@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { getMockProjects, type ProjectRow, type ProjectStatus } from "@/lib/mock/projects/list";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const STATUS_OPTIONS: { label: string; value: string }[] = [
@@ -80,7 +81,7 @@ export default function ProjectsListPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain projects, cost centers, and linked transactions." label="Explain projects" />
-            <Button size="sm" onClick={() => window.alert("Create project (stub). API pending.")}>
+            <Button size="sm" onClick={() => toast.info("Create project (stub). API pending.")}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               New project
             </Button>
@@ -95,7 +96,7 @@ export default function ProjectsListPage() {
           filters={[
             { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>

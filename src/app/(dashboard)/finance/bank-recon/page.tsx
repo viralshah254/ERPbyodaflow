@@ -14,6 +14,7 @@ import {
   type BankStatementLine,
   type SystemTransaction,
 } from "@/lib/mock/bank-recon";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function BankReconPage() {
@@ -32,19 +33,19 @@ export default function BankReconPage() {
 
   const handleCreateAdjustingEntry = () => {
     if (typeof window !== "undefined") {
-      window.alert("Create adjusting entry (stub): Draft JE created. Opening review.");
+      toast.info("Create adjusting entry (stub): Draft JE created. Opening review.");
     }
     router.push("/docs/journal/new");
   };
 
   const handleAISuggest = () => {
     if (typeof window !== "undefined") {
-      window.alert("AI match suggestions (stub): Would propose matches.");
+      toast.info("AI match suggestions (stub): Would propose matches.");
     }
   };
 
   const handleCreatePayment = (lineId: string) => {
-    window.alert(`Create payment (stub) from statement line ${lineId}. API pending.`);
+    toast.info(`Create payment (stub) from statement line ${lineId}. API pending.`);
   };
 
   return (
@@ -111,14 +112,14 @@ export default function BankReconPage() {
               <button
                 type="button"
                 className="w-full text-left rounded border px-2 py-1.5 text-xs hover:bg-muted/50"
-                onClick={() => window.alert("Auto-match by amount/date (stub).")}
+                onClick={() => toast.info("Auto-match by amount/date (stub).")}
               >
                 Auto-match by amount/date
               </button>
               <button
                 type="button"
                 className="w-full text-left rounded border px-2 py-1.5 text-xs hover:bg-muted/50"
-                onClick={() => window.alert("Match by reference contains (stub).")}
+                onClick={() => toast.info("Match by reference contains (stub).")}
               >
                 Match by reference contains
               </button>
@@ -191,7 +192,7 @@ export default function BankReconPage() {
               size="sm"
               disabled={!selectedStmt || !selectedSys}
               onClick={() =>
-                window.alert(
+                toast.info(
                   `Match (stub): ${selectedStmt} ↔ ${selectedSys}`
                 )
               }

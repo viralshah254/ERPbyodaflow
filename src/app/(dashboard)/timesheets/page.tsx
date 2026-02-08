@@ -26,6 +26,7 @@ import {
 import { getMockTimesheetEntries, getMockWeekStarts } from "@/lib/mock/timesheets";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -57,7 +58,7 @@ export default function TimesheetsPage() {
   }, [entries]);
 
   const handleSubmit = () => {
-    window.alert("Submit for approval (stub). Reuse approvals module.");
+    toast.info("Submit for approval (stub). Reuse approvals module.");
   };
 
   return (

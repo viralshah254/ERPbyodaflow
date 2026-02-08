@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { getDocTypeConfig } from "@/config/documents";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function DocViewPage() {
@@ -74,7 +75,7 @@ export default function DocViewPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.alert("Request approval (stub): API pending.")}
+              onClick={() => toast.info("Request approval (stub). API pending.")}
             >
               <Icons.CheckCircle2 className="mr-2 h-4 w-4" />
               Request approval

@@ -21,6 +21,7 @@ import {
 } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -167,20 +168,20 @@ export default function DocTypeListPage() {
   const handleExport = () => {
     // Stub: toast or similar
     if (typeof window !== "undefined") {
-      window.alert(`Export (stub): ${filtered.length} rows for ${type}`);
+      toast.info(`Export (stub): ${filtered.length} rows for ${type}`);
     }
   };
 
   const handleBulkApprove = () => {
     if (typeof window !== "undefined") {
-      window.alert(`Approve (stub): ${selectedIds.length} selected`);
+      toast.info(`Approve (stub): ${selectedIds.length} selected`);
     }
     setSelectedIds([]);
   };
 
   const handleBulkPost = () => {
     if (typeof window !== "undefined") {
-      window.alert(`Post (stub): ${selectedIds.length} selected`);
+      toast.info(`Post (stub): ${selectedIds.length} selected`);
     }
     setSelectedIds([]);
   };

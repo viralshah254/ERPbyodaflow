@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { getMockRules, type AutomationRule } from "@/lib/mock/automation-rules";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function AutomationRulesPage() {
@@ -195,7 +196,7 @@ export default function AutomationRulesPage() {
                       size="sm"
                       className="text-xs"
                       onClick={() => {
-                        if (a === "Require approval") window.alert("Require approval (stub): API pending.");
+                        if (a === "Require approval") toast.info("Require approval (stub): API pending.");
                       }}
                     >
                       {a}

@@ -29,6 +29,7 @@ import { listEmployees, createEmployee } from "@/lib/data/payroll.repo";
 import type { Employee, EmploymentType, SalaryType } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const EMPLOYMENT_TYPES: EmploymentType[] = ["PERMANENT", "CONTRACT"];
@@ -117,7 +118,7 @@ export default function PayrollEmployeesPage() {
           searchPlaceholder="Search by name, department, branch..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>

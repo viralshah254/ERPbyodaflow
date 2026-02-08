@@ -27,6 +27,7 @@ import { getPayRunById, listPayRunLines, listEmployees } from "@/lib/data/payrol
 import type { PayRunLine } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 function exportPayRunBankCSV(runId: string, lines: PayRunLine[]) {
@@ -70,11 +71,11 @@ export default function PayRunDetailPage() {
   };
 
   const handleApprove = () => {
-    window.alert("Approve (stub). API pending.");
+    toast.info("Approve (stub). API pending.");
   };
 
   const handlePostJournal = () => {
-    router.push("/docs/journal/new");
+    toast.info("Post payroll journal (stub). API pending.");
   };
 
   const handleExportBank = () => {
@@ -123,7 +124,7 @@ export default function PayRunDetailPage() {
               <Icons.Download className="mr-2 h-4 w-4" />
               Generate bank file
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.alert("Request approval (stub).")}>
+            <Button variant="outline" size="sm" onClick={() => toast.info("Request approval (stub).")}>
               Request approval
             </Button>
             <Button variant="outline" size="sm" asChild>

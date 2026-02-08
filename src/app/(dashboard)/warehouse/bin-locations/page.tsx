@@ -25,9 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getMockBins, type BinRow } from "@/lib/mock/warehouse/bins";
+import { listBins, createBin, updateBin } from "@/lib/data/bins.repo";
+import type { BinRow } from "@/lib/mock/warehouse/bins";
 import { getMockWarehouses } from "@/lib/mock/masters";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function BinLocationsPage() {
@@ -48,20 +50,24 @@ export default function BinLocationsPage() {
   });
 
   const warehouses = React.useMemo(() => getMockWarehouses(), []);
-  const allRows = React.useMemo(
-    () => getMockBins({ warehouse: warehouseFilter || undefined, zone: zoneFilter || undefined }),
-    [warehouseFilter, zoneFilter]
-  );
+  const [allRows, setAllRows] = React.useState<BinRow[]>(() => listBins());
+  const refresh = React.useCallback(() => setAllRows(listBins()), []);
+  const filteredByWarehouseZone = React.useMemo(() => {
+    let out = allRows;
+    if (warehouseFilter) out = out.filter((b) => b.warehouse === warehouseFilter);
+    if (zoneFilter) out = out.filter((b) => b.zone === zoneFilter);
+    return out;
+  }, [allRows, warehouseFilter, zoneFilter]);
   const filtered = React.useMemo(() => {
-    if (!search.trim()) return allRows;
+    if (!search.trim()) return filteredByWarehouseZone;
     const q = search.trim().toLowerCase();
-    return allRows.filter(
+    return filteredByWarehouseZone.filter(
       (r) =>
         r.code.toLowerCase().includes(q) ||
         r.name.toLowerCase().includes(q) ||
         r.zone.toLowerCase().includes(q)
     );
-  }, [allRows, search]);
+  }, [filteredByWarehouseZone, search]);
 
   const zones = React.useMemo(() => Array.from(new Set(allRows.map((b) => b.zone))), [allRows]);
 
@@ -143,7 +149,7 @@ export default function BinLocationsPage() {
             {
               id: "warehouse",
               label: "Warehouse",
-              options: [{ label: "All", value: "" }, ...warehouses.map((w) => ({ label: w.name, value: w.code }))],
+              options: [{ label: "All", value: "" }, ...warehouses.map((w) => ({ label: w.name, value: w.name }))],
               value: warehouseFilter,
               onChange: (v) => setWarehouseFilter(v),
             },
@@ -155,7 +161,7 @@ export default function BinLocationsPage() {
               onChange: (v) => setZoneFilter(v),
             },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
@@ -177,7 +183,7 @@ export default function BinLocationsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit bin" : "Add bin"}</SheetTitle>
-            <SheetDescription>Code, name, zone, aisle, rack, shelf. Stub — no persist.</SheetDescription>
+            <SheetDescription>Saved to browser storage. API pending.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -226,7 +232,43 @@ export default function BinLocationsPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-            <Button onClick={() => setDrawerOpen(false)}>{editing ? "Save" : "Create"}</Button>
+            <Button
+              onClick={() => {
+                const wh = warehouses.find((w) => w.id === form.warehouseId);
+                const warehouseName = wh?.name ?? "";
+                if (editing) {
+                  updateBin(editing.id, {
+                    code: form.code,
+                    name: form.name,
+                    warehouseId: form.warehouseId,
+                    warehouse: warehouseName,
+                    zone: form.zone,
+                    aisle: form.aisle,
+                    rack: form.rack,
+                    shelf: form.shelf,
+                    active: form.active,
+                  });
+                  toast.success("Bin updated.");
+                } else {
+                  createBin({
+                    code: form.code,
+                    name: form.name,
+                    warehouseId: form.warehouseId,
+                    warehouse: warehouseName,
+                    zone: form.zone,
+                    aisle: form.aisle,
+                    rack: form.rack,
+                    shelf: form.shelf,
+                    active: form.active,
+                  });
+                  toast.success("Bin created.");
+                }
+                setDrawerOpen(false);
+                refresh();
+              }}
+            >
+              {editing ? "Save" : "Create"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

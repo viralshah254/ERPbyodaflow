@@ -25,9 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getMockBankAccounts, type BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
+import { listBankAccounts, createBankAccount, updateBankAccount } from "@/lib/data/bank-accounts.repo";
+import type { BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
 import { getMockCOARootFirst } from "@/lib/mock/coa";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function BankAccountsPage() {
@@ -44,7 +46,8 @@ export default function BankAccountsPage() {
     active: true,
   });
 
-  const rows = React.useMemo(() => getMockBankAccounts(), []);
+  const [rows, setRows] = React.useState<BankAccountRow[]>(() => listBankAccounts());
+  const refresh = React.useCallback(() => setRows(listBankAccounts()), []);
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -123,7 +126,7 @@ export default function BankAccountsPage() {
           searchPlaceholder="Search by name, bank, account..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
@@ -145,7 +148,7 @@ export default function BankAccountsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit account" : "Add account"}</SheetTitle>
-            <SheetDescription>Stub — no persist.</SheetDescription>
+            <SheetDescription>Saved to browser storage. API pending.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -192,7 +195,40 @@ export default function BankAccountsPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-            <Button onClick={() => setDrawerOpen(false)}>{editing ? "Save" : "Create"}</Button>
+            <Button
+              onClick={() => {
+                const glAccount = coa.find((r) => r.code === form.glAccountCode);
+                if (editing) {
+                  updateBankAccount(editing.id, {
+                    name: form.name,
+                    accountNumber: form.accountNumber,
+                    bank: form.bank,
+                    branch: form.branch || undefined,
+                    currency: form.currency,
+                    glAccountCode: form.glAccountCode || undefined,
+                    glAccountName: glAccount?.name,
+                    active: form.active,
+                  });
+                  toast.success("Account updated.");
+                } else {
+                  createBankAccount({
+                    name: form.name,
+                    accountNumber: form.accountNumber,
+                    bank: form.bank,
+                    branch: form.branch || undefined,
+                    currency: form.currency,
+                    glAccountCode: form.glAccountCode || undefined,
+                    glAccountName: glAccount?.name,
+                    active: form.active,
+                  });
+                  toast.success("Account created.");
+                }
+                setDrawerOpen(false);
+                refresh();
+              }}
+            >
+              {editing ? "Save" : "Create"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

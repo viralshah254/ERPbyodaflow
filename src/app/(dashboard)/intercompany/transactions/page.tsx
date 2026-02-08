@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { getMockICTransactions, type ICTransactionRow } from "@/lib/mock/intercompany/transactions";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function IntercompanyTransactionsPage() {
@@ -45,7 +46,7 @@ export default function IntercompanyTransactionsPage() {
   );
 
   const handleElimination = () => {
-    window.alert("Generate elimination journal (stub). Would create draft JE.");
+    toast.info("Generate elimination journal (stub). Would create draft JE.");
     router.push("/docs/journal/new");
   };
 
@@ -63,10 +64,10 @@ export default function IntercompanyTransactionsPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain IC invoice/bill and elimination journal." label="Explain IC transactions" />
-            <Button variant="outline" size="sm" onClick={() => window.alert("Create IC invoice (stub).")}>
+            <Button variant="outline" size="sm" onClick={() => toast.info("Create IC invoice (stub).")}>
               IC Invoice
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.alert("Create IC bill (stub).")}>
+            <Button variant="outline" size="sm" onClick={() => toast.info("Create IC bill (stub).")}>
               IC Bill
             </Button>
             <Button size="sm" onClick={handleElimination}>
@@ -84,7 +85,7 @@ export default function IntercompanyTransactionsPage() {
           searchPlaceholder="Search by number, entity..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
@@ -107,7 +108,7 @@ export default function IntercompanyTransactionsPage() {
           <CardContent>
             <p className="text-sm text-muted-foreground">
               Consolidated P&L aggregates entity results. Use &quot;Generate elimination journal&quot; for IC balances. 
-              <Button variant="link" className="h-auto p-0 ml-1" onClick={() => window.alert("Open consolidation report (stub).")}>
+              <Button variant="link" className="h-auto p-0 ml-1" onClick={() => toast.info("Open consolidation report (stub).")}>
                 View report
               </Button>
             </p>

@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getMockTransfers, type TransferRow } from "@/lib/mock/warehouse/transfers";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 function statusVariant(s: string): "default" | "secondary" | "outline" {
@@ -64,9 +65,9 @@ export default function TransferDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            {canApprove && <Button size="sm" onClick={() => window.alert("Approve (stub)")}>Approve</Button>}
-            {canTransit && <Button size="sm" onClick={() => window.alert("Mark in transit (stub)")}>Mark in transit</Button>}
-            {canReceive && <Button size="sm" onClick={() => window.alert("Receive (stub)")}>Receive</Button>}
+            {canApprove && <Button size="sm" onClick={() => toast.info("Approve (stub)")}>Approve</Button>}
+            {canTransit && <Button size="sm" onClick={() => toast.info("Mark in transit (stub)")}>Mark in transit</Button>}
+            {canReceive && <Button size="sm" onClick={() => toast.info("Receive (stub)")}>Receive</Button>}
             <Button variant="outline" size="sm" asChild>
               <Link href="/warehouse/transfers">Back to list</Link>
             </Button>

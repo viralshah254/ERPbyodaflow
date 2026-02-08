@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { getMockScheduledReports, type ScheduledReportRow } from "@/lib/mock/reports";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ScheduledReportsPage() {
@@ -32,7 +33,7 @@ export default function ScheduledReportsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" onClick={() => window.alert("Schedule report (stub)")}>
+          <Button size="sm" onClick={() => toast.info("Schedule report (stub)")}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Schedule Report
           </Button>
@@ -79,7 +80,7 @@ export default function ScheduledReportsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => window.alert("Edit (stub)")}>
+                          <Button variant="ghost" size="sm" onClick={() => toast.info("Edit (stub)")}>
                             Edit
                           </Button>
                         </div>

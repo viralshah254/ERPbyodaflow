@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { listWhtCodes, saveWhtCodes } from "@/lib/data/tax.repo";
 import type { KenyaWhtCode } from "@/lib/mock/tax/kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function WithholdingTaxPage() {
@@ -58,7 +59,7 @@ export default function WithholdingTaxPage() {
   };
 
   const handleWhtCertificate = () => {
-    window.alert("WHT certificate (stub). API pending.");
+    toast.info("WHT certificate (stub). API pending.");
   };
 
   return (

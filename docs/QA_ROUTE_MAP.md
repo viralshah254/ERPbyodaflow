@@ -378,25 +378,31 @@ All nav `href` values have corresponding routes. ✅
 ## 7. Completed Action Items
 
 ### Done ✅
-1. ✅ Added `/dev/link-check` route
-2. ✅ Added VAT/WHT summary reports to nav
-3. ✅ Created drill-through utility (`src/lib/drill-through.ts`)
-4. ✅ Enhanced Work Queue with all categories and resolve links
-5. ✅ Created `ActivityPanel` component
-6. ✅ Created comprehensive route registry (`src/lib/qa/route-registry.ts`)
-7. ✅ Created action registry (`src/lib/qa/action-registry.ts`)
-8. ✅ Added Playwright smoke tests (`e2e/smoke.spec.ts`)
-9. ✅ Added Playwright critical flow tests (`e2e/critical-flows.spec.ts`)
-10. ✅ Added `typecheck` npm script
-11. ✅ Build passes (`npm run build`)
+1. ✅ **Frontend completion (6 sessions):** See “Frontend completion (6 sessions)” below.
+2. ✅ **Session 3 (Drill-through & work queue):** Approvals inbox and ApprovalSheet use `drillToDocument(type, id)` for "View" / "View document" links to `/docs/[type]/[id]`. Work queue "View" uses `item.href` (Link); all mock items have valid hrefs.
+3. ✅ Added `/dev/link-check` route
+4. ✅ Added VAT/WHT summary reports to nav
+5. ✅ Created drill-through utility (`src/lib/drill-through.ts`)
+6. ✅ Enhanced Work Queue with all categories and resolve links
+7. ✅ Created `ActivityPanel` component
+8. ✅ Created comprehensive route registry (`src/lib/qa/route-registry.ts`)
+9. ✅ Created action registry (`src/lib/qa/action-registry.ts`)
+10. ✅ Added Playwright smoke tests (`e2e/smoke.spec.ts`)
+11. ✅ Added Playwright critical flow tests (`e2e/critical-flows.spec.ts`)
+12. ✅ Added `typecheck` npm script
+13. ✅ Build passes (`npm run build`)
 
 ### Recent fixes
+- **Session 1 (Frontend completion):** Route/nav clarifications: `/inventory/stock` → redirect to `/inventory/stock-levels`; `/purchasing/purchase-orders` → `/purchasing/orders`; `/settings/customization` → `/settings/customizer/modules`. Finance nav: added Budgets (`/finance/budgets`) and Ledger (`/finance/ledger`). All stub actions now use `toast.info()` / `toast.success()` (sonner) instead of `window.alert`; no remaining `window.alert` in `src`.
 - **`/purchasing/purchase-returns`**: Replaced `PageLayout` + dead CTAs with `PageShell` + `PageHeader`, `DataTable` + `DataTableToolbar`, mock data (`getMockPurchaseReturns`), and wired Create Return / Export / Approve / row click to toast stubs.
 
 ### Remaining Polish (optional)
 - Virtualize heavy tables if performance issues arise
 - Add RTL unit tests for edge cases
 - Add more granular CTA stubs where needed
+
+### Frontend completion (6 sessions)
+Completed: (1) Route/nav clarifications and redirects; (2) All stub actions use toast (no window.alert); (3) Persist flows (assets, bank accounts, bins, sequences, users/roles, cycle counts) via localStorage repos; (4) Drill-through (approvals View → doc) and work queue View links; (5) Docs/print preview, approval workflow stub, payroll journal posting stub, period close toasts; (6) Analytics Explorer, intelligence modules, Anomaly Center, Simulation Lab with mock data and action links; (7) QA doc updates.
 
 ---
 

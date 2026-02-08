@@ -26,18 +26,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  getMockUsers,
-  getMockRoles,
+  listUsers,
+  listRoles,
+  createUser,
+  updateUser,
+  createRole,
+  updateRole,
+} from "@/lib/data/users-roles.repo";
+import {
   PERMISSION_GROUPS,
   getAllPermissions,
   type UserRow,
   type RoleRow,
 } from "@/lib/mock/users-roles";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function UsersRolesPage() {
-  const [users, setUsers] = React.useState<UserRow[]>(() => getMockUsers());
-  const [roles, setRoles] = React.useState<RoleRow[]>(() => getMockRoles());
+  const [users, setUsers] = React.useState<UserRow[]>(() => listUsers());
+  const [roles, setRoles] = React.useState<RoleRow[]>(() => listRoles());
+  const refreshUsers = React.useCallback(() => setUsers(listUsers()), []);
+  const refreshRoles = React.useCallback(() => {
+    setRoles(listRoles());
+    setUsers(listUsers()); // roles might have changed names
+  }, []);
   const [userSheetOpen, setUserSheetOpen] = React.useState(false);
   const [roleSheetOpen, setRoleSheetOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<UserRow | null>(null);
@@ -210,7 +222,7 @@ export default function UsersRolesPage() {
           <SheetHeader>
             <SheetTitle>{editingUser ? "Edit user" : "Add user"}</SheetTitle>
             <SheetDescription>
-              Email, name, and role assignments. Stub — no persist.
+              Saved to browser storage. API pending.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -255,7 +267,34 @@ export default function UsersRolesPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setUserSheetOpen(false)}>Cancel</Button>
-            <Button onClick={() => setUserSheetOpen(false)}>{editingUser ? "Save" : "Create"}</Button>
+            <Button
+              onClick={() => {
+                const roleNames = userForm.roleIds.map((id) => roles.find((r) => r.id === id)?.name ?? "").filter(Boolean);
+                if (editingUser) {
+                  updateUser(editingUser.id, {
+                    email: userForm.email,
+                    firstName: userForm.firstName,
+                    lastName: userForm.lastName,
+                    roleIds: userForm.roleIds,
+                    roleNames,
+                  });
+                  toast.success("User updated.");
+                } else {
+                  createUser({
+                    email: userForm.email,
+                    firstName: userForm.firstName,
+                    lastName: userForm.lastName,
+                    roleIds: userForm.roleIds,
+                    roleNames,
+                  });
+                  toast.success("User created.");
+                }
+                setUserSheetOpen(false);
+                refreshUsers();
+              }}
+            >
+              {editingUser ? "Save" : "Create"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -265,7 +304,7 @@ export default function UsersRolesPage() {
           <SheetHeader>
             <SheetTitle>{editingRole ? "Edit role" : "Add role"}</SheetTitle>
             <SheetDescription>
-              Name, description, and permissions. Stub — no persist.
+              Saved to browser storage. API pending.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -309,7 +348,29 @@ export default function UsersRolesPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setRoleSheetOpen(false)}>Cancel</Button>
-            <Button onClick={() => setRoleSheetOpen(false)}>{editingRole ? "Save" : "Create"}</Button>
+            <Button
+              onClick={() => {
+                if (editingRole) {
+                  updateRole(editingRole.id, {
+                    name: roleForm.name,
+                    description: roleForm.description || undefined,
+                    permissionCount: roleForm.permissions.length,
+                  });
+                  toast.success("Role updated.");
+                } else {
+                  createRole({
+                    name: roleForm.name,
+                    description: roleForm.description || undefined,
+                    permissionCount: roleForm.permissions.length,
+                  });
+                  toast.success("Role created.");
+                }
+                setRoleSheetOpen(false);
+                refreshRoles();
+              }}
+            >
+              {editingRole ? "Save" : "Create"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

@@ -20,6 +20,7 @@ import { listPayslips } from "@/lib/data/payroll.repo";
 import type { Payslip } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PayslipsPage() {
@@ -50,7 +51,7 @@ export default function PayslipsPage() {
   };
 
   const handleDownloadPDF = () => {
-    window.alert("Download PDF (stub). API pending.");
+    toast.info("Download PDF (stub). API pending.");
   };
 
   return (
@@ -78,7 +79,7 @@ export default function PayslipsPage() {
           searchPlaceholder="Search by employee, month..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>

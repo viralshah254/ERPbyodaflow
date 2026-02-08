@@ -10,6 +10,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 interface JournalEntry {
@@ -137,7 +138,7 @@ export default function JournalEntriesPage() {
               onChange: (v) => setStatusFilter(v),
             },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <DataTable<JournalEntry>
           data={filtered}

@@ -22,6 +22,7 @@ import {
 import type { MetricKey, DimensionKey } from "@/lib/analytics/semantic";
 import type { AnalyticsQuery, AnalyticsRow, DrillContext } from "@/lib/analytics/types";
 import type { AnalyticsGlobalFilters } from "@/lib/analytics/types";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,7 +69,7 @@ export default function AnalyticsExplorePage() {
     const name = `View ${metric} by ${dims.join(", ")}`;
     const view = saveAnalysisView(name, query, filters);
     setSavedViews(getSavedAnalysisViews());
-    window.alert(`Saved "${name}". Shareable link (stub): ${getShareableLink(view)}`);
+    toast.info(`Saved "${name}". Shareable link (stub): ${getShareableLink(view)}`);
   };
 
   const handleRestoreView = (viewId: string) => {

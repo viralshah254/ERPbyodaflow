@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getMockPaymentRuns } from "@/lib/mock/treasury/payment-runs";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const METHOD_LABELS: Record<string, string> = {
@@ -55,12 +56,12 @@ export default function PaymentRunDetailPage() {
         actions={
           <div className="flex gap-2">
             {canApprove && (
-              <Button size="sm" onClick={() => window.alert("Approve (stub). Reuse approvals module.")}>
+              <Button size="sm" onClick={() => toast.info("Approve (stub). Reuse approvals module.")}>
                 Approve
               </Button>
             )}
             {canExport && (
-              <Button variant="outline" size="sm" onClick={() => window.alert("Export CSV / Bank format (stub).")}>
+              <Button variant="outline" size="sm" onClick={() => toast.info("Export CSV / Bank format (stub).")}>
                 Export
               </Button>
             )}

@@ -35,6 +35,7 @@ import {
 } from "@/lib/mock/treasury/payment-runs";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -85,14 +86,14 @@ export default function PaymentRunsPage() {
 
   const handleGenerateCSV = () => {
     if (selectedBillRows.length === 0) {
-      window.alert("Select at least one bill.");
+      toast.info("Select at least one bill.");
       return;
     }
     exportPaymentRunCSV(selectedBillRows, method);
   };
 
   const handleRequestApproval = () => {
-    window.alert("Request approval (stub). API pending.");
+    toast.info("Request approval (stub). API pending.");
     setCreateOpen(false);
     setSelectedBills(new Set());
   };
@@ -142,7 +143,7 @@ export default function PaymentRunsPage() {
       <div className="p-6 space-y-4">
         <DataTableToolbar
           searchPlaceholder="Search runs..."
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
@@ -209,7 +210,7 @@ export default function PaymentRunsPage() {
             <Button variant="outline" onClick={handleGenerateCSV} disabled={selectedBillRows.length === 0}>
               Export CSV
             </Button>
-            <Button variant="outline" onClick={() => window.alert("Bank format (stub). API pending.")} disabled={selectedBillRows.length === 0}>
+            <Button variant="outline" onClick={() => toast.info("Bank format (stub). API pending.")} disabled={selectedBillRows.length === 0}>
               Bank format
             </Button>
             <Button onClick={handleRequestApproval} disabled={selectedBillRows.length === 0}>

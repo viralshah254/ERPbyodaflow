@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getKenyaProfile, saveKenyaProfile } from "@/lib/data/tax.repo";
 import type { KenyaTaxProfile } from "@/lib/mock/tax/kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const LINKS = [
@@ -32,7 +33,7 @@ export default function KenyaTaxProfilePage() {
 
   const handleSave = () => {
     saveKenyaProfile(profile);
-    window.alert("Saved.");
+    toast.info("Saved.");
   };
 
   const setVatRegistered = (v: boolean) =>

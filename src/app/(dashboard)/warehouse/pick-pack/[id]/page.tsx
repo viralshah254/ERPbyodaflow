@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMockPickPack } from "@/lib/mock/warehouse/pick-pack";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PickPackDetailPage() {
@@ -100,7 +101,7 @@ export default function PickPackDetailPage() {
                 </Table>
               </CardContent>
             </Card>
-            <Button onClick={() => window.alert("Confirm pick (stub)")}>Confirm pick</Button>
+            <Button onClick={() => toast.info("Confirm pick (stub)")}>Confirm pick</Button>
           </TabsContent>
           <TabsContent value="pack" className="space-y-4">
             <Card>
@@ -119,7 +120,7 @@ export default function PickPackDetailPage() {
                 </div>
               </CardContent>
             </Card>
-            <Button onClick={() => window.alert("Confirm pack (stub)")}>Confirm pack</Button>
+            <Button onClick={() => toast.info("Confirm pack (stub)")}>Confirm pack</Button>
           </TabsContent>
           <TabsContent value="dispatch" className="space-y-4">
             <Card>
@@ -138,7 +139,7 @@ export default function PickPackDetailPage() {
                 </div>
               </CardContent>
             </Card>
-            <Button onClick={() => window.alert("Mark dispatched (stub)")}>Mark dispatched</Button>
+            <Button onClick={() => toast.info("Mark dispatched (stub)")}>Mark dispatched</Button>
           </TabsContent>
         </Tabs>
       </div>

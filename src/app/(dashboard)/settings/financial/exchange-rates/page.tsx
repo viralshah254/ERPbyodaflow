@@ -22,6 +22,7 @@ import {
   upsertMockExchangeRate,
   type ExchangeRateRow,
 } from "@/lib/mock/exchange-rates";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -47,13 +48,13 @@ export default function ExchangeRatesSettingsPage() {
 
   const handleImportCsv = () => {
     if (typeof window !== "undefined") {
-      window.alert("Import CSV: API pending.");
+      toast.info("Import CSV: API pending.");
     }
   };
 
   const handleFetchLatest = () => {
     if (typeof window !== "undefined") {
-      window.alert("API not connected.");
+      toast.info("API not connected.");
     }
   };
 

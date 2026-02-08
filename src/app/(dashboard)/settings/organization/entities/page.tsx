@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getMockEntities, type EntityRow } from "@/lib/mock/intercompany/entities";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function EntitiesPage() {
@@ -50,7 +51,7 @@ export default function EntitiesPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain multi-entity and intercompany accounts mapping." label="Explain entities" />
-            <Button size="sm" onClick={() => window.alert("Add entity (stub). API pending.")}>
+            <Button size="sm" onClick={() => toast.info("Add entity (stub). API pending.")}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add entity
             </Button>
@@ -65,7 +66,7 @@ export default function EntitiesPage() {
           searchPlaceholder="Search by code, name..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub). API pending.")}
         />
         <Card>
           <CardHeader>

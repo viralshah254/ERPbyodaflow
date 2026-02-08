@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { getMockPickPack, type PickPackOrderRow, type PickPackStatus } from "@/lib/mock/warehouse/pick-pack";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const STATUS_OPTIONS: { label: string; value: string }[] = [
@@ -86,7 +87,7 @@ export default function PickPackPage() {
           filters={[
             { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>

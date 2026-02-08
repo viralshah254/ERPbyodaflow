@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getMockSavedViews, type SavedViewRow } from "@/lib/mock/reports";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function SavedViewsPage() {
@@ -31,7 +32,7 @@ export default function SavedViewsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" onClick={() => window.alert("Save view (stub)")}>
+          <Button size="sm" onClick={() => toast.info("Save view (stub)")}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Save view
           </Button>
@@ -70,10 +71,10 @@ export default function SavedViewsPage() {
                       <TableCell className="text-muted-foreground">{r.filters ?? "—"}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => window.alert(`Run (stub): ${r.name}`)}>
+                          <Button variant="ghost" size="sm" onClick={() => toast.info(`Run (stub): ${r.name}`)}>
                             Run
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => window.alert("Edit (stub)")}>
+                          <Button variant="ghost" size="sm" onClick={() => toast.info("Edit (stub)")}>
                             Edit
                           </Button>
                         </div>

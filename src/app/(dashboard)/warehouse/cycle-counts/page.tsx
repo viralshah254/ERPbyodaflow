@@ -26,9 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getMockCycleCounts, type CycleCountSessionRow, type CycleCountStatus } from "@/lib/mock/warehouse/cycle-counts";
+import { listCycleCounts, createCycleCountSession } from "@/lib/data/cycle-counts.repo";
+import type { CycleCountSessionRow, CycleCountStatus } from "@/lib/mock/warehouse/cycle-counts";
 import { getMockWarehouses } from "@/lib/mock/masters";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const STATUS_OPTIONS: { label: string; value: string }[] = [
@@ -57,7 +59,8 @@ export default function CycleCountsPage() {
   });
 
   const warehouses = React.useMemo(() => getMockWarehouses(), []);
-  const allRows = React.useMemo(() => getMockCycleCounts(), []);
+  const [allRows, setAllRows] = React.useState<CycleCountSessionRow[]>(() => listCycleCounts());
+  const refresh = React.useCallback(() => setAllRows(listCycleCounts()), []);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -122,7 +125,7 @@ export default function CycleCountsPage() {
           filters={[
             { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
@@ -144,7 +147,7 @@ export default function CycleCountsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Create cycle count session</SheetTitle>
-            <SheetDescription>Warehouse, scope (bin/category/full). Stub.</SheetDescription>
+            <SheetDescription>Saved to browser storage. API pending.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -176,7 +179,25 @@ export default function CycleCountsPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={() => setCreateOpen(false)}>Create</Button>
+            <Button
+              onClick={() => {
+                const wh = warehouses.find((w) => w.id === form.warehouseId);
+                if (!wh) {
+                  toast.error("Select a warehouse.");
+                  return;
+                }
+                createCycleCountSession({
+                  warehouse: wh.name,
+                  scope: form.scope,
+                  scopeDetail: form.scopeDetail || undefined,
+                });
+                toast.success("Cycle count session created.");
+                setCreateOpen(false);
+                refresh();
+              }}
+            >
+              Create
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

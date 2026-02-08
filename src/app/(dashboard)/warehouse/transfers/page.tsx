@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { getMockTransfers, type TransferRow, type TransferStatus } from "@/lib/mock/warehouse/transfers";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const STATUS_OPTIONS: { label: string; value: string }[] = [
@@ -76,7 +77,7 @@ export default function WarehouseTransfersPage() {
   const canReceive = selected.some((r) => r.status === "IN_TRANSIT");
 
   const handleBulk = (action: "approve" | "transit" | "receive") => {
-    window.alert(`${action} (stub): ${selectedIds.length} transfer(s). API pending.`);
+    toast.info(`${action} (stub): ${selectedIds.length} transfer(s). API pending.`);
     setSelectedIds([]);
   };
 
@@ -94,7 +95,7 @@ export default function WarehouseTransfersPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain inter-warehouse transfers and status lifecycle." label="Explain transfers" />
-            <Button size="sm" onClick={() => window.alert("Create transfer (stub). API pending.")}>
+            <Button size="sm" onClick={() => toast.info("Create transfer (stub). API pending.")}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Create transfer
             </Button>
@@ -109,7 +110,7 @@ export default function WarehouseTransfersPage() {
           filters={[
             { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">

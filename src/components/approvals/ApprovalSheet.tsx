@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Sheet,
   SheetContent,
@@ -12,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { ApprovalItem } from "@/lib/mock/approvals";
+import { drillToDocument } from "@/lib/drill-through";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/money";
 
@@ -97,7 +99,10 @@ export function ApprovalSheet({
             />
           </div>
         </div>
-        <SheetFooter className="mt-6">
+        <SheetFooter className="mt-6 flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link href={drillToDocument(item.documentType, item.documentId).href}>View document</Link>
+          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {onApprove || onReject ? "Cancel" : "Close"}
           </Button>

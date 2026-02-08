@@ -4,15 +4,18 @@ import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ApprovalsWorkflowsPage() {
+  const stubCreate = () => toast.info("Create workflow (stub). API pending.");
+
   return (
     <PageLayout
       title="Approvals Workflows"
       description="Configure multi-step approval processes"
       actions={
-        <Button>
+        <Button onClick={stubCreate}>
           <Icons.Plus className="mr-2 h-4 w-4" />
           Create Workflow
         </Button>
@@ -29,7 +32,7 @@ export default function ApprovalsWorkflowsPage() {
             description="Create approval workflows for orders, POs, and journals"
             action={{
               label: "Create Workflow",
-              onClick: () => {},
+              onClick: stubCreate,
             }}
           />
         </CardContent>

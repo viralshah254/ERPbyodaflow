@@ -8,6 +8,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getMockAuditLog, type AuditEntry } from "@/lib/mock/audit-log";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function AuditLogPage() {
@@ -97,7 +98,7 @@ export default function AuditLogPage() {
           searchPlaceholder="Search by user, entity, action..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>

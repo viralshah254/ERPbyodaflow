@@ -21,6 +21,7 @@ import { getMockProjectCosts } from "@/lib/mock/projects/costs";
 import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ProjectDetailPage() {
@@ -65,7 +66,7 @@ export default function ProjectDetailPage() {
               <Icons.Sparkles className="mr-2 h-4 w-4" />
               Ask Copilot
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.alert("Link transaction (stub). Attach bill/journal/expense.")}>
+            <Button variant="outline" size="sm" onClick={() => toast.info("Link transaction (stub). Attach bill/journal/expense.")}>
               Link transaction
             </Button>
             <Button variant="outline" size="sm" asChild>

@@ -34,6 +34,7 @@ import { getCostingSettings } from "@/lib/mock/inventory/costing";
 import { getMockLandedCostTemplates } from "@/lib/mock/inventory/landed-cost";
 import { getMockCOARootFirst } from "@/lib/mock/coa";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const COSTING_METHODS = ["FIFO", "WEIGHTED_AVERAGE", "STANDARD_COST"] as const;
@@ -186,7 +187,7 @@ export default function InventoryCostingSettingsPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setTemplateSheetOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setTemplateSheetOpen(false); window.alert("Save (stub). API pending."); }}>Save</Button>
+            <Button onClick={() => { setTemplateSheetOpen(false); toast.info("Save (stub). API pending."); }}>Save</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

@@ -35,6 +35,7 @@ import { getMockValuationSummary } from "@/lib/mock/inventory/costing";
 import { getMockLandedCostSources, getMockLandedCostTemplates, type LandedCostSourceRow } from "@/lib/mock/inventory/landed-cost";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function InventoryCostingPage() {
@@ -204,7 +205,7 @@ export default function InventoryCostingPage() {
           )}
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setAllocationOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setAllocationOpen(false); window.alert("Save allocation (stub). API pending."); }}>Save</Button>
+            <Button onClick={() => { setAllocationOpen(false); toast.info("Save allocation (stub). API pending."); }}>Save</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

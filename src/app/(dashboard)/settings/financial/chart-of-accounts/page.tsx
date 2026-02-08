@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getMockCOARootFirst, type CoaRow, type CoaRowWithDepth, type CoaAccountType, type NormalBalance } from "@/lib/mock/coa";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const ACCOUNT_TYPES: CoaAccountType[] = ["Asset", "Liability", "Equity", "Income", "Expense"];
@@ -78,7 +79,7 @@ export default function ChartOfAccountsPage() {
   };
 
   const handleImport = () => {
-    window.alert("Import COA (stub): API pending.");
+    toast.info("Import COA (stub). API pending.");
   };
 
   return (

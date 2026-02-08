@@ -19,6 +19,7 @@ import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import type { CurrencyCode } from "@/lib/org/financial-settings";
 import { BaseCurrencyCard } from "@/components/settings/financial/BaseCurrencyCard";
 import { CurrencyTable } from "@/components/settings/financial/CurrencyTable";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CurrenciesSettingsPage() {
@@ -50,7 +51,7 @@ export default function CurrenciesSettingsPage() {
 
   const handleAddSave = () => {
     if (typeof window !== "undefined") {
-      window.alert("Add currency: API pending.");
+      toast.info("Add currency (stub). API pending.");
     }
     setAddOpen(false);
   };

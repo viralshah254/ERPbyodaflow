@@ -14,6 +14,7 @@ import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -156,15 +157,15 @@ export default function APBillsPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" size="sm" onClick={() => window.alert("Post (stub)")}>
+                <Button variant="outline" size="sm" onClick={() => toast.info("Post (stub)")}>
                   Post
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => window.alert("Export (stub)")}>
+                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
                   Export
                 </Button>
               </div>

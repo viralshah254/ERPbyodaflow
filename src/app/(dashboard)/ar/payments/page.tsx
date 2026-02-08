@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { getMockPayments, getMockOpenInvoices, type PaymentRow, type OpenInvoiceRow } from "@/lib/mock/ar";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ARPaymentsPage() {
@@ -82,7 +83,7 @@ export default function ARPaymentsPage() {
   };
 
   const handleWizardSubmit = () => {
-    window.alert("Submit payment: API pending.");
+    toast.info("Submit payment: API pending.");
     setWizardOpen(false);
   };
 
@@ -123,7 +124,7 @@ export default function ARPaymentsPage() {
           searchPlaceholder="Search by number, customer..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <DataTable<PaymentRow>
           data={filtered}

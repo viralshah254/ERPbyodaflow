@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CompliancePage() {
@@ -26,7 +27,7 @@ export default function CompliancePage() {
 
   const handleSave = () => {
     if (typeof window !== "undefined") {
-      window.alert("Save (stub). API pending.");
+      toast.info("Save (stub). API pending.");
     }
   };
 

@@ -9,6 +9,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getMockAPSuppliers, type APSupplierRow } from "@/lib/mock/ap";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function APSuppliersPage() {
@@ -61,7 +62,7 @@ export default function APSuppliersPage() {
           searchPlaceholder="Search suppliers..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <DataTable<APSupplierRow>
           data={filtered}

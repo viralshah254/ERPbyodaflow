@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { getMockCashflowForecast, type CashflowForecastRow } from "@/lib/mock/treasury/cashflow";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CashflowPage() {
@@ -109,7 +110,7 @@ export default function CashflowPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => window.alert(`Drilldown (stub): ${r.sourceDoc}. Would open doc view.`)}
+                          onClick={() => toast.info(`Drilldown (stub): ${r.sourceDoc}. Would open doc view.`)}
                         >
                           View doc
                         </Button>

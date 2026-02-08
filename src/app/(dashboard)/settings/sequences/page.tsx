@@ -23,13 +23,16 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getMockSequences, type SequenceRow } from "@/lib/mock/sequences";
+import { listSequences, createSequence, updateSequence } from "@/lib/data/sequences.repo";
+import type { SequenceRow } from "@/lib/mock/sequences";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const DOC_TYPES = ["Sales Order", "Invoice", "Purchase Order", "Bill", "Journal Entry", "Quote", "Delivery Note", "Goods Receipt"];
 
 export default function NumberingSequencesPage() {
-  const [rows, setRows] = React.useState<SequenceRow[]>(() => getMockSequences());
+  const [rows, setRows] = React.useState<SequenceRow[]>(() => listSequences());
+  const refresh = React.useCallback(() => setRows(listSequences()), []);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<SequenceRow | null>(null);
   const [form, setForm] = React.useState({
@@ -138,7 +141,7 @@ export default function NumberingSequencesPage() {
           <SheetHeader>
             <SheetTitle>{editing ? "Edit sequence" : "Add sequence"}</SheetTitle>
             <SheetDescription>
-              Prefix, next number, suffix, padding. Stub — no persist.
+              Saved to browser storage. API pending.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -192,7 +195,33 @@ export default function NumberingSequencesPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-            <Button onClick={() => setDrawerOpen(false)}>{editing ? "Save" : "Create"}</Button>
+            <Button
+              onClick={() => {
+                if (editing) {
+                  updateSequence(editing.id, {
+                    documentType: form.documentType,
+                    prefix: form.prefix,
+                    nextNumber: form.nextNumber,
+                    suffix: form.suffix,
+                    padding: form.padding,
+                  });
+                  toast.success("Sequence updated.");
+                } else {
+                  createSequence({
+                    documentType: form.documentType,
+                    prefix: form.prefix,
+                    nextNumber: form.nextNumber,
+                    suffix: form.suffix,
+                    padding: form.padding,
+                  });
+                  toast.success("Sequence created.");
+                }
+                setDrawerOpen(false);
+                refresh();
+              }}
+            >
+              {editing ? "Save" : "Create"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

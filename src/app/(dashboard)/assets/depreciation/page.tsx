@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { getMockDepreciationPreview } from "@/lib/mock/assets/depreciation";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function DepreciationPage() {
@@ -29,7 +30,7 @@ export default function DepreciationPage() {
   const preview = React.useMemo(() => getMockDepreciationPreview(period), [period]);
 
   const handlePost = () => {
-    window.alert("Post depreciation (stub). Creates journal and redirects to review.");
+    toast.info("Post depreciation (stub). Creates journal and redirects to review.");
     router.push("/docs/journal/new");
   };
 

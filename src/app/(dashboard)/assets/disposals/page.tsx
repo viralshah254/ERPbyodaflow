@@ -30,6 +30,7 @@ import { getMockDisposals, type DisposalRow } from "@/lib/mock/assets/disposals"
 import { getMockAssets } from "@/lib/mock/assets/register";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function DisposalsPage() {
@@ -117,7 +118,7 @@ export default function DisposalsPage() {
           searchPlaceholder="Search by asset..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
@@ -190,7 +191,7 @@ export default function DisposalsPage() {
             ) : (
               <>
                 <Button variant="outline" onClick={() => setWizardStep(1)}>Back</Button>
-                <Button onClick={() => { setWizardOpen(false); window.alert("Post disposal (stub)."); }}>Post</Button>
+                <Button onClick={() => { setWizardOpen(false); toast.info("Post disposal (stub)."); }}>Post</Button>
               </>
             )}
           </SheetFooter>

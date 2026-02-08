@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function NotificationsPage() {
@@ -18,7 +19,7 @@ export default function NotificationsPage() {
 
   const handleSave = () => {
     if (typeof window !== "undefined") {
-      window.alert("Save (stub). API pending.");
+      toast.info("Save (stub). API pending.");
     }
   };
 

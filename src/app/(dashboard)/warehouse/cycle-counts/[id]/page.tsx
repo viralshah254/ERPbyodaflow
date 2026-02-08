@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getMockCycleCounts } from "@/lib/mock/warehouse/cycle-counts";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CycleCountDetailPage() {
@@ -56,12 +57,12 @@ export default function CycleCountDetailPage() {
         actions={
           <div className="flex gap-2">
             {(session.status === "OPEN" || session.status === "IN_PROGRESS") && (
-              <Button size="sm" onClick={() => window.alert("Enter quantities (stub). Scan/enter UI.")}>
+              <Button size="sm" onClick={() => toast.info("Enter quantities (stub). Scan/enter UI.")}>
                 Enter quantities
               </Button>
             )}
             {session.status === "REVIEW" && hasVariance && (
-              <Button size="sm" onClick={() => window.alert("Post adjustments (stub). API pending.")}>
+              <Button size="sm" onClick={() => toast.info("Post adjustments (stub). API pending.")}>
                 Post adjustments
               </Button>
             )}

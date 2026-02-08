@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getMockReportLibrary, getMockSavedViews, getMockScheduledReports, getMockExportHistory } from "@/lib/mock/reports";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const QUICK_LINKS = [
@@ -94,7 +95,7 @@ export default function ReportsPage() {
                   <button
                     type="button"
                     className="text-xs text-primary hover:underline shrink-0"
-                    onClick={() => window.alert(`Run report (stub): ${r.name}`)}
+                    onClick={() => toast.info(`Run report (stub): ${r.name}`)}
                   >
                     Run
                   </button>

@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PricingRulesSettingsPage() {
@@ -25,7 +26,7 @@ export default function PricingRulesSettingsPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain pricing rules and when they override tier selection." label="Explain" />
-            <Button size="sm" onClick={() => window.alert("Add rule (stub). API pending.")}>
+            <Button size="sm" onClick={() => toast.info("Add rule (stub). API pending.")}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add rule
             </Button>

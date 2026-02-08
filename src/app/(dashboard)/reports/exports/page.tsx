@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getMockExportHistory, type ExportHistoryRow } from "@/lib/mock/reports";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ExportsPage() {
@@ -32,7 +33,7 @@ export default function ExportsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" variant="outline" onClick={() => window.alert("Export (stub)")}>
+          <Button size="sm" variant="outline" onClick={() => toast.info("Export (stub)")}>
             <Icons.Download className="mr-2 h-4 w-4" />
             Export
           </Button>
@@ -80,7 +81,7 @@ export default function ExportsPage() {
                           variant="ghost"
                           size="sm"
                           disabled={r.status !== "completed"}
-                          onClick={() => window.alert(`Download (stub): ${r.name}`)}
+                          onClick={() => toast.info(`Download (stub): ${r.name}`)}
                         >
                           Download
                         </Button>

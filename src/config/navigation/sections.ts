@@ -234,6 +234,8 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         { key: "finance-statements-cash-flow", label: "Cash Flow", href: "/finance/statements/cash-flow", icon: "ArrowLeftRight", moduleKey: "finance", requiresPermissions: ["finance.statements.read"] },
       ]},
       { key: "finance-period-close", label: "Period Close", href: "/finance/period-close", icon: "Lock", moduleKey: "finance", requiresPermissions: ["finance.close.write"] },
+      { key: "finance-budgets", label: "Budgets", href: "/finance/budgets", icon: "PiggyBank", moduleKey: "finance", requiresPermissions: ["finance.read"] },
+      { key: "finance-ledger", label: "Ledger", href: "/finance/ledger", icon: "BookOpen", moduleKey: "finance", requiresPermissions: ["finance.gl.read"] },
       { key: "finance-audit", label: "Audit Log", href: "/finance/audit", icon: "FileSearch", moduleKey: "finance", requiresPermissions: ["finance.audit.read"] },
     ],
   },

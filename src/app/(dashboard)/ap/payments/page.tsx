@@ -8,6 +8,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { getMockAPPayments, type APPaymentRow } from "@/lib/mock/ap";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function APPaymentsPage() {
@@ -64,7 +65,7 @@ export default function APPaymentsPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => window.alert("Pay supplier: API pending.")}>
+          <Button onClick={() => toast.info("Pay supplier: API pending.")}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Pay supplier
           </Button>
@@ -75,7 +76,7 @@ export default function APPaymentsPage() {
           searchPlaceholder="Search by number, supplier..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <DataTable<APPaymentRow>
           data={filtered}

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export interface DocumentComment {
@@ -36,7 +37,7 @@ export function DocumentComments({
     if (!t) return;
     onAddComment?.(t);
     setDraft("");
-    if (!onAddComment) window.alert("Add comment (stub): API pending.");
+    if (!onAddComment) toast.info("Add comment (stub). API pending.");
   };
 
   return (

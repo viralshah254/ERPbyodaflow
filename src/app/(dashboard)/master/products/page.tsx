@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getMockProducts, type ProductRow } from "@/lib/mock/masters";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const productIcon = "Package" as const;
@@ -75,7 +76,7 @@ export default function MasterProductsPage() {
 
   const handleImport = () => {
     if (typeof window !== "undefined") {
-      window.alert("Bulk import (stub): CSV preview would open here.");
+      toast.info("Bulk import (stub): CSV preview would open here.");
     }
   };
 
@@ -121,7 +122,7 @@ export default function MasterProductsPage() {
               onChange: (v) => setStatusFilter(v),
             },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
           actions={
             <Link
               href="/settings/customizer/fields"

@@ -17,6 +17,7 @@ import {
 import { getMockWhtSummary } from "@/lib/mock/tax/reports";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function WhtSummaryReportPage() {
@@ -36,7 +37,7 @@ export default function WhtSummaryReportPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain WHT in Kenya. When to apply on AP and payments." label="Explain" />
-            <Button variant="outline" size="sm" onClick={() => window.alert("Export (stub)")}>
+            <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
               <Icons.Download className="mr-2 h-4 w-4" />
               Export
             </Button>

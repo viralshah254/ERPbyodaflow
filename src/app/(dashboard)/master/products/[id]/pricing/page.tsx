@@ -38,6 +38,7 @@ import { listUoms } from "@/lib/data/uom.repo";
 import type { PricingTier, ProductPrice } from "@/lib/products/pricing-types";
 import { validateTiers } from "@/lib/pricing/validation";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { t } from "@/lib/terminology";
@@ -97,7 +98,7 @@ export default function ProductPricingPage() {
   };
 
   const handleApplyTemplate = () => {
-    window.alert("Apply pricing template (stub). API pending.");
+    toast.info("Apply pricing template (stub). API pending.");
   };
 
   if (!product) {

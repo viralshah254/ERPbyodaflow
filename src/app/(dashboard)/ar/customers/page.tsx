@@ -14,6 +14,7 @@ import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getMockARCustomers, type ARCustomerRow } from "@/lib/mock/ar";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ARCustomersPage() {
@@ -80,7 +81,7 @@ export default function ARCustomersPage() {
           searchPlaceholder="Search customers..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
           actions={
             <Link
               href="/settings/customizer/fields"

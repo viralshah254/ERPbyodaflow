@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InsightCard, KpiHero } from "@/components/analytics";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 
 /** Mock simulation: sliders + instant recalculation. */
 
@@ -34,9 +35,17 @@ export default function AnalyticsSimulationsPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/analytics/insights">Insights</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => toast.info("Apply suggestion (stub). API pending.")}
+            >
+              Apply suggestion
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/analytics/insights">Insights</Link>
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-6">

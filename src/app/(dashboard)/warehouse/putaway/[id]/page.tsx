@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { getMockPutaway } from "@/lib/mock/warehouse/putaway";
 import { getMockBins } from "@/lib/mock/warehouse/bins";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PutawayDetailPage() {
@@ -62,7 +63,7 @@ export default function PutawayDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => window.alert("Allocate to bins (stub). API pending.")}>
+            <Button size="sm" onClick={() => toast.info("Allocate to bins (stub). API pending.")}>
               Save allocation
             </Button>
             <Button variant="outline" size="sm" asChild>

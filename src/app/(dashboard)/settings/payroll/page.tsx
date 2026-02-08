@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PayrollSettingsPage() {
@@ -22,7 +23,7 @@ export default function PayrollSettingsPage() {
   const [payPeriod, setPayPeriod] = React.useState("MONTHLY");
 
   const handleSave = () => {
-    window.alert("Save (stub). API pending.");
+    toast.info("Save (stub). API pending.");
   };
 
   return (

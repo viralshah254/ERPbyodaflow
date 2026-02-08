@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { getMockFiscalYears, type FiscalYearRow } from "@/lib/mock/fiscal";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function FiscalYearsPage() {
@@ -23,11 +24,11 @@ export default function FiscalYearsPage() {
   const selected = years.find((y) => y.id === selectedYearId) ?? years[0] ?? null;
 
   const handleClosePeriod = (periodId: string) => {
-    window.alert(`Close period (stub): ${periodId}`);
+    toast.info(`Close period (stub): ${periodId}`);
   };
 
   const handleReopen = (periodId: string) => {
-    window.alert(`Reopen period (stub): ${periodId}`);
+    toast.info(`Reopen period (stub): ${periodId}`);
   };
 
   return (

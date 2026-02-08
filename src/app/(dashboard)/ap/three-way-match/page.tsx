@@ -22,6 +22,7 @@ import {
   getMockBillLines,
 } from "@/lib/mock/ap-match";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 type LineId = string;
@@ -62,7 +63,7 @@ export default function ThreeWayMatchPage() {
   };
 
   const handleMatchSelected = () => {
-    window.alert(
+    toast.info(
       `Match (stub): ${selectedPO.size} PO · ${selectedGRN.size} GRN · ${selectedBill.size} Bill`
     );
   };

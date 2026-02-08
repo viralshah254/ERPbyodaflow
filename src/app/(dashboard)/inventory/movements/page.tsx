@@ -7,6 +7,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { getMockMovements, type MovementRow } from "@/lib/mock/movements";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function StockMovementsPage() {
@@ -122,7 +123,7 @@ export default function StockMovementsPage() {
               onChange: (v) => setTypeFilter(v),
             },
           ]}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
 
         <DataTable<MovementRow>

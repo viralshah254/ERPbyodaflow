@@ -32,6 +32,7 @@ import { buildPayRunLinesFromEmployees } from "@/lib/mock/payroll/payruns";
 import type { PayRun } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const BRANCHES = ["Head Office", "East"];
@@ -68,7 +69,7 @@ export default function PayRunsPage() {
 
   const handleCreate = () => {
     if (!month) {
-      window.alert("Select month.");
+      toast.info("Select month.");
       return;
     }
     const nextNum = `PR-${month}`;
@@ -87,7 +88,7 @@ export default function PayRunsPage() {
   };
 
   const handleRequestApproval = () => {
-    window.alert("Request approval (stub). Links to approvals module.");
+    toast.info("Request approval (stub). Links to approvals module.");
     setCreateOpen(false);
     setSeed((s) => s + 1);
   };
@@ -131,7 +132,7 @@ export default function PayRunsPage() {
       <div className="p-6 space-y-4">
         <DataTableToolbar
           searchPlaceholder="Search runs..."
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>

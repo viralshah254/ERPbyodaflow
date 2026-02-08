@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export interface PrintPreviewDoc {
@@ -51,7 +52,7 @@ export function PrintPreviewDrawer({
   const currency = doc?.currency ?? "KES";
 
   const handleDownloadPDF = () => {
-    window.alert("Download PDF (stub). API pending.");
+    toast.info("Download PDF (stub). API pending.");
     onOpenChange(false);
   };
 

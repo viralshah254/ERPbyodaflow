@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { getMockWarehouses, type WarehouseRow } from "@/lib/mock/masters";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function MasterWarehousesPage() {
@@ -84,7 +85,7 @@ export default function MasterWarehousesPage() {
           searchPlaceholder={`Search by code, name, branch...`}
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
           actions={
             <Link
               href="/settings/customizer/fields"

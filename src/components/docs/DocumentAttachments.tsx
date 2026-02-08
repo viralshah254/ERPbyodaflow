@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 interface DocumentAttachmentsProps {
@@ -32,7 +33,7 @@ export function DocumentAttachments({ files = MOCK_FILES }: DocumentAttachmentsP
         <Button
           variant="outline"
           size="sm"
-          onClick={() => window.alert("Upload (stub): API pending.")}
+          onClick={() => toast.info("Upload (stub). API pending.")}
         >
           <Icons.Upload className="mr-2 h-4 w-4" />
           Upload (stub)
@@ -53,7 +54,7 @@ export function DocumentAttachments({ files = MOCK_FILES }: DocumentAttachmentsP
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {f.size && <span className="text-xs text-muted-foreground">{f.size}</span>}
-                <Button variant="ghost" size="sm" className="h-7" onClick={() => window.alert(`Download (stub): ${f.name}`)}>
+                <Button variant="ghost" size="sm" className="h-7" onClick={() => toast.info(`Download (stub): ${f.name}`)}>
                   <Icons.Download className="h-4 w-4" />
                 </Button>
               </div>

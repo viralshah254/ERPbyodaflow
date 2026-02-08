@@ -25,10 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getMockAssets, getMockAssetById, type AssetRow, type DepreciationMethod } from "@/lib/mock/assets/register";
+import { listAssets, createAsset, updateAsset } from "@/lib/data/assets.repo";
+import { type AssetRow, type DepreciationMethod } from "@/lib/mock/assets/register";
 import { getMockAPSuppliers } from "@/lib/mock/ap";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const CATEGORIES = ["IT Equipment", "Machinery", "Furniture", "Vehicles", "Other"];
@@ -51,7 +53,8 @@ export default function AssetRegisterPage() {
     linkedInvoiceId: "",
   });
 
-  const rows = React.useMemo(() => getMockAssets(), []);
+  const [rows, setRows] = React.useState<AssetRow[]>(() => listAssets());
+  const refresh = React.useCallback(() => setRows(listAssets()), []);
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -136,7 +139,7 @@ export default function AssetRegisterPage() {
           searchPlaceholder="Search by code, name, category..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
@@ -158,7 +161,7 @@ export default function AssetRegisterPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit asset" : "Add asset"}</SheetTitle>
-            <SheetDescription>Stub — no persist.</SheetDescription>
+            <SheetDescription>Saved to browser storage. API pending.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -225,7 +228,44 @@ export default function AssetRegisterPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-            <Button onClick={() => setDrawerOpen(false)}>{editing ? "Save" : "Create"}</Button>
+            <Button
+              onClick={() => {
+                if (editing) {
+                  updateAsset(editing.id, {
+                    code: form.code,
+                    name: form.name,
+                    category: form.category,
+                    acquisitionDate: form.acquisitionDate,
+                    cost: form.cost,
+                    salvage: form.salvage,
+                    usefulLifeYears: form.usefulLifeYears,
+                    depreciationMethod: form.depreciationMethod,
+                    linkedVendorId: form.linkedVendorId || undefined,
+                    linkedInvoiceId: form.linkedInvoiceId || undefined,
+                  });
+                  toast.success("Asset updated.");
+                } else {
+                  createAsset({
+                    code: form.code,
+                    name: form.name,
+                    category: form.category,
+                    acquisitionDate: form.acquisitionDate,
+                    cost: form.cost,
+                    salvage: form.salvage,
+                    usefulLifeYears: form.usefulLifeYears,
+                    depreciationMethod: form.depreciationMethod,
+                    linkedVendorId: form.linkedVendorId || undefined,
+                    linkedInvoiceId: form.linkedInvoiceId || undefined,
+                    status: "ACTIVE",
+                  });
+                  toast.success("Asset created.");
+                }
+                setDrawerOpen(false);
+                refresh();
+              }}
+            >
+              {editing ? "Save" : "Create"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

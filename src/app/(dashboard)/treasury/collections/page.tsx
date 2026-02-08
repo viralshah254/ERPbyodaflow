@@ -12,6 +12,7 @@ import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import Link from "next/link";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CollectionsPage() {
@@ -76,7 +77,7 @@ export default function CollectionsPage() {
           searchPlaceholder="Search by invoice, customer..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => window.alert("Export (stub)")}
+          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>

@@ -1,13 +1,16 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMockApprovalInbox, type ApprovalItem } from "@/lib/mock/approvals";
 import { formatMoney } from "@/lib/money";
+import { drillToDocument } from "@/lib/drill-through";
 import { ApprovalSheet } from "@/components/approvals/ApprovalSheet";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ApprovalsInboxPage() {
@@ -22,11 +25,11 @@ export default function ApprovalsInboxPage() {
   };
 
   const handleApprove = (id: string, comment?: string) => {
-    window.alert(`Approve (stub): ${id}${comment ? ` — ${comment}` : ""}`);
+    toast.info(`Approve (stub): ${id}${comment ? ` — ${comment}` : ""}`);
   };
 
   const handleReject = (id: string, comment?: string) => {
-    window.alert(`Reject (stub): ${id}${comment ? ` — ${comment}` : ""}`);
+    toast.info(`Reject (stub): ${id}${comment ? ` — ${comment}` : ""}`);
   };
 
   return (
@@ -75,6 +78,9 @@ export default function ApprovalsInboxPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={drillToDocument(a.documentType, a.documentId).href}>View</Link>
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => handleReject(a.id)}>
                         Reject
                       </Button>

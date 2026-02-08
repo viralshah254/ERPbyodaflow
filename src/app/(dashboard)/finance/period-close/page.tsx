@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PeriodClosePage() {
@@ -36,13 +37,26 @@ export default function PeriodClosePage() {
               </div>
             ))}
           </div>
-          <div className="pt-4 border-t">
-            <Button className="w-full" size="lg">
+          <div className="pt-4 border-t space-y-2">
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => toast.info("Close period (stub). API pending.")}
+            >
               <Icons.Lock className="mr-2 h-4 w-4" />
-              Lock Period
+              Close period
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              size="lg"
+              onClick={() => toast.info("Reopen period (stub). API pending.")}
+            >
+              <Icons.Unlock className="mr-2 h-4 w-4" />
+              Reopen period
             </Button>
             <p className="text-xs text-muted-foreground mt-2 text-center">
-              This will prevent any transactions from being posted to this period
+              Close prevents transactions from being posted to this period. Reopen allows edits (stub).
             </p>
           </div>
         </CardContent>
