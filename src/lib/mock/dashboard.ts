@@ -12,6 +12,13 @@ export interface KpiSeries {
   sparkline?: boolean;
 }
 
+export interface ApprovalLineItem {
+  description: string;
+  qty?: number;
+  unit?: string;
+  amount?: number;
+}
+
 export interface ApprovalItem {
   id: string;
   entityType: string;
@@ -21,6 +28,13 @@ export interface ApprovalItem {
   requestedAt: string;
   requestedBy: string;
   severity?: "low" | "medium" | "high";
+  /** Rich detail for quick-view sheet */
+  amount?: number;
+  currency?: string;
+  party?: string;
+  documentType?: string;
+  documentId?: string;
+  lineItems?: ApprovalLineItem[];
 }
 
 export interface TaskItem {
@@ -161,20 +175,39 @@ export const MOCK_APPROVALS: ApprovalItem[] = [
     entityType: "purchase-order",
     entityId: "po-101",
     reference: "PO-2025-101",
-    summary: "Office supplies KES 85,000",
+    summary: "Office supplies",
     requestedAt: "2025-01-28T10:00:00Z",
     requestedBy: "Jane Doe",
     severity: "medium",
+    amount: 85000,
+    currency: "KES",
+    party: "Office Supplies Co",
+    documentType: "purchase-order",
+    documentId: "po-101",
+    lineItems: [
+      { description: "A4 paper (reams)", qty: 20, unit: "ream", amount: 24000 },
+      { description: "Pens box", qty: 10, unit: "box", amount: 8500 },
+      { description: "Staples & folders", qty: 1, unit: "lot", amount: 52500 },
+    ],
   },
   {
     id: "a2",
     entityType: "sales-order",
     entityId: "so-205",
     reference: "SO-2025-205",
-    summary: "Bulk order ABC Ltd KES 320,000",
+    summary: "Bulk order",
     requestedAt: "2025-01-28T09:30:00Z",
     requestedBy: "John Smith",
     severity: "high",
+    amount: 320000,
+    currency: "KES",
+    party: "ABC Ltd",
+    documentType: "sales-order",
+    documentId: "so-205",
+    lineItems: [
+      { description: "Product Alpha", qty: 500, unit: "pcs", amount: 200000 },
+      { description: "Product Beta", qty: 200, unit: "pcs", amount: 120000 },
+    ],
   },
 ];
 
