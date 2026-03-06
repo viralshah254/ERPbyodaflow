@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getMockPaymentRuns } from "@/lib/mock/treasury/payment-runs";
 import { formatMoney } from "@/lib/money";
+import { downloadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -61,7 +62,21 @@ export default function PaymentRunDetailPage() {
               </Button>
             )}
             {canExport && (
-              <Button variant="outline" size="sm" onClick={() => toast.info("Export CSV / Bank format (stub).")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (isApiConfigured()) {
+                    downloadFile(
+                      `/api/treasury/payment-runs/${encodeURIComponent(id)}/export`,
+                      `payment-run-${run.number}.csv`,
+                      (msg) => toast.info(msg || "Export not yet available.")
+                    );
+                  } else {
+                    toast.info("Export CSV / Bank format (stub). Set NEXT_PUBLIC_API_URL to use backend.");
+                  }
+                }}
+              >
                 Export
               </Button>
             )}

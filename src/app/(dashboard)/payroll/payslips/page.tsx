@@ -21,6 +21,7 @@ import type { Payslip } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
+import { downloadFile, isApiConfigured } from "@/lib/api/client";
 import * as Icons from "lucide-react";
 
 export default function PayslipsPage() {
@@ -50,7 +51,19 @@ export default function PayslipsPage() {
     setPreviewOpen(true);
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = (payslipId?: string) => {
+    if (!payslipId) {
+      toast.info("Select a payslip to download.");
+      return;
+    }
+    if (isApiConfigured()) {
+      downloadFile(
+        `/api/payroll/payslips/${encodeURIComponent(payslipId)}/pdf`,
+        `payslip-${payslipId}.pdf`,
+        (msg) => toast.info(msg || "PDF not yet available.")
+      );
+      return;
+    }
     toast.info("Download PDF (stub). API pending.");
   };
 
@@ -112,7 +125,7 @@ export default function PayslipsPage() {
           )}
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>Close</Button>
-            <Button onClick={handleDownloadPDF} data-testid="payslip-preview-download-pdf">Download PDF</Button>
+            <Button onClick={() => handleDownloadPDF(selected?.id)} data-testid="payslip-preview-download-pdf">Download PDF</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

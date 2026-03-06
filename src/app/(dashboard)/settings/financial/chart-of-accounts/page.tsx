@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getMockCOARootFirst, type CoaRow, type CoaRowWithDepth, type CoaAccountType, type NormalBalance } from "@/lib/mock/coa";
+import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -78,8 +79,30 @@ export default function ChartOfAccountsPage() {
     setDrawerOpen(true);
   };
 
+  const importInputRef = React.useRef<HTMLInputElement>(null);
+
   const handleImport = () => {
-    toast.info("Import COA (stub). API pending.");
+    if (isApiConfigured()) {
+      importInputRef.current?.click();
+      return;
+    }
+    toast.info("Import COA (stub). Set NEXT_PUBLIC_API_URL to use backend.");
+  };
+
+  const onImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    uploadFile(
+      "/api/import/coa",
+      file,
+      (data) => {
+        if (data.imported != null) toast.success(`Imported ${data.imported} account(s).`);
+        else if (data.jobId) toast.success("Import queued. " + (data.message ?? ""));
+        else toast.success("Import completed.");
+      },
+      (msg) => toast.error(msg)
+    );
   };
 
   return (
@@ -96,6 +119,13 @@ export default function ChartOfAccountsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={onImportFile}
+            />
             <Button variant="outline" size="sm" onClick={handleImport}>
               <Icons.Upload className="mr-2 h-4 w-4" />
               Import

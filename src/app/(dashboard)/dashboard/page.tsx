@@ -23,6 +23,12 @@ export default function DashboardPage() {
         showCommandHint
         actions={
           <>
+            <Link
+              href="/control-tower"
+              className="text-sm font-medium text-primary hover:underline hidden sm:inline"
+            >
+              Control Tower
+            </Link>
             <QuickActionsRow actions={quickActions} />
             <Link
               href="/inbox"

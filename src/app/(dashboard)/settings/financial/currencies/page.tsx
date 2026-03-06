@@ -19,12 +19,14 @@ import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import type { CurrencyCode } from "@/lib/org/financial-settings";
 import { BaseCurrencyCard } from "@/components/settings/financial/BaseCurrencyCard";
 import { CurrencyTable } from "@/components/settings/financial/CurrencyTable";
+import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CurrenciesSettingsPage() {
   const { settings, update } = useFinancialSettings();
   const [addOpen, setAddOpen] = React.useState(false);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleBaseChange = React.useCallback(
     (code: CurrencyCode) => {
@@ -56,8 +58,39 @@ export default function CurrenciesSettingsPage() {
     setAddOpen(false);
   };
 
+  const handleImportCsv = () => {
+    if (isApiConfigured()) {
+      importInputRef.current?.click();
+      return;
+    }
+    toast.info("Import CSV: set NEXT_PUBLIC_API_URL to use backend.");
+  };
+
+  const onImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    uploadFile(
+      "/api/import/currencies",
+      file,
+      (data) => {
+        if (data.imported != null) toast.success(`Imported ${data.imported} currency(ies).`);
+        else if (data.jobId) toast.success("Import queued. " + (data.message ?? ""));
+        else toast.success("Import completed.");
+      },
+      (msg) => toast.error(msg)
+    );
+  };
+
   return (
     <PageShell>
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={onImportFile}
+      />
       <PageHeader
         title="Currencies"
         description="Set base currency and enabled currencies for this business."
@@ -68,6 +101,12 @@ export default function CurrenciesSettingsPage() {
         ]}
         sticky
         showCommandHint
+        actions={
+          <Button variant="outline" size="sm" onClick={handleImportCsv}>
+            <Icons.Upload className="mr-2 h-4 w-4" />
+            Import CSV
+          </Button>
+        }
       />
       <div className="p-6 space-y-6">
         <BaseCurrencyCard

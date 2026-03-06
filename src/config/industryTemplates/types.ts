@@ -15,6 +15,7 @@ export type ModuleKey =
   | "finance"
   | "manufacturing"
   | "distribution"
+  | "franchise"
   | "retail"
   | "crm"
   | "projects"
@@ -38,7 +39,13 @@ export type FeatureFlagKey =
   | "collections"
   | "replenishment"
   | "promotions"
-  | "storePerformance";
+  | "storePerformance"
+  // Cool Catch / franchise & VAS (offerable to other customers)
+  | "procurementAuditCashWeight"
+  | "subcontracting"
+  | "commissionEngine"
+  | "vmiReplenishment"
+  | "reverseBom";
 
 export type NavSectionKey =
   | "core"
@@ -55,6 +62,7 @@ export type NavSectionKey =
   | "pricing"
   | "manufacturing"
   | "distribution"
+  | "franchise"
   | "retail"
   | "finance"
   | "crm"
@@ -88,7 +96,9 @@ export type TerminologyKey =
   | "quote"
   | "deliveryNote"
   | "purchaseRequest"
-  | "bill";
+  | "bill"
+  | "franchisee"
+  | "commission";
 
 export type TerminologyOverrides = Partial<Record<TerminologyKey, string>>;
 

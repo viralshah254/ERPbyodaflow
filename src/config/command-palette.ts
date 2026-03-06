@@ -27,6 +27,7 @@ export interface CommandItemCopilot extends CommandItemBase {
 export type CommandItem = CommandItemNav | CommandItemCreate | CommandItemCopilot;
 
 export const COMMAND_NAV_ITEMS: CommandItemNav[] = [
+  { id: "nav-control-tower", label: "Control Tower", group: "nav", href: "/control-tower", keywords: ["ai", "planning", "production", "procurement", "finance", "layers"], icon: "Gauge" },
   { id: "nav-dashboard", label: "Dashboard", group: "nav", href: "/dashboard", keywords: ["home"], icon: "LayoutDashboard" },
   { id: "nav-docs", label: "Document Center", group: "nav", href: "/docs", keywords: ["documents", "docs", "center"], icon: "FileText" },
   { id: "nav-approvals-inbox", label: "Approvals Inbox", group: "nav", href: "/approvals/inbox", keywords: ["approvals", "inbox", "pending"], icon: "Inbox" },

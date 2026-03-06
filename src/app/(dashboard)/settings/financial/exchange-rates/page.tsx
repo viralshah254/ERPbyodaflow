@@ -22,6 +22,7 @@ import {
   upsertMockExchangeRate,
   type ExchangeRateRow,
 } from "@/lib/mock/exchange-rates";
+import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -40,6 +41,7 @@ export default function ExchangeRatesSettingsPage() {
     to: settings.baseCurrency,
     rate: 128.5,
   });
+  const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const rates = React.useMemo(
     () => getMockExchangeRates({ date }),
@@ -47,9 +49,28 @@ export default function ExchangeRatesSettingsPage() {
   );
 
   const handleImportCsv = () => {
-    if (typeof window !== "undefined") {
-      toast.info("Import CSV: API pending.");
+    if (isApiConfigured()) {
+      importInputRef.current?.click();
+      return;
     }
+    toast.info("Import CSV: set NEXT_PUBLIC_API_URL to use backend.");
+  };
+
+  const onImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    uploadFile(
+      "/api/import/exchange-rates",
+      file,
+      (data) => {
+        if (data.imported != null) toast.success(`Imported ${data.imported} rate(s).`);
+        else if (data.jobId) toast.success("Import queued. " + (data.message ?? ""));
+        else toast.success("Import completed.");
+        setRefresh((r) => r + 1);
+      },
+      (msg) => toast.error(msg)
+    );
   };
 
   const handleFetchLatest = () => {
@@ -110,6 +131,13 @@ export default function ExchangeRatesSettingsPage() {
             <Button variant="outline" size="sm" onClick={handleFetchLatest}>
               Fetch latest rates
             </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={onImportFile}
+            />
             <Button variant="outline" size="sm" onClick={handleImportCsv}>
               <Icons.Upload className="mr-2 h-4 w-4" />
               Import CSV

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { downloadFile, isApiConfigured } from "@/lib/api/client";
 
 export interface PrintPreviewDoc {
   type: string;
@@ -52,7 +53,21 @@ export function PrintPreviewDrawer({
   const currency = doc?.currency ?? "KES";
 
   const handleDownloadPDF = () => {
-    toast.info("Download PDF (stub). API pending.");
+    if (!doc) {
+      toast.info("Download PDF (stub). API pending.");
+      onOpenChange(false);
+      return;
+    }
+    if (isApiConfigured()) {
+      downloadFile(
+        `/api/docs/${encodeURIComponent(doc.type)}/${encodeURIComponent(doc.id)}/pdf`,
+        `${doc.type}-${doc.id}.pdf`,
+        (msg) => toast.info(msg || "PDF not yet available.")
+      );
+      onOpenChange(false);
+      return;
+    }
+    toast.info("Download PDF (stub). Set NEXT_PUBLIC_API_URL to use backend.");
     onOpenChange(false);
   };
 

@@ -7,6 +7,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     moduleKey: "dashboard",
     order: 0,
     items: [
+      { key: "control-tower", label: "Control Tower", href: "/control-tower", icon: "Gauge", moduleKey: "dashboard" },
       { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", moduleKey: "dashboard" },
       { key: "approvals", label: "Approvals", href: "/approvals", icon: "CheckCircle2", moduleKey: "automation", requiresFlags: ["approvals"], requiresPermissions: ["approvals.read"], children: [
         { key: "approvals-inbox", label: "Inbox", href: "/approvals/inbox", icon: "Inbox", moduleKey: "automation", requiresPermissions: ["approvals.read"] },
@@ -98,6 +99,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "purchasing-suppliers", label: "Suppliers", href: "/ap/suppliers", icon: "Building2", moduleKey: "purchasing", termKey: "supplier", requiresPermissions: ["purchasing.suppliers.read"] },
       { key: "purchasing-supplier-invoices", label: "Supplier Invoices (AP)", href: "/ap/bills", icon: "FileText", moduleKey: "purchasing", requiresPermissions: ["purchasing.bills.read"] },
       { key: "purchasing-returns", label: "Purchase Returns", href: "/purchasing/purchase-returns", icon: "RotateCcw", moduleKey: "purchasing", requiresPermissions: ["purchasing.returns.read"] },
+      { key: "purchasing-cash-weight-audit", label: "Cash-to-Weight Audit", href: "/purchasing/cash-weight-audit", icon: "Scale", moduleKey: "purchasing", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["purchasing.orders.read"] },
     ],
   },
   {
@@ -122,6 +124,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "manufacturing-routing", label: "Routing", href: "/manufacturing/routing", icon: "GitBranch", moduleKey: "manufacturing", requiresFlags: ["bomMrpWorkOrders"], requiresPermissions: ["manufacturing.production.read"] },
       { key: "manufacturing-work-orders", label: "Work Orders", href: "/manufacturing/work-orders", icon: "ClipboardList", moduleKey: "manufacturing", termKey: "workOrder", requiresFlags: ["workOrders"], requiresPermissions: ["manufacturing.workorders.read"] },
       { key: "manufacturing-mrp", label: "MRP", href: "/manufacturing/mrp", icon: "BarChart3", moduleKey: "manufacturing", requiresFlags: ["bomMrpWorkOrders"], requiresPermissions: ["manufacturing.production.read"] },
+      { key: "manufacturing-subcontracting", label: "Subcontracting / Job Work", href: "/manufacturing/subcontracting", icon: "Factory", moduleKey: "manufacturing", requiresFlags: ["subcontracting"], requiresPermissions: ["manufacturing.production.read"] },
     ],
   },
   {
@@ -134,6 +137,16 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "distribution-routes", label: "Routes", href: "/distribution/routes", icon: "MapPin", moduleKey: "distribution", termKey: "route", requiresPermissions: ["distribution.routes.read"] },
       { key: "distribution-deliveries", label: "Deliveries", href: "/distribution/deliveries", icon: "Truck", moduleKey: "distribution", termKey: "delivery", requiresFlags: ["deliveries"], requiresPermissions: ["distribution.deliveries.read"] },
       { key: "distribution-collections", label: "Collections", href: "/distribution/collections", icon: "Wallet", moduleKey: "distribution", termKey: "collection", requiresFlags: ["collections"], requiresPermissions: ["distribution.collections.read"] },
+    ],
+  },
+  {
+    key: "franchise",
+    label: "Franchise",
+    moduleKey: "franchise",
+    order: 8.5,
+    items: [
+      { key: "franchise-commission", label: "Commission & Rebates", href: "/franchise/commission", icon: "Percent", moduleKey: "franchise", termKey: "commission", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
+      { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment"], requiresPermissions: ["inventory.read"] },
     ],
   },
   {

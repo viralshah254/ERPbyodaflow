@@ -14,6 +14,7 @@ import {
   type BankStatementLine,
   type SystemTransaction,
 } from "@/lib/mock/bank-recon";
+import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -21,6 +22,7 @@ export default function BankReconPage() {
   const router = useRouter();
   const [selectedStmt, setSelectedStmt] = React.useState<string | null>(null);
   const [selectedSys, setSelectedSys] = React.useState<string | null>(null);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const session = React.useMemo(() => getMockReconcileSession(), []);
   const statements = React.useMemo(() => getMockStatementLines(), []);
@@ -48,6 +50,30 @@ export default function BankReconPage() {
     toast.info(`Create payment (stub) from statement line ${lineId}. API pending.`);
   };
 
+  const handleImportStatement = () => {
+    if (isApiConfigured()) {
+      importInputRef.current?.click();
+      return;
+    }
+    toast.info("Import statement: set NEXT_PUBLIC_API_URL to use backend.");
+  };
+
+  const onImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    uploadFile(
+      "/api/import/bank-statement",
+      file,
+      (data) => {
+        if (data.imported != null) toast.success(`Imported ${data.imported} line(s).`);
+        else if (data.jobId) toast.success("Import queued. " + (data.message ?? ""));
+        else toast.success("Import completed.");
+      },
+      (msg) => toast.error(msg)
+    );
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -61,6 +87,13 @@ export default function BankReconPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,.ofx,.qfx"
+              className="hidden"
+              onChange={onImportFile}
+            />
             <Button variant="outline" size="sm" asChild>
               <Link href="/treasury/overview">Treasury</Link>
             </Button>
@@ -68,7 +101,7 @@ export default function BankReconPage() {
               <Icons.Sparkles className="mr-2 h-4 w-4" />
               AI match suggestions
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleImportStatement}>
               <Icons.Upload className="mr-2 h-4 w-4" />
               Import Statement
             </Button>
