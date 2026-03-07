@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { getMockPutaway } from "@/lib/mock/warehouse/putaway";
 import { getMockBins } from "@/lib/mock/warehouse/bins";
+import { warehousePutawayConfirm } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -65,6 +66,21 @@ export default function PutawayDetailPage() {
           <div className="flex gap-2">
             <Button size="sm" onClick={() => toast.info("Allocate to bins (stub). API pending.")}>
               Save allocation
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  await warehousePutawayConfirm(id);
+                  toast.success("Putaway confirmed.");
+                } catch (e) {
+                  if ((e as Error).message === "STUB") toast.info("Confirm (stub). API pending.");
+                  else toast.error((e as Error).message);
+                }
+              }}
+            >
+              Confirm putaway
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/warehouse/putaway">Back to list</Link>

@@ -10,6 +10,7 @@ import { getMockApprovalInbox, type ApprovalItem } from "@/lib/mock/approvals";
 import { formatMoney } from "@/lib/money";
 import { drillToDocument } from "@/lib/drill-through";
 import { ApprovalSheet } from "@/components/approvals/ApprovalSheet";
+import { approvalApprove, approvalReject } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -24,12 +25,24 @@ export default function ApprovalsInboxPage() {
     setSheetOpen(true);
   };
 
-  const handleApprove = (id: string, comment?: string) => {
-    toast.info(`Approve (stub): ${id}${comment ? ` — ${comment}` : ""}`);
+  const handleApprove = async (id: string, comment?: string) => {
+    try {
+      await approvalApprove(id, comment);
+      toast.success("Approved.");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info(`Approve (stub): ${id}. API pending.`);
+      else toast.error((e as Error).message);
+    }
   };
 
-  const handleReject = (id: string, comment?: string) => {
-    toast.info(`Reject (stub): ${id}${comment ? ` — ${comment}` : ""}`);
+  const handleReject = async (id: string, comment?: string) => {
+    try {
+      await approvalReject(id, comment);
+      toast.success("Rejected.");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info(`Reject (stub): ${id}. API pending.`);
+      else toast.error((e as Error).message);
+    }
   };
 
   return (

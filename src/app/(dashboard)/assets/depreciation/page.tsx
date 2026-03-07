@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getMockDepreciationPreview } from "@/lib/mock/assets/depreciation";
 import { formatMoney } from "@/lib/money";
+import { runDepreciation } from "@/lib/api/stub-endpoints";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -26,12 +27,22 @@ import * as Icons from "lucide-react";
 export default function DepreciationPage() {
   const router = useRouter();
   const [period, setPeriod] = React.useState("2025-01");
+  const [posting, setPosting] = React.useState(false);
 
   const preview = React.useMemo(() => getMockDepreciationPreview(period), [period]);
 
-  const handlePost = () => {
-    toast.info("Post depreciation (stub). Creates journal and redirects to review.");
-    router.push("/docs/journal/new");
+  const handlePost = async () => {
+    setPosting(true);
+    try {
+      await runDepreciation({ period });
+      toast.success("Depreciation run completed.");
+      router.push("/docs/journal/new");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info("Post depreciation (stub). API pending.");
+      else toast.error((e as Error).message);
+    } finally {
+      setPosting(false);
+    }
   };
 
   return (
@@ -48,7 +59,7 @@ export default function DepreciationPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain depreciation run and journal posting." label="Explain depreciation" />
-            <Button size="sm" onClick={handlePost}>
+            <Button size="sm" disabled={posting} onClick={handlePost}>
               <Icons.FileEdit className="mr-2 h-4 w-4" />
               Post depreciation
             </Button>

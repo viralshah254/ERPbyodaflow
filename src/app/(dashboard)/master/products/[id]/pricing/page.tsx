@@ -38,6 +38,7 @@ import { listUoms } from "@/lib/data/uom.repo";
 import type { PricingTier, ProductPrice } from "@/lib/products/pricing-types";
 import { validateTiers } from "@/lib/pricing/validation";
 import { formatMoney } from "@/lib/money";
+import { productApplyPricingTemplate } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -68,6 +69,7 @@ export default function ProductPricingPage() {
   const [compareView, setCompareView] = React.useState(false);
   const [tierSheetOpen, setTierSheetOpen] = React.useState(false);
   const [editingTierIndex, setEditingTierIndex] = React.useState<number | null>(null);
+  const [applyingTemplate, setApplyingTemplate] = React.useState(false);
 
   React.useEffect(() => {
     setDraftTiers(tiers);
@@ -97,8 +99,21 @@ export default function ProductPricingPage() {
     setEditingTierIndex(null);
   };
 
-  const handleApplyTemplate = () => {
-    toast.info("Apply pricing template (stub). API pending.");
+  const handleApplyTemplate = async () => {
+    if (!product || !selectedListId) {
+      toast.error("Select a price list to apply as template.");
+      return;
+    }
+    setApplyingTemplate(true);
+    try {
+      await productApplyPricingTemplate(product.id, selectedListId);
+      toast.success("Pricing template applied.");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info("Apply pricing template (stub). API pending.");
+      else toast.error((e as Error).message);
+    } finally {
+      setApplyingTemplate(false);
+    }
   };
 
   if (!product) {
@@ -137,7 +152,7 @@ export default function ProductPricingPage() {
               <Icons.Sparkles className="mr-2 h-4 w-4" />
               Copilot
             </Button>
-            <Button variant="outline" size="sm" onClick={handleApplyTemplate}>
+            <Button variant="outline" size="sm" disabled={applyingTemplate} onClick={handleApplyTemplate}>
               Apply template
             </Button>
             <Button variant="outline" size="sm" asChild>

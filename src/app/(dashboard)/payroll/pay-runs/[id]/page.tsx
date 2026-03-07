@@ -26,6 +26,7 @@ import {
 import { getPayRunById, listPayRunLines, listEmployees } from "@/lib/data/payroll.repo";
 import type { PayRunLine } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
+import { payRunApprove } from "@/lib/api/stub-endpoints";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -70,8 +71,18 @@ export default function PayRunDetailPage() {
     setLineSheetOpen(true);
   };
 
-  const handleApprove = () => {
-    toast.info("Approve (stub). API pending.");
+  const [approving, setApproving] = React.useState(false);
+  const handleApprove = async () => {
+    setApproving(true);
+    try {
+      await payRunApprove(id);
+      toast.success("Pay run approved.");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info("Approve (stub). API pending.");
+      else toast.error((e as Error).message);
+    } finally {
+      setApproving(false);
+    }
   };
 
   const handlePostJournal = () => {
@@ -112,7 +123,7 @@ export default function PayRunDetailPage() {
           <div className="flex gap-2">
             <ExplainThis prompt="Explain pay run approval and bank file generation." label="Explain" />
             {(run.status === "DRAFT" || run.status === "SUBMITTED") && (
-              <Button size="sm" onClick={handleApprove}>
+              <Button size="sm" disabled={approving} onClick={handleApprove}>
                 Approve
               </Button>
             )}

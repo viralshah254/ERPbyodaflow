@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMockPickPack } from "@/lib/mock/warehouse/pick-pack";
+import { warehousePickPackComplete } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -58,9 +59,25 @@ export default function PickPackDetailPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/warehouse/pick-pack">Back to list</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  await warehousePickPackComplete(id);
+                  toast.success("Pick-pack completed.");
+                } catch (e) {
+                  if ((e as Error).message === "STUB") toast.info("Complete (stub). API pending.");
+                  else toast.error((e as Error).message);
+                }
+              }}
+            >
+              Complete
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/warehouse/pick-pack">Back to list</Link>
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-6">

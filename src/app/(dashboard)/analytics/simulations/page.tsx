@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InsightCard, KpiHero } from "@/components/analytics";
 import { formatMoney } from "@/lib/money";
+import { analyticsApplySuggestion } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 
 /** Mock simulation: sliders + instant recalculation. */
@@ -18,6 +19,20 @@ export default function AnalyticsSimulationsPage() {
   const [reorder, setReorder] = React.useState(0);
   const [payroll, setPayroll] = React.useState(0);
   const [fx, setFx] = React.useState(0);
+  const [applying, setApplying] = React.useState(false);
+
+  const handleApplySuggestion = async () => {
+    setApplying(true);
+    try {
+      await analyticsApplySuggestion("sim-current");
+      toast.success("Suggestion applied.");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info("Apply suggestion (stub). API pending.");
+      else toast.error((e as Error).message);
+    } finally {
+      setApplying(false);
+    }
+  };
 
   const marginImpact = 2.1 * (priceTier / 5);
   const revenueImpactPct = 4.3 * (priceTier / 5);
@@ -36,10 +51,7 @@ export default function AnalyticsSimulationsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => toast.info("Apply suggestion (stub). API pending.")}
-            >
+            <Button size="sm" disabled={applying} onClick={handleApplySuggestion}>
               Apply suggestion
             </Button>
             <Button variant="outline" size="sm" asChild>

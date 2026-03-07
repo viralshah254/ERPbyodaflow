@@ -331,6 +331,9 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       commissionEngine: true,
       vmiReplenishment: true,
       reverseBom: true,
+      landedCostMultiCurrency: true,
+      logisticsTrips: true,
+      massBalanceYield: true,
     },
     terminology: {
       customer: "Customer / Franchisee",

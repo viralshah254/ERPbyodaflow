@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getMockCycleCounts } from "@/lib/mock/warehouse/cycle-counts";
+import { warehouseCycleCountSubmit } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -64,6 +65,23 @@ export default function CycleCountDetailPage() {
             {session.status === "REVIEW" && hasVariance && (
               <Button size="sm" onClick={() => toast.info("Post adjustments (stub). API pending.")}>
                 Post adjustments
+              </Button>
+            )}
+            {(session.status === "OPEN" || session.status === "IN_PROGRESS" || session.status === "REVIEW") && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={async () => {
+                  try {
+                    await warehouseCycleCountSubmit(id);
+                    toast.success("Cycle count submitted.");
+                  } catch (e) {
+                    if ((e as Error).message === "STUB") toast.info("Submit (stub). API pending.");
+                    else toast.error((e as Error).message);
+                  }
+                }}
+              >
+                Submit
               </Button>
             )}
             <Button variant="outline" size="sm" asChild>

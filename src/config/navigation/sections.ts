@@ -117,7 +117,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "manufacturing",
     label: "Manufacturing",
     moduleKey: "manufacturing",
-    requiresOrgTypes: ["MANUFACTURER"],
+    requiresOrgTypes: ["MANUFACTURER", "DISTRIBUTOR"],
     order: 7,
     items: [
       { key: "manufacturing-boms", label: "Bills of Material (BOM)", href: "/manufacturing/boms", icon: "List", moduleKey: "manufacturing", termKey: "bom", requiresFlags: ["bomMrpWorkOrders"], requiresPermissions: ["manufacturing.bom.read"] },
@@ -125,6 +125,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "manufacturing-work-orders", label: "Work Orders", href: "/manufacturing/work-orders", icon: "ClipboardList", moduleKey: "manufacturing", termKey: "workOrder", requiresFlags: ["workOrders"], requiresPermissions: ["manufacturing.workorders.read"] },
       { key: "manufacturing-mrp", label: "MRP", href: "/manufacturing/mrp", icon: "BarChart3", moduleKey: "manufacturing", requiresFlags: ["bomMrpWorkOrders"], requiresPermissions: ["manufacturing.production.read"] },
       { key: "manufacturing-subcontracting", label: "Subcontracting / Job Work", href: "/manufacturing/subcontracting", icon: "Factory", moduleKey: "manufacturing", requiresFlags: ["subcontracting"], requiresPermissions: ["manufacturing.production.read"] },
+      { key: "manufacturing-yield", label: "Yield / Mass balance", href: "/manufacturing/yield", icon: "Scale", moduleKey: "manufacturing", requiresFlags: ["massBalanceYield"], requiresPermissions: ["manufacturing.production.read"] },
     ],
   },
   {
@@ -136,6 +137,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     items: [
       { key: "distribution-routes", label: "Routes", href: "/distribution/routes", icon: "MapPin", moduleKey: "distribution", termKey: "route", requiresPermissions: ["distribution.routes.read"] },
       { key: "distribution-deliveries", label: "Deliveries", href: "/distribution/deliveries", icon: "Truck", moduleKey: "distribution", termKey: "delivery", requiresFlags: ["deliveries"], requiresPermissions: ["distribution.deliveries.read"] },
+      { key: "distribution-trips", label: "Trips / Logistics", href: "/distribution/trips", icon: "Ship", moduleKey: "distribution", requiresFlags: ["logisticsTrips"], requiresPermissions: ["distribution.routes.read"] },
       { key: "distribution-collections", label: "Collections", href: "/distribution/collections", icon: "Wallet", moduleKey: "distribution", termKey: "collection", requiresFlags: ["collections"], requiresPermissions: ["distribution.collections.read"] },
     ],
   },

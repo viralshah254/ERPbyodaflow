@@ -32,17 +32,38 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getMockValuationSummary } from "@/lib/mock/inventory/costing";
-import { getMockLandedCostSources, getMockLandedCostTemplates, type LandedCostSourceRow } from "@/lib/mock/inventory/landed-cost";
+import { fetchLandedCostSources, fetchLandedCostTemplates, postLandedCostAllocation, type LandedCostSourceRow, type LandedCostTemplateRow } from "@/lib/api/landed-cost";
+import { runCosting } from "@/lib/api/stub-endpoints";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+const LANDED_COST_TYPE_LABELS: Record<string, string> = {
+  freight: "Freight",
+  insurance: "Insurance",
+  duty: "Import duty",
+  other: "Other",
+  permit: "Permits",
+  border: "Border / customs",
+  inbound_freight: "Inbound freight",
+  outbound_freight: "Outbound freight",
+  storage: "Cold storage",
+};
+
 export default function InventoryCostingPage() {
-  // Use a non-empty sentinel value for "all" to avoid Radix Select runtime error
+  const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
   const [warehouseFilter, setWarehouseFilter] = React.useState("ALL");
   const [allocationOpen, setAllocationOpen] = React.useState(false);
   const [selectedSource, setSelectedSource] = React.useState<LandedCostSourceRow | null>(null);
+  const [sources, setSources] = React.useState<LandedCostSourceRow[]>([]);
+  const [templates, setTemplates] = React.useState<LandedCostTemplateRow[]>([]);
+  const [sourcesLoading, setSourcesLoading] = React.useState(true);
+  const [allocationTemplateId, setAllocationTemplateId] = React.useState("");
+  const [allocationAmount, setAllocationAmount] = React.useState("");
+  const [allocationSaving, setAllocationSaving] = React.useState(false);
+  const [runCostingLoading, setRunCostingLoading] = React.useState(false);
 
   const summary = React.useMemo(
     () =>
@@ -51,13 +72,56 @@ export default function InventoryCostingPage() {
       ),
     [warehouseFilter]
   );
-  const sources = React.useMemo(() => getMockLandedCostSources(), []);
-  const templates = React.useMemo(() => getMockLandedCostTemplates(), []);
   const warehouses = React.useMemo(() => Array.from(new Set(summary.map((s) => s.warehouse))), [summary]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSourcesLoading(true);
+    Promise.all([fetchLandedCostSources(), fetchLandedCostTemplates()])
+      .then(([srcList, tplList]) => {
+        if (!cancelled) {
+          setSources(srcList);
+          setTemplates(tplList);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSources([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSourcesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const openAllocation = (src: LandedCostSourceRow) => {
     setSelectedSource(src);
+    setAllocationTemplateId("");
+    setAllocationAmount("");
     setAllocationOpen(true);
+  };
+
+  const handleSaveAllocation = async () => {
+    if (!selectedSource) return;
+    const templateId = allocationTemplateId.trim();
+    const amount = Number(allocationAmount);
+    if (!templateId || Number.isNaN(amount) || amount <= 0) {
+      toast.error("Select a template and enter a valid amount.");
+      return;
+    }
+    setAllocationSaving(true);
+    try {
+      await postLandedCostAllocation({
+        sourceId: selectedSource.id,
+        lines: [{ templateId, amount, currency: selectedSource.currency }],
+      });
+      toast.success("Landed cost allocation saved.");
+      setAllocationOpen(false);
+      setSelectedSource(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save allocation.");
+    } finally {
+      setAllocationSaving(false);
+    }
   };
 
   return (
@@ -72,7 +136,31 @@ export default function InventoryCostingPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              disabled={runCostingLoading}
+              onClick={async () => {
+                setRunCostingLoading(true);
+                try {
+                  await runCosting();
+                  toast.success("Costing run completed.");
+                } catch (e) {
+                  if ((e as Error).message === "STUB") toast.info("Run costing (stub). API pending.");
+                  else toast.error((e as Error).message);
+                } finally {
+                  setRunCostingLoading(false);
+                }
+              }}
+            >
+              <Icons.Play className="mr-2 h-4 w-4" />
+              Run costing
+            </Button>
+            {hasCashWeightAudit && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/purchasing/cash-weight-audit">Cash-to-weight audit</Link>
+              </Button>
+            )}
             <ExplainThis prompt="Explain inventory costing, FIFO vs weighted average, and landed cost allocation." label="Explain costing" />
             <Button variant="outline" size="sm" asChild>
               <Link href="/settings/inventory/costing">Costing settings</Link>
@@ -128,7 +216,7 @@ export default function InventoryCostingPage() {
         <Card>
           <CardHeader>
             <CardTitle>Landed cost allocation</CardTitle>
-            <CardDescription>Select GRN or Bill, add landed cost lines, allocate by qty/value/weight. Stub.</CardDescription>
+            <CardDescription>Select GRN or Bill, add landed cost lines (freight, duty, permits, inbound/outbound, storage). Allocate by qty, value, or weight. Multi-currency (e.g. KES/UGX) supported.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -138,6 +226,7 @@ export default function InventoryCostingPage() {
                   <TableHead>Number</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Supplier</TableHead>
+                  <TableHead>Currency</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead />
                 </TableRow>
@@ -149,6 +238,7 @@ export default function InventoryCostingPage() {
                     <TableCell className="font-medium">{s.number}</TableCell>
                     <TableCell>{s.date}</TableCell>
                     <TableCell>{s.supplier ?? "—"}</TableCell>
+                    <TableCell>{s.currency}</TableCell>
                     <TableCell>{formatMoney(s.totalAmount, s.currency)}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" onClick={() => openAllocation(s)}>
@@ -159,7 +249,10 @@ export default function InventoryCostingPage() {
                 ))}
               </TableBody>
             </Table>
-            {sources.length === 0 && (
+            {sourcesLoading && (
+              <div className="py-8 text-center text-sm text-muted-foreground">Loading sources…</div>
+            )}
+            {!sourcesLoading && sources.length === 0 && (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 No GRNs or bills to allocate. Select a document to add landed costs.
               </div>
@@ -185,27 +278,39 @@ export default function InventoryCostingPage() {
               <div className="space-y-2">
                 <Label>Add landed cost line</Label>
                 <div className="flex gap-2">
-                  <Select>
+                  <Select value={allocationTemplateId} onValueChange={setAllocationTemplateId}>
                     <SelectTrigger className="flex-1">
                       <SelectValue placeholder="Template" />
                     </SelectTrigger>
                     <SelectContent>
                       {templates.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>{t.name} ({t.allocationBasis})</SelectItem>
+                        <SelectItem key={t.id} value={t.id}>
+                          {LANDED_COST_TYPE_LABELS[t.type] ?? t.name} — {t.allocationBasis}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input type="number" placeholder="Amount" className="w-28" />
+                  <Input
+                    type="number"
+                    placeholder="Amount"
+                    className="w-28"
+                    value={allocationAmount}
+                    onChange={(e) => setAllocationAmount(e.target.value)}
+                    min={0}
+                    step={0.01}
+                  />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Allocate by qty / value / weight. Resulting per-unit cost impact shown after save (stub).
+                Allocate by qty, value, or weight. For weight-based allocation (e.g. fish), ensure GRN lines have weight; multi-currency sources (e.g. UGX) use exchange rate to base. Per-unit cost impact after save (stub).
               </p>
             </div>
           )}
           <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setAllocationOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setAllocationOpen(false); toast.info("Save allocation (stub). API pending."); }}>Save</Button>
+            <Button variant="outline" onClick={() => setAllocationOpen(false)} disabled={allocationSaving}>Cancel</Button>
+            <Button onClick={handleSaveAllocation} disabled={allocationSaving}>
+              {allocationSaving ? "Saving…" : "Save"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

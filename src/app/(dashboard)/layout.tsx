@@ -1,6 +1,7 @@
 "use client";
 
 import { MainLayout } from "@/components/layout/main-layout";
+import { setApiAuth } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useEffect } from "react";
@@ -64,6 +65,8 @@ function initializeMockAuth() {
 
   setBranches([branch1]);
   setCurrentBranch(branch1);
+  // So Cool Catch (and other) API requests send dev auth when backend is configured
+  setApiAuth({ devUserId: "user-1", branchId: branch1.branchId });
 }
 
 export default function DashboardLayout({

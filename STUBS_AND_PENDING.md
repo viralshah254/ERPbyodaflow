@@ -1,8 +1,10 @@
 # OdaFlow ERP — Stubs, API Requirements & Pending Work
 
-**Purpose:** Single source of truth for all stub behavior, API‑pending actions, mock‑only data, and pending work across the ERP frontend.
+**Purpose:** Detailed stub behavior, API‑pending actions, mock‑only data, and pending work across the ERP frontend.
 
-**Context:** Frontend‑only. No `fetch`/axios/API calls. Mock engine + `localStorage` overlay. Architecture is real; replace stubs with backend when ready.
+**Master list:** For a single consolidated inventory of **all** stubs, pending UI, pending workflows, and pending tasks (with file locations and counts), see **[docs/PENDING_AND_STUBS_MASTER.md](docs/PENDING_AND_STUBS_MASTER.md)**. This file (STUBS_AND_PENDING) retains the by-module behavior detail and “what’s real vs not”; the master is the canonical checklist.
+
+**Context:** Frontend‑only. No `fetch`/axios/API calls in many flows. Mock engine + `localStorage` overlay. Architecture is real; replace stubs with backend when ready.
 
 ---
 

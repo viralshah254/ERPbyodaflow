@@ -9,7 +9,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getMockGRNs, type PurchasingDocRow } from "@/lib/mock/purchasing";
+import { fetchGRNs } from "@/lib/api/grn";
+import type { PurchasingDocRow } from "@/lib/mock/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
@@ -35,7 +36,11 @@ export default function InventoryReceiptsPage() {
     getSavedViews(scope)
   );
 
-  const allRows = React.useMemo(() => getMockGRNs(), []);
+  const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    fetchGRNs().then(setAllRows).finally(() => setLoading(false));
+  }, []);
   const warehouses = React.useMemo(
     () => Array.from(new Set(allRows.map((r) => r.warehouse).filter(Boolean))) as string[],
     [allRows]
@@ -188,15 +193,19 @@ export default function InventoryReceiptsPage() {
             ) : undefined
           }
         />
-        <DataTable<PurchasingDocRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/grn/${row.id}`)}
-          emptyMessage="No GRNs yet."
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading receipts…</div>
+        ) : (
+          <DataTable<PurchasingDocRow>
+            data={filtered}
+            columns={columns}
+            onRowClick={(row) => router.push(`/inventory/receipts/${row.id}`)}
+            emptyMessage="No GRNs yet."
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        )}
       </div>
     </PageShell>
   );

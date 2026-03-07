@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -16,21 +16,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { getProductById, listPackaging, listProductPrices } from "@/lib/data/products.repo";
 import { getMockPriceLists } from "@/lib/mock/products/price-lists";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { productDelete } from "@/lib/api/stub-endpoints";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ProductDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-
   const [vatCategory, setVatCategory] = React.useState<string>("standard");
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -110,6 +115,37 @@ export default function ProductDetailPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href={`/master/products/${id}/attributes`}>Attributes</Link>
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              <Icons.Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+            <ConfirmDialog
+              open={deleteConfirmOpen}
+              onOpenChange={setDeleteConfirmOpen}
+              title="Delete product?"
+              description="This will remove the product. This action cannot be undone."
+              confirmLabel="Delete"
+              cancelLabel="Cancel"
+              variant="destructive"
+              onConfirm={async () => {
+                setDeleting(true);
+                try {
+                  await productDelete(id);
+                  toast.success("Product deleted.");
+                  router.push("/master/products");
+                } catch (err) {
+                  if ((err as Error).message === "STUB") toast.info("Delete (stub). API pending.");
+                  else toast.error((err as Error).message);
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            />
             <Button variant="outline" size="sm" asChild>
               <Link href="/master/products">Back to list</Link>
             </Button>

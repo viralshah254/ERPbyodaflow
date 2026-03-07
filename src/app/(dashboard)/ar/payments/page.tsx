@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { getMockPayments, getMockOpenInvoices, type PaymentRow, type OpenInvoiceRow } from "@/lib/mock/ar";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { formatMoney } from "@/lib/money";
+import { arAllocate } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -30,6 +31,10 @@ export default function ARPaymentsPage() {
   const [step, setStep] = React.useState(1);
   const [customerId, setCustomerId] = React.useState("");
   const [allocations, setAllocations] = React.useState<Record<string, number>>({});
+  const [selectedPaymentId, setSelectedPaymentId] = React.useState<string | null>(null);
+  const [allocateSheetOpen, setAllocateSheetOpen] = React.useState(false);
+  const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
+  const [allocating, setAllocating] = React.useState(false);
 
   const payments = React.useMemo(() => getMockPayments(), []);
   const openInvoices = React.useMemo(
@@ -46,6 +51,13 @@ export default function ARPaymentsPage() {
         r.customerName.toLowerCase().includes(q)
     );
   }, [payments, search]);
+
+  const openAllocateRef = React.useRef<(payment: PaymentRow) => void>(() => {});
+  openAllocateRef.current = (payment: PaymentRow) => {
+    setSelectedPaymentId(payment.id);
+    setAllocateAmounts({});
+    setAllocateSheetOpen(true);
+  };
 
   const columns = React.useMemo(
     () => [
@@ -71,6 +83,15 @@ export default function ARPaymentsPage() {
           </span>
         ),
       },
+      {
+        id: "actions",
+        header: "",
+        accessor: (r: PaymentRow) => (
+          <Button variant="ghost" size="sm" onClick={() => openAllocateRef.current(r as PaymentRow)}>
+            Allocate
+          </Button>
+        ),
+      },
     ],
     []
   );
@@ -82,9 +103,37 @@ export default function ARPaymentsPage() {
     setWizardOpen(true);
   };
 
+  const selectedPayment = selectedPaymentId ? payments.find((p) => p.id === selectedPaymentId) : null;
+  const allocateInvoices = React.useMemo(
+    () => getMockOpenInvoices(selectedPayment?.customerId),
+    [selectedPayment?.customerId]
+  );
+
   const handleWizardSubmit = () => {
     toast.info("Submit payment: API pending.");
     setWizardOpen(false);
+  };
+
+  const handleAllocateSubmit = async () => {
+    if (!selectedPaymentId) return;
+    const invoiceIds = Object.keys(allocateAmounts).filter((k) => (allocateAmounts[k] ?? 0) > 0);
+    const amounts = invoiceIds.map((k) => allocateAmounts[k] ?? 0);
+    if (invoiceIds.length === 0) {
+      toast.error("Enter at least one allocation amount.");
+      return;
+    }
+    setAllocating(true);
+    try {
+      await arAllocate(selectedPaymentId, { invoiceIds, amounts });
+      toast.success("Allocation saved.");
+      setAllocateSheetOpen(false);
+      setSelectedPaymentId(null);
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info("Allocate (stub). API pending.");
+      else toast.error((e as Error).message);
+    } finally {
+      setAllocating(false);
+    }
   };
 
   const handleDraftReminder = () => {
@@ -128,7 +177,18 @@ export default function ARPaymentsPage() {
         />
         <DataTable<PaymentRow>
           data={filtered}
-          columns={columns}
+          columns={[
+            ...columns,
+            {
+              id: "actions",
+              header: "",
+              accessor: (r: PaymentRow) => (
+                <Button variant="ghost" size="sm" onClick={() => openAllocateRef.current(r)}>
+                  Allocate
+                </Button>
+              ),
+            },
+          ]}
           emptyMessage="No payments yet."
         />
       </div>
@@ -203,6 +263,48 @@ export default function ARPaymentsPage() {
                 </SheetFooter>
               </>
             )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={allocateSheetOpen} onOpenChange={setAllocateSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Allocate to invoices</SheetTitle>
+            <SheetDescription>
+              {selectedPayment ? `Payment ${selectedPayment.number} · ${formatMoney(selectedPayment.amount, "KES")}` : ""}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            {allocateInvoices.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No open invoices for this customer.</p>
+            ) : (
+              <div className="rounded border divide-y max-h-64 overflow-auto">
+                {allocateInvoices.map((inv) => (
+                  <div key={inv.id} className="flex items-center justify-between p-2 text-sm gap-2">
+                    <span className="truncate">{inv.number} · {formatMoney(inv.outstanding, "KES")}</span>
+                    <Input
+                      type="number"
+                      className="w-28 h-8 shrink-0"
+                      placeholder="Amount"
+                      value={allocateAmounts[inv.id] ?? ""}
+                      onChange={(e) =>
+                        setAllocateAmounts((a) => ({
+                          ...a,
+                          [inv.id]: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setAllocateSheetOpen(false)}>Cancel</Button>
+              <Button disabled={allocating || allocateInvoices.length === 0} onClick={handleAllocateSubmit}>
+                Submit allocation
+              </Button>
+            </SheetFooter>
           </div>
         </SheetContent>
       </Sheet>

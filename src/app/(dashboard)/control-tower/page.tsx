@@ -106,7 +106,7 @@ export default function ControlTowerPage() {
               Landmark: "Landmark",
               MessageSquare: "MessageSquare",
             };
-            const Icon = Icons[iconMap[layer.icon] ?? "Box"] ?? Icons.Box;
+            const Icon = (Icons[iconMap[layer.icon] ?? "Box"] ?? Icons.Box) as React.ComponentType<{ className?: string }>;
             return (
               <Card
                 key={layer.id}

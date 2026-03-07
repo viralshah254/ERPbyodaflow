@@ -2,6 +2,8 @@
 
 **Purpose:** Single source of truth for engineers and Cursor when building backend infra, agents, APIs, and data pipelines. This document was derived from a full review of the frontend codebase and defines everything the backend must provide.
 
+**See also:** [BACKEND_API_SPEC_SINGLE_SOURCE.md](./BACKEND_API_SPEC_SINGLE_SOURCE.md) — **single source of truth** for implemented APIs, stub→endpoint migrations, and quick reference (no dependency on external spec files). [BACKEND_SPEC_COOL_CATCH.md](./BACKEND_SPEC_COOL_CATCH.md) — Cool Catch / franchise features (commission engine, VMI, cash-to-weight audit, subcontracting). [BACKEND_ENDPOINT_MIGRATIONS.md](./BACKEND_ENDPOINT_MIGRATIONS.md) and [REMAINING_BACKEND_IMPLEMENTED.md](./REMAINING_BACKEND_IMPLEMENTED.md) point to BACKEND_API_SPEC_SINGLE_SOURCE for implementation details.
+
 ---
 
 ## STACK & CONTEXT (from your history)
@@ -392,10 +394,11 @@ Backend must: CRUD per type; number sequences per type (prefix, next number, pad
 - **Inventory:** /inventory/products, /inventory/stock-levels, /inventory/movements, /inventory/receipts, /inventory/costing, /warehouse/transfers, /warehouse/cycle-counts, /inventory/warehouses
 - **Warehouse:** /warehouse/overview, /warehouse/transfers, /warehouse/pick-pack, /warehouse/putaway, /warehouse/bin-locations, /warehouse/cycle-counts
 - **Sales:** /sales/overview, /sales/quotes, /sales/orders, /sales/deliveries, /sales/invoices, /sales/customers, /sales/returns
-- **Purchasing:** /purchasing/requests, /purchasing/orders, /inventory/receipts (GRN), /ap/suppliers, /ap/bills, /purchasing/purchase-returns
+- **Purchasing:** /purchasing/requests, /purchasing/orders, /inventory/receipts (GRN), /ap/suppliers, /ap/bills, /purchasing/purchase-returns, /purchasing/cash-weight-audit (flag: procurementAuditCashWeight)
 - **Pricing:** /pricing/overview, /pricing/price-lists, /pricing/rules
-- **Manufacturing:** /manufacturing/boms, /manufacturing/routing, /manufacturing/work-orders, /manufacturing/mrp (flags: bomMrpWorkOrders, workOrders)
+- **Manufacturing:** /manufacturing/boms, /manufacturing/routing, /manufacturing/work-orders, /manufacturing/mrp, /manufacturing/subcontracting (flags: bomMrpWorkOrders, workOrders, subcontracting)
 - **Distribution:** /distribution/routes, /distribution/deliveries, /distribution/collections (orgType DISTRIBUTOR)
+- **Franchise:** /franchise/commission, /franchise/vmi (flags: commissionEngine, vmiReplenishment)
 - **Retail:** /retail/replenishment, /retail/promotions, /retail/store-performance (orgType RETAIL)
 - **Treasury:** /treasury/overview, /treasury/payment-runs, /treasury/collections, /treasury/bank-accounts, /treasury/cashflow, /finance/bank-recon
 - **Assets:** /assets/overview, /assets/register, /assets/depreciation, /assets/disposals
@@ -411,7 +414,7 @@ Backend must: CRUD per type; number sequences per type (prefix, next number, pad
 
 ## 10.10 Feature flags and org types (backend must respect)
 
-- **requiresFlags:** approvals, multiWarehouse, bomMrpWorkOrders, workOrders, deliveries, collections, replenishment, promotions, storePerformance
+- **requiresFlags:** approvals, multiWarehouse, bomMrpWorkOrders, workOrders, deliveries, collections, replenishment, promotions, storePerformance, procurementAuditCashWeight, subcontracting, commissionEngine, vmiReplenishment, reverseBom (see BACKEND_SPEC_COOL_CATCH)
 - **requiresOrgTypes:** MANUFACTURER (manufacturing), DISTRIBUTOR (distribution), RETAIL (retail)
 - **requiresPermissions:** See §10.11. Every nav item that has requiresPermissions must be gated by backend RBAC.
 
@@ -427,6 +430,7 @@ From `src/lib/permissions.ts` and every `requiresPermissions` in `sections.ts`:
 - **Manufacturing:** manufacturing.bom.read, manufacturing.production.read, manufacturing.workorders.read
 - **Distribution:** distribution.routes.read, distribution.deliveries.read, distribution.collections.read
 - **Retail:** retail.replenishment.read, retail.promotions.read, retail.performance.read
+- **Franchise (Cool Catch):** franchise.commission.read, franchise.commission.write, franchise.vmi.read, franchise.vmi.write; purchasing.audit.read, purchasing.audit.write; manufacturing.subcontracting.read, manufacturing.subcontracting.write (see BACKEND_SPEC_COOL_CATCH)
 - **Projects:** projects.read
 - **Reports:** reports.read, reports.schedule.read, reports.export.read
 - **Automation:** automation.read, automation.rules.read, automation.alerts.read, automation.schedules.read, automation.workflows.read, automation.integrations.read, automation.ai.read
@@ -475,6 +479,9 @@ Use this to verify “everything the ERP will have” is covered.
 | Pricing | overview, price-lists, rules | PriceList, DiscountRule | | |
 | Manufacturing | BOMs, routing, work-orders, MRP | BOM, Routing, WorkOrder, MRP | mrp.*, work-order.* | Optional (MANUFACTURER) |
 | Distribution | routes, deliveries, collections | Route, Delivery, Collection | | Optional (DISTRIBUTOR) |
+| Franchise | commission, vmi | CommissionRun, Franchisee, VMIReplenishmentOrder | franchise.* | Optional (flags: commissionEngine, vmiReplenishment); see BACKEND_SPEC_COOL_CATCH |
+| Procurement audit | cash-weight-audit | CashDisbursement, ProcurementAuditLine | procurement.audit.* | Optional (flag: procurementAuditCashWeight) |
+| Subcontracting | subcontracting | ExternalWorkCenter, SubcontractOrder, WIPBalance | subcontract.* | Optional (flag: subcontracting) |
 | Retail | replenishment, promotions, store-performance | Replenishment, Promotion, Store | | Optional (RETAIL) |
 | Treasury | overview, payment-runs, collections, bank-accounts, cashflow, bank-recon | PaymentRun, BankAccount, Cashflow, BankRecon | payment.*, bank-recon.* | |
 | Assets | overview, register, depreciation, disposals | Asset, DepreciationRun, Disposal | asset.*, depreciation.run | |

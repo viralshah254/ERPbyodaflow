@@ -1,6 +1,6 @@
 import type { TerminologyKey, TerminologyOverrides } from "@/config/industryTemplates/index";
 
-const FALLBACK: Record<TerminologyKey, string> = {
+const FALLBACK = {
   customer: "Customer",
   supplier: "Supplier",
   product: "Product",
@@ -24,7 +24,9 @@ const FALLBACK: Record<TerminologyKey, string> = {
   deliveryNote: "Delivery Note",
   purchaseRequest: "Purchase Request",
   bill: "Bill",
-};
+  franchisee: "Franchisee",
+  commission: "Commission",
+} as const satisfies Record<TerminologyKey, string>;
 
 /**
  * Resolve a terminology key to display label.

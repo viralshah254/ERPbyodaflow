@@ -16,6 +16,11 @@ import { Button } from "@/components/ui/button";
 import { getDocTypeConfig } from "@/config/documents";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import {
+  documentRequestApproval,
+  documentAction,
+  documentDownloadPdf,
+} from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -27,8 +32,10 @@ export default function DocViewPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const [printOpen, setPrintOpen] = React.useState(false);
+  const [actionLoading, setActionLoading] = React.useState(false);
 
   const showRequestApproval = ["invoice", "bill", "journal"].includes(type);
+  const showApprovePost = ["invoice", "bill", "journal", "sales-order", "purchase-order", "quote", "delivery-note", "purchase-request", "grn"].includes(type);
   const printDoc = React.useMemo(
     () => ({
       type,
@@ -70,17 +77,85 @@ export default function DocViewPage() {
       status="APPROVED"
       rightSlot={rightSlot}
       actions={
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {showRequestApproval && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => toast.info("Request approval (stub). API pending.")}
+              disabled={actionLoading}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  await documentRequestApproval(type, id);
+                  toast.success("Approval requested.");
+                } catch (e) {
+                  if ((e as Error).message === "STUB") toast.info("Request approval (stub). API pending.");
+                  else toast.error((e as Error).message);
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
             >
               <Icons.CheckCircle2 className="mr-2 h-4 w-4" />
               Request approval
             </Button>
           )}
+          {showApprovePost && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={actionLoading}
+                onClick={async () => {
+                  setActionLoading(true);
+                  try {
+                    await documentAction(type, id, "approve");
+                    toast.success("Document approved.");
+                  } catch (e) {
+                    if ((e as Error).message === "STUB") toast.info("Approve (stub). API pending.");
+                    else toast.error((e as Error).message);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+              >
+                <Icons.Check className="mr-2 h-4 w-4" />
+                Approve
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={actionLoading}
+                onClick={async () => {
+                  setActionLoading(true);
+                  try {
+                    await documentAction(type, id, "post");
+                    toast.success("Document posted.");
+                  } catch (e) {
+                    if ((e as Error).message === "STUB") toast.info("Post (stub). API pending.");
+                    else toast.error((e as Error).message);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+              >
+                <Icons.Send className="mr-2 h-4 w-4" />
+                Post
+              </Button>
+            </>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              documentDownloadPdf(type, id, `${type}-${id}.pdf`, (msg) =>
+                toast.info(msg || "Export PDF (stub). API pending.")
+              )
+            }
+          >
+            <Icons.FileDown className="mr-2 h-4 w-4" />
+            Export PDF
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)}>
             <Icons.Printer className="mr-2 h-4 w-4" />
             Print

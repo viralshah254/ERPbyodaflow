@@ -22,6 +22,7 @@ import {
   getMockBillLines,
 } from "@/lib/mock/ap-match";
 import { formatMoney } from "@/lib/money";
+import { threeWayMatch } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -32,6 +33,7 @@ export default function ThreeWayMatchPage() {
   const [selectedPO, setSelectedPO] = React.useState<Set<LineId>>(new Set());
   const [selectedGRN, setSelectedGRN] = React.useState<Set<LineId>>(new Set());
   const [selectedBill, setSelectedBill] = React.useState<Set<LineId>>(new Set());
+  const [matching, setMatching] = React.useState(false);
 
   const poLines = React.useMemo(() => getMockPOLines(), []);
   const grnLines = React.useMemo(() => getMockGRNLines(), []);
@@ -62,10 +64,23 @@ export default function ThreeWayMatchPage() {
     });
   };
 
-  const handleMatchSelected = () => {
-    toast.info(
-      `Match (stub): ${selectedPO.size} PO · ${selectedGRN.size} GRN · ${selectedBill.size} Bill`
-    );
+  const handleMatchSelected = async () => {
+    const grnIds = Array.from(selectedGRN);
+    const billIds = Array.from(selectedBill);
+    if (grnIds.length === 0 || billIds.length === 0) {
+      toast.info("Select at least one GRN line and one Bill line to match.");
+      return;
+    }
+    setMatching(true);
+    try {
+      await threeWayMatch(grnIds, billIds);
+      toast.success("Lines matched.");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info(`Match (stub): ${grnIds.length} GRN · ${billIds.length} Bill. API pending.`);
+      else toast.error((e as Error).message);
+    } finally {
+      setMatching(false);
+    }
   };
 
   const explainThreeWay = () => {
@@ -276,7 +291,7 @@ export default function ThreeWayMatchPage() {
             <Button
               variant="default"
               size="sm"
-              disabled={selectedPO.size === 0 || selectedGRN.size === 0 || selectedBill.size === 0}
+              disabled={matching || selectedPO.size === 0 || selectedGRN.size === 0 || selectedBill.size === 0}
               onClick={handleMatchSelected}
             >
               Match selected

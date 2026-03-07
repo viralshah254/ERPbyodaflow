@@ -11,6 +11,11 @@ import { getMockPurchaseReturns, type PurchasingDocRow } from "@/lib/mock/purcha
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import {
+  purchaseReturnCreate,
+  purchaseReturnApprove,
+  purchaseReturnsExport,
+} from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -24,14 +29,12 @@ const STATUS_OPTIONS = [
 
 const scope = "purchasing-returns";
 
-function handleCreateReturn() {
-  toast.info("Create return (stub). API not connected yet.");
-}
-
 export default function PurchaseReturnsPage() {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [creating, setCreating] = React.useState(false);
+  const [approving, setApproving] = React.useState(false);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
@@ -119,6 +122,40 @@ export default function PurchaseReturnsPage() {
     if (currentViewId === id) setCurrentViewId(null);
   };
 
+  const handleCreateReturn = async () => {
+    setCreating(true);
+    try {
+      await purchaseReturnCreate({});
+      toast.success("Purchase return created.");
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info("Create return (stub). API pending.");
+      else toast.error((e as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleExport = () => {
+    purchaseReturnsExport((msg) => toast.info(msg || "Export (stub). API pending."));
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0) return;
+    setApproving(true);
+    try {
+      for (const returnId of selectedIds) {
+        await purchaseReturnApprove(returnId);
+      }
+      toast.success(`Approved ${selectedIds.length} return(s).`);
+      setSelectedIds([]);
+    } catch (e) {
+      if ((e as Error).message === "STUB") toast.info("Approve (stub). API pending.");
+      else toast.error((e as Error).message);
+    } finally {
+      setApproving(false);
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -131,7 +168,7 @@ export default function PurchaseReturnsPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={handleCreateReturn}>
+          <Button disabled={creating} onClick={handleCreateReturn}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create Return
           </Button>
@@ -160,15 +197,15 @@ export default function PurchaseReturnsPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub). API not connected yet.")}
+          onExport={handleExport}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Approve (stub). API pending.")}>
+                <Button variant="outline" size="sm" disabled={approving} onClick={handleBulkApprove}>
                   Approve
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub). API pending.")}>
+                <Button variant="outline" size="sm" onClick={handleExport}>
                   Export
                 </Button>
               </div>

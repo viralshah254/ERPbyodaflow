@@ -45,7 +45,10 @@ export type FeatureFlagKey =
   | "subcontracting"
   | "commissionEngine"
   | "vmiReplenishment"
-  | "reverseBom";
+  | "reverseBom"
+  | "landedCostMultiCurrency"
+  | "logisticsTrips"
+  | "massBalanceYield";
 
 export type NavSectionKey =
   | "core"

@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getMockTransfers, type TransferRow } from "@/lib/mock/warehouse/transfers";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
+import { warehouseTransferReceive } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -67,7 +68,22 @@ export default function TransferDetailPage() {
           <div className="flex gap-2">
             {canApprove && <Button size="sm" onClick={() => toast.info("Approve (stub)")}>Approve</Button>}
             {canTransit && <Button size="sm" onClick={() => toast.info("Mark in transit (stub)")}>Mark in transit</Button>}
-            {canReceive && <Button size="sm" onClick={() => toast.info("Receive (stub)")}>Receive</Button>}
+            {canReceive && (
+              <Button
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await warehouseTransferReceive(id);
+                    toast.success("Transfer received.");
+                  } catch (e) {
+                    if ((e as Error).message === "STUB") toast.info("Receive (stub). API pending.");
+                    else toast.error((e as Error).message);
+                  }
+                }}
+              >
+                Receive
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href="/warehouse/transfers">Back to list</Link>
             </Button>

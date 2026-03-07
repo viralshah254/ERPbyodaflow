@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getCopilotActionCards } from "@/lib/mock/copilot-action-cards";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { automationInsightApply } from "@/lib/api/stub-endpoints";
 import type { CustomRecommendationAction } from "@/types/copilotActions";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const riskVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -18,9 +20,25 @@ const riskVariant: Record<string, "default" | "secondary" | "destructive" | "out
 export function CopilotActionCards() {
   const openDrawerWithAction = useCopilotStore((s) => s.openDrawerWithAction);
   const cards = React.useMemo(() => getCopilotActionCards(), []);
+  const [applyingId, setApplyingId] = React.useState<string | null>(null);
 
-  const handleApply = (action: CustomRecommendationAction) => {
-    openDrawerWithAction(action);
+  const handleApply = async (action: CustomRecommendationAction) => {
+    const actionId = action.payload?.recommendationKey ?? action.id;
+    setApplyingId(action.id);
+    try {
+      await automationInsightApply(action.id, actionId);
+      toast.success("Action applied.");
+      openDrawerWithAction(action);
+    } catch (e) {
+      if ((e as Error).message === "STUB") {
+        toast.info("Apply action (stub). API pending.");
+        openDrawerWithAction(action);
+      } else {
+        toast.error((e as Error).message);
+      }
+    } finally {
+      setApplyingId(null);
+    }
   };
 
   return (
@@ -50,7 +68,7 @@ export function CopilotActionCards() {
               <p className="text-xs text-muted-foreground line-clamp-2">
                 {a.payload.narrative}
               </p>
-              <Button size="sm" className="w-fit" onClick={() => handleApply(a)}>
+              <Button size="sm" className="w-fit" disabled={applyingId === a.id} onClick={() => handleApply(a)}>
                 Apply
               </Button>
             </div>

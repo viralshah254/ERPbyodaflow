@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { getMockPaymentRuns } from "@/lib/mock/treasury/payment-runs";
 import { formatMoney } from "@/lib/money";
 import { downloadFile, isApiConfigured } from "@/lib/api/client";
+import { paymentRunApprove } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -57,7 +58,18 @@ export default function PaymentRunDetailPage() {
         actions={
           <div className="flex gap-2">
             {canApprove && (
-              <Button size="sm" onClick={() => toast.info("Approve (stub). Reuse approvals module.")}>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await paymentRunApprove(id);
+                    toast.success("Payment run approved.");
+                  } catch (e) {
+                    if ((e as Error).message === "STUB") toast.info("Approve (stub). Set NEXT_PUBLIC_API_URL to use backend.");
+                    else toast.error((e as Error).message);
+                  }
+                }}
+              >
                 Approve
               </Button>
             )}
