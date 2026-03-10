@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { getMockTransfers, type TransferRow } from "@/lib/mock/warehouse/transfers";
+import { fetchTransferById, type TransferRow } from "@/lib/api/warehouse-transfers";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { warehouseTransferReceive } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
@@ -31,7 +31,30 @@ function statusVariant(s: string): "default" | "secondary" | "outline" {
 export default function TransferDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const transfer = React.useMemo(() => getMockTransfers().find((t) => t.id === id), [id]);
+  const [transfer, setTransfer] = React.useState<TransferRow | null | undefined>(undefined);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchTransferById(id)
+      .then((t) => {
+        if (!cancelled) setTransfer(t);
+      })
+      .catch(() => {
+        if (!cancelled) setTransfer(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (transfer === undefined) {
+    return (
+      <PageShell>
+        <PageHeader title="Transfer" breadcrumbs={[{ label: "Warehouse", href: "/warehouse/overview" }, { label: "Transfers", href: "/warehouse/transfers" }, { label: id }]} />
+        <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+      </PageShell>
+    );
+  }
 
   if (!transfer) {
     return (

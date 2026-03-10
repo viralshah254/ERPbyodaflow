@@ -41,6 +41,20 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### Environment
+
+Copy `.env.example` to `.env.local` and set the backend URL when using a real API:
+
+```bash
+cp .env.example .env.local
+```
+
+Variables in `.env.example`:
+
+- **`NEXT_PUBLIC_API_URL`** — Backend API base URL (e.g. `http://localhost:4000`). When set, the app calls live endpoints; when unset, mocks are used.
+- **`NEXT_PUBLIC_API_DEMO_MODE`** — Set to `1` for local dev: sends `X-Demo-Mode: 1` so the backend uses the seeded user (no user/branch headers needed).
+- **`NEXT_PUBLIC_DEV_USER_ID`** / **`NEXT_PUBLIC_CURRENT_BRANCH_ID`** — Optional; use when not in demo mode to send `X-Dev-User-Id` and `X-Current-Branch-Id` on every request.
+
 ### Build
 
 ```bash

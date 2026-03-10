@@ -38,3 +38,12 @@ export function getMockStock(filters?: { warehouse?: string; category?: string }
 export function getLowStockItems(): StockRow[] {
   return MOCK_STOCK.filter((r) => r.status === "Low Stock" || r.status === "Out of Stock");
 }
+
+export function getStockItemById(id: string): StockRow | undefined {
+  return MOCK_STOCK.find((r) => r.id === id);
+}
+
+/** All stock rows for a given SKU (e.g. across warehouses). */
+export function getStockBySku(sku: string): StockRow[] {
+  return MOCK_STOCK.filter((r) => r.sku === sku);
+}

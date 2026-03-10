@@ -4,11 +4,14 @@
  *
  * Auth (see docs/COOL_CATCH_API_CONNECT.md):
  * - Production: Authorization: Bearer <firebase-id-token>
- * - Dev: X-Dev-User-Id or X-Dev-Firebase-Uid
- * - Optional: X-Current-Branch-Id for branch-scoped data
+ * - Demo (local): set NEXT_PUBLIC_API_DEMO_MODE=1 → sends X-Demo-Mode: 1 (backend uses seeded user)
+ * - Dev: X-Dev-User-Id, X-Current-Branch-Id (set via setApiAuth or NEXT_PUBLIC_DEV_* env)
  */
 
 const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL ?? "") : "";
+const DEMO_MODE = typeof window !== "undefined" && (process.env.NEXT_PUBLIC_API_DEMO_MODE === "1" || process.env.NEXT_PUBLIC_API_DEMO_MODE === "true");
+const ENV_DEV_USER_ID = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_DEV_USER_ID ?? "") : "";
+const ENV_BRANCH_ID = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_CURRENT_BRANCH_ID ?? "") : "";
 
 export function getApiBase(): string {
   return API_BASE.replace(/\/$/, "");
@@ -44,17 +47,22 @@ function getAuthHeaders(includeJsonContentType = false): HeadersInit {
   if (includeJsonContentType) {
     headers["Content-Type"] = "application/json";
   }
+  if (DEMO_MODE) {
+    headers["X-Demo-Mode"] = "1";
+  }
   if (authOptions.bearerToken) {
     headers["Authorization"] = `Bearer ${authOptions.bearerToken}`;
   }
-  if (authOptions.devUserId) {
-    headers["X-Dev-User-Id"] = authOptions.devUserId;
+  const devUserId = authOptions.devUserId || ENV_DEV_USER_ID;
+  if (devUserId) {
+    headers["X-Dev-User-Id"] = devUserId;
   }
   if (authOptions.devFirebaseUid) {
     headers["X-Dev-Firebase-Uid"] = authOptions.devFirebaseUid;
   }
-  if (authOptions.branchId) {
-    headers["X-Current-Branch-Id"] = authOptions.branchId;
+  const branchId = authOptions.branchId || ENV_BRANCH_ID;
+  if (branchId) {
+    headers["X-Current-Branch-Id"] = branchId;
   }
   return headers;
 }

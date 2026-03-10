@@ -122,22 +122,22 @@ export default function DistributionTripsPage() {
             <CardTitle>Trips</CardTitle>
             <CardDescription>Farm → hub (inbound), hub → franchisee (outbound). Monthly leased truck or spot-hire per trip.</CardDescription>
             <div className="flex gap-2 mt-2">
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <Select value={typeFilter || "ALL"} onValueChange={(v) => setTypeFilter(v === "ALL" ? "" : v)}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="All types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All types</SelectItem>
+                  <SelectItem value="ALL">All types</SelectItem>
                   <SelectItem value="INBOUND">Inbound</SelectItem>
                   <SelectItem value="OUTBOUND">Outbound</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter || "ALL"} onValueChange={(v) => setStatusFilter(v === "ALL" ? "" : v)}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All statuses</SelectItem>
+                  <SelectItem value="ALL">All statuses</SelectItem>
                   <SelectItem value="PLANNED">Planned</SelectItem>
                   <SelectItem value="IN_TRANSIT">In transit</SelectItem>
                   <SelectItem value="COMPLETED">Completed</SelectItem>

@@ -43,6 +43,17 @@ function listParams(p?: Record<string, string | undefined>): Record<string, stri
   return out;
 }
 
+export interface CommissionSummaryRow {
+  franchiseeId: string;
+  franchiseeCode: string;
+  franchiseeName: string;
+  runs: number;
+  salesAmount: number;
+  commissionAmount: number;
+  topUpAmount: number;
+  totalPayout: number;
+}
+
 // ——— Commission ———
 
 export async function fetchCommissionRuns(params?: { status?: string }): Promise<CommissionRunRow[]> {
@@ -76,9 +87,52 @@ export async function fetchTopUps(params?: { franchiseeId?: string; runId?: stri
   return res.items ?? [];
 }
 
+export async function fetchCommissionSummary(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+  status?: "DRAFT" | "POSTED" | "ALL";
+  franchiseeId?: string;
+}): Promise<{
+  dateFrom?: string;
+  dateTo?: string;
+  status?: string;
+  items: CommissionSummaryRow[];
+  totalCommission: number;
+  totalTopUp: number;
+  totalPayout: number;
+}> {
+  if (!isApiConfigured()) throw new Error("STUB");
+  const { status, ...rest } = params ?? {};
+  const query = listParams({
+    ...rest,
+    ...(status && status !== "ALL" ? { status } : {}),
+  });
+  return apiRequest("/api/reports/cool-catch/commission-summary", {
+    params: query,
+  });
+}
+
 export async function postCommissionRun(id: string): Promise<void> {
   if (!isApiConfigured()) return;
   await apiRequest(`/api/franchise/commission/runs/${encodeURIComponent(id)}/post`, { method: "POST" });
+}
+
+/** Auto-calculate commission run from posted invoices for the period. Body: { periodStart, periodEnd }. */
+export async function calculateCommissionRun(body: { periodStart: string; periodEnd: string }): Promise<CommissionRunRow> {
+  if (!isApiConfigured()) throw new Error("STUB");
+  const res = await apiRequest<CommissionRunRow>("/api/franchise/commission/runs/calculate", { method: "POST", body });
+  return res;
+}
+
+/** Manual create commission run. Body: { periodStart, periodEnd, lines? }. */
+export async function createCommissionRun(body: {
+  periodStart: string;
+  periodEnd: string;
+  lines?: { franchiseeId: string; salesAmount?: number; commissionAmount?: number }[];
+}): Promise<CommissionRunRow> {
+  if (!isApiConfigured()) throw new Error("STUB");
+  const res = await apiRequest<CommissionRunRow>("/api/franchise/commission/runs", { method: "POST", body });
+  return res;
 }
 
 // ——— VMI ———
@@ -126,6 +180,16 @@ export async function confirmReplenishmentOrder(id: string): Promise<void> {
   await apiRequest(`/api/franchise/vmi/replenishment-orders/${encodeURIComponent(id)}/confirm`, { method: "POST" });
 }
 
+/** Auto-create replenishment orders from suggestions (reorder points). Body: { sourceWarehouseId?, franchiseeId? }. */
+export async function autoReplenish(body?: { sourceWarehouseId?: string; franchiseeId?: string }): Promise<{ created: number; orderIds?: string[] }> {
+  if (!isApiConfigured()) throw new Error("STUB");
+  const res = await apiRequest<{ created: number; orderIds?: string[] }>("/api/franchise/vmi/auto-replenish", {
+    method: "POST",
+    body: body ?? {},
+  });
+  return res;
+}
+
 // ——— Cash-to-weight audit ———
 
 export async function fetchCashWeightAuditLines(params?: {
@@ -154,8 +218,9 @@ export async function createCashDisbursement(body: {
   currency: string;
   paidAt: string;
   reference?: string;
+  paidWeightKg?: number;
 }): Promise<{ id: string }> {
-  if (!isApiConfigured()) throw new Error("API not configured");
+  if (!isApiConfigured()) throw new Error("STUB");
   return apiRequest<{ id: string }>("/api/purchasing/cash-weight-audit/disbursements", {
     method: "POST",
     body,
@@ -173,12 +238,35 @@ export async function reconcileCashWeightAudit(body: {
   await apiRequest("/api/purchasing/cash-weight-audit/reconcile", { method: "POST", body });
 }
 
+/** Build audit lines from PO + Cash disbursements + GRN. Body: { poId?, dateFrom?, dateTo? }. */
+export async function buildCashWeightAudit(body?: { poId?: string; dateFrom?: string; dateTo?: string }): Promise<{ built: number }> {
+  if (!isApiConfigured()) throw new Error("STUB");
+  const res = await apiRequest<{ built: number }>("/api/purchasing/cash-weight-audit/build", { method: "POST", body: body ?? {} });
+  return res;
+}
+
 // ——— Subcontracting ———
 
 export async function fetchExternalWorkCenters(): Promise<ExternalWorkCenterRow[]> {
   if (!isApiConfigured()) return getMockExternalWorkCenters();
   const res = await apiRequest<{ items: ExternalWorkCenterRow[] }>("/api/manufacturing/work-centers/external");
   return res.items ?? [];
+}
+
+/** Create external work center (factory, women's group). */
+export async function createExternalWorkCenter(body: {
+  code: string;
+  name: string;
+  type: ExternalWorkCenterRow["type"];
+  address?: string;
+  isActive?: boolean;
+}): Promise<ExternalWorkCenterRow> {
+  if (!isApiConfigured()) throw new Error("STUB");
+  const res = await apiRequest<ExternalWorkCenterRow>("/api/manufacturing/work-centers/external", {
+    method: "POST",
+    body,
+  });
+  return res;
 }
 
 export async function fetchSubcontractOrders(params?: {
@@ -190,6 +278,31 @@ export async function fetchSubcontractOrders(params?: {
     params: listParams(params),
   });
   return res.items ?? [];
+}
+
+/** Create subcontract order (send stock to processor). */
+export async function createSubcontractOrder(body: {
+  workCenterId: string;
+  bomId?: string | null;
+  reference?: string;
+  /** Expected receive date. */
+  expectedAt?: string;
+  /** Input and output lines, including processing fees. */
+  lines: {
+    sku: string;
+    productName?: string;
+    type: SubcontractOrderLineRow["type"];
+    quantity: number;
+    uom: string;
+    processingFeePerUnit?: number | null;
+  }[];
+}): Promise<SubcontractOrderRow> {
+  if (!isApiConfigured()) throw new Error("STUB");
+  const res = await apiRequest<SubcontractOrderRow>("/api/manufacturing/subcontract-orders", {
+    method: "POST",
+    body,
+  });
+  return res;
 }
 
 export async function fetchSubcontractOrderById(id: string): Promise<SubcontractOrderRow | null> {

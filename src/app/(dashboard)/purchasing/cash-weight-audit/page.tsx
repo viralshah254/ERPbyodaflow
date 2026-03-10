@@ -8,6 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -18,7 +28,9 @@ import {
 import {
   fetchCashWeightAuditLines,
   fetchCashDisbursements,
+  createCashDisbursement,
   reconcileCashWeightAudit,
+  buildCashWeightAudit,
 } from "@/lib/api/cool-catch";
 import type { CashWeightAuditLineRow, CashDisbursementRow } from "@/lib/mock/purchasing/cash-weight-audit";
 import { formatMoney } from "@/lib/money";
@@ -32,6 +44,18 @@ export default function CashWeightAuditPage() {
   const [disbursements, setDisbursements] = React.useState<CashDisbursementRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [reconcilingId, setReconcilingId] = React.useState<string | null>(null);
+  const [disbursementOpen, setDisbursementOpen] = React.useState(false);
+  const [disbPoId, setDisbPoId] = React.useState("");
+  const [disbAmount, setDisbAmount] = React.useState("");
+  const [disbCurrency, setDisbCurrency] = React.useState("KES");
+  const [disbPaidAt, setDisbPaidAt] = React.useState("");
+  const [disbReference, setDisbReference] = React.useState("");
+  const [disbPaidWeightKg, setDisbPaidWeightKg] = React.useState("");
+  const [savingDisb, setSavingDisb] = React.useState(false);
+  const [buildingAudit, setBuildingAudit] = React.useState(false);
+  const [buildDateFrom, setBuildDateFrom] = React.useState("");
+  const [buildDateTo, setBuildDateTo] = React.useState("");
+  const [buildSheetOpen, setBuildSheetOpen] = React.useState(false);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -65,6 +89,61 @@ export default function CashWeightAuditPage() {
       toast.error((e as Error)?.message ?? "Reconcile failed");
     } finally {
       setReconcilingId(null);
+    }
+  };
+
+  const handleRecordDisbursement = async () => {
+    if (!disbPoId.trim() || !disbAmount || !disbPaidAt) {
+      toast.error("PO, amount and paid date are required.");
+      return;
+    }
+    const amount = parseFloat(disbAmount);
+    if (Number.isNaN(amount) || amount <= 0) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+    setSavingDisb(true);
+    try {
+      await createCashDisbursement({
+        poId: disbPoId.trim(),
+        amount,
+        currency: disbCurrency,
+        paidAt: disbPaidAt,
+        reference: disbReference.trim() || undefined,
+        paidWeightKg: disbPaidWeightKg ? parseFloat(disbPaidWeightKg) : undefined,
+      });
+      toast.success("Disbursement recorded.");
+      setDisbursementOpen(false);
+      setDisbPoId("");
+      setDisbAmount("");
+      setDisbPaidAt("");
+      setDisbReference("");
+      setDisbPaidWeightKg("");
+      await load();
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Record failed";
+      toast.error(msg === "STUB" ? "Configure API to record disbursements." : msg);
+    } finally {
+      setSavingDisb(false);
+    }
+  };
+
+  const handleBuildAudit = async () => {
+    setBuildingAudit(true);
+    try {
+      const res = await buildCashWeightAudit(
+        buildDateFrom || buildDateTo ? { dateFrom: buildDateFrom || undefined, dateTo: buildDateTo || undefined } : undefined
+      );
+      toast.success(`Built ${res.built} audit line(s).`);
+      setBuildSheetOpen(false);
+      setBuildDateFrom("");
+      setBuildDateTo("");
+      await load();
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Build failed";
+      toast.error(msg === "STUB" ? "Configure API to build audit lines." : msg);
+    } finally {
+      setBuildingAudit(false);
     }
   };
 
@@ -109,10 +188,82 @@ export default function CashWeightAuditPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => toast.info("Record disbursement: POST /api/purchasing/cash-weight-audit/disbursements")}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Record disbursement
-            </Button>
+            <Sheet open={disbursementOpen} onOpenChange={setDisbursementOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Record disbursement
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>Record cash disbursement</SheetTitle>
+                  <SheetDescription>Farm-gate CoD payment linked to a PO; include paid weight for audit.</SheetDescription>
+                </SheetHeader>
+                <div className="grid gap-4 py-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="disbPoId">PO ID</Label>
+                    <Input id="disbPoId" value={disbPoId} onChange={(e) => setDisbPoId(e.target.value)} placeholder="e.g. po1" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="disbAmount">Amount</Label>
+                    <Input id="disbAmount" type="number" step="0.01" value={disbAmount} onChange={(e) => setDisbAmount(e.target.value)} placeholder="0.00" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="disbCurrency">Currency</Label>
+                    <Select value={disbCurrency} onValueChange={setDisbCurrency}>
+                      <SelectTrigger id="disbCurrency"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="KES">KES</SelectItem>
+                        <SelectItem value="UGX">UGX</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="disbPaidAt">Paid at (date)</Label>
+                    <Input id="disbPaidAt" type="date" value={disbPaidAt} onChange={(e) => setDisbPaidAt(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="disbReference">Reference (optional)</Label>
+                    <Input id="disbReference" value={disbReference} onChange={(e) => setDisbReference(e.target.value)} placeholder="Reference" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="disbPaidWeightKg">Paid weight (kg, optional)</Label>
+                    <Input id="disbPaidWeightKg" type="number" step="0.01" value={disbPaidWeightKg} onChange={(e) => setDisbPaidWeightKg(e.target.value)} placeholder="—" />
+                  </div>
+                  <Button onClick={handleRecordDisbursement} disabled={savingDisb}>
+                    {savingDisb ? "Saving…" : "Save disbursement"}
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Sheet open={buildSheetOpen} onOpenChange={setBuildSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Build audit
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>Build audit lines</SheetTitle>
+                  <SheetDescription>Create audit lines from PO + Cash disbursements + GRN (optional date range).</SheetDescription>
+                </SheetHeader>
+                <div className="grid gap-4 py-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="buildDateFrom">Date from (optional)</Label>
+                    <Input id="buildDateFrom" type="date" value={buildDateFrom} onChange={(e) => setBuildDateFrom(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="buildDateTo">Date to (optional)</Label>
+                    <Input id="buildDateTo" type="date" value={buildDateTo} onChange={(e) => setBuildDateTo(e.target.value)} />
+                  </div>
+                  <Button onClick={handleBuildAudit} disabled={buildingAudit}>
+                    {buildingAudit ? "Building…" : "Build"}
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
             <Button variant="outline" size="sm" asChild>
               <Link href="/ap/three-way-match">Standard 3-way match (PO / GRN / Bill)</Link>
             </Button>

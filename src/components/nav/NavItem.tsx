@@ -31,6 +31,7 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
   );
   const hasChildren = item.children && item.children.length > 0;
   const [isExpanded, setIsExpanded] = React.useState(isActive || !!isChildActive);
+  const itemRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     if (!hasChildren) return;
@@ -38,6 +39,16 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
     if (stored !== undefined) setIsExpanded(stored);
     else if (isActive || isChildActive) setIsExpanded(true);
   }, [item.id, hasChildren, isActive, isChildActive]);
+
+  React.useEffect(() => {
+    if (isActive && itemRef.current) {
+      try {
+        itemRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+      } catch {
+        // ignore scroll errors
+      }
+    }
+  }, [isActive]);
 
   const toggle = () => {
     const next = !isExpanded;
@@ -91,6 +102,7 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
 
   const content = (
     <div
+      ref={itemRef}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
         level > 0 && "ml-6",

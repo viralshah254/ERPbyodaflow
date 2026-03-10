@@ -12,13 +12,8 @@ import {
   ExplorerTable,
   DrillDrawer,
 } from "@/components/analytics";
-import {
-  runAnalyticsQuery,
-  getMetric,
-  getSavedAnalysisViews,
-  saveAnalysisView,
-  getShareableLink,
-} from "@/lib/analytics";
+import { getMetric, getSavedAnalysisViews, saveAnalysisView, getShareableLink } from "@/lib/analytics";
+import { runAnalyticsQueryApi } from "@/lib/api/analytics";
 import type { MetricKey, DimensionKey } from "@/lib/analytics/semantic";
 import type { AnalyticsQuery, AnalyticsRow, DrillContext } from "@/lib/analytics/types";
 import type { AnalyticsGlobalFilters } from "@/lib/analytics/types";
@@ -38,15 +33,38 @@ export default function AnalyticsExplorePage() {
   const [drill, setDrill] = React.useState<DrillContext | null>(null);
   const [drillOpen, setDrillOpen] = React.useState(false);
   const [savedViews, setSavedViews] = React.useState(() => getSavedAnalysisViews());
+  const [result, setResult] = React.useState<AnalyticsResult | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
   const query: AnalyticsQuery = React.useMemo(
     () => ({ metric, dimensions: dims, filters, limit: 20 }),
     [metric, dims, filters]
   );
-  const result = React.useMemo(
-    () => runAnalyticsQuery(query),
-    [query]
-  );
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    runAnalyticsQueryApi(query)
+      .then((res) => {
+        if (!cancelled) setResult(res);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.error(e);
+          toast.error(e instanceof Error ? e.message : "Analytics query failed.");
+          // Fallback to mock engine to avoid blank UI
+          import("@/lib/analytics/engine").then((mod) => {
+            if (!cancelled) setResult(mod.runAnalyticsQuery(query));
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query]);
   const def = getMetric(metric);
 
   const toggleDim = (d: DimensionKey) => {
@@ -133,16 +151,18 @@ export default function AnalyticsExplorePage() {
 
         <GlobalFilterBar filters={filters} onChange={setFilters} />
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <InsightCanvas result={result} />
-          <div className="lg:col-span-2" />
-        </div>
+        {loading || !result ? (
+          <p className="text-sm text-muted-foreground">Loading analytics…</p>
+        ) : (
+          <>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <InsightCanvas result={result} />
+              <div className="lg:col-span-2" />
+            </div>
 
-        <ExplorerTable
-          result={result}
-          onDrill={handleDrill}
-          maxRows={15}
-        />
+            <ExplorerTable result={result} onDrill={handleDrill} maxRows={15} />
+          </>
+        )}
       </div>
 
       <DrillDrawer

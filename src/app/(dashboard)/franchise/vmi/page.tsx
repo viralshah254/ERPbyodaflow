@@ -19,6 +19,7 @@ import {
   fetchVMIReplenishmentOrders,
   fetchFranchiseeStock,
   confirmReplenishmentOrder,
+  autoReplenish,
 } from "@/lib/api/cool-catch";
 import type { FranchiseeStockRow, VMIReplenishmentOrderRow } from "@/lib/mock/franchise/vmi";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ export default function FranchiseVmiPage() {
   const [stock, setStock] = React.useState<FranchiseeStockRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
+  const [autoReplenishing, setAutoReplenishing] = React.useState(false);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -87,6 +89,20 @@ export default function FranchiseVmiPage() {
     }
   };
 
+  const handleAutoReplenish = async () => {
+    setAutoReplenishing(true);
+    try {
+      const res = await autoReplenish({ franchiseeId: franchiseeFilter || undefined });
+      toast.success(`Created ${res.created} replenishment order(s).`);
+      await load();
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Auto-replenish failed";
+      toast.error(msg === "STUB" ? "Configure API to run auto-replenish." : msg);
+    } finally {
+      setAutoReplenishing(false);
+    }
+  };
+
   const suggestionColumns = [
     { id: "franchisee", header: "Franchisee", accessor: (r: FranchiseeStockRow) => <span className="font-medium">{r.franchiseeName}</span>, sticky: true },
     { id: "sku", header: "SKU", accessor: (r: FranchiseeStockRow) => r.sku },
@@ -133,9 +149,9 @@ export default function FranchiseVmiPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => toast.info("Create replenishment order: POST /api/franchise/vmi/replenishment-orders")}>
+          <Button onClick={handleAutoReplenish} disabled={autoReplenishing}>
             <Icons.PackagePlus className="mr-2 h-4 w-4" />
-            Create from suggestions
+            {autoReplenishing ? "Creating…" : "Create from suggestions"}
           </Button>
         }
       />

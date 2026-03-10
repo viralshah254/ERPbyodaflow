@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { PageLayout } from "@/components/layout/page-layout";
 import { DataTable } from "@/components/ui/data-table";
 import { FiltersBar } from "@/components/ui/filters-bar";
@@ -8,75 +9,16 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { getMockStock, type StockRow } from "@/lib/mock/stock";
 import * as Icons from "lucide-react";
 
-interface StockItem {
-  id: string;
-  sku: string;
-  name: string;
-  warehouse: string;
-  location: string;
-  quantity: number;
-  reserved: number;
-  available: number;
-  reorderLevel: number;
-  status: string;
-}
-
 export default function StockLevelsPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState<string>("all");
+  const [statusFilter, setStatusFilter] = React.useState<string>("all");
 
-  const stockItems: StockItem[] = [
-    {
-      id: "1",
-      sku: "WID-A-001",
-      name: "Premium Widget A",
-      warehouse: "Main Warehouse",
-      location: "A-01-02",
-      quantity: 150,
-      reserved: 25,
-      available: 125,
-      reorderLevel: 50,
-      status: "In Stock",
-    },
-    {
-      id: "2",
-      sku: "WID-B-002",
-      name: "Standard Widget B",
-      warehouse: "Main Warehouse",
-      location: "A-02-03",
-      quantity: 75,
-      reserved: 10,
-      available: 65,
-      reorderLevel: 100,
-      status: "Low Stock",
-    },
-    {
-      id: "3",
-      sku: "COMP-X-003",
-      name: "Component X",
-      warehouse: "Main Warehouse",
-      location: "B-01-01",
-      quantity: 0,
-      reserved: 0,
-      available: 0,
-      reorderLevel: 20,
-      status: "Out of Stock",
-    },
-    {
-      id: "4",
-      sku: "KIT-Y-004",
-      name: "Assembly Kit Y",
-      warehouse: "Secondary Warehouse",
-      location: "C-03-05",
-      quantity: 45,
-      reserved: 5,
-      available: 40,
-      reorderLevel: 30,
-      status: "In Stock",
-    },
-  ];
+  const stockItems = React.useMemo(() => getMockStock(), []);
 
   const filteredItems = React.useMemo(() => {
     return stockItems.filter((item) => {
@@ -86,15 +28,21 @@ export default function StockLevelsPage() {
         item.sku.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesWarehouse =
         warehouseFilter === "all" || item.warehouse === warehouseFilter;
-      return matchesSearch && matchesWarehouse;
+      const matchesStatus =
+        statusFilter === "all" || item.status === statusFilter;
+      return matchesSearch && matchesWarehouse && matchesStatus;
     });
-  }, [searchQuery, warehouseFilter]);
+  }, [stockItems, searchQuery, warehouseFilter, statusFilter]);
+
+  const openStockDetail = (row: StockRow) => {
+    router.push(`/inventory/stock-levels/${row.id}`);
+  };
 
   const columns = [
     {
       id: "sku",
       header: "SKU",
-      accessor: (row: StockItem) => (
+      accessor: (row: StockRow) => (
         <div>
           <div className="font-medium">{row.sku}</div>
           <div className="text-xs text-muted-foreground">{row.name}</div>
@@ -105,66 +53,66 @@ export default function StockLevelsPage() {
     {
       id: "warehouse",
       header: "Warehouse",
-      accessor: "warehouse" as keyof StockItem,
+      accessor: (row: StockRow) => row.warehouse,
     },
     {
       id: "location",
       header: "Location",
-      accessor: "location" as keyof StockItem,
+      accessor: (row: StockRow) => row.location ?? "—",
     },
     {
       id: "quantity",
       header: "Quantity",
-      accessor: (row: StockItem) => (
+      accessor: (row: StockRow) => (
         <div className="text-right font-medium">{row.quantity}</div>
       ),
     },
     {
       id: "reserved",
       header: "Reserved",
-      accessor: (row: StockItem) => (
+      accessor: (row: StockRow) => (
         <div className="text-right text-muted-foreground">{row.reserved}</div>
       ),
     },
     {
       id: "available",
       header: "Available",
-      accessor: (row: StockItem) => (
+      accessor: (row: StockRow) => (
         <div className="text-right font-semibold">{row.available}</div>
       ),
     },
     {
       id: "reorderLevel",
       header: "Reorder Level",
-      accessor: (row: StockItem) => (
+      accessor: (row: StockRow) => (
         <div className="text-right">{row.reorderLevel}</div>
       ),
     },
     {
       id: "status",
       header: "Status",
-      accessor: (row: StockItem) => <StatusBadge status={row.status} />,
+      accessor: (row: StockRow) => <StatusBadge status={row.status} />,
     },
     {
       id: "actions",
       header: "",
-      accessor: (row: StockItem) => (
+      accessor: (row: StockRow) => (
         <RowActions
           actions={[
             {
               label: "View Details",
               icon: "Eye",
-              onClick: () => console.log("View", row.id),
+              onClick: (e) => { e?.stopPropagation?.(); openStockDetail(row); },
             },
             {
               label: "Adjust Stock",
               icon: "Edit",
-              onClick: () => console.log("Adjust", row.id),
+              onClick: (e) => { e?.stopPropagation?.(); router.push(`/inventory/stock-levels?adjust=${row.id}`); },
             },
             {
               label: "Transfer",
               icon: "ArrowLeftRight",
-              onClick: () => console.log("Transfer", row.id),
+              onClick: (e) => { e?.stopPropagation?.(); router.push(`/inventory/transfers?from=${row.id}`); },
             },
           ]}
         />
@@ -200,11 +148,8 @@ export default function StockLevelsPage() {
               label: "Warehouse",
               options: [
                 { label: "All Warehouses", value: "all" },
-                { label: "Main Warehouse", value: "Main Warehouse" },
-                {
-                  label: "Secondary Warehouse",
-                  value: "Secondary Warehouse",
-                },
+                { label: "WH-Main", value: "WH-Main" },
+                { label: "WH-East", value: "WH-East" },
               ],
               value: warehouseFilter,
               onChange: setWarehouseFilter,
@@ -218,10 +163,12 @@ export default function StockLevelsPage() {
                 { label: "Low Stock", value: "Low Stock" },
                 { label: "Out of Stock", value: "Out of Stock" },
               ],
+              value: statusFilter,
+              onChange: setStatusFilter,
             },
           ]}
-          activeFiltersCount={warehouseFilter !== "all" ? 1 : 0}
-          onClearFilters={() => setWarehouseFilter("all")}
+          activeFiltersCount={[warehouseFilter, statusFilter].filter((v) => v !== "all").length}
+          onClearFilters={() => { setWarehouseFilter("all"); setStatusFilter("all"); }}
         />
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -237,7 +184,7 @@ export default function StockLevelsPage() {
           <DataTable
             data={filteredItems}
             columns={columns}
-            onRowClick={(row) => console.log("Row clicked", row.id)}
+            onRowClick={(row) => openStockDetail(row)}
             emptyMessage="No stock items found."
           />
         </CardContent>

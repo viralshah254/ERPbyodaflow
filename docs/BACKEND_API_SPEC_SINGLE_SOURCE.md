@@ -127,11 +127,44 @@ Every row: frontend currently shows a toast or placeholder; backend should imple
 | Settings → Financial → COA | Import COA | POST | /api/import/coa | §2.4 | (same) |
 | Settings → Financial → Fiscal years | Close / Reopen | POST | /api/finance/period/close, /api/finance/period/reopen | §3.1 rows 15–16 | finance.write |
 | Settings → Inventory → Costing | Save template | POST/PATCH | /api/settings/inventory/costing-templates or /api/inventory/landed-cost/templates | Template CRUD | inventory.read |
-| Settings → Products → Pricing rules | Add rule | POST | /api/settings/pricing-rules or /api/pricing/rules | Rule body → 201 | pricing.read |
+| Warehouse → Transfers | List / Create | GET, POST | /api/warehouse/transfers | See §3.6 | inventory.read/write |
+| **Subcontracting → Job Work** | **Work centers, orders, WIP** | **GET, POST** | **/api/manufacturing/work-centers/external, /api/manufacturing/subcontract-orders, /api/manufacturing/subcontract-orders/wip** | **See §3.4** | **manufacturing.subcontracting.read/write** |
+| **Pricing → Rules** | **List / Add policy, Configure customer default** | **GET, POST, GET, POST** | **/api/pricing/policies, /api/pricing/customer-default-price-lists** | **See §3.5** | **pricing.read** |
 | Settings → Sequences | Add sequence | POST | /api/sequences | Sequence body → 201 | settings.sequences.read |
 | Settings → Users & roles | Add user / Add role | POST | /api/users, /api/roles | User/role body → 201 | settings.users.read |
 
-### 3.4 Payroll and reports
+### 3.4 Subcontracting / Job Work (external processors, WIP, processing fees)
+
+Frontend pages: `/manufacturing/subcontracting`, `/manufacturing/subcontracting/orders/[id]`. Wired in `src/lib/api/cool-catch.ts`.
+
+See `BACKEND_SUBCONTRACTING_API.md` for full models and behaviour.
+
+**Core endpoints:**
+
+- `GET /api/manufacturing/work-centers/external` — list external work centers.
+- `POST /api/manufacturing/work-centers/external` — create external work center.
+- `GET /api/manufacturing/subcontract-orders` — list orders (filters: `workCenterId`, `status`).
+- `GET /api/manufacturing/subcontract-orders/:id` — order detail with lines.
+- `POST /api/manufacturing/subcontract-orders` — create order (“Send to processor”).
+- `POST /api/manufacturing/subcontract-orders/:id/receive` — mark received, move stock back, apply processing fees.
+- `GET /api/manufacturing/subcontract-orders/wip` — WIP balances at processors (filters: `workCenterId`).
+
+### 3.5 Pricing rules (discount policies & customer default price list)
+
+Frontend page: `/pricing/rules`. Wired in `src/lib/api/pricing.ts`.
+
+| Method | Path | Body / response | Permission |
+|--------|------|-----------------|------------|
+| GET | `/api/pricing/policies` | **200** — `{ items: DiscountPolicy[] }`. Each policy: `{ id, name, type, requiresApproval?, startDate?, endDate? }`. `type` = `volume` \| `promo` \| `channel`. | pricing.read |
+| POST | `/api/pricing/policies` | **201** — Body: `{ name, type, requiresApproval?, startDate?, endDate? }`. Response: full `DiscountPolicy` with `id`. | pricing.write |
+| PATCH | `/api/pricing/policies/:id` | Body: partial policy. **200** — updated policy. | pricing.write |
+| POST | `/api/pricing/policies/:id/request-approval` | `{ comment? }` → **200**. Optional: emit approval workflow. | pricing.write |
+| GET | `/api/pricing/customer-default-price-lists` | **200** — `{ items: { customerId, customerName?, priceListId, priceListName? }[] }`. | pricing.read |
+| POST | `/api/pricing/customer-default-price-lists` | Body: `{ customerId, priceListId }`. **200** or **201** — upsert default for customer. | pricing.write |
+
+**Backend implementation guide:** See `docs/BACKEND_PRICING_RULES_API.md` for request/response shapes and notes.
+
+### 3.5 Payroll and reports
 
 | Frontend | Action | Method | Path | Body / response | Permission |
 |----------|--------|--------|------|-----------------|------------|
@@ -141,6 +174,25 @@ Every row: frontend currently shows a toast or placeholder; backend should imple
 | Reports → VAT summary | Run / Export | GET | /api/reports/vat-summary?period=&branchId= | 200 + JSON or CSV | finance.read |
 | Reports → WHT summary | Run / Export | GET | /api/reports/wht-summary?period= | 200 + JSON or CSV | (same) |
 | Reports → Report library | Run report | GET | /api/reports/:reportId/run?params | 200 + data or file | (same) |
+
+---
+
+### 3.6 Warehouse transfers (inter-warehouse)
+
+Frontend pages: `/warehouse/transfers`, `/warehouse/transfers/[id]`. API helper in `src/lib/api/warehouse-transfers.ts`. Mark-received action is also part of §3.1 row 8.
+
+**Core endpoints:**
+
+- `GET /api/warehouse/transfers` — list transfers. Optional query: `status` (`DRAFT`, `APPROVED`, `IN_TRANSIT`, `RECEIVED`), `search` (number/from/to).
+- `GET /api/warehouse/transfers/:id` — transfer header + lines.
+- `POST /api/warehouse/transfers` — create new transfer. Body (minimum UI contract):
+  - `{ date, fromWarehouseId, toWarehouseId, reference?, lines: [{ sku, productName?, quantity, unit? }] }`
+- `POST /api/warehouse/transfers/:id/receive` — mark transfer received; see §3.1 row 8 for behaviour.
+
+**Notes:**
+
+- Implement stock movements for from/to warehouses on create/receive according to your inventory engine.
+- Approve / mark-in-transit can be added later as `/api/warehouse/transfers/:id/action` with `{ action: "approve" | "transit" }`.
 
 ---
 
@@ -194,6 +246,9 @@ Replace stub responses with real DB read/write. Example routes (base `/api`):
 | Close / Reopen period | POST /finance/period/close, POST /finance/period/reopen |
 | Save org settings | PATCH /org |
 | Approve / Reject (inbox) | POST /approvals/:id/approve, POST /approvals/:id/reject |
+| Pricing rules: list policies | GET /pricing/policies |
+| Pricing rules: add policy | POST /pricing/policies |
+| Pricing rules: customer default list/set | GET /pricing/customer-default-price-lists, POST /pricing/customer-default-price-lists |
 
 ---
 
@@ -231,6 +286,9 @@ When **NEXT_PUBLIC_API_URL** is set, the frontend calls the backend for these ac
 | 18 | /assets/depreciation | Run depreciation | Wired |
 | 20 | /analytics/simulations | Apply suggestion | Wired |
 | 21 | /automation/ai-insights | Apply action | Wired (CopilotActionCards) |
+| — | /pricing/rules | Add policy, Configure customer default price list | Wired (fetchDiscountPolicies, createDiscountPolicy, fetchCustomerDefaultPriceLists, setCustomerDefaultPriceList) |
+| — | /manufacturing/subcontracting | Send to processor, Receive, Manage work centers, View WIP | Wired (fetchExternalWorkCenters, createExternalWorkCenter, fetchSubcontractOrders, createSubcontractOrder, fetchSubcontractOrderById, fetchWIPBalances, receiveSubcontractOrder) |
+| — | /warehouse/transfers | Create transfer, Mark received (bulk + detail) | Wired (fetchTransfers, fetchTransferById, createTransfer, warehouseTransferReceive) |
 
 ---
 
