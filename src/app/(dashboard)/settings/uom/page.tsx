@@ -43,12 +43,16 @@ import {
   deleteConversion,
   resetUomFromMocks,
 } from "@/lib/data/uom.repo";
+import { canDeleteEntity } from "@/lib/permissions";
 import type { UomDefinition, UomConversion } from "@/lib/products/types";
+import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 
 const CATEGORIES = ["base", "weight", "volume", "count"] as const;
 
 export default function UomSettingsPage() {
+  const user = useAuthStore((s) => s.user);
+  const canDelete = canDeleteEntity(user);
   const [uoms, setUoms] = React.useState<UomDefinition[]>([]);
   const [conversions, setConversions] = React.useState<UomConversion[]>([]);
   const [validation, setValidation] = React.useState(validateUomCatalog());
@@ -163,7 +167,9 @@ export default function UomSettingsPage() {
                       <TableCell>{u.decimals}</TableCell>
                       <TableCell className="space-x-1">
                         <Button variant="ghost" size="sm" onClick={() => openEditUom(u)}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteUom(u.id); refresh(); }}>Remove</Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteUom(u.id); refresh(); }}>Remove</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -196,9 +202,11 @@ export default function UomSettingsPage() {
                       <TableCell className="font-mono">{c.toUom}</TableCell>
                       <TableCell>1 {c.fromUom} = {c.factor} {c.toUom}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => { deleteConversion(c.id); refresh(); }}>
-                          Remove
-                        </Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" onClick={() => { deleteConversion(c.id); refresh(); }}>
+                            Remove
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

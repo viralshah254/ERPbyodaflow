@@ -22,7 +22,9 @@ import { getMockPriceLists } from "@/lib/mock/products/price-lists";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { productDelete } from "@/lib/api/stub-endpoints";
+import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
+import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -31,6 +33,8 @@ export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const user = useAuthStore((s) => s.user);
+  const canDelete = canDeleteEntity(user);
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [vatCategory, setVatCategory] = React.useState<string>("standard");
@@ -115,37 +119,41 @@ export default function ProductDetailPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href={`/master/products/${id}/attributes`}>Attributes</Link>
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setDeleteConfirmOpen(true)}
-            >
-              <Icons.Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </Button>
-            <ConfirmDialog
-              open={deleteConfirmOpen}
-              onOpenChange={setDeleteConfirmOpen}
-              title="Delete product?"
-              description="This will remove the product. This action cannot be undone."
-              confirmLabel="Delete"
-              cancelLabel="Cancel"
-              variant="destructive"
-              onConfirm={async () => {
-                setDeleting(true);
-                try {
-                  await productDelete(id);
-                  toast.success("Product deleted.");
-                  router.push("/master/products");
-                } catch (err) {
-                  if ((err as Error).message === "STUB") toast.info("Delete (stub). API pending.");
-                  else toast.error((err as Error).message);
-                } finally {
-                  setDeleting(false);
-                }
-              }}
-            />
+            {canDelete && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  <Icons.Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
+                <ConfirmDialog
+                  open={deleteConfirmOpen}
+                  onOpenChange={setDeleteConfirmOpen}
+                  title="Delete product?"
+                  description="This will remove the product. This action cannot be undone."
+                  confirmLabel="Delete"
+                  cancelLabel="Cancel"
+                  variant="destructive"
+                  onConfirm={async () => {
+                    setDeleting(true);
+                    try {
+                      await productDelete(id);
+                      toast.success("Product deleted.");
+                      router.push("/master/products");
+                    } catch (err) {
+                      if ((err as Error).message === "STUB") toast.info("Delete (stub). API pending.");
+                      else toast.error((err as Error).message);
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                />
+              </>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href="/master/products">Back to list</Link>
             </Button>

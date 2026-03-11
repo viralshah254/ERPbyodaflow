@@ -35,7 +35,9 @@ import {
 } from "@/components/ui/table";
 import { getProductById, listVariants, saveVariants, createVariant, updateVariant, deleteVariant, listAttributeDefs } from "@/lib/data/products.repo";
 import type { ProductVariant, VariantAttribute } from "@/lib/products/types";
+import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
+import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -44,6 +46,8 @@ import * as Icons from "lucide-react";
 export default function ProductVariantsPage() {
   const params = useParams();
   const id = params.id as string;
+  const user = useAuthStore((s) => s.user);
+  const canDelete = canDeleteEntity(user);
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
@@ -165,7 +169,9 @@ export default function ProductVariantsPage() {
                       </TableCell>
                       <TableCell className="space-x-1">
                         <Button variant="ghost" size="sm" onClick={() => { setEditing(v); setSheetOpen(true); }}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleRemove(v.id)}>Remove</Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleRemove(v.id)}>Remove</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))

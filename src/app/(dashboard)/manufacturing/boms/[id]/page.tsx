@@ -45,7 +45,9 @@ import {
   updateBom,
   deleteBom,
 } from "@/lib/data/bom.repo";
+import { canDeleteEntity } from "@/lib/permissions";
 import { getRouteById, listRoutes } from "@/lib/data/routing.repo";
+import { useAuthStore } from "@/stores/auth-store";
 import { listProducts } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
 import type { BOMRow, BOMItemRow, FormulaCoProduct, FormulaByProduct } from "@/lib/manufacturing/types";
@@ -68,6 +70,8 @@ export default function BomDetailPage() {
   const [batchSize, setBatchSize] = React.useState<number>(1);
   const [itemSheetOpen, setItemSheetOpen] = React.useState(false);
   const [editingItemId, setEditingItemId] = React.useState<string | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const canDelete = canDeleteEntity(user);
 
   React.useEffect(() => {
     const b = getBomById(id);
@@ -134,9 +138,11 @@ export default function BomDetailPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/boms">Back to list</Link>
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDeleteBom} className="text-destructive">
-              Delete
-            </Button>
+            {canDelete && (
+              <Button variant="outline" size="sm" onClick={handleDeleteBom} className="text-destructive">
+                Delete
+              </Button>
+            )}
           </div>
         }
       />
@@ -170,7 +176,9 @@ export default function BomDetailPage() {
                       <TableCell>{i.scrapFactor ?? "—"}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={() => { setEditingItemId(i.id); setItemSheetOpen(true); }}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteBomItem(bom.id, i.id); setItems(listBomItems(bom.id)); }}>Remove</Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteBomItem(bom.id, i.id); setItems(listBomItems(bom.id)); }}>Remove</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

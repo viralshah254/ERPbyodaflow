@@ -18,6 +18,8 @@ import {
 } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/mock/masters";
 import { productDelete } from "@/lib/api/stub-endpoints";
+import { canDeleteEntity } from "@/lib/permissions";
+import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -55,6 +57,8 @@ function buildProductRow(row: ProductRow): Product {
 
 export default function ProductsPage() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const canDelete = canDeleteEntity(user);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [rows, setRows] = React.useState<Product[]>([]);
@@ -188,12 +192,16 @@ export default function ProductsPage() {
               icon: "Copy",
               onClick: () => handleDuplicate(row.id),
             },
-            {
-              label: "Delete",
-              icon: "Trash2",
-              onClick: () => handleDelete(row.id),
-              variant: "destructive",
-            },
+            ...(canDelete
+              ? [
+                  {
+                    label: "Delete",
+                    icon: "Trash2" as const,
+                    onClick: () => handleDelete(row.id),
+                    variant: "destructive" as const,
+                  },
+                ]
+              : []),
           ]}
         />
       ),

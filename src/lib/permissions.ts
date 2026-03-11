@@ -74,5 +74,19 @@ export const Permissions = {
   ADMIN_USERS: "admin.users",
   ADMIN_SETTINGS: "admin.settings",
   ADMIN_CUSTOMIZATION: "admin.customization",
+  /** Required to delete master data (products, parties, etc.). Backend must enforce. */
+  ADMIN_DELETE: "admin.delete",
 } as const;
+
+/** Role ID that grants admin delete in mock; backend should map roles to permissions. */
+const ADMIN_DELETE_ROLE_IDS = new Set(["role-admin"]);
+
+/**
+ * True if the user is allowed to perform delete operations on entities (products, parties, etc.).
+ * Non-admins should not see or use Delete; backend must enforce.
+ */
+export function canDeleteEntity(user: User | null): boolean {
+  if (!user?.roleIds?.length) return false;
+  return user.roleIds.some((rid) => ADMIN_DELETE_ROLE_IDS.has(rid));
+}
 

@@ -44,6 +44,8 @@ import {
 } from "@/lib/data/pricing.repo";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { listProducts } from "@/lib/data/products.repo";
+import { canDeleteEntity } from "@/lib/permissions";
+import { useAuthStore } from "@/stores/auth-store";
 import { listProductPrices } from "@/lib/data/products.repo";
 import * as Icons from "lucide-react";
 
@@ -52,6 +54,8 @@ const CHANNELS = ["Retail", "Wholesale", "Distributor", "ModernTrade", "Export"]
 function PriceListsContent() {
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("list") ?? "";
+  const user = useAuthStore((s) => s.user);
+  const canDelete = canDeleteEntity(user);
   const [lists, setLists] = React.useState<PriceList[]>([]);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PriceList | null>(null);
@@ -137,7 +141,9 @@ function PriceListsContent() {
                         <Link href={`/pricing/price-lists?list=${pl.id}`}>View</Link>
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(pl)}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deletePriceList(pl.id); refresh(); }}>Remove</Button>
+                      {canDelete && (
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deletePriceList(pl.id); refresh(); }}>Remove</Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

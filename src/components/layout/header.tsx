@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useUIStore } from "@/stores/ui-store";
@@ -17,9 +19,15 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Bell, Search, Settings, LogOut, User, Sparkles } from "lucide-react";
 
 export function Header() {
+  const router = useRouter();
   const { user, currentBranch, logout } = useAuthStore();
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
 
   const userInitials = user
     ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
@@ -60,10 +68,14 @@ export function Header() {
         <Bell className="h-5 w-5" />
       </Button>
 
-      {/* User Menu */}
+      {/* User Menu — click for Profile, Settings, Log out */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+          <Button
+            variant="ghost"
+            className="relative h-10 w-10 rounded-full"
+            aria-label="Account menu — profile, settings, log out"
+          >
             <Avatar className="h-10 w-10">
               <AvatarImage src={user?.avatarUrl} alt={user?.email} />
               <AvatarFallback>{userInitials}</AvatarFallback>
@@ -82,16 +94,20 @@ export function Header() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
-            <User className="mr-2 h-4 w-4" />
-            <span>Profile</span>
+          <DropdownMenuItem asChild>
+            <Link href="/settings/org" className="flex cursor-pointer items-center">
+              <User className="mr-2 h-4 w-4" />
+              <span>Profile</span>
+            </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem>
-            <Settings className="mr-2 h-4 w-4" />
-            <span>Settings</span>
+          <DropdownMenuItem asChild>
+            <Link href="/settings/org" className="flex cursor-pointer items-center">
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={logout}>
+          <DropdownMenuItem onClick={handleLogout} className="focus:bg-destructive/10 focus:text-destructive">
             <LogOut className="mr-2 h-4 w-4" />
             <span>Log out</span>
           </DropdownMenuItem>

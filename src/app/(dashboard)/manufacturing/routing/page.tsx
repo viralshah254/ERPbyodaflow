@@ -50,12 +50,16 @@ import {
   deleteRouteOperation,
   resetRoutingFromMocks,
 } from "@/lib/data/routing.repo";
+import { canDeleteEntity } from "@/lib/permissions";
 import type { WorkCenter, RouteRow, RouteOperation } from "@/lib/manufacturing/types";
+import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 
 function RoutingContent() {
   const searchParams = useSearchParams();
   const routeId = searchParams.get("route") ?? "";
+  const user = useAuthStore((s) => s.user);
+  const canDelete = canDeleteEntity(user);
 
   const [workCenters, setWorkCenters] = React.useState<WorkCenter[]>([]);
   const [routes, setRoutes] = React.useState<RouteRow[]>([]);
@@ -131,7 +135,9 @@ function RoutingContent() {
                       <TableCell>{w.name}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={() => { setEditingWc(w); setWcSheetOpen(true); }}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteWorkCenter(w.id); refresh(); }}>Remove</Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteWorkCenter(w.id); refresh(); }}>Remove</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -168,7 +174,9 @@ function RoutingContent() {
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={() => { setSelectedRouteId(r.id); setEditingRoute(r); setRouteSheetOpen(true); }}>Edit</Button>
                         <Button variant="ghost" size="sm" onClick={() => setSelectedRouteId(r.id)}>View ops</Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteRoute(r.id); refresh(); if (selectedRouteId === r.id) setSelectedRouteId(""); }}>Remove</Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteRoute(r.id); refresh(); if (selectedRouteId === r.id) setSelectedRouteId(""); }}>Remove</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -212,7 +220,9 @@ function RoutingContent() {
                       <TableCell>{o.runMinutesPerUnit}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={() => { setEditingOp(o); setOpSheetOpen(true); }}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteRouteOperation(selectedRouteId, o.id); setOps(listRouteOperations(selectedRouteId)); }}>Remove</Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteRouteOperation(selectedRouteId, o.id); setOps(listRouteOperations(selectedRouteId)); }}>Remove</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
