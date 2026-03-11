@@ -10,6 +10,16 @@ import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getMockStock, type StockRow } from "@/lib/mock/stock";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import * as Icons from "lucide-react";
 
 export default function StockLevelsPage() {
@@ -17,8 +27,11 @@ export default function StockLevelsPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState<string>("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
-
-  const stockItems = React.useMemo(() => getMockStock(), []);
+  const [stockItems, setStockItems] = React.useState<StockRow[]>(() => getMockStock());
+  const [adjusting, setAdjusting] = React.useState<StockRow | null>(null);
+  const [adjustDelta, setAdjustDelta] = React.useState<string>("");
+  const [adjustReason, setAdjustReason] = React.useState("");
+  const [adjustMode, setAdjustMode] = React.useState<"INCREASE" | "DECREASE">("DECREASE");
 
   const filteredItems = React.useMemo(() => {
     return stockItems.filter((item) => {
@@ -36,6 +49,44 @@ export default function StockLevelsPage() {
 
   const openStockDetail = (row: StockRow) => {
     router.push(`/inventory/stock-levels/${row.id}`);
+  };
+
+  const openAdjust = (row: StockRow) => {
+    setAdjusting(row);
+    setAdjustDelta("");
+    setAdjustReason("");
+  };
+
+  const handleApplyAdjustment = () => {
+    if (!adjusting) {
+      setAdjusting(null);
+      return;
+    }
+
+    const numeric = parseFloat(adjustDelta);
+    if (!numeric || Number.isNaN(numeric)) {
+      setAdjusting(null);
+      return;
+    }
+    const magnitude = Math.abs(numeric);
+    const signedDelta = adjustMode === "INCREASE" ? magnitude : -magnitude;
+
+    setStockItems((prev) =>
+      prev.map((row) => {
+        if (row.id !== adjusting.id) return row;
+        let quantity = row.quantity + signedDelta;
+        let available = row.available + signedDelta;
+        if (quantity < 0) quantity = 0;
+        if (available < 0) available = 0;
+        let status: StockRow["status"];
+        if (quantity <= 0) status = "Out of Stock";
+        else if (available <= row.reorderLevel) status = "Low Stock";
+        else status = "In Stock";
+        return { ...row, quantity, available, status };
+      })
+    );
+
+    setAdjusting(null);
   };
 
   const columns = [
@@ -107,12 +158,15 @@ export default function StockLevelsPage() {
             {
               label: "Adjust Stock",
               icon: "Edit",
-              onClick: (e) => { e?.stopPropagation?.(); router.push(`/inventory/stock-levels?adjust=${row.id}`); },
+              onClick: (e) => { e?.stopPropagation?.(); openAdjust(row); },
             },
             {
               label: "Transfer",
               icon: "ArrowLeftRight",
-              onClick: (e) => { e?.stopPropagation?.(); router.push(`/inventory/transfers?from=${row.id}`); },
+              onClick: (e) => {
+                e?.stopPropagation?.();
+                router.push(`/warehouse/transfers?from=${row.id}`);
+              },
             },
           ]}
         />
@@ -189,6 +243,83 @@ export default function StockLevelsPage() {
           />
         </CardContent>
       </Card>
+
+      {adjusting && (
+        <Sheet open onOpenChange={(open) => !open && setAdjusting(null)}>
+          <SheetContent side="right" className="w-full sm:max-w-md">
+            <SheetHeader>
+              <SheetTitle>Stock adjustment — {adjusting.sku}</SheetTitle>
+              <SheetDescription>
+                {adjusting.name} · {adjusting.warehouse}
+                {adjusting.location ? ` · ${adjusting.location}` : ""}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">On hand</div>
+                  <div className="text-lg font-semibold">{adjusting.quantity}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">Available</div>
+                  <div className="text-lg font-semibold">{adjusting.available}</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Adjustment type</Label>
+                <div className="inline-flex rounded-md border bg-muted/40 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    className={`px-2 py-1 rounded-sm ${
+                      adjustMode === "INCREASE" ? "bg-background shadow-sm" : "text-muted-foreground"
+                    }`}
+                    onClick={() => setAdjustMode("INCREASE")}
+                  >
+                    Increase
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-2 py-1 rounded-sm ${
+                      adjustMode === "DECREASE" ? "bg-background shadow-sm" : "text-muted-foreground"
+                    }`}
+                    onClick={() => setAdjustMode("DECREASE")}
+                  >
+                    Decrease
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Adjustment quantity</Label>
+                <Input
+                  type="number"
+                  value={adjustDelta}
+                  onChange={(e) => setAdjustDelta((e.target as HTMLInputElement).value)}
+                  placeholder="Enter quantity"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reason (optional)</Label>
+                <Input
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  placeholder="Cycle count, damage, write-off (stub)"
+                />
+              </div>
+            </div>
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setAdjusting(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleApplyAdjustment}
+                disabled={!adjustDelta || Number.isNaN(parseFloat(adjustDelta)) || parseFloat(adjustDelta) <= 0}
+              >
+                Apply adjustment
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      )}
     </PageLayout>
   );
 }

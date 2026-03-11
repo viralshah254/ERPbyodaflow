@@ -14,10 +14,28 @@ export interface ProductRow {
   currentStock?: number;
 }
 
+export type PartyRole = "customer" | "supplier" | "franchisee";
+
+export type CustomerType =
+  | "DISTRIBUTOR"
+  | "WHOLESALER"
+  | "RETAILER"
+  | "FRANCHISEE"
+  | "END_CUSTOMER";
+
+export type SupplierType = "RAW_MATERIAL" | "SERVICE" | "LOGISTICS" | "OTHER";
+
 export interface PartyRow {
   id: string;
   name: string;
+  /**
+   * Primary legacy type for simple filters (customer vs supplier).
+   * Use roles + customerType/supplierType for richer logic.
+   */
   type: "customer" | "supplier";
+  roles?: PartyRole[];
+  customerType?: CustomerType;
+  supplierType?: SupplierType;
   email?: string;
   phone?: string;
   status: string;
@@ -38,10 +56,41 @@ export const MOCK_PRODUCTS: ProductRow[] = [
 ];
 
 export const MOCK_PARTIES: PartyRow[] = [
-  { id: "c1", name: "ABC Retail", type: "customer", email: "abc@retail.com", status: "ACTIVE" },
-  { id: "c2", name: "XYZ Shop", type: "customer", email: "xyz@shop.com", status: "ACTIVE" },
-  { id: "s1", name: "Global Suppliers Ltd", type: "supplier", email: "procure@global.com", status: "ACTIVE" },
-  { id: "s2", name: "Local Wholesale Co", type: "supplier", status: "ACTIVE" },
+  {
+    id: "c1",
+    name: "ABC Retail",
+    type: "customer",
+    roles: ["customer"],
+    customerType: "RETAILER",
+    email: "abc@retail.com",
+    status: "ACTIVE",
+  },
+  {
+    id: "c2",
+    name: "XYZ Shop (Franchisee)",
+    type: "customer",
+    roles: ["customer", "franchisee"],
+    customerType: "FRANCHISEE",
+    email: "xyz@shop.com",
+    status: "ACTIVE",
+  },
+  {
+    id: "s1",
+    name: "Global Suppliers Ltd",
+    type: "supplier",
+    roles: ["supplier"],
+    supplierType: "RAW_MATERIAL",
+    email: "procure@global.com",
+    status: "ACTIVE",
+  },
+  {
+    id: "s2",
+    name: "Local Wholesale Co",
+    type: "supplier",
+    roles: ["supplier"],
+    supplierType: "WHOLESALER" as unknown as SupplierType,
+    status: "ACTIVE",
+  },
 ];
 
 export const MOCK_WAREHOUSES: WarehouseRow[] = [

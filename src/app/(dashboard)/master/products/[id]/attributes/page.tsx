@@ -58,6 +58,17 @@ export default function ProductAttributesPage() {
 
   const variants = React.useMemo(() => (product ? listVariants(product.id) : []), [product]);
 
+  const sortedDefs = React.useMemo(() => {
+    const order = new Map<ProductAttributeDef["kind"], number>();
+    KINDS.forEach((k, idx) => order.set(k, idx));
+    return [...defs].sort((a, b) => {
+      const ak = order.get(a.kind) ?? 999;
+      const bk = order.get(b.kind) ?? 999;
+      if (ak !== bk) return ak - bk;
+      return a.name.localeCompare(b.name);
+    });
+  }, [defs]);
+
   const handleSave = (d: Omit<ProductAttributeDef, "id">) => {
     if (editing) {
       const next = defs.map((x) => (x.id === editing.id ? { ...x, ...d, id: x.id } : x));
@@ -96,7 +107,7 @@ export default function ProductAttributesPage() {
     <PageShell>
       <PageHeader
         title={`Attributes — ${product.sku}`}
-        description="Size, grade, flavor, packaging type. Used by variants."
+        description="Size, grade, flavor, packaging type. Define once, reuse across all variants."
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: t("product", terminology) + "s", href: "/master/products" },
@@ -128,7 +139,9 @@ export default function ProductAttributesPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Attribute definitions</CardTitle>
-            <CardDescription>Org-level. Options (e.g. 1kg, 5kg) used when creating variants.</CardDescription>
+            <CardDescription>
+              Org-level. {sortedDefs.length} definition(s). Options (e.g. 1kg, 5kg) used when creating variants.
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -141,21 +154,27 @@ export default function ProductAttributesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {defs.length === 0 ? (
+                {sortedDefs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                       No attribute definitions. Add size, grade, flavor, etc.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  defs.map((d) => (
+                  sortedDefs.map((d) => (
                     <TableRow key={d.id}>
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline">{d.kind}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {d.options.join(", ")}
+                        <div className="flex flex-wrap gap-1">
+                          {d.options.map((opt) => (
+                            <Badge key={opt} variant="outline" className="text-[10px] px-1.5 py-0">
+                              {opt}
+                            </Badge>
+                          ))}
+                        </div>
                       </TableCell>
                       <TableCell className="space-x-1">
                         <Button variant="ghost" size="sm" onClick={() => { setEditing(d); setSheetOpen(true); }}>Edit</Button>
@@ -178,18 +197,38 @@ export default function ProductAttributesPage() {
             {variants.length === 0 ? (
               <p className="text-sm text-muted-foreground">No variants yet. Add them from the Variants tab.</p>
             ) : (
-              <ul className="text-sm space-y-1">
-                {variants.map((v) => (
-                  <li key={v.id}>
-                    <span className="font-mono">{v.sku}</span>
-                    {v.attributes.length > 0 && (
-                      <span className="text-muted-foreground ml-2">
-                        ({v.attributes.map((a) => `${a.key}: ${a.value}`).join(", ")})
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Variant SKU</TableHead>
+                    <TableHead>Attributes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {variants.map((v) => (
+                    <TableRow key={v.id}>
+                      <TableCell className="font-mono text-xs md:text-sm">{v.sku}</TableCell>
+                      <TableCell>
+                        {v.attributes.length === 0 ? (
+                          <span className="text-sm text-muted-foreground">No attributes set.</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {v.attributes.map((a) => (
+                              <Badge
+                                key={`${v.id}-${a.key}-${a.value}`}
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0"
+                              >
+                                {a.key}: {a.value}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
             <Button variant="outline" size="sm" className="mt-4" asChild>
               <Link href={`/master/products/${id}/variants`}>Manage variants</Link>

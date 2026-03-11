@@ -13,7 +13,16 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getMockProducts, type ProductRow } from "@/lib/mock/masters";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { listProducts, createProduct } from "@/lib/data/products.repo";
+import { listUoms } from "@/lib/data/uom.repo";
+import type { ProductRow } from "@/lib/mock/masters";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
@@ -30,8 +39,16 @@ export default function MasterProductsPage() {
   const [statusFilter, setStatusFilter] = React.useState("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [sku, setSku] = React.useState("");
+  const [name, setName] = React.useState("");
+  const [category, setCategory] = React.useState("");
+  const [unit, setUnit] = React.useState("");
+  const [baseBarcode, setBaseBarcode] = React.useState("");
+  const [defaultSize, setDefaultSize] = React.useState("");
 
-  const allRows = React.useMemo(() => getMockProducts(), []);
+  const uomOptions = React.useMemo(() => listUoms().map((u) => u.code), []);
+
+  const allRows = React.useMemo(() => listProducts(), []);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -80,6 +97,38 @@ export default function MasterProductsPage() {
     }
   };
 
+  const resetForm = () => {
+    setSku("");
+    setName("");
+    setCategory("");
+    setUnit("");
+    setBaseBarcode("");
+    setDefaultSize("");
+  };
+
+  const handleCreate = () => {
+    if (!sku.trim() || !name.trim()) {
+      toast.error("SKU and Name are required.");
+      return;
+    }
+    const selectedUnit = unit.trim() || (uomOptions[0] ?? "EA");
+    const payload: Omit<ProductRow, "id"> = {
+      sku: sku.trim(),
+      name: name.trim(),
+      category: category.trim() || undefined,
+      unit: selectedUnit,
+      baseUom: selectedUnit,
+      status: "ACTIVE",
+      currentStock: 0,
+    };
+    const created = createProduct(payload);
+    toast.success("Product created. Next: define packaging and variants.");
+    resetForm();
+    setDrawerOpen(false);
+    // Guide user straight into packaging/variants on the detail page
+    router.push(`/master/products/${created.id}/packaging`);
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -97,7 +146,13 @@ export default function MasterProductsPage() {
               <Icons.Upload className="mr-2 h-4 w-4" />
               Import
             </Button>
-            <Button onClick={() => { setEditingId(null); setDrawerOpen(true); }}>
+            <Button
+              onClick={() => {
+                setEditingId(null);
+                resetForm();
+                setDrawerOpen(true);
+              }}
+            >
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add {productLabel}
             </Button>
@@ -159,23 +214,80 @@ export default function MasterProductsPage() {
         description={editingId ? "Update product details." : "Add a new product."}
         mode={editingId ? "edit" : "create"}
         duplicateWarning={!editingId ? "Possible duplicate: similar SKU exists (stub)." : undefined}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setDrawerOpen(false); }}>
+              Cancel
+            </Button>
+            {!editingId && (
+              <Button onClick={handleCreate}>
+                Create & configure
+              </Button>
+            )}
+          </>
+        }
       >
         <div className="space-y-4 pr-4">
           <div className="space-y-2">
             <Label>SKU</Label>
-            <Input placeholder="e.g. SKU-001" />
+            <Input
+              placeholder="e.g. SKU-001"
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label>Name</Label>
-            <Input placeholder="Product name" />
+            <Input
+              placeholder="Product name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label>Category</Label>
-            <Input placeholder="Category" />
+            <Input
+              placeholder="Category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label>Unit</Label>
-            <Input placeholder="pcs, kg, etc." />
+            <Select
+              value={unit || uomOptions[0] ?? "EA"}
+              onValueChange={(v) => setUnit(v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select unit" />
+              </SelectTrigger>
+              <SelectContent>
+                {uomOptions.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Base barcode (optional)</Label>
+            <Input
+              placeholder="Primary barcode used for base UOM"
+              value={baseBarcode}
+              onChange={(e) => setBaseBarcode(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Default size / variant hint (optional)</Label>
+            <Input
+              placeholder="e.g. 1kg, 500ml"
+              value={defaultSize}
+              onChange={(e) => setDefaultSize(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              This is a hint for the first variant you will set up on the Variants tab.
+            </p>
           </div>
         </div>
       </EntityDrawer>

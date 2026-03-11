@@ -1,13 +1,24 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { PageLayout } from "@/components/layout/page-layout";
 import { DataTable } from "@/components/ui/data-table";
 import { FiltersBar } from "@/components/ui/filters-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  listProducts,
+  listVariants,
+  listPackaging,
+  createProduct,
+} from "@/lib/data/products.repo";
+import type { ProductRow } from "@/lib/mock/masters";
+import { productDelete } from "@/lib/api/stub-endpoints";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 interface Product {
@@ -19,68 +30,42 @@ interface Product {
   price: number;
   status: string;
   lastUpdated: string;
+  variantsCount: number;
+  packagingCount: number;
+}
+
+function buildProductRow(row: ProductRow): Product {
+  const variantsCount = listVariants(row.id).length;
+  const packagingCount = listPackaging(row.id).length;
+
+  return {
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    category: row.category ?? "",
+    stock: row.currentStock ?? 0,
+    // Placeholder pricing/last updated until backend wiring
+    price: 0,
+    status: row.status === "ACTIVE" ? "Active" : row.status,
+    lastUpdated: "",
+    variantsCount,
+    packagingCount,
+  };
 }
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
+  const [rows, setRows] = React.useState<Product[]>([]);
 
-  // Mock data - more realistic
-  const products: Product[] = [
-    {
-      id: "1",
-      name: "Premium Widget A",
-      sku: "WID-A-001",
-      category: "Electronics",
-      stock: 150,
-      price: 29.99,
-      status: "Active",
-      lastUpdated: "2024-01-20",
-    },
-    {
-      id: "2",
-      name: "Standard Widget B",
-      sku: "WID-B-002",
-      category: "Electronics",
-      stock: 75,
-      price: 39.99,
-      status: "Active",
-      lastUpdated: "2024-01-19",
-    },
-    {
-      id: "3",
-      name: "Component X",
-      sku: "COMP-X-003",
-      category: "Components",
-      stock: 0,
-      price: 15.50,
-      status: "Out of Stock",
-      lastUpdated: "2024-01-18",
-    },
-    {
-      id: "4",
-      name: "Assembly Kit Y",
-      sku: "KIT-Y-004",
-      category: "Kits",
-      stock: 45,
-      price: 89.99,
-      status: "Active",
-      lastUpdated: "2024-01-20",
-    },
-    {
-      id: "5",
-      name: "Raw Material Z",
-      sku: "RAW-Z-005",
-      category: "Raw Materials",
-      stock: 12,
-      price: 5.25,
-      status: "Low Stock",
-      lastUpdated: "2024-01-17",
-    },
-  ];
+  React.useEffect(() => {
+    const products = listProducts().map(buildProductRow);
+    setRows(products);
+  }, []);
 
   const filteredProducts = React.useMemo(() => {
-    return products.filter((product) => {
+    return rows.filter((product) => {
       const matchesSearch =
         searchQuery === "" ||
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -89,16 +74,59 @@ export default function ProductsPage() {
         statusFilter === "all" || product.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [searchQuery, statusFilter]);
+  }, [rows, searchQuery, statusFilter]);
+
+  const handleView = (id: string) => {
+    router.push(`/master/products/${id}`);
+  };
+
+  const handleEdit = (id: string) => {
+    router.push(`/master/products/${id}`);
+  };
+
+  const handleDuplicate = (id: string) => {
+    const all = listProducts();
+    const original = all.find((p) => p.id === id);
+    if (!original) {
+      toast.error("Product not found.");
+      return;
+    }
+    const { id: _id, ...rest } = original;
+    const newSku = `${original.sku}-COPY`;
+    const created = createProduct({ ...rest, sku: newSku });
+    setRows((prev) => [...prev, buildProductRow(created)]);
+    toast.success("Product duplicated (local only).");
+  };
+
+  const handleDelete = async (id: string) => {
+    setRows((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await productDelete(id);
+      toast.success("Product deleted.");
+    } catch (err) {
+      const message = (err as Error).message === "STUB"
+        ? "Delete (stub). Set NEXT_PUBLIC_API_URL to use backend."
+        : (err as Error).message;
+      toast.info(message);
+    }
+  };
 
   const columns = [
     {
       id: "name",
       header: "Product Name",
       accessor: (row: Product) => (
-        <div>
+        <div className="space-y-1">
           <div className="font-medium">{row.name}</div>
           <div className="text-xs text-muted-foreground">{row.sku}</div>
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              {row.variantsCount} variants
+            </Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              {row.packagingCount} UOMs
+            </Badge>
+          </div>
         </div>
       ),
       sticky: true,
@@ -148,22 +176,22 @@ export default function ProductsPage() {
             {
               label: "View",
               icon: "Eye",
-              onClick: () => console.log("View", row.id),
+              onClick: () => handleView(row.id),
             },
             {
               label: "Edit",
               icon: "Edit",
-              onClick: () => console.log("Edit", row.id),
+              onClick: () => handleEdit(row.id),
             },
             {
               label: "Duplicate",
               icon: "Copy",
-              onClick: () => console.log("Duplicate", row.id),
+              onClick: () => handleDuplicate(row.id),
             },
             {
               label: "Delete",
               icon: "Trash2",
-              onClick: () => console.log("Delete", row.id),
+              onClick: () => handleDelete(row.id),
               variant: "destructive",
             },
           ]}
@@ -178,7 +206,7 @@ export default function ProductsPage() {
       title="Products"
       description="Manage your product catalog"
       actions={
-        <Button>
+        <Button onClick={() => router.push("/master/products")}>
           <Icons.Plus className="mr-2 h-4 w-4" />
           Add Product
         </Button>
@@ -223,7 +251,7 @@ export default function ProductsPage() {
             <div>
               <CardTitle>Products</CardTitle>
               <CardDescription>
-                {filteredProducts.length} of {products.length} products
+                {filteredProducts.length} of {rows.length} products
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -242,7 +270,7 @@ export default function ProductsPage() {
           <DataTable
             data={filteredProducts}
             columns={columns}
-            onRowClick={(row) => console.log("Row clicked", row.id)}
+            onRowClick={(row) => handleView(row.id)}
             emptyMessage="No products found. Create your first product to get started."
           />
         </CardContent>
