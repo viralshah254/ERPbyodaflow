@@ -6,8 +6,32 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { APPaymentRow } from "@/lib/mock/ap";
-import { createApPayment, listApPayments } from "@/lib/data/ap-payments.repo";
+import {
+  allocateApPaymentApi,
+  createApPaymentApi,
+  fetchApPaymentsApi,
+  fetchApSuppliersApi,
+  fetchOpenBillsApi,
+  type OpenBillRow,
+} from "@/lib/api/payments";
 import { downloadCsv } from "@/lib/export/csv";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -15,7 +39,35 @@ import * as Icons from "lucide-react";
 
 export default function APPaymentsPage() {
   const [search, setSearch] = React.useState("");
-  const [allRows, setAllRows] = React.useState<APPaymentRow[]>(() => listApPayments());
+  const [allRows, setAllRows] = React.useState<APPaymentRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [wizardOpen, setWizardOpen] = React.useState(false);
+  const [supplierId, setSupplierId] = React.useState("");
+  const [supplierOptions, setSupplierOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [openBills, setOpenBills] = React.useState<OpenBillRow[]>([]);
+  const [allocations, setAllocations] = React.useState<Record<string, number>>({});
+  const [saving, setSaving] = React.useState(false);
+
+  const refreshPayments = React.useCallback(async () => {
+    setAllRows(await fetchApPaymentsApi());
+  }, []);
+
+  React.useEffect(() => {
+    setLoading(true);
+    Promise.all([fetchApPaymentsApi(), fetchApSuppliersApi()])
+      .then(([payments, suppliers]) => {
+        setAllRows(payments);
+        setSupplierOptions(suppliers);
+      })
+      .catch((error) => toast.error((error as Error).message || "Failed to load AP payments."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  React.useEffect(() => {
+    fetchOpenBillsApi(supplierId || undefined)
+      .then(setOpenBills)
+      .catch(() => setOpenBills([]));
+  }, [supplierId]);
 
   const filtered = React.useMemo(() => {
     if (!search.trim()) return allRows;
@@ -55,6 +107,31 @@ export default function APPaymentsPage() {
     []
   );
 
+  const handleCreatePayment = async () => {
+    const nextAllocations = Object.entries(allocations)
+      .filter(([, amount]) => amount > 0)
+      .map(([documentId, amount]) => ({ documentId, amount }));
+    const totalAmount = nextAllocations.reduce((sum, allocation) => sum + allocation.amount, 0);
+    if (!supplierId || totalAmount <= 0) {
+      toast.error("Select a supplier and allocate at least one bill.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const created = await createApPaymentApi({ supplierId, amount: totalAmount });
+      await allocateApPaymentApi(created.id, nextAllocations);
+      await refreshPayments();
+      toast.success(`Supplier payment ${created.number} created.`);
+      setWizardOpen(false);
+      setSupplierId("");
+      setAllocations({});
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to create supplier payment.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -68,11 +145,7 @@ export default function APPaymentsPage() {
         showCommandHint
         actions={
           <Button
-            onClick={() => {
-              const created = createApPayment({ party: "Supplier settlement", amount: 0 });
-              setAllRows(listApPayments());
-              toast.success(`Supplier payment ${created.number} created.`);
-            }}
+            onClick={() => setWizardOpen(true)}
           >
             <Icons.Plus className="mr-2 h-4 w-4" />
             Pay supplier
@@ -102,7 +175,68 @@ export default function APPaymentsPage() {
           columns={columns}
           emptyMessage="No payments yet."
         />
+        {loading ? <p className="text-sm text-muted-foreground">Loading AP payments...</p> : null}
       </div>
+
+      <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Pay supplier</SheetTitle>
+            <SheetDescription>Select a supplier, review open bills, and allocate the payment.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="space-y-2">
+              <Label>Supplier</Label>
+              <Select value={supplierId} onValueChange={setSupplierId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {supplierOptions.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Open bills</Label>
+              <div className="rounded border divide-y max-h-64 overflow-auto">
+                {openBills.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">No open bills for this supplier.</div>
+                ) : (
+                  openBills.map((bill) => (
+                    <div key={bill.id} className="flex items-center justify-between gap-2 p-2 text-sm">
+                      <span className="truncate">
+                        {bill.number} · {formatMoney(bill.outstanding, bill.currency ?? "KES")}
+                      </span>
+                      <Input
+                        type="number"
+                        className="w-28 h-8 shrink-0"
+                        placeholder="Amount"
+                        value={allocations[bill.id] ?? ""}
+                        onChange={(e) =>
+                          setAllocations((current) => ({
+                            ...current,
+                            [bill.id]: parseFloat(e.target.value) || 0,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setWizardOpen(false)}>Cancel</Button>
+              <Button disabled={saving} onClick={handleCreatePayment}>
+                {saving ? "Saving..." : "Create payment"}
+              </Button>
+            </SheetFooter>
+          </div>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

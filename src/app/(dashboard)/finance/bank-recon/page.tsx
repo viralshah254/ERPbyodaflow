@@ -7,6 +7,23 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   createBankReconPaymentFromStatementApi,
   fetchBankReconSnapshotApi,
@@ -15,6 +32,7 @@ import {
   type BankReconSnapshot,
   type SystemTransaction,
 } from "@/lib/api/bank-recon";
+import { fetchApSuppliersApi, fetchArCustomersApi } from "@/lib/api/payments";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -26,6 +44,12 @@ export default function BankReconPage() {
   const importInputRef = React.useRef<HTMLInputElement>(null);
   const [loading, setLoading] = React.useState(true);
   const [snapshot, setSnapshot] = React.useState<BankReconSnapshot | null>(null);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [creating, setCreating] = React.useState(false);
+  const [pendingLine, setPendingLine] = React.useState<BankStatementLine | null>(null);
+  const [counterpartySearch, setCounterpartySearch] = React.useState("");
+  const [counterpartyId, setCounterpartyId] = React.useState("");
+  const [counterpartyOptions, setCounterpartyOptions] = React.useState<Array<{ id: string; name: string }>>([]);
 
   const refreshSnapshot = React.useCallback(async () => {
     setLoading(true);
@@ -62,15 +86,54 @@ export default function BankReconPage() {
     toast.success("Suggested closest amount/date matches in demo mode.");
   };
 
+  React.useEffect(() => {
+    if (!createOpen || !pendingLine) return;
+    let cancelled = false;
+    const load = async () => {
+      const items =
+        pendingLine.amount >= 0
+          ? await fetchArCustomersApi(counterpartySearch)
+          : await fetchApSuppliersApi(counterpartySearch);
+      if (!cancelled) {
+        setCounterpartyOptions(items);
+      }
+    };
+    void load().catch((e) => {
+      if (!cancelled) toast.error((e as Error).message || "Failed to load counterparties.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, pendingLine, counterpartySearch]);
+
   const handleCreatePayment = (lineId: string) => {
     const line = statements.find((item) => item.id === lineId);
-    if (!line || !session) return;
-    void createBankReconPaymentFromStatementApi(line, session.bankAccountId)
-      .then(async () => {
-        toast.success(`Created payment proposal from statement line ${lineId}.`);
-        await refreshSnapshot();
-      })
-      .catch((e) => toast.error((e as Error).message));
+    if (!line) return;
+    setPendingLine(line);
+    setCounterpartySearch("");
+    setCounterpartyId("");
+    setCounterpartyOptions([]);
+    setCreateOpen(true);
+  };
+
+  const handleCreatePaymentSubmit = async () => {
+    if (!pendingLine || !counterpartyId) {
+      toast.error("Select a counterparty first.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const result = await createBankReconPaymentFromStatementApi(pendingLine, counterpartyId);
+      toast.success(`Created and matched payment ${result.number}.`);
+      setCreateOpen(false);
+      setPendingLine(null);
+      setCounterpartyId("");
+      await refreshSnapshot();
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to create payment.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleImportStatement = () => {
@@ -188,7 +251,7 @@ export default function BankReconPage() {
           <Card>
             <CardHeader>
               <CardTitle>Bank statement</CardTitle>
-              <CardDescription>Lines from imported statement (mock)</CardDescription>
+              <CardDescription>Lines from imported statement.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 max-h-[400px] overflow-auto">
@@ -212,7 +275,7 @@ export default function BankReconPage() {
           <Card>
             <CardHeader>
               <CardTitle>System transactions</CardTitle>
-              <CardDescription>Payments and receipts in system (mock)</CardDescription>
+              <CardDescription>Payments and receipts in system.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 max-h-[400px] overflow-auto">
@@ -272,6 +335,57 @@ export default function BankReconPage() {
           </CardContent>
         </Card>
       </div>
+      <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Create payment from statement line</SheetTitle>
+            <SheetDescription>
+              {pendingLine
+                ? `${pendingLine.amount >= 0 ? "Receipt" : "Payment"} for ${pendingLine.description}`
+                : "Select the correct counterparty before creating the payment."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            {pendingLine ? (
+              <div className="rounded border p-3 text-sm">
+                <p className="font-medium">{pendingLine.description}</p>
+                <p className="text-muted-foreground">
+                  {pendingLine.date} · {pendingLine.amount.toLocaleString()} {pendingLine.currency ?? "KES"}
+                </p>
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <Label>Search {pendingLine?.amount && pendingLine.amount >= 0 ? "customer" : "supplier"}</Label>
+              <Input
+                value={counterpartySearch}
+                onChange={(e) => setCounterpartySearch(e.target.value)}
+                placeholder="Type name, email, or code"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Counterparty</Label>
+              <Select value={counterpartyId} onValueChange={setCounterpartyId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select counterparty" />
+                </SelectTrigger>
+                <SelectContent>
+                  {counterpartyOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleCreatePaymentSubmit()} disabled={creating || !counterpartyId}>
+              {creating ? "Creating..." : "Create and match payment"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }
@@ -287,7 +401,7 @@ function StatementRow({
   onSelect: () => void;
   onCreatePayment: () => void;
 }) {
-  const isUnmatched = !line.matchedId;
+          const isUnmatched = !line.matchedId;
   return (
     <div
       className={`rounded-lg border p-3 transition-colors ${
@@ -327,7 +441,7 @@ function StatementRow({
           className="mt-2 h-7 text-xs"
           onClick={(e) => { e.stopPropagation(); onCreatePayment(); }}
         >
-          Create payment
+          Create payment manually
         </Button>
       )}
     </div>

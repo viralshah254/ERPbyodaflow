@@ -5,14 +5,13 @@ import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getMockPaymentRuns } from "@/lib/mock/treasury/payment-runs";
-import { getMockOverdueInvoices } from "@/lib/mock/treasury/collections";
-import { getMockCashflowForecast } from "@/lib/mock/treasury/cashflow";
-import { getMockBankAccounts } from "@/lib/mock/treasury/bank-accounts";
+import { fetchCashflowApi } from "@/lib/api/treasury";
+import { fetchBankAccountsApi, fetchCollectionsApi, fetchPaymentRunsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const LINKS = [
@@ -25,10 +24,26 @@ const LINKS = [
 
 export default function TreasuryOverviewPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const runs = React.useMemo(() => getMockPaymentRuns(), []);
-  const overdue = React.useMemo(() => getMockOverdueInvoices(), []);
-  const forecast = React.useMemo(() => getMockCashflowForecast(), []);
-  const banks = React.useMemo(() => getMockBankAccounts(), []);
+  const [runs, setRuns] = React.useState<any[]>([]);
+  const [overdue, setOverdue] = React.useState<any[]>([]);
+  const [forecast, setForecast] = React.useState<any[]>([]);
+  const [banks, setBanks] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    Promise.all([
+      fetchPaymentRunsApi(),
+      fetchCollectionsApi(),
+      fetchCashflowApi(),
+      fetchBankAccountsApi(),
+    ])
+      .then(([nextRuns, nextOverdue, nextForecast, nextBanks]) => {
+        setRuns(nextRuns);
+        setOverdue(nextOverdue);
+        setForecast(nextForecast);
+        setBanks(nextBanks);
+      })
+      .catch((error) => toast.error((error as Error).message || "Failed to load treasury overview."));
+  }, []);
 
   const draftRuns = runs.filter((r) => r.status === "DRAFT" || r.status === "PENDING_APPROVAL");
   const overdueTotal = overdue.reduce((s, i) => s + i.outstanding, 0);
@@ -91,7 +106,7 @@ export default function TreasuryOverviewPage() {
               <Icons.Landmark className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{banks.filter((b) => b.active).length}</div>
+              <div className="text-2xl font-bold">{banks.filter((b) => b.active ?? true).length}</div>
               <p className="text-xs text-muted-foreground">Active</p>
             </CardContent>
           </Card>

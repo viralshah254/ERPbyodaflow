@@ -7,7 +7,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getMockOverdueInvoices, type OverdueInvoiceRow } from "@/lib/mock/treasury/collections";
+import { type OverdueInvoiceRow } from "@/lib/mock/treasury/collections";
+import { fetchCollectionsApi } from "@/lib/api/treasury-ops";
 import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -18,8 +19,17 @@ import * as Icons from "lucide-react";
 export default function CollectionsPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [search, setSearch] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = React.useState<OverdueInvoiceRow[]>([]);
 
-  const rows = React.useMemo(() => getMockOverdueInvoices(), []);
+  React.useEffect(() => {
+    setLoading(true);
+    fetchCollectionsApi()
+      .then(setRows)
+      .catch((error) => toast.error((error as Error).message || "Failed to load collections."))
+      .finally(() => setLoading(false));
+  }, []);
+
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -77,7 +87,7 @@ export default function CollectionsPage() {
           searchPlaceholder="Search by invoice, customer..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() => toast.info("Export coming from finance reports/export flow.")}
         />
         <Card>
           <CardHeader>
@@ -90,6 +100,7 @@ export default function CollectionsPage() {
               columns={columns}
               emptyMessage="No overdue invoices."
             />
+            {loading ? <p className="px-4 pb-4 text-sm text-muted-foreground">Loading overdue invoices...</p> : null}
           </CardContent>
         </Card>
       </div>

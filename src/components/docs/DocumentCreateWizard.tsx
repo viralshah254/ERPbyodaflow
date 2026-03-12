@@ -30,6 +30,9 @@ import * as Icons from "lucide-react";
 import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
 import { createDocumentApi } from "@/lib/api/documents";
+import { fetchPartiesApi } from "@/lib/api/parties";
+import { fetchBranchOptions, fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
+import { fetchCustomerDefaultPriceLists, fetchPriceListOptions } from "@/lib/api/pricing";
 import { toast } from "sonner";
 
 const DRAFT_KEY = "odaflow_draft";
@@ -91,19 +94,53 @@ function fieldIdToKey(id: string): keyof FormValues {
 function RenderField({
   field,
   form,
+  options,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
+  options?: LookupOption[];
 }) {
   const key = fieldIdToKey(field.id);
   const isDate = field.type === "date";
   const isNum = field.type === "number";
-  const placeholder =
-    field.type === "entity"
-      ? "Search or enter"
-      : field.type === "select"
-        ? "Select..."
-        : undefined;
+  const hasOptions = Boolean(options?.length) && (field.type === "entity" || field.type === "select");
+
+  if (hasOptions) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-1">
+          <Label>
+            {field.label}
+            {field.required ? " *" : ""}
+          </Label>
+          <ExplainThis
+            prompt={`Explain: ${field.label} in document context.`}
+            label={`Explain ${field.label}`}
+          />
+        </div>
+        <Select
+          value={(form.watch(key) as string | undefined) || ""}
+          onValueChange={(value) => form.setValue(key, value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {options?.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {form.formState.errors[key] && (
+          <p className="text-sm text-destructive">
+            {form.formState.errors[key]?.message as string}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -119,7 +156,7 @@ function RenderField({
       </div>
       <Input
         type={isDate ? "date" : isNum ? "number" : "text"}
-        placeholder={placeholder}
+        placeholder={field.type === "entity" ? "Search or enter" : field.type === "select" ? "Select..." : undefined}
         {...form.register(key)}
       />
       {form.formState.errors[key] && (
@@ -154,6 +191,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [step, setStep] = React.useState(1);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
+  const [fieldOptions, setFieldOptions] = React.useState<Record<string, LookupOption[]>>({});
+  const [customerDefaultPriceLists, setCustomerDefaultPriceLists] = React.useState<Record<string, string>>({});
+  const [fallbackPriceListId, setFallbackPriceListId] = React.useState<string>("pl-retail");
   const storageKey = `${DRAFT_KEY}_${type}`;
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
@@ -187,6 +227,41 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     });
     return () => sub.unsubscribe();
   }, [storageKey, form]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchPartiesApi({ role: "customer", status: "ACTIVE" }),
+      fetchPartiesApi({ role: "supplier", status: "ACTIVE" }),
+      fetchBranchOptions(),
+      fetchWarehouseOptions(),
+      fetchCustomerDefaultPriceLists(),
+      fetchPriceListOptions(),
+    ])
+      .then(([customers, suppliers, branches, warehouses, customerDefaults, priceLists]) => {
+        if (cancelled) return;
+        setFieldOptions({
+          customer: customers.map((item) => ({ id: item.id, label: item.name })),
+          supplier: suppliers.map((item) => ({ id: item.id, label: item.name })),
+          branch: branches,
+          warehouse: warehouses,
+        });
+        setCustomerDefaultPriceLists(
+          Object.fromEntries(customerDefaults.map((item) => [item.customerId, item.priceListId]))
+        );
+        setFallbackPriceListId(priceLists[0]?.id ?? "pl-retail");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFieldOptions({});
+          setCustomerDefaultPriceLists({});
+          setFallbackPriceListId("pl-retail");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLinesChange = React.useCallback(
     (next: DocumentLine[]) => {
@@ -247,6 +322,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
 
   const headerSection = config?.createFormSections.find((s) => s.id === "header");
   const headerFields = headerSection?.fields ?? [];
+  const selectedPartyId = form.watch("party");
+  const resolvedPriceListId =
+    (selectedPartyId ? customerDefaultPriceLists[selectedPartyId] : undefined) ?? fallbackPriceListId;
 
   return (
     <div className="space-y-6">
@@ -270,7 +348,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
             <form className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 {headerFields.map((f) => (
-                  <RenderField key={f.id} field={f} form={form} />
+                    <RenderField key={f.id} field={f} form={form} options={fieldOptions[f.id]} />
                 ))}
               </div>
               <div className="border-t pt-4 mt-4">
@@ -348,7 +426,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           </CardHeader>
           <CardContent>
             <DocumentLineEditor
-              priceListId="pl-retail"
+              priceListId={resolvedPriceListId}
               currency={form.watch("currency") || baseCurrency}
               lines={lines}
               onLinesChange={handleLinesChange}
@@ -369,7 +447,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           </CardHeader>
           <CardContent>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Configure tax codes, freight, withholding, or other document charges before posting.
+              Taxes and pricing defaults now follow the selected customer/supplier setup where available. Review charges before posting.
             </div>
             <div className="mt-4">
               <Label className="text-muted-foreground">Tax / charge notes</Label>

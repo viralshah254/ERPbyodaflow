@@ -1,12 +1,26 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/layout/page-layout";
+import { fetchFinanceOverviewApi } from "@/lib/api/finance";
+import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function FinanceDashboardPage() {
+  const [overview, setOverview] = React.useState<Awaited<ReturnType<typeof fetchFinanceOverviewApi>> | null>(null);
+
+  React.useEffect(() => {
+    fetchFinanceOverviewApi()
+      .then(setOverview)
+      .catch((error) => toast.error((error as Error).message || "Failed to load finance dashboard."));
+  }, []);
+
+  const summary = overview?.summary;
+
   return (
     <PageLayout
       title="Finance Dashboard"
@@ -33,8 +47,8 @@ export default function FinanceDashboardPage() {
               <Icons.Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">KES 2,450,000</div>
-              <p className="text-xs text-muted-foreground">Across 3 bank accounts</p>
+              <div className="text-2xl font-bold">{formatMoney(summary?.cashBalance ?? 0, "KES")}</div>
+              <p className="text-xs text-muted-foreground">Across {summary?.bankAccountCount ?? 0} bank account(s)</p>
             </CardContent>
           </Card>
 
@@ -44,8 +58,8 @@ export default function FinanceDashboardPage() {
               <Icons.ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">KES 1,850,000</div>
-              <p className="text-xs text-muted-foreground">23 customers</p>
+              <div className="text-2xl font-bold">{formatMoney(summary?.arOutstanding ?? 0, "KES")}</div>
+              <p className="text-xs text-muted-foreground">{overview?.arOutstandingItems.length ?? 0} open item(s)</p>
             </CardContent>
           </Card>
 
@@ -55,8 +69,8 @@ export default function FinanceDashboardPage() {
               <Icons.ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">KES 980,000</div>
-              <p className="text-xs text-muted-foreground">12 suppliers</p>
+              <div className="text-2xl font-bold">{formatMoney(summary?.apOutstanding ?? 0, "KES")}</div>
+              <p className="text-xs text-muted-foreground">{overview?.apOutstandingItems.length ?? 0} supplier item(s)</p>
             </CardContent>
           </Card>
 
@@ -66,8 +80,8 @@ export default function FinanceDashboardPage() {
               <Icons.TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">KES 4,200,000</div>
-              <p className="text-xs text-muted-foreground">+12% vs last month</p>
+              <div className="text-2xl font-bold">{formatMoney(summary?.netRevenue ?? 0, "KES")}</div>
+              <p className="text-xs text-muted-foreground">Posted invoice revenue</p>
             </CardContent>
           </Card>
         </div>
@@ -80,24 +94,22 @@ export default function FinanceDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { customer: "ABC Corp", amount: "KES 450,000", days: 45 },
-                  { customer: "XYZ Ltd", amount: "KES 320,000", days: 30 },
-                  { customer: "DEF Inc", amount: "KES 180,000", days: 15 },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                {(overview?.arOutstandingItems ?? []).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
-                      <p className="font-medium">{item.customer}</p>
-                      <p className="text-sm text-muted-foreground">{item.days} days overdue</p>
+                      <p className="font-medium">{item.number}</p>
+                      <p className="text-sm text-muted-foreground">Due {item.dueDate ?? "—"}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">{item.amount}</p>
+                      <p className="font-semibold">{formatMoney(item.outstanding, "KES")}</p>
                     </div>
                   </div>
                 ))}
               </div>
-              <Button variant="outline" className="w-full mt-4">
+              <Button variant="outline" className="w-full mt-4" asChild>
+                <Link href="/treasury/collections">
                 View All AR
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -108,24 +120,22 @@ export default function FinanceDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { supplier: "Supplier A", amount: "KES 250,000", due: "Jan 25" },
-                  { supplier: "Supplier B", amount: "KES 180,000", due: "Jan 28" },
-                  { supplier: "Supplier C", amount: "KES 120,000", due: "Feb 1" },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                {(overview?.apOutstandingItems ?? []).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
-                      <p className="font-medium">{item.supplier}</p>
-                      <p className="text-sm text-muted-foreground">Due {item.due}</p>
+                      <p className="font-medium">{item.number}</p>
+                      <p className="text-sm text-muted-foreground">Due {item.dueDate ?? "—"}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">{item.amount}</p>
+                      <p className="font-semibold">{formatMoney(item.outstanding, "KES")}</p>
                     </div>
                   </div>
                 ))}
               </div>
-              <Button variant="outline" className="w-full mt-4">
+              <Button variant="outline" className="w-full mt-4" asChild>
+                <Link href="/ap/payments">
                 View All AP
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -138,26 +148,24 @@ export default function FinanceDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {[
-                { date: "2024-01-20", memo: "Monthly depreciation", amount: "KES 50,000", status: "Posted" },
-                { date: "2024-01-19", memo: "Bank charges", amount: "KES 2,500", status: "Posted" },
-                { date: "2024-01-18", memo: "Accrued expenses", amount: "KES 15,000", status: "Draft" },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                {(overview?.recentJournals ?? []).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div>
-                    <p className="font-medium">{item.memo}</p>
+                      <p className="font-medium">{item.reference ?? item.number}</p>
                     <p className="text-sm text-muted-foreground">{item.date}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold">{item.amount}</p>
-                    <p className="text-xs text-muted-foreground">{item.status}</p>
+                      <p className="font-semibold">{formatMoney(item.total, "KES")}</p>
+                      <p className="text-xs text-muted-foreground">{item.status}</p>
                   </div>
                 </div>
               ))}
             </div>
-            <Button variant="outline" className="w-full mt-4">
+              <Button variant="outline" className="w-full mt-4" asChild>
+                <Link href="/finance/journals">
               View All Journals
-            </Button>
+                </Link>
+              </Button>
           </CardContent>
         </Card>
       </div>

@@ -8,10 +8,9 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { PaymentRunRow } from "@/lib/mock/treasury/payment-runs";
-import { listPaymentRuns } from "@/lib/data/payment-runs.repo";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { fetchPaymentRunApi, approvePaymentRunApi, exportPaymentRunApi } from "@/lib/api/treasury-ops";
 import { formatMoney } from "@/lib/money";
-import { exportPaymentRunFile, paymentRunApprove } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -24,13 +23,24 @@ const METHOD_LABELS: Record<string, string> = {
 export default function PaymentRunDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const [run, setRun] = React.useState<PaymentRunRow | undefined>(() =>
-    listPaymentRuns().find((r) => r.id === id)
-  );
+  const [run, setRun] = React.useState<any | undefined | null>(undefined);
 
-  const refreshRun = React.useCallback(() => {
-    setRun(listPaymentRuns().find((r) => r.id === id));
+  const refreshRun = React.useCallback(async () => {
+    setRun(await fetchPaymentRunApi(id));
   }, [id]);
+
+  React.useEffect(() => {
+    void refreshRun();
+  }, [refreshRun]);
+
+  if (run === undefined) {
+    return (
+      <PageShell>
+        <PageHeader title="Loading..." breadcrumbs={[{ label: "Treasury", href: "/treasury/overview" }, { label: "Payment runs", href: "/treasury/payment-runs" }, { label: id }]} />
+        <div className="p-6 text-muted-foreground">Loading payment run...</div>
+      </PageShell>
+    );
+  }
 
   if (!run) {
     return (
@@ -68,8 +78,8 @@ export default function PaymentRunDetailPage() {
                 size="sm"
                 onClick={async () => {
                   try {
-                    await paymentRunApprove(id);
-                    refreshRun();
+                    await approvePaymentRunApi(id);
+                    await refreshRun();
                     toast.success("Payment run approved.");
                   } catch (e) {
                     toast.error((e as Error).message);
@@ -84,8 +94,7 @@ export default function PaymentRunDetailPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  exportPaymentRunFile(id, (msg) => toast.info(msg || "Export not yet available."));
-                  toast.success("Payment run export downloaded.");
+                  exportPaymentRunApi(id, (msg) => toast.info(msg || "Export not yet available."));
                 }}
               >
                 Export
@@ -110,6 +119,35 @@ export default function PaymentRunDetailPage() {
             <p>{run.number} · {run.date}</p>
             <p>Total: {formatMoney(run.totalAmount, run.currency)} · {run.billCount} bill(s) · {run.supplierCount} supplier(s)</p>
             <p>Method: {METHOD_LABELS[run.paymentMethod] ?? run.paymentMethod}</p>
+            {run.bankAccountName ? <p>Bank account: {run.bankAccountName}</p> : null}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Run lines</CardTitle>
+            <CardDescription>Suppliers and bills included in this payment run.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Bill</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Currency</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(run.lines ?? []).map((line: any) => (
+                  <TableRow key={line.id}>
+                    <TableCell>{line.supplierName ?? line.supplierId}</TableCell>
+                    <TableCell>{line.billNumber ?? line.billId ?? "Manual line"}</TableCell>
+                    <TableCell className="text-right">{formatMoney(line.amount, line.currency)}</TableCell>
+                    <TableCell>{line.currency}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>

@@ -14,6 +14,13 @@ export interface CustomerDefaultPriceListRow {
   customerName?: string;
   priceListId: string;
   priceListName?: string;
+  customerCurrency?: string;
+  paymentTermsId?: string;
+}
+
+export interface PricingOption {
+  id: string;
+  name: string;
 }
 
 // ——— Discount policies ———
@@ -72,4 +79,10 @@ export async function setCustomerDefaultPriceList(customerId: string, priceListI
 /** List price lists (for dropdowns). Uses repo/mock when API not configured. */
 export function getPriceListsForConfig(): { id: string; name: string }[] {
   return getMockPriceLists().map((pl) => ({ id: pl.id, name: pl.name }));
+}
+
+export async function fetchPriceListOptions(): Promise<PricingOption[]> {
+  if (!isApiConfigured()) return getPriceListsForConfig();
+  const res = await apiRequest<{ items: Array<{ id: string; name: string }> }>("/api/pricing/price-lists");
+  return (res.items ?? []).map((item) => ({ id: item.id, name: item.name }));
 }

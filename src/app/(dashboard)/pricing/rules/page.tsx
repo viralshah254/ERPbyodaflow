@@ -36,10 +36,11 @@ import {
   fetchDiscountPolicies,
   createDiscountPolicy,
   fetchCustomerDefaultPriceLists,
+  fetchPriceListOptions,
   setCustomerDefaultPriceList,
-  getPriceListsForConfig,
   type CustomerDefaultPriceListRow,
 } from "@/lib/api/pricing";
+import { fetchPartiesApi } from "@/lib/api/parties";
 import type { DiscountPolicy } from "@/lib/products/pricing-types";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -61,9 +62,10 @@ export default function PricingRulesPage() {
 
   // Configure customer default
   const [customerDefaults, setCustomerDefaults] = React.useState<CustomerDefaultPriceListRow[]>([]);
+  const [customerOptions, setCustomerOptions] = React.useState<Array<{ id: string; name: string }>>([]);
   const [configCustomerId, setConfigCustomerId] = React.useState("");
   const [configPriceListId, setConfigPriceListId] = React.useState("");
-  const priceListOptions = React.useMemo(() => getPriceListsForConfig(), []);
+  const [priceListOptions, setPriceListOptions] = React.useState<Array<{ id: string; name: string }>>([]);
 
   const loadPolicies = React.useCallback(() => {
     setLoading(true);
@@ -82,7 +84,14 @@ export default function PricingRulesPage() {
   }, []);
 
   React.useEffect(() => {
-    if (configureOpen) loadCustomerDefaults();
+    if (!configureOpen) return;
+    loadCustomerDefaults();
+    fetchPriceListOptions()
+      .then(setPriceListOptions)
+      .catch(() => setPriceListOptions([]));
+    fetchPartiesApi({ role: "customer", status: "ACTIVE" })
+      .then((items) => setCustomerOptions(items.map((item) => ({ id: item.id, name: item.name }))))
+      .catch(() => setCustomerOptions([]));
   }, [configureOpen, loadCustomerDefaults]);
 
   const handleAddPolicy = async () => {
@@ -286,13 +295,15 @@ export default function PricingRulesPage() {
                   <div className="border-t pt-4 space-y-4">
                     <Label>Set default</Label>
                     <div className="grid gap-2">
-                      <Label htmlFor="configCustomerId" className="text-muted-foreground text-xs">Customer ID</Label>
-                      <Input
-                        id="configCustomerId"
-                        value={configCustomerId}
-                        onChange={(e) => setConfigCustomerId(e.target.value)}
-                        placeholder="Customer ID"
-                      />
+                      <Label htmlFor="configCustomerId" className="text-muted-foreground text-xs">Customer</Label>
+                      <Select value={configCustomerId} onValueChange={setConfigCustomerId}>
+                        <SelectTrigger id="configCustomerId"><SelectValue placeholder="Select customer" /></SelectTrigger>
+                        <SelectContent>
+                          {customerOptions.map((customer) => (
+                            <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="configPriceList">Price list</Label>

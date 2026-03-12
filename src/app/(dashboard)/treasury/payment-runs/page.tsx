@@ -32,10 +32,11 @@ import {
   type PaymentMethod,
 } from "@/lib/mock/treasury/payment-runs";
 import {
-  createPaymentRunFromBills,
-  listBillsDue,
-  listPaymentRuns,
-} from "@/lib/data/payment-runs.repo";
+  createPaymentRunApi,
+  fetchBankAccountsApi,
+  fetchBillsDueApi,
+  fetchPaymentRunsApi,
+} from "@/lib/api/treasury-ops";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { downloadCsv } from "@/lib/export/csv";
@@ -72,13 +73,31 @@ export default function PaymentRunsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedBills, setSelectedBills] = React.useState<Set<string>>(new Set());
   const [method, setMethod] = React.useState<PaymentMethod>("BANK_TRANSFER");
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [bankAccountId, setBankAccountId] = React.useState("");
+  const [bankAccounts, setBankAccounts] = React.useState<Array<{ id: string; name: string; currency: string }>>([]);
+  const [runs, setRuns] = React.useState<PaymentRunRow[]>([]);
+  const [billsDue, setBillsDue] = React.useState<BillDueRow[]>([]);
 
-  const [runs, setRuns] = React.useState<PaymentRunRow[]>(() => listPaymentRuns());
-  const billsDue = React.useMemo(() => listBillsDue(), []);
-
-  const refreshRuns = React.useCallback(() => {
-    setRuns(listPaymentRuns());
+  const refreshRuns = React.useCallback(async () => {
+    const [nextRuns, nextBills, nextBanks] = await Promise.all([
+      fetchPaymentRunsApi(),
+      fetchBillsDueApi(),
+      fetchBankAccountsApi(),
+    ]);
+    setRuns(nextRuns);
+    setBillsDue(nextBills);
+    setBankAccounts(nextBanks.map((account) => ({ id: account.id, name: account.name, currency: account.currency })));
+    setBankAccountId((current) => current || nextBanks[0]?.id || "");
   }, []);
+
+  React.useEffect(() => {
+    setLoading(true);
+    refreshRuns()
+      .catch((error) => toast.error((error as Error).message || "Failed to load payment runs."))
+      .finally(() => setLoading(false));
+  }, [refreshRuns]);
 
   const toggleBill = (id: string) => {
     setSelectedBills((prev) => {
@@ -100,12 +119,23 @@ export default function PaymentRunsPage() {
     exportPaymentRunCSV(selectedBillRows, method);
   };
 
-  const handleRequestApproval = () => {
-    const created = createPaymentRunFromBills(selectedBillRows, method);
-    refreshRuns();
-    toast.success(`Payment run ${created.number} submitted for approval.`);
-    setCreateOpen(false);
-    setSelectedBills(new Set());
+  const handleRequestApproval = async () => {
+    if (!bankAccountId) {
+      toast.error("Select a bank account.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await createPaymentRunApi({ bankAccountId, paymentMethod: method, bills: selectedBillRows });
+      await refreshRuns();
+      toast.success("Payment run submitted for approval.");
+      setCreateOpen(false);
+      setSelectedBills(new Set());
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to create payment run.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const columns = React.useMemo(
@@ -181,6 +211,7 @@ export default function PaymentRunsPage() {
               onRowClick={(r) => router.push(`/treasury/payment-runs/${r.id}`)}
               emptyMessage="No payment runs."
             />
+            {loading ? <p className="px-4 pb-4 text-sm text-muted-foreground">Loading payment runs...</p> : null}
           </CardContent>
         </Card>
       </div>
@@ -192,6 +223,21 @@ export default function PaymentRunsPage() {
             <SheetDescription>Select supplier bills due. Group by supplier/currency. Choose method. Generate file.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
+            <div className="space-y-2">
+              <span className="text-sm font-medium">Bank account</span>
+              <Select value={bankAccountId} onValueChange={setBankAccountId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select bank account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bankAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name} · {account.currency}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <span className="text-sm font-medium">Payment method</span>
               <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
@@ -225,7 +271,7 @@ export default function PaymentRunsPage() {
             </div>
             {selectedBillRows.length > 0 && (
               <p className="text-sm text-muted-foreground">
-                Total: {formatMoney(totalSelected, "KES")} · {selectedBillRows.length} bill(s)
+                Total: {formatMoney(totalSelected, selectedBillRows[0]?.currency ?? "KES")} · {selectedBillRows.length} bill(s)
               </p>
             )}
           </div>
@@ -244,7 +290,7 @@ export default function PaymentRunsPage() {
             >
               Bank format
             </Button>
-            <Button onClick={handleRequestApproval} disabled={selectedBillRows.length === 0}>
+            <Button onClick={() => void handleRequestApproval()} disabled={selectedBillRows.length === 0 || saving}>
               Request approval
             </Button>
           </SheetFooter>

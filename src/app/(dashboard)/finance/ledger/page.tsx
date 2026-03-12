@@ -1,3 +1,6 @@
+"use client";
+
+import * as React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,47 +13,52 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { fetchFinanceAccountsApi, fetchFinancePeriodsApi, fetchLedgerEntriesApi } from "@/lib/api/finance";
+import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 
 export default function LedgerPage() {
-  // Mock data
-  const entries = [
-    {
-      id: "1",
-      date: "2024-01-15",
-      account: "Accounts Receivable",
-      description: "Sales Invoice #INV-001",
-      debit: 1250.00,
-      credit: 0,
-      balance: 1250.00,
-    },
-    {
-      id: "2",
-      date: "2024-01-15",
-      account: "Sales Revenue",
-      description: "Sales Invoice #INV-001",
-      debit: 0,
-      credit: 1250.00,
-      balance: -1250.00,
-    },
-    {
-      id: "3",
-      date: "2024-01-16",
-      account: "Accounts Payable",
-      description: "Purchase Invoice #PINV-001",
-      debit: 0,
-      credit: 5000.00,
-      balance: -5000.00,
-    },
-    {
-      id: "4",
-      date: "2024-01-16",
-      account: "Inventory",
-      description: "Purchase Invoice #PINV-001",
-      debit: 5000.00,
-      credit: 0,
-      balance: 5000.00,
-    },
-  ];
+  const [search, setSearch] = React.useState("");
+  const [accountId, setAccountId] = React.useState("");
+  const [periodId, setPeriodId] = React.useState("");
+  const [accounts, setAccounts] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
+  const [entries, setEntries] = React.useState<Awaited<ReturnType<typeof fetchLedgerEntriesApi>>>([]);
+
+  React.useEffect(() => {
+    Promise.all([fetchFinanceAccountsApi(), fetchFinancePeriodsApi()])
+      .then(([nextAccounts, nextPeriods]) => {
+        setAccounts(nextAccounts);
+        setPeriods(nextPeriods);
+        setPeriodId(nextPeriods.find((period) => period.status === "OPEN")?.id ?? nextPeriods[0]?.id ?? "");
+      })
+      .catch((error) => toast.error((error as Error).message || "Failed to load ledger filters."));
+  }, []);
+
+  React.useEffect(() => {
+    fetchLedgerEntriesApi(accountId || undefined, periodId || undefined)
+      .then(setEntries)
+      .catch((error) => toast.error((error as Error).message || "Failed to load ledger entries."));
+  }, [accountId, periodId]);
+
+  const filtered = React.useMemo(() => {
+    if (!search.trim()) return entries;
+    const query = search.trim().toLowerCase();
+    return entries.filter(
+      (entry) =>
+        entry.accountCode.toLowerCase().includes(query) ||
+        entry.accountName.toLowerCase().includes(query) ||
+        entry.description.toLowerCase().includes(query) ||
+        entry.documentNumber.toLowerCase().includes(query)
+    );
+  }, [entries, search]);
 
   return (
     <div className="space-y-6">
@@ -81,9 +89,29 @@ export default function LedgerPage() {
                   type="search"
                   placeholder="Search accounts or descriptions..."
                   className="pl-9"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
             </div>
+            <Select value={accountId || "__all_accounts"} onValueChange={(value) => setAccountId(value === "__all_accounts" ? "" : value)}>
+              <SelectTrigger className="w-52"><SelectValue placeholder="All accounts" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all_accounts">All accounts</SelectItem>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={periodId || "__all_periods"} onValueChange={(value) => setPeriodId(value === "__all_periods" ? "" : value)}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="All periods" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all_periods">All periods</SelectItem>
+                {periods.map((period) => (
+                  <SelectItem key={period.id} value={period.id}>{period.fiscalYear} · P{period.periodNumber}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -93,7 +121,7 @@ export default function LedgerPage() {
         <CardHeader>
           <CardTitle>Journal Entries</CardTitle>
           <CardDescription>
-            {entries.length} entries found
+            {filtered.length} entries found
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -109,19 +137,19 @@ export default function LedgerPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell>{entry.date}</TableCell>
-                  <TableCell className="font-medium">{entry.account}</TableCell>
+              {filtered.map((entry) => (
+                <TableRow key={`${entry.documentId}-${entry.accountId}-${entry.date}`}>
+                  <TableCell>{entry.date.slice(0, 10)}</TableCell>
+                  <TableCell className="font-medium">{entry.accountCode} · {entry.accountName}</TableCell>
                   <TableCell>{entry.description}</TableCell>
                   <TableCell className="text-right">
-                    {entry.debit > 0 ? `$${entry.debit.toFixed(2)}` : "-"}
+                    {entry.debit > 0 ? formatMoney(entry.debit, "KES") : "-"}
                   </TableCell>
                   <TableCell className="text-right">
-                    {entry.credit > 0 ? `$${entry.credit.toFixed(2)}` : "-"}
+                    {entry.credit > 0 ? formatMoney(entry.credit, "KES") : "-"}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    ${entry.balance.toFixed(2)}
+                    {formatMoney(entry.balance, "KES")}
                   </TableCell>
                 </TableRow>
               ))}

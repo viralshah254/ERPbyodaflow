@@ -32,7 +32,18 @@ export interface DocumentDetailRecord {
   total?: number;
   currency: string;
   status: string;
-  lines: Array<{ description: string; qty?: number; amount?: number }>;
+  lines: Array<{
+    description: string;
+    qty?: number;
+    amount?: number;
+    tax?: number;
+    productId?: string;
+    productName?: string;
+    productSku?: string;
+    accountId?: string;
+    accountName?: string;
+    accountCode?: string;
+  }>;
   attachments: DocumentAttachmentRecord[];
   comments: DocumentCommentRecord[];
   approvalHistory: DocumentTimelineEntry[];

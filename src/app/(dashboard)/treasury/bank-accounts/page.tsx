@@ -25,7 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listBankAccounts, createBankAccount, updateBankAccount } from "@/lib/data/bank-accounts.repo";
+import {
+  fetchBankAccountsApi,
+  createBankAccountApi,
+  updateBankAccountApi,
+} from "@/lib/api/treasury-ops";
 import type { BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
 import { getMockCOARootFirst } from "@/lib/mock/coa";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -46,9 +50,10 @@ export default function BankAccountsPage() {
     glAccountCode: "",
     active: true,
   });
-
-  const [rows, setRows] = React.useState<BankAccountRow[]>(() => listBankAccounts());
-  const refresh = React.useCallback(() => setRows(listBankAccounts()), []);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [rows, setRows] = React.useState<BankAccountRow[]>([]);
+  const refresh = React.useCallback(async () => setRows(await fetchBankAccountsApi()), []);
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -100,6 +105,13 @@ export default function BankAccountsPage() {
     ],
     []
   );
+
+  React.useEffect(() => {
+    setLoading(true);
+    refresh()
+      .catch((error) => toast.error((error as Error).message || "Failed to load bank accounts."))
+      .finally(() => setLoading(false));
+  }, [refresh]);
 
   return (
     <PageShell>
@@ -161,7 +173,7 @@ export default function BankAccountsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit account" : "Add account"}</SheetTitle>
-            <SheetDescription>Saved to browser storage for demo-mode administration.</SheetDescription>
+            <SheetDescription>Manage live bank accounts and GL mapping.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -209,38 +221,46 @@ export default function BankAccountsPage() {
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => {
+              disabled={saving}
+              onClick={async () => {
                 const glAccount = coa.find((r) => r.code === form.glAccountCode);
-                if (editing) {
-                  updateBankAccount(editing.id, {
-                    name: form.name,
-                    accountNumber: form.accountNumber,
-                    bank: form.bank,
-                    branch: form.branch || undefined,
-                    currency: form.currency,
-                    glAccountCode: form.glAccountCode || undefined,
-                    glAccountName: glAccount?.name,
-                    active: form.active,
-                  });
-                  toast.success("Account updated.");
-                } else {
-                  createBankAccount({
-                    name: form.name,
-                    accountNumber: form.accountNumber,
-                    bank: form.bank,
-                    branch: form.branch || undefined,
-                    currency: form.currency,
-                    glAccountCode: form.glAccountCode || undefined,
-                    glAccountName: glAccount?.name,
-                    active: form.active,
-                  });
-                  toast.success("Account created.");
+                try {
+                  setSaving(true);
+                  if (editing) {
+                    await updateBankAccountApi(editing.id, {
+                      name: form.name,
+                      accountNumber: form.accountNumber,
+                      bank: form.bank,
+                      branch: form.branch || undefined,
+                      currency: form.currency,
+                      glAccountCode: form.glAccountCode || undefined,
+                      glAccountName: glAccount?.name,
+                      active: form.active,
+                    });
+                    toast.success("Account updated.");
+                  } else {
+                    await createBankAccountApi({
+                      name: form.name,
+                      accountNumber: form.accountNumber,
+                      bank: form.bank,
+                      branch: form.branch || undefined,
+                      currency: form.currency,
+                      glAccountCode: form.glAccountCode || undefined,
+                      glAccountName: glAccount?.name,
+                      active: form.active,
+                    });
+                    toast.success("Account created.");
+                  }
+                  setDrawerOpen(false);
+                  await refresh();
+                } catch (error) {
+                  toast.error((error as Error).message || "Failed to save account.");
+                } finally {
+                  setSaving(false);
                 }
-                setDrawerOpen(false);
-                refresh();
               }}
             >
-              {editing ? "Save" : "Create"}
+              {saving ? "Saving..." : editing ? "Save" : "Create"}
             </Button>
           </SheetFooter>
         </SheetContent>

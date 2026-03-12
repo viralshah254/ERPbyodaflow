@@ -16,8 +16,15 @@ import { apiRequest, downloadFile, isApiConfigured } from "./client";
 type BackendDocumentLine = {
   id?: string;
   description?: string;
+  productId?: string;
+  productName?: string;
+  productSku?: string;
+  accountId?: string;
+  accountName?: string;
+  accountCode?: string;
   qty?: number;
   quantity?: number;
+  tax?: number;
   amount?: number;
 };
 
@@ -124,7 +131,14 @@ function mapDocumentDetail(
     status: payload.status,
     lines: (payload.lines ?? []).map((line) => ({
       description: line.description ?? "Line item",
+        productId: line.productId,
+        productName: line.productName,
+        productSku: line.productSku,
+        accountId: line.accountId,
+        accountName: line.accountName,
+        accountCode: line.accountCode,
       qty: line.qty ?? line.quantity,
+        tax: line.tax,
       amount: line.amount,
     })),
     attachments: (payload.attachments ?? []).map((item) => ({

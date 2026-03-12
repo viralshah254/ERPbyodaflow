@@ -18,10 +18,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PaymentRow, OpenInvoiceRow } from "@/lib/mock/ar";
-import { createArPayment, listArPayments, listOpenInvoices } from "@/lib/data/ar.repo";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  allocateArPaymentApi,
+  createArPaymentApi,
+  fetchArCustomersApi,
+  fetchArPaymentsApi,
+  fetchOpenInvoicesApi,
+} from "@/lib/api/payments";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { formatMoney } from "@/lib/money";
-import { arAllocate } from "@/lib/api/stub-endpoints";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -37,13 +49,32 @@ export default function ARPaymentsPage() {
   const [allocateSheetOpen, setAllocateSheetOpen] = React.useState(false);
   const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
   const [allocating, setAllocating] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [payments, setPayments] = React.useState<PaymentRow[]>([]);
+  const [customerOptions, setCustomerOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [openInvoices, setOpenInvoices] = React.useState<OpenInvoiceRow[]>([]);
+  const [allocateInvoices, setAllocateInvoices] = React.useState<OpenInvoiceRow[]>([]);
 
-  const [payments, setPayments] = React.useState<PaymentRow[]>(() => listArPayments());
-  const openInvoices = React.useMemo(() => listOpenInvoices(customerId || undefined), [customerId, payments]);
-
-  const refreshData = React.useCallback(() => {
-    setPayments(listArPayments());
+  const refreshData = React.useCallback(async () => {
+    setPayments(await fetchArPaymentsApi());
   }, []);
+
+  React.useEffect(() => {
+    setLoading(true);
+    Promise.all([fetchArPaymentsApi(), fetchArCustomersApi()])
+      .then(([nextPayments, nextCustomers]) => {
+        setPayments(nextPayments);
+        setCustomerOptions(nextCustomers);
+      })
+      .catch((error) => toast.error((error as Error).message || "Failed to load AR payments."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  React.useEffect(() => {
+    fetchOpenInvoicesApi(customerId || undefined)
+      .then(setOpenInvoices)
+      .catch(() => setOpenInvoices([]));
+  }, [customerId]);
 
   const filtered = React.useMemo(() => {
     if (!search.trim()) return payments;
@@ -107,27 +138,35 @@ export default function ARPaymentsPage() {
   };
 
   const selectedPayment = selectedPaymentId ? payments.find((p) => p.id === selectedPaymentId) : null;
-  const allocateInvoices = React.useMemo(
-    () => listOpenInvoices(selectedPayment?.customerId),
-    [selectedPayment?.customerId, payments]
-  );
+
+  React.useEffect(() => {
+    if (!selectedPayment?.customerId) {
+      setAllocateInvoices([]);
+      return;
+    }
+    fetchOpenInvoicesApi(selectedPayment.customerId)
+      .then(setAllocateInvoices)
+      .catch(() => setAllocateInvoices([]));
+  }, [selectedPayment?.customerId]);
 
   const handleWizardSubmit = async () => {
-    const customerName = openInvoices[0]?.customerName ?? customerId;
     const totalAmount = Object.values(allocations).reduce((sum, amount) => sum + amount, 0);
     if (!customerId || totalAmount <= 0) {
       toast.error("Select a customer and allocate at least one invoice amount.");
       return;
     }
-    const payment = createArPayment({ customerId, customerName, amount: totalAmount });
-    const invoiceIds = Object.keys(allocations).filter((invoiceId) => (allocations[invoiceId] ?? 0) > 0);
-    await arAllocate(payment.id, {
-      invoiceIds,
-      amounts: invoiceIds.map((invoiceId) => allocations[invoiceId] ?? 0),
-    });
-    refreshData();
-    toast.success(`Payment ${payment.number} posted and allocated.`);
-    setWizardOpen(false);
+    try {
+      const payment = await createArPaymentApi({ customerId, amount: totalAmount });
+      const nextAllocations = Object.entries(allocations)
+        .filter(([, amount]) => amount > 0)
+        .map(([documentId, amount]) => ({ documentId, amount }));
+      await allocateArPaymentApi(payment.id, nextAllocations);
+      await refreshData();
+      toast.success(`Payment ${payment.number} posted and allocated.`);
+      setWizardOpen(false);
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to create payment.");
+    }
   };
 
   const handleAllocateSubmit = async () => {
@@ -140,8 +179,11 @@ export default function ARPaymentsPage() {
     }
     setAllocating(true);
     try {
-      await arAllocate(selectedPaymentId, { invoiceIds, amounts });
-      refreshData();
+      await allocateArPaymentApi(
+        selectedPaymentId,
+        invoiceIds.map((documentId, index) => ({ documentId, amount: amounts[index] ?? 0 }))
+      );
+      await refreshData();
       toast.success("Allocation saved.");
       setAllocateSheetOpen(false);
       setSelectedPaymentId(null);
@@ -218,6 +260,7 @@ export default function ARPaymentsPage() {
           ]}
           emptyMessage="No payments yet."
         />
+        {loading ? <p className="text-sm text-muted-foreground">Loading AR payments...</p> : null}
       </div>
 
       <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
@@ -233,11 +276,18 @@ export default function ARPaymentsPage() {
               <>
                 <div className="space-y-2">
                   <Label>Customer</Label>
-                  <Input
-                    placeholder="Search or select customer"
-                    value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
-                  />
+                  <Select value={customerId} onValueChange={setCustomerId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customerOptions.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button onClick={() => setStep(2)}>Next</Button>
               </>
@@ -245,7 +295,7 @@ export default function ARPaymentsPage() {
             {step === 2 && (
               <>
                 <div className="space-y-2">
-                  <Label>Open invoices (mock)</Label>
+                  <Label>Open invoices</Label>
                   <div className="rounded border divide-y max-h-48 overflow-auto">
                     {openInvoices.length === 0 ? (
                       <div className="p-3 text-sm text-muted-foreground">

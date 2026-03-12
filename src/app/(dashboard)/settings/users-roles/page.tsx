@@ -26,38 +26,57 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  listUsers,
-  listRoles,
-  createUser,
-  updateUser,
-  createRole,
-  updateRole,
-} from "@/lib/data/users-roles.repo";
-import {
   PERMISSION_GROUPS,
   getAllPermissions,
   type UserRow,
-  type RoleRow,
 } from "@/lib/mock/users-roles";
+import {
+  createRoleApi,
+  createUserApi,
+  fetchRolesApi,
+  fetchUsersApi,
+  type RoleDetailRow,
+  updateRoleApi,
+  updateUserApi,
+} from "@/lib/api/users-roles";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function UsersRolesPage() {
-  const [users, setUsers] = React.useState<UserRow[]>(() => listUsers());
-  const [roles, setRoles] = React.useState<RoleRow[]>(() => listRoles());
-  const refreshUsers = React.useCallback(() => setUsers(listUsers()), []);
-  const refreshRoles = React.useCallback(() => {
-    setRoles(listRoles());
-    setUsers(listUsers()); // roles might have changed names
+  const [users, setUsers] = React.useState<UserRow[]>([]);
+  const [roles, setRoles] = React.useState<RoleDetailRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [savingUser, setSavingUser] = React.useState(false);
+  const [savingRole, setSavingRole] = React.useState(false);
+  const refreshUsers = React.useCallback(async () => {
+    setUsers(await fetchUsersApi());
+  }, []);
+  const refreshRoles = React.useCallback(async () => {
+    const [nextRoles, nextUsers] = await Promise.all([fetchRolesApi(), fetchUsersApi()]);
+    setRoles(nextRoles);
+    setUsers(nextUsers);
   }, []);
   const [userSheetOpen, setUserSheetOpen] = React.useState(false);
   const [roleSheetOpen, setRoleSheetOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<UserRow | null>(null);
-  const [editingRole, setEditingRole] = React.useState<RoleRow | null>(null);
+  const [editingRole, setEditingRole] = React.useState<RoleDetailRow | null>(null);
   const [userForm, setUserForm] = React.useState({ email: "", firstName: "", lastName: "", roleIds: [] as string[] });
   const [roleForm, setRoleForm] = React.useState({ name: "", description: "", permissions: [] as string[] });
 
   const allPerms = React.useMemo(() => getAllPermissions(), []);
+
+  React.useEffect(() => {
+    setLoading(true);
+    Promise.all([fetchUsersApi(), fetchRolesApi()])
+      .then(([nextUsers, nextRoles]) => {
+        setUsers(nextUsers);
+        setRoles(nextRoles);
+      })
+      .catch((error) => {
+        toast.error((error as Error).message || "Failed to load users and roles.");
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const openCreateUser = () => {
     setEditingUser(null);
@@ -82,12 +101,12 @@ export default function UsersRolesPage() {
     setRoleSheetOpen(true);
   };
 
-  const openEditRole = (r: RoleRow) => {
+  const openEditRole = (r: RoleDetailRow) => {
     setEditingRole(r);
     setRoleForm({
       name: r.name,
       description: r.description ?? "",
-      permissions: [], // Stub: would load from role
+      permissions: [...r.permissions],
     });
     setRoleSheetOpen(true);
   };
@@ -154,6 +173,13 @@ export default function UsersRolesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {loading && users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-muted-foreground">
+                          Loading users...
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                     {users.map((u) => (
                       <TableRow key={u.id}>
                         <TableCell className="font-medium">{u.firstName} {u.lastName}</TableCell>
@@ -197,6 +223,13 @@ export default function UsersRolesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {loading && roles.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-muted-foreground">
+                          Loading roles...
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                     {roles.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{r.name}</TableCell>
@@ -222,7 +255,7 @@ export default function UsersRolesPage() {
           <SheetHeader>
             <SheetTitle>{editingUser ? "Edit user" : "Add user"}</SheetTitle>
             <SheetDescription>
-              Saved to browser storage. API pending.
+              Create and update ERP users with live role assignments.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -268,32 +301,37 @@ export default function UsersRolesPage() {
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setUserSheetOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => {
-                const roleNames = userForm.roleIds.map((id) => roles.find((r) => r.id === id)?.name ?? "").filter(Boolean);
-                if (editingUser) {
-                  updateUser(editingUser.id, {
-                    email: userForm.email,
-                    firstName: userForm.firstName,
-                    lastName: userForm.lastName,
-                    roleIds: userForm.roleIds,
-                    roleNames,
-                  });
-                  toast.success("User updated.");
-                } else {
-                  createUser({
-                    email: userForm.email,
-                    firstName: userForm.firstName,
-                    lastName: userForm.lastName,
-                    roleIds: userForm.roleIds,
-                    roleNames,
-                  });
-                  toast.success("User created.");
+              disabled={savingUser}
+              onClick={async () => {
+                try {
+                  setSavingUser(true);
+                  if (editingUser) {
+                    await updateUserApi(editingUser.id, {
+                      email: userForm.email,
+                      firstName: userForm.firstName,
+                      lastName: userForm.lastName,
+                      roleIds: userForm.roleIds,
+                    });
+                    toast.success("User updated.");
+                  } else {
+                    await createUserApi({
+                      email: userForm.email,
+                      firstName: userForm.firstName,
+                      lastName: userForm.lastName,
+                      roleIds: userForm.roleIds,
+                    });
+                    toast.success("User created.");
+                  }
+                  setUserSheetOpen(false);
+                  await refreshUsers();
+                } catch (error) {
+                  toast.error((error as Error).message || "Failed to save user.");
+                } finally {
+                  setSavingUser(false);
                 }
-                setUserSheetOpen(false);
-                refreshUsers();
               }}
             >
-              {editingUser ? "Save" : "Create"}
+              {savingUser ? "Saving..." : editingUser ? "Save" : "Create"}
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -304,7 +342,7 @@ export default function UsersRolesPage() {
           <SheetHeader>
             <SheetTitle>{editingRole ? "Edit role" : "Add role"}</SheetTitle>
             <SheetDescription>
-              Saved to browser storage. API pending.
+              Configure live permissions used by backend RBAC.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -349,27 +387,35 @@ export default function UsersRolesPage() {
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setRoleSheetOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => {
-                if (editingRole) {
-                  updateRole(editingRole.id, {
-                    name: roleForm.name,
-                    description: roleForm.description || undefined,
-                    permissionCount: roleForm.permissions.length,
-                  });
-                  toast.success("Role updated.");
-                } else {
-                  createRole({
-                    name: roleForm.name,
-                    description: roleForm.description || undefined,
-                    permissionCount: roleForm.permissions.length,
-                  });
-                  toast.success("Role created.");
+              disabled={savingRole}
+              onClick={async () => {
+                try {
+                  setSavingRole(true);
+                  if (editingRole) {
+                    await updateRoleApi(editingRole.id, {
+                      name: roleForm.name,
+                      description: roleForm.description || undefined,
+                      permissions: roleForm.permissions,
+                    });
+                    toast.success("Role updated.");
+                  } else {
+                    await createRoleApi({
+                      name: roleForm.name,
+                      description: roleForm.description || undefined,
+                      permissions: roleForm.permissions,
+                    });
+                    toast.success("Role created.");
+                  }
+                  setRoleSheetOpen(false);
+                  await refreshRoles();
+                } catch (error) {
+                  toast.error((error as Error).message || "Failed to save role.");
+                } finally {
+                  setSavingRole(false);
                 }
-                setRoleSheetOpen(false);
-                refreshRoles();
               }}
             >
-              {editingRole ? "Save" : "Create"}
+              {savingRole ? "Saving..." : editingRole ? "Save" : "Create"}
             </Button>
           </SheetFooter>
         </SheetContent>

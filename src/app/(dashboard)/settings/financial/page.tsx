@@ -38,6 +38,12 @@ const links = [
     desc: "Years, periods, close/reopen",
     icon: "Calendar" as const,
   },
+  {
+    href: "/settings/financial/posting-mappings",
+    label: "Posting mappings",
+    desc: "Map operational posting flows to org-specific ledger accounts",
+    icon: "GitBranch" as const,
+  },
 ];
 
 export default function FinancialSettingsHubPage() {

@@ -6,17 +6,33 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { listFiscalYears } from "@/lib/data/fiscal.repo";
-import { periodClose, periodReopen } from "@/lib/api/stub-endpoints";
+import {
+  closeFinancePeriodApi,
+  fetchFinancePeriodsApi,
+  reopenFinancePeriodApi,
+} from "@/lib/api/finance";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PeriodClosePage() {
   const [loading, setLoading] = React.useState<"close" | "reopen" | null>(null);
+  const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number; status: "OPEN" | "CLOSED" }>>([]);
   const currentPeriodId = React.useMemo(
-    () => listFiscalYears().flatMap((year) => year.periods).find((period) => period.status === "Open")?.id,
-    []
+    () => periods.find((period) => period.status === "OPEN")?.id,
+    [periods]
   );
+  const closedPeriodId = React.useMemo(
+    () => periods.find((period) => period.status === "CLOSED")?.id,
+    [periods]
+  );
+
+  const refreshPeriods = React.useCallback(async () => {
+    setPeriods(await fetchFinancePeriodsApi());
+  }, []);
+
+  React.useEffect(() => {
+    void refreshPeriods();
+  }, [refreshPeriods]);
   return (
     <PageLayout
       title="Period Close"
@@ -53,7 +69,9 @@ export default function PeriodClosePage() {
               onClick={async () => {
                 setLoading("close");
                 try {
-                  await periodClose({ periodId: currentPeriodId, date: new Date().toISOString().slice(0, 10) });
+                  if (!currentPeriodId) throw new Error("No open fiscal period found.");
+                  await closeFinancePeriodApi(currentPeriodId);
+                  await refreshPeriods();
                   toast.success("Period closed.");
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -73,8 +91,9 @@ export default function PeriodClosePage() {
               onClick={async () => {
                 setLoading("reopen");
                 try {
-                  if (!currentPeriodId) throw new Error("No open fiscal period found.");
-                  await periodReopen(currentPeriodId);
+                  if (!closedPeriodId) throw new Error("No closed fiscal period found.");
+                  await reopenFinancePeriodApi(closedPeriodId);
+                  await refreshPeriods();
                   toast.success("Period reopened.");
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -88,6 +107,13 @@ export default function PeriodClosePage() {
             </Button>
             <p className="text-xs text-muted-foreground mt-2 text-center">
               Close prevents transactions from being posted to this period. Reopen restores posting and adjustments.
+            </p>
+            <p className="text-xs text-muted-foreground text-center">
+              {periods.length > 0
+                ? `Loaded ${periods.length} fiscal period(s). Current open period: ${
+                    periods.find((period) => period.status === "OPEN")?.fiscalYear ?? "None"
+                  }`
+                : "No fiscal periods loaded."}
             </p>
           </div>
         </CardContent>

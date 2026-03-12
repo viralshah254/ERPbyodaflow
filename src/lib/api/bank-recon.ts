@@ -37,7 +37,9 @@ type BackendPayment = {
   number: string;
   date: string;
   partyId: string;
+  partyName?: string;
   amount: number;
+  type?: "AR_RECEIPT" | "AP_PAYMENT";
 };
 
 export type BankReconSnapshot = {
@@ -110,8 +112,8 @@ export async function fetchBankReconSnapshotApi(
     id: item.id,
     date: item.date.slice(0, 10),
     reference: item.number,
-    description: item.partyId,
-    amount: item.amount,
+    description: item.partyName ?? item.partyId,
+    amount: item.amount * (item.type === "AP_PAYMENT" ? -1 : 1),
     matchedId: statementByPayment.get(item.id) ?? null,
   }));
 
@@ -140,21 +142,17 @@ export async function matchBankReconLinesApi(
 
 export async function createBankReconPaymentFromStatementApi(
   line: BankStatementLine,
-  bankAccountId?: string
-): Promise<void> {
+  partyId: string
+): Promise<{ paymentId: string; number: string }> {
   if (!isApiConfigured()) {
     createBankReconPaymentFromStatement(line.id);
-    return;
+    return { paymentId: line.id, number: `mock-${line.id}` };
   }
-  const path = line.amount >= 0 ? "/api/ar/payments" : "/api/ap/payments";
-  await apiRequest(path, {
+  return apiRequest<{ paymentId: string; number: string }>("/api/finance/bank-recon/create-payment", {
     method: "POST",
     body: {
-      date: line.date,
-      partyId: line.description || `statement-${line.id}`,
-      amount: Math.abs(line.amount),
-      currency: line.currency ?? "KES",
-      bankAccountId,
+      lineId: line.id,
+      partyId,
     },
   });
 }

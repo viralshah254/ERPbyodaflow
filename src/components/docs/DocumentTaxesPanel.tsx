@@ -11,8 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatMoney } from "@/lib/money";
+import { fetchDocumentDetailApi } from "@/lib/api/documents";
 
-/** Mock VAT breakdown line. */
 interface VatLine {
   code: string;
   base: number;
@@ -20,30 +20,11 @@ interface VatLine {
   amount: number;
 }
 
-/** Mock WHT line. */
 interface WhtLine {
   code: string;
   base: number;
   rate: number;
   amount: number;
-}
-
-/** Mock data for document taxes tab. */
-function mockVatBreakdown(docType: string): VatLine[] {
-  if (["invoice", "bill", "credit-note"].includes(docType)) {
-    return [
-      { code: "VAT16", base: 10000, rate: 16, amount: 1600 },
-      { code: "VAT0", base: 5000, rate: 0, amount: 0 },
-    ];
-  }
-  return [];
-}
-
-function mockWhtLines(docType: string): WhtLine[] {
-  if (["bill", "supplier-invoice", "ap-bill"].includes(docType)) {
-    return [{ code: "WHT-5", base: 10000, rate: 5, amount: 500 }];
-  }
-  return [];
 }
 
 export interface DocumentTaxesPanelProps {
@@ -57,8 +38,47 @@ export function DocumentTaxesPanel({
   docId,
   currency = "KES",
 }: DocumentTaxesPanelProps) {
-  const vat = React.useMemo(() => mockVatBreakdown(docType), [docType]);
-  const wht = React.useMemo(() => mockWhtLines(docType), [docType]);
+  const [vat, setVat] = React.useState<VatLine[]>([]);
+  const [wht, setWht] = React.useState<WhtLine[]>([]);
+
+  React.useEffect(() => {
+    fetchDocumentDetailApi(docType as any, docId)
+      .then((document) => {
+        const lines = document?.lines ?? [];
+        const totalTax = lines.reduce((sum, line) => sum + (line.tax ?? 0), 0);
+        const totalBase = lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
+        if (["invoice", "bill"].includes(docType) && totalTax > 0) {
+          setVat([
+            {
+              code: "DOC-TAX",
+              base: totalBase,
+              rate: totalBase > 0 ? Number(((totalTax / totalBase) * 100).toFixed(2)) : 0,
+              amount: totalTax,
+            },
+          ]);
+        } else {
+          setVat([]);
+        }
+
+        if (docType === "bill" && totalTax > 0) {
+          setWht([
+            {
+              code: "WHT-EST",
+              base: totalBase,
+              rate: totalBase > 0 ? Number(((totalTax / totalBase) * 100).toFixed(2)) : 0,
+              amount: totalTax,
+            },
+          ]);
+        } else {
+          setWht([]);
+        }
+      })
+      .catch(() => {
+        setVat([]);
+        setWht([]);
+      });
+  }, [docId, docType]);
+
   const vatTotal = vat.reduce((s, l) => s + l.amount, 0);
   const whtTotal = wht.reduce((s, l) => s + l.amount, 0);
 
