@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchTransfers, type TransferRow } from "@/lib/api/warehouse-transfers";
+import { exportTransfersCsv, fetchTransfers, updateTransferStatus, type TransferRow, type TransferStatus } from "@/lib/api/warehouse-transfers";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { warehouseTransferReceive } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
@@ -106,27 +106,26 @@ export default function WarehouseTransfersPage() {
   const canReceive = selected.some((r) => r.status === "IN_TRANSIT");
 
   const handleBulk = async (action: "approve" | "transit" | "receive") => {
-    if (action !== "receive") {
-      toast.info(`${action} (stub): ${selectedIds.length} transfer(s). API pending.`);
-      setSelectedIds([]);
-      return;
-    }
     if (selectedIds.length === 0) return;
     try {
-      await Promise.all(
-        selected
-          .filter((r) => r.status === "IN_TRANSIT")
-          .map((r) => warehouseTransferReceive(r.id))
-      );
-      toast.success("Transfer(s) received.");
+      if (action === "approve") {
+        await Promise.all(selected.filter((r) => r.status === "DRAFT").map((r) => updateTransferStatus(r.id, "APPROVED")));
+        toast.success("Transfer(s) approved.");
+      } else if (action === "transit") {
+        await Promise.all(selected.filter((r) => r.status === "APPROVED").map((r) => updateTransferStatus(r.id, "IN_TRANSIT")));
+        toast.success("Transfer(s) marked in transit.");
+      } else {
+        await Promise.all(
+          selected
+            .filter((r) => r.status === "IN_TRANSIT")
+            .map((r) => warehouseTransferReceive(r.id))
+        );
+        toast.success("Transfer(s) received.");
+      }
       setSelectedIds([]);
       load();
     } catch (e) {
-      if ((e as Error).message === "STUB") {
-        toast.info("Receive (stub). Set NEXT_PUBLIC_API_URL to use backend.");
-      } else {
-        toast.error((e as Error).message);
-      }
+      toast.error((e as Error).message);
     }
   };
 
@@ -298,7 +297,7 @@ export default function WarehouseTransfersPage() {
           filters={[
             { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
           ]}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() => exportTransfersCsv(filtered)}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
@@ -325,7 +324,7 @@ export default function WarehouseTransfersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Transfers</CardTitle>
-            <CardDescription>Draft → Approved → In transit → Received. Bulk actions are stubs.</CardDescription>
+            <CardDescription>Draft → Approved → In transit → Received. Bulk actions work in demo mode and against the backend.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (

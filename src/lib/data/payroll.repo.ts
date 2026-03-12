@@ -75,6 +75,29 @@ export function createPayRun(run: Omit<PayRun, "id">): PayRun {
   return created;
 }
 
+export function updatePayRun(id: string, patch: Partial<PayRun>): PayRun | null {
+  const list = listPayRuns();
+  const idx = list.findIndex((run) => run.id === id);
+  if (idx < 0) return null;
+  const updated = { ...list[idx], ...patch };
+  const next = [...list];
+  next[idx] = updated;
+  saveJson(KEY_PAY_RUNS, next);
+  return updated;
+}
+
+export function requestPayRunApproval(id: string): PayRun | null {
+  return updatePayRun(id, { status: "SUBMITTED" });
+}
+
+export function approvePayRun(id: string): PayRun | null {
+  return updatePayRun(id, { status: "APPROVED" });
+}
+
+export function postPayRunJournal(id: string): PayRun | null {
+  return updatePayRun(id, { status: "PROCESSED" });
+}
+
 export function listPayRunLines(payRunId: string): PayRunLine[] {
   const run = getPayRunById(payRunId);
   if (!run) return [];

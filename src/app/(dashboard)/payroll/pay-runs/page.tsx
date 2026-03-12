@@ -27,7 +27,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listPayRuns, listEmployees, createPayRun } from "@/lib/data/payroll.repo";
+import {
+  createPayRunApi,
+  fetchEmployeesApi,
+  fetchPayRunsApi,
+  submitPayRunForApprovalApi,
+} from "@/lib/api/payroll";
+import { downloadCsv } from "@/lib/export/csv";
 import { buildPayRunLinesFromEmployees } from "@/lib/mock/payroll/payruns";
 import type { PayRun } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
@@ -47,18 +53,37 @@ function statusVariant(s: string): "default" | "secondary" | "outline" {
 export default function PayRunsPage() {
   const router = useRouter();
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [seed, setSeed] = React.useState(0);
   const [month, setMonth] = React.useState("");
   const [branch, setBranch] = React.useState("Head Office");
   const [currency, setCurrency] = React.useState("KES");
-
-  const runs = React.useMemo(() => listPayRuns(), [seed]);
-  const employees = React.useMemo(() => listEmployees(), [seed]);
+  const [loading, setLoading] = React.useState(true);
+  const [runs, setRuns] = React.useState<PayRun[]>([]);
+  const [employees, setEmployees] = React.useState<Awaited<ReturnType<typeof fetchEmployeesApi>>>([]);
 
   React.useEffect(() => {
     const d = new Date();
     setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }, []);
+
+  const refreshData = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [payRuns, payrollEmployees] = await Promise.all([
+        fetchPayRunsApi(),
+        fetchEmployeesApi(),
+      ]);
+      setRuns(payRuns);
+      setEmployees(payrollEmployees);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshData();
+  }, [refreshData]);
 
   const filteredEmployees = employees.filter((e) => !branch || e.branch === branch);
   const previewLines = month && filteredEmployees.length
@@ -67,30 +92,46 @@ export default function PayRunsPage() {
   const totalGross = previewLines.reduce((s, l) => s + l.gross, 0);
   const totalNet = previewLines.reduce((s, l) => s + l.net, 0);
 
-  const handleCreate = () => {
+  const createPayload = React.useMemo(
+    () => ({
+      periodStart: `${month}-01`,
+      periodEnd: `${month}-31`,
+      branchId: branch,
+      currency,
+      lines: previewLines.map((line) => ({
+        employeeId: line.employeeId,
+        grossPay: line.gross,
+        deductions: line.gross - line.net,
+      })),
+    }),
+    [branch, currency, month, previewLines]
+  );
+
+  const handleCreate = async () => {
     if (!month) {
       toast.info("Select month.");
       return;
     }
-    const nextNum = `PR-${month}`;
-    createPayRun({
-      number: nextNum,
-      month,
-      branch,
-      currency,
-      status: "DRAFT",
-      lineCount: previewLines.length,
-      totalGross,
-      totalNet,
-    });
-    setCreateOpen(false);
-    setSeed((s) => s + 1);
+    try {
+      await createPayRunApi(createPayload);
+      setCreateOpen(false);
+      await refreshData();
+      toast.success("Pay run created.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
-  const handleRequestApproval = () => {
-    toast.info("Request approval (stub). Links to approvals module.");
-    setCreateOpen(false);
-    setSeed((s) => s + 1);
+  const handleRequestApproval = async () => {
+    try {
+      const created = await createPayRunApi(createPayload);
+      await submitPayRunForApprovalApi(created.id);
+      toast.success("Pay run created and sent for approval.");
+      setCreateOpen(false);
+      await refreshData();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   const columns = React.useMemo(
@@ -132,7 +173,20 @@ export default function PayRunsPage() {
       <div className="p-6 space-y-4">
         <DataTableToolbar
           searchPlaceholder="Search runs..."
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `pay-runs-${new Date().toISOString().slice(0, 10)}.csv`,
+              runs.map((run) => ({
+                number: run.number,
+                month: run.month,
+                branch: run.branch ?? "",
+                currency: run.currency,
+                status: run.status,
+                totalGross: run.totalGross,
+                totalNet: run.totalNet,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>
@@ -144,7 +198,7 @@ export default function PayRunsPage() {
               data={runs}
               columns={columns}
               onRowClick={(r) => router.push(`/payroll/pay-runs/${r.id}`)}
-              emptyMessage="No pay runs."
+              emptyMessage={loading ? "Loading pay runs..." : "No pay runs."}
             />
           </CardContent>
         </Card>

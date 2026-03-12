@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getMockDepreciationPreview } from "@/lib/mock/assets/depreciation";
+import { listDepreciationRuns } from "@/lib/data/depreciation.repo";
 import { formatMoney } from "@/lib/money";
 import { runDepreciation } from "@/lib/api/stub-endpoints";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -28,6 +29,7 @@ export default function DepreciationPage() {
   const router = useRouter();
   const [period, setPeriod] = React.useState("2025-01");
   const [posting, setPosting] = React.useState(false);
+  const [runs, setRuns] = React.useState(() => listDepreciationRuns());
 
   const preview = React.useMemo(() => getMockDepreciationPreview(period), [period]);
 
@@ -35,11 +37,11 @@ export default function DepreciationPage() {
     setPosting(true);
     try {
       await runDepreciation({ period });
+      setRuns(listDepreciationRuns());
       toast.success("Depreciation run completed.");
       router.push("/docs/journal/new");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Post depreciation (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setPosting(false);
     }
@@ -84,7 +86,7 @@ export default function DepreciationPage() {
         <Card>
           <CardHeader>
             <CardTitle>Preview entries</CardTitle>
-            <CardDescription>Journal lines (mock). Post → draft JE then review.</CardDescription>
+            <CardDescription>Journal lines prepared for depreciation posting and journal review.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -110,6 +112,23 @@ export default function DepreciationPage() {
             <div className="border-t px-4 py-2 flex justify-end">
               <span className="text-sm font-medium">Total depreciation: {formatMoney(preview.totalDepreciation, "KES")}</span>
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent depreciation runs</CardTitle>
+            <CardDescription>Latest posted periods and totals.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {runs.length === 0 ? (
+              <p className="text-muted-foreground">No depreciation runs posted yet.</p>
+            ) : (
+              runs.slice(0, 5).map((run) => (
+                <p key={run.id} className="text-muted-foreground">
+                  {run.period} · {formatMoney(run.totalDepreciation, "KES")} · {new Date(run.createdAt).toLocaleString()}
+                </p>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>

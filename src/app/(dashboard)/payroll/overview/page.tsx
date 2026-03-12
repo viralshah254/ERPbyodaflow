@@ -6,7 +6,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listEmployees, listPayRuns } from "@/lib/data/payroll.repo";
+import { fetchEmployeesApi, fetchPayRunsApi } from "@/lib/api/payroll";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
@@ -22,8 +22,29 @@ const LINKS = [
 
 export default function PayrollOverviewPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const employees = React.useMemo(() => listEmployees(), []);
-  const runs = React.useMemo(() => listPayRuns(), []);
+  const [employees, setEmployees] = React.useState<Awaited<ReturnType<typeof fetchEmployeesApi>>>([]);
+  const [runs, setRuns] = React.useState<Awaited<ReturnType<typeof fetchPayRunsApi>>>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [employeeRows, runRows] = await Promise.all([
+          fetchEmployeesApi(),
+          fetchPayRunsApi(),
+        ]);
+        if (cancelled) return;
+        setEmployees(employeeRows);
+        setRuns(runRows);
+      } catch {
+        // Keep the overview resilient; linked detail pages surface exact API errors.
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const draftRuns = runs.filter((r) => r.status === "DRAFT" || r.status === "SUBMITTED");
   const totalGross = runs.length ? runs.reduce((s, r) => s + r.totalGross, 0) : 0;

@@ -9,7 +9,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getMockInvoices, type SalesDocRow } from "@/lib/mock/sales";
+import type { SalesDocRow } from "@/lib/mock/sales";
+import { downloadCsv } from "@/lib/export/csv";
+import { applyDocumentAction, listDocuments } from "@/lib/data/documents.repo";
 import {
   getSavedViews,
   saveView,
@@ -38,7 +40,7 @@ export default function SalesInvoicesPage() {
     getSavedViews(scope)
   );
 
-  const allRows = React.useMemo(() => getMockInvoices(), []);
+  const [allRows, setAllRows] = React.useState<SalesDocRow[]>(() => listDocuments("invoice") as SalesDocRow[]);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -161,17 +163,54 @@ export default function SalesInvoicesPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `sales-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                number: row.number,
+                date: row.date,
+                customer: row.party ?? "",
+                total: row.total ?? 0,
+                status: row.status,
+              }))
+            )
+          }
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
                   {selectedIds.length} selected
                 </span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Post (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    selectedIds.forEach((id) => applyDocumentAction("invoice", id, "post"));
+                    setAllRows(listDocuments("invoice") as SalesDocRow[]);
+                    setSelectedIds([]);
+                    toast.success("Invoice(s) posted.");
+                  }}
+                >
                   Post
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadCsv(
+                      `sales-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+                      filtered
+                        .filter((row) => selectedIds.includes(row.id))
+                        .map((row) => ({
+                          number: row.number,
+                          date: row.date,
+                          customer: row.party ?? "",
+                          total: row.total ?? 0,
+                          status: row.status,
+                        }))
+                    )
+                  }
+                >
                   Export
                 </Button>
               </div>

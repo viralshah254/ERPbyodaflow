@@ -17,12 +17,18 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCopilotStore } from "@/stores/copilot-store";
 import {
-  getMockPOLines,
-  getMockGRNLines,
-  getMockBillLines,
+  type BillLineRow,
+  type GRNLineRow,
+  type POLineRow,
 } from "@/lib/mock/ap-match";
+import {
+  createThreeWayMatch,
+  listBillLines,
+  listGRNLines,
+  listPOLines,
+  listThreeWayMatches,
+} from "@/lib/data/ap-match.repo";
 import { formatMoney } from "@/lib/money";
-import { threeWayMatch } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -34,10 +40,12 @@ export default function ThreeWayMatchPage() {
   const [selectedGRN, setSelectedGRN] = React.useState<Set<LineId>>(new Set());
   const [selectedBill, setSelectedBill] = React.useState<Set<LineId>>(new Set());
   const [matching, setMatching] = React.useState(false);
+  const [lastDecisionId, setLastDecisionId] = React.useState<string | null>(null);
 
-  const poLines = React.useMemo(() => getMockPOLines(), []);
-  const grnLines = React.useMemo(() => getMockGRNLines(), []);
-  const billLines = React.useMemo(() => getMockBillLines(), []);
+  const poLines = React.useMemo(() => listPOLines(), []);
+  const grnLines = React.useMemo(() => listGRNLines(), []);
+  const billLines = React.useMemo(() => listBillLines(), []);
+  const decisions = React.useMemo(() => listThreeWayMatches(), [lastDecisionId]);
 
   const togglePO = (id: LineId) => {
     setSelectedPO((s) => {
@@ -73,11 +81,13 @@ export default function ThreeWayMatchPage() {
     }
     setMatching(true);
     try {
-      await threeWayMatch(grnIds, billIds);
-      toast.success("Lines matched.");
-    } catch (e) {
-      if ((e as Error).message === "STUB") toast.info(`Match (stub): ${grnIds.length} GRN · ${billIds.length} Bill. API pending.`);
-      else toast.error((e as Error).message);
+      const decision = createThreeWayMatch(Array.from(selectedPO), grnIds, billIds);
+      setLastDecisionId(decision.id);
+      toast.success(
+        decision.status === "MATCHED"
+          ? "Lines matched within tolerance."
+          : "Lines matched but blocked for variance review."
+      );
     } finally {
       setMatching(false);
     }
@@ -284,7 +294,7 @@ export default function ThreeWayMatchPage() {
           <CardHeader>
             <CardTitle>Match &amp; actions</CardTitle>
             <CardDescription>
-              Select lines in each column, then Match selected. Create Bill from PO opens /docs/bill/new (stub).
+              Select lines in each column, then create a match decision with quantity and price tolerance review.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-4">
@@ -301,6 +311,25 @@ export default function ThreeWayMatchPage() {
             </span>
           </CardContent>
         </Card>
+        {decisions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent decisions</CardTitle>
+              <CardDescription>Most recent three-way match outcomes and tolerance reasons.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {decisions.slice(0, 5).map((decision) => (
+                <div key={decision.id} className="rounded border p-3 text-sm">
+                  <p className="font-medium">{decision.status}</p>
+                  <p className="text-muted-foreground">{decision.reason}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {decision.poLineIds.length} PO · {decision.grnLineIds.length} GRN · {decision.billLineIds.length} Bill · {new Date(decision.matchedAt).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </PageShell>
   );

@@ -25,10 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listEmployees, createEmployee } from "@/lib/data/payroll.repo";
+import { createEmployeeApi, fetchEmployeesApi } from "@/lib/api/payroll";
 import type { Employee, EmploymentType, SalaryType } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -45,8 +46,24 @@ export default function PayrollEmployeesPage() {
   const [salaryType, setSalaryType] = React.useState<SalaryType>("MONTHLY");
   const [baseSalary, setBaseSalary] = React.useState(0);
 
-  const [seed, setSeed] = React.useState(0);
-  const rows = React.useMemo(() => listEmployees(), [seed]);
+  const [rows, setRows] = React.useState<Employee[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const refreshRows = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setRows(await fetchEmployeesApi());
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshRows();
+  }, [refreshRows]);
+
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -70,23 +87,24 @@ export default function PayrollEmployeesPage() {
     []
   );
 
-  const handleCreate = () => {
-    createEmployee({
+  const handleCreate = async () => {
+    try {
+      await createEmployeeApi({
       name: name || "New Employee",
       department: department || undefined,
       branch: branch || undefined,
-      employmentType,
-      salaryType,
       baseSalary: baseSalary || 0,
       currency: "KES",
-      allowances: [],
-      deductions: [],
-    });
-    setSheetOpen(false);
-    setName("");
-    setDepartment("");
-    setBaseSalary(0);
-    setSeed((s) => s + 1);
+      });
+      setSheetOpen(false);
+      setName("");
+      setDepartment("");
+      setBaseSalary(0);
+      await refreshRows();
+      toast.success("Employee created.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   return (
@@ -118,7 +136,20 @@ export default function PayrollEmployeesPage() {
           searchPlaceholder="Search by name, department, branch..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `payroll-employees-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                name: row.name,
+                department: row.department ?? "",
+                branch: row.branch ?? "",
+                employmentType: row.employmentType,
+                salaryType: row.salaryType,
+                baseSalary: row.baseSalary,
+                currency: row.currency,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>
@@ -129,7 +160,7 @@ export default function PayrollEmployeesPage() {
             <DataTable<Employee>
               data={filtered}
               columns={columns}
-              emptyMessage="No employees."
+              emptyMessage={loading ? "Loading employees..." : "No employees."}
             />
           </CardContent>
         </Card>

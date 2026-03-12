@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getMockPutaway } from "@/lib/mock/warehouse/putaway";
+import { getPutawayGrnById, savePutawayAllocation } from "@/lib/data/warehouse-execution.repo";
 import { getMockBins } from "@/lib/mock/warehouse/bins";
 import { warehousePutawayConfirm } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
@@ -33,8 +33,25 @@ import * as Icons from "lucide-react";
 export default function PutawayDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const grn = React.useMemo(() => getMockPutaway().find((g) => g.id === id), [id]);
+  const [grn, setGrn] = React.useState(() => getPutawayGrnById(id));
   const bins = React.useMemo(() => getMockBins(), []);
+  const [allocationState, setAllocationState] = React.useState<Record<string, { putawayQty: number; binCode?: string }>>({});
+
+  React.useEffect(() => {
+    const current = getPutawayGrnById(id);
+    setGrn(current);
+    setAllocationState(
+      Object.fromEntries(
+        (current?.lines ?? []).map((line) => [
+          line.id,
+          {
+            putawayQty: line.putawayQty,
+            binCode: line.allocatedBins?.[0]?.binCode,
+          },
+        ])
+      )
+    );
+  }, [id]);
 
   if (!grn) {
     return (
@@ -64,7 +81,14 @@ export default function PutawayDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => toast.info("Allocate to bins (stub). API pending.")}>
+            <Button
+              size="sm"
+              onClick={() => {
+                savePutawayAllocation(id, allocationState);
+                setGrn(getPutawayGrnById(id));
+                toast.success("Bin allocation saved.");
+              }}
+            >
               Save allocation
             </Button>
             <Button
@@ -73,10 +97,10 @@ export default function PutawayDetailPage() {
               onClick={async () => {
                 try {
                   await warehousePutawayConfirm(id);
+                  setGrn(getPutawayGrnById(id));
                   toast.success("Putaway confirmed.");
                 } catch (e) {
-                  if ((e as Error).message === "STUB") toast.info("Confirm (stub). API pending.");
-                  else toast.error((e as Error).message);
+                  toast.error((e as Error).message);
                 }
               }}
             >
@@ -92,7 +116,7 @@ export default function PutawayDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Lines — allocate to bin</CardTitle>
-            <CardDescription>Select bin and qty per line. Stub.</CardDescription>
+            <CardDescription>Select bin and quantity for each receipt line, then confirm putaway.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -114,14 +138,34 @@ export default function PutawayDetailPage() {
                     <TableCell>
                       <Input
                         type="number"
-                        defaultValue={l.putawayQty}
+                        value={allocationState[l.id]?.putawayQty ?? l.putawayQty}
                         className="w-20"
                         min={0}
                         max={l.receivedQty}
+                        onChange={(e) =>
+                          setAllocationState((prev) => ({
+                            ...prev,
+                            [l.id]: {
+                              ...prev[l.id],
+                              putawayQty: Number(e.target.value) || 0,
+                            },
+                          }))
+                        }
                       />
                     </TableCell>
                     <TableCell>
-                      <Select defaultValue={l.allocatedBins?.[0]?.binCode}>
+                      <Select
+                        value={allocationState[l.id]?.binCode ?? l.allocatedBins?.[0]?.binCode}
+                        onValueChange={(value) =>
+                          setAllocationState((prev) => ({
+                            ...prev,
+                            [l.id]: {
+                              putawayQty: prev[l.id]?.putawayQty ?? l.putawayQty,
+                              binCode: value,
+                            },
+                          }))
+                        }
+                      >
                         <SelectTrigger className="w-40">
                           <SelectValue placeholder="Select bin" />
                         </SelectTrigger>
@@ -138,6 +182,17 @@ export default function PutawayDetailPage() {
             </Table>
           </CardContent>
         </Card>
+        <div className="flex justify-end">
+          <Button
+            onClick={() => {
+              savePutawayAllocation(id, allocationState);
+              setGrn(getPutawayGrnById(id));
+              toast.success("Putaway allocation saved.");
+            }}
+          >
+            Save allocation
+          </Button>
+        </div>
       </div>
     </PageShell>
   );

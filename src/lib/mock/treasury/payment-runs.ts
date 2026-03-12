@@ -60,10 +60,35 @@ export const MOCK_PAYMENT_RUNS: PaymentRunRow[] = [
   },
 ];
 
+const RUNS_STORAGE_KEY = "odaflow_mock_payment_runs";
+
+function cloneRuns(runs: PaymentRunRow[]): PaymentRunRow[] {
+  return runs.map((run) => ({ ...run }));
+}
+
 export function getMockBillsDue(): BillDueRow[] {
   return [...MOCK_BILLS_DUE];
 }
 
 export function getMockPaymentRuns(): PaymentRunRow[] {
-  return [...MOCK_PAYMENT_RUNS];
+  if (typeof window === "undefined") return cloneRuns(MOCK_PAYMENT_RUNS);
+  try {
+    const raw = localStorage.getItem(RUNS_STORAGE_KEY);
+    if (!raw) return cloneRuns(MOCK_PAYMENT_RUNS);
+    return cloneRuns(JSON.parse(raw) as PaymentRunRow[]);
+  } catch {
+    return cloneRuns(MOCK_PAYMENT_RUNS);
+  }
+}
+
+function savePaymentRuns(runs: PaymentRunRow[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(RUNS_STORAGE_KEY, JSON.stringify(runs));
+}
+
+export function updateMockPaymentRunStatus(id: string, status: PaymentRunRow["status"]): void {
+  const next = getMockPaymentRuns().map((run) =>
+    run.id === id ? { ...run, status } : run
+  );
+  savePaymentRuns(next);
 }

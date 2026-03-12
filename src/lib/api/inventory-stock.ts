@@ -1,0 +1,176 @@
+import {
+  getMockStock,
+  getStockItemById,
+  type StockRow,
+} from "@/lib/mock/stock";
+import { getMockMovements, type MovementRow } from "@/lib/mock/movements";
+import { apiRequest, isApiConfigured } from "./client";
+
+export type InventoryStockRow = StockRow & { productId?: string };
+
+type BackendStockLevel = {
+  id: string;
+  productId: string;
+  sku?: string;
+  name: string;
+  warehouseId: string;
+  warehouse: string;
+  location?: string;
+  onHand?: number;
+  quantity?: number;
+  reserved?: number;
+  reservedQuantity?: number;
+  available: number;
+  reorderLevel: number;
+  status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+};
+
+function mapStatus(status: BackendStockLevel["status"]): StockRow["status"] {
+  if (status === "OUT_OF_STOCK") return "Out of Stock";
+  if (status === "LOW_STOCK") return "Low Stock";
+  return "In Stock";
+}
+
+function mapStock(item: BackendStockLevel): InventoryStockRow {
+  return {
+    id: item.id,
+    productId: item.productId,
+    sku: item.sku ?? item.productId,
+    name: item.name,
+    warehouse: item.warehouse,
+    warehouseId: item.warehouseId,
+    location: item.location,
+    quantity: item.onHand ?? item.quantity ?? 0,
+    reserved: item.reserved ?? item.reservedQuantity ?? 0,
+    available: item.available,
+    reorderLevel: item.reorderLevel,
+    status: mapStatus(item.status),
+  };
+}
+
+export async function fetchStockLevelsApi(filters?: {
+  warehouseId?: string;
+  productId?: string;
+  status?: "In Stock" | "Low Stock" | "Out of Stock" | "all";
+  search?: string;
+}): Promise<InventoryStockRow[]> {
+  if (!isApiConfigured()) {
+    let rows = getMockStock();
+    if (filters?.warehouseId) {
+      rows = rows.filter((row) => row.warehouseId === filters.warehouseId || row.warehouse === filters.warehouseId);
+    }
+    if (filters?.productId) {
+      rows = rows.filter((row) => row.id === filters.productId || row.sku === filters.productId);
+    }
+    if (filters?.status && filters.status !== "all") {
+      rows = rows.filter((row) => row.status === filters.status);
+    }
+    if (filters?.search?.trim()) {
+      const query = filters.search.trim().toLowerCase();
+      rows = rows.filter(
+        (row) => row.sku.toLowerCase().includes(query) || row.name.toLowerCase().includes(query)
+      );
+    }
+    return rows;
+  }
+  const statusMap: Record<string, string | undefined> = {
+    "In Stock": "IN_STOCK",
+    "Low Stock": "LOW_STOCK",
+    "Out of Stock": "OUT_OF_STOCK",
+    all: undefined,
+  };
+  const params = new URLSearchParams();
+  if (filters?.warehouseId) params.set("warehouseId", filters.warehouseId);
+  if (filters?.productId) params.set("productId", filters.productId);
+  if (filters?.status) {
+    const mappedStatus = statusMap[filters.status];
+    if (mappedStatus) params.set("status", mappedStatus);
+  }
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  const data = await apiRequest<{ items: BackendStockLevel[] }>("/api/inventory/stock-levels", {
+    params,
+  });
+  return data.items.map(mapStock);
+}
+
+export async function fetchStockLevelApi(id: string): Promise<InventoryStockRow | null> {
+  if (!isApiConfigured()) {
+    return getStockItemById(id) ?? null;
+  }
+  const data = await apiRequest<BackendStockLevel>(`/api/inventory/stock-levels/${id}`);
+  return mapStock(data);
+}
+
+export async function createStockAdjustmentApi(payload: {
+  stockLevelId: string;
+  quantityDelta: number;
+  reason?: string;
+}): Promise<void> {
+  if (!isApiConfigured()) {
+    return;
+  }
+  await apiRequest("/api/inventory/stock-adjustments", {
+    method: "POST",
+    body: {
+      reason: payload.reason,
+      lines: [{ stockLevelId: payload.stockLevelId, quantityDelta: payload.quantityDelta }],
+    },
+  });
+}
+
+type BackendInventoryMovement = {
+  id: string;
+  date: string;
+  direction: "IN" | "OUT";
+  signedQuantity?: number;
+  sku?: string;
+  name?: string;
+  warehouse: string;
+  sourceType?: string;
+  reference?: string;
+};
+
+export async function fetchInventoryMovementsApi(filters?: {
+  warehouseId?: string;
+  search?: string;
+  type?: string;
+}): Promise<MovementRow[]> {
+  if (!isApiConfigured()) {
+    let rows = getMockMovements();
+    if (filters?.warehouseId) rows = rows.filter((row) => row.warehouse === filters.warehouseId);
+    if (filters?.type) rows = rows.filter((row) => row.type === filters.type);
+    if (filters?.search?.trim()) {
+      const query = filters.search.trim().toLowerCase();
+      rows = rows.filter(
+        (row) =>
+          row.sku.toLowerCase().includes(query) ||
+          row.productName.toLowerCase().includes(query) ||
+          row.reference?.toLowerCase().includes(query)
+      );
+    }
+    return rows;
+  }
+  const params = new URLSearchParams();
+  if (filters?.warehouseId) params.set("warehouseId", filters.warehouseId);
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  const data = await apiRequest<{ items: BackendInventoryMovement[] }>("/api/inventory/movements", {
+    params,
+  });
+  let rows = data.items.map((item) => ({
+    id: item.id,
+    date: item.date,
+    type:
+      item.sourceType === "TRANSFER"
+        ? "TRANSFER"
+        : item.sourceType === "ADJUSTMENT"
+          ? "ADJUST"
+          : item.direction,
+    sku: item.sku ?? "—",
+    productName: item.name ?? "Unknown product",
+    warehouse: item.warehouse,
+    quantity: item.signedQuantity ?? 0,
+    reference: item.reference,
+  })) as MovementRow[];
+  if (filters?.type) rows = rows.filter((row) => row.type === filters.type);
+  return rows;
+}

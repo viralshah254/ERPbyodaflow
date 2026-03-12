@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { downloadFile, isApiConfigured } from "@/lib/api/client";
+import { downloadFile, downloadTextFile, isApiConfigured } from "@/lib/api/client";
 
 export interface PrintPreviewDoc {
   type: string;
@@ -39,22 +39,22 @@ interface PrintPreviewDrawerProps {
   doc: PrintPreviewDoc | null;
 }
 
-/** UI-only print preview: document header + lines + totals. Download PDF stub. */
+/** UI-only print preview: document header + lines + totals. */
 export function PrintPreviewDrawer({
   open,
   onOpenChange,
   doc,
 }: PrintPreviewDrawerProps) {
   const lines = doc?.lines ?? [
-    { description: "Line 1 (stub)", qty: 1, amount: 10000 },
-    { description: "Line 2 (stub)", qty: 2, amount: 5000 },
+    { description: "Primary line item", qty: 1, amount: 10000 },
+    { description: "Secondary line item", qty: 2, amount: 5000 },
   ];
   const total = doc?.total ?? 20000;
   const currency = doc?.currency ?? "KES";
 
   const handleDownloadPDF = () => {
     if (!doc) {
-      toast.info("Download PDF (stub). API pending.");
+      toast.info("No document selected for download.");
       onOpenChange(false);
       return;
     }
@@ -67,7 +67,21 @@ export function PrintPreviewDrawer({
       onOpenChange(false);
       return;
     }
-    toast.info("Download PDF (stub). Set NEXT_PUBLIC_API_URL to use backend.");
+    const preview = [
+      `${doc.title}`,
+      `Document: ${doc.type} ${doc.id}`,
+      doc.date ? `Date: ${doc.date}` : "",
+      doc.party ? `Party: ${doc.party}` : "",
+      "",
+      "Lines",
+      ...lines.map((line) => `${line.description} | Qty: ${line.qty ?? "—"} | Amount: ${line.amount ?? "—"}`),
+      "",
+      `Total: ${total.toLocaleString()} ${currency}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    downloadTextFile(`${doc.type}-${doc.id}-print-preview.txt`, preview);
+    toast.success("Printable preview downloaded.");
     onOpenChange(false);
   };
 
@@ -77,7 +91,7 @@ export function PrintPreviewDrawer({
         <SheetHeader>
           <SheetTitle>Print preview</SheetTitle>
           <SheetDescription>
-            {doc ? `${doc.type} ${doc.id}` : "Document"} — header, lines, totals. PDF stub.
+            {doc ? `${doc.type} ${doc.id}` : "Document"} — header, lines, totals, and printable export.
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-4">

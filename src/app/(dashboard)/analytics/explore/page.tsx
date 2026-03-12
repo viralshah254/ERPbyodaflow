@@ -15,7 +15,7 @@ import {
 import { getMetric, getSavedAnalysisViews, saveAnalysisView, getShareableLink } from "@/lib/analytics";
 import { runAnalyticsQueryApi } from "@/lib/api/analytics";
 import type { MetricKey, DimensionKey } from "@/lib/analytics/semantic";
-import type { AnalyticsQuery, AnalyticsRow, DrillContext } from "@/lib/analytics/types";
+import type { AnalyticsQuery, AnalyticsResult, AnalyticsRow, DrillContext } from "@/lib/analytics/types";
 import type { AnalyticsGlobalFilters } from "@/lib/analytics/types";
 import { toast } from "sonner";
 import {

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InsightCard, KpiHero } from "@/components/analytics";
+import { loadStoredValue } from "@/lib/data/persisted-store";
 import { formatMoney } from "@/lib/money";
 import { analyticsApplySuggestion } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
@@ -20,15 +21,20 @@ export default function AnalyticsSimulationsPage() {
   const [payroll, setPayroll] = React.useState(0);
   const [fx, setFx] = React.useState(0);
   const [applying, setApplying] = React.useState(false);
+  const [lastAppliedAt, setLastAppliedAt] = React.useState<string | null>(() =>
+    loadStoredValue<{ appliedAt?: string } | null>("odaflow_analytics_last_applied_suggestion", () => null)?.appliedAt ?? null
+  );
 
   const handleApplySuggestion = async () => {
     setApplying(true);
     try {
       await analyticsApplySuggestion("sim-current");
+      setLastAppliedAt(
+        loadStoredValue<{ appliedAt?: string } | null>("odaflow_analytics_last_applied_suggestion", () => null)?.appliedAt ?? null
+      );
       toast.success("Suggestion applied.");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Apply suggestion (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setApplying(false);
     }
@@ -61,6 +67,17 @@ export default function AnalyticsSimulationsPage() {
         }
       />
       <div className="p-6 space-y-6">
+        {lastAppliedAt && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Last applied simulation</CardTitle>
+              <CardDescription>Most recent simulation suggestion applied to the demo workspace.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Applied at {new Date(lastAppliedAt).toLocaleString()}.
+            </CardContent>
+          </Card>
+        )}
         <InsightCard
           title="Change price tiers → margin impact"
           description="Simulate +X% across tiers"

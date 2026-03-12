@@ -8,6 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
+import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
+import { LiveCurrencyConverterCard } from "@/components/operational/LiveCurrencyConverterCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -271,6 +274,23 @@ export default function CashWeightAuditPage() {
         }
       />
       <div className="p-6 space-y-6">
+        <ExceptionBanner
+          type="warning"
+          title="Cash-heavy procurement needs same-day reconciliation"
+          description="Use this workspace to compare PO quantity, cash disbursement weight, and actual received weight before losses or grading differences are approved."
+          actions={[
+            { label: "Record disbursement", onClick: () => setDisbursementOpen(true) },
+            { label: "Build audit", onClick: () => setBuildSheetOpen(true), variant: "outline" },
+          ]}
+        />
+        <div className="grid gap-6 xl:grid-cols-2">
+          <ProcurementVariancePanel
+            poWeightKg={auditLines.reduce((a, r) => a + r.orderedQty, 0)}
+            paidWeightKg={auditLines.reduce((a, r) => a + (r.paidWeightKg ?? 0), 0)}
+            receivedWeightKg={auditLines.reduce((a, r) => a + (r.receivedWeightKg ?? 0), 0)}
+          />
+          <LiveCurrencyConverterCard />
+        </div>
         <div className="flex gap-2 border-b">
           <Button variant={view === "audit" ? "secondary" : "ghost"} size="sm" onClick={() => setView("audit")}>
             Audit lines

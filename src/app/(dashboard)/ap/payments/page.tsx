@@ -6,15 +6,17 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { getMockAPPayments, type APPaymentRow } from "@/lib/mock/ap";
+import type { APPaymentRow } from "@/lib/mock/ap";
+import { createApPayment, listApPayments } from "@/lib/data/ap-payments.repo";
+import { downloadCsv } from "@/lib/export/csv";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function APPaymentsPage() {
   const [search, setSearch] = React.useState("");
+  const [allRows, setAllRows] = React.useState<APPaymentRow[]>(() => listApPayments());
 
-  const allRows = React.useMemo(() => getMockAPPayments(), []);
   const filtered = React.useMemo(() => {
     if (!search.trim()) return allRows;
     const q = search.trim().toLowerCase();
@@ -65,7 +67,13 @@ export default function APPaymentsPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => toast.info("Pay supplier: API pending.")}>
+          <Button
+            onClick={() => {
+              const created = createApPayment({ party: "Supplier settlement", amount: 0 });
+              setAllRows(listApPayments());
+              toast.success(`Supplier payment ${created.number} created.`);
+            }}
+          >
             <Icons.Plus className="mr-2 h-4 w-4" />
             Pay supplier
           </Button>
@@ -76,7 +84,18 @@ export default function APPaymentsPage() {
           searchPlaceholder="Search by number, supplier..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `ap-payments-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                number: row.number,
+                date: row.date,
+                supplier: row.party,
+                amount: row.amount,
+                status: row.status,
+              }))
+            )
+          }
         />
         <DataTable<APPaymentRow>
           data={filtered}

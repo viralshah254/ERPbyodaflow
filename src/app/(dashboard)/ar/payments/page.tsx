@@ -17,10 +17,12 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getMockPayments, getMockOpenInvoices, type PaymentRow, type OpenInvoiceRow } from "@/lib/mock/ar";
+import type { PaymentRow, OpenInvoiceRow } from "@/lib/mock/ar";
+import { createArPayment, listArPayments, listOpenInvoices } from "@/lib/data/ar.repo";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { formatMoney } from "@/lib/money";
 import { arAllocate } from "@/lib/api/stub-endpoints";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -36,11 +38,12 @@ export default function ARPaymentsPage() {
   const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
   const [allocating, setAllocating] = React.useState(false);
 
-  const payments = React.useMemo(() => getMockPayments(), []);
-  const openInvoices = React.useMemo(
-    () => getMockOpenInvoices(customerId || undefined),
-    [customerId]
-  );
+  const [payments, setPayments] = React.useState<PaymentRow[]>(() => listArPayments());
+  const openInvoices = React.useMemo(() => listOpenInvoices(customerId || undefined), [customerId, payments]);
+
+  const refreshData = React.useCallback(() => {
+    setPayments(listArPayments());
+  }, []);
 
   const filtered = React.useMemo(() => {
     if (!search.trim()) return payments;
@@ -105,12 +108,25 @@ export default function ARPaymentsPage() {
 
   const selectedPayment = selectedPaymentId ? payments.find((p) => p.id === selectedPaymentId) : null;
   const allocateInvoices = React.useMemo(
-    () => getMockOpenInvoices(selectedPayment?.customerId),
-    [selectedPayment?.customerId]
+    () => listOpenInvoices(selectedPayment?.customerId),
+    [selectedPayment?.customerId, payments]
   );
 
-  const handleWizardSubmit = () => {
-    toast.info("Submit payment: API pending.");
+  const handleWizardSubmit = async () => {
+    const customerName = openInvoices[0]?.customerName ?? customerId;
+    const totalAmount = Object.values(allocations).reduce((sum, amount) => sum + amount, 0);
+    if (!customerId || totalAmount <= 0) {
+      toast.error("Select a customer and allocate at least one invoice amount.");
+      return;
+    }
+    const payment = createArPayment({ customerId, customerName, amount: totalAmount });
+    const invoiceIds = Object.keys(allocations).filter((invoiceId) => (allocations[invoiceId] ?? 0) > 0);
+    await arAllocate(payment.id, {
+      invoiceIds,
+      amounts: invoiceIds.map((invoiceId) => allocations[invoiceId] ?? 0),
+    });
+    refreshData();
+    toast.success(`Payment ${payment.number} posted and allocated.`);
     setWizardOpen(false);
   };
 
@@ -125,12 +141,12 @@ export default function ARPaymentsPage() {
     setAllocating(true);
     try {
       await arAllocate(selectedPaymentId, { invoiceIds, amounts });
+      refreshData();
       toast.success("Allocation saved.");
       setAllocateSheetOpen(false);
       setSelectedPaymentId(null);
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Allocate (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setAllocating(false);
     }
@@ -173,7 +189,18 @@ export default function ARPaymentsPage() {
           searchPlaceholder="Search by number, customer..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `ar-payments-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                number: row.number,
+                date: row.date,
+                customerName: row.customerName,
+                amount: row.amount,
+                status: row.status,
+              }))
+            )
+          }
         />
         <DataTable<PaymentRow>
           data={filtered}
@@ -198,7 +225,7 @@ export default function ARPaymentsPage() {
           <SheetHeader>
             <SheetTitle>Receive payment</SheetTitle>
             <SheetDescription>
-              Customer → Open invoices → Allocate → Review. API pending.
+              Customer → Open invoices → Allocate → Review and post receipt.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -256,7 +283,7 @@ export default function ARPaymentsPage() {
             )}
             {step === 3 && (
               <>
-                <p className="text-sm text-muted-foreground">Review &amp; submit (stub).</p>
+                <p className="text-sm text-muted-foreground">Review allocations and post the receipt to customer open items.</p>
                 <SheetFooter>
                   <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
                   <Button onClick={handleWizardSubmit}>Submit</Button>

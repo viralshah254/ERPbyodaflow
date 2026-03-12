@@ -10,6 +10,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getMockSalesOrders, type SalesDocRow } from "@/lib/mock/sales";
+import { downloadCsv } from "@/lib/export/csv";
 import {
   getSavedViews,
   saveView,
@@ -40,7 +41,7 @@ export default function SalesOrdersPage() {
     getSavedViews(scope)
   );
 
-  const allRows = React.useMemo(() => getMockSalesOrders(), []);
+  const [allRows, setAllRows] = React.useState<SalesDocRow[]>(() => getMockSalesOrders());
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -163,17 +164,59 @@ export default function SalesOrdersPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                number: row.number,
+                date: row.date,
+                party: row.party ?? "",
+                total: row.total ?? 0,
+                status: row.status,
+              }))
+            )
+          }
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
                   {selectedIds.length} selected
                 </span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Approve (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setAllRows((prev) =>
+                      prev.map((row) =>
+                        selectedIds.includes(row.id) && row.status !== "FULFILLED"
+                          ? { ...row, status: "APPROVED" }
+                          : row
+                      )
+                    );
+                    toast.success("Sales order(s) approved.");
+                    setSelectedIds([]);
+                  }}
+                >
                   Approve
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadCsv(
+                      `sales-orders-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+                      filtered
+                        .filter((row) => selectedIds.includes(row.id))
+                        .map((row) => ({
+                          number: row.number,
+                          date: row.date,
+                          party: row.party ?? "",
+                          total: row.total ?? 0,
+                          status: row.status,
+                        }))
+                    )
+                  }
+                >
                   Export
                 </Button>
               </div>

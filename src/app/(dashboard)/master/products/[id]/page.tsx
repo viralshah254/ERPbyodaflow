@@ -17,11 +17,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { getProductById, listPackaging, listProductPrices } from "@/lib/data/products.repo";
+import { listPackaging, listProductPrices } from "@/lib/data/products.repo";
 import { getMockPriceLists } from "@/lib/mock/products/price-lists";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { productDelete } from "@/lib/api/stub-endpoints";
+import { fetchProductApi } from "@/lib/api/products";
 import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
 import { useAuthStore } from "@/stores/auth-store";
@@ -40,6 +41,7 @@ export default function ProductDetailPage() {
   const [vatCategory, setVatCategory] = React.useState<string>("standard");
   const [deleting, setDeleting] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+  const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | undefined>(undefined);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -48,15 +50,49 @@ export default function ProductDetailPage() {
     if (raw && ["standard", "zero", "exempt"].includes(raw)) setVatCategory(raw);
   }, [id]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const found = await fetchProductApi(id);
+        if (!cancelled) setProduct(found);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error((error as Error).message);
+          setProduct(null);
+        }
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const saveVatCategory = (v: string) => {
     setVatCategory(v);
     if (typeof window !== "undefined") localStorage.setItem(`odaflow_product_vat_${id}`, v);
   };
 
-  const product = React.useMemo(() => getProductById(id), [id]);
   const packaging = React.useMemo(() => (product ? listPackaging(product.id) : []), [product]);
   const prices = React.useMemo(() => (product ? listProductPrices(product.id) : []), [product]);
   const priceLists = React.useMemo(() => getMockPriceLists(), []);
+
+  if (product === undefined) {
+    return (
+      <PageShell>
+        <PageHeader
+          title="Loading product"
+          breadcrumbs={[
+            { label: "Masters", href: "/master" },
+            { label: t("product", terminology) + "s", href: "/master/products" },
+            { label: id },
+          ]}
+        />
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      </PageShell>
+    );
+  }
 
   if (!product) {
     return (
@@ -145,8 +181,7 @@ export default function ProductDetailPage() {
                       toast.success("Product deleted.");
                       router.push("/master/products");
                     } catch (err) {
-                      if ((err as Error).message === "STUB") toast.info("Delete (stub). API pending.");
-                      else toast.error((err as Error).message);
+                      toast.error((err as Error).message);
                     } finally {
                       setDeleting(false);
                     }

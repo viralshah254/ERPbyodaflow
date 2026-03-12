@@ -6,10 +6,11 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getMockApprovalInbox, type ApprovalItem } from "@/lib/mock/approvals";
+import type { ApprovalItem } from "@/lib/mock/approvals";
 import { formatMoney } from "@/lib/money";
 import { drillToDocument } from "@/lib/drill-through";
 import { ApprovalSheet } from "@/components/approvals/ApprovalSheet";
+import { fetchApprovalInbox } from "@/lib/api/approvals";
 import { approvalApprove, approvalReject } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -17,31 +18,48 @@ import * as Icons from "lucide-react";
 export default function ApprovalsInboxPage() {
   const [selected, setSelected] = React.useState<ApprovalItem | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
-
-  const items = React.useMemo(() => getMockApprovalInbox(), []);
+  const [items, setItems] = React.useState<ApprovalItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
   const openSheet = (item: ApprovalItem) => {
     setSelected(item);
     setSheetOpen(true);
   };
 
+  const refreshItems = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setItems(await fetchApprovalInbox());
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshItems();
+  }, [refreshItems]);
+
   const handleApprove = async (id: string, comment?: string) => {
     try {
       await approvalApprove(id, comment);
+      await refreshItems();
+      if (selected?.id === id) setSheetOpen(false);
       toast.success("Approved.");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info(`Approve (stub): ${id}. API pending.`);
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     }
   };
 
   const handleReject = async (id: string, comment?: string) => {
     try {
       await approvalReject(id, comment);
+      await refreshItems();
+      if (selected?.id === id) setSheetOpen(false);
       toast.success("Rejected.");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info(`Reject (stub): ${id}. API pending.`);
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     }
   };
 
@@ -63,7 +81,11 @@ export default function ApprovalsInboxPage() {
             <CardTitle>Pending</CardTitle>
           </CardHeader>
           <CardContent>
-            {items.length === 0 ? (
+            {loading ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Loading approvals...
+              </p>
+            ) : items.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 No items pending your approval.
               </p>

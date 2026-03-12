@@ -6,7 +6,8 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getMockReportLibrary, getMockSavedViews, getMockScheduledReports, getMockExportHistory } from "@/lib/mock/reports";
+import { getMockSavedViews, getMockScheduledReports } from "@/lib/mock/reports";
+import { listReportExports, listReportLibrary, runReportExport } from "@/lib/data/reports.repo";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -29,8 +30,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function ReportsPage() {
   const saved = React.useMemo(() => getMockSavedViews(), []);
   const scheduled = React.useMemo(() => getMockScheduledReports(), []);
-  const exports = React.useMemo(() => getMockExportHistory(), []);
-  const library = React.useMemo(() => getMockReportLibrary(), []);
+  const [exports, setExports] = React.useState(() => listReportExports());
+  const library = React.useMemo(() => listReportLibrary(), []);
 
   return (
     <PageShell>
@@ -74,7 +75,7 @@ export default function ReportsPage() {
           <CardHeader>
             <CardTitle>Report library</CardTitle>
             <CardDescription>
-              Browse report templates. Run (stub) or save as view.
+              Browse report templates, run them, and capture export history.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -95,7 +96,11 @@ export default function ReportsPage() {
                   <button
                     type="button"
                     className="text-xs text-primary hover:underline shrink-0"
-                    onClick={() => toast.info(`Run report (stub): ${r.name}`)}
+                    onClick={() => {
+                      const created = runReportExport(r.name);
+                      setExports(listReportExports());
+                      toast.success(`Report executed and exported as ${created.format.toUpperCase()}.`);
+                    }}
                   >
                     Run
                   </button>

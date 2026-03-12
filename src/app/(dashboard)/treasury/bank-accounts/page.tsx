@@ -29,6 +29,7 @@ import { listBankAccounts, createBankAccount, updateBankAccount } from "@/lib/da
 import type { BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
 import { getMockCOARootFirst } from "@/lib/mock/coa";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -126,7 +127,19 @@ export default function BankAccountsPage() {
           searchPlaceholder="Search by name, bank, account..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `bank-accounts-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                name: row.name,
+                accountNumber: row.accountNumber,
+                bank: row.bank,
+                currency: row.currency,
+                glAccountCode: row.glAccountCode ?? "",
+                active: row.active,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>
@@ -148,7 +161,7 @@ export default function BankAccountsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit account" : "Add account"}</SheetTitle>
-            <SheetDescription>Saved to browser storage. API pending.</SheetDescription>
+            <SheetDescription>Saved to browser storage for demo-mode administration.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">

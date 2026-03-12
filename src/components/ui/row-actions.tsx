@@ -14,7 +14,7 @@ import * as Icons from "lucide-react";
 interface RowAction {
   label: string;
   icon?: keyof typeof Icons;
-  onClick: () => void;
+  onClick: (event?: React.MouseEvent) => void;
   variant?: "default" | "destructive";
 }
 

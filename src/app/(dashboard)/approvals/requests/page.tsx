@@ -6,21 +6,38 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getMockApprovalRequests, type ApprovalItem } from "@/lib/mock/approvals";
+import type { ApprovalItem } from "@/lib/mock/approvals";
 import { formatMoney } from "@/lib/money";
 import { ApprovalSheet } from "@/components/approvals/ApprovalSheet";
+import { fetchApprovalRequests } from "@/lib/api/approvals";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ApprovalsRequestsPage() {
   const [selected, setSelected] = React.useState<ApprovalItem | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
-
-  const items = React.useMemo(() => getMockApprovalRequests(), []);
+  const [items, setItems] = React.useState<ApprovalItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
   const openSheet = (item: ApprovalItem) => {
     setSelected(item);
     setSheetOpen(true);
   };
+
+  const refreshItems = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setItems(await fetchApprovalRequests());
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshItems();
+  }, [refreshItems]);
 
   return (
     <PageShell>
@@ -40,7 +57,11 @@ export default function ApprovalsRequestsPage() {
             <CardTitle>Submitted</CardTitle>
           </CardHeader>
           <CardContent>
-            {items.length === 0 ? (
+            {loading ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Loading approval requests...
+              </p>
+            ) : items.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 No approval requests submitted by you.
               </p>

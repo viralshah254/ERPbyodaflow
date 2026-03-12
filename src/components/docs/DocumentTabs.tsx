@@ -39,19 +39,19 @@ export function DocumentTabs({
         {lines}
       </TabsContent>
       <TabsContent value="taxes" className="mt-4">
-        {taxes ?? <div className="rounded border p-4 text-sm text-muted-foreground">Taxes & charges (stub)</div>}
+        {taxes ?? <div className="rounded border p-4 text-sm text-muted-foreground">Taxes and charges will appear here for this document.</div>}
       </TabsContent>
       <TabsContent value="attachments" className="mt-4">
-        {attachments ?? <div className="rounded border p-4 text-sm text-muted-foreground">Attachments (stub)</div>}
+        {attachments ?? <div className="rounded border p-4 text-sm text-muted-foreground">Attachments will appear here when files are added.</div>}
       </TabsContent>
       <TabsContent value="comments" className="mt-4">
-        {comments ?? <div className="rounded border p-4 text-sm text-muted-foreground">Comments (stub)</div>}
+        {comments ?? <div className="rounded border p-4 text-sm text-muted-foreground">Comments and collaboration notes will appear here.</div>}
       </TabsContent>
       <TabsContent value="approval" className="mt-4">
-        {approval ?? <div className="rounded border p-4 text-sm text-muted-foreground">Approval history (stub)</div>}
+        {approval ?? <div className="rounded border p-4 text-sm text-muted-foreground">Approval history will appear here once actions are taken.</div>}
       </TabsContent>
       <TabsContent value="audit" className="mt-4">
-        {audit ?? <div className="rounded border p-4 text-sm text-muted-foreground">Audit log (stub)</div>}
+        {audit ?? <div className="rounded border p-4 text-sm text-muted-foreground">Audit events will appear here as the document changes.</div>}
       </TabsContent>
     </Tabs>
   );

@@ -4,6 +4,7 @@
  */
 
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
+import { saveLandedCostAllocation } from "@/lib/data/inventory-costing.repo";
 import {
   getMockLandedCostTemplates,
   getMockLandedCostSources,
@@ -54,7 +55,7 @@ export interface LandedCostAllocationRequest {
 
 export async function postLandedCostAllocation(body: LandedCostAllocationRequest): Promise<{ id?: string }> {
   if (!isApiConfigured()) {
-    return Promise.resolve({ id: "mock-allocation-1" });
+    return Promise.resolve({ id: saveLandedCostAllocation(body).id });
   }
   return apiRequest<{ id: string }>("/api/inventory/landed-cost/allocation", {
     method: "POST",

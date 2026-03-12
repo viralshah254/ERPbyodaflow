@@ -13,7 +13,14 @@ import { getDocTypeConfig, DOC_TYPES } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
-import { getMockDocs, type DocListRow } from "@/lib/mock/docs";
+import { type DocListRow } from "@/lib/mock/docs";
+import { downloadCsv } from "@/lib/export/csv";
+import {
+  bulkDocumentActionApi,
+  exportDocumentListApi,
+  fetchDocumentListApi,
+} from "@/lib/api/documents";
+import { isApiConfigured } from "@/lib/api/client";
 import {
   getSavedViews,
   saveView,
@@ -92,7 +99,25 @@ export default function DocTypeListPage() {
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
   );
-  const allRows = React.useMemo(() => getMockDocs(type), [type]);
+  const [allRows, setAllRows] = React.useState<DocListRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const refreshRows = React.useCallback(async () => {
+    if (!DOC_TYPES.includes(type as DocTypeKey)) return;
+    setLoading(true);
+    try {
+      setAllRows(await fetchDocumentListApi(type as DocTypeKey));
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [type]);
+
+  React.useEffect(() => {
+    setSelectedIds([]);
+    void refreshRows();
+  }, [refreshRows]);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -166,24 +191,48 @@ export default function DocTypeListPage() {
   };
 
   const handleExport = () => {
-    // Stub: toast or similar
-    if (typeof window !== "undefined") {
-      toast.info(`Export (stub): ${filtered.length} rows for ${type}`);
+    const fileName = `${type}-${new Date().toISOString().slice(0, 10)}.csv`;
+    if (filtered.length === 0) {
+      toast.error(`No ${label.toLowerCase()}s to export.`);
+      return;
+    }
+    if (isApiConfigured()) {
+      exportDocumentListApi(type as DocTypeKey, fileName, (message) => toast.error(message));
+      return;
+    }
+    downloadCsv(
+      fileName,
+      filtered.map((row) => ({
+        number: row.number,
+        date: row.date,
+        party: row.party ?? "",
+        reference: row.reference ?? row.poRef ?? "",
+        total: row.total ?? 0,
+        status: row.status,
+      }))
+    );
+  };
+
+  const handleBulkApprove = async () => {
+    try {
+      await bulkDocumentActionApi(type as DocTypeKey, "approve", selectedIds);
+      await refreshRows();
+      toast.success(`${selectedIds.length} ${label.toLowerCase()} record(s) approved.`);
+      setSelectedIds([]);
+    } catch (error) {
+      toast.error((error as Error).message);
     }
   };
 
-  const handleBulkApprove = () => {
-    if (typeof window !== "undefined") {
-      toast.info(`Approve (stub): ${selectedIds.length} selected`);
+  const handleBulkPost = async () => {
+    try {
+      await bulkDocumentActionApi(type as DocTypeKey, "post", selectedIds);
+      await refreshRows();
+      toast.success(`${selectedIds.length} ${label.toLowerCase()} record(s) posted.`);
+      setSelectedIds([]);
+    } catch (error) {
+      toast.error((error as Error).message);
     }
-    setSelectedIds([]);
-  };
-
-  const handleBulkPost = () => {
-    if (typeof window !== "undefined") {
-      toast.info(`Post (stub): ${selectedIds.length} selected`);
-    }
-    setSelectedIds([]);
   };
 
   const isValidType = DOC_TYPES.includes(type as DocTypeKey);
@@ -262,15 +311,21 @@ export default function DocTypeListPage() {
             ) : undefined
           }
         />
-        <DataTable<DocListRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/${type}/${row.id}`)}
-          emptyMessage={`No ${label.toLowerCase()}s found.`}
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+        {loading ? (
+          <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+            Loading {label.toLowerCase()}s...
+          </div>
+        ) : (
+          <DataTable<DocListRow>
+            data={filtered}
+            columns={columns}
+            onRowClick={(row) => router.push(`/docs/${type}/${row.id}`)}
+            emptyMessage={`No ${label.toLowerCase()}s found.`}
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        )}
       </div>
     </PageShell>
   );

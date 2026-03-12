@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { fetchTransferById, type TransferRow } from "@/lib/api/warehouse-transfers";
+import { fetchTransferById, updateTransferStatus, type TransferRow } from "@/lib/api/warehouse-transfers";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { warehouseTransferReceive } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
@@ -45,6 +45,10 @@ export default function TransferDetailPage() {
     return () => {
       cancelled = true;
     };
+  }, [id]);
+
+  const refresh = React.useCallback(async () => {
+    setTransfer(await fetchTransferById(id));
   }, [id]);
 
   if (transfer === undefined) {
@@ -89,18 +93,40 @@ export default function TransferDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            {canApprove && <Button size="sm" onClick={() => toast.info("Approve (stub)")}>Approve</Button>}
-            {canTransit && <Button size="sm" onClick={() => toast.info("Mark in transit (stub)")}>Mark in transit</Button>}
+            {canApprove && (
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await updateTransferStatus(id, "APPROVED");
+                  await refresh();
+                  toast.success("Transfer approved.");
+                }}
+              >
+                Approve
+              </Button>
+            )}
+            {canTransit && (
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await updateTransferStatus(id, "IN_TRANSIT");
+                  await refresh();
+                  toast.success("Transfer marked in transit.");
+                }}
+              >
+                Mark in transit
+              </Button>
+            )}
             {canReceive && (
               <Button
                 size="sm"
                 onClick={async () => {
                   try {
                     await warehouseTransferReceive(id);
+                    await refresh();
                     toast.success("Transfer received.");
                   } catch (e) {
-                    if ((e as Error).message === "STUB") toast.info("Receive (stub). API pending.");
-                    else toast.error((e as Error).message);
+                    toast.error((e as Error).message);
                   }
                 }}
               >
@@ -138,7 +164,7 @@ export default function TransferDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {t.lines.map((l) => (
+                {t.lines.map((l: TransferRow["lines"][number]) => (
                   <TableRow key={l.id}>
                     <TableCell className="font-medium">{l.sku}</TableCell>
                     <TableCell>{l.productName}</TableCell>

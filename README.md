@@ -138,12 +138,20 @@ npm run type-check
 npm run lint
 ```
 
+## Integration Status
+
+This app is no longer frontend-only.
+
+- When `NEXT_PUBLIC_API_URL` is set, many operational screens call the live backend in `../erp_odaflow_backend`.
+- Some areas are fully live, some are still hybrid, and some remain mock-first while backend coverage catches up.
+- The current wiring map lives in `docs/FRONTEND_BACKEND_INTEGRATION_MATRIX.md`.
+
 ## Notes
 
-- This is a **frontend-only** implementation
-- Backend APIs are mocked for development
-- Authentication is simulated (no real auth flow)
-- Data is stored in-memory (not persisted)
+- This repo supports both **mock-first development** and **live backend integration**
+- Authentication headers are passed through the shared API client when the backend is configured
+- Some screens still use local repo/mock data as fallback when live APIs are unavailable
+- Forecast and command-bar ML features rely on the backend-owned `../erp_odaflow_backend/ml_service`
 
 ## License
 

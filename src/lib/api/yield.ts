@@ -5,12 +5,15 @@
 
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import {
-  getMockYieldRecords,
-  getMockMassBalanceReport,
-  getMockYieldById,
   type YieldRecordRow,
   type MassBalanceSummaryRow,
 } from "@/lib/mock/manufacturing/yield";
+import {
+  buildMassBalanceSummary,
+  createYieldRecordEntry,
+  getYieldRecordById,
+  listYieldRecords,
+} from "@/lib/data/yield.repo";
 
 export type { YieldRecordRow, MassBalanceSummaryRow };
 
@@ -19,7 +22,11 @@ export async function fetchYieldRecords(params?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<YieldRecordRow[]> {
-  if (!isApiConfigured()) return getMockYieldRecords(params);
+  if (!isApiConfigured()) {
+    let rows = listYieldRecords();
+    if (params?.workOrderId) rows = rows.filter((r) => r.workOrderId === params.workOrderId);
+    return rows;
+  }
   const q: Record<string, string> = {};
   if (params?.workOrderId) q.workOrderId = params.workOrderId;
   if (params?.dateFrom) q.dateFrom = params.dateFrom;
@@ -31,7 +38,7 @@ export async function fetchYieldRecords(params?: {
 }
 
 export async function fetchYieldById(id: string): Promise<YieldRecordRow | null> {
-  if (!isApiConfigured()) return getMockYieldById(id);
+  if (!isApiConfigured()) return getYieldRecordById(id);
   try {
     return await apiRequest<YieldRecordRow>(`/api/manufacturing/yield/${encodeURIComponent(id)}`);
   } catch {
@@ -40,7 +47,9 @@ export async function fetchYieldById(id: string): Promise<YieldRecordRow | null>
 }
 
 export async function fetchMassBalanceReport(params?: { period?: string }): Promise<MassBalanceSummaryRow[]> {
-  if (!isApiConfigured()) return getMockMassBalanceReport(params);
+  if (!isApiConfigured()) {
+    return buildMassBalanceSummary(listYieldRecords());
+  }
   const q = params?.period ? { period: params.period } : undefined;
   const res = await apiRequest<{ items: MassBalanceSummaryRow[] }>("/api/manufacturing/yield/mass-balance-report", {
     params: q,
@@ -57,7 +66,8 @@ export interface CreateYieldRequest {
 
 export async function createYieldRecord(body: CreateYieldRequest): Promise<{ id: string }> {
   if (!isApiConfigured()) {
-    return Promise.resolve({ id: `mock-yield-${Date.now()}` });
+    const row = createYieldRecordEntry(body);
+    return Promise.resolve({ id: row.id });
   }
   return apiRequest<{ id: string }>("/api/manufacturing/yield", {
     method: "POST",

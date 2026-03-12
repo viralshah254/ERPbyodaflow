@@ -41,6 +41,37 @@ export const MOCK_FISCAL_YEARS: FiscalYearRow[] = [
   },
 ];
 
+const STORAGE_KEY = "odaflow_mock_fiscal_years";
+
+function cloneYears(years: FiscalYearRow[]): FiscalYearRow[] {
+  return years.map((year) => ({
+    ...year,
+    periods: year.periods.map((period) => ({ ...period })),
+  }));
+}
+
 export function getMockFiscalYears(): FiscalYearRow[] {
-  return [...MOCK_FISCAL_YEARS];
+  if (typeof window === "undefined") return cloneYears(MOCK_FISCAL_YEARS);
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return cloneYears(MOCK_FISCAL_YEARS);
+    return cloneYears(JSON.parse(raw) as FiscalYearRow[]);
+  } catch {
+    return cloneYears(MOCK_FISCAL_YEARS);
+  }
+}
+
+function saveMockFiscalYears(years: FiscalYearRow[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(years));
+}
+
+export function updateMockFiscalPeriodStatus(periodId: string, status: FiscalPeriodRow["status"]): void {
+  const next = getMockFiscalYears().map((year) => ({
+    ...year,
+    periods: year.periods.map((period) =>
+      period.id === periodId ? { ...period, status } : period
+    ),
+  }));
+  saveMockFiscalYears(next);
 }

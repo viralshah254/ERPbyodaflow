@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { ReplenishmentSuggestionCard } from "@/components/operational/ReplenishmentSuggestionCard";
 import {
   Select,
   SelectContent,
@@ -169,15 +170,40 @@ export default function FranchiseVmiPage() {
         ) : (
           <>
             {tab === "suggestions" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Reorder suggestions</CardTitle>
-                  <CardDescription>Below reorder point; suggested order qty to bring up to max or target.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable<FranchiseeStockRow & { id?: string }> data={suggestions as (FranchiseeStockRow & { id?: string })[]} columns={suggestionColumns} emptyMessage="No suggestions (all above reorder point)." />
-                </CardContent>
-              </Card>
+              <div className="space-y-6">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {suggestions.slice(0, 4).map((suggestion) => (
+                    <ReplenishmentSuggestionCard
+                      key={`${suggestion.franchiseeId}-${suggestion.sku}`}
+                      title={`${suggestion.franchiseeName} · ${suggestion.sku}`}
+                      subtitle={suggestion.productName}
+                      suggestedQty={suggestion.suggestedOrder}
+                      urgency={suggestion.qty <= suggestion.minQty ? "high" : "normal"}
+                      reasons={[
+                        `On hand ${suggestion.qty} below reorder point ${suggestion.reorderPoint}`,
+                        `Target max ${suggestion.maxQty}`,
+                      ]}
+                      primaryAction={{
+                        label: "Create replenishment",
+                        onClick: () => void handleAutoReplenish(),
+                      }}
+                      secondaryAction={{
+                        label: "Review stock",
+                        onClick: () => setTab("stock"),
+                      }}
+                    />
+                  ))}
+                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Reorder suggestions</CardTitle>
+                    <CardDescription>Below reorder point; suggested order qty to bring up to max or target.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <DataTable<FranchiseeStockRow & { id?: string }> data={suggestions as (FranchiseeStockRow & { id?: string })[]} columns={suggestionColumns} emptyMessage="No suggestions (all above reorder point)." />
+                  </CardContent>
+                </Card>
+              </div>
             )}
 
             {tab === "orders" && (

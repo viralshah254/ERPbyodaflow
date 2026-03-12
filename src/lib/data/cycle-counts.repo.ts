@@ -64,3 +64,44 @@ export function updateCycleCountSession(id: string, patch: Partial<CycleCountSes
   saveJson(KEY, next);
   return updated;
 }
+
+export function updateCycleCountLine(
+  sessionId: string,
+  lineId: string,
+  countedQty: number
+): CycleCountSessionRow | null {
+  const session = getCycleCountById(sessionId);
+  if (!session) return null;
+  const nextLines = session.lines.map((line) =>
+    line.id === lineId
+      ? {
+          ...line,
+          countedQty,
+          variance: countedQty - line.systemQty,
+        }
+      : line
+  );
+  const hasVariance = nextLines.some((line) => line.variance !== 0);
+  return updateCycleCountSession(sessionId, {
+    lines: nextLines,
+    status: hasVariance ? "REVIEW" : "IN_PROGRESS",
+    countedAt: new Date().toISOString(),
+  });
+}
+
+export function submitCycleCount(sessionId: string): CycleCountSessionRow | null {
+  const session = getCycleCountById(sessionId);
+  if (!session) return null;
+  const hasVariance = session.lines.some((line) => line.variance !== 0);
+  return updateCycleCountSession(sessionId, {
+    status: hasVariance ? "REVIEW" : "POSTED",
+    countedAt: new Date().toISOString(),
+  });
+}
+
+export function postCycleCountAdjustments(sessionId: string): CycleCountSessionRow | null {
+  return updateCycleCountSession(sessionId, {
+    status: "POSTED",
+    countedAt: new Date().toISOString(),
+  });
+}

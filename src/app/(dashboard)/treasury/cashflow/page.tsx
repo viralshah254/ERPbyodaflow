@@ -22,21 +22,37 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getMockCashflowForecast, type CashflowForecastRow } from "@/lib/mock/treasury/cashflow";
+import type { CashflowForecastRow } from "@/lib/mock/treasury/cashflow";
+import { fetchCashflowApi } from "@/lib/api/treasury";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function CashflowPage() {
   const [currencyFilter, setCurrencyFilter] = React.useState("KES");
   const [from, setFrom] = React.useState("2025-01-01");
   const [to, setTo] = React.useState("2025-02-28");
+  const [rows, setRows] = React.useState<CashflowForecastRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const rows = React.useMemo(
-    () => getMockCashflowForecast({ currency: currencyFilter, from, to }),
-    [currencyFilter, from, to]
-  );
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const data = await fetchCashflowApi({ currency: currencyFilter, from, to });
+        if (!cancelled) setRows(data);
+      } catch (error) {
+        if (!cancelled) toast.error((error as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [currencyFilter, from, to]);
 
   return (
     <PageShell>
@@ -122,9 +138,14 @@ export default function CashflowPage() {
                 ))}
               </TableBody>
             </Table>
-            {rows.length === 0 && (
+            {!loading && rows.length === 0 && (
               <div className="py-12 text-center text-sm text-muted-foreground">
                 No forecast data for selected filters.
+              </div>
+            )}
+            {loading && (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                Loading cashflow...
               </div>
             )}
           </CardContent>

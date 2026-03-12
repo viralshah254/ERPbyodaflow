@@ -63,10 +63,52 @@ export const MOCK_APPROVAL_REQUESTS: ApprovalItem[] = [
   },
 ];
 
+const INBOX_STORAGE_KEY = "odaflow_mock_approvals_inbox";
+const REQUESTS_STORAGE_KEY = "odaflow_mock_approvals_requests";
+
+function cloneItems(items: ApprovalItem[]): ApprovalItem[] {
+  return items.map((item) => ({ ...item }));
+}
+
 export function getMockApprovalInbox(): ApprovalItem[] {
-  return [...MOCK_APPROVAL_INBOX];
+  if (typeof window === "undefined") return cloneItems(MOCK_APPROVAL_INBOX);
+  try {
+    const raw = localStorage.getItem(INBOX_STORAGE_KEY);
+    if (!raw) return cloneItems(MOCK_APPROVAL_INBOX);
+    return cloneItems(JSON.parse(raw) as ApprovalItem[]);
+  } catch {
+    return cloneItems(MOCK_APPROVAL_INBOX);
+  }
 }
 
 export function getMockApprovalRequests(): ApprovalItem[] {
-  return [...MOCK_APPROVAL_REQUESTS];
+  if (typeof window === "undefined") return cloneItems(MOCK_APPROVAL_REQUESTS);
+  try {
+    const raw = localStorage.getItem(REQUESTS_STORAGE_KEY);
+    if (!raw) return cloneItems(MOCK_APPROVAL_REQUESTS);
+    return cloneItems(JSON.parse(raw) as ApprovalItem[]);
+  } catch {
+    return cloneItems(MOCK_APPROVAL_REQUESTS);
+  }
+}
+
+function saveInbox(items: ApprovalItem[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(INBOX_STORAGE_KEY, JSON.stringify(items));
+}
+
+function saveRequests(items: ApprovalItem[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(REQUESTS_STORAGE_KEY, JSON.stringify(items));
+}
+
+export function updateMockApprovalStatus(id: string, status: ApprovalItem["status"]): void {
+  const inbox = getMockApprovalInbox().map((item) =>
+    item.id === id ? { ...item, status } : item
+  );
+  const requests = getMockApprovalRequests().map((item) =>
+    item.id === id ? { ...item, status } : item
+  );
+  saveInbox(inbox);
+  saveRequests(requests);
 }

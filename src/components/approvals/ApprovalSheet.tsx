@@ -56,7 +56,7 @@ export function ApprovalSheet({
         <SheetHeader>
           <SheetTitle>Approval</SheetTitle>
           <SheetDescription>
-            Review and approve or reject. Stub actions.
+            Review the document context, add comments, and complete the approval decision.
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-4">

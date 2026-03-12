@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getMockPickPack } from "@/lib/mock/warehouse/pick-pack";
+import { dispatchPickPackOrder, getPickPackOrderById, confirmPickPackPack, confirmPickPackPick } from "@/lib/data/warehouse-execution.repo";
 import { warehousePickPackComplete } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -26,11 +26,20 @@ import * as Icons from "lucide-react";
 export default function PickPackDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const order = React.useMemo(() => getMockPickPack().find((o) => o.id === id), [id]);
+  const [order, setOrder] = React.useState(() => getPickPackOrderById(id));
   const [cartons, setCartons] = React.useState(order?.cartonsCount ?? 0);
   const [packingNote, setPackingNote] = React.useState(order?.packingNote ?? "");
   const [courier, setCourier] = React.useState(order?.courier ?? "");
   const [trackingRef, setTrackingRef] = React.useState(order?.trackingRef ?? "");
+
+  const refreshOrder = React.useCallback(() => {
+    const next = getPickPackOrderById(id);
+    setOrder(next);
+    setCartons(next?.cartonsCount ?? 0);
+    setPackingNote(next?.packingNote ?? "");
+    setCourier(next?.courier ?? "");
+    setTrackingRef(next?.trackingRef ?? "");
+  }, [id]);
 
   if (!order) {
     return (
@@ -65,10 +74,10 @@ export default function PickPackDetailPage() {
               onClick={async () => {
                 try {
                   await warehousePickPackComplete(id);
+                  refreshOrder();
                   toast.success("Pick-pack completed.");
                 } catch (e) {
-                  if ((e as Error).message === "STUB") toast.info("Complete (stub). API pending.");
-                  else toast.error((e as Error).message);
+                  toast.error((e as Error).message);
                 }
               }}
             >
@@ -91,7 +100,7 @@ export default function PickPackDetailPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Picklist</CardTitle>
-                <CardDescription>Item, qty, suggested bin. Enter picked qty (stub).</CardDescription>
+                <CardDescription>Item, qty, suggested bin, and confirmed picked quantity.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -118,13 +127,21 @@ export default function PickPackDetailPage() {
                 </Table>
               </CardContent>
             </Card>
-            <Button onClick={() => toast.info("Confirm pick (stub)")}>Confirm pick</Button>
+            <Button
+              onClick={() => {
+                confirmPickPackPick(id);
+                refreshOrder();
+                toast.success("Pick confirmed and moved to packing.");
+              }}
+            >
+              Confirm pick
+            </Button>
           </TabsContent>
           <TabsContent value="pack" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Pack</CardTitle>
-                <CardDescription>Cartons, packing note. Stub.</CardDescription>
+                <CardDescription>Capture packaging units and packing instructions before dispatch.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -137,13 +154,21 @@ export default function PickPackDetailPage() {
                 </div>
               </CardContent>
             </Card>
-            <Button onClick={() => toast.info("Confirm pack (stub)")}>Confirm pack</Button>
+            <Button
+              onClick={() => {
+                confirmPickPackPack(id, cartons, packingNote);
+                refreshOrder();
+                toast.success("Pack confirmed and moved to dispatch.");
+              }}
+            >
+              Confirm pack
+            </Button>
           </TabsContent>
           <TabsContent value="dispatch" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Dispatch</CardTitle>
-                <CardDescription>Courier, tracking. Stub.</CardDescription>
+                <CardDescription>Record carrier and tracking reference before release.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -156,7 +181,15 @@ export default function PickPackDetailPage() {
                 </div>
               </CardContent>
             </Card>
-            <Button onClick={() => toast.info("Mark dispatched (stub)")}>Mark dispatched</Button>
+            <Button
+              onClick={() => {
+                dispatchPickPackOrder(id, courier, trackingRef);
+                refreshOrder();
+                toast.success("Dispatch recorded.");
+              }}
+            >
+              Mark dispatched
+            </Button>
           </TabsContent>
         </Tabs>
       </div>

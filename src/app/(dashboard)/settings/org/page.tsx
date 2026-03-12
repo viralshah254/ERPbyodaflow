@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { getAllTemplates } from "@/config/industryTemplates/templates";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { fetchOrgProfileApi } from "@/lib/api/org";
 import { orgSave } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -16,22 +17,44 @@ export default function OrganizationPage() {
   const { templateId, template, applyTemplate } = useOrgContextStore();
   const templates = React.useMemo(() => getAllTemplates(), []);
   const [saving, setSaving] = React.useState(false);
-  const nameRef = React.useRef<HTMLInputElement>(null);
-  const taxIdRef = React.useRef<HTMLInputElement>(null);
-  const registrationRef = React.useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [name, setName] = React.useState("");
+  const [taxId, setTaxId] = React.useState("");
+  const [registrationNumber, setRegistrationNumber] = React.useState("");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadProfile = async () => {
+      setLoading(true);
+      try {
+        const profile = await fetchOrgProfileApi();
+        if (cancelled) return;
+        setName(profile.name);
+        setTaxId(profile.taxId);
+        setRegistrationNumber(profile.registrationNumber);
+      } catch (e) {
+        if (!cancelled) toast.error((e as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await orgSave({
-        name: nameRef.current?.value ?? "",
-        taxId: taxIdRef.current?.value ?? "",
-        registrationNumber: registrationRef.current?.value ?? "",
+        name,
+        taxId,
+        registrationNumber,
       });
       toast.success("Organization saved.");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Save (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -50,17 +73,29 @@ export default function OrganizationPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Organization Name</Label>
-              <Input id="name" ref={nameRef} defaultValue="Acme Manufacturing" />
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} disabled={loading} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="tax-id">Tax ID</Label>
-              <Input id="tax-id" ref={taxIdRef} placeholder="Enter tax ID" />
+              <Input
+                id="tax-id"
+                value={taxId}
+                onChange={(e) => setTaxId(e.target.value)}
+                placeholder="Enter tax ID"
+                disabled={loading}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="registration">Registration Number</Label>
-              <Input id="registration" ref={registrationRef} placeholder="Enter registration number" />
+              <Input
+                id="registration"
+                value={registrationNumber}
+                onChange={(e) => setRegistrationNumber(e.target.value)}
+                placeholder="Enter registration number"
+                disabled={loading}
+              />
             </div>
-            <Button disabled={saving} onClick={handleSave}>
+            <Button disabled={saving || loading} onClick={handleSave}>
               <Icons.Save className="mr-2 h-4 w-4" />
               Save Changes
             </Button>

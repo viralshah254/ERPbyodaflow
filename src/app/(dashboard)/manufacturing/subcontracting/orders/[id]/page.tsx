@@ -9,6 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { ActivityPanel } from "@/components/shared/ActivityPanel";
+import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimeline";
+import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
+import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocationBadge";
+import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
 import { fetchSubcontractOrderById, receiveSubcontractOrder } from "@/lib/api/cool-catch";
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
@@ -77,6 +82,12 @@ export default function SubcontractOrderDetailPage() {
     );
   }
 
+  const inputQty = (order.lines ?? []).filter((line) => line.type === "INPUT").reduce((a, line) => a + line.quantity, 0);
+  const primaryQty = (order.lines ?? []).filter((line) => line.type === "OUTPUT_PRIMARY").reduce((a, line) => a + line.quantity, 0);
+  const secondaryQty = (order.lines ?? []).filter((line) => line.type === "OUTPUT_SECONDARY").reduce((a, line) => a + line.quantity, 0);
+  const wasteQty = (order.lines ?? []).filter((line) => line.type === "WASTE").reduce((a, line) => a + line.quantity, 0);
+  const feeLines = (order.lines ?? []).filter((line) => line.processingFeePerUnit != null);
+
   return (
     <PageShell>
       <PageHeader
@@ -103,28 +114,91 @@ export default function SubcontractOrderDetailPage() {
         }
       />
       <div className="p-6 space-y-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Header</CardTitle>
-            <Badge>{order.status}</Badge>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            <p>Work center: {order.workCenterName}</p>
-            <p>BOM: {order.bomName ?? "—"}</p>
-            <p>Sent: {order.sentAt ?? "—"} · Received: {order.receivedAt ?? "—"}</p>
-            <p>Created: {new Date(order.createdAt).toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        {order.lines && order.lines.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Lines (input / output)</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <DataTable data={order.lines} columns={lineColumns} emptyMessage="No lines." />
-            </CardContent>
-          </Card>
-        )}
+        <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Subcontract Order Summary</CardTitle>
+                <Badge>{order.status}</Badge>
+              </CardHeader>
+              <CardContent className="grid gap-4 text-sm md:grid-cols-4">
+                <div>
+                  <p className="text-muted-foreground">Work center</p>
+                  <p className="font-medium">{order.workCenterName}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">BOM</p>
+                  <p className="font-medium">{order.bomName ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Sent / Received</p>
+                  <p className="font-medium">{order.sentAt ?? "—"} / {order.receivedAt ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Ownership / Location</p>
+                  <OwnershipLocationBadge owner="CoolCatch" location={order.workCenterName} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <YieldBreakdownCard
+              inputKg={inputQty}
+              primaryKg={primaryQty}
+              secondaryKg={secondaryQty}
+              lossKg={wasteQty}
+              serviceFeeTotal={feeLines.reduce((a, line) => a + (line.amount ?? 0), 0)}
+            />
+
+            {order.lines && order.lines.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Lines (input / output)</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <DataTable<SubcontractOrderLineRow> data={order.lines} columns={lineColumns} emptyMessage="No lines." />
+                </CardContent>
+              </Card>
+            )}
+
+            <CostImpactPanel
+              title="Processor Cost Impact"
+              currency="KES"
+              quantityKg={inputQty}
+              lines={[
+                { label: "Primary processing fees", amount: feeLines.filter((line) => line.type === "OUTPUT_PRIMARY").reduce((a, line) => a + (line.amount ?? 0), 0) },
+                { label: "Secondary/byproduct fees", amount: feeLines.filter((line) => line.type !== "OUTPUT_PRIMARY").reduce((a, line) => a + (line.amount ?? 0), 0) },
+              ]}
+            />
+          </div>
+
+          <div className="space-y-6">
+            <BatchStatusTimeline
+              title="Job Work Timeline"
+              steps={[
+                { id: "create", label: "Order created", status: "completed", timestamp: order.createdAt },
+                { id: "dispatch", label: "Stock dispatched to processor", status: order.sentAt ? "completed" : "current", timestamp: order.sentAt ?? undefined },
+                { id: "wip", label: "Processing / WIP", status: order.status === "WIP" ? "current" : order.status === "RECEIVED" ? "completed" : "upcoming", detail: order.workCenterName },
+                { id: "receive", label: "Outputs received back", status: order.status === "RECEIVED" ? "completed" : "upcoming", timestamp: order.receivedAt ?? undefined },
+              ]}
+            />
+            <Card className="overflow-hidden">
+              <CardHeader>
+                <CardTitle>Activity & Audit</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ActivityPanel
+                  auditEntries={[
+                    { id: "1", action: "Subcontract order created", user: "Processing Coordinator", timestamp: new Date(order.createdAt).toLocaleString(), detail: order.number },
+                    { id: "2", action: order.status === "RECEIVED" ? "Outputs received" : "Awaiting receipt", user: "Warehouse", timestamp: new Date().toLocaleString(), detail: order.workCenterName },
+                  ]}
+                  comments={[
+                    { id: "c1", user: "Ops", text: "Confirm actual return yield and byproduct quantities before closing batch.", timestamp: new Date().toLocaleString() },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </PageShell>
   );

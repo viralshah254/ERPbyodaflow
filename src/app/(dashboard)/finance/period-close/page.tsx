@@ -6,12 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { listFiscalYears } from "@/lib/data/fiscal.repo";
 import { periodClose, periodReopen } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PeriodClosePage() {
   const [loading, setLoading] = React.useState<"close" | "reopen" | null>(null);
+  const currentPeriodId = React.useMemo(
+    () => listFiscalYears().flatMap((year) => year.periods).find((period) => period.status === "Open")?.id,
+    []
+  );
   return (
     <PageLayout
       title="Period Close"
@@ -48,11 +53,10 @@ export default function PeriodClosePage() {
               onClick={async () => {
                 setLoading("close");
                 try {
-                  await periodClose({ date: new Date().toISOString().slice(0, 10) });
+                  await periodClose({ periodId: currentPeriodId, date: new Date().toISOString().slice(0, 10) });
                   toast.success("Period closed.");
                 } catch (e) {
-                  if ((e as Error).message === "STUB") toast.info("Close period (stub). API pending.");
-                  else toast.error((e as Error).message);
+                  toast.error((e as Error).message);
                 } finally {
                   setLoading(null);
                 }
@@ -69,11 +73,11 @@ export default function PeriodClosePage() {
               onClick={async () => {
                 setLoading("reopen");
                 try {
-                  await periodReopen("current");
+                  if (!currentPeriodId) throw new Error("No open fiscal period found.");
+                  await periodReopen(currentPeriodId);
                   toast.success("Period reopened.");
                 } catch (e) {
-                  if ((e as Error).message === "STUB") toast.info("Reopen period (stub). API pending.");
-                  else toast.error((e as Error).message);
+                  toast.error((e as Error).message);
                 } finally {
                   setLoading(null);
                 }
@@ -83,7 +87,7 @@ export default function PeriodClosePage() {
               Reopen period
             </Button>
             <p className="text-xs text-muted-foreground mt-2 text-center">
-              Close prevents transactions from being posted to this period. Reopen allows edits (stub).
+              Close prevents transactions from being posted to this period. Reopen restores posting and adjustments.
             </p>
           </div>
         </CardContent>

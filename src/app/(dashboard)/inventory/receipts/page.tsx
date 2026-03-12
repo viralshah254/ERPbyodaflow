@@ -9,7 +9,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { fetchGRNs } from "@/lib/api/grn";
+import { fetchGRNs, postGRN, exportGRNsCsv } from "@/lib/api/grn";
 import type { PurchasingDocRow } from "@/lib/mock/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
@@ -178,15 +178,28 @@ export default function InventoryReceiptsPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() => exportGRNsCsv(filtered)}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Post (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await Promise.all(selectedIds.map((selectedId) => postGRN(selectedId)));
+                    setAllRows(await fetchGRNs());
+                    toast.success(`${selectedIds.length} GRN(s) posted.`);
+                    setSelectedIds([]);
+                  }}
+                >
                   Post
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportGRNsCsv(filtered.filter((row) => selectedIds.includes(row.id)))}
+                >
                   Export
                 </Button>
               </div>

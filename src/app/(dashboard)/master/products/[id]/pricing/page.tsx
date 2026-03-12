@@ -109,8 +109,7 @@ export default function ProductPricingPage() {
       await productApplyPricingTemplate(product.id, selectedListId);
       toast.success("Pricing template applied.");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Apply pricing template (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setApplyingTemplate(false);
     }
@@ -206,7 +205,7 @@ export default function ProductPricingPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Compare price lists</CardTitle>
-              <CardDescription>Effective per {baseUom} by list (stub matrix).</CardDescription>
+              <CardDescription>Effective per {baseUom} across enabled price lists.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>

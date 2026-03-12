@@ -10,6 +10,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getMockDeliveries, type SalesDocRow } from "@/lib/mock/sales";
+import { downloadCsv } from "@/lib/export/csv";
 import {
   getSavedViews,
   saveView,
@@ -39,7 +40,7 @@ export default function SalesDeliveriesPage() {
     getSavedViews(scope)
   );
 
-  const allRows = React.useMemo(() => getMockDeliveries(), []);
+  const [allRows, setAllRows] = React.useState<SalesDocRow[]>(() => getMockDeliveries());
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -162,17 +163,59 @@ export default function SalesDeliveriesPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `deliveries-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                number: row.number,
+                date: row.date,
+                party: row.party ?? "",
+                total: row.total ?? 0,
+                status: row.status,
+              }))
+            )
+          }
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
                   {selectedIds.length} selected
                 </span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Post (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setAllRows((prev) =>
+                      prev.map((row) =>
+                        selectedIds.includes(row.id) && row.status === "DRAFT"
+                          ? { ...row, status: "IN_TRANSIT" }
+                          : row
+                      )
+                    );
+                    toast.success("Delivery note(s) posted to transit.");
+                    setSelectedIds([]);
+                  }}
+                >
                   Post
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadCsv(
+                      `deliveries-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+                      filtered
+                        .filter((row) => selectedIds.includes(row.id))
+                        .map((row) => ({
+                          number: row.number,
+                          date: row.date,
+                          party: row.party ?? "",
+                          total: row.total ?? 0,
+                          status: row.status,
+                        }))
+                    )
+                  }
+                >
                   Export
                 </Button>
               </div>

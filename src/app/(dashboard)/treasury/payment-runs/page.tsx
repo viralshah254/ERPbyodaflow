@@ -27,14 +27,18 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  getMockPaymentRuns,
-  getMockBillsDue,
-  type PaymentRunRow,
   type BillDueRow,
+  type PaymentRunRow,
   type PaymentMethod,
 } from "@/lib/mock/treasury/payment-runs";
+import {
+  createPaymentRunFromBills,
+  listBillsDue,
+  listPaymentRuns,
+} from "@/lib/data/payment-runs.repo";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -69,8 +73,12 @@ export default function PaymentRunsPage() {
   const [selectedBills, setSelectedBills] = React.useState<Set<string>>(new Set());
   const [method, setMethod] = React.useState<PaymentMethod>("BANK_TRANSFER");
 
-  const runs = React.useMemo(() => getMockPaymentRuns(), []);
-  const billsDue = React.useMemo(() => getMockBillsDue(), []);
+  const [runs, setRuns] = React.useState<PaymentRunRow[]>(() => listPaymentRuns());
+  const billsDue = React.useMemo(() => listBillsDue(), []);
+
+  const refreshRuns = React.useCallback(() => {
+    setRuns(listPaymentRuns());
+  }, []);
 
   const toggleBill = (id: string) => {
     setSelectedBills((prev) => {
@@ -93,7 +101,9 @@ export default function PaymentRunsPage() {
   };
 
   const handleRequestApproval = () => {
-    toast.info("Request approval (stub). API pending.");
+    const created = createPaymentRunFromBills(selectedBillRows, method);
+    refreshRuns();
+    toast.success(`Payment run ${created.number} submitted for approval.`);
     setCreateOpen(false);
     setSelectedBills(new Set());
   };
@@ -143,12 +153,26 @@ export default function PaymentRunsPage() {
       <div className="p-6 space-y-4">
         <DataTableToolbar
           searchPlaceholder="Search runs..."
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `payment-runs-${new Date().toISOString().slice(0, 10)}.csv`,
+              runs.map((row) => ({
+                number: row.number,
+                date: row.date,
+                totalAmount: row.totalAmount,
+                currency: row.currency,
+                supplierCount: row.supplierCount,
+                billCount: row.billCount,
+                method: METHOD_LABELS[row.paymentMethod],
+                status: row.status,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>
             <CardTitle>Runs</CardTitle>
-            <CardDescription>Select bills, group by supplier/currency, choose method. Generate CSV or bank format (stub).</CardDescription>
+            <CardDescription>Select bills, group by supplier/currency, choose method, and generate payment files.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<PaymentRunRow>
@@ -210,7 +234,14 @@ export default function PaymentRunsPage() {
             <Button variant="outline" onClick={handleGenerateCSV} disabled={selectedBillRows.length === 0}>
               Export CSV
             </Button>
-            <Button variant="outline" onClick={() => toast.info("Bank format (stub). API pending.")} disabled={selectedBillRows.length === 0}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                exportPaymentRunCSV(selectedBillRows, method);
+                toast.success("Bank-format export generated.");
+              }}
+              disabled={selectedBillRows.length === 0}
+            >
               Bank format
             </Button>
             <Button onClick={handleRequestApproval} disabled={selectedBillRows.length === 0}>

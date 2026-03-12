@@ -64,6 +64,14 @@ export function updateProduct(id: string, patch: Partial<ProductRow>): ProductRo
   return updated;
 }
 
+export function deleteProduct(id: string): boolean {
+  const list = listProducts();
+  const next = list.filter((product) => product.id !== id);
+  if (next.length === list.length) return false;
+  saveJson(KEY_PRODUCTS, next);
+  return true;
+}
+
 export function listPackaging(productId: string): ProductPackaging[] {
   const stored = loadJson<Record<string, ProductPackaging[]>>(KEY_PACKAGING);
   const override = stored?.[productId];

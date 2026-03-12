@@ -10,6 +10,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { format } from "date-fns";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -138,7 +139,20 @@ export default function JournalEntriesPage() {
               onChange: (v) => setStatusFilter(v),
             },
           ]}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `journal-entries-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                journalNumber: row.journalNumber,
+                date: row.date,
+                memo: row.memo,
+                reference: row.reference,
+                totalDebit: row.totalDebit,
+                totalCredit: row.totalCredit,
+                status: row.status,
+              }))
+            )
+          }
         />
         <DataTable<JournalEntry>
           data={filtered}

@@ -17,7 +17,12 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { getMockCycleCounts } from "@/lib/mock/warehouse/cycle-counts";
+import {
+  getCycleCountById,
+  postCycleCountAdjustments,
+  submitCycleCount,
+  updateCycleCountLine,
+} from "@/lib/data/cycle-counts.repo";
 import { warehouseCycleCountSubmit } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -25,7 +30,11 @@ import * as Icons from "lucide-react";
 export default function CycleCountDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const session = React.useMemo(() => getMockCycleCounts().find((c) => c.id === id), [id]);
+  const [session, setSession] = React.useState(() => getCycleCountById(id));
+
+  const refreshSession = React.useCallback(() => {
+    setSession(getCycleCountById(id));
+  }, [id]);
 
   if (!session) {
     return (
@@ -58,12 +67,19 @@ export default function CycleCountDetailPage() {
         actions={
           <div className="flex gap-2">
             {(session.status === "OPEN" || session.status === "IN_PROGRESS") && (
-              <Button size="sm" onClick={() => toast.info("Enter quantities (stub). Scan/enter UI.")}>
+              <Button size="sm" onClick={() => toast.success("Use the line inputs below to capture counted quantities.")}>
                 Enter quantities
               </Button>
             )}
             {session.status === "REVIEW" && hasVariance && (
-              <Button size="sm" onClick={() => toast.info("Post adjustments (stub). API pending.")}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  postCycleCountAdjustments(id);
+                  refreshSession();
+                  toast.success("Inventory adjustments posted.");
+                }}
+              >
                 Post adjustments
               </Button>
             )}
@@ -74,10 +90,10 @@ export default function CycleCountDetailPage() {
                 onClick={async () => {
                   try {
                     await warehouseCycleCountSubmit(id);
+                    refreshSession();
                     toast.success("Cycle count submitted.");
                   } catch (e) {
-                    if ((e as Error).message === "STUB") toast.info("Submit (stub). API pending.");
-                    else toast.error((e as Error).message);
+                    toast.error((e as Error).message);
                   }
                 }}
               >
@@ -122,13 +138,31 @@ export default function CycleCountDetailPage() {
                       <TableCell className="text-muted-foreground">{l.binCode ?? "—"}</TableCell>
                       <TableCell>{l.systemQty}</TableCell>
                       <TableCell>
-                        <Input type="number" defaultValue={l.countedQty} className="w-20" />
+                        <Input
+                          type="number"
+                          value={l.countedQty}
+                          className="w-20"
+                          onChange={(e) => {
+                            updateCycleCountLine(id, l.id, Number(e.target.value) || 0);
+                            refreshSession();
+                          }}
+                        />
                       </TableCell>
                       <TableCell>
                         <Badge variant={l.variance === 0 ? "secondary" : "outline"}>{l.variance >= 0 ? `+${l.variance}` : l.variance}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm">Save</Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            submitCycleCount(id);
+                            refreshSession();
+                            toast.success("Count line saved to review.");
+                          }}
+                        >
+                          Save
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

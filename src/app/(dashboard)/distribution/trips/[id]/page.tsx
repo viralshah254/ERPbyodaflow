@@ -8,6 +8,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ActivityPanel } from "@/components/shared/ActivityPanel";
+import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimeline";
+import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
+import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocationBadge";
 import {
   Table,
   TableBody,
@@ -143,77 +147,122 @@ export default function TripDetailPage() {
         }
       />
       <div className="p-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Header</CardTitle>
-            <CardDescription>Trip and vehicle</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-            <div>
-              <p className="text-muted-foreground">Reference</p>
-              <p className="font-medium">{trip.reference}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Type</p>
-              <Badge variant="outline">{trip.type}</Badge>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Vehicle</p>
-              <p className="font-medium">{trip.vehicleMode === "LEASED" ? `Leased ${trip.vehicleCode ?? ""}` : "Spot hire"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Status</p>
-              <Badge variant={trip.status === "COMPLETED" ? "default" : "secondary"}>{trip.status.replace("_", " ")}</Badge>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Planned</p>
-              <p className="font-medium">{new Date(trip.plannedAt).toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Completed</p>
-              <p className="font-medium">{trip.completedAt ? new Date(trip.completedAt).toLocaleString() : "—"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Total cost</p>
-              <p className="font-medium">{trip.totalCost != null ? formatMoney(trip.totalCost, trip.currency) : "—"}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Trip Summary</CardTitle>
+                <CardDescription>Leased vs spot hire movement with cost traceability.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                <div>
+                  <p className="text-muted-foreground">Reference</p>
+                  <p className="font-medium">{trip.reference}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Type</p>
+                  <Badge variant="outline">{trip.type}</Badge>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Vehicle</p>
+                  <p className="font-medium">{trip.vehicleMode === "LEASED" ? `Leased ${trip.vehicleCode ?? ""}` : "Spot hire"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <Badge variant={trip.status === "COMPLETED" ? "default" : "secondary"}>{trip.status.replace("_", " ")}</Badge>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Planned</p>
+                  <p className="font-medium">{new Date(trip.plannedAt).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Completed</p>
+                  <p className="font-medium">{trip.completedAt ? new Date(trip.completedAt).toLocaleString() : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total cost</p>
+                  <p className="font-medium">{trip.totalCost != null ? formatMoney(trip.totalCost, trip.currency) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Ownership / Lane</p>
+                  <OwnershipLocationBadge owner="CoolCatch" location={trip.type === "INBOUND" ? "Inbound to hub" : "Outbound dispatch"} />
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Cost lines</CardTitle>
-            <CardDescription>Fuel, driver, hire fee, toll — allocated to this trip</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Reference</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {costLines.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
-                      No cost lines. Add fuel, driver, or hire fee.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  costLines.map((line) => (
-                    <TableRow key={line.id}>
-                      <TableCell>{COST_TYPE_LABELS[line.costType] ?? line.costType}</TableCell>
-                      <TableCell>{formatMoney(line.amount, line.currency)}</TableCell>
-                      <TableCell className="text-muted-foreground">{line.reference ?? "—"}</TableCell>
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost lines</CardTitle>
+                <CardDescription>Fuel, driver, hire fee, toll allocated to this trip.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Reference</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {costLines.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                          No cost lines. Add fuel, driver, or hire fee.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      costLines.map((line) => (
+                        <TableRow key={line.id}>
+                          <TableCell>{COST_TYPE_LABELS[line.costType] ?? line.costType}</TableCell>
+                          <TableCell>{formatMoney(line.amount, line.currency)}</TableCell>
+                          <TableCell className="text-muted-foreground">{line.reference ?? "—"}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <CostImpactPanel
+              title="Trip Cost Summary"
+              currency={trip.currency}
+              lines={costLines.map((line) => ({
+                label: COST_TYPE_LABELS[line.costType] ?? line.costType,
+                amount: line.amount,
+              }))}
+            />
+          </div>
+
+          <div className="space-y-6">
+            <BatchStatusTimeline
+              title="Trip Timeline"
+              steps={[
+                { id: "planned", label: "Trip planned", status: "completed", timestamp: trip.plannedAt },
+                { id: "dispatch", label: "Vehicle assigned / dispatched", status: trip.status === "PLANNED" ? "current" : "completed" },
+                { id: "transit", label: "In transit", status: trip.status === "IN_TRANSIT" ? "current" : trip.status === "COMPLETED" ? "completed" : "upcoming" },
+                { id: "complete", label: "Trip completed", status: trip.status === "COMPLETED" ? "completed" : "upcoming", timestamp: trip.completedAt },
+              ]}
+            />
+            <Card className="overflow-hidden">
+              <CardHeader>
+                <CardTitle>Activity & Audit</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ActivityPanel
+                  auditEntries={[
+                    { id: "1", action: "Trip created", user: "Logistics Coordinator", timestamp: new Date(trip.plannedAt).toLocaleString(), detail: trip.reference },
+                    { id: "2", action: "Cost lines tracked", user: "Finance", timestamp: new Date().toLocaleString(), detail: `${costLines.length} line(s)` },
+                  ]}
+                  comments={[
+                    { id: "c1", user: "Dispatch", text: "Compare leased and spot-hire economics before next lane planning run.", timestamp: new Date().toLocaleString() },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
 
       <Sheet open={addCostOpen} onOpenChange={setAddCostOpen}>

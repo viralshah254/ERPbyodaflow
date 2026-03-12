@@ -9,18 +9,27 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { loadStoredValue, saveStoredValue } from "@/lib/data/persisted-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function NotificationsPage() {
-  const [email, setEmail] = React.useState(true);
-  const [sms, setSms] = React.useState(false);
-  const [whatsapp, setWhatsapp] = React.useState(false);
+  const saved = React.useMemo(
+    () =>
+      loadStoredValue("odaflow_notification_settings", () => ({
+        email: true,
+        sms: false,
+        whatsapp: false,
+      })),
+    []
+  );
+  const [email, setEmail] = React.useState(saved.email);
+  const [sms, setSms] = React.useState(saved.sms);
+  const [whatsapp, setWhatsapp] = React.useState(saved.whatsapp);
 
   const handleSave = () => {
-    if (typeof window !== "undefined") {
-      toast.info("Save (stub). API pending.");
-    }
+    saveStoredValue("odaflow_notification_settings", { email, sms, whatsapp });
+    toast.success("Notification settings saved.");
   };
 
   return (
@@ -47,7 +56,7 @@ export default function NotificationsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Channels</CardTitle>
-            <CardDescription>Email, SMS, WhatsApp toggles (stubs). No real integrations.</CardDescription>
+            <CardDescription>Email, SMS, and WhatsApp channel preferences stored for demo mode.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2">

@@ -6,211 +6,298 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RecommendationCard } from "@/components/ai/RecommendationCard";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui/badge";
+import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
+import { MassBalanceChart } from "@/components/operational/MassBalanceChart";
+import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
+import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
+import {
+  fetchCashWeightAuditLines,
+  fetchFranchiseeStock,
+  fetchSubcontractOrders,
+  fetchTopUps,
+  fetchVMIReplenishmentOrders,
+} from "@/lib/api/cool-catch";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useUIStore } from "@/stores/ui-store";
-import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-const LAYERS = [
-  {
-    id: "planning",
-    title: "Forecasting & Planning",
-    description: "Demand forecasts, supply risk, scenario simulation",
-    href: "/analytics/explore",
-    icon: "TrendingUp",
-    links: [
-      { label: "Explore metrics", href: "/analytics/explore" },
-      { label: "Simulations", href: "/analytics/simulations" },
-      { label: "MRP", href: "/manufacturing/mrp" },
-    ],
-  },
-  {
-    id: "production",
-    title: "Production Optimization",
-    description: "Schedules, utilization, reorder suggestions",
-    href: "/manufacturing/work-orders",
-    icon: "Factory",
-    links: [
-      { label: "Work orders", href: "/manufacturing/work-orders" },
-      { label: "MRP", href: "/manufacturing/mrp" },
-      { label: "Routing", href: "/manufacturing/routing" },
-      { label: "Approvals", href: "/approvals/inbox" },
-    ],
-  },
-  {
-    id: "procurement",
-    title: "Autonomous Procurement",
-    description: "Supplier performance, auto-PO proposals, approval queue",
-    href: "/purchasing/orders",
-    icon: "ShoppingCart",
-    links: [
-      { label: "Purchase orders", href: "/purchasing/orders" },
-      { label: "Requests", href: "/purchasing/requests" },
-      { label: "Approvals", href: "/approvals/inbox" },
-      { label: "Work queue", href: "/work/queue" },
-    ],
-  },
-  {
-    id: "finance",
-    title: "Finance Intelligence",
-    description: "Margins, cash forecast, anomalies, fraud signals",
-    href: "/analytics/finance",
-    icon: "Landmark",
-    links: [
-      { label: "Finance intelligence", href: "/analytics/finance" },
-      { label: "Cashflow", href: "/treasury/cashflow" },
-      { label: "Bank recon", href: "/finance/bank-recon" },
-      { label: "Three-way match", href: "/ap/three-way-match" },
-    ],
-  },
-  {
-    id: "ask-ai",
-    title: "Ask AI",
-    description: "Natural language commands, intent preview, generated views",
-    href: "#",
-    icon: "MessageSquare",
-    links: [{ label: "Press ⌘K to open command bar", href: "#" }],
-  },
-] as const;
+type ExceptionRow = {
+  id: string;
+  type: string;
+  reference: string;
+  status: string;
+  value: string;
+};
+
+function GenericControlTower() {
+  const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Generic Control Tower</CardTitle>
+        <CardDescription>Template-specific command center appears when industry features are enabled.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex gap-2">
+        <Button variant="outline" onClick={() => setCommandPaletteOpen(true)}>
+          <Icons.Command className="mr-2 h-4 w-4" />
+          Open command bar
+        </Button>
+        <Button asChild>
+          <Link href="/dashboard">Go to Dashboard</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function ControlTowerPage() {
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const featureFlags = useOrgContextStore((s) => s.featureFlags);
+  const coolCatchEnabled =
+    templateId === "cool-catch" ||
+    (featureFlags.procurementAuditCashWeight === true &&
+      featureFlags.vmiReplenishment === true &&
+      featureFlags.commissionEngine === true);
+
+  const [loading, setLoading] = React.useState(true);
+  const [kpis, setKpis] = React.useState({
+    purchasedWeight: 0,
+    receivedWeight: 0,
+    inProcessing: 0,
+    franchiseLowStockSkus: 0,
+    replenishmentOrdersOpen: 0,
+    topUpExposure: 0,
+  });
+  const [exceptions, setExceptions] = React.useState<ExceptionRow[]>([]);
+  const [yieldSnapshot, setYieldSnapshot] = React.useState({
+    inputKg: 0,
+    primaryKg: 0,
+    secondaryKg: 0,
+    lossKg: 0,
+    serviceFeeTotal: 0,
+  });
+
+  React.useEffect(() => {
+    if (!coolCatchEnabled) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      fetchCashWeightAuditLines(),
+      fetchSubcontractOrders(),
+      fetchFranchiseeStock(),
+      fetchVMIReplenishmentOrders(),
+      fetchTopUps(),
+    ])
+      .then(([auditLines, subOrders, stockRows, replenishments, topUps]) => {
+        if (cancelled) return;
+        const purchasedWeight = auditLines.reduce((acc, l) => acc + (l.paidWeightKg ?? 0), 0);
+        const receivedWeight = auditLines.reduce((acc, l) => acc + (l.receivedWeightKg ?? 0), 0);
+        const inProcessing = subOrders.filter((o) => o.status === "SENT").length;
+        const franchiseLowStockSkus = stockRows.filter((s) => s.qty <= s.reorderPoint).length;
+        const replenishmentOrdersOpen = replenishments.filter((r) => r.status !== "RECEIVED").length;
+        const topUpExposure = topUps.reduce((acc, t) => acc + t.amount, 0);
+
+        const totalInput = subOrders.reduce((acc, o) => {
+          const input = (o.lines ?? []).filter((l) => l.type === "INPUT").reduce((a, l) => a + l.quantity, 0);
+          return acc + input;
+        }, 0);
+        const totalPrimary = subOrders.reduce((acc, o) => {
+          const out = (o.lines ?? []).filter((l) => l.type === "OUTPUT_PRIMARY").reduce((a, l) => a + l.quantity, 0);
+          return acc + out;
+        }, 0);
+        const totalSecondary = subOrders.reduce((acc, o) => {
+          const out = (o.lines ?? []).filter((l) => l.type === "OUTPUT_SECONDARY").reduce((a, l) => a + l.quantity, 0);
+          return acc + out;
+        }, 0);
+        const totalLoss = Math.max(0, totalInput - (totalPrimary + totalSecondary));
+        const feeTotal = subOrders.reduce((acc, o) => {
+          const fees = (o.lines ?? []).reduce((a, l) => a + (l.processingFeePerUnit ?? 0) * l.quantity, 0);
+          return acc + fees;
+        }, 0);
+
+        setKpis({
+          purchasedWeight,
+          receivedWeight,
+          inProcessing,
+          franchiseLowStockSkus,
+          replenishmentOrdersOpen,
+          topUpExposure,
+        });
+        setYieldSnapshot({
+          inputKg: totalInput,
+          primaryKg: totalPrimary,
+          secondaryKg: totalSecondary,
+          lossKg: totalLoss,
+          serviceFeeTotal: feeTotal,
+        });
+
+        const exceptionRows: ExceptionRow[] = auditLines
+          .filter((l) => l.status === "VARIANCE")
+          .slice(0, 8)
+          .map((l) => ({
+            id: l.id,
+            type: "Weight Variance",
+            reference: `${l.poNumber} · ${l.sku}`,
+            status: l.status,
+            value: `${(l.varianceKg ?? 0).toFixed(1)} kg`,
+          }));
+        for (const s of stockRows.filter((r) => r.qty <= r.reorderPoint).slice(0, 8 - exceptionRows.length)) {
+          exceptionRows.push({
+            id: `stock-${s.franchiseeId}-${s.sku}`,
+            type: "Low Franchise Stock",
+            reference: `${s.franchiseeName} · ${s.sku}`,
+            status: "LOW_STOCK",
+            value: `${s.qty} / RP ${s.reorderPoint}`,
+          });
+        }
+        setExceptions(exceptionRows);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [coolCatchEnabled]);
+
+  const exceptionColumns = [
+    { id: "type", header: "Exception", accessor: (r: ExceptionRow) => r.type, sticky: true },
+    { id: "reference", header: "Reference", accessor: (r: ExceptionRow) => r.reference },
+    {
+      id: "status",
+      header: "Status",
+      accessor: (r: ExceptionRow) => (
+        <Badge variant={r.status.includes("VARIANCE") ? "destructive" : "secondary"}>{r.status}</Badge>
+      ),
+    },
+    { id: "value", header: "Value", accessor: (r: ExceptionRow) => r.value },
+  ];
+
+  const poWeight = kpis.purchasedWeight;
+  const paidWeight = kpis.purchasedWeight;
+  const receivedWeight = kpis.receivedWeight;
 
   return (
     <PageShell>
       <PageHeader
-        title="Control Tower"
-        description="Supply chain autopilot with human supervision — five intelligence layers"
+        title={coolCatchEnabled ? "CoolCatch Command Center" : "Control Tower"}
+        description={
+          coolCatchEnabled
+            ? "Real-time sourcing, processing, cold chain, franchise, and finance visibility."
+            : "Supply chain command layer for template-enabled modules."
+        }
         breadcrumbs={[{ label: "Control Tower" }]}
         sticky
         showCommandHint
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCommandPaletteOpen(true)}
-          >
+          <Button variant="outline" size="sm" onClick={() => setCommandPaletteOpen(true)}>
             <Icons.MessageSquare className="mr-2 h-4 w-4" />
             Ask AI (⌘K)
           </Button>
         }
       />
-      <div className="p-6 space-y-8">
-        {/* Five layers grid */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {LAYERS.map((layer) => {
-            const iconMap: Record<string, keyof typeof Icons> = {
-              TrendingUp: "TrendingUp",
-              Factory: "Factory",
-              ShoppingCart: "ShoppingCart",
-              Landmark: "Landmark",
-              MessageSquare: "MessageSquare",
-            };
-            const Icon = (Icons[iconMap[layer.icon] ?? "Box"] ?? Icons.Box) as React.ComponentType<{ className?: string }>;
-            return (
-              <Card
-                key={layer.id}
-                className="transition-colors hover:border-primary/30 hover:bg-muted/20"
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-lg bg-primary/10 p-2">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{layer.title}</CardTitle>
-                      <CardDescription className="mt-1 text-sm">
-                        {layer.description}
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {layer.links.map((link) => (
-                    <div key={link.href + link.label}>
-                      {link.href === "#" && link.label.includes("⌘K") ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-start text-muted-foreground hover:text-foreground"
-                          onClick={() => setCommandPaletteOpen(true)}
-                        >
-                          <Icons.Command className="mr-2 h-4 w-4" />
-                          {link.label}
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" size="sm" className="w-full justify-start" asChild>
-                          <Link href={link.href}>{link.label}</Link>
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+      <div className="p-6 space-y-6">
+        {!coolCatchEnabled ? (
+          <GenericControlTower />
+        ) : loading ? (
+          <div className="text-sm text-muted-foreground">Loading command center data…</div>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <OperationalKpiCard
+                title="Weight Purchased"
+                value={kpis.purchasedWeight.toLocaleString()}
+                unit="kg"
+                subtitle="Farm-gate disbursement basis"
+                href="/purchasing/cash-weight-audit"
+              />
+              <OperationalKpiCard
+                title="Weight Received"
+                value={kpis.receivedWeight.toLocaleString()}
+                unit="kg"
+                subtitle="Facility confirmed receipt"
+                trend={{ value: `${(kpis.receivedWeight - kpis.purchasedWeight).toFixed(1)} kg`, direction: kpis.receivedWeight >= kpis.purchasedWeight ? "up" : "down" }}
+                severity={kpis.receivedWeight >= kpis.purchasedWeight ? "success" : "warning"}
+                href="/inventory/receiving"
+              />
+              <OperationalKpiCard
+                title="Batches In Processing"
+                value={kpis.inProcessing}
+                subtitle="Subcontracted work centers"
+                href="/manufacturing/subcontracting"
+              />
+              <OperationalKpiCard
+                title="Franchise Low-Stock SKUs"
+                value={kpis.franchiseLowStockSkus}
+                subtitle="At or below reorder point"
+                severity={kpis.franchiseLowStockSkus > 0 ? "warning" : "success"}
+                href="/franchise/vmi"
+              />
+              <OperationalKpiCard
+                title="Open Replenishments"
+                value={kpis.replenishmentOrdersOpen}
+                subtitle="Not yet received"
+                href="/distribution/transfer-planning"
+              />
+              <OperationalKpiCard
+                title="Top-up Exposure"
+                value={kpis.topUpExposure.toLocaleString()}
+                unit="KES"
+                subtitle="Current support obligations"
+                severity={kpis.topUpExposure > 0 ? "danger" : "success"}
+                href="/finance/commission-topup"
+              />
+            </div>
 
-        {/* Sample AI recommendation cards */}
-        <section>
-          <h2 className="text-lg font-semibold mb-4">Sample recommendations</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            AI-first UX: insights before tables. Each recommendation includes drivers, risk, confidence, and Simulate / Approve / Modify.
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <RecommendationCard
-              layer="Planning"
-              title="Increase maize flour production by 12% in Nairobi next month"
-              drivers={[
-                "Distributor demand +14%",
-                "Harvest forecast −8%",
-                "Promo uplift +6%",
-              ]}
-              risk="medium"
-              confidence={83}
-              onSimulate={() => toast.info("Simulate (stub). Opens scenario builder.")}
-              onApprove={() => toast.success("Approve (stub). API pending.")}
-              onModify={() => toast.info("Modify (stub). Opens plan editor.")}
-              onExplain={() => toast.info("Why this? (stub). Opens explainability panel.")}
+            <div className="grid gap-6 xl:grid-cols-2">
+              <ProcurementVariancePanel
+                poWeightKg={poWeight}
+                paidWeightKg={paidWeight}
+                receivedWeightKg={receivedWeight}
+              />
+              <YieldBreakdownCard
+                inputKg={yieldSnapshot.inputKg}
+                primaryKg={yieldSnapshot.primaryKg}
+                secondaryKg={yieldSnapshot.secondaryKg}
+                lossKg={yieldSnapshot.lossKg}
+                serviceFeeTotal={yieldSnapshot.serviceFeeTotal}
+              />
+            </div>
+
+            <MassBalanceChart
+              inputKg={yieldSnapshot.inputKg}
+              outputKg={yieldSnapshot.primaryKg}
+              byproductKg={yieldSnapshot.secondaryKg}
+              wasteKg={yieldSnapshot.lossKg}
             />
-            <RecommendationCard
-              layer="Production"
-              title="Run SKU-A after SKU-C"
-              expectedUpside="Cleaning time −18%, Energy −6%, Scrap −4%"
-              risk="low"
-              confidence={79}
-              onSimulate={() => toast.info("Simulate (stub).")}
-              onApprove={() => toast.success("Approve (stub). API pending.")}
-              onModify={() => toast.info("Override (stub).")}
-            />
-            <RecommendationCard
-              layer="Procurement"
-              title="Shift 40% volume from Supplier X to Supplier Y"
-              drivers={[
-                "Late deliveries: 27%",
-                "Cost delta: −4%",
-                "Risk rating improvement",
-              ]}
-              risk="medium"
-              confidence={76}
-              onSimulate={() => toast.info("Simulate (stub).")}
-              onApprove={() => toast.success("Approve switch (stub). API pending.")}
-            />
-            <RecommendationCard
-              layer="Finance"
-              title="Packaging cost per unit increased 9%"
-              drivers={[
-                "Supplier change",
-                "MOQ uplift",
-                "Transport surcharge",
-              ]}
-              risk="medium"
-              confidence={88}
-              onModify={() => toast.info("Open investigation (stub).")}
-              onApprove={() => toast.success("Approve mitigation (stub). API pending.")}
-            />
-          </div>
-        </section>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Exception Center</CardTitle>
+                  <CardDescription>Weight mismatches and low-stock franchise alerts that need action now.</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" asChild>
+                    <Link href="/purchasing/cash-weight-audit">Review Variance</Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href="/franchise/vmi">Open Replenishment</Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <DataTable<ExceptionRow> data={exceptions} columns={exceptionColumns} emptyMessage="No active exceptions." />
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </PageShell>
   );

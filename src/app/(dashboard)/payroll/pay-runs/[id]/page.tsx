@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -23,8 +23,12 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { getPayRunById, listPayRunLines, listEmployees } from "@/lib/data/payroll.repo";
-import type { PayRunLine } from "@/lib/payroll/types";
+import {
+  fetchPayRunDetailApi,
+  postPayRunJournalApi,
+  submitPayRunForApprovalApi,
+} from "@/lib/api/payroll";
+import type { PayRun, PayRunLine } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { payRunApprove } from "@/lib/api/stub-endpoints";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -32,17 +36,14 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 function exportPayRunBankCSV(runId: string, lines: PayRunLine[]) {
-  const employees = listEmployees();
-  const empMap = new Map(employees.map((e) => [e.id, e]));
   const headers = ["Employee", "Net", "Currency", "Bank account", "Payment method"];
   const rows = lines.map((l) => {
-    const e = empMap.get(l.employeeId);
     return [
       l.employeeName,
       l.net,
       l.currency,
-      e?.bankAccountMasked ?? "—",
-      e?.paymentMethod ?? "BANK",
+      "—",
+      "BANK",
     ].join(",");
   });
   const csv = [headers.join(","), ...rows].join("\n");
@@ -57,14 +58,30 @@ function exportPayRunBankCSV(runId: string, lines: PayRunLine[]) {
 
 export default function PayRunDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
 
   const [lineSheetOpen, setLineSheetOpen] = React.useState(false);
   const [selectedLine, setSelectedLine] = React.useState<PayRunLine | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [run, setRun] = React.useState<PayRun | null>(null);
+  const [lines, setLines] = React.useState<PayRunLine[]>([]);
 
-  const run = React.useMemo(() => getPayRunById(id), [id]);
-  const lines = React.useMemo(() => (run ? listPayRunLines(run.id) : []), [run]);
+  const refreshRun = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const detail = await fetchPayRunDetailApi(id);
+      setRun(detail?.run ?? null);
+      setLines(detail?.lines ?? []);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  React.useEffect(() => {
+    void refreshRun();
+  }, [refreshRun]);
 
   const openLine = (l: PayRunLine) => {
     setSelectedLine(l);
@@ -76,17 +93,23 @@ export default function PayRunDetailPage() {
     setApproving(true);
     try {
       await payRunApprove(id);
+      await refreshRun();
       toast.success("Pay run approved.");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Approve (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setApproving(false);
     }
   };
 
-  const handlePostJournal = () => {
-    toast.info("Post payroll journal (stub). API pending.");
+  const handlePostJournal = async () => {
+    try {
+      await postPayRunJournalApi(id);
+      await refreshRun();
+      toast.success("Payroll journal posted.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   const handleExportBank = () => {
@@ -98,7 +121,7 @@ export default function PayRunDetailPage() {
       <PageShell>
         <PageHeader title="Pay run not found" breadcrumbs={[{ label: "Payroll", href: "/payroll/overview" }, { label: "Pay runs", href: "/payroll/pay-runs" }, { label: id }]} />
         <div className="p-6">
-          <p className="text-muted-foreground">Pay run not found.</p>
+          <p className="text-muted-foreground">{loading ? "Loading pay run..." : "Pay run not found."}</p>
           <Button variant="outline" className="mt-4" asChild>
             <Link href="/payroll/pay-runs">Back to list</Link>
           </Button>
@@ -135,7 +158,19 @@ export default function PayRunDetailPage() {
               <Icons.Download className="mr-2 h-4 w-4" />
               Generate bank file
             </Button>
-            <Button variant="outline" size="sm" onClick={() => toast.info("Request approval (stub).")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await submitPayRunForApprovalApi(id);
+                  await refreshRun();
+                  toast.success("Approval request sent to the workflow queue.");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+            >
               Request approval
             </Button>
             <Button variant="outline" size="sm" asChild>

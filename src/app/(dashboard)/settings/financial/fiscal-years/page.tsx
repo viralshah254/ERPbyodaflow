@@ -14,28 +14,38 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { getMockFiscalYears, type FiscalYearRow } from "@/lib/mock/fiscal";
+import { listFiscalYears } from "@/lib/data/fiscal.repo";
+import type { FiscalYearRow } from "@/lib/mock/fiscal";
+import { periodClose, periodReopen } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function FiscalYearsPage() {
-  const years = React.useMemo(() => getMockFiscalYears(), []);
-  const [selectedYearId, setSelectedYearId] = React.useState<string | null>(() => years[0]?.id ?? null);
+  const [years, setYears] = React.useState<FiscalYearRow[]>(() => listFiscalYears());
+  const [selectedYearId, setSelectedYearId] = React.useState<string | null>(() => listFiscalYears()[0]?.id ?? null);
   const selected = years.find((y) => y.id === selectedYearId) ?? years[0] ?? null;
 
-  const handleClosePeriod = (periodId: string) => {
-    toast.info(`Close period (stub): ${periodId}`);
+  const refreshYears = React.useCallback(() => {
+    setYears(listFiscalYears());
+  }, []);
+
+  const handleClosePeriod = async (periodId: string) => {
+    await periodClose({ periodId });
+    refreshYears();
+    toast.success(`Period ${periodId} closed.`);
   };
 
-  const handleReopen = (periodId: string) => {
-    toast.info(`Reopen period (stub): ${periodId}`);
+  const handleReopen = async (periodId: string) => {
+    await periodReopen(periodId);
+    refreshYears();
+    toast.success(`Period ${periodId} reopened.`);
   };
 
   return (
     <PageShell>
       <PageHeader
         title="Fiscal years"
-        description="Years and periods. Close / Reopen (stubs)."
+        description="Years and periods. Close and reopen periods in demo mode or against the backend."
         breadcrumbs={[
           { label: "Settings", href: "/settings/org" },
           { label: "Financial", href: "/settings/financial/currencies" },

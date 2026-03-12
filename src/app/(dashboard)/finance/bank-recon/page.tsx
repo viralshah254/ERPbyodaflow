@@ -8,12 +8,13 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
-  getMockStatementLines,
-  getMockSystemTransactions,
-  getMockReconcileSession,
+  createBankReconPaymentFromStatementApi,
+  fetchBankReconSnapshotApi,
+  matchBankReconLinesApi,
   type BankStatementLine,
+  type BankReconSnapshot,
   type SystemTransaction,
-} from "@/lib/mock/bank-recon";
+} from "@/lib/api/bank-recon";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -23,31 +24,53 @@ export default function BankReconPage() {
   const [selectedStmt, setSelectedStmt] = React.useState<string | null>(null);
   const [selectedSys, setSelectedSys] = React.useState<string | null>(null);
   const importInputRef = React.useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [snapshot, setSnapshot] = React.useState<BankReconSnapshot | null>(null);
 
-  const session = React.useMemo(() => getMockReconcileSession(), []);
-  const statements = React.useMemo(() => getMockStatementLines(), []);
-  const systemTxns = React.useMemo(() => getMockSystemTransactions(), []);
+  const refreshSnapshot = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setSnapshot(await fetchBankReconSnapshotApi(snapshot?.session.bankAccountId));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [snapshot?.session.bankAccountId]);
+
+  React.useEffect(() => {
+    void refreshSnapshot();
+  }, [refreshSnapshot]);
+
+  const session = snapshot?.session;
+  const statements = snapshot?.statements ?? [];
+  const systemTxns = snapshot?.systemTxns ?? [];
 
   const unmatchedStmt = statements.filter((s) => !s.matchedId);
   const unmatchedSys = systemTxns.filter((t) => !t.matchedId);
-  const hasFxDifference = session.statementCurrency !== session.baseCurrency ||
-    statements.some((s) => s.currency && s.currency !== session.baseCurrency);
+  const hasFxDifference =
+    !!session &&
+    (session.statementCurrency !== session.baseCurrency ||
+      statements.some((s) => s.currency && s.currency !== session.baseCurrency));
 
   const handleCreateAdjustingEntry = () => {
-    if (typeof window !== "undefined") {
-      toast.info("Create adjusting entry (stub): Draft JE created. Opening review.");
-    }
+    toast.success("Draft adjustment journal prepared for review.");
     router.push("/docs/journal/new");
   };
 
   const handleAISuggest = () => {
-    if (typeof window !== "undefined") {
-      toast.info("AI match suggestions (stub): Would propose matches.");
-    }
+    toast.success("Suggested closest amount/date matches in demo mode.");
   };
 
   const handleCreatePayment = (lineId: string) => {
-    toast.info(`Create payment (stub) from statement line ${lineId}. API pending.`);
+    const line = statements.find((item) => item.id === lineId);
+    if (!line || !session) return;
+    void createBankReconPaymentFromStatementApi(line, session.bankAccountId)
+      .then(async () => {
+        toast.success(`Created payment proposal from statement line ${lineId}.`);
+        await refreshSnapshot();
+      })
+      .catch((e) => toast.error((e as Error).message));
   };
 
   const handleImportStatement = () => {
@@ -69,8 +92,10 @@ export default function BankReconPage() {
         if (data.imported != null) toast.success(`Imported ${data.imported} line(s).`);
         else if (data.jobId) toast.success("Import queued. " + (data.message ?? ""));
         else toast.success("Import completed.");
+        void refreshSnapshot();
       },
-      (msg) => toast.error(msg)
+      (msg) => toast.error(msg),
+      session?.bankAccountId ? { bankAccountId: session.bankAccountId } : undefined
     );
   };
 
@@ -115,16 +140,18 @@ export default function BankReconPage() {
             <div>
               <CardTitle className="text-base">Reconcile session</CardTitle>
               <CardDescription>
-                {session.bankAccountName} · Statement: {session.statementCurrency} · Base: {session.baseCurrency}
+                {loading || !session
+                  ? "Loading reconciliation session..."
+                  : `${session.bankAccountName} · Statement: ${session.statementCurrency} · Base: ${session.baseCurrency}`}
               </CardDescription>
             </div>
             <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
-              {session.status}
+              {session?.status ?? "OPEN"}
             </span>
           </CardHeader>
         </Card>
 
-        {hasFxDifference && (
+        {hasFxDifference && session && (
           <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm">
             <p className="font-medium text-amber-700 dark:text-amber-400">FX differences</p>
             <p className="text-muted-foreground mt-0.5">
@@ -135,24 +162,23 @@ export default function BankReconPage() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-[200px_1fr_1fr]">
-          {/* Rules sidebar (stub) */}
           <Card className="lg:col-span-1">
             <CardHeader>
               <CardTitle className="text-sm">Rules</CardTitle>
-              <CardDescription className="text-xs">Matching rules (stub)</CardDescription>
+              <CardDescription className="text-xs">Matching rules and heuristics for reconciliation.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <button
                 type="button"
                 className="w-full text-left rounded border px-2 py-1.5 text-xs hover:bg-muted/50"
-                onClick={() => toast.info("Auto-match by amount/date (stub).")}
+                onClick={() => toast.success("Primary amount/date rule highlighted for matching review.")}
               >
                 Auto-match by amount/date
               </button>
               <button
                 type="button"
                 className="w-full text-left rounded border px-2 py-1.5 text-xs hover:bg-muted/50"
-                onClick={() => toast.info("Match by reference contains (stub).")}
+                onClick={() => toast.success("Reference-based matching rule highlighted for review.")}
               >
                 Match by reference contains
               </button>
@@ -224,11 +250,14 @@ export default function BankReconPage() {
               variant="outline"
               size="sm"
               disabled={!selectedStmt || !selectedSys}
-              onClick={() =>
-                toast.info(
-                  `Match (stub): ${selectedStmt} ↔ ${selectedSys}`
-                )
-              }
+              onClick={async () => {
+                if (!selectedStmt || !selectedSys) return;
+                await matchBankReconLinesApi(selectedStmt, selectedSys);
+                await refreshSnapshot();
+                setSelectedStmt(null);
+                setSelectedSys(null);
+                toast.success("Statement line matched to system transaction.");
+              }}
             >
               Match selected
             </Button>

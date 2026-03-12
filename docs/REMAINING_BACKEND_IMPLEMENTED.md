@@ -52,7 +52,7 @@ The single-source document contains the full contract for implemented APIs (§2)
 
 ## 3. File import (§3 — done)
 
-All four endpoints **parse CSV and persist** to DB. They accept either **JSON body** with `csv` (string) or `rows` (array). For multipart file upload, frontend can read the file as text and send `{ csv: fileContent }`.
+All four endpoints **parse CSV and persist** to DB. They accept either **JSON body** with `csv` (string) or `rows` (array), or **`multipart/form-data`** with file field `file`.
 
 ### 3.1 POST `/import/currencies`
 
@@ -77,17 +77,17 @@ All four endpoints **parse CSV and persist** to DB. They accept either **JSON bo
 - **Body:** `{ bankAccountId, csv: "<string>" }` or `{ bankAccountId, rows: [{ date, description?, amount, balance?, reference? }] }`.
 - **Behaviour:** Inserts bank statement lines (status PENDING). Returns `201` with `{ imported, ids }`.
 
-**Frontend:** File picker → read file as text → POST JSON `{ csv: content }` (and `bankAccountId` for bank-statement). Show “Imported N” or validation errors.
+**Frontend:** File picker can upload the file directly as multipart. For bank statements, include `bankAccountId` alongside the file upload.
 
 ---
 
-## 4. Costing run (§6.1 — partial)
+## 4. Costing run (§6.1 — implemented)
 
 | Method | Path | Status |
 |--------|------|--------|
-| POST | `/inventory/costing/run` | **200** — emits `costing.run` event; returns `{ runs: 1, updated: 0, message }` |
+| POST | `/inventory/costing/run` | **200** — computes weighted-average costing snapshot and emits `costing.run` |
 
-- **Behaviour:** Publishes event for downstream costing logic; no FIFO/weighted-average computation in BFF yet. Full costing can be implemented in a worker that consumes the event.
+- **Behaviour:** Computes weighted-average receipt cost from posted GRNs, joins current stock levels, stores the latest costing snapshot in org settings, and emits `costing.run` with summary totals.
 
 ---
 
@@ -101,7 +101,6 @@ All four endpoints **parse CSV and persist** to DB. They accept either **JSON bo
 ## 6. Not yet implemented
 
 - **VAT summary report (§6.2):** Aggregate from posted invoices/bills and tax lines by period — not implemented; report can return empty or stub.
-- **Multipart file upload for import:** Spec says `multipart/form-data` with field `file`. Current implementation accepts JSON `body.csv` or `body.rows`. To support file upload, add multer (or similar) and pass `req.file.buffer.toString()` as CSV.
 - **Settings extended (30+ routes):** Replace stubs with real DB read/write per BACKEND_SPEC §13 Stage 3 and BACKEND_ENDPOINT_MIGRATIONS.md.
 - **Full costing logic:** FIFO/weighted average from movements and update of stock/cost store in a worker or service.
 
@@ -118,7 +117,7 @@ All four endpoints **parse CSV and persist** to DB. They accept either **JSON bo
 | Import exchange-rates | §3.2 | Done — parse + upsert |
 | Import COA | §3.3 | Done — parse + upsert + parentCode |
 | Import bank-statement | §3.4 | Done — parse + insert lines |
-| Costing run | §6.1 | Partial — event + response shape |
+| Costing run | §6.1 | Done — weighted-average snapshot + event |
 | VAT summary | §6.2 | Not done |
 | List/read stubs (§4) | §4 | Most use real models; empty when no data |
 | Settings extended (§5) | §5 | Stubs; need per-route persistence |

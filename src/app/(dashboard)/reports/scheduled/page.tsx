@@ -14,12 +14,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { getMockScheduledReports, type ScheduledReportRow } from "@/lib/mock/reports";
+import type { ScheduledReportRow } from "@/lib/mock/reports";
+import { fetchScheduledReportsApi } from "@/lib/api/reports";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ScheduledReportsPage() {
-  const rows = React.useMemo(() => getMockScheduledReports(), []);
+  const [rows, setRows] = React.useState<ScheduledReportRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const data = await fetchScheduledReportsApi();
+        if (!cancelled) setRows(data);
+      } catch (error) {
+        if (!cancelled) toast.error((error as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <PageShell>
@@ -48,7 +69,11 @@ export default function ScheduledReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {rows.length === 0 ? (
+            {loading ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                Loading scheduled reports...
+              </div>
+            ) : rows.length === 0 ? (
               <div className="py-12 text-center text-sm text-muted-foreground">
                 No scheduled reports. Create one to automate delivery.
               </div>

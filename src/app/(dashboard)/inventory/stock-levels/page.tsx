@@ -9,7 +9,6 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getMockStock, type StockRow } from "@/lib/mock/stock";
 import {
   Sheet,
   SheetContent,
@@ -20,6 +19,12 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  createStockAdjustmentApi,
+  fetchStockLevelsApi,
+  type InventoryStockRow,
+} from "@/lib/api/inventory-stock";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function StockLevelsPage() {
@@ -27,37 +32,55 @@ export default function StockLevelsPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState<string>("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
-  const [stockItems, setStockItems] = React.useState<StockRow[]>(() => getMockStock());
-  const [adjusting, setAdjusting] = React.useState<StockRow | null>(null);
+  const [stockItems, setStockItems] = React.useState<InventoryStockRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [savingAdjustment, setSavingAdjustment] = React.useState(false);
+  const [adjusting, setAdjusting] = React.useState<InventoryStockRow | null>(null);
   const [adjustDelta, setAdjustDelta] = React.useState<string>("");
   const [adjustReason, setAdjustReason] = React.useState("");
   const [adjustMode, setAdjustMode] = React.useState<"INCREASE" | "DECREASE">("DECREASE");
 
-  const filteredItems = React.useMemo(() => {
-    return stockItems.filter((item) => {
-      const matchesSearch =
-        searchQuery === "" ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.sku.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesWarehouse =
-        warehouseFilter === "all" || item.warehouse === warehouseFilter;
-      const matchesStatus =
-        statusFilter === "all" || item.status === statusFilter;
-      return matchesSearch && matchesWarehouse && matchesStatus;
-    });
-  }, [stockItems, searchQuery, warehouseFilter, statusFilter]);
+  const refreshStock = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setStockItems(
+        await fetchStockLevelsApi({
+          warehouseId: warehouseFilter === "all" ? undefined : warehouseFilter,
+          status: statusFilter as "In Stock" | "Low Stock" | "Out of Stock" | "all",
+          search: searchQuery,
+        })
+      );
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, statusFilter, warehouseFilter]);
 
-  const openStockDetail = (row: StockRow) => {
+  React.useEffect(() => {
+    void refreshStock();
+  }, [refreshStock]);
+
+  const filteredItems = stockItems;
+  const warehouseOptions = React.useMemo(() => {
+    const options = new Map<string, string>();
+    stockItems.forEach((item) => {
+      options.set(item.warehouseId ?? item.warehouse, item.warehouse);
+    });
+    return Array.from(options.entries()).map(([value, label]) => ({ value, label }));
+  }, [stockItems]);
+
+  const openStockDetail = (row: InventoryStockRow) => {
     router.push(`/inventory/stock-levels/${row.id}`);
   };
 
-  const openAdjust = (row: StockRow) => {
+  const openAdjust = (row: InventoryStockRow) => {
     setAdjusting(row);
     setAdjustDelta("");
     setAdjustReason("");
   };
 
-  const handleApplyAdjustment = () => {
+  const handleApplyAdjustment = async () => {
     if (!adjusting) {
       setAdjusting(null);
       return;
@@ -65,35 +88,33 @@ export default function StockLevelsPage() {
 
     const numeric = parseFloat(adjustDelta);
     if (!numeric || Number.isNaN(numeric)) {
-      setAdjusting(null);
+      toast.error("Enter a valid quantity.");
       return;
     }
     const magnitude = Math.abs(numeric);
     const signedDelta = adjustMode === "INCREASE" ? magnitude : -magnitude;
-
-    setStockItems((prev) =>
-      prev.map((row) => {
-        if (row.id !== adjusting.id) return row;
-        let quantity = row.quantity + signedDelta;
-        let available = row.available + signedDelta;
-        if (quantity < 0) quantity = 0;
-        if (available < 0) available = 0;
-        let status: StockRow["status"];
-        if (quantity <= 0) status = "Out of Stock";
-        else if (available <= row.reorderLevel) status = "Low Stock";
-        else status = "In Stock";
-        return { ...row, quantity, available, status };
-      })
-    );
-
-    setAdjusting(null);
+    try {
+      setSavingAdjustment(true);
+      await createStockAdjustmentApi({
+        stockLevelId: adjusting.id,
+        quantityDelta: signedDelta,
+        reason: adjustReason.trim() || undefined,
+      });
+      toast.success("Stock adjustment posted.");
+      setAdjusting(null);
+      await refreshStock();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSavingAdjustment(false);
+    }
   };
 
   const columns = [
     {
       id: "sku",
       header: "SKU",
-      accessor: (row: StockRow) => (
+      accessor: (row: InventoryStockRow) => (
         <div>
           <div className="font-medium">{row.sku}</div>
           <div className="text-xs text-muted-foreground">{row.name}</div>
@@ -104,50 +125,50 @@ export default function StockLevelsPage() {
     {
       id: "warehouse",
       header: "Warehouse",
-      accessor: (row: StockRow) => row.warehouse,
+      accessor: (row: InventoryStockRow) => row.warehouse,
     },
     {
       id: "location",
       header: "Location",
-      accessor: (row: StockRow) => row.location ?? "—",
+      accessor: (row: InventoryStockRow) => row.location ?? "—",
     },
     {
       id: "quantity",
       header: "Quantity",
-      accessor: (row: StockRow) => (
+      accessor: (row: InventoryStockRow) => (
         <div className="text-right font-medium">{row.quantity}</div>
       ),
     },
     {
       id: "reserved",
       header: "Reserved",
-      accessor: (row: StockRow) => (
+      accessor: (row: InventoryStockRow) => (
         <div className="text-right text-muted-foreground">{row.reserved}</div>
       ),
     },
     {
       id: "available",
       header: "Available",
-      accessor: (row: StockRow) => (
+      accessor: (row: InventoryStockRow) => (
         <div className="text-right font-semibold">{row.available}</div>
       ),
     },
     {
       id: "reorderLevel",
       header: "Reorder Level",
-      accessor: (row: StockRow) => (
+      accessor: (row: InventoryStockRow) => (
         <div className="text-right">{row.reorderLevel}</div>
       ),
     },
     {
       id: "status",
       header: "Status",
-      accessor: (row: StockRow) => <StatusBadge status={row.status} />,
+      accessor: (row: InventoryStockRow) => <StatusBadge status={row.status} />,
     },
     {
       id: "actions",
       header: "",
-      accessor: (row: StockRow) => (
+      accessor: (row: InventoryStockRow) => (
         <RowActions
           actions={[
             {
@@ -202,8 +223,7 @@ export default function StockLevelsPage() {
               label: "Warehouse",
               options: [
                 { label: "All Warehouses", value: "all" },
-                { label: "WH-Main", value: "WH-Main" },
-                { label: "WH-East", value: "WH-East" },
+                ...warehouseOptions,
               ],
               value: warehouseFilter,
               onChange: setWarehouseFilter,
@@ -229,18 +249,22 @@ export default function StockLevelsPage() {
             <div>
               <CardTitle>Stock Levels</CardTitle>
               <CardDescription>
-                {filteredItems.length} items across all locations
+                {loading ? "Loading stock..." : `${filteredItems.length} items across all locations`}
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <DataTable
-            data={filteredItems}
-            columns={columns}
-            onRowClick={(row) => openStockDetail(row)}
-            emptyMessage="No stock items found."
-          />
+          {loading ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">Loading stock levels...</div>
+          ) : (
+            <DataTable
+              data={filteredItems}
+              columns={columns}
+              onRowClick={(row) => openStockDetail(row)}
+              emptyMessage="No stock items found."
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -311,10 +335,10 @@ export default function StockLevelsPage() {
                 Cancel
               </Button>
               <Button
-                onClick={handleApplyAdjustment}
-                disabled={!adjustDelta || Number.isNaN(parseFloat(adjustDelta)) || parseFloat(adjustDelta) <= 0}
+                onClick={() => void handleApplyAdjustment()}
+                disabled={savingAdjustment || !adjustDelta || Number.isNaN(parseFloat(adjustDelta)) || parseFloat(adjustDelta) <= 0}
               >
-                Apply adjustment
+                {savingAdjustment ? "Applying..." : "Apply adjustment"}
               </Button>
             </SheetFooter>
           </SheetContent>

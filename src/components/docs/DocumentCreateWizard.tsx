@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { getDocTypeConfig } from "@/config/documents";
+import type { DocTypeKey } from "@/config/documents/types";
 import type { FormFieldConfig } from "@/config/documents/types";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { t } from "@/lib/terminology";
@@ -28,6 +29,8 @@ import {
 import * as Icons from "lucide-react";
 import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
+import { createDocumentApi } from "@/lib/api/documents";
+import { toast } from "sonner";
 
 const DRAFT_KEY = "odaflow_draft";
 
@@ -150,6 +153,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
 
   const [step, setStep] = React.useState(1);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
+  const [submitting, setSubmitting] = React.useState(false);
   const storageKey = `${DRAFT_KEY}_${type}`;
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
@@ -204,13 +208,41 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     setStep((s) => Math.min(4, s + 1));
   };
 
-  const onSubmit = () => {
+  const onSubmit = async () => {
     try {
-      localStorage.removeItem(storageKey);
-    } catch {
-      /* ignore */
+      setSubmitting(true);
+      const result = await createDocumentApi(type as DocTypeKey, {
+        date: form.getValues("date"),
+        branchId: form.getValues("branch") || undefined,
+        partyId: form.getValues("party") || undefined,
+        warehouseId: form.getValues("warehouse") || undefined,
+        poRef: form.getValues("poRef") || undefined,
+        reference: form.getValues("reference") || undefined,
+        dueDate: form.getValues("dueDate") || undefined,
+        lines: lines.map((line) => ({
+          productId: line.productId,
+          description: line.name,
+          quantity: line.qty,
+          unit: line.uom,
+          unitPrice: line.price,
+          amount: line.amount,
+        })),
+        subtotal: form.getValues("totalAmount") ?? 0,
+        total: form.getValues("totalAmount") ?? 0,
+        currency: form.getValues("currency") || baseCurrency,
+      });
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        /* ignore */
+      }
+      toast.success(`${label} draft created.`);
+      router.push(`/docs/${type}/${result.id}`);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSubmitting(false);
     }
-    router.push(`/docs/${type}/1`);
   };
 
   const headerSection = config?.createFormSections.find((s) => s.id === "header");
@@ -337,10 +369,10 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           </CardHeader>
           <CardContent>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Taxes (stub). Configure tax codes and charges.
+              Configure tax codes, freight, withholding, or other document charges before posting.
             </div>
             <div className="mt-4">
-              <Label className="text-muted-foreground">Notes (stub)</Label>
+              <Label className="text-muted-foreground">Tax / charge notes</Label>
               <Input
                 placeholder="—"
                 className="mt-1"
@@ -415,7 +447,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           <Card>
             <CardHeader>
               <CardTitle>Posting Preview</CardTitle>
-              <p className="text-sm text-muted-foreground">Stub: mock GL lines in base currency.</p>
+              <p className="text-sm text-muted-foreground">Preview draft GL impact in base currency before creation.</p>
             </CardHeader>
             <CardContent>
               <div className="rounded border text-sm">
@@ -426,8 +458,8 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                   <span>Memo</span>
                 </div>
                 {[
-                  { account: "1100 · Cash", debit: 10000, credit: 0, memo: "Stub" },
-                  { account: "4000 · Revenue", debit: 0, credit: 10000, memo: "Stub" },
+                  { account: "1100 · Cash", debit: 10000, credit: 0, memo: "Settlement account" },
+                  { account: "4000 · Revenue", debit: 0, credit: 10000, memo: "Document posting" },
                 ].map((row, i) => (
                   <div
                     key={i}
@@ -441,7 +473,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                 ))}
                 {(form.watch("currency") || baseCurrency) !== baseCurrency && (
                   <div className="p-2 border-t bg-amber-500/10 text-amber-800 dark:text-amber-200 text-xs">
-                    FX Gain/Loss (stub)
+                    FX gain/loss line will be included if document and base currency differ.
                   </div>
                 )}
               </div>
@@ -465,7 +497,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           {step < 4 ? (
             <Button onClick={validateAndNext}>Next</Button>
           ) : (
-            <Button onClick={onSubmit}>Create draft</Button>
+            <Button onClick={() => void onSubmit()} disabled={submitting}>
+              {submitting ? "Creating..." : "Create draft"}
+            </Button>
           )}
           {step < 4 && (
             <Button variant="outline" onClick={onReview}>

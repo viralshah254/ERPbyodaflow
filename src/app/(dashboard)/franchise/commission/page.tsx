@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { CommissionSummaryCard } from "@/components/operational/CommissionSummaryCard";
+import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -276,6 +278,41 @@ export default function FranchiseCommissionPage() {
           <p className="text-muted-foreground text-sm">Loading…</p>
         ) : (
           <>
+            {summaryTotals && summaryTotals.totalTopUp > 0 ? (
+              <ExceptionBanner
+                type="warning"
+                title="Top-up exposure requires finance review"
+                description={`Current filtered view contains ${formatMoney(summaryTotals.totalTopUp, "KES")} in top-up exposure.`}
+                actions={[
+                  { label: "Review finance center", onClick: () => { window.location.href = "/finance/commission-topup"; } },
+                ]}
+              />
+            ) : null}
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              <CommissionSummaryCard
+                title="Commission Exposure"
+                salesAmount={summaryTotals?.totalPayout ?? runs.reduce((a, r) => a + r.totalPayout, 0)}
+                commissionAmount={summaryTotals?.totalCommission ?? 0}
+                topUpAmount={summaryTotals?.totalTopUp ?? topUps.reduce((a, r) => a + r.amount, 0)}
+                status={statusFilter || "ALL"}
+              />
+              <CommissionSummaryCard
+                title="Latest Run"
+                salesAmount={runs[0]?.lines?.reduce((a, l) => a + l.salesAmount, 0) ?? 0}
+                commissionAmount={runs[0]?.lines?.reduce((a, l) => a + l.commissionAmount, 0) ?? 0}
+                topUpAmount={runs[0]?.lines?.reduce((a, l) => a + l.topUpAmount, 0) ?? 0}
+                status={runs[0]?.status}
+              />
+              <CommissionSummaryCard
+                title="Top-up Records"
+                salesAmount={0}
+                commissionAmount={0}
+                topUpAmount={topUps.reduce((a, r) => a + r.amount, 0)}
+                status={topUps.some((t) => t.status === "PENDING") ? "PENDING" : "POSTED"}
+              />
+            </div>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>

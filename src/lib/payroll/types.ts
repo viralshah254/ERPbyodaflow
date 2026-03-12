@@ -40,7 +40,7 @@ export interface Employee {
   paymentMethod?: PaymentMethodStub;
 }
 
-export type PayRunStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "PROCESSED";
+export type PayRunStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "PROCESSED" | "CANCELLED";
 
 export interface PayRunLine {
   id: string;

@@ -6,35 +6,40 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Badge } from "@/components/ui/badge";
-import { getMockMovements, type MovementRow } from "@/lib/mock/movements";
+import { downloadCsv } from "@/lib/export/csv";
+import type { MovementRow } from "@/lib/mock/movements";
+import { fetchInventoryMovementsApi } from "@/lib/api/inventory-stock";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function StockMovementsPage() {
   const [search, setSearch] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("");
+  const [allRows, setAllRows] = React.useState<MovementRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const allRows = React.useMemo(() => getMockMovements(), []);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (warehouseFilter) {
-      out = out.filter((r) => r.warehouse === warehouseFilter);
-    }
-    if (typeFilter) {
-      out = out.filter((r) => r.type === typeFilter);
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.sku.toLowerCase().includes(q) ||
-          r.productName.toLowerCase().includes(q) ||
-          (r.reference?.toLowerCase().includes(q))
+  const refreshRows = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setAllRows(
+        await fetchInventoryMovementsApi({
+          warehouseId: warehouseFilter || undefined,
+          search,
+          type: typeFilter || undefined,
+        })
       );
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoading(false);
     }
-    return out;
-  }, [allRows, warehouseFilter, typeFilter, search]);
+  }, [warehouseFilter, search, typeFilter]);
+
+  React.useEffect(() => {
+    void refreshRows();
+  }, [refreshRows]);
+
+  const filtered = allRows;
 
   const warehouses = React.useMemo(
     () => Array.from(new Set(allRows.map((r) => r.warehouse))),
@@ -123,14 +128,33 @@ export default function StockMovementsPage() {
               onChange: (v) => setTypeFilter(v),
             },
           ]}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `stock-movements-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                date: row.date,
+                type: row.type,
+                sku: row.sku,
+                productName: row.productName,
+                warehouse: row.warehouse,
+                quantity: row.quantity,
+                reference: row.reference ?? "",
+              }))
+            )
+          }
         />
 
-        <DataTable<MovementRow>
-          data={filtered}
-          columns={columns}
-          emptyMessage="No movements found."
-        />
+        {loading ? (
+          <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+            Loading movements...
+          </div>
+        ) : (
+          <DataTable<MovementRow>
+            data={filtered}
+            columns={columns}
+            emptyMessage="No movements found."
+          />
+        )}
       </div>
     </PageShell>
   );

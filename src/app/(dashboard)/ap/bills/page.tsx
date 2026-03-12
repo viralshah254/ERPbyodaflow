@@ -14,6 +14,7 @@ import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { formatMoney } from "@/lib/money";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -35,7 +36,7 @@ export default function APBillsPage() {
     getSavedViews(scope)
   );
 
-  const allRows = React.useMemo(() => getMockAPBills(), []);
+  const [allRows, setAllRows] = React.useState<APBillRow[]>(() => getMockAPBills());
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -157,15 +158,57 @@ export default function APBillsPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `ap-bills-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                number: row.number,
+                date: row.date,
+                supplier: row.party,
+                totalAmount: row.total,
+                currency: "KES",
+                status: row.status,
+              }))
+            )
+          }
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Post (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setAllRows((prev) =>
+                      prev.map((row) =>
+                        selectedIds.includes(row.id) ? { ...row, status: "POSTED" } : row
+                      )
+                    );
+                    toast.success("Bill(s) posted.");
+                    setSelectedIds([]);
+                  }}
+                >
                   Post
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    downloadCsv(
+                      `ap-bills-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+                      filtered
+                        .filter((row) => selectedIds.includes(row.id))
+                        .map((row) => ({
+                          number: row.number,
+                          date: row.date,
+                          supplier: row.party,
+                          totalAmount: row.total,
+                          currency: "KES",
+                          status: row.status,
+                        }))
+                    )
+                  }
+                >
                   Export
                 </Button>
               </div>

@@ -8,10 +8,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getMockPaymentRuns } from "@/lib/mock/treasury/payment-runs";
+import type { PaymentRunRow } from "@/lib/mock/treasury/payment-runs";
+import { listPaymentRuns } from "@/lib/data/payment-runs.repo";
 import { formatMoney } from "@/lib/money";
-import { downloadFile, isApiConfigured } from "@/lib/api/client";
-import { paymentRunApprove } from "@/lib/api/stub-endpoints";
+import { exportPaymentRunFile, paymentRunApprove } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -24,7 +24,13 @@ const METHOD_LABELS: Record<string, string> = {
 export default function PaymentRunDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const run = React.useMemo(() => getMockPaymentRuns().find((r) => r.id === id), [id]);
+  const [run, setRun] = React.useState<PaymentRunRow | undefined>(() =>
+    listPaymentRuns().find((r) => r.id === id)
+  );
+
+  const refreshRun = React.useCallback(() => {
+    setRun(listPaymentRuns().find((r) => r.id === id));
+  }, [id]);
 
   if (!run) {
     return (
@@ -63,10 +69,10 @@ export default function PaymentRunDetailPage() {
                 onClick={async () => {
                   try {
                     await paymentRunApprove(id);
+                    refreshRun();
                     toast.success("Payment run approved.");
                   } catch (e) {
-                    if ((e as Error).message === "STUB") toast.info("Approve (stub). Set NEXT_PUBLIC_API_URL to use backend.");
-                    else toast.error((e as Error).message);
+                    toast.error((e as Error).message);
                   }
                 }}
               >
@@ -78,15 +84,8 @@ export default function PaymentRunDetailPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  if (isApiConfigured()) {
-                    downloadFile(
-                      `/api/treasury/payment-runs/${encodeURIComponent(id)}/export`,
-                      `payment-run-${run.number}.csv`,
-                      (msg) => toast.info(msg || "Export not yet available.")
-                    );
-                  } else {
-                    toast.info("Export CSV / Bank format (stub). Set NEXT_PUBLIC_API_URL to use backend.");
-                  }
+                  exportPaymentRunFile(id, (msg) => toast.info(msg || "Export not yet available."));
+                  toast.success("Payment run export downloaded.");
                 }}
               >
                 Export

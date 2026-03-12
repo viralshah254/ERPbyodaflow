@@ -3,8 +3,17 @@
  * Uses backend when NEXT_PUBLIC_API_URL is set, otherwise falls back to mocks.
  */
 
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
-import { getMockTransfers, type TransferRow } from "@/lib/mock/warehouse/transfers";
+import { apiRequest, downloadTextFile, isApiConfigured } from "@/lib/api/client";
+import {
+  createTransferRecord,
+  getTransferById,
+  listTransfers,
+  updateTransferRecordStatus,
+} from "@/lib/data/transfers.repo";
+import { type TransferRow } from "@/lib/mock/warehouse/transfers";
+import type { TransferStatus } from "@/lib/mock/warehouse/transfers";
+
+export type { TransferRow, TransferStatus };
 
 function listParams(p?: Record<string, string | undefined>): Record<string, string> {
   if (!p) return {};
@@ -16,7 +25,7 @@ function listParams(p?: Record<string, string | undefined>): Record<string, stri
 export async function fetchTransfers(params?: { status?: string; search?: string }): Promise<TransferRow[]> {
   if (!isApiConfigured()) {
     // Filter mocks client-side for dev/demo
-    let items = getMockTransfers();
+    let items = listTransfers();
     if (params?.search) {
       const q = params.search.toLowerCase();
       items = items.filter(
@@ -37,7 +46,7 @@ export async function fetchTransfers(params?: { status?: string; search?: string
 
 export async function fetchTransferById(id: string): Promise<TransferRow | null> {
   if (!isApiConfigured()) {
-    return getMockTransfers().find((t) => t.id === id) ?? null;
+    return getTransferById(id);
   }
   try {
     return await apiRequest<TransferRow>(`/api/warehouse/transfers/${encodeURIComponent(id)}`);
@@ -53,10 +62,51 @@ export async function createTransfer(body: {
   reference?: string;
   lines: { sku: string; productName?: string; quantity: number; unit?: string }[];
 }): Promise<{ id: string }> {
-  if (!isApiConfigured()) throw new Error("STUB");
+  if (!isApiConfigured()) {
+    const created = createTransferRecord(body);
+    return { id: created.id };
+  }
   return apiRequest<{ id: string }>("/api/warehouse/transfers", {
     method: "POST",
     body,
   });
+}
+
+export async function updateTransferStatus(
+  id: string,
+  status: TransferStatus
+): Promise<void> {
+  if (!isApiConfigured()) {
+    updateTransferRecordStatus(id, status);
+    return;
+  }
+  await apiRequest(`/api/warehouse/transfers/${encodeURIComponent(id)}/action`, {
+    method: "POST",
+    body: { action: status.toLowerCase() },
+  });
+}
+
+export function exportTransfersCsv(rows: TransferRow[]): void {
+  const headers = ["number", "date", "fromWarehouse", "toWarehouse", "status", "lineCount"];
+  const csv = [
+    headers.join(","),
+    ...rows.map((row) =>
+      [
+        row.number,
+        row.date,
+        row.fromWarehouse,
+        row.toWarehouse,
+        row.status,
+        row.lines.length,
+      ]
+        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
+        .join(",")
+    ),
+  ].join("\n");
+  downloadTextFile(
+    `warehouse-transfers-${new Date().toISOString().slice(0, 10)}.csv`,
+    csv,
+    "text/csv;charset=utf-8"
+  );
 }
 

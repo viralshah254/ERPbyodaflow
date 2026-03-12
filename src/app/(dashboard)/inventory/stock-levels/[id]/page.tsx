@@ -16,17 +16,45 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getStockItemById, getStockBySku, type StockRow } from "@/lib/mock/stock";
+import {
+  fetchStockLevelApi,
+  fetchStockLevelsApi,
+  type InventoryStockRow,
+} from "@/lib/api/inventory-stock";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function StockLevelDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const [item, setItem] = React.useState<StockRow | null>(undefined as StockRow | null | undefined);
+  const [item, setItem] = React.useState<InventoryStockRow | null | undefined>(undefined);
+  const [otherLocations, setOtherLocations] = React.useState<InventoryStockRow[]>([]);
 
   React.useEffect(() => {
-    const found = getStockItemById(id);
-    setItem(found ?? null);
+    let cancelled = false;
+    async function load() {
+      try {
+        const found = await fetchStockLevelApi(id);
+        if (cancelled) return;
+        setItem(found ?? null);
+        const relatedProductId = found?.productId ?? found?.sku;
+        if (found && relatedProductId) {
+          const related = await fetchStockLevelsApi({ productId: relatedProductId });
+          if (!cancelled) {
+            setOtherLocations(related.filter((row) => row.id !== found.id));
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error((error as Error).message);
+          setItem(null);
+        }
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (item === undefined) {
@@ -66,8 +94,6 @@ export default function StockLevelDetailPage() {
     );
   }
 
-  const otherLocations = getStockBySku(item.sku).filter((r) => r.id !== item.id);
-
   return (
     <PageShell>
       <PageHeader
@@ -86,7 +112,7 @@ export default function StockLevelDetailPage() {
               <Link href={`/inventory/stock-levels`}>Back to list</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/inventory/movements?sku=${encodeURIComponent(item.sku)}`}>View movements</Link>
+              <Link href={`/inventory/movements?productId=${encodeURIComponent(item.productId ?? item.sku)}`}>View movements</Link>
             </Button>
             <Button size="sm" asChild>
               <Link href={`/inventory/stock-levels?adjust=${item.id}`}>Stock adjustment</Link>

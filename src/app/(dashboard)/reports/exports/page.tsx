@@ -14,12 +14,34 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getMockExportHistory, type ExportHistoryRow } from "@/lib/mock/reports";
+import type { ExportHistoryRow } from "@/lib/mock/reports";
+import {
+  downloadReportExportApi,
+  fetchReportExportsApi,
+  runReportExportApi,
+} from "@/lib/api/reports";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ExportsPage() {
-  const rows = React.useMemo(() => getMockExportHistory(), []);
+  const [rows, setRows] = React.useState<ExportHistoryRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [running, setRunning] = React.useState(false);
+
+  const refreshRows = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setRows(await fetchReportExportsApi());
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshRows();
+  }, [refreshRows]);
 
   return (
     <PageShell>
@@ -33,9 +55,25 @@ export default function ExportsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" variant="outline" onClick={() => toast.info("Export (stub)")}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              try {
+                setRunning(true);
+                await runReportExportApi();
+                await refreshRows();
+                toast.success("Export generated.");
+              } catch (error) {
+                toast.error((error as Error).message);
+              } finally {
+                setRunning(false);
+              }
+            }}
+            disabled={running}
+          >
             <Icons.Download className="mr-2 h-4 w-4" />
-            Export
+            {running ? "Exporting..." : "Export"}
           </Button>
         }
       />
@@ -44,11 +82,15 @@ export default function ExportsPage() {
           <CardHeader>
             <CardTitle>Export history</CardTitle>
             <CardDescription>
-              {rows.length} export(s). Download or re-export (stub).
+              {rows.length} export(s). Download or re-run exports from report actions.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {rows.length === 0 ? (
+            {loading ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                Loading exports...
+              </div>
+            ) : rows.length === 0 ? (
               <div className="py-12 text-center text-sm text-muted-foreground">
                 No exports yet. Run a report and export to add here.
               </div>
@@ -81,7 +123,14 @@ export default function ExportsPage() {
                           variant="ghost"
                           size="sm"
                           disabled={r.status !== "completed"}
-                          onClick={() => toast.info(`Download (stub): ${r.name}`)}
+                          onClick={async () => {
+                            try {
+                              await downloadReportExportApi(r);
+                              toast.success(`Downloaded ${r.name}.`);
+                            } catch (error) {
+                              toast.error((error as Error).message);
+                            }
+                          }}
                         >
                           Download
                         </Button>

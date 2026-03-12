@@ -17,25 +17,41 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { loadStoredValue, saveStoredValue } from "@/lib/data/persisted-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CompliancePage() {
-  const [taxId, setTaxId] = React.useState("");
-  const [eInvoice, setEInvoice] = React.useState(false);
-  const [withholdingEnabled, setWithholdingEnabled] = React.useState(false);
+  const saved = React.useMemo(
+    () =>
+      loadStoredValue("odaflow_compliance_settings", () => ({
+        taxId: "",
+        invoiceTemplate: "standard",
+        eInvoice: false,
+        withholdingEnabled: false,
+      })),
+    []
+  );
+  const [taxId, setTaxId] = React.useState(saved.taxId);
+  const [invoiceTemplate, setInvoiceTemplate] = React.useState(saved.invoiceTemplate);
+  const [eInvoice, setEInvoice] = React.useState(saved.eInvoice);
+  const [withholdingEnabled, setWithholdingEnabled] = React.useState(saved.withholdingEnabled);
 
   const handleSave = () => {
-    if (typeof window !== "undefined") {
-      toast.info("Save (stub). API pending.");
-    }
+    saveStoredValue("odaflow_compliance_settings", {
+      taxId,
+      invoiceTemplate,
+      eInvoice,
+      withholdingEnabled,
+    });
+    toast.success("Compliance settings saved.");
   };
 
   return (
     <PageShell>
       <PageHeader
         title="Compliance"
-        description="Tax IDs, invoice templates, e-invoicing, withholding tax. Placeholders."
+        description="Tax IDs, invoice templates, e-invoicing, and withholding control settings."
         breadcrumbs={[
           { label: "Settings", href: "/settings/org" },
           { label: "Compliance" },
@@ -55,7 +71,7 @@ export default function CompliancePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Tax IDs</CardTitle>
-            <CardDescription>Organization tax identifiers (stub).</CardDescription>
+            <CardDescription>Organization tax identifiers used for statutory documents.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -67,12 +83,12 @@ export default function CompliancePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Invoice templates</CardTitle>
-            <CardDescription>Document print templates selector (stub).</CardDescription>
+            <CardDescription>Default document print layouts for operational entities.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <Label>Default invoice template</Label>
-              <Select defaultValue="standard">
+              <Select value={invoiceTemplate} onValueChange={setInvoiceTemplate}>
                 <SelectTrigger className="w-64">
                   <SelectValue />
                 </SelectTrigger>
@@ -87,7 +103,7 @@ export default function CompliancePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">E-invoicing</CardTitle>
-            <CardDescription>Toggle (stub). No real integration.</CardDescription>
+            <CardDescription>Enable or disable e-invoice controls in the document flow.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
@@ -99,7 +115,7 @@ export default function CompliancePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Withholding tax</CardTitle>
-            <CardDescription>Ties to Taxes page. Toggle (stub).</CardDescription>
+            <CardDescription>Control withholding behavior before tax configuration and posting.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">

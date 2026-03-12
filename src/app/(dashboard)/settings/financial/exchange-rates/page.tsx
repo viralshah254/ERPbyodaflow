@@ -22,6 +22,7 @@ import {
   upsertMockExchangeRate,
   type ExchangeRateRow,
 } from "@/lib/mock/exchange-rates";
+import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -73,9 +74,29 @@ export default function ExchangeRatesSettingsPage() {
     );
   };
 
-  const handleFetchLatest = () => {
-    if (typeof window !== "undefined") {
-      toast.info("API not connected.");
+  const handleFetchLatest = async () => {
+    const base = settings.baseCurrency.toUpperCase();
+    const pairs = ["USD", "EUR", "GBP", "UGX", "KES"].filter((c) => c !== base);
+    try {
+      const rates = await Promise.all(
+        pairs.map(async (fromCurrency) => {
+          const live = await fetchLiveExchangeRate(fromCurrency, base);
+          return live;
+        })
+      );
+      for (const rate of rates) {
+        upsertMockExchangeRate({
+          date,
+          from: rate.from,
+          to: rate.to,
+          rate: rate.rate,
+          source: "API_STUB",
+        });
+      }
+      setRefresh((r) => r + 1);
+      toast.success(`Fetched ${rates.length} live rate(s).`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to fetch latest rates.");
     }
   };
 

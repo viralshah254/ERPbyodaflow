@@ -33,7 +33,7 @@ interface DataTableProps<T> {
   onSelectionChange?: (ids: string[]) => void;
 }
 
-export function DataTable<T extends { id?: string }>({
+export function DataTable<T extends object>({
   data,
   columns,
   onRowClick,
@@ -47,10 +47,11 @@ export function DataTable<T extends { id?: string }>({
     () => new Set(selectedIds),
     [selectedIds]
   );
-  const allIds = React.useMemo(
-    () => data.map((r) => r.id).filter(Boolean) as string[],
-    [data]
-  );
+  const allIds = React.useMemo(() => {
+    return data
+      .map((row) => (row as { id?: string }).id)
+      .filter(Boolean) as string[];
+  }, [data]);
   const allSelected =
     allIds.length > 0 && allIds.every((id) => selectedSet.has(id));
   const someSelected = allIds.some((id) => selectedSet.has(id));
@@ -112,11 +113,11 @@ export function DataTable<T extends { id?: string }>({
               </TableRow>
             ) : (
               data.map((row, rowIndex) => {
-                const id = row.id as string | undefined;
+                const id = (row as { id?: string }).id;
                 const checked = id ? selectedSet.has(id) : false;
                 return (
                   <TableRow
-                    key={row.id || rowIndex}
+                    key={id || rowIndex}
                     className={cn(
                       onRowClick && "cursor-pointer hover:bg-muted/50"
                     )}

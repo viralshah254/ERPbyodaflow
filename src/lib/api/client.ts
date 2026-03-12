@@ -111,6 +111,20 @@ export async function downloadFile(
   }
 }
 
+export function downloadTextFile(
+  filename: string,
+  content: string,
+  mimeType = "text/plain;charset=utf-8"
+): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /**
  * POST multipart form data (file upload). Returns JSON body or throws.
  */
@@ -118,7 +132,8 @@ export async function uploadFile(
   path: string,
   file: File,
   onSuccess: (data: { jobId?: string; imported?: number; message?: string }) => void,
-  onError: (message: string) => void
+  onError: (message: string) => void,
+  formFields?: Record<string, string>
 ): Promise<void> {
   if (!getApiBase()) {
     onError("API not configured.");
@@ -127,6 +142,9 @@ export async function uploadFile(
   const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
   const form = new FormData();
   form.append("file", file);
+  Object.entries(formFields ?? {}).forEach(([key, value]) => {
+    form.append(key, value);
+  });
   try {
     const res = await fetch(url, {
       method: "POST",

@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { getMockValuationSummary } from "@/lib/mock/inventory/costing";
 import { fetchLandedCostSources, fetchLandedCostTemplates, postLandedCostAllocation, type LandedCostSourceRow, type LandedCostTemplateRow } from "@/lib/api/landed-cost";
 import { runCosting } from "@/lib/api/stub-endpoints";
+import { listCostingRuns, listLandedCostAllocations } from "@/lib/data/inventory-costing.repo";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -64,6 +65,8 @@ export default function InventoryCostingPage() {
   const [allocationAmount, setAllocationAmount] = React.useState("");
   const [allocationSaving, setAllocationSaving] = React.useState(false);
   const [runCostingLoading, setRunCostingLoading] = React.useState(false);
+  const [costingRuns, setCostingRuns] = React.useState(() => listCostingRuns());
+  const [allocations, setAllocations] = React.useState(() => listLandedCostAllocations());
 
   const summary = React.useMemo(
     () =>
@@ -114,6 +117,7 @@ export default function InventoryCostingPage() {
         sourceId: selectedSource.id,
         lines: [{ templateId, amount, currency: selectedSource.currency }],
       });
+      setAllocations(listLandedCostAllocations());
       toast.success("Landed cost allocation saved.");
       setAllocationOpen(false);
       setSelectedSource(null);
@@ -144,10 +148,10 @@ export default function InventoryCostingPage() {
                 setRunCostingLoading(true);
                 try {
                   await runCosting();
+                  setCostingRuns(listCostingRuns());
                   toast.success("Costing run completed.");
                 } catch (e) {
-                  if ((e as Error).message === "STUB") toast.info("Run costing (stub). API pending.");
-                  else toast.error((e as Error).message);
+                  toast.error((e as Error).message);
                 } finally {
                   setRunCostingLoading(false);
                 }
@@ -173,7 +177,7 @@ export default function InventoryCostingPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Stock valuation summary</CardTitle>
-              <CardDescription>By warehouse / category. Mock.</CardDescription>
+              <CardDescription>By warehouse and category, with landed-cost and periodic run visibility.</CardDescription>
             </div>
             <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
               <SelectTrigger className="w-40">
@@ -259,6 +263,38 @@ export default function InventoryCostingPage() {
             )}
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Costing activity</CardTitle>
+            <CardDescription>Recent landed-cost allocations and costing runs.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <p className="font-medium">Recent allocations</p>
+              {allocations.length === 0 ? (
+                <p className="text-muted-foreground">No allocations recorded yet.</p>
+              ) : (
+                allocations.slice(0, 3).map((allocation) => (
+                  <p key={allocation.id} className="text-muted-foreground">
+                    {allocation.sourceId} · {allocation.lines.length} line(s) · {new Date(allocation.postedAt).toLocaleString()}
+                  </p>
+                ))
+              )}
+            </div>
+            <div>
+              <p className="font-medium">Recent costing runs</p>
+              {costingRuns.length === 0 ? (
+                <p className="text-muted-foreground">No costing runs executed yet.</p>
+              ) : (
+                costingRuns.slice(0, 3).map((run) => (
+                  <p key={run.id} className="text-muted-foreground">
+                    {run.period} · {run.status} · {new Date(run.completedAt).toLocaleString()}
+                  </p>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Sheet open={allocationOpen} onOpenChange={setAllocationOpen}>
@@ -302,7 +338,7 @@ export default function InventoryCostingPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Allocate by qty, value, or weight. For weight-based allocation (e.g. fish), ensure GRN lines have weight; multi-currency sources (e.g. UGX) use exchange rate to base. Per-unit cost impact after save (stub).
+                Allocate by qty, value, or weight. For weight-based allocation (e.g. fish), ensure GRN lines have weight; multi-currency sources (e.g. UGX) use exchange rate to base.
               </p>
             </div>
           )}

@@ -16,20 +16,40 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import { listPayslips } from "@/lib/data/payroll.repo";
+import { fetchPayslipsApi } from "@/lib/api/payroll";
 import type { Payslip } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
-import { downloadFile, isApiConfigured } from "@/lib/api/client";
+import { downloadFile, downloadTextFile, isApiConfigured } from "@/lib/api/client";
 import * as Icons from "lucide-react";
 
 export default function PayslipsPage() {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Payslip | null>(null);
   const [search, setSearch] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [slips, setSlips] = React.useState<Payslip[]>([]);
 
-  const slips = React.useMemo(() => listPayslips(), []);
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadPayslips = async () => {
+      setLoading(true);
+      try {
+        const items = await fetchPayslipsApi();
+        if (!cancelled) setSlips(items);
+      } catch (e) {
+        if (!cancelled) toast.error((e as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void loadPayslips();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const filtered = React.useMemo(() => {
     if (!search.trim()) return slips;
     const q = search.trim().toLowerCase();
@@ -64,14 +84,26 @@ export default function PayslipsPage() {
       );
       return;
     }
-    toast.info("Download PDF (stub). API pending.");
+    const slip = filtered.find((row) => row.id === payslipId);
+    if (!slip) return;
+    downloadTextFile(
+      `payslip-${slip.employeeName.replaceAll(" ", "-").toLowerCase()}-${slip.month}.txt`,
+      [
+        `Payslip: ${slip.employeeName}`,
+        `Month: ${slip.month}`,
+        `Gross: ${formatMoney(slip.gross, slip.currency)}`,
+        `Statutory: ${formatMoney(slip.statutory, slip.currency)}`,
+        `Net: ${formatMoney(slip.net, slip.currency)}`,
+      ].join("\n")
+    );
+    toast.success("Payslip preview exported.");
   };
 
   return (
     <PageShell>
       <PageHeader
         title="Payslips"
-        description="Preview, download PDF (stub)."
+        description="Preview and export payslips."
         breadcrumbs={[
           { label: "Payroll", href: "/payroll/overview" },
           { label: "Payslips" },
@@ -92,19 +124,31 @@ export default function PayslipsPage() {
           searchPlaceholder="Search by employee, month..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() =>
+            downloadCsv(
+              `payslips-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                employeeName: row.employeeName,
+                month: row.month,
+                gross: row.gross,
+                statutory: row.statutory,
+                net: row.net,
+                currency: row.currency,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>
             <CardTitle>Payslips</CardTitle>
-            <CardDescription>Open to preview. Download PDF (stub).</CardDescription>
+            <CardDescription>Open to preview or export a payslip copy.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<Payslip>
               data={filtered}
               columns={columns}
               onRowClick={openPreview}
-              emptyMessage="No payslips."
+              emptyMessage={loading ? "Loading payslips..." : "No payslips."}
             />
           </CardContent>
         </Card>

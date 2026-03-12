@@ -20,6 +20,7 @@ import type { CurrencyCode } from "@/lib/org/financial-settings";
 import { BaseCurrencyCard } from "@/components/settings/financial/BaseCurrencyCard";
 import { CurrencyTable } from "@/components/settings/financial/CurrencyTable";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -27,6 +28,7 @@ export default function CurrenciesSettingsPage() {
   const { settings, update } = useFinancialSettings();
   const [addOpen, setAddOpen] = React.useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
+  const [newCurrencyCode, setNewCurrencyCode] = React.useState("");
 
   const handleBaseChange = React.useCallback(
     (code: CurrencyCode) => {
@@ -52,10 +54,16 @@ export default function CurrenciesSettingsPage() {
   };
 
   const handleAddSave = () => {
-    if (typeof window !== "undefined") {
-      toast.info("Add currency (stub). API pending.");
+    const code = newCurrencyCode.trim().toUpperCase();
+    if (!code) {
+      toast.error("Enter a currency code.");
+      return;
     }
+    const next = [...new Set([...settings.enabledCurrencies, code as CurrencyCode])];
+    update({ enabledCurrencies: next });
+    toast.success(`Currency ${code} enabled.`);
     setAddOpen(false);
+    setNewCurrencyCode("");
   };
 
   const handleImportCsv = () => {
@@ -102,10 +110,28 @@ export default function CurrenciesSettingsPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" onClick={handleImportCsv}>
-            <Icons.Upload className="mr-2 h-4 w-4" />
-            Import CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadCsv(
+                  `currencies-${new Date().toISOString().slice(0, 10)}.csv`,
+                  settings.enabledCurrencies.map((code) => ({
+                    code,
+                    isBaseCurrency: code === settings.baseCurrency,
+                  }))
+                )
+              }
+            >
+              <Icons.Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleImportCsv}>
+              <Icons.Upload className="mr-2 h-4 w-4" />
+              Import CSV
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-6">
@@ -136,13 +162,13 @@ export default function CurrenciesSettingsPage() {
           <SheetHeader>
             <SheetTitle>Add currency</SheetTitle>
             <SheetDescription>
-              Add a new currency. API pending — stub only.
+              Enable an additional currency code for transactions and reporting.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
               <Label>Code</Label>
-              <Input placeholder="e.g. CHF" />
+              <Input placeholder="e.g. CHF" value={newCurrencyCode} onChange={(e) => setNewCurrencyCode(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
@@ -161,7 +187,7 @@ export default function CurrenciesSettingsPage() {
             <Button variant="outline" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddSave}>Add (stub)</Button>
+            <Button onClick={handleAddSave}>Add currency</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

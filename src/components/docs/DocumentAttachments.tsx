@@ -8,6 +8,8 @@ import * as Icons from "lucide-react";
 
 interface DocumentAttachmentsProps {
   files?: { id: string; name: string; size?: string }[];
+  onUpload?: (file: File) => void | Promise<void>;
+  onDownload?: (file: { id: string; name: string; size?: string }) => void;
 }
 
 const MOCK_FILES = [
@@ -15,12 +17,39 @@ const MOCK_FILES = [
   { id: "2", name: "delivery-scan.png", size: "1.2 MB" },
 ];
 
-/** Attachments panel: list + upload stub, optional drop-zone styling. */
-export function DocumentAttachments({ files = MOCK_FILES }: DocumentAttachmentsProps) {
+/** Attachments panel: list + lightweight demo upload/download behavior. */
+export function DocumentAttachments({
+  files = MOCK_FILES,
+  onUpload,
+  onDownload,
+}: DocumentAttachmentsProps) {
   const [isDragOver, setIsDragOver] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFiles = async (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    try {
+      await onUpload?.(file);
+      if (!onUpload) {
+        toast.success(`Attachment ${file.name} recorded.`);
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   return (
     <div className="space-y-4">
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          void handleFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
       <div
         className={cn(
           "rounded-lg border-2 border-dashed p-6 text-center transition-colors",
@@ -28,15 +57,20 @@ export function DocumentAttachments({ files = MOCK_FILES }: DocumentAttachmentsP
         )}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+          void handleFiles(e.dataTransfer.files);
+        }}
       >
         <p className="text-sm text-muted-foreground mb-2">Drag and drop files here, or</p>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => toast.info("Upload (stub). API pending.")}
+          onClick={() => inputRef.current?.click()}
         >
           <Icons.Upload className="mr-2 h-4 w-4" />
-          Upload (stub)
+          Upload file
         </Button>
       </div>
       {files.length === 0 ? (
@@ -54,7 +88,17 @@ export function DocumentAttachments({ files = MOCK_FILES }: DocumentAttachmentsP
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {f.size && <span className="text-xs text-muted-foreground">{f.size}</span>}
-                <Button variant="ghost" size="sm" className="h-7" onClick={() => toast.info(`Download (stub): ${f.name}`)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => {
+                    onDownload?.(f);
+                    if (!onDownload) {
+                      toast.success(`Attachment preview for ${f.name} is only available in demo mode.`);
+                    }
+                  }}
+                >
                   <Icons.Download className="h-4 w-4" />
                 </Button>
               </div>

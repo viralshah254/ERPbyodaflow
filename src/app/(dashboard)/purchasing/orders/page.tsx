@@ -9,7 +9,10 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getMockPurchaseOrders, type PurchasingDocRow } from "@/lib/mock/purchasing";
+import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
+import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
+import { fetchPurchaseOrders, approvePurchaseOrders, exportPurchaseOrdersCsv } from "@/lib/api/purchasing";
+import type { PurchasingDocRow } from "@/lib/mock/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
@@ -35,8 +38,23 @@ export default function PurchaseOrdersPage() {
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
   );
+  const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const allRows = React.useMemo(() => getMockPurchaseOrders(), []);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchPurchaseOrders()
+      .then((rows) => {
+        if (!cancelled) setAllRows(rows);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -137,6 +155,17 @@ export default function PurchaseOrdersPage() {
         }
       />
       <div className="p-6 space-y-4">
+        <ExceptionBanner
+          type="info"
+          title="Procurement workspace"
+          description="Use this worklist to control approvals, cash-heavy sourcing, and drill into PO-level audit and landed-cost context."
+        />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <OperationalKpiCard title="Total POs" value={allRows.length} subtitle="Current dataset" />
+          <OperationalKpiCard title="Pending Approval" value={allRows.filter((r) => r.status === "PENDING_APPROVAL").length} subtitle="Needs action now" severity="warning" />
+          <OperationalKpiCard title="Approved" value={allRows.filter((r) => r.status === "APPROVED").length} subtitle="Ready for receiving" />
+          <OperationalKpiCard title="Received" value={allRows.filter((r) => r.status === "RECEIVED").length} subtitle="Already fulfilled" severity="success" />
+        </div>
         <DataTableToolbar
           searchPlaceholder="Search by number, supplier..."
           searchValue={search}
@@ -159,30 +188,43 @@ export default function PurchaseOrdersPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() => exportPurchaseOrdersCsv(filtered)}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Approve (stub)")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await approvePurchaseOrders(selectedIds);
+                    setAllRows(await fetchPurchaseOrders());
+                    toast.success(`${selectedIds.length} purchase order(s) approved.`);
+                    setSelectedIds([]);
+                  }}
+                >
                   Approve
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+                <Button variant="outline" size="sm" onClick={() => exportPurchaseOrdersCsv(filtered.filter((r) => selectedIds.includes(r.id)))}>
                   Export
                 </Button>
               </div>
             ) : undefined
           }
         />
-        <DataTable<PurchasingDocRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/purchase-order/${row.id}`)}
-          emptyMessage="No purchase orders yet."
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading purchase orders…</div>
+        ) : (
+          <DataTable<PurchasingDocRow>
+            data={filtered}
+            columns={columns}
+            onRowClick={(row) => router.push(`/purchasing/orders/${row.id}`)}
+            emptyMessage="No purchase orders yet."
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        )}
       </div>
     </PageShell>
   );

@@ -7,10 +7,13 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getMockPurchaseReturns, type PurchasingDocRow } from "@/lib/mock/purchasing";
+import type { PurchasingDocRow } from "@/lib/mock/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { downloadCsv } from "@/lib/export/csv";
+import { createPurchaseReturn, listPurchaseReturns, updatePurchaseReturnStatus } from "@/lib/data/purchasing.repo";
 import {
   purchaseReturnCreate,
   purchaseReturnApprove,
@@ -35,12 +38,18 @@ export default function PurchaseReturnsPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [creating, setCreating] = React.useState(false);
   const [approving, setApproving] = React.useState(false);
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const [selectedReturn, setSelectedReturn] = React.useState<PurchasingDocRow | null>(null);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
   );
 
-  const allRows = React.useMemo(() => getMockPurchaseReturns(), []);
+  const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>(() => listPurchaseReturns());
+
+  const refreshRows = React.useCallback(() => {
+    setAllRows(listPurchaseReturns());
+  }, []);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -126,17 +135,27 @@ export default function PurchaseReturnsPage() {
     setCreating(true);
     try {
       await purchaseReturnCreate({});
+      refreshRows();
       toast.success("Purchase return created.");
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Create return (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setCreating(false);
     }
   };
 
   const handleExport = () => {
-    purchaseReturnsExport((msg) => toast.info(msg || "Export (stub). API pending."));
+    downloadCsv(
+      `purchase-returns-${new Date().toISOString().slice(0, 10)}.csv`,
+      filtered.map((row) => ({
+        number: row.number,
+        date: row.date,
+        supplier: row.party ?? "",
+        poRef: row.poRef ?? "",
+        total: row.total ?? 0,
+        status: row.status,
+      }))
+    );
   };
 
   const handleBulkApprove = async () => {
@@ -145,12 +164,13 @@ export default function PurchaseReturnsPage() {
     try {
       for (const returnId of selectedIds) {
         await purchaseReturnApprove(returnId);
+        updatePurchaseReturnStatus(returnId, "APPROVED");
       }
+      refreshRows();
       toast.success(`Approved ${selectedIds.length} return(s).`);
       setSelectedIds([]);
     } catch (e) {
-      if ((e as Error).message === "STUB") toast.info("Approve (stub). API pending.");
-      else toast.error((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setApproving(false);
     }
@@ -215,13 +235,46 @@ export default function PurchaseReturnsPage() {
         <DataTable<PurchasingDocRow>
           data={filtered}
           columns={columns}
-          onRowClick={() => toast.info("View return (stub). API not connected yet.")}
+          onRowClick={(row) => {
+            setSelectedReturn(row);
+            setDetailOpen(true);
+          }}
           emptyMessage="No purchase returns yet."
           selectable
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
       </div>
+      <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
+        <SheetContent side="right">
+          <SheetHeader>
+            <SheetTitle>{selectedReturn?.number ?? "Purchase return"}</SheetTitle>
+            <SheetDescription>Return-to-vendor summary, approval state, and linked PO reference.</SheetDescription>
+          </SheetHeader>
+          {selectedReturn && (
+            <div className="mt-6 space-y-2 text-sm">
+              <p><span className="text-muted-foreground">Supplier:</span> {selectedReturn.party ?? "—"}</p>
+              <p><span className="text-muted-foreground">Date:</span> {selectedReturn.date}</p>
+              <p><span className="text-muted-foreground">PO ref:</span> {selectedReturn.poRef ?? "—"}</p>
+              <p><span className="text-muted-foreground">Total:</span> KES {(selectedReturn.total ?? 0).toLocaleString()}</p>
+              <p><span className="text-muted-foreground">Status:</span> {selectedReturn.status}</p>
+              <div className="pt-4">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    updatePurchaseReturnStatus(selectedReturn.id, "APPROVED");
+                    refreshRows();
+                    setSelectedReturn(listPurchaseReturns().find((row) => row.id === selectedReturn.id) ?? selectedReturn);
+                    toast.success("Return approved.");
+                  }}
+                >
+                  Approve return
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

@@ -21,7 +21,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getMockParties, type PartyRow, type CustomerType, type SupplierType } from "@/lib/mock/masters";
+import type { PartyRow, CustomerType, SupplierType } from "@/lib/mock/masters";
+import { createPartyApi, fetchPartiesApi, updatePartyApi } from "@/lib/api/parties";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
@@ -39,16 +40,41 @@ export default function MasterPartiesPage() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [customerType, setCustomerType] = React.useState<CustomerType | "">("");
   const [supplierType, setSupplierType] = React.useState<SupplierType | "">("");
+  const [parties, setParties] = React.useState<PartyRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [formName, setFormName] = React.useState("");
+  const [formEmail, setFormEmail] = React.useState("");
+  const [formPhone, setFormPhone] = React.useState("");
+  const [formCustomerType, setFormCustomerType] = React.useState<CustomerType>("RETAILER");
+  const [formSupplierType, setFormSupplierType] = React.useState<SupplierType>("RAW_MATERIAL");
 
-  const customers = React.useMemo(() => getMockParties("customer"), []);
-  const suppliers = React.useMemo(() => getMockParties("supplier"), []);
-  const franchisees = React.useMemo(
-    () => customers.filter((p) => p.roles?.includes("franchisee") || p.customerType === "FRANCHISEE"),
-    [customers]
-  );
+  const refreshParties = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const role = tab === "customers" ? "customer" : tab === "franchisees" ? "franchisee" : "supplier";
+      setParties(
+        await fetchPartiesApi({
+          role,
+          customerType: tab === "customers" ? customerType : "",
+          supplierType: tab === "suppliers" ? supplierType : "",
+          search,
+          status: "ACTIVE",
+        })
+      );
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [customerType, search, supplierType, tab]);
+
+  React.useEffect(() => {
+    void refreshParties();
+  }, [refreshParties]);
 
   const filteredCustomers = React.useMemo(() => {
-    let base = customers;
+    let base = parties;
     if (customerType) {
       base = base.filter((p) => p.customerType === customerType);
     }
@@ -59,20 +85,20 @@ export default function MasterPartiesPage() {
         r.name.toLowerCase().includes(q) ||
         (r.email?.toLowerCase().includes(q))
     );
-  }, [customers, customerType, search]);
+  }, [customerType, parties, search]);
 
   const filteredFranchisees = React.useMemo(() => {
-    if (!search.trim()) return franchisees;
+    if (!search.trim()) return parties;
     const q = search.trim().toLowerCase();
-    return franchisees.filter(
+    return parties.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
         (r.email?.toLowerCase().includes(q))
     );
-  }, [franchisees, search]);
+  }, [parties, search]);
 
   const filteredSuppliers = React.useMemo(() => {
-    let base = suppliers;
+    let base = parties;
     if (supplierType) {
       base = base.filter((p) => p.supplierType === supplierType);
     }
@@ -83,7 +109,7 @@ export default function MasterPartiesPage() {
         r.name.toLowerCase().includes(q) ||
         (r.email?.toLowerCase().includes(q))
     );
-  }, [suppliers, supplierType, search]);
+  }, [parties, search, supplierType]);
 
   const columns = React.useMemo(
     () => [
@@ -152,6 +178,64 @@ export default function MasterPartiesPage() {
       ? franchiseeLabel
       : supplierLabel;
 
+  const openCreateDrawer = () => {
+    setEditingId(null);
+    setFormName("");
+    setFormEmail("");
+    setFormPhone("");
+    setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
+    setFormSupplierType(supplierType || "RAW_MATERIAL");
+    setDrawerOpen(true);
+  };
+
+  const openEditDrawer = (row: PartyRow) => {
+    setEditingId(row.id);
+    setFormName(row.name);
+    setFormEmail(row.email ?? "");
+    setFormPhone(row.phone ?? "");
+    setFormCustomerType(row.customerType ?? "RETAILER");
+    setFormSupplierType(row.supplierType ?? "RAW_MATERIAL");
+    setDrawerOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!formName.trim()) {
+      toast.error("Name is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const roles =
+        tab === "suppliers"
+          ? ["supplier"] as const
+          : tab === "franchisees"
+            ? (["customer", "franchisee"] as const)
+            : (["customer"] as const);
+      const payload = {
+        name: formName.trim(),
+        email: formEmail.trim() || undefined,
+        phone: formPhone.trim() || undefined,
+        roles: [...roles],
+        customerType: tab === "suppliers" ? undefined : formCustomerType,
+        supplierType: tab === "suppliers" ? formSupplierType : undefined,
+        status: "ACTIVE" as const,
+      };
+      if (editingId) {
+        await updatePartyApi(editingId, payload);
+        toast.success(`${label} updated.`);
+      } else {
+        await createPartyApi(payload);
+        toast.success(`${label} created.`);
+      }
+      setDrawerOpen(false);
+      await refreshParties();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -165,10 +249,7 @@ export default function MasterPartiesPage() {
         showCommandHint
         actions={
           <Button
-            onClick={() => {
-              setEditingId(null);
-              setDrawerOpen(true);
-            }}
+            onClick={openCreateDrawer}
           >
             <Icons.Plus className="mr-2 h-4 w-4" />
             Add {label}
@@ -213,24 +294,25 @@ export default function MasterPartiesPage() {
                 </Link>
               }
             />
-            {filteredCustomers.length === 0 ? (
+            {loading ? (
+              <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+                Loading {customerLabel.toLowerCase()}s...
+              </div>
+            ) : filteredCustomers.length === 0 ? (
               <EmptyState
                 icon="Users"
                 title={`No ${customerLabel.toLowerCase()}s`}
                 description="Add your first customer."
                 action={{
                   label: `Add ${customerLabel}`,
-                  onClick: () => setDrawerOpen(true),
+                  onClick: openCreateDrawer,
                 }}
               />
             ) : (
               <DataTable<PartyRow>
                 data={filteredCustomers}
                 columns={columns}
-                onRowClick={(row) => {
-                  setEditingId(row.id);
-                  setDrawerOpen(true);
-                }}
+                onRowClick={openEditDrawer}
                 emptyMessage={`No ${customerLabel.toLowerCase()}s.`}
               />
             )}
@@ -265,24 +347,25 @@ export default function MasterPartiesPage() {
                 </Link>
               }
             />
-            {filteredSuppliers.length === 0 ? (
+            {loading ? (
+              <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+                Loading {supplierLabel.toLowerCase()}s...
+              </div>
+            ) : filteredSuppliers.length === 0 ? (
               <EmptyState
                 icon="Building2"
                 title={`No ${supplierLabel.toLowerCase()}s`}
                 description="Add your first supplier."
                 action={{
                   label: `Add ${supplierLabel}`,
-                  onClick: () => setDrawerOpen(true),
+                  onClick: openCreateDrawer,
                 }}
               />
             ) : (
               <DataTable<PartyRow>
                 data={filteredSuppliers}
                 columns={columns}
-                onRowClick={(row) => {
-                  setEditingId(row.id);
-                  setDrawerOpen(true);
-                }}
+                onRowClick={openEditDrawer}
                 emptyMessage={`No ${supplierLabel.toLowerCase()}s.`}
               />
             )}
@@ -302,27 +385,25 @@ export default function MasterPartiesPage() {
                 </Link>
               }
             />
-            {filteredFranchisees.length === 0 ? (
+            {loading ? (
+              <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+                Loading {franchiseeLabel.toLowerCase()}s...
+              </div>
+            ) : filteredFranchisees.length === 0 ? (
               <EmptyState
                 icon="Users"
                 title={`No ${franchiseeLabel.toLowerCase()}s`}
                 description="Add your first franchisee."
                 action={{
                   label: `Add ${franchiseeLabel}`,
-                  onClick: () => {
-                    setEditingId(null);
-                    setDrawerOpen(true);
-                  },
+                  onClick: openCreateDrawer,
                 }}
               />
             ) : (
               <DataTable<PartyRow>
                 data={filteredFranchisees}
                 columns={columns}
-                onRowClick={(row) => {
-                  setEditingId(row.id);
-                  setDrawerOpen(true);
-                }}
+                onRowClick={openEditDrawer}
                 emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
               />
             )}
@@ -337,26 +418,36 @@ export default function MasterPartiesPage() {
         description={editingId ? `Update ${label.toLowerCase()} details.` : `Add a new ${label.toLowerCase()}.`}
         mode={editingId ? "edit" : "create"}
         duplicateWarning={!editingId ? `Possible duplicate: similar name exists (stub).` : undefined}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDrawerOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSave()} disabled={saving}>
+              {saving ? "Saving..." : editingId ? "Save" : "Create"}
+            </Button>
+          </>
+        }
       >
         <div className="space-y-4 pr-4">
           <div className="space-y-2">
             <Label>Name</Label>
-            <Input placeholder="Party name" />
+            <Input placeholder="Party name" value={formName} onChange={(e) => setFormName(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>Email</Label>
-            <Input type="email" placeholder="email@example.com" />
+            <Input type="email" placeholder="email@example.com" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>Phone</Label>
-            <Input placeholder="Phone" />
+            <Input placeholder="Phone" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} />
           </div>
           {tab === "customers" && (
             <div className="space-y-2">
               <Label>Customer type</Label>
               <Select
-                value={customerType || "RETAILER"}
-                onValueChange={(v) => setCustomerType(v as CustomerType | "")}
+                value={formCustomerType}
+                onValueChange={(v) => setFormCustomerType(v as CustomerType)}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -381,8 +472,8 @@ export default function MasterPartiesPage() {
             <div className="space-y-2">
               <Label>Supplier type</Label>
               <Select
-                value={supplierType || "RAW_MATERIAL"}
-                onValueChange={(v) => setSupplierType(v as SupplierType | "")}
+                value={formSupplierType}
+                onValueChange={(v) => setFormSupplierType(v as SupplierType)}
               >
                 <SelectTrigger>
                   <SelectValue />

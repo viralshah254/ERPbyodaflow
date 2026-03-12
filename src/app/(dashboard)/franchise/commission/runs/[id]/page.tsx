@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { CommissionSummaryCard } from "@/components/operational/CommissionSummaryCard";
 import { fetchCommissionRunById } from "@/lib/api/cool-catch";
 import type { CommissionRunLineRow } from "@/lib/mock/franchise/commission";
 import { formatMoney } from "@/lib/money";
@@ -80,6 +81,13 @@ export default function CommissionRunDetailPage() {
         }
       />
       <div className="p-6 space-y-6">
+        <CommissionSummaryCard
+          title={run.number}
+          salesAmount={run.lines?.reduce((a, l) => a + l.salesAmount, 0) ?? 0}
+          commissionAmount={run.lines?.reduce((a, l) => a + l.commissionAmount, 0) ?? 0}
+          topUpAmount={run.lines?.reduce((a, l) => a + l.topUpAmount, 0) ?? 0}
+          status={run.status}
+        />
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Header</CardTitle>

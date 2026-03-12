@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listProducts, createProduct } from "@/lib/data/products.repo";
+import { createProductApi, fetchProductsApi } from "@/lib/api/products";
 import { listUoms } from "@/lib/data/uom.repo";
 import type { ProductRow } from "@/lib/mock/masters";
 import { t } from "@/lib/terminology";
@@ -39,6 +39,9 @@ export default function MasterProductsPage() {
   const [statusFilter, setStatusFilter] = React.useState("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [allRows, setAllRows] = React.useState<ProductRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
   const [sku, setSku] = React.useState("");
   const [name, setName] = React.useState("");
   const [category, setCategory] = React.useState("");
@@ -47,24 +50,22 @@ export default function MasterProductsPage() {
   const [defaultSize, setDefaultSize] = React.useState("");
 
   const uomOptions = React.useMemo(() => listUoms().map((u) => u.code), []);
+  const filtered = allRows;
 
-  const allRows = React.useMemo(() => listProducts(), []);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.sku.toLowerCase().includes(q) ||
-          r.name.toLowerCase().includes(q) ||
-          (r.category?.toLowerCase().includes(q))
-      );
+  const refreshProducts = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setAllRows(await fetchProductsApi(search, statusFilter || undefined));
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoading(false);
     }
-    if (statusFilter) {
-      out = out.filter((r) => r.status === statusFilter);
-    }
-    return out;
-  }, [allRows, search, statusFilter]);
+  }, [search, statusFilter]);
+
+  React.useEffect(() => {
+    void refreshProducts();
+  }, [refreshProducts]);
 
   const columns = React.useMemo(
     () => [
@@ -106,27 +107,33 @@ export default function MasterProductsPage() {
     setDefaultSize("");
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!sku.trim() || !name.trim()) {
       toast.error("SKU and Name are required.");
       return;
     }
     const selectedUnit = unit.trim() || (uomOptions[0] ?? "EA");
-    const payload: Omit<ProductRow, "id"> = {
+    const payload = {
       sku: sku.trim(),
       name: name.trim(),
       category: category.trim() || undefined,
       unit: selectedUnit,
       baseUom: selectedUnit,
-      status: "ACTIVE",
-      currentStock: 0,
+      status: "ACTIVE" as const,
     };
-    const created = createProduct(payload);
-    toast.success("Product created. Next: define packaging and variants.");
-    resetForm();
-    setDrawerOpen(false);
-    // Guide user straight into packaging/variants on the detail page
-    router.push(`/master/products/${created.id}/packaging`);
+    try {
+      setSaving(true);
+      const created = await createProductApi(payload);
+      toast.success("Product created.");
+      resetForm();
+      setDrawerOpen(false);
+      await refreshProducts();
+      router.push(`/master/products/${created.id}`);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -187,7 +194,11 @@ export default function MasterProductsPage() {
             </Link>
           }
         />
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+            Loading {productLabel.toLowerCase()}s...
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={productIcon}
             title={`No ${productLabel.toLowerCase()}s found`}
@@ -220,8 +231,8 @@ export default function MasterProductsPage() {
               Cancel
             </Button>
             {!editingId && (
-              <Button onClick={handleCreate}>
-                Create & configure
+              <Button onClick={() => void handleCreate()} disabled={saving}>
+                {saving ? "Creating..." : "Create & configure"}
               </Button>
             )}
           </>
@@ -255,7 +266,7 @@ export default function MasterProductsPage() {
           <div className="space-y-2">
             <Label>Unit</Label>
             <Select
-              value={unit || uomOptions[0] ?? "EA"}
+              value={unit || (uomOptions[0] ?? "EA")}
               onValueChange={(v) => setUnit(v)}
             >
               <SelectTrigger>

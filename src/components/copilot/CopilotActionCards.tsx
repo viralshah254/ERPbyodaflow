@@ -30,12 +30,7 @@ export function CopilotActionCards() {
       toast.success("Action applied.");
       openDrawerWithAction(action);
     } catch (e) {
-      if ((e as Error).message === "STUB") {
-        toast.info("Apply action (stub). API pending.");
-        openDrawerWithAction(action);
-      } else {
-        toast.error((e as Error).message);
-      }
+      toast.error((e as Error).message);
     } finally {
       setApplyingId(null);
     }
@@ -49,7 +44,7 @@ export function CopilotActionCards() {
           Copilot action cards
         </CardTitle>
         <CardDescription>
-          Pricing, payroll, and tax recommendations. Apply opens review (stub).
+          Pricing, payroll, and tax recommendations. Apply opens the guided review flow.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -52,7 +52,10 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "inventory-stock-levels", label: "Stock Levels", href: "/inventory/stock-levels", icon: "Warehouse", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-movements", label: "Stock Movements", href: "/inventory/movements", icon: "ArrowLeftRight", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-receipts", label: "Receipts (GRN)", href: "/inventory/receipts", icon: "PackageCheck", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
+      { key: "inventory-receiving", label: "Receiving Queue", href: "/inventory/receiving", icon: "ClipboardCheck", moduleKey: "inventory", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["inventory.read"] },
       { key: "inventory-costing", label: "Costing", href: "/inventory/costing", icon: "Calculator", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
+      { key: "inventory-stock-explorer", label: "Stock Explorer", href: "/inventory/stock-explorer", icon: "Search", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
+      { key: "inventory-valuation", label: "Valuation", href: "/inventory/valuation", icon: "Scale", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-transfers", label: "Transfers", href: "/warehouse/transfers", icon: "Truck", moduleKey: "inventory", requiresFlags: ["multiWarehouse"], requiresPermissions: ["inventory.write"] },
       { key: "inventory-stocktake", label: "Stocktake / Cycle Count", href: "/warehouse/cycle-counts", icon: "ClipboardCheck", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
       { key: "inventory-warehouses", label: "Warehouses & Locations", href: "/inventory/warehouses", icon: "MapPin", moduleKey: "inventory", termKey: "warehouse", requiresPermissions: ["inventory.read"] },
@@ -126,6 +129,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "manufacturing-mrp", label: "MRP", href: "/manufacturing/mrp", icon: "BarChart3", moduleKey: "manufacturing", requiresFlags: ["bomMrpWorkOrders"], requiresPermissions: ["manufacturing.production.read"] },
       { key: "manufacturing-subcontracting", label: "Subcontracting / Job Work", href: "/manufacturing/subcontracting", icon: "Factory", moduleKey: "manufacturing", requiresFlags: ["subcontracting"], requiresPermissions: ["manufacturing.production.read"] },
       { key: "manufacturing-yield", label: "Yield / Mass balance", href: "/manufacturing/yield", icon: "Scale", moduleKey: "manufacturing", requiresFlags: ["massBalanceYield"], requiresPermissions: ["manufacturing.production.read"] },
+      { key: "manufacturing-byproducts", label: "Byproducts", href: "/manufacturing/byproducts", icon: "Package", moduleKey: "manufacturing", requiresFlags: ["reverseBom"], requiresPermissions: ["manufacturing.production.read"] },
     ],
   },
   {
@@ -138,6 +142,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "distribution-routes", label: "Routes", href: "/distribution/routes", icon: "MapPin", moduleKey: "distribution", termKey: "route", requiresPermissions: ["distribution.routes.read"] },
       { key: "distribution-deliveries", label: "Deliveries", href: "/distribution/deliveries", icon: "Truck", moduleKey: "distribution", termKey: "delivery", requiresFlags: ["deliveries"], requiresPermissions: ["distribution.deliveries.read"] },
       { key: "distribution-trips", label: "Trips / Logistics", href: "/distribution/trips", icon: "Ship", moduleKey: "distribution", requiresFlags: ["logisticsTrips"], requiresPermissions: ["distribution.routes.read"] },
+      { key: "distribution-transfer-planning", label: "Transfer Planning", href: "/distribution/transfer-planning", icon: "Route", moduleKey: "distribution", requiresFlags: ["logisticsTrips"], requiresPermissions: ["distribution.routes.read"] },
       { key: "distribution-collections", label: "Collections", href: "/distribution/collections", icon: "Wallet", moduleKey: "distribution", termKey: "collection", requiresFlags: ["collections"], requiresPermissions: ["distribution.collections.read"] },
     ],
   },
@@ -147,8 +152,10 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     moduleKey: "franchise",
     order: 8.5,
     items: [
+      { key: "franchise-overview", label: "Franchise Overview", href: "/franchise/overview", icon: "LayoutDashboard", moduleKey: "franchise", requiresFlags: ["commissionEngine"], requiresPermissions: ["inventory.read"] },
       { key: "franchise-commission", label: "Commission & Rebates", href: "/franchise/commission", icon: "Percent", moduleKey: "franchise", termKey: "commission", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
       { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment"], requiresPermissions: ["inventory.read"] },
+      { key: "franchise-comparison", label: "Franchise Comparison", href: "/franchise/comparison", icon: "BarChart3", moduleKey: "franchise", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
     ],
   },
   {
@@ -243,6 +250,9 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "ap-three-way-match", label: "3-way match", href: "/ap/three-way-match", icon: "GitCompare", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "finance-payments", label: "Payments & Receipts", href: "/finance/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.payments.read"] },
       { key: "finance-tax", label: "Tax / VAT", href: "/finance/tax", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.tax.read"] },
+      { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
+      { key: "finance-commission-topup", label: "Commission / Top-up", href: "/finance/commission-topup", icon: "Percent", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
+      { key: "finance-journal-events", label: "Journal Events", href: "/finance/journal-events", icon: "BookOpen", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.journals.read"] },
       { key: "finance-statements", label: "Financial Statements", href: "/finance/statements", icon: "BarChart3", moduleKey: "finance", requiresPermissions: ["finance.statements.read"], children: [
         { key: "finance-statements-pnl", label: "P&L", href: "/finance/statements/pnl", icon: "TrendingUp", moduleKey: "finance", requiresPermissions: ["finance.statements.read"] },
         { key: "finance-statements-balance-sheet", label: "Balance Sheet", href: "/finance/statements/balance-sheet", icon: "Scale", moduleKey: "finance", requiresPermissions: ["finance.statements.read"] },
