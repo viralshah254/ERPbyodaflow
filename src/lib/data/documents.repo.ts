@@ -34,6 +34,8 @@ export interface DocumentDetailRecord {
   total?: number;
   currency: string;
   status: string;
+  availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
+  availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
   lines: Array<{
     id?: string;
@@ -117,6 +119,8 @@ function seedDocumentDetails(type: DocTypeKey): Record<string, DocumentDetailRec
       total: row.total,
       currency: "KES",
       status: row.status,
+      availableActions: [],
+      availableConversionTargets: [],
       warehouseId: row.warehouse,
       lines: buildDefaultLines(type, row.number),
       outputTemplateId: undefined,

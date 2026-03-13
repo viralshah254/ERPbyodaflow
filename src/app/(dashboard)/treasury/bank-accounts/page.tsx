@@ -31,7 +31,7 @@ import {
   updateBankAccountApi,
 } from "@/lib/api/treasury-ops";
 import type { BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
-import { getMockCOARootFirst } from "@/lib/mock/coa";
+import { fetchFinanceAccountsApi, type FinanceAccount } from "@/lib/api/finance";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
@@ -47,12 +47,13 @@ export default function BankAccountsPage() {
     bank: "",
     branch: "",
     currency: "KES",
-    glAccountCode: "",
+    glAccountId: "",
     active: true,
   });
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [rows, setRows] = React.useState<BankAccountRow[]>([]);
+  const [accounts, setAccounts] = React.useState<FinanceAccount[]>([]);
   const refresh = React.useCallback(async () => setRows(await fetchBankAccountsApi()), []);
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
@@ -64,7 +65,7 @@ export default function BankAccountsPage() {
         r.accountNumber.toLowerCase().includes(q)
     );
   }, [rows, search]);
-  const coa = React.useMemo(() => getMockCOARootFirst().filter((r) => r.type === "Asset"), []);
+  const coa = React.useMemo(() => accounts.filter((account) => account.type === "ASSET"), [accounts]);
 
   const openCreate = () => {
     setEditing(null);
@@ -74,7 +75,7 @@ export default function BankAccountsPage() {
       bank: "",
       branch: "",
       currency: "KES",
-      glAccountCode: "",
+      glAccountId: "",
       active: true,
     });
     setDrawerOpen(true);
@@ -88,7 +89,7 @@ export default function BankAccountsPage() {
       bank: r.bank,
       branch: r.branch ?? "",
       currency: r.currency,
-      glAccountCode: r.glAccountCode ?? "",
+      glAccountId: r.glAccountId ?? "",
       active: r.active,
     });
     setDrawerOpen(true);
@@ -108,7 +109,7 @@ export default function BankAccountsPage() {
 
   React.useEffect(() => {
     setLoading(true);
-    refresh()
+    Promise.all([refresh(), fetchFinanceAccountsApi().then(setAccounts)])
       .catch((error) => toast.error((error as Error).message || "Failed to load bank accounts."))
       .finally(() => setLoading(false));
   }, [refresh]);
@@ -204,11 +205,11 @@ export default function BankAccountsPage() {
             </div>
             <div className="space-y-2">
               <Label>GL account</Label>
-              <Select value={form.glAccountCode} onValueChange={(v) => setForm((p) => ({ ...p, glAccountCode: v }))}>
+              <Select value={form.glAccountId} onValueChange={(v) => setForm((p) => ({ ...p, glAccountId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   {coa.map((r) => (
-                    <SelectItem key={r.id} value={r.code}>{r.code} — {r.name}</SelectItem>
+                    <SelectItem key={r.id} value={r.id}>{r.code} — {r.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -223,7 +224,7 @@ export default function BankAccountsPage() {
             <Button
               disabled={saving}
               onClick={async () => {
-                const glAccount = coa.find((r) => r.code === form.glAccountCode);
+                const glAccount = coa.find((r) => r.id === form.glAccountId);
                 try {
                   setSaving(true);
                   if (editing) {
@@ -233,7 +234,8 @@ export default function BankAccountsPage() {
                       bank: form.bank,
                       branch: form.branch || undefined,
                       currency: form.currency,
-                      glAccountCode: form.glAccountCode || undefined,
+                      glAccountId: form.glAccountId || undefined,
+                      glAccountCode: glAccount?.code,
                       glAccountName: glAccount?.name,
                       active: form.active,
                     });
@@ -245,7 +247,8 @@ export default function BankAccountsPage() {
                       bank: form.bank,
                       branch: form.branch || undefined,
                       currency: form.currency,
-                      glAccountCode: form.glAccountCode || undefined,
+                      glAccountId: form.glAccountId || undefined,
+                      glAccountCode: glAccount?.code,
                       glAccountName: glAccount?.name,
                       active: form.active,
                     });

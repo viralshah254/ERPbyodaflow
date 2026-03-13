@@ -1,10 +1,22 @@
 import {
   getMockExportHistory,
   getMockScheduledReports,
+  getMockSavedViews,
   type ExportHistoryRow,
   type ScheduledReportRow,
+  type SavedViewRow,
 } from "@/lib/mock/reports";
-import { apiRequest, downloadTextFile, isApiConfigured } from "./client";
+import { apiRequest, downloadFile, downloadTextFile, isApiConfigured } from "./client";
+
+type BackendReportLibraryItem = {
+  id: string;
+  name: string;
+};
+
+type BackendSavedView = {
+  id: string;
+  name: string;
+};
 
 type BackendScheduledReport = {
   id: string;
@@ -34,6 +46,36 @@ export async function fetchScheduledReportsApi(): Promise<ScheduledReportRow[]> 
     nextRun: item.lastRunAt ?? item.createdAt ?? new Date().toISOString(),
     recipients: (item.recipients ?? []).join(", "),
     enabled: item.isActive,
+  }));
+}
+
+export async function fetchSavedReportViewsApi(): Promise<SavedViewRow[]> {
+  if (!isApiConfigured()) {
+    return getMockSavedViews();
+  }
+  const data = await apiRequest<{ items: BackendSavedView[] }>("/api/reports/saved");
+  return data.items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    reportType: "saved-view",
+    filters: "Saved backend view",
+    lastRun: "—",
+  }));
+}
+
+export async function fetchReportLibraryApi(): Promise<Array<{ id: string; name: string; description: string; category: string }>> {
+  if (!isApiConfigured()) {
+    return [
+      { id: "vat-summary", name: "VAT Summary", description: "VAT output, input, and net tax summary.", category: "finance" },
+      { id: "wht-summary", name: "WHT Summary", description: "Withholding tax summary by reporting period.", category: "finance" },
+    ];
+  }
+  const data = await apiRequest<{ items: BackendReportLibraryItem[] }>("/api/reports");
+  return data.items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    description: item.name,
+    category: item.id.includes("commission") ? "sales" : "finance",
   }));
 }
 
@@ -84,6 +126,48 @@ export async function runReportExportApi(reportId = "vat-summary"): Promise<void
     method: "POST",
     body: { reportId },
   });
+}
+
+export async function fetchVatSummaryApi(input?: { dateFrom?: string; dateTo?: string }): Promise<{
+  dateFrom?: string;
+  dateTo?: string;
+  totalVat: number;
+  invoiceCount: number;
+}> {
+  if (!isApiConfigured()) {
+    return { totalVat: 0, invoiceCount: 0, ...input };
+  }
+  const params = new URLSearchParams();
+  if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
+  if (input?.dateTo) params.set("dateTo", input.dateTo);
+  return apiRequest("/api/reports/vat-summary", { params });
+}
+
+export async function fetchWhtSummaryApi(input?: { dateFrom?: string; dateTo?: string }): Promise<{
+  dateFrom?: string;
+  dateTo?: string;
+  totalWht: number;
+  billCount: number;
+}> {
+  if (!isApiConfigured()) {
+    return { totalWht: 0, billCount: 0, ...input };
+  }
+  const params = new URLSearchParams();
+  if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
+  if (input?.dateTo) params.set("dateTo", input.dateTo);
+  return apiRequest("/api/reports/wht-summary", { params });
+}
+
+export function downloadTaxSummaryCsvApi(
+  reportId: "vat-summary" | "wht-summary",
+  filename: string,
+  onError: (message: string) => void
+): void {
+  if (!isApiConfigured()) {
+    onError("API not configured.");
+    return;
+  }
+  downloadFile(`/api/reports/${reportId}?format=csv`, filename, onError);
 }
 
 export async function downloadReportExportApi(row: ExportHistoryRow): Promise<void> {

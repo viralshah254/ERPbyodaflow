@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { format } from "date-fns";
 import { downloadCsv } from "@/lib/export/csv";
+import { fetchDocumentListApi } from "@/lib/api/documents";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -18,34 +19,53 @@ interface JournalEntry {
   id: string;
   journalNumber: string;
   date: string;
-  memo: string;
-  reference: string;
+  memo?: string;
+  reference?: string;
   totalDebit: number;
   totalCredit: number;
   status: string;
   postedBy?: string;
 }
 
-const JOURNALS: JournalEntry[] = [
-  { id: "1", journalNumber: "JE-2024-001", date: "2024-01-20", memo: "Monthly depreciation", reference: "DEP-2024-01", totalDebit: 50000, totalCredit: 50000, status: "POSTED", postedBy: "Admin User" },
-  { id: "2", journalNumber: "JE-2024-002", date: "2024-01-19", memo: "Bank charges", reference: "BANK-001", totalDebit: 2500, totalCredit: 2500, status: "POSTED", postedBy: "Admin User" },
-  { id: "3", journalNumber: "JE-2024-003", date: "2024-01-18", memo: "Accrued expenses", reference: "ACC-001", totalDebit: 15000, totalCredit: 15000, status: "DRAFT" },
-];
-
 export default function JournalEntriesPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = React.useState<JournalEntry[]>([]);
+
+  const refresh = React.useCallback(async () => {
+    const docs = await fetchDocumentListApi("journal");
+    setRows(
+      docs.map((doc) => ({
+        id: doc.id,
+        journalNumber: doc.number,
+        date: doc.date,
+        memo: doc.reference,
+        reference: doc.reference,
+        totalDebit: doc.total ?? 0,
+        totalCredit: doc.total ?? 0,
+        status: doc.status,
+      }))
+    );
+  }, []);
+
+  React.useEffect(() => {
+    setLoading(true);
+    refresh()
+      .catch((error) => toast.error((error as Error).message || "Failed to load journals."))
+      .finally(() => setLoading(false));
+  }, [refresh]);
 
   const filtered = React.useMemo(() => {
-    let out = JOURNALS;
+    let out = rows;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       out = out.filter(
         (j) =>
           j.journalNumber.toLowerCase().includes(q) ||
-          j.memo.toLowerCase().includes(q) ||
-          j.reference.toLowerCase().includes(q)
+          (j.memo ?? "").toLowerCase().includes(q) ||
+          (j.reference ?? "").toLowerCase().includes(q)
       );
     }
     if (statusFilter) {
@@ -70,10 +90,9 @@ export default function JournalEntriesPage() {
       {
         id: "date",
         header: "Date",
-        accessor: (row: JournalEntry) =>
-          format(new Date(row.date), "MMM dd, yyyy"),
+        accessor: (row: JournalEntry) => format(new Date(row.date), "MMM dd, yyyy"),
       },
-      { id: "memo", header: "Memo", accessor: "memo" as keyof JournalEntry },
+      { id: "memo", header: "Memo", accessor: (row: JournalEntry) => row.memo || "—" },
       {
         id: "debit",
         header: "Debit",
@@ -154,12 +173,16 @@ export default function JournalEntriesPage() {
             )
           }
         />
-        <DataTable<JournalEntry>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/journal/${row.id}`)}
-          emptyMessage="No journal entries. Create one to get started."
-        />
+        {loading ? (
+          <div className="rounded border p-6 text-sm text-muted-foreground">Loading journal entries...</div>
+        ) : (
+          <DataTable<JournalEntry>
+            data={filtered}
+            columns={columns}
+            onRowClick={(row) => router.push(`/docs/journal/${row.id}`)}
+            emptyMessage="No journal entries. Create one to get started."
+          />
+        )}
       </div>
     </PageShell>
   );

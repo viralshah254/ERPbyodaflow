@@ -1,10 +1,8 @@
 /**
  * Firebase Auth client — used for sign-in and ID token.
  * Requires NEXT_PUBLIC_FIREBASE_* env vars from Firebase Console → Project settings.
+ * Uses dynamic import so the firebase package is only loaded in the browser.
  */
-import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -22,18 +20,6 @@ export function isFirebaseConfigured(): boolean {
   );
 }
 
-function getFirebaseApp(): FirebaseApp {
-  if (getApps().length === 0) {
-    return initializeApp(firebaseConfig);
-  }
-  return getApp();
-}
-
-export function getFirebaseAuth() {
-  if (typeof window === "undefined") return null;
-  return getAuth(getFirebaseApp());
-}
-
 /**
  * Sign in with email/password and return the Firebase ID token for the backend.
  */
@@ -41,8 +27,12 @@ export async function signInAndGetIdToken(
   email: string,
   password: string
 ): Promise<string> {
-  const auth = getFirebaseAuth();
-  if (!auth) throw new Error("Firebase Auth not configured");
+  if (typeof window === "undefined")
+    throw new Error("Firebase Auth is only available in the browser");
+  const { getApp, getApps, initializeApp } = await import("firebase/app");
+  const { getAuth, signInWithEmailAndPassword } = await import("firebase/auth");
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  const auth = getAuth(app);
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const token = await userCredential.user.getIdToken();
   return token;
@@ -52,8 +42,11 @@ export async function signInAndGetIdToken(
  * Get current ID token (e.g. after page reload). Returns null if not signed in.
  */
 export async function getIdToken(): Promise<string | null> {
-  const auth = getFirebaseAuth();
-  if (!auth) return null;
+  if (typeof window === "undefined") return null;
+  const { getApp, getApps, initializeApp } = await import("firebase/app");
+  const { getAuth } = await import("firebase/auth");
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  const auth = getAuth(app);
   const user = auth.currentUser;
   if (!user) return null;
   return user.getIdToken();

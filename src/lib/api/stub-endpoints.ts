@@ -47,16 +47,19 @@ export async function documentRequestApproval(
 export async function documentAction(
   docType: string,
   id: string,
-  action: "approve" | "post",
+  action: "approve" | "post" | "cancel" | "reverse",
   comment?: string
 ): Promise<void> {
   if (!isApiConfigured()) {
-    applyDocumentAction(docType as DocTypeKey, id, action);
+    if (action === "approve" || action === "post") {
+      applyDocumentAction(docType as DocTypeKey, id, action);
+      return;
+    }
     return;
   }
   await apiRequest(`${API}/documents/${docType}/${id}/action`, {
     method: "POST",
-    body: action === "approve" ? { action: "approve", comment } : { action: "post" },
+    body: { action, ...(comment != null ? { comment } : {}) },
   });
 }
 

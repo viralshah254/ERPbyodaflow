@@ -201,6 +201,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
       { id: "DRAFT", label: "Draft" },
       { id: "PENDING_APPROVAL", label: "Pending Approval" },
       { id: "APPROVED", label: "Approved" },
+      { id: "CONVERTED", label: "Converted" },
     ],
     validations: [{ id: "has-lines", message: "At least one line required" }],
     totals: { total: true },

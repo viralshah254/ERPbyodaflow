@@ -73,20 +73,13 @@ export default function DocViewPage() {
   const [counterpartyOptions, setCounterpartyOptions] = React.useState<Array<{ id: string; name: string }>>([]);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
-  const convertTargets = React.useMemo(() => {
-    const map: Partial<Record<DocTypeKey, DocTypeKey[]>> = {
-      quote: ["sales-order"],
-      "sales-order": ["delivery-note", "invoice"],
-      "delivery-note": ["invoice"],
-      "purchase-request": ["purchase-order"],
-      "purchase-order": ["grn", "bill"],
-      grn: ["bill"],
-    };
-    return map[type as DocTypeKey] ?? [];
-  }, [type]);
-
-  const showRequestApproval = ["invoice", "bill", "journal"].includes(type);
-  const showApprovePost = ["invoice", "bill", "journal", "sales-order", "purchase-order", "quote", "delivery-note", "purchase-request", "grn"].includes(type);
+  const convertTargets = document?.availableConversionTargets ?? [];
+  const availableActions = document?.availableActions ?? [];
+  const canRequestApproval = availableActions.includes("submit");
+  const canApprove = availableActions.includes("approve");
+  const canPost = availableActions.includes("post");
+  const canCancel = availableActions.includes("cancel");
+  const canReverse = availableActions.includes("reverse");
   const printDoc = React.useMemo(
     () => ({
       type,
@@ -217,7 +210,7 @@ export default function DocViewPage() {
       rightSlot={rightSlot}
       actions={
         <div className="flex gap-2 flex-wrap">
-          {showRequestApproval && (
+          {canRequestApproval && (
             <Button
               variant="outline"
               size="sm"
@@ -239,8 +232,9 @@ export default function DocViewPage() {
               Request approval
             </Button>
           )}
-          {showApprovePost && (
+          {(canApprove || canPost) && (
             <>
+              {canApprove && (
               <Button
                 variant="outline"
                 size="sm"
@@ -261,6 +255,8 @@ export default function DocViewPage() {
                 <Icons.Check className="mr-2 h-4 w-4" />
                 Approve
               </Button>
+              )}
+              {canPost && (
               <Button
                 variant="outline"
                 size="sm"
@@ -281,7 +277,52 @@ export default function DocViewPage() {
                 <Icons.Send className="mr-2 h-4 w-4" />
                 Post
               </Button>
+              )}
             </>
+          )}
+          {canCancel && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={actionLoading}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  await documentActionEndpoint(type, id, "cancel");
+                  await refreshDocument();
+                  toast.success("Document cancelled.");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
+            >
+              <Icons.XCircle className="mr-2 h-4 w-4" />
+              Cancel
+            </Button>
+          )}
+          {canReverse && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={actionLoading}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  await documentActionEndpoint(type, id, "reverse");
+                  await refreshDocument();
+                  toast.success("Reversal created.");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
+            >
+              <Icons.RotateCcw className="mr-2 h-4 w-4" />
+              Reverse
+            </Button>
           )}
           {convertTargets.map((targetType) => (
             <Button

@@ -9,7 +9,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +42,8 @@ export function DataTable<T extends object>({
   selectedIds = [],
   onSelectionChange,
 }: DataTableProps<T>) {
+  const checkboxClassName =
+    "h-4 w-4 rounded-sm border border-primary accent-primary disabled:cursor-not-allowed disabled:opacity-50";
   const selectedSet = React.useMemo(
     () => new Set(selectedIds),
     [selectedIds]
@@ -80,9 +81,14 @@ export function DataTable<T extends object>({
             <TableRow>
               {selectable && (
                 <TableHead className="sticky left-0 z-20 w-12 bg-muted/50">
-                  <Checkbox
-                    checked={allSelected || (someSelected ? "indeterminate" : false)}
-                    onCheckedChange={toggleAll}
+                  <input
+                    type="checkbox"
+                    className={checkboxClassName}
+                    checked={allSelected}
+                    ref={(node) => {
+                      if (node) node.indeterminate = !allSelected && someSelected;
+                    }}
+                    onChange={toggleAll}
                     aria-label="Select all"
                   />
                 </TableHead>
@@ -128,9 +134,11 @@ export function DataTable<T extends object>({
                         className="sticky left-0 z-10 w-12 bg-background"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Checkbox
+                        <input
+                          type="checkbox"
+                          className={checkboxClassName}
                           checked={checked}
-                          onCheckedChange={() => id && toggleRow(id)}
+                          onChange={() => id && toggleRow(id)}
                           aria-label={`Select row ${id ?? rowIndex}`}
                         />
                       </TableCell>

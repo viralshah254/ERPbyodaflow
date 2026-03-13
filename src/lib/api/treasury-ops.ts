@@ -14,6 +14,8 @@ type BackendBankAccount = {
   branchName?: string;
   currency: string;
   glAccountId?: string;
+  glAccountCode?: string;
+  glAccountName?: string;
   isActive?: boolean;
 };
 
@@ -52,7 +54,9 @@ function mapBankAccount(account: BackendBankAccount): BankAccountRow {
     bank: account.bankName ?? "Bank",
     branch: account.branchName,
     currency: account.currency,
-    glAccountCode: account.glAccountId,
+    glAccountId: account.glAccountId,
+    glAccountCode: account.glAccountCode,
+    glAccountName: account.glAccountName,
     active: account.isActive ?? true,
   };
 }
@@ -93,7 +97,7 @@ export async function createBankAccountApi(body: Omit<BankAccountRow, "id">): Pr
       bankName: body.bank,
       branchName: body.branch,
       currency: body.currency,
-      glAccountId: body.glAccountCode,
+      glAccountId: body.glAccountId,
       isActive: body.active,
     },
   });
@@ -112,7 +116,7 @@ export async function updateBankAccountApi(id: string, body: Partial<BankAccount
       bankName: body.bank,
       branchName: body.branch,
       currency: body.currency,
-      glAccountId: body.glAccountCode,
+      glAccountId: body.glAccountId,
       isActive: body.active,
     },
   });

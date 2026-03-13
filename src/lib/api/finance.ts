@@ -193,6 +193,20 @@ export async function fetchFinanceAccountsApi(): Promise<FinanceAccount[]> {
   return payload.items ?? [];
 }
 
+export async function createFinanceAccountApi(payload: {
+  code: string;
+  name: string;
+  type: string;
+  parentId?: string;
+  currency?: string;
+}): Promise<void> {
+  if (!isApiConfigured()) return;
+  await apiRequest("/api/finance/accounts", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function fetchPostingMappingsApi(): Promise<{
   items: PostingMappingRow[];
   accounts: FinanceAccount[];

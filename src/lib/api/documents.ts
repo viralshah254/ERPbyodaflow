@@ -65,6 +65,8 @@ type BackendDocumentDetail = {
   total?: number;
   currency?: string;
   status: string;
+  availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
+  availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
   lines?: BackendDocumentLine[];
   sourceDocument?: {
@@ -170,6 +172,8 @@ function mapDocumentDetail(
     total: payload.total,
     currency: payload.currency ?? "KES",
     status: payload.status,
+    availableActions: payload.availableActions ?? [],
+    availableConversionTargets: payload.availableConversionTargets ?? [],
     outputTemplateId: payload.outputTemplateId,
     lines: (payload.lines ?? []).map((line) => ({
       id: line.id,

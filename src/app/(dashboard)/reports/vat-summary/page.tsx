@@ -14,20 +14,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getMockVatSummary } from "@/lib/mock/tax/reports";
+import { downloadTaxSummaryCsvApi, fetchVatSummaryApi } from "@/lib/api/reports";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function VatSummaryReportPage() {
-  const rows = React.useMemo(() => getMockVatSummary(), []);
+  const [summary, setSummary] = React.useState<{ totalVat: number; invoiceCount: number; dateFrom?: string; dateTo?: string } | null>(null);
+
+  React.useEffect(() => {
+    fetchVatSummaryApi()
+      .then(setSummary)
+      .catch((error) => toast.error((error as Error).message || "Failed to load VAT summary."));
+  }, []);
 
   return (
     <PageShell>
       <PageHeader
         title="VAT summary"
-        description="VAT output, input, net (mock)."
+        description="Live VAT summary sourced from posted invoices."
         breadcrumbs={[
           { label: "Reports", href: "/reports" },
           { label: "VAT summary" },
@@ -37,7 +43,15 @@ export default function VatSummaryReportPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Why is VAT higher this month? Explain VAT output vs input." label="Explain" />
-            <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadTaxSummaryCsvApi("vat-summary", "vat-summary.csv", (message) =>
+                  toast.error(message || "Export failed.")
+                )
+              }
+            >
               <Icons.Download className="mr-2 h-4 w-4" />
               Export
             </Button>
@@ -51,29 +65,27 @@ export default function VatSummaryReportPage() {
         <Card>
           <CardHeader>
             <CardTitle>VAT summary</CardTitle>
-            <CardDescription>By period. Output, input, net. Mock data.</CardDescription>
+            <CardDescription>Header and line tax aggregated from posted invoices.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="text-right">Output</TableHead>
-                  <TableHead className="text-right">Input</TableHead>
-                  <TableHead className="text-right">Net</TableHead>
+                  <TableHead>From</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead className="text-right">Total VAT</TableHead>
+                  <TableHead className="text-right">Posted invoices</TableHead>
                   <TableHead>Currency</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.period}>
-                    <TableCell className="font-medium">{r.period}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.output, r.currency)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.input, r.currency)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.net, r.currency)}</TableCell>
-                    <TableCell>{r.currency}</TableCell>
-                  </TableRow>
-                ))}
+                <TableRow>
+                  <TableCell className="font-medium">{summary?.dateFrom?.slice(0, 10) ?? "All time"}</TableCell>
+                  <TableCell>{summary?.dateTo?.slice(0, 10) ?? "Current"}</TableCell>
+                  <TableCell className="text-right">{formatMoney(summary?.totalVat ?? 0, "KES")}</TableCell>
+                  <TableCell className="text-right">{summary?.invoiceCount ?? 0}</TableCell>
+                  <TableCell>KES</TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </CardContent>

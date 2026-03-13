@@ -9,6 +9,7 @@ export interface BankAccountRow {
   bank: string;
   branch?: string;
   currency: string;
+  glAccountId?: string;
   glAccountCode?: string;
   glAccountName?: string;
   active: boolean;
@@ -22,6 +23,7 @@ export const MOCK_BANK_ACCOUNTS: BankAccountRow[] = [
     bank: "KCB",
     branch: "Nairobi Main",
     currency: "KES",
+    glAccountId: "ba-gl-1120",
     glAccountCode: "1120",
     glAccountName: "Main Bank",
     active: true,
@@ -33,6 +35,7 @@ export const MOCK_BANK_ACCOUNTS: BankAccountRow[] = [
     bank: "Equity",
     branch: "Westlands",
     currency: "KES",
+    glAccountId: "ba-gl-1121",
     glAccountCode: "1121",
     glAccountName: "Payroll Account",
     active: true,

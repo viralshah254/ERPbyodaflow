@@ -14,20 +14,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getMockWhtSummary } from "@/lib/mock/tax/reports";
+import { downloadTaxSummaryCsvApi, fetchWhtSummaryApi } from "@/lib/api/reports";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function WhtSummaryReportPage() {
-  const rows = React.useMemo(() => getMockWhtSummary(), []);
+  const [summary, setSummary] = React.useState<{ totalWht: number; billCount: number; dateFrom?: string; dateTo?: string } | null>(null);
+
+  React.useEffect(() => {
+    fetchWhtSummaryApi()
+      .then(setSummary)
+      .catch((error) => toast.error((error as Error).message || "Failed to load WHT summary."));
+  }, []);
 
   return (
     <PageShell>
       <PageHeader
         title="WHT summary"
-        description="Withholding tax by period and code (mock)."
+        description="Live withholding tax summary sourced from posted bills."
         breadcrumbs={[
           { label: "Reports", href: "/reports" },
           { label: "WHT summary" },
@@ -37,7 +43,15 @@ export default function WhtSummaryReportPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain WHT in Kenya. When to apply on AP and payments." label="Explain" />
-            <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadTaxSummaryCsvApi("wht-summary", "wht-summary.csv", (message) =>
+                  toast.error(message || "Export failed.")
+                )
+              }
+            >
               <Icons.Download className="mr-2 h-4 w-4" />
               Export
             </Button>
@@ -51,29 +65,27 @@ export default function WhtSummaryReportPage() {
         <Card>
           <CardHeader>
             <CardTitle>WHT summary</CardTitle>
-            <CardDescription>By period and code. Base, amount. Mock data.</CardDescription>
+            <CardDescription>Aggregated withholding on posted bills for the selected scope.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead className="text-right">Base</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>From</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead className="text-right">Total WHT</TableHead>
+                  <TableHead className="text-right">Posted bills</TableHead>
                   <TableHead>Currency</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r, i) => (
-                  <TableRow key={`${r.period}-${r.code}-${i}`}>
-                    <TableCell className="font-medium">{r.period}</TableCell>
-                    <TableCell>{r.code}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.base, r.currency)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(r.amount, r.currency)}</TableCell>
-                    <TableCell>{r.currency}</TableCell>
-                  </TableRow>
-                ))}
+                <TableRow>
+                  <TableCell className="font-medium">{summary?.dateFrom?.slice(0, 10) ?? "All time"}</TableCell>
+                  <TableCell>{summary?.dateTo?.slice(0, 10) ?? "Current"}</TableCell>
+                  <TableCell className="text-right">{formatMoney(summary?.totalWht ?? 0, "KES")}</TableCell>
+                  <TableCell className="text-right">{summary?.billCount ?? 0}</TableCell>
+                  <TableCell>KES</TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </CardContent>
