@@ -12,6 +12,9 @@ export interface AnalyticsGlobalFilters {
   branch?: string;
   entity?: string;
   currency?: string;
+  franchisee?: string;
+  network?: string;
+  territory?: string;
 }
 
 /** Query sent to analytics engine */

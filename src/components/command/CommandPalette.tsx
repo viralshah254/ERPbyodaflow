@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { searchErpApi, type ErpSearchHit } from "@/lib/api/erp-search";
 import * as Icons from "lucide-react";
 
 const ALL_ITEMS: CommandItem[] = [
@@ -35,8 +36,8 @@ function filterItems(query: string): CommandItem[] {
   });
 }
 
-const GROUP_ORDER: Record<string, number> = { ask: -1, nav: 0, create: 1, copilot: 2 };
-const GROUP_LABELS: Record<string, string> = { ask: "Natural language", nav: "Navigate", create: "Create", copilot: "Copilot" };
+const GROUP_ORDER: Record<string, number> = { ask: -1, search: 0, nav: 1, create: 2, copilot: 3 };
+const GROUP_LABELS: Record<string, string> = { ask: "Natural language", search: "ERP results", nav: "Navigate", create: "Create", copilot: "Copilot" };
 
 /** Synthetic "Ask AI" item when user types a free-form query (intent preview). */
 interface AskAiItem {
@@ -45,6 +46,15 @@ interface AskAiItem {
   label: string;
   prompt: string;
   intentPreview?: string;
+}
+
+interface SearchResultItem {
+  id: string;
+  group: "search";
+  label: string;
+  href: string;
+  subtitle?: string;
+  entityType: ErpSearchHit["entityType"];
 }
 
 function sortByGroup(items: CommandItem[]): CommandItem[] {
@@ -70,6 +80,7 @@ export function CommandPalette() {
 
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState(0);
+  const [searchResults, setSearchResults] = React.useState<SearchResultItem[]>([]);
 
   const filtered = React.useMemo(() => filterItems(query), [query]);
   const sorted = React.useMemo(() => sortByGroup(filtered), [filtered]);
@@ -84,10 +95,42 @@ export function CommandPalette() {
       }
     : null;
 
+  React.useEffect(() => {
+    let active = true;
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      searchErpApi(query)
+        .then((response) => {
+          if (!active) return;
+          setSearchResults(
+            response.hits.slice(0, 6).map((hit) => ({
+              id: `search-${hit.entityType}-${hit.id}`,
+              group: "search",
+              label: hit.title,
+              href: hit.href,
+              subtitle: hit.subtitle,
+              entityType: hit.entityType,
+            }))
+          );
+        })
+        .catch(() => {
+          if (active) setSearchResults([]);
+        });
+    }, 180);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
   const displayList = React.useMemo(() => {
-    if (!askAiItem) return sorted;
-    return [askAiItem, ...sorted];
-  }, [askAiItem, sorted]);
+    const base = searchResults.length > 0 ? [...searchResults, ...sorted] : sorted;
+    if (!askAiItem) return base;
+    return [askAiItem, ...base];
+  }, [askAiItem, sorted, searchResults]);
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -113,10 +156,15 @@ export function CommandPalette() {
   }, [displayList.length, selected]);
 
   const handleSelect = React.useCallback(
-    (item: CommandItem | AskAiItem) => {
+    (item: CommandItem | AskAiItem | SearchResultItem) => {
       if (item.group === "ask" && "prompt" in item) {
         setOpen(false);
         openDrawerWithPrompt((item as AskAiItem).prompt);
+        return;
+      }
+      if (item.group === "search" && "href" in item) {
+        setOpen(false);
+        router.push(item.href);
         return;
       }
       if (item.group === "nav" && "href" in item) {
@@ -192,7 +240,12 @@ export function CommandPalette() {
                       if (showHeader) prevGroup = item.group;
                       const isSelected = i === selected;
                       const isAskAi = item.group === "ask";
-                      const iconKey = "icon" in item ? (item.icon ?? "Circle") : "MessageSquare";
+                      const iconKey =
+                        item.group === "search"
+                          ? "Search"
+                          : "icon" in item
+                            ? (item.icon ?? "Circle")
+                            : "MessageSquare";
                       const Icon = (Icons[iconKey as keyof typeof Icons] || Icons.Circle) as React.ComponentType<{ className?: string }>;
                       return (
                         <React.Fragment key={item.id}>
@@ -213,6 +266,11 @@ export function CommandPalette() {
                             <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                             <div className="flex-1 min-w-0">
                               <span className="block">{item.label}</span>
+                              {item.group === "search" && "subtitle" in item && item.subtitle ? (
+                                <span className="block truncate text-xs text-muted-foreground mt-0.5">
+                                  {item.subtitle}
+                                </span>
+                              ) : null}
                               {isAskAi && "intentPreview" in item && (
                                 <span className="block text-xs text-muted-foreground truncate mt-0.5">
                                   {item.intentPreview}

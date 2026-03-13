@@ -11,26 +11,20 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { CurrencyCode } from "@/lib/org/financial-settings";
-import { CURRENCY_META } from "@/lib/mock/financial-settings";
+import type { FinancialCurrencyRow } from "@/lib/api/financial-settings";
 import * as Icons from "lucide-react";
 
 interface CurrencyTableProps {
-  enabledCurrencies: CurrencyCode[];
-  onToggle: (code: CurrencyCode, enabled: boolean) => void;
+  currencies: FinancialCurrencyRow[];
+  onToggle: (code: string, enabled: boolean) => void;
   onAddCurrency: () => void;
 }
 
 export function CurrencyTable({
-  enabledCurrencies,
+  currencies,
   onToggle,
   onAddCurrency,
 }: CurrencyTableProps) {
-  const all = React.useMemo(
-    () => Object.keys(CURRENCY_META) as CurrencyCode[],
-    []
-  );
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -52,24 +46,22 @@ export function CurrencyTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {all.map((code) => {
-              const meta = CURRENCY_META[code];
-              const enabled = enabledCurrencies.includes(code);
+            {currencies.map((currency) => {
               return (
-                <TableRow key={code}>
+                <TableRow key={currency.code}>
                   <TableCell>
                     <Checkbox
-                      checked={enabled}
+                      checked={currency.enabled}
                       onCheckedChange={(c) =>
-                        onToggle(code, c === true)
+                        onToggle(currency.code, c === true)
                       }
-                      aria-label={`Toggle ${code}`}
+                      aria-label={`Toggle ${currency.code}`}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{code}</TableCell>
-                  <TableCell>{meta?.name ?? "—"}</TableCell>
-                  <TableCell>{meta?.symbol ?? "—"}</TableCell>
-                  <TableCell>{meta?.decimals ?? 2}</TableCell>
+                  <TableCell className="font-medium">{currency.code}</TableCell>
+                  <TableCell>{currency.name ?? "—"}</TableCell>
+                  <TableCell>{currency.symbol ?? "—"}</TableCell>
+                  <TableCell>2</TableCell>
                 </TableRow>
               );
             })}

@@ -9,10 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { listBoms } from "@/lib/data/bom.repo";
-import { listProducts } from "@/lib/data/products.repo";
+import { fetchManufacturingBoms, type ManufacturingBom } from "@/lib/api/manufacturing";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 type BomRow = {
@@ -31,24 +31,37 @@ export default function BomsPage() {
   const router = useRouter();
   const terminology = useTerminology();
   const bomLabel = t("bom", terminology);
+  const [boms, setBoms] = React.useState<ManufacturingBom[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const [boms, setBoms] = React.useState<ReturnType<typeof listBoms>>([]);
-  const products = React.useMemo(() => {
-    const m = new Map(listProducts().map((p) => [p.id, p]));
-    return m;
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchManufacturingBoms()
+      .then((items) => {
+        if (!cancelled) setBoms(items);
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to load BOMs.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  React.useEffect(() => setBoms(listBoms()), []);
 
   const rows: BomRow[] = React.useMemo(
     () =>
       boms.map((b) => {
-        const p = products.get(b.finishedProductId);
         return {
           id: b.id,
           code: b.code,
           name: b.name,
-          finishedProduct: p ? `${p.sku} — ${p.name}` : b.finishedProductId,
+          finishedProduct: b.finishedProductSku
+            ? `${b.finishedProductSku} — ${b.finishedProductName ?? b.finishedProductId}`
+            : b.finishedProductName ?? b.finishedProductId,
           quantity: b.quantity,
           uom: b.uom,
           version: b.version,
@@ -56,7 +69,7 @@ export default function BomsPage() {
           isActive: b.isActive,
         };
       }),
-    [boms, products]
+    [boms]
   );
 
   const columns = [
@@ -119,7 +132,7 @@ export default function BomsPage() {
             <DataTable
               data={rows}
               columns={columns}
-              emptyMessage="No BOMs yet. Create one to get started."
+              emptyMessage={loading ? "Loading BOMs..." : "No BOMs yet. Create one to get started."}
               onRowClick={(r) => router.push(`/manufacturing/boms/${r.id}`)}
             />
           </CardContent>

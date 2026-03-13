@@ -14,6 +14,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AppFrame } from "@/components/marketing/app-frame";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
+import { isFirebaseConfigured, signInAndGetIdToken } from "@/lib/firebase";
+import { isApiConfigured, setApiAuth } from "@/lib/api/client";
+import { fetchRuntimeSession } from "@/lib/api/context";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -42,6 +46,7 @@ function LoginContent() {
     handleSubmit,
     formState: { errors },
     setValue,
+    setError,
     watch,
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -54,63 +59,128 @@ function LoginContent() {
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      // Firebase + API: real sign-in and backend session
+      if (isFirebaseConfigured() && isApiConfigured()) {
+        const token = await signInAndGetIdToken(data.email, data.password);
+        setApiAuth({ bearerToken: token });
+        const session = await fetchRuntimeSession();
+        const { setSession } = useAuthStore.getState();
+        const { hydrateFromBackend } = useOrgContextStore.getState();
+        setSession({
+          user: session.user,
+          org: session.org,
+          tenant: session.tenant,
+          currentBranch: session.currentBranch,
+          branches: session.branches,
+          permissions: session.permissions,
+        });
+        hydrateFromBackend({
+          orgType: session.org.orgType,
+          templateId: session.orgContext.templateId,
+          enabledModules: session.orgContext.enabledModules,
+          featureFlags: session.orgContext.featureFlags,
+          terminology: session.orgContext.terminology,
+          defaultNav: session.orgContext.defaultNav,
+          orgRole: session.orgContext.orgRole,
+          parentOrgId: session.orgContext.parentOrgId,
+          franchiseNetworkId: session.orgContext.franchiseNetworkId,
+          franchiseCode: session.orgContext.franchiseCode,
+          franchiseTerritory: session.orgContext.franchiseTerritory,
+          franchiseStoreFormat: session.orgContext.franchiseStoreFormat,
+          franchiseManagerName: session.orgContext.franchiseManagerName,
+          franchisePersona: session.orgContext.franchisePersona,
+        });
+        setApiAuth({
+          bearerToken: token,
+          branchId: session.currentBranch?.branchId,
+        });
+        setIsLoading(false);
+        if (session.user.mustChangePassword) {
+          router.push("/change-password");
+          return;
+        }
+        const redirectTo = searchParams.get("redirect") || "/dashboard";
+        router.push(redirectTo);
+        return;
+      }
 
-    // Mock auth setup
-    const mockUser = {
-      userId: "user-1",
-      orgId: "org-1",
-      branchIds: ["branch-1"],
-      roleIds: ["role-admin"],
-      email: data.email,
-      firstName: "Admin",
-      lastName: "User",
-      status: "ACTIVE" as const,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const mockOrg = {
-      orgId: "org-1",
-      tenantId: "tenant-1",
-      orgType: "MANUFACTURER" as const,
-      name: "Acme Manufacturing",
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const mockTenant = {
-      tenantId: "tenant-1",
-      name: "Acme Corp",
-      plan: "ENTERPRISE" as const,
-      region: "US",
-      currency: "USD",
-      timeZone: "America/New_York",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const mockBranch = {
-      branchId: "branch-1",
-      orgId: "org-1",
-      name: "Head Office",
-      isHeadOffice: true,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    setUser(mockUser);
-    setOrg(mockOrg);
-    setTenant(mockTenant);
-    setBranches([mockBranch]);
-    setCurrentBranch(mockBranch);
-
-    setIsLoading(false);
-    const redirectTo = searchParams.get("redirect") || "/dashboard";
-    router.push(redirectTo);
+      // Fallback: mock auth (no Firebase or no API)
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const mockUser = {
+        userId: "user-1",
+        orgId: "org-1",
+        branchIds: ["branch-1"],
+        roleIds: ["role-admin"],
+        email: data.email,
+        firstName: "Admin",
+        lastName: "User",
+        status: "ACTIVE" as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const mockOrg = {
+        orgId: "org-1",
+        tenantId: "tenant-1",
+        orgType: "MANUFACTURER" as const,
+        name: "Acme Manufacturing",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const mockTenant = {
+        tenantId: "tenant-1",
+        name: "Acme Corp",
+        plan: "ENTERPRISE" as const,
+        region: "US",
+        currency: "USD",
+        timeZone: "America/New_York",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const mockBranch = {
+        branchId: "branch-1",
+        orgId: "org-1",
+        name: "Head Office",
+        isHeadOffice: true,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      setUser(mockUser);
+      setOrg(mockOrg);
+      setTenant(mockTenant);
+      setBranches([mockBranch]);
+      setCurrentBranch(mockBranch);
+      setIsLoading(false);
+      const redirectTo = searchParams.get("redirect") || "/dashboard";
+      router.push(redirectTo);
+    } catch (err) {
+      setIsLoading(false);
+      const status =
+        err && typeof err === "object" && "status" in err
+          ? (err as { status?: number }).status
+          : undefined;
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? (err as { code?: string }).code
+          : undefined;
+      if (status === 401)
+        setError("root", {
+          message: "Account not found. Contact your administrator.",
+        });
+      else if (code === "auth/invalid-credential" || code === "auth/user-not-found")
+        setError("root", { message: "Invalid email or password." });
+      else if (code === "auth/too-many-requests")
+        setError("root", { message: "Too many attempts. Try again later." });
+      else {
+        const message =
+          err && typeof err === "object" && "message" in err
+            ? String((err as { message: string }).message)
+            : "Sign-in failed";
+        setError("root", { message });
+      }
+    }
   };
 
   const handleDemoLogin = async (type: string) => {
@@ -167,6 +237,9 @@ function LoginContent() {
 
             <Card className="p-6">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                {errors.root && (
+                  <p className="text-sm text-destructive">{errors.root.message}</p>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input

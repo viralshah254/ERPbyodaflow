@@ -1,25 +1,56 @@
 "use client";
 
+import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
-
-const valuationRows = [
-  { sku: "FILLET-001", costPerKg: 480, landedCostPerKg: 55, processingCostPerKg: 38, totalCostPerKg: 573, stockKg: 620 },
-  { sku: "GUTTED-001", costPerKg: 360, landedCostPerKg: 48, processingCostPerKg: 24, totalCostPerKg: 432, stockKg: 410 },
-  { sku: "BONES-001", costPerKg: 80, landedCostPerKg: 10, processingCostPerKg: 6, totalCostPerKg: 96, stockKg: 150 },
-];
+import { fetchInventoryValuation } from "@/lib/api/inventory-costing";
+import { toast } from "sonner";
 
 export default function InventoryValuationPage() {
+  const [valuationRows, setValuationRows] = React.useState<Array<{
+    sku: string;
+    productName: string;
+    unitCost: number;
+    stockQty: number;
+    stockValue: number;
+  }>>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchInventoryValuation()
+      .then((payload) => {
+        if (cancelled) return;
+        setValuationRows(
+          payload.rows.map((row) => ({
+            sku: row.sku,
+            productName: row.productName,
+            unitCost: row.unitCost,
+            stockQty: row.quantity,
+            stockValue: row.inventoryValue,
+          }))
+        );
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to load valuation.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const columns = [
     { id: "sku", header: "SKU", accessor: (r: (typeof valuationRows)[number]) => r.sku, sticky: true },
-    { id: "base", header: "Base cost/kg", accessor: (r: (typeof valuationRows)[number]) => r.costPerKg.toLocaleString() },
-    { id: "landed", header: "Landed/kg", accessor: (r: (typeof valuationRows)[number]) => r.landedCostPerKg.toLocaleString() },
-    { id: "processing", header: "Processing/kg", accessor: (r: (typeof valuationRows)[number]) => r.processingCostPerKg.toLocaleString() },
-    { id: "total", header: "Total/kg", accessor: (r: (typeof valuationRows)[number]) => r.totalCostPerKg.toLocaleString() },
-    { id: "stock", header: "Stock kg", accessor: (r: (typeof valuationRows)[number]) => r.stockKg.toLocaleString() },
-    { id: "value", header: "Stock value", accessor: (r: (typeof valuationRows)[number]) => (r.totalCostPerKg * r.stockKg).toLocaleString() },
+    { id: "name", header: "Product", accessor: (r: (typeof valuationRows)[number]) => r.productName },
+    { id: "unitCost", header: "Unit cost", accessor: (r: (typeof valuationRows)[number]) => r.unitCost.toLocaleString() },
+    { id: "stock", header: "Stock qty", accessor: (r: (typeof valuationRows)[number]) => r.stockQty.toLocaleString() },
+    { id: "value", header: "Stock value", accessor: (r: (typeof valuationRows)[number]) => r.stockValue.toLocaleString() },
   ];
 
   return (
@@ -35,10 +66,10 @@ export default function InventoryValuationPage() {
         <Card>
           <CardHeader>
             <CardTitle>Valuation layers</CardTitle>
-            <CardDescription>Current page uses static demo rows until costing APIs are wired end-to-end.</CardDescription>
+            <CardDescription>Latest persisted valuation from the backend costing snapshot.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <DataTable data={valuationRows} columns={columns} emptyMessage="No valuation rows." />
+            <DataTable data={valuationRows} columns={columns} emptyMessage={loading ? "Loading valuation..." : "No valuation rows."} />
           </CardContent>
         </Card>
       </div>

@@ -22,7 +22,9 @@ export type MetricKey =
   | "overtime_cost"
   | "vat"
   | "wht"
-  | "fx_impact";
+  | "fx_impact"
+  | "commission_payout"
+  | "topup_exposure";
 
 export type DimensionKey =
   | "time"
@@ -39,7 +41,12 @@ export type DimensionKey =
   | "project"
   | "employee"
   | "entity"
-  | "currency";
+  | "currency"
+  | "franchisee"
+  | "network"
+  | "territory"
+  | "store_format"
+  | "agreement_status";
 
 export type FormatKind = "currency" | "number" | "percent" | "days";
 export type VizKind = "bar" | "line" | "table" | "kpi" | "waterfall" | "treemap";
@@ -215,6 +222,22 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     defaultVisualization: "bar",
     drillTarget: "finance/period-close",
   },
+  commission_payout: {
+    key: "commission_payout",
+    label: "Commission payout",
+    format: "currency",
+    allowedDimensions: ["time", "franchisee", "network", "territory", "entity", "currency"],
+    defaultVisualization: "bar",
+    drillTarget: "franchise/commission",
+  },
+  topup_exposure: {
+    key: "topup_exposure",
+    label: "Top-up exposure",
+    format: "currency",
+    allowedDimensions: ["time", "franchisee", "network", "territory", "entity", "currency"],
+    defaultVisualization: "bar",
+    drillTarget: "finance/commission-topup",
+  },
 };
 
 export const DIMENSIONS: Record<DimensionKey, DimensionDef> = {
@@ -233,6 +256,11 @@ export const DIMENSIONS: Record<DimensionKey, DimensionDef> = {
   employee: { key: "employee", label: "Employee" },
   entity: { key: "entity", label: "Entity" },
   currency: { key: "currency", label: "Currency" },
+  franchisee: { key: "franchisee", label: "Franchisee" },
+  network: { key: "network", label: "Network" },
+  territory: { key: "territory", label: "Territory" },
+  store_format: { key: "store_format", label: "Store format" },
+  agreement_status: { key: "agreement_status", label: "Agreement status" },
 };
 
 export function getMetric(key: MetricKey): MetricDef {

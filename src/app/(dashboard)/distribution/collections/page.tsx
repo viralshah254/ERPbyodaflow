@@ -1,27 +1,52 @@
 "use client";
 
+import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { fetchCollectionsApi } from "@/lib/api/treasury-ops";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
-
-const MOCK = [
-  { id: "1", party: "ABC Ltd", due: 45000, overdue: 0, aging: "Current" },
-  { id: "2", party: "XYZ Co", due: 12000, overdue: 12000, aging: "30+" },
-];
 
 export default function DistributionCollectionsPage() {
   const terminology = useTerminology();
   const collectionLabel = t("collection", terminology);
+  const [rows, setRows] = React.useState<Array<{ id: string; party: string; due: number; overdue: number; aging: string }>>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchCollectionsApi()
+      .then((items) => {
+        if (cancelled) return;
+        setRows(items.map((item) => ({
+          id: item.id,
+          party: item.customerName,
+          due: item.total,
+          overdue: item.outstanding,
+          aging: `${item.daysOverdue}+`,
+        })));
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to load collections.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const columns = [
-    { id: "party", header: "Party", accessor: (r: (typeof MOCK)[0]) => <span className="font-medium">{r.party}</span>, sticky: true },
-    { id: "due", header: "Due", accessor: (r: (typeof MOCK)[0]) => `KES ${r.due.toLocaleString()}` },
-    { id: "overdue", header: "Overdue", accessor: (r: (typeof MOCK)[0]) => `KES ${r.overdue.toLocaleString()}` },
-    { id: "aging", header: "Aging", accessor: "aging" as keyof (typeof MOCK)[0] },
+    { id: "party", header: "Party", accessor: (r: (typeof rows)[number]) => <span className="font-medium">{r.party}</span>, sticky: true },
+    { id: "due", header: "Due", accessor: (r: (typeof rows)[number]) => `KES ${r.due.toLocaleString()}` },
+    { id: "overdue", header: "Overdue", accessor: (r: (typeof rows)[number]) => `KES ${r.overdue.toLocaleString()}` },
+    { id: "aging", header: "Aging", accessor: "aging" as keyof (typeof rows)[number] },
   ];
 
   return (
@@ -40,7 +65,7 @@ export default function DistributionCollectionsPage() {
           <CardTitle>Collections</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <DataTable data={MOCK} columns={columns} emptyMessage="No collections." />
+          <DataTable data={rows} columns={columns} emptyMessage={loading ? "Loading collections..." : "No collections."} />
         </CardContent>
       </Card>
     </PageLayout>

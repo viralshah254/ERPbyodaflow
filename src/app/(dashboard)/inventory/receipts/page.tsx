@@ -21,6 +21,7 @@ const STATUS_OPTIONS = [
   { label: "All", value: "" },
   { label: "Draft", value: "DRAFT" },
   { label: "Posted", value: "POSTED" },
+  { label: "Received", value: "RECEIVED" },
 ];
 
 const scope = "inventory-receipts";

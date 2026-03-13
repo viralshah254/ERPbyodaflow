@@ -8,7 +8,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
-import { fetchFranchiseeStock, fetchVMIReplenishmentOrders, fetchTopUps } from "@/lib/api/cool-catch";
+import { fetchFranchiseeStock, fetchFranchiseNetworkOutlets, fetchVMIReplenishmentOrders, fetchTopUps } from "@/lib/api/cool-catch";
+import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { formatMoney } from "@/lib/money";
 
 export default function FranchiseDetailPage() {
@@ -16,6 +17,7 @@ export default function FranchiseDetailPage() {
   const franchiseeId = String(params?.id ?? "");
   const [name, setName] = React.useState(franchiseeId);
   const [loading, setLoading] = React.useState(true);
+  const [summary, setSummary] = React.useState<{ territory?: string; storeFormat?: string; revenue: number; arOverdue: number } | null>(null);
   const [stockRows, setStockRows] = React.useState<Array<{ sku: string; productName: string; qty: number; reorderPoint: number; suggestedOrder: number }>>([]);
   const [replenishments, setReplenishments] = React.useState<Array<{ number: string; status: string; totalQty: number; createdAt: string }>>([]);
   const [topUps, setTopUps] = React.useState<Array<{ runNumber: string; amount: number; reason: string; status: string }>>([]);
@@ -24,12 +26,24 @@ export default function FranchiseDetailPage() {
     let cancelled = false;
     setLoading(true);
     Promise.all([
+      fetchFranchiseNetworkOutlets(),
       fetchFranchiseeStock(franchiseeId),
       fetchVMIReplenishmentOrders({ franchiseeId }),
       fetchTopUps({ franchiseeId }),
     ])
-      .then(([stock, orders, topupRows]) => {
+      .then(([outlets, stock, orders, topupRows]) => {
         if (cancelled) return;
+        const outlet = outlets.find((item) => item.id === franchiseeId);
+        setSummary(
+          outlet
+            ? {
+                territory: outlet.territory,
+                storeFormat: outlet.storeFormat,
+                revenue: outlet.revenue,
+                arOverdue: outlet.arOverdue,
+              }
+            : null
+        );
         setName(stock[0]?.franchiseeName ?? orders[0]?.franchiseeName ?? franchiseeId);
         setStockRows(
           stock.map((s) => ({
@@ -91,7 +105,11 @@ export default function FranchiseDetailPage() {
     <PageShell>
       <PageHeader
         title={name}
-        description="Franchise profile: stock, replenishment, and top-up history."
+        description={
+          summary
+            ? `${summary.territory ?? "Territory"} · ${summary.storeFormat ?? "Outlet"} · stock, replenishment, and settlement visibility.`
+            : "Franchise profile: stock, replenishment, and top-up history."
+        }
         breadcrumbs={[{ label: "Franchise", href: "/franchise/overview" }, { label: name }]}
         sticky
         showCommandHint
@@ -107,6 +125,13 @@ export default function FranchiseDetailPage() {
         }
       />
       <div className="p-6 space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <OperationalKpiCard title="Revenue" value={formatMoney(summary?.revenue ?? 0, "KES")} subtitle="Posted invoice value" />
+          <OperationalKpiCard title="AR Overdue" value={formatMoney(summary?.arOverdue ?? 0, "KES")} subtitle="Collections pressure" severity={(summary?.arOverdue ?? 0) > 0 ? "warning" : "default"} />
+          <OperationalKpiCard title="Active SKUs" value={stockRows.length} subtitle="Tracked outlet stock positions" />
+          <OperationalKpiCard title="Top-up Exposure" value={formatMoney(topUps.reduce((sum, item) => sum + item.amount, 0), "KES")} subtitle="Support or settlement items" />
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle>Current stock</CardTitle>

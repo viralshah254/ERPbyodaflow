@@ -5,17 +5,50 @@
 
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import {
-  type YieldRecordRow,
-  type MassBalanceSummaryRow,
-} from "@/lib/mock/manufacturing/yield";
-import {
   buildMassBalanceSummary,
   createYieldRecordEntry,
   getYieldRecordById,
   listYieldRecords,
 } from "@/lib/data/yield.repo";
 
-export type { YieldRecordRow, MassBalanceSummaryRow };
+export type YieldRecordRow = {
+  id: string;
+  workOrderId?: string;
+  workOrderNumber?: string;
+  subcontractOrderId?: string;
+  subcontractOrderNumber?: string;
+  batchId?: string;
+  inputWeightKg: number;
+  outputPrimaryKg: number;
+  outputSecondaryKg: number;
+  wasteKg: number;
+  yieldPercent?: number;
+  recordedAt: string;
+  lines: Array<{
+    id: string;
+    skuId: string;
+    skuCode: string;
+    productName: string;
+    type: "PRIMARY" | "SECONDARY" | "WASTE";
+    quantityKg: number;
+    uom: string;
+  }>;
+};
+
+export type MassBalanceSummaryRow = {
+  id: string;
+  period: string;
+  workOrderId?: string;
+  workOrderNumber?: string;
+  subcontractOrderId?: string;
+  subcontractOrderNumber?: string;
+  inputWeightKg: number;
+  outputPrimaryKg: number;
+  outputSecondaryKg: number;
+  wasteKg: number;
+  yieldPercent: number;
+  varianceVsBom?: number | null;
+};
 
 export async function fetchYieldRecords(params?: {
   workOrderId?: string;

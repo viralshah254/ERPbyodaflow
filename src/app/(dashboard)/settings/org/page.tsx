@@ -6,15 +6,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { getAllTemplates } from "@/config/industryTemplates/templates";
+import {
+  getAllTemplates,
+  PERISHABLE_DISTRIBUTION_TEMPLATE_IDS,
+} from "@/config/industryTemplates/templates";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { fetchOrgProfileApi } from "@/lib/api/org";
+import { saveCurrentOrgContext } from "@/lib/api/context";
+import { isApiConfigured } from "@/lib/api/client";
 import { orgSave } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function OrganizationPage() {
-  const { templateId, template, applyTemplate } = useOrgContextStore();
+  const { templateId, template, applyTemplate, hydrateFromBackend } = useOrgContextStore();
   const templates = React.useMemo(() => getAllTemplates(), []);
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
@@ -121,12 +126,37 @@ export default function OrganizationPage() {
                   key={t.id}
                   variant={templateId === t.id ? "default" : "outline"}
                   size="sm"
-                  onClick={() => {
+                  onClick={async () => {
                     applyTemplate(t.id);
-                    toast.success(`Switched to ${t.name}`);
+                    if (!isApiConfigured()) {
+                      toast.success(`Switched to ${t.name}`);
+                      return;
+                    }
+                    try {
+                      const orgContext = await saveCurrentOrgContext({
+                        templateId: t.id,
+                        enabledModules: t.enabledModules,
+                        featureFlags: t.featureFlags,
+                        terminology: t.terminology,
+                        defaultNav: t.defaultNav,
+                      });
+                      hydrateFromBackend({
+                        orgType: t.orgType,
+                        templateId: orgContext.templateId,
+                        enabledModules: orgContext.enabledModules,
+                        featureFlags: orgContext.featureFlags,
+                        terminology: orgContext.terminology,
+                        defaultNav: orgContext.defaultNav,
+                      });
+                      toast.success(`Switched to ${t.name}`);
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
                   }}
                 >
-                  {t.id === "cool-catch" && <Icons.Fish className="mr-1.5 h-4 w-4" />}
+                  {PERISHABLE_DISTRIBUTION_TEMPLATE_IDS.includes(
+                    t.id as (typeof PERISHABLE_DISTRIBUTION_TEMPLATE_IDS)[number]
+                  ) && <Icons.Fish className="mr-1.5 h-4 w-4" />}
                   {t.name}
                 </Button>
               ))}

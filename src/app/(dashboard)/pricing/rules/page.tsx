@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -296,14 +297,13 @@ export default function PricingRulesPage() {
                     <Label>Set default</Label>
                     <div className="grid gap-2">
                       <Label htmlFor="configCustomerId" className="text-muted-foreground text-xs">Customer</Label>
-                      <Select value={configCustomerId} onValueChange={setConfigCustomerId}>
-                        <SelectTrigger id="configCustomerId"><SelectValue placeholder="Select customer" /></SelectTrigger>
-                        <SelectContent>
-                          {customerOptions.map((customer) => (
-                            <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={configCustomerId}
+                        onValueChange={setConfigCustomerId}
+                        options={customerOptions.map((customer) => ({ id: customer.id, label: customer.name }))}
+                        placeholder="Select customer"
+                        searchPlaceholder="Type to search customer"
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="configPriceList">Price list</Label>

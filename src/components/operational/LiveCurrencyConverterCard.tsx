@@ -13,16 +13,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
-
-const DEFAULT_CURRENCIES = ["KES", "UGX", "USD"];
+import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 
 export function LiveCurrencyConverterCard() {
+  const { settings } = useFinancialSettings();
+  const availableCurrencies = React.useMemo(
+    () => [...new Set([settings.baseCurrency, ...settings.enabledCurrencies, "UGX"])],
+    [settings.baseCurrency, settings.enabledCurrencies]
+  );
   const [amount, setAmount] = React.useState("100000");
-  const [from, setFrom] = React.useState("KES");
+  const [from, setFrom] = React.useState(settings.baseCurrency);
   const [to, setTo] = React.useState("UGX");
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<{ rate: number; converted: number; fetchedAt: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setFrom((current) => (availableCurrencies.includes(current) ? current : settings.baseCurrency));
+    setTo((current) => (availableCurrencies.includes(current) ? current : settings.baseCurrency));
+  }, [availableCurrencies, settings.baseCurrency]);
 
   const handleConvert = React.useCallback(async () => {
     const numericAmount = Number(amount);
@@ -55,7 +64,7 @@ export function LiveCurrencyConverterCard() {
     <Card>
       <CardHeader>
         <CardTitle>Live Currency Converter</CardTitle>
-        <CardDescription>Free live FX for Kenya/Uganda operations. Source: open.er-api.</CardDescription>
+        <CardDescription>Uses saved backend FX rates, synced from the free ExchangeRate-API feed.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
@@ -68,7 +77,7 @@ export function LiveCurrencyConverterCard() {
             <Select value={from} onValueChange={setFrom}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {DEFAULT_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
+                {availableCurrencies.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -77,7 +86,7 @@ export function LiveCurrencyConverterCard() {
             <Select value={to} onValueChange={setTo}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {DEFAULT_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
+                {availableCurrencies.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

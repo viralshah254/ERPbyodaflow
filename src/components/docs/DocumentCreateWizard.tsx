@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import * as Icons from "lucide-react";
 import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
@@ -33,6 +34,7 @@ import { createDocumentApi } from "@/lib/api/documents";
 import { fetchPartiesApi } from "@/lib/api/parties";
 import { fetchBranchOptions, fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { fetchCustomerDefaultPriceLists, fetchPriceListOptions } from "@/lib/api/pricing";
+import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { toast } from "sonner";
 
 const DRAFT_KEY = "odaflow_draft";
@@ -104,6 +106,35 @@ function RenderField({
   const isDate = field.type === "date";
   const isNum = field.type === "number";
   const hasOptions = Boolean(options?.length) && (field.type === "entity" || field.type === "select");
+
+  if (field.type === "entity" && hasOptions) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-1">
+          <Label>
+            {field.label}
+            {field.required ? " *" : ""}
+          </Label>
+          <ExplainThis
+            prompt={`Explain: ${field.label} in document context.`}
+            label={`Explain ${field.label}`}
+          />
+        </div>
+        <SearchableSelect
+          value={(form.watch(key) as string | undefined) || ""}
+          onValueChange={(value) => form.setValue(key, value)}
+          options={options?.map((option) => ({ id: option.id, label: option.label })) ?? []}
+          placeholder={`Select ${field.label.toLowerCase()}`}
+          searchPlaceholder={`Type to search ${field.label.toLowerCase()}`}
+        />
+        {form.formState.errors[key] && (
+          <p className="text-sm text-destructive">
+            {form.formState.errors[key]?.message as string}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   if (hasOptions) {
     return (
@@ -191,6 +222,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [step, setStep] = React.useState(1);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
+  const [loadingFxRate, setLoadingFxRate] = React.useState(false);
   const [fieldOptions, setFieldOptions] = React.useState<Record<string, LookupOption[]>>({});
   const [customerDefaultPriceLists, setCustomerDefaultPriceLists] = React.useState<Record<string, string>>({});
   const [fallbackPriceListId, setFallbackPriceListId] = React.useState<string>("pl-retail");
@@ -323,8 +355,44 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const headerSection = config?.createFormSections.find((s) => s.id === "header");
   const headerFields = headerSection?.fields ?? [];
   const selectedPartyId = form.watch("party");
+  const selectedCurrency = form.watch("currency") || baseCurrency;
+  const selectedFxDate = form.watch("fxDate") || form.watch("date") || new Date().toISOString().slice(0, 10);
   const resolvedPriceListId =
     (selectedPartyId ? customerDefaultPriceLists[selectedPartyId] : undefined) ?? fallbackPriceListId;
+  const lineEditorMode =
+    type === "bill" || type === "purchase-order" || type === "grn" ? "purchasing" : "sales";
+
+  React.useEffect(() => {
+    if (selectedCurrency === baseCurrency) {
+      form.setValue("exchangeRate", 1);
+      return;
+    }
+    let cancelled = false;
+    setLoadingFxRate(true);
+    fetchSavedExchangeRateApi({
+      fromCurrency: selectedCurrency,
+      toCurrency: baseCurrency,
+      date: selectedFxDate,
+    })
+      .then((rate) => {
+        if (!cancelled) {
+          form.setValue("exchangeRate", rate.rate, { shouldDirty: true });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          form.setValue("exchangeRate", form.getValues("exchangeRate") || 1, { shouldDirty: true });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingFxRate(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseCurrency, form, selectedCurrency, selectedFxDate]);
 
   return (
     <div className="space-y-6">
@@ -363,7 +431,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                       />
                     </div>
                     <Select
-                      value={form.watch("currency") || baseCurrency}
+                      value={selectedCurrency}
                       onValueChange={(v) => {
                         form.setValue("currency", v);
                         form.setValue(
@@ -384,7 +452,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                       </SelectContent>
                     </Select>
                   </div>
-                  {(form.watch("currency") || baseCurrency) !== baseCurrency && (
+                  {selectedCurrency !== baseCurrency && (
                     <>
                       <div className="space-y-2">
                         <div className="flex items-center gap-1">
@@ -401,6 +469,11 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                             valueAsNumber: true,
                           })}
                         />
+                        <p className="text-xs text-muted-foreground">
+                          {loadingFxRate
+                            ? `Loading saved ${selectedCurrency}/${baseCurrency} rate...`
+                            : `Saved ${selectedCurrency}/${baseCurrency} rate for ${selectedFxDate}. You can still override it.`}
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <Label>FX date</Label>
@@ -426,11 +499,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           </CardHeader>
           <CardContent>
             <DocumentLineEditor
-              priceListId={resolvedPriceListId}
-              currency={form.watch("currency") || baseCurrency}
-              lines={lines}
-              onLinesChange={handleLinesChange}
-              mode={type === "bill" || type === "purchase-order" || type === "grn" ? "purchasing" : "sales"}
+              {...{
+                priceListId: resolvedPriceListId,
+                currency: selectedCurrency,
+                lines,
+                onLinesChange: handleLinesChange,
+                mode: lineEditorMode,
+              }}
             />
           </CardContent>
         </Card>
@@ -500,7 +575,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                   <p className="font-medium">
                     {formatMoney(
                       form.watch("totalAmount") ?? 0,
-                      form.watch("currency") || baseCurrency
+                      selectedCurrency
                     )}
                   </p>
                 </div>
@@ -549,7 +624,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                     <span>{row.memo}</span>
                   </div>
                 ))}
-                {(form.watch("currency") || baseCurrency) !== baseCurrency && (
+                {selectedCurrency !== baseCurrency && (
                   <div className="p-2 border-t bg-amber-500/10 text-amber-800 dark:text-amber-200 text-xs">
                     FX gain/loss line will be included if document and base currency differ.
                   </div>

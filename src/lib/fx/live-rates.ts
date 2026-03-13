@@ -1,9 +1,12 @@
+import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
+import { isApiConfigured } from "@/lib/api/client";
+
 export interface LiveRateResult {
   from: string;
   to: string;
   rate: number;
   fetchedAt: string;
-  source: "open.er-api";
+  source: "exchangerate-api" | "open.er-api";
 }
 
 export async function fetchLiveExchangeRate(from: string, to: string): Promise<LiveRateResult> {
@@ -15,7 +18,21 @@ export async function fetchLiveExchangeRate(from: string, to: string): Promise<L
       to: targetCurrency,
       rate: 1,
       fetchedAt: new Date().toISOString(),
-      source: "open.er-api",
+      source: "exchangerate-api",
+    };
+  }
+
+  if (isApiConfigured()) {
+    const saved = await fetchSavedExchangeRateApi({
+      fromCurrency: sourceCurrency,
+      toCurrency: targetCurrency,
+    });
+    return {
+      from: saved.from,
+      to: saved.to,
+      rate: saved.rate,
+      fetchedAt: saved.fetchedAt ?? new Date().toISOString(),
+      source: "exchangerate-api",
     };
   }
 

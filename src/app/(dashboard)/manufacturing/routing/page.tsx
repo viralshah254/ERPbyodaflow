@@ -2,99 +2,96 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  listWorkCenters,
-  createWorkCenter,
-  updateWorkCenter,
-  deleteWorkCenter,
-  listRoutes,
-  getRouteById,
-  createRoute,
-  updateRoute,
-  deleteRoute,
-  listRouteOperations,
-  saveRouteOperations,
-  createRouteOperation,
-  updateRouteOperation,
-  deleteRouteOperation,
-  resetRoutingFromMocks,
-} from "@/lib/data/routing.repo";
-import { canDeleteEntity } from "@/lib/permissions";
-import type { WorkCenter, RouteRow, RouteOperation } from "@/lib/manufacturing/types";
-import { useAuthStore } from "@/stores/auth-store";
+  createManufacturingRoute,
+  fetchManufacturingRoutes,
+  updateManufacturingRoute,
+  type ManufacturingRoute,
+} from "@/lib/api/manufacturing";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-function RoutingContent() {
-  const searchParams = useSearchParams();
-  const routeId = searchParams.get("route") ?? "";
-  const user = useAuthStore((s) => s.user);
-  const canDelete = canDeleteEntity(user);
+type RouteOperationInput = {
+  id: string;
+  sequence: string;
+  name: string;
+  workCenter: string;
+  setupMinutes: string;
+  runMinutesPerUnit: string;
+};
 
-  const [workCenters, setWorkCenters] = React.useState<WorkCenter[]>([]);
-  const [routes, setRoutes] = React.useState<RouteRow[]>([]);
-  const [wcSheetOpen, setWcSheetOpen] = React.useState(false);
-  const [routeSheetOpen, setRouteSheetOpen] = React.useState(false);
-  const [opSheetOpen, setOpSheetOpen] = React.useState(false);
-  const [editingWc, setEditingWc] = React.useState<WorkCenter | null>(null);
-  const [editingRoute, setEditingRoute] = React.useState<RouteRow | null>(null);
-  const [editingOp, setEditingOp] = React.useState<RouteOperation | null>(null);
-  const [selectedRouteId, setSelectedRouteId] = React.useState(routeId);
-  const [ops, setOps] = React.useState<RouteOperation[]>([]);
+export default function RoutingPage() {
+  const [routes, setRoutes] = React.useState<ManufacturingRoute[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [editingRoute, setEditingRoute] = React.useState<ManufacturingRoute | null>(null);
+  const [code, setCode] = React.useState("");
+  const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [operations, setOperations] = React.useState<RouteOperationInput[]>([]);
 
-  const refresh = React.useCallback(() => {
-    setWorkCenters(listWorkCenters());
-    setRoutes(listRoutes());
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const nextRoutes = await fetchManufacturingRoutes();
+      setRoutes(nextRoutes);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load routing.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  React.useEffect(() => refresh(), [refresh]);
 
   React.useEffect(() => {
-    setSelectedRouteId((prev) => routeId || prev);
-  }, [routeId]);
+    void refresh();
+  }, [refresh]);
 
-  React.useEffect(() => {
-    if (!selectedRouteId) return;
-    setOps(listRouteOperations(selectedRouteId));
-  }, [selectedRouteId, routes, workCenters]);
+  function openRoute(route?: ManufacturingRoute) {
+    setEditingRoute(route ?? null);
+    setCode(route?.code ?? "");
+    setName(route?.name ?? "");
+    setDescription(route?.description ?? "");
+    setOperations(
+      (route?.operations ?? []).map((operation) => ({
+        id: operation.id,
+        sequence: String(operation.sequence),
+        name: operation.name,
+        workCenter: operation.workCenter ?? operation.workCenterId ?? "",
+        setupMinutes: String(operation.setupMinutes ?? 0),
+        runMinutesPerUnit: String(operation.runMinutesPerUnit ?? 0),
+      }))
+    );
+    setSheetOpen(true);
+  }
 
-  const selectedRoute = selectedRouteId ? getRouteById(selectedRouteId) : null;
-  const wcMap = React.useMemo(() => new Map(workCenters.map((w) => [w.id, w])), [workCenters]);
+  function addOperation() {
+    setOperations((current) => [
+      ...current,
+      {
+        id: `op-${Date.now()}`,
+        sequence: String(current.length + 1),
+        name: "",
+        workCenter: "",
+        setupMinutes: "0",
+        runMinutesPerUnit: "0",
+      },
+    ]);
+  }
 
   return (
     <PageShell>
       <PageHeader
         title="Routing"
-        description="Work centers, routes, and operations. Stub for production order sequencing."
+        description="Live operation sequences used by manufacturing BOMs and work orders."
         breadcrumbs={[
           { label: "Manufacturing", href: "/manufacturing/boms" },
           { label: "Routing" },
@@ -103,387 +100,213 @@ function RoutingContent() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { resetRoutingFromMocks(); refresh(); }}>
-              Reset to defaults
-            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/boms">BOMs</Link>
+            </Button>
+            <Button size="sm" onClick={() => openRoute()}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              New route
             </Button>
           </div>
         }
       />
-      <div className="p-6 space-y-6">
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Work centers</CardTitle>
-              <CardDescription>Mixing, packing, QC, etc.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="w-24"></TableHead>
+      <div className="space-y-6 p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Routes</CardTitle>
+            <CardDescription>Each route can define multiple operations with work center and time standards.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Operations</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {routes.map((route) => (
+                  <TableRow key={route.id}>
+                    <TableCell className="font-medium">{route.code}</TableCell>
+                    <TableCell>{route.name}</TableCell>
+                    <TableCell>{route.operations.length}</TableCell>
+                    <TableCell>{route.description ?? "—"}</TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" onClick={() => openRoute(route)}>
+                        Edit
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {workCenters.map((w) => (
-                    <TableRow key={w.id}>
-                      <TableCell className="font-mono font-medium">{w.code}</TableCell>
-                      <TableCell>{w.name}</TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => { setEditingWc(w); setWcSheetOpen(true); }}>Edit</Button>
-                        {canDelete && (
-                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteWorkCenter(w.id); refresh(); }}>Remove</Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="p-4 border-t">
-                <Button size="sm" onClick={() => { setEditingWc(null); setWcSheetOpen(true); }}>
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Add work center
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                ))}
+              </TableBody>
+            </Table>
+            {!loading && routes.length === 0 && (
+              <div className="p-6 text-sm text-muted-foreground">No routes yet.</div>
+            )}
+            {loading && <div className="p-6 text-sm text-muted-foreground">Loading routes...</div>}
+          </CardContent>
+        </Card>
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Routes</CardTitle>
-              <CardDescription>Sequence of operations. Link from formula BOMs.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="w-24"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {routes.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-mono font-medium">{r.code}</TableCell>
-                      <TableCell>{r.name}</TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => { setSelectedRouteId(r.id); setEditingRoute(r); setRouteSheetOpen(true); }}>Edit</Button>
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedRouteId(r.id)}>View ops</Button>
-                        {canDelete && (
-                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteRoute(r.id); refresh(); if (selectedRouteId === r.id) setSelectedRouteId(""); }}>Remove</Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="p-4 border-t">
-                <Button size="sm" onClick={() => { setEditingRoute(null); setRouteSheetOpen(true); }}>
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Add route
-                </Button>
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>{editingRoute ? "Edit route" : "New route"}</SheetTitle>
+            <SheetDescription>Define the operation sequence, work centers, and timing standards.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Code</Label>
+                <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="RT-001" />
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {selectedRoute && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Operations — {selectedRoute.name}</CardTitle>
-              <CardDescription>Sequence, work center, setup & run times.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Seq</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Work center</TableHead>
-                    <TableHead>Setup (min)</TableHead>
-                    <TableHead>Run (min/unit)</TableHead>
-                    <TableHead className="w-24"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ops.map((o) => (
-                    <TableRow key={o.id}>
-                      <TableCell className="font-mono">{o.sequence}</TableCell>
-                      <TableCell className="font-medium">{o.name}</TableCell>
-                      <TableCell>{wcMap.get(o.workCenterId)?.name ?? o.workCenterId}</TableCell>
-                      <TableCell>{o.setupMinutes}</TableCell>
-                      <TableCell>{o.runMinutesPerUnit}</TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm" onClick={() => { setEditingOp(o); setOpSheetOpen(true); }}>Edit</Button>
-                        {canDelete && (
-                          <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deleteRouteOperation(selectedRouteId, o.id); setOps(listRouteOperations(selectedRouteId)); }}>Remove</Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="p-4 border-t">
-                <Button size="sm" onClick={() => { setEditingOp(null); setOpSheetOpen(true); }}>
-                  <Icons.Plus className="mr-2 h-4 w-4" />
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Filleting route" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Operations</Label>
+                <Button size="sm" variant="outline" onClick={addOperation}>
                   Add operation
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {routes.length > 0 && !selectedRouteId && (
-          <p className="text-sm text-muted-foreground">Select a route (View ops) to see or edit operations.</p>
-        )}
-      </div>
-
-      {wcSheetOpen && (
-        <WorkCenterSheet
-          initial={editingWc}
-          onSave={(row) => {
-            if (editingWc) updateWorkCenter(editingWc.id, row);
-            else createWorkCenter(row);
-            refresh();
-            setWcSheetOpen(false);
-          }}
-          onClose={() => { setWcSheetOpen(false); setEditingWc(null); }}
-        />
-      )}
-      {routeSheetOpen && (
-        <RouteSheet
-          initial={editingRoute}
-          onSave={(row) => {
-            if (editingRoute) updateRoute(editingRoute.id, row);
-            else createRoute(row);
-            refresh();
-            setRouteSheetOpen(false);
-          }}
-          onClose={() => { setRouteSheetOpen(false); setEditingRoute(null); }}
-        />
-      )}
-      {opSheetOpen && selectedRouteId && (
-        <OperationSheet
-          routeId={selectedRouteId}
-          workCenters={workCenters}
-          initial={editingOp}
-          onSave={(row) => {
-            if (editingOp) {
-              updateRouteOperation(selectedRouteId, editingOp.id, row);
-            } else {
-              createRouteOperation(selectedRouteId, row);
-            }
-            setOps(listRouteOperations(selectedRouteId));
-            setOpSheetOpen(false);
-          }}
-          onClose={() => { setOpSheetOpen(false); setEditingOp(null); }}
-        />
-      )}
+              {operations.map((operation, index) => (
+                <div key={operation.id} className="rounded-md border p-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Sequence</Label>
+                      <Input
+                        value={operation.sequence}
+                        onChange={(e) =>
+                          setOperations((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, sequence: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Name</Label>
+                      <Input
+                        value={operation.name}
+                        onChange={(e) =>
+                          setOperations((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, name: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label>Work center</Label>
+                      <Input
+                        value={operation.workCenter}
+                        onChange={(e) =>
+                          setOperations((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, workCenter: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Setup minutes</Label>
+                      <Input
+                        value={operation.setupMinutes}
+                        onChange={(e) =>
+                          setOperations((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, setupMinutes: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Run min/unit</Label>
+                      <Input
+                        value={operation.runMinutesPerUnit}
+                        onChange={(e) =>
+                          setOperations((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, runMinutesPerUnit: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => setOperations((current) => current.filter((item) => item.id !== operation.id))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {operations.length === 0 && (
+                <p className="text-sm text-muted-foreground">No operations defined yet. Add at least one step for execution planning.</p>
+              )}
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancel</Button>
+            <Button
+              disabled={saving || !name.trim()}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  const payload = {
+                    code: code.trim(),
+                    name: name.trim(),
+                    description: description.trim() || undefined,
+                    operations: operations.map((operation) => ({
+                      id: operation.id,
+                      sequence: Number(operation.sequence) || 0,
+                      name: operation.name.trim(),
+                      workCenter: operation.workCenter.trim(),
+                      setupMinutes: Number(operation.setupMinutes) || 0,
+                      runMinutesPerUnit: Number(operation.runMinutesPerUnit) || 0,
+                    })),
+                  };
+                  if (editingRoute) {
+                    await updateManufacturingRoute(editingRoute.id, payload);
+                  } else {
+                    await createManufacturingRoute(payload);
+                  }
+                  toast.success(`Route ${editingRoute ? "updated" : "created"}.`);
+                  setSheetOpen(false);
+                  await refresh();
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Failed to save route.");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              Save route
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
-  );
-}
-
-function WorkCenterSheet({
-  initial,
-  onSave,
-  onClose,
-}: {
-  initial: WorkCenter | null;
-  onSave: (row: Omit<WorkCenter, "id">) => void;
-  onClose: () => void;
-}) {
-  const [code, setCode] = React.useState(initial?.code ?? "");
-  const [name, setName] = React.useState(initial?.name ?? "");
-  const [description, setDescription] = React.useState(initial?.description ?? "");
-
-  React.useEffect(() => {
-    if (initial) {
-      setCode(initial.code);
-      setName(initial.name);
-      setDescription(initial.description ?? "");
-    }
-  }, [initial]);
-
-  return (
-    <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{initial ? "Edit work center" : "Add work center"}</SheetTitle>
-          <SheetDescription>Code, name, optional description.</SheetDescription>
-        </SheetHeader>
-        <div className="space-y-4 py-6">
-          <div className="space-y-2">
-            <Label>Code</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="WC-MIX" required />
-          </div>
-          <div className="space-y-2">
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Mixing" required />
-          </div>
-          <div className="space-y-2">
-            <Label>Description (optional)</Label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Raw material mixing" />
-          </div>
-        </div>
-        <SheetFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave({ code: code.trim(), name: name.trim(), description: description.trim() || undefined })}>Save</Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function RouteSheet({
-  initial,
-  onSave,
-  onClose,
-}: {
-  initial: RouteRow | null;
-  onSave: (row: Omit<RouteRow, "id">) => void;
-  onClose: () => void;
-}) {
-  const [code, setCode] = React.useState(initial?.code ?? "");
-  const [name, setName] = React.useState(initial?.name ?? "");
-  const [description, setDescription] = React.useState(initial?.description ?? "");
-
-  React.useEffect(() => {
-    if (initial) {
-      setCode(initial.code);
-      setName(initial.name);
-      setDescription(initial.description ?? "");
-    }
-  }, [initial]);
-
-  return (
-    <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{initial ? "Edit route" : "Add route"}</SheetTitle>
-          <SheetDescription>Code, name, optional description.</SheetDescription>
-        </SheetHeader>
-        <div className="space-y-4 py-6">
-          <div className="space-y-2">
-            <Label>Code</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="R-GAMMA" required />
-          </div>
-          <div className="space-y-2">
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Gamma Production" required />
-          </div>
-          <div className="space-y-2">
-            <Label>Description (optional)</Label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-        </div>
-        <SheetFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave({ code: code.trim(), name: name.trim(), description: description.trim() || undefined })}>Save</Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function OperationSheet({
-  routeId,
-  workCenters,
-  initial,
-  onSave,
-  onClose,
-}: {
-  routeId: string;
-  workCenters: WorkCenter[];
-  initial: RouteOperation | null;
-  onSave: (row: Omit<RouteOperation, "id" | "routeId">) => void;
-  onClose: () => void;
-}) {
-  const ops = listRouteOperations(routeId);
-  const nextSeq = initial ? initial.sequence : (ops.length ? Math.max(...ops.map((o) => o.sequence)) + 10 : 10);
-
-  const [sequence, setSequence] = React.useState(initial?.sequence ?? nextSeq);
-  const [name, setName] = React.useState(initial?.name ?? "");
-  const [workCenterId, setWorkCenterId] = React.useState(initial?.workCenterId ?? workCenters[0]?.id ?? "");
-  const [setupMinutes, setSetupMinutes] = React.useState(initial?.setupMinutes ?? 0);
-  const [runMinutesPerUnit, setRunMinutesPerUnit] = React.useState(initial?.runMinutesPerUnit ?? 0);
-
-  React.useEffect(() => {
-    if (initial) {
-      setSequence(initial.sequence);
-      setName(initial.name);
-      setWorkCenterId(initial.workCenterId);
-      setSetupMinutes(initial.setupMinutes);
-      setRunMinutesPerUnit(initial.runMinutesPerUnit);
-    } else {
-      setSequence(nextSeq);
-    }
-  }, [initial, nextSeq]);
-
-  return (
-    <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{initial ? "Edit operation" : "Add operation"}</SheetTitle>
-          <SheetDescription>Sequence, work center, setup & run times.</SheetDescription>
-        </SheetHeader>
-        <div className="space-y-4 py-6">
-          <div className="space-y-2">
-            <Label>Sequence</Label>
-            <Input type="number" min={0} value={sequence} onChange={(e) => setSequence(Number((e.target as HTMLInputElement).value) || 0)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Mix" required />
-          </div>
-          <div className="space-y-2">
-            <Label>Work center</Label>
-            <Select value={workCenterId} onValueChange={setWorkCenterId} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent>
-                {workCenters.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>{w.code} — {w.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Setup (min)</Label>
-              <Input type="number" min={0} value={setupMinutes} onChange={(e) => setSetupMinutes(Number((e.target as HTMLInputElement).value) || 0)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Run (min/unit)</Label>
-              <Input type="number" min={0} step={0.01} value={runMinutesPerUnit} onChange={(e) => setRunMinutesPerUnit(Number((e.target as HTMLInputElement).value) || 0)} />
-            </div>
-          </div>
-        </div>
-        <SheetFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave({ sequence, name: name.trim(), workCenterId, setupMinutes, runMinutesPerUnit })}>Save</Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-export default function RoutingPage() {
-  return (
-    <Suspense
-      fallback={
-        <PageShell>
-          <PageHeader title="Routing" description="Loading…" breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/boms" }, { label: "Routing" }]} />
-          <div className="p-6">Loading…</div>
-        </PageShell>
-      }
-    >
-      <RoutingContent />
-    </Suspense>
   );
 }

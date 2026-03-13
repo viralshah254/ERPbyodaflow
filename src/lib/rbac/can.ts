@@ -1,4 +1,5 @@
 import type { User } from "@/types/erp";
+import { useAuthStore } from "@/stores/auth-store";
 
 /**
  * RBAC Permission Helper
@@ -59,32 +60,33 @@ function hasPermission(
 }
 
 export function can(user: User | null, permission?: string): boolean {
-  if (!user || !permission) {
-    return true; // No permission required or no user = allow
+  if (!permission) return true;
+  if (!user) return false;
+
+  const runtimePermissions = useAuthStore.getState().permissions;
+  if (runtimePermissions.length > 0) {
+    return hasPermission(runtimePermissions, permission);
   }
 
-  // Get permissions from user roles
-  const userPermissions: string[] = [];
+  const fallbackPermissions: string[] = [];
   for (const roleId of user.roleIds) {
     const rolePerms = MOCK_PERMISSIONS[roleId] || [];
-    userPermissions.push(...rolePerms);
+    fallbackPermissions.push(...rolePerms);
   }
 
-  return hasPermission(userPermissions, permission);
+  return hasPermission(fallbackPermissions, permission);
 }
 
 export function canAny(user: User | null, permissions: string[]): boolean {
-  if (!user || permissions.length === 0) {
-    return true;
-  }
+  if (permissions.length === 0) return true;
+  if (!user) return false;
 
   return permissions.some((perm) => can(user, perm));
 }
 
 export function canAll(user: User | null, permissions: string[]): boolean {
-  if (!user || permissions.length === 0) {
-    return true;
-  }
+  if (permissions.length === 0) return true;
+  if (!user) return false;
 
   return permissions.every((perm) => can(user, perm));
 }

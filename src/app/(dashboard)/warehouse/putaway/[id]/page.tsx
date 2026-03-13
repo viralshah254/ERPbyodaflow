@@ -7,116 +7,80 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { getPutawayGrnById, savePutawayAllocation } from "@/lib/data/warehouse-execution.repo";
-import { getMockBins } from "@/lib/mock/warehouse/bins";
-import { warehousePutawayConfirm } from "@/lib/api/stub-endpoints";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { fetchPutawayTask, updatePutawayTask, confirmPutawayTask, type WarehousePutawayRow } from "@/lib/api/warehouse-execution";
+import { fetchWarehouseLocations } from "@/lib/api/warehouse-locations";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function PutawayDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const [grn, setGrn] = React.useState(() => getPutawayGrnById(id));
-  const bins = React.useMemo(() => getMockBins(), []);
-  const [allocationState, setAllocationState] = React.useState<Record<string, { putawayQty: number; binCode?: string }>>({});
+  const [task, setTask] = React.useState<WarehousePutawayRow | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [locations, setLocations] = React.useState<Array<{ id: string; code?: string; name: string }>>([]);
+  const [allocations, setAllocations] = React.useState<Record<string, { putawayQty: string; locationId: string }>>({});
 
-  React.useEffect(() => {
-    const current = getPutawayGrnById(id);
-    setGrn(current);
-    setAllocationState(
-      Object.fromEntries(
-        (current?.lines ?? []).map((line) => [
-          line.id,
-          {
-            putawayQty: line.putawayQty,
-            binCode: line.allocatedBins?.[0]?.binCode,
-          },
-        ])
-      )
-    );
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const payload = await fetchPutawayTask(id);
+      setTask(payload);
+      if (payload?.warehouseId) {
+        const nextLocations = await fetchWarehouseLocations(payload.warehouseId);
+        setLocations(nextLocations.map((location) => ({ id: location.id, code: location.code, name: location.name })));
+      }
+      setAllocations(
+        Object.fromEntries(
+          (payload?.lines ?? []).map((line) => [
+            line.id,
+            {
+              putawayQty: String(line.putawayQty ?? 0),
+              locationId: line.allocatedBins?.[0]?.binCode ?? "",
+            },
+          ])
+        )
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load putaway task.");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  if (!grn) {
-    return (
-      <PageShell>
-        <PageHeader title="Not found" breadcrumbs={[{ label: "Warehouse", href: "/warehouse/overview" }, { label: "Putaway", href: "/warehouse/putaway" }, { label: id }]} />
-        <div className="p-6">
-          <p className="text-muted-foreground">GRN not found.</p>
-          <Button variant="outline" className="mt-4" asChild>
-            <Link href="/warehouse/putaway">Back to list</Link>
-          </Button>
-        </div>
-      </PageShell>
-    );
-  }
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  if (!task && loading) return <PageShell><PageHeader title="Loading putaway..." /></PageShell>;
+  if (!task) return <PageShell><PageHeader title="Putaway task not found" /></PageShell>;
+
+  const locationIdByCode = new Map(locations.map((location) => [location.code ?? location.id, location.id]));
 
   return (
     <PageShell>
       <PageHeader
-        title={`Putaway — ${grn.grnNumber}`}
-        description={grn.warehouse}
+        title={`Putaway - ${task.grnNumber}`}
+        description={
+          task.sourceDocumentId
+            ? `${task.warehouse ?? "Warehouse"} · GRN ${task.grnNumber} (${task.sourceDocumentStatus ?? "POSTED"})`
+            : task.warehouse
+        }
         breadcrumbs={[
           { label: "Warehouse", href: "/warehouse/overview" },
           { label: "Putaway", href: "/warehouse/putaway" },
-          { label: grn.grnNumber },
+          { label: task.grnNumber },
         ]}
         sticky
         showCommandHint
-        actions={
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                savePutawayAllocation(id, allocationState);
-                setGrn(getPutawayGrnById(id));
-                toast.success("Bin allocation saved.");
-              }}
-            >
-              Save allocation
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={async () => {
-                try {
-                  await warehousePutawayConfirm(id);
-                  setGrn(getPutawayGrnById(id));
-                  toast.success("Putaway confirmed.");
-                } catch (e) {
-                  toast.error((e as Error).message);
-                }
-              }}
-            >
-              Confirm putaway
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/warehouse/putaway">Back to list</Link>
-            </Button>
-          </div>
-        }
+        actions={<Button variant="outline" size="sm" asChild><Link href="/warehouse/putaway">Back to list</Link></Button>}
       />
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Lines — allocate to bin</CardTitle>
-            <CardDescription>Select bin and quantity for each receipt line, then confirm putaway.</CardDescription>
+            <CardTitle>Allocate to bins</CardTitle>
+            <CardDescription>Save bin assignments, then confirm putaway to move quantity into location stock.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -130,24 +94,21 @@ export default function PutawayDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {grn.lines.map((l) => (
-                  <TableRow key={l.id}>
-                    <TableCell className="font-medium">{l.sku}</TableCell>
-                    <TableCell>{l.productName}</TableCell>
-                    <TableCell>{l.receivedQty}</TableCell>
+                {task.lines.map((line) => (
+                  <TableRow key={line.id}>
+                    <TableCell className="font-medium">{line.sku ?? "—"}</TableCell>
+                    <TableCell>{line.productName ?? line.productId ?? "—"}</TableCell>
+                    <TableCell>{line.receivedQty}</TableCell>
                     <TableCell>
                       <Input
-                        type="number"
-                        value={allocationState[l.id]?.putawayQty ?? l.putawayQty}
-                        className="w-20"
-                        min={0}
-                        max={l.receivedQty}
+                        className="w-24"
+                        value={allocations[line.id]?.putawayQty ?? String(line.putawayQty ?? 0)}
                         onChange={(e) =>
-                          setAllocationState((prev) => ({
-                            ...prev,
-                            [l.id]: {
-                              ...prev[l.id],
-                              putawayQty: Number(e.target.value) || 0,
+                          setAllocations((current) => ({
+                            ...current,
+                            [line.id]: {
+                              ...(current[line.id] ?? { locationId: "" }),
+                              putawayQty: e.target.value,
                             },
                           }))
                         }
@@ -155,23 +116,25 @@ export default function PutawayDetailPage() {
                     </TableCell>
                     <TableCell>
                       <Select
-                        value={allocationState[l.id]?.binCode ?? l.allocatedBins?.[0]?.binCode}
+                        value={allocations[line.id]?.locationId ?? ""}
                         onValueChange={(value) =>
-                          setAllocationState((prev) => ({
-                            ...prev,
-                            [l.id]: {
-                              putawayQty: prev[l.id]?.putawayQty ?? l.putawayQty,
-                              binCode: value,
+                          setAllocations((current) => ({
+                            ...current,
+                            [line.id]: {
+                              putawayQty: current[line.id]?.putawayQty ?? String(line.putawayQty ?? 0),
+                              locationId: value,
                             },
                           }))
                         }
                       >
-                        <SelectTrigger className="w-40">
+                        <SelectTrigger className="w-48">
                           <SelectValue placeholder="Select bin" />
                         </SelectTrigger>
                         <SelectContent>
-                          {bins.filter((b) => b.warehouse === grn.warehouse).map((b) => (
-                            <SelectItem key={b.id} value={b.code}>{b.code}</SelectItem>
+                          {locations.map((location) => (
+                            <SelectItem key={location.id} value={location.id}>
+                              {location.code ?? location.name}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -182,16 +145,40 @@ export default function PutawayDetailPage() {
             </Table>
           </CardContent>
         </Card>
-        <div className="flex justify-end">
+        <div className="flex gap-2">
           <Button
-            onClick={() => {
-              savePutawayAllocation(id, allocationState);
-              setGrn(getPutawayGrnById(id));
+            onClick={async () => {
+              await updatePutawayTask(
+                task.id,
+                task.lines.map((line) => ({
+                  lineId: line.id,
+                  putawayQty: Number(allocations[line.id]?.putawayQty ?? line.putawayQty ?? 0),
+                  toLocationId:
+                    allocations[line.id]?.locationId ||
+                    locationIdByCode.get(line.allocatedBins?.[0]?.binCode ?? ""),
+                }))
+              );
               toast.success("Putaway allocation saved.");
+              await refresh();
             }}
           >
             Save allocation
           </Button>
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              await confirmPutawayTask(task.id);
+              toast.success("Putaway confirmed.");
+              await refresh();
+            }}
+          >
+            Confirm putaway
+          </Button>
+          {task.sourceDocumentId ? (
+            <Button variant="outline" asChild>
+              <Link href={`/inventory/receipts/${task.sourceDocumentId}`}>Open receipt</Link>
+            </Button>
+          ) : null}
         </div>
       </div>
     </PageShell>

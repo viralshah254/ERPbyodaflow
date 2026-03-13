@@ -32,8 +32,10 @@ import {
   receiveSubcontractOrder,
   createExternalWorkCenter,
   createSubcontractOrder,
+  type ExternalWorkCenterRow,
+  type SubcontractOrderRow,
+  type WIPBalanceRow,
 } from "@/lib/api/cool-catch";
-import type { ExternalWorkCenterRow, SubcontractOrderRow, WIPBalanceRow } from "@/lib/mock/manufacturing/subcontracting";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 

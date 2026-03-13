@@ -19,6 +19,7 @@ import {
   fetchTopUps,
   fetchVMIReplenishmentOrders,
 } from "@/lib/api/cool-catch";
+import { PERISHABLE_DISTRIBUTION_TEMPLATE_IDS } from "@/config/industryTemplates/templates";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useUIStore } from "@/stores/ui-store";
 import * as Icons from "lucide-react";
@@ -56,8 +57,10 @@ export default function ControlTowerPage() {
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const templateId = useOrgContextStore((s) => s.templateId);
   const featureFlags = useOrgContextStore((s) => s.featureFlags);
-  const coolCatchEnabled =
-    templateId === "cool-catch" ||
+  const perishableControlTowerEnabled =
+    PERISHABLE_DISTRIBUTION_TEMPLATE_IDS.includes(
+      (templateId ?? "") as (typeof PERISHABLE_DISTRIBUTION_TEMPLATE_IDS)[number]
+    ) ||
     (featureFlags.procurementAuditCashWeight === true &&
       featureFlags.vmiReplenishment === true &&
       featureFlags.commissionEngine === true);
@@ -81,7 +84,7 @@ export default function ControlTowerPage() {
   });
 
   React.useEffect(() => {
-    if (!coolCatchEnabled) {
+    if (!perishableControlTowerEnabled) {
       setLoading(false);
       return;
     }
@@ -164,7 +167,7 @@ export default function ControlTowerPage() {
     return () => {
       cancelled = true;
     };
-  }, [coolCatchEnabled]);
+  }, [perishableControlTowerEnabled]);
 
   const exceptionColumns = [
     { id: "type", header: "Exception", accessor: (r: ExceptionRow) => r.type, sticky: true },
@@ -186,9 +189,9 @@ export default function ControlTowerPage() {
   return (
     <PageShell>
       <PageHeader
-        title={coolCatchEnabled ? "CoolCatch Command Center" : "Control Tower"}
+        title={perishableControlTowerEnabled ? "Perishable Command Center" : "Control Tower"}
         description={
-          coolCatchEnabled
+          perishableControlTowerEnabled
             ? "Real-time sourcing, processing, cold chain, franchise, and finance visibility."
             : "Supply chain command layer for template-enabled modules."
         }
@@ -203,7 +206,7 @@ export default function ControlTowerPage() {
         }
       />
       <div className="p-6 space-y-6">
-        {!coolCatchEnabled ? (
+        {!perishableControlTowerEnabled ? (
           <GenericControlTower />
         ) : loading ? (
           <div className="text-sm text-muted-foreground">Loading command center data…</div>

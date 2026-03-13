@@ -7,6 +7,7 @@ interface AuthState {
   tenant: Tenant | null;
   currentBranch: Branch | null;
   branches: Branch[];
+  permissions: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
   
@@ -15,6 +16,16 @@ interface AuthState {
   setTenant: (tenant: Tenant | null) => void;
   setCurrentBranch: (branch: Branch | null) => void;
   setBranches: (branches: Branch[]) => void;
+  setPermissions: (permissions: string[]) => void;
+  setSession: (payload: {
+    user: User | null;
+    org: Org | null;
+    tenant: Tenant | null;
+    currentBranch: Branch | null;
+    branches: Branch[];
+    permissions: string[];
+  }) => void;
+  finishHydration: () => void;
   logout: () => void;
 }
 
@@ -24,6 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   tenant: null,
   currentBranch: null,
   branches: [],
+  permissions: [],
   isAuthenticated: false,
   isLoading: true,
 
@@ -32,13 +44,28 @@ export const useAuthStore = create<AuthState>((set) => ({
   setTenant: (tenant) => set({ tenant }),
   setCurrentBranch: (branch) => set({ currentBranch: branch }),
   setBranches: (branches) => set({ branches }),
+  setPermissions: (permissions) => set({ permissions }),
+  setSession: ({ user, org, tenant, currentBranch, branches, permissions }) =>
+    set({
+      user,
+      org,
+      tenant,
+      currentBranch,
+      branches,
+      permissions,
+      isAuthenticated: !!user,
+      isLoading: false,
+    }),
+  finishHydration: () => set({ isLoading: false }),
   logout: () => set({
     user: null,
     org: null,
     tenant: null,
     currentBranch: null,
     branches: [],
+    permissions: [],
     isAuthenticated: false,
+    isLoading: false,
   }),
 }));
 

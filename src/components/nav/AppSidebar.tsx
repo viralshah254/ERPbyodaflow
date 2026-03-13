@@ -22,7 +22,7 @@ function toTemplateOrgType(orgType: string | undefined): TemplateOrgType | null 
 
 const ALL_MODULES = [
   "dashboard", "inventory", "sales", "purchasing", "pricing", "finance",
-  "manufacturing", "distribution", "retail", "crm", "projects", "payroll", "reports", "automation", "analytics", "settings", "docs",
+  "manufacturing", "distribution", "franchise", "retail", "crm", "projects", "payroll", "reports", "automation", "analytics", "settings", "docs",
 ] as const;
 const DEFAULT_NAV_ORDER = NAV_SECTIONS_CONFIG.map((s) => s.key);
 
@@ -38,6 +38,8 @@ export function AppSidebar({ className }: AppSidebarProps) {
     enabledModules,
     featureFlags,
     template,
+    orgRole,
+    franchisePersona,
   } = useOrgContextStore();
 
   const visibleSections = React.useMemo((): ResolvedNavSection[] => {
@@ -47,16 +49,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
       template?.enabledModules?.length
         ? [...new Set([...baseModules, ...template.enabledModules])]
         : baseModules;
+    const personaNav =
+      franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE"
+        ? ["core", "docs", "sales", "inventory", "warehouse", "purchasing", "finance", "franchise", "settings"]
+        : null;
     const input = {
       orgType,
       enabledModules: resolvedModules,
       featureFlags: featureFlags ?? {},
-      defaultNav: template?.defaultNav?.length ? template.defaultNav : DEFAULT_NAV_ORDER,
+      defaultNav: personaNav ?? (template?.defaultNav?.length ? template.defaultNav : DEFAULT_NAV_ORDER),
       terminology: template?.terminology ?? {},
       user,
     };
     return buildVisibleNav(input);
-  }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user]);
+  }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, orgRole, franchisePersona]);
 
   return (
     <div
@@ -72,7 +78,9 @@ export function AppSidebar({ className }: AppSidebarProps) {
             <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground">
               <Icons.Box className="h-5 w-5" />
             </div>
-            <span className="font-semibold">OdaFlow ERP</span>
+            <span className="font-semibold">
+              {franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE" ? "OdaFlow Outlet ERP" : "OdaFlow ERP"}
+            </span>
           </div>
         )}
         {sidebarCollapsed && (

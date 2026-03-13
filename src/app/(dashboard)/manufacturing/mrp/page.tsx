@@ -8,14 +8,40 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MrpPlanningGrid } from "@/components/manufacturing/MrpPlanningGrid";
-import { getMrpGrid } from "@/lib/mock/mrp-planning";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { applyManufacturingMrp, fetchManufacturingMrp, type ManufacturingMrpSuggestion } from "@/lib/api/manufacturing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function MrpPage() {
-  const grid = React.useMemo(() => getMrpGrid(), []);
   const [itemFilter, setItemFilter] = React.useState("");
+  const [suggestions, setSuggestions] = React.useState<ManufacturingMrpSuggestion[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [applying, setApplying] = React.useState(false);
+
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const payload = await fetchManufacturingMrp();
+      setSuggestions(payload.suggestions ?? []);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load MRP plan.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const filtered = React.useMemo(() => {
+    const q = itemFilter.trim().toLowerCase();
+    if (!q) return suggestions;
+    return suggestions.filter((item) =>
+      [item.productSku, item.productName, item.reason].filter(Boolean).some((value) => value!.toLowerCase().includes(q))
+    );
+  }, [itemFilter, suggestions]);
 
   return (
     <PageShell>
@@ -51,19 +77,42 @@ export default function MrpPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Planning grid</CardTitle>
+            <CardTitle>Planning actions</CardTitle>
             <CardDescription>
-              Rows = items. Columns = periods (W1–W6). Each cell: <strong>Req</strong> (requirements) / <strong>Plan</strong> (planned orders). Stub data.
+              Live shortages and replenishment recommendations derived from sales-order demand, on-hand stock, and open work orders.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <MrpPlanningGrid
-              periods={grid.periods}
-              items={grid.items}
-              getCell={grid.getCell}
-              itemFilter={itemFilter}
-              className="border-0 rounded-none"
-            />
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Required</TableHead>
+                  <TableHead>On hand</TableHead>
+                  <TableHead>Incoming</TableHead>
+                  <TableHead>Shortage</TableHead>
+                  <TableHead>Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell>{item.type === "WORK_ORDER" ? "Make" : "Buy"}</TableCell>
+                    <TableCell className="font-medium">
+                      {item.productSku ? `${item.productSku} - ${item.productName}` : item.productName}
+                    </TableCell>
+                    <TableCell>{item.requiredQty}</TableCell>
+                    <TableCell>{item.onHandQty}</TableCell>
+                    <TableCell>{item.incomingQty}</TableCell>
+                    <TableCell>{item.shortageQty}</TableCell>
+                    <TableCell className="max-w-[420px] text-muted-foreground">{item.reason}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {loading && <div className="p-6 text-sm text-muted-foreground">Loading MRP suggestions...</div>}
+            {!loading && filtered.length === 0 && <div className="p-6 text-sm text-muted-foreground">No shortages detected.</div>}
           </CardContent>
         </Card>
 
@@ -74,14 +123,28 @@ export default function MrpPage() {
               AI recommended plan
             </CardTitle>
             <CardDescription>
-              Suggestions based on demand and current stock (stub).
+              Create draft work orders directly from the live MRP shortage list.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => toast.success("Apply suggestion (stub). API pending.")}
+              disabled={applying || suggestions.filter((item) => item.type === "WORK_ORDER").length === 0}
+              onClick={async () => {
+                setApplying(true);
+                try {
+                  const result = await applyManufacturingMrp(
+                    suggestions.filter((item) => item.type === "WORK_ORDER").map((item) => item.id)
+                  );
+                  toast.success(`Created ${result.created.length} draft work order(s).`);
+                  await refresh();
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Failed to apply MRP suggestions.");
+                } finally {
+                  setApplying(false);
+                }
+              }}
             >
               Apply suggestion
             </Button>

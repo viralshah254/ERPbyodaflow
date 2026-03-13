@@ -7,18 +7,18 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import type { PurchasingDocRow } from "@/lib/mock/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { downloadCsv } from "@/lib/export/csv";
-import { createPurchaseReturn, listPurchaseReturns, updatePurchaseReturnStatus } from "@/lib/data/purchasing.repo";
 import {
-  purchaseReturnCreate,
-  purchaseReturnApprove,
-  purchaseReturnsExport,
-} from "@/lib/api/stub-endpoints";
+  approvePurchaseReturnApi,
+  createPurchaseReturnApi,
+  exportPurchaseReturnsApi,
+  fetchPurchaseReturns,
+  type PurchaseReturnRow,
+} from "@/lib/api/purchase-returns";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -39,17 +39,34 @@ export default function PurchaseReturnsPage() {
   const [creating, setCreating] = React.useState(false);
   const [approving, setApproving] = React.useState(false);
   const [detailOpen, setDetailOpen] = React.useState(false);
-  const [selectedReturn, setSelectedReturn] = React.useState<PurchasingDocRow | null>(null);
+  const [selectedReturn, setSelectedReturn] = React.useState<PurchaseReturnRow | null>(null);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
   );
 
-  const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>(() => listPurchaseReturns());
+  const [allRows, setAllRows] = React.useState<PurchaseReturnRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
   const refreshRows = React.useCallback(() => {
-    setAllRows(listPurchaseReturns());
-  }, []);
+    setLoading(true);
+    void fetchPurchaseReturns(statusFilter || undefined)
+      .then((items) => {
+        setAllRows(
+          items.map((item) => ({
+            ...item,
+            party: item.party ?? item.supplierName ?? item.supplierId,
+          }))
+        );
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to load purchase returns.");
+      })
+      .finally(() => setLoading(false));
+  }, [statusFilter]);
+  React.useEffect(() => {
+    refreshRows();
+  }, [refreshRows, statusFilter]);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -58,7 +75,7 @@ export default function PurchaseReturnsPage() {
         (r) =>
           r.number.toLowerCase().includes(q) ||
           (r.party?.toLowerCase().includes(q)) ||
-          (r.poRef?.toLowerCase().includes(q))
+          (r.grnRef?.toLowerCase().includes(q))
       );
     }
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
@@ -80,22 +97,22 @@ export default function PurchaseReturnsPage() {
       {
         id: "number",
         header: "Number",
-        accessor: (r: PurchasingDocRow) => <span className="font-medium">{r.number}</span>,
+        accessor: (r: PurchaseReturnRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
       },
-      { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
-      { id: "party", header: "Supplier", accessor: "party" as keyof PurchasingDocRow },
-      { id: "poRef", header: "PO Ref", accessor: "poRef" as keyof PurchasingDocRow },
+      { id: "date", header: "Date", accessor: "date" as keyof PurchaseReturnRow },
+      { id: "party", header: "Supplier", accessor: "party" as keyof PurchaseReturnRow },
+      { id: "poRef", header: "GRN Ref", accessor: "grnRef" as keyof PurchaseReturnRow },
       {
         id: "total",
         header: "Total",
-        accessor: (r: PurchasingDocRow) =>
+        accessor: (r: PurchaseReturnRow) =>
           r.total != null ? `KES ${r.total.toLocaleString()}` : "—",
       },
       {
         id: "status",
         header: "Status",
-        accessor: (r: PurchasingDocRow) => <StatusBadge status={r.status} />,
+        accessor: (r: PurchaseReturnRow) => <StatusBadge status={r.status} />,
       },
     ],
     []
@@ -134,7 +151,7 @@ export default function PurchaseReturnsPage() {
   const handleCreateReturn = async () => {
     setCreating(true);
     try {
-      await purchaseReturnCreate({});
+      await createPurchaseReturnApi();
       refreshRows();
       toast.success("Purchase return created.");
     } catch (e) {
@@ -145,17 +162,20 @@ export default function PurchaseReturnsPage() {
   };
 
   const handleExport = () => {
-    downloadCsv(
-      `purchase-returns-${new Date().toISOString().slice(0, 10)}.csv`,
-      filtered.map((row) => ({
-        number: row.number,
-        date: row.date,
-        supplier: row.party ?? "",
-        poRef: row.poRef ?? "",
-        total: row.total ?? 0,
-        status: row.status,
-      }))
-    );
+    exportPurchaseReturnsApi((message) => {
+      downloadCsv(
+        `purchase-returns-${new Date().toISOString().slice(0, 10)}.csv`,
+        filtered.map((row) => ({
+          number: row.number,
+          date: row.date,
+          supplier: row.party ?? "",
+          grnRef: row.grnRef ?? "",
+          total: row.total ?? 0,
+          status: row.status,
+        }))
+      );
+      if (message) toast.message(message);
+    });
   };
 
   const handleBulkApprove = async () => {
@@ -163,8 +183,7 @@ export default function PurchaseReturnsPage() {
     setApproving(true);
     try {
       for (const returnId of selectedIds) {
-        await purchaseReturnApprove(returnId);
-        updatePurchaseReturnStatus(returnId, "APPROVED");
+        await approvePurchaseReturnApi(returnId);
       }
       refreshRows();
       toast.success(`Approved ${selectedIds.length} return(s).`);
@@ -232,14 +251,14 @@ export default function PurchaseReturnsPage() {
             ) : undefined
           }
         />
-        <DataTable<PurchasingDocRow>
+        <DataTable<PurchaseReturnRow>
           data={filtered}
           columns={columns}
           onRowClick={(row) => {
             setSelectedReturn(row);
             setDetailOpen(true);
           }}
-          emptyMessage="No purchase returns yet."
+          emptyMessage={loading ? "Loading purchase returns..." : "No purchase returns yet."}
           selectable
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
@@ -255,16 +274,15 @@ export default function PurchaseReturnsPage() {
             <div className="mt-6 space-y-2 text-sm">
               <p><span className="text-muted-foreground">Supplier:</span> {selectedReturn.party ?? "—"}</p>
               <p><span className="text-muted-foreground">Date:</span> {selectedReturn.date}</p>
-              <p><span className="text-muted-foreground">PO ref:</span> {selectedReturn.poRef ?? "—"}</p>
+              <p><span className="text-muted-foreground">GRN ref:</span> {selectedReturn.grnRef ?? "—"}</p>
               <p><span className="text-muted-foreground">Total:</span> KES {(selectedReturn.total ?? 0).toLocaleString()}</p>
               <p><span className="text-muted-foreground">Status:</span> {selectedReturn.status}</p>
               <div className="pt-4">
                 <Button
                   size="sm"
-                  onClick={() => {
-                    updatePurchaseReturnStatus(selectedReturn.id, "APPROVED");
+                  onClick={async () => {
+                    await approvePurchaseReturnApi(selectedReturn.id);
                     refreshRows();
-                    setSelectedReturn(listPurchaseReturns().find((row) => row.id === selectedReturn.id) ?? selectedReturn);
                     toast.success("Return approved.");
                   }}
                 >

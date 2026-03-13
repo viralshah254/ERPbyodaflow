@@ -7,6 +7,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -18,13 +19,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PaymentRow, OpenInvoiceRow } from "@/lib/mock/ar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   allocateArPaymentApi,
   createArPaymentApi,
@@ -276,18 +270,13 @@ export default function ARPaymentsPage() {
               <>
                 <div className="space-y-2">
                   <Label>Customer</Label>
-                  <Select value={customerId} onValueChange={setCustomerId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customerOptions.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={customerId}
+                    onValueChange={setCustomerId}
+                    options={customerOptions.map((customer) => ({ id: customer.id, label: customer.name }))}
+                    placeholder="Select customer"
+                    searchPlaceholder="Type to search customer"
+                  />
                 </div>
                 <Button onClick={() => setStep(2)}>Next</Button>
               </>

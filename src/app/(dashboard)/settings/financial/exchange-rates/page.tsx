@@ -18,11 +18,11 @@ import {
 } from "@/components/ui/sheet";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import {
-  getMockExchangeRates,
-  upsertMockExchangeRate,
-  type ExchangeRateRow,
-} from "@/lib/mock/exchange-rates";
-import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
+  fetchFinancialExchangeRatesApi,
+  saveFinancialExchangeRateApi,
+  syncFinancialExchangeRatesApi,
+  type FinancialExchangeRateRow,
+} from "@/lib/api/financial-settings";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -35,19 +35,38 @@ export default function ExchangeRatesSettingsPage() {
   const [from, setFrom] = React.useState("USD");
   const [to, setTo] = React.useState(settings.baseCurrency);
   const [addOpen, setAddOpen] = React.useState(false);
+  const [rates, setRates] = React.useState<FinancialExchangeRateRow[]>([]);
   const [refresh, setRefresh] = React.useState(0);
   const [addForm, setAddForm] = React.useState({
     date: today,
     from: "USD",
     to: settings.baseCurrency,
-    rate: 128.5,
+    rate: 1,
   });
   const importInputRef = React.useRef<HTMLInputElement>(null);
 
-  const rates = React.useMemo(
-    () => getMockExchangeRates({ date }),
-    [date, refresh]
-  );
+  React.useEffect(() => {
+    setTo(settings.baseCurrency);
+    setAddForm((current) => ({ ...current, to: settings.baseCurrency }));
+  }, [settings.baseCurrency]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchFinancialExchangeRatesApi({
+      date,
+      fromCurrency: from.trim() || undefined,
+      toCurrency: to.trim() || undefined,
+    })
+      .then((items) => {
+        if (!cancelled) setRates(items);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error((error as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [date, from, to, refresh]);
 
   const handleImportCsv = () => {
     if (isApiConfigured()) {
@@ -62,7 +81,7 @@ export default function ExchangeRatesSettingsPage() {
     e.target.value = "";
     if (!file) return;
     uploadFile(
-      "/api/import/exchange-rates",
+      "/api/settings/financial/exchange-rates/import",
       file,
       (data) => {
         if (data.imported != null) toast.success(`Imported ${data.imported} rate(s).`);
@@ -75,47 +94,35 @@ export default function ExchangeRatesSettingsPage() {
   };
 
   const handleFetchLatest = async () => {
-    const base = settings.baseCurrency.toUpperCase();
-    const pairs = ["USD", "EUR", "GBP", "UGX", "KES"].filter((c) => c !== base);
     try {
-      const rates = await Promise.all(
-        pairs.map(async (fromCurrency) => {
-          const live = await fetchLiveExchangeRate(fromCurrency, base);
-          return live;
-        })
-      );
-      for (const rate of rates) {
-        upsertMockExchangeRate({
-          date,
-          from: rate.from,
-          to: rate.to,
-          rate: rate.rate,
-          source: "API_STUB",
-        });
-      }
+      const result = await syncFinancialExchangeRatesApi();
       setRefresh((r) => r + 1);
-      toast.success(`Fetched ${rates.length} live rate(s).`);
+      toast.success(`Fetched ${result.saved} saved rate(s).`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to fetch latest rates.");
     }
   };
 
-  const handleAddRate = () => {
-    upsertMockExchangeRate({
-      date: addForm.date,
-      from: addForm.from,
-      to: addForm.to,
-      rate: addForm.rate,
-      source: "MANUAL",
-    });
-    setRefresh((r) => r + 1);
-    setAddOpen(false);
-    setAddForm({
-      date: today,
-      from: "USD",
-      to: settings.baseCurrency,
-      rate: 128.5,
-    });
+  const handleAddRate = async () => {
+    try {
+      await saveFinancialExchangeRateApi({
+        date: addForm.date,
+        from: addForm.from,
+        to: addForm.to,
+        rate: addForm.rate,
+      });
+      setRefresh((r) => r + 1);
+      setAddOpen(false);
+      setAddForm({
+        date: today,
+        from: "USD",
+        to: settings.baseCurrency,
+        rate: 1,
+      });
+      toast.success("Exchange rate saved.");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
 
   const columns = React.useMemo(
@@ -123,14 +130,14 @@ export default function ExchangeRatesSettingsPage() {
       {
         id: "pair",
         header: "Pair",
-        accessor: (r: ExchangeRateRow) => (
+        accessor: (r: FinancialExchangeRateRow) => (
           <span className="font-medium">{r.from} → {r.to}</span>
         ),
         sticky: true,
       },
-      { id: "rate", header: "Rate", accessor: (r: ExchangeRateRow) => r.rate },
-      { id: "date", header: "Effective date", accessor: "date" as keyof ExchangeRateRow },
-      { id: "source", header: "Source", accessor: "source" as keyof ExchangeRateRow },
+      { id: "rate", header: "Rate", accessor: (r: FinancialExchangeRateRow) => r.rate },
+      { id: "date", header: "Effective date", accessor: "date" as keyof FinancialExchangeRateRow },
+      { id: "source", header: "Source", accessor: "source" as keyof FinancialExchangeRateRow },
     ],
     []
   );
@@ -150,7 +157,7 @@ export default function ExchangeRatesSettingsPage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleFetchLatest}>
-              Fetch latest rates
+              Sync daily rates
             </Button>
             <input
               ref={importInputRef}
@@ -205,7 +212,7 @@ export default function ExchangeRatesSettingsPage() {
                 />
               </div>
             </div>
-            <DataTable<ExchangeRateRow>
+            <DataTable<FinancialExchangeRateRow>
               data={rates}
               columns={columns}
               emptyMessage="No rates for this date."
@@ -272,7 +279,7 @@ export default function ExchangeRatesSettingsPage() {
             <Button variant="outline" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddRate}>Save</Button>
+            <Button onClick={() => void handleAddRate()}>Save</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

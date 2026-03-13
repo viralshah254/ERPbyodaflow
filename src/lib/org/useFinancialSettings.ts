@@ -1,21 +1,50 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
-  getMockFinancialSettings,
-  updateMockFinancialSettings,
-} from "@/lib/mock/financial-settings";
+  fetchFinancialSettingsApi,
+  getInitialFinancialSettings,
+  updateFinancialSettingsApi,
+  applyLocalFinancialPatch,
+} from "@/lib/api/financial-settings";
 import type { FinancialSettings } from "./financial-settings";
 
 /** Minimal getter + updater hook for financial settings. Used by Settings pages. */
 export function useFinancialSettings() {
-  const [settings, setSettings] = useState<FinancialSettings>(
-    () => getMockFinancialSettings()
-  );
-  const update = useCallback((patch: Partial<FinancialSettings>) => {
-    const next = updateMockFinancialSettings(patch);
-    setSettings(next);
-    return next;
+  const [settings, setSettings] = useState<FinancialSettings>(() => getInitialFinancialSettings());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFinancialSettingsApi()
+      .then((next) => {
+        if (!cancelled) {
+          setSettings(next);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
-  return { settings, update };
+
+  const update = useCallback(async (patch: Partial<FinancialSettings>) => {
+    const previous = settings;
+    const optimistic = applyLocalFinancialPatch(previous, patch);
+    setSettings(optimistic);
+    try {
+      const next = await updateFinancialSettingsApi(patch);
+      setSettings(next);
+      return next;
+    } catch (error) {
+      setSettings(previous);
+      throw error;
+    }
+  }, [settings]);
+
+  return { settings, update, loading };
 }

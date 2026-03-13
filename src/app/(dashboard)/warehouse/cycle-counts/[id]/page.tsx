@@ -5,170 +5,105 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  getCycleCountById,
-  postCycleCountAdjustments,
-  submitCycleCount,
-  updateCycleCountLine,
-} from "@/lib/data/cycle-counts.repo";
-import { warehouseCycleCountSubmit } from "@/lib/api/stub-endpoints";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { fetchCycleCountTask, submitCycleCountTask, updateCycleCountTaskLine, type WarehouseCycleCountRow } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function CycleCountDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const [session, setSession] = React.useState(() => getCycleCountById(id));
+  const [task, setTask] = React.useState<WarehouseCycleCountRow | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
-  const refreshSession = React.useCallback(() => {
-    setSession(getCycleCountById(id));
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const payload = await fetchCycleCountTask(id);
+      setTask(payload);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load cycle count.");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  if (!session) {
-    return (
-      <PageShell>
-        <PageHeader title="Not found" breadcrumbs={[{ label: "Warehouse", href: "/warehouse/overview" }, { label: "Cycle counts", href: "/warehouse/cycle-counts" }, { label: id }]} />
-        <div className="p-6">
-          <p className="text-muted-foreground">Session not found.</p>
-          <Button variant="outline" className="mt-4" asChild>
-            <Link href="/warehouse/cycle-counts">Back to list</Link>
-          </Button>
-        </div>
-      </PageShell>
-    );
-  }
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
-  const hasVariance = session.lines.some((l) => l.variance !== 0);
+  if (!task && loading) return <PageShell><PageHeader title="Loading cycle count..." /></PageShell>;
+  if (!task) return <PageShell><PageHeader title="Cycle count not found" /></PageShell>;
 
   return (
     <PageShell>
       <PageHeader
-        title={`${session.number} — ${session.status}`}
-        description={`${session.warehouse} · ${session.scope}${session.scopeDetail ? ` · ${session.scopeDetail}` : ""}`}
+        title={`${task.number} - ${task.status}`}
+        description={task.warehouse}
         breadcrumbs={[
           { label: "Warehouse", href: "/warehouse/overview" },
           { label: "Cycle counts", href: "/warehouse/cycle-counts" },
-          { label: session.number },
+          { label: task.number },
         ]}
         sticky
         showCommandHint
         actions={
           <div className="flex gap-2">
-            {(session.status === "OPEN" || session.status === "IN_PROGRESS") && (
-              <Button size="sm" onClick={() => toast.success("Use the line inputs below to capture counted quantities.")}>
-                Enter quantities
-              </Button>
-            )}
-            {session.status === "REVIEW" && hasVariance && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  postCycleCountAdjustments(id);
-                  refreshSession();
-                  toast.success("Inventory adjustments posted.");
-                }}
-              >
-                Post adjustments
-              </Button>
-            )}
-            {(session.status === "OPEN" || session.status === "IN_PROGRESS" || session.status === "REVIEW") && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={async () => {
-                  try {
-                    await warehouseCycleCountSubmit(id);
-                    refreshSession();
-                    toast.success("Cycle count submitted.");
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  }
-                }}
-              >
-                Submit
-              </Button>
-            )}
+            <Button variant="secondary" onClick={async () => {
+              await submitCycleCountTask(task.id);
+              toast.success("Cycle count posted.");
+              await refresh();
+            }}>
+              Submit & post
+            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/warehouse/cycle-counts">Back to list</Link>
             </Button>
           </div>
         }
       />
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Variance report</CardTitle>
-            <CardDescription>System vs counted. Adjust and post.</CardDescription>
+            <CardTitle>Count lines</CardTitle>
+            <CardDescription>Update counted quantities; variance is recalculated from backend data.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {session.lines.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                No lines. Add items or scan to count.
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Bin</TableHead>
-                    <TableHead>System qty</TableHead>
-                    <TableHead>Counted qty</TableHead>
-                    <TableHead>Variance</TableHead>
-                    <TableHead>Edit</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>System qty</TableHead>
+                  <TableHead>Counted qty</TableHead>
+                  <TableHead>Variance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {task.lines.map((line) => (
+                  <TableRow key={line.id}>
+                    <TableCell className="font-medium">{line.sku ?? "—"}</TableCell>
+                    <TableCell>{line.productName ?? line.productId}</TableCell>
+                    <TableCell>{line.locationCode ?? "—"}</TableCell>
+                    <TableCell>{line.systemQty}</TableCell>
+                    <TableCell>
+                      <Input
+                        className="w-24"
+                        value={String(line.countedQty)}
+                        onChange={async (e) => {
+                          await updateCycleCountTaskLine(task.id, line.id, Number(e.target.value) || 0);
+                          await refresh();
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>{line.variance >= 0 ? `+${line.variance}` : line.variance}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {session.lines.map((l) => (
-                    <TableRow key={l.id}>
-                      <TableCell className="font-medium">{l.sku}</TableCell>
-                      <TableCell>{l.productName}</TableCell>
-                      <TableCell className="text-muted-foreground">{l.binCode ?? "—"}</TableCell>
-                      <TableCell>{l.systemQty}</TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          value={l.countedQty}
-                          className="w-20"
-                          onChange={(e) => {
-                            updateCycleCountLine(id, l.id, Number(e.target.value) || 0);
-                            refreshSession();
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={l.variance === 0 ? "secondary" : "outline"}>{l.variance >= 0 ? `+${l.variance}` : l.variance}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            submitCycleCount(id);
-                            refreshSession();
-                            toast.success("Count line saved to review.");
-                          }}
-                        >
-                          Save
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>

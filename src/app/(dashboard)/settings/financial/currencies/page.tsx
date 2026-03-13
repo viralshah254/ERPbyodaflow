@@ -20,6 +20,11 @@ import type { CurrencyCode } from "@/lib/org/financial-settings";
 import { BaseCurrencyCard } from "@/components/settings/financial/BaseCurrencyCard";
 import { CurrencyTable } from "@/components/settings/financial/CurrencyTable";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
+import {
+  createFinancialCurrencyApi,
+  fetchFinancialCurrenciesApi,
+  type FinancialCurrencyRow,
+} from "@/lib/api/financial-settings";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -29,24 +34,49 @@ export default function CurrenciesSettingsPage() {
   const [addOpen, setAddOpen] = React.useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
   const [newCurrencyCode, setNewCurrencyCode] = React.useState("");
+  const [newCurrencyName, setNewCurrencyName] = React.useState("");
+  const [newCurrencySymbol, setNewCurrencySymbol] = React.useState("");
+  const [currencies, setCurrencies] = React.useState<FinancialCurrencyRow[]>([]);
+
+  const loadCurrencies = React.useCallback(async () => {
+    try {
+      setCurrencies(await fetchFinancialCurrenciesApi());
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void loadCurrencies();
+  }, [loadCurrencies]);
 
   const handleBaseChange = React.useCallback(
-    (code: CurrencyCode) => {
-      const next = [...new Set([...settings.enabledCurrencies, code])];
-      update({ baseCurrency: code, enabledCurrencies: next });
+    async (code: CurrencyCode) => {
+      try {
+        const next = [...new Set([...settings.enabledCurrencies, code])];
+        await update({ baseCurrency: code, enabledCurrencies: next });
+        await loadCurrencies();
+      } catch (error) {
+        toast.error((error as Error).message);
+      }
     },
-    [settings.enabledCurrencies, update]
+    [settings.enabledCurrencies, update, loadCurrencies]
   );
 
   const handleToggle = React.useCallback(
-    (code: CurrencyCode, enabled: boolean) => {
+    async (code: string, enabled: boolean) => {
       if (!enabled && settings.baseCurrency === code) return;
-      const next = enabled
-        ? [...new Set([...settings.enabledCurrencies, code])]
-        : settings.enabledCurrencies.filter((c) => c !== code);
-      update({ enabledCurrencies: next });
+      try {
+        const next = enabled
+          ? [...new Set([...settings.enabledCurrencies, code])]
+          : settings.enabledCurrencies.filter((c) => c !== code);
+        await update({ enabledCurrencies: next });
+        await loadCurrencies();
+      } catch (error) {
+        toast.error((error as Error).message);
+      }
     },
-    [settings.baseCurrency, settings.enabledCurrencies, update]
+    [settings.baseCurrency, settings.enabledCurrencies, update, loadCurrencies]
   );
 
   const handleAddCurrency = () => {
@@ -59,11 +89,22 @@ export default function CurrenciesSettingsPage() {
       toast.error("Enter a currency code.");
       return;
     }
-    const next = [...new Set([...settings.enabledCurrencies, code as CurrencyCode])];
-    update({ enabledCurrencies: next });
-    toast.success(`Currency ${code} enabled.`);
-    setAddOpen(false);
-    setNewCurrencyCode("");
+    createFinancialCurrencyApi({
+      code,
+      name: newCurrencyName.trim() || undefined,
+      symbol: newCurrencySymbol.trim() || undefined,
+    })
+      .then(async () => {
+        const next = [...new Set([...settings.enabledCurrencies, code as CurrencyCode])];
+        await update({ enabledCurrencies: next });
+        await loadCurrencies();
+        toast.success(`Currency ${code} enabled.`);
+        setAddOpen(false);
+        setNewCurrencyCode("");
+        setNewCurrencyName("");
+        setNewCurrencySymbol("");
+      })
+      .catch((error) => toast.error((error as Error).message));
   };
 
   const handleImportCsv = () => {
@@ -138,7 +179,7 @@ export default function CurrenciesSettingsPage() {
         <BaseCurrencyCard
           value={settings.baseCurrency}
           onChange={handleBaseChange}
-          enabledCurrencies={settings.enabledCurrencies}
+          currencies={currencies}
         />
         <Card>
           <CardHeader>
@@ -149,7 +190,7 @@ export default function CurrenciesSettingsPage() {
           </CardHeader>
           <CardContent>
             <CurrencyTable
-              enabledCurrencies={settings.enabledCurrencies}
+              currencies={currencies}
               onToggle={handleToggle}
               onAddCurrency={handleAddCurrency}
             />
@@ -172,11 +213,11 @@ export default function CurrenciesSettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input placeholder="e.g. Swiss Franc" />
+              <Input placeholder="e.g. Swiss Franc" value={newCurrencyName} onChange={(e) => setNewCurrencyName(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Symbol</Label>
-              <Input placeholder="e.g. CHF" />
+              <Input placeholder="e.g. CHF" value={newCurrencySymbol} onChange={(e) => setNewCurrencySymbol(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Decimals</Label>

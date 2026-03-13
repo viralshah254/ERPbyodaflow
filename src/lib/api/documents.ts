@@ -26,6 +26,12 @@ type BackendDocumentLine = {
   quantity?: number;
   tax?: number;
   amount?: number;
+  sourceDocumentId?: string;
+  sourceDocumentType?: DocTypeKey;
+  sourceLineId?: string;
+  sourceQuantity?: number;
+  convertedQuantity?: number;
+  remainingQuantity?: number;
 };
 
 type BackendAttachment = {
@@ -53,11 +59,29 @@ type BackendDocumentDetail = {
   id: string;
   number: string;
   date: string;
+  partyId?: string;
   party?: string;
+  warehouseId?: string;
   total?: number;
   currency?: string;
   status: string;
+  outputTemplateId?: string;
   lines?: BackendDocumentLine[];
+  sourceDocument?: {
+    id: string;
+    typeKey: DocTypeKey;
+    number: string;
+    status: string;
+    date: string;
+  } | null;
+  relatedDocuments?: Array<{
+    id: string;
+    typeKey: DocTypeKey;
+    number: string;
+    status: string;
+    date: string;
+    total?: number;
+  }>;
   attachments?: BackendAttachment[];
   comments?: BackendComment[];
   approvalHistory?: BackendTimelineEntry[];
@@ -105,6 +129,21 @@ export type DocumentDraftPayload = {
   tax?: number;
   total: number;
   currency?: string;
+  outputTemplateId?: string;
+};
+
+export type DocumentConvertPayload = {
+  targetType: DocTypeKey;
+  date?: string;
+  dueDate?: string;
+  branchId?: string;
+  partyId?: string;
+  warehouseId?: string;
+  poRef?: string;
+  reference?: string;
+  currency?: string;
+  outputTemplateId?: string;
+  lines?: Array<{ sourceLineId?: string; quantity?: number }>;
 };
 
 function mapTimeline(entries?: BackendTimelineEntry[]): DocumentTimelineEntry[] {
@@ -125,22 +164,34 @@ function mapDocumentDetail(
     type,
     number: payload.number,
     date: payload.date,
+    partyId: payload.partyId,
     party: payload.party,
+    warehouseId: payload.warehouseId,
     total: payload.total,
     currency: payload.currency ?? "KES",
     status: payload.status,
+    outputTemplateId: payload.outputTemplateId,
     lines: (payload.lines ?? []).map((line) => ({
+      id: line.id,
       description: line.description ?? "Line item",
-        productId: line.productId,
-        productName: line.productName,
-        productSku: line.productSku,
-        accountId: line.accountId,
-        accountName: line.accountName,
-        accountCode: line.accountCode,
+      productId: line.productId,
+      productName: line.productName,
+      productSku: line.productSku,
+      accountId: line.accountId,
+      accountName: line.accountName,
+      accountCode: line.accountCode,
       qty: line.qty ?? line.quantity,
-        tax: line.tax,
+      tax: line.tax,
       amount: line.amount,
+      sourceDocumentId: line.sourceDocumentId,
+      sourceDocumentType: line.sourceDocumentType,
+      sourceLineId: line.sourceLineId,
+      sourceQuantity: line.sourceQuantity,
+      convertedQuantity: line.convertedQuantity,
+      remainingQuantity: line.remainingQuantity,
     })),
+    sourceDocument: payload.sourceDocument ?? null,
+    relatedDocuments: payload.relatedDocuments ?? [],
     attachments: (payload.attachments ?? []).map((item) => ({
       id: item.id,
       name: item.name,
@@ -243,6 +294,38 @@ export async function createDocumentApi(
     method: "POST",
     body: payload,
   });
+}
+
+export async function convertDocumentApi(
+  type: DocTypeKey,
+  id: string,
+  payload: DocumentConvertPayload
+): Promise<{ id: string; typeKey?: DocTypeKey; number?: string; status?: string }> {
+  if (!isApiConfigured()) {
+    const source = getDocumentDetail(type, id);
+    const created = createDocumentDraft(payload.targetType, {
+      date: payload.date ?? new Date().toISOString().slice(0, 10),
+      partyId: payload.partyId ?? source?.partyId,
+      warehouseId: payload.warehouseId,
+      lines: (source?.lines ?? []).map((line) => ({
+        productId: line.productId,
+        description: line.description,
+        quantity: payload.lines?.find((item) => item.sourceLineId === line.id)?.quantity ?? line.qty ?? 0,
+        amount: line.amount,
+      })),
+      total: source?.total ?? 0,
+      currency: source?.currency,
+      outputTemplateId: payload.outputTemplateId,
+    });
+    return { id: created.id, number: created.number, status: created.status };
+  }
+  return apiRequest<{ id: string; typeKey?: DocTypeKey; number?: string; status?: string }>(
+    `/api/documents/${type}/${id}/convert`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
 }
 
 export function exportDocumentListApi(

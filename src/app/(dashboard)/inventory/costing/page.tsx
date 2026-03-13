@@ -31,10 +31,10 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getMockValuationSummary } from "@/lib/mock/inventory/costing";
 import { fetchLandedCostSources, fetchLandedCostTemplates, postLandedCostAllocation, type LandedCostSourceRow, type LandedCostTemplateRow } from "@/lib/api/landed-cost";
+import { fetchInventoryValuation, fetchLatestInventoryCosting } from "@/lib/api/inventory-costing";
 import { runCosting } from "@/lib/api/stub-endpoints";
-import { listCostingRuns, listLandedCostAllocations } from "@/lib/data/inventory-costing.repo";
+import { listLandedCostAllocations } from "@/lib/data/inventory-costing.repo";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -65,15 +65,24 @@ export default function InventoryCostingPage() {
   const [allocationAmount, setAllocationAmount] = React.useState("");
   const [allocationSaving, setAllocationSaving] = React.useState(false);
   const [runCostingLoading, setRunCostingLoading] = React.useState(false);
-  const [costingRuns, setCostingRuns] = React.useState(() => listCostingRuns());
+  const [costingSnapshot, setCostingSnapshot] = React.useState<{ ranAt: string | null; method: string; updated: number; totalValue: number }>({
+    ranAt: null,
+    method: "WEIGHTED_AVERAGE",
+    updated: 0,
+    totalValue: 0,
+  });
+  const [valuationSummary, setValuationSummary] = React.useState<Array<{
+    warehouseId: string;
+    warehouse: string;
+    skuCount: number;
+    totalQty: number;
+    totalValue: number;
+  }>>([]);
   const [allocations, setAllocations] = React.useState(() => listLandedCostAllocations());
 
   const summary = React.useMemo(
-    () =>
-      getMockValuationSummary(
-        warehouseFilter === "ALL" ? undefined : { warehouse: warehouseFilter }
-      ),
-    [warehouseFilter]
+    () => valuationSummary.filter((row) => warehouseFilter === "ALL" || row.warehouseId === warehouseFilter),
+    [valuationSummary, warehouseFilter]
   );
   const warehouses = React.useMemo(() => Array.from(new Set(summary.map((s) => s.warehouse))), [summary]);
 
@@ -94,6 +103,29 @@ export default function InventoryCostingPage() {
         if (!cancelled) setSourcesLoading(false);
       });
     return () => { cancelled = true; };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void Promise.all([fetchInventoryValuation(), fetchLatestInventoryCosting()])
+      .then(([valuation, snapshot]) => {
+        if (cancelled) return;
+        setValuationSummary(valuation.summary);
+        setCostingSnapshot({
+          ranAt: snapshot.ranAt,
+          method: snapshot.method,
+          updated: snapshot.updated,
+          totalValue: snapshot.totalValue,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setValuationSummary([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const openAllocation = (src: LandedCostSourceRow) => {
@@ -148,7 +180,17 @@ export default function InventoryCostingPage() {
                 setRunCostingLoading(true);
                 try {
                   await runCosting();
-                  setCostingRuns(listCostingRuns());
+                  const [valuation, snapshot] = await Promise.all([
+                    fetchInventoryValuation(),
+                    fetchLatestInventoryCosting(),
+                  ]);
+                  setValuationSummary(valuation.summary);
+                  setCostingSnapshot({
+                    ranAt: snapshot.ranAt,
+                    method: snapshot.method,
+                    updated: snapshot.updated,
+                    totalValue: snapshot.totalValue,
+                  });
                   toast.success("Costing run completed.");
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -196,7 +238,6 @@ export default function InventoryCostingPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Warehouse</TableHead>
-                  <TableHead>Category</TableHead>
                   <TableHead>SKU count</TableHead>
                   <TableHead>Total qty</TableHead>
                   <TableHead>Total value</TableHead>
@@ -204,12 +245,11 @@ export default function InventoryCostingPage() {
               </TableHeader>
               <TableBody>
                 {summary.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow key={r.warehouseId}>
                     <TableCell className="font-medium">{r.warehouse}</TableCell>
-                    <TableCell>{r.category ?? "—"}</TableCell>
                     <TableCell>{r.skuCount}</TableCell>
                     <TableCell>{r.totalQty}</TableCell>
-                    <TableCell>{formatMoney(r.totalValue, r.currency)}</TableCell>
+                    <TableCell>{formatMoney(r.totalValue, "KES")}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -283,14 +323,12 @@ export default function InventoryCostingPage() {
             </div>
             <div>
               <p className="font-medium">Recent costing runs</p>
-              {costingRuns.length === 0 ? (
+              {!costingSnapshot.ranAt ? (
                 <p className="text-muted-foreground">No costing runs executed yet.</p>
               ) : (
-                costingRuns.slice(0, 3).map((run) => (
-                  <p key={run.id} className="text-muted-foreground">
-                    {run.period} · {run.status} · {new Date(run.completedAt).toLocaleString()}
-                  </p>
-                ))
+                <p className="text-muted-foreground">
+                  {costingSnapshot.method} · {costingSnapshot.updated} stock levels · {new Date(costingSnapshot.ranAt).toLocaleString()}
+                </p>
               )}
             </div>
           </CardContent>

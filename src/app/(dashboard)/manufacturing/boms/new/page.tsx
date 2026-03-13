@@ -16,10 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createBom } from "@/lib/data/bom.repo";
+import { createManufacturingBom } from "@/lib/api/manufacturing";
 import { listProducts } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function NewBomPage() {
@@ -34,20 +35,22 @@ export default function NewBomPage() {
   const [uom, setUom] = React.useState("EA");
   const [type, setType] = React.useState<BomType>("bom");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || !name.trim() || !finishedProductId) return;
-    const bom = createBom({
-      code: code.trim(),
-      name: name.trim(),
-      finishedProductId,
-      quantity: Number(quantity) || 1,
-      uom: uom || "EA",
-      version: "1",
-      isActive: true,
-      type,
-    });
-    router.push(`/manufacturing/boms/${bom.id}`);
+    try {
+      const bom = await createManufacturingBom({
+        code: code.trim(),
+        name: name.trim(),
+        productId: finishedProductId,
+        quantity: Number(quantity) || 1,
+        uom: uom || "EA",
+        type,
+      });
+      router.push(`/manufacturing/boms/${bom.id}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create BOM.");
+    }
   };
 
   return (

@@ -39,6 +39,8 @@ import {
 } from "@/lib/mock/manufacturing/subcontracting";
 import { loadStoredValue, saveStoredValue } from "@/lib/data/persisted-store";
 
+export type { ExternalWorkCenterRow, SubcontractOrderRow, WIPBalanceRow };
+
 const STORAGE_KEYS = {
   commissionRuns: "odaflow_coolcatch_commission_runs",
   topUps: "odaflow_coolcatch_topups",
@@ -123,6 +125,51 @@ export interface CommissionSummaryRow {
   totalPayout: number;
 }
 
+export interface FranchiseNetworkOutletRow {
+  id: string;
+  membershipId?: string;
+  networkId?: string;
+  name: string;
+  code?: string;
+  territory?: string;
+  storeFormat?: string;
+  managerName?: string;
+  agreementStatus?: string;
+  isActive: boolean;
+  revenue: number;
+  invoiceCount: number;
+  arOverdue: number;
+  totalStockQty: number;
+  lowStockCount: number;
+  orgType?: string;
+}
+
+export interface FranchiseNetworkSummary {
+  parentOrgId: string;
+  outletCount: number;
+  activeOutletCount: number;
+  networkSales: number;
+  networkInvoices: number;
+  stockRiskOutlets: number;
+  arOverdue: number;
+  totalStockQty: number;
+  totalCommission: number;
+  topUpExposure: number;
+  generatedAt: string;
+  outlets: FranchiseNetworkOutletRow[];
+}
+
+export interface FranchiseOutletWorkspace {
+  salesToday: number;
+  monthlySales: number;
+  openSalesOrders: number;
+  openBills: number;
+  stockSkuCount: number;
+  lowStockCount: number;
+  lowStockItems: Array<{ productId: string; warehouseId: string; quantity: number }>;
+  recentInvoices: Array<{ id: string; number: string; total: number; date: string; status: string }>;
+}
+
 // ——— Commission ———
 
 export async function fetchCommissionRuns(params?: { status?: string }): Promise<CommissionRunRow[]> {
@@ -135,6 +182,86 @@ export async function fetchCommissionRuns(params?: { status?: string }): Promise
     params: listParams(params),
   });
   return res.items ?? [];
+}
+
+export async function fetchFranchiseNetworkSummary(): Promise<FranchiseNetworkSummary> {
+  if (!isApiConfigured()) {
+    const [stock, orders, runs, topUps] = await Promise.all([
+      fetchFranchiseeStock(),
+      fetchVMIReplenishmentOrders(),
+      fetchCommissionRuns({ status: "POSTED" }),
+      fetchTopUps(),
+    ]);
+    const outletMap = new Map<string, FranchiseNetworkOutletRow>();
+    for (const row of stock) {
+      const current = outletMap.get(row.franchiseeId) ?? {
+        id: row.franchiseeId,
+        name: row.franchiseeName,
+        isActive: true,
+        revenue: 0,
+        invoiceCount: 0,
+        arOverdue: 0,
+        totalStockQty: 0,
+        lowStockCount: 0,
+      };
+      current.totalStockQty += row.qty;
+      if (row.suggestedOrder > 0) current.lowStockCount += 1;
+      outletMap.set(row.franchiseeId, current);
+    }
+    for (const order of orders) {
+      const current = outletMap.get(order.franchiseeId);
+      if (!current) continue;
+      current.invoiceCount += order.status === "RECEIVED" ? 1 : 0;
+    }
+    let totalCommission = 0;
+    for (const run of runs) {
+      for (const line of run.lines ?? []) {
+        totalCommission += line.commissionAmount;
+      }
+    }
+    const topUpExposure = topUps.reduce((sum, row) => sum + row.amount, 0);
+    const outlets = Array.from(outletMap.values());
+    return {
+      parentOrgId: "mock-parent-org",
+      outletCount: outlets.length,
+      activeOutletCount: outlets.length,
+      networkSales: 0,
+      networkInvoices: outlets.reduce((sum, item) => sum + item.invoiceCount, 0),
+      stockRiskOutlets: outlets.filter((item) => item.lowStockCount > 0).length,
+      arOverdue: 0,
+      totalStockQty: outlets.reduce((sum, item) => sum + item.totalStockQty, 0),
+      totalCommission,
+      topUpExposure,
+      generatedAt: new Date().toISOString(),
+      outlets,
+    };
+  }
+  return apiRequest<FranchiseNetworkSummary>("/api/franchise/network/summary");
+}
+
+export async function fetchFranchiseNetworkOutlets(): Promise<FranchiseNetworkOutletRow[]> {
+  if (!isApiConfigured()) {
+    const summary = await fetchFranchiseNetworkSummary();
+    return summary.outlets;
+  }
+  const payload = await apiRequest<{ items: FranchiseNetworkOutletRow[] }>("/api/franchise/network/outlets");
+  return payload.items ?? [];
+}
+
+export async function fetchFranchiseOutletWorkspace(): Promise<FranchiseOutletWorkspace> {
+  if (!isApiConfigured()) {
+    return {
+      salesToday: 0,
+      monthlySales: 0,
+      openSalesOrders: 0,
+      openBills: 0,
+      stockSkuCount: 0,
+      lowStockCount: 0,
+      lowStockItems: [],
+      recentInvoices: [],
+    };
+  }
+  return apiRequest<FranchiseOutletWorkspace>("/api/franchise/outlet/workspace");
 }
 
 export async function fetchCommissionRunById(id: string): Promise<CommissionRunRow | null> {

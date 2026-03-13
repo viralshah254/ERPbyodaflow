@@ -26,6 +26,14 @@ export type OrgContextState = {
   defaultRoleDashboards: DefaultRoleDashboardConfig[];
   /** Resolved template def for convenience */
   template: IndustryTemplateDefinition | null;
+  orgRole: "STANDARD" | "FRANCHISOR" | "FRANCHISEE";
+  parentOrgId?: string;
+  franchiseNetworkId?: string;
+  franchiseCode?: string;
+  franchiseTerritory?: string;
+  franchiseStoreFormat?: string;
+  franchiseManagerName?: string;
+  franchisePersona: "STANDARD" | "LIGHT_ERP";
 };
 
 export type OrgContextActions = {
@@ -35,6 +43,22 @@ export type OrgContextActions = {
   setFromOnboarding: (orgType: TemplateOrgType, templateId: string) => void;
   /** Override enabled modules (e.g. from settings) */
   setEnabledModules: (modules: ModuleKey[]) => void;
+  hydrateFromBackend: (payload: {
+    orgType?: string | null;
+    templateId?: string | null;
+    enabledModules?: string[];
+    featureFlags?: Record<string, boolean>;
+    terminology?: Record<string, string>;
+    defaultNav?: string[];
+    orgRole?: "STANDARD" | "FRANCHISOR" | "FRANCHISEE";
+    parentOrgId?: string;
+    franchiseNetworkId?: string;
+    franchiseCode?: string;
+    franchiseTerritory?: string;
+    franchiseStoreFormat?: string;
+    franchiseManagerName?: string;
+    franchisePersona?: "STANDARD" | "LIGHT_ERP";
+  }) => void;
   /** Dev: clear and optionally set defaults */
   reset: () => void;
   /** Check if a feature flag is on */
@@ -52,6 +76,8 @@ const emptyState: OrgContextState = {
   defaultKPIs: [],
   defaultRoleDashboards: [],
   template: null,
+  orgRole: "STANDARD",
+  franchisePersona: "STANDARD",
 };
 
 function hydrateFromTemplate(template: IndustryTemplateDefinition): OrgContextState {
@@ -64,7 +90,21 @@ function hydrateFromTemplate(template: IndustryTemplateDefinition): OrgContextSt
     defaultKPIs: template.defaultKPIs,
     defaultRoleDashboards: template.defaultRoleDashboards,
     template,
+    orgRole: "STANDARD",
+    parentOrgId: undefined,
+    franchiseNetworkId: undefined,
+    franchiseCode: undefined,
+    franchiseTerritory: undefined,
+    franchiseStoreFormat: undefined,
+    franchiseManagerName: undefined,
+    franchisePersona: "STANDARD",
   };
+}
+
+function normalizeOrgType(orgType?: string | null): TemplateOrgType | null {
+  if (!orgType) return null;
+  if (orgType === "SHOP") return "RETAIL";
+  return orgType as TemplateOrgType;
 }
 
 export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
@@ -86,6 +126,67 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
 
       setEnabledModules(modules: ModuleKey[]) {
         set({ enabledModules: modules });
+      },
+
+      hydrateFromBackend(payload) {
+        const normalizedOrgType = normalizeOrgType(payload.orgType);
+        const template =
+          (payload.templateId ? getTemplateById(payload.templateId) : null) ??
+          (normalizedOrgType
+            ? getTemplateById(
+                normalizedOrgType === "MANUFACTURER"
+                  ? "fmcg-manufacturer"
+                  : normalizedOrgType === "DISTRIBUTOR"
+                    ? "fmcg-distributor"
+                    : "retail-multi-store"
+              )
+            : null);
+        if (!template) {
+          set({
+            orgType: normalizedOrgType,
+            templateId: payload.templateId ?? null,
+            enabledModules: (payload.enabledModules ?? []) as ModuleKey[],
+            featureFlags: (payload.featureFlags ?? {}) as Partial<Record<FeatureFlagKey, boolean>>,
+            terminology: (payload.terminology ?? {}) as TerminologyOverrides,
+            template: null,
+            orgRole: payload.orgRole ?? "STANDARD",
+            parentOrgId: payload.parentOrgId,
+            franchiseNetworkId: payload.franchiseNetworkId,
+            franchiseCode: payload.franchiseCode,
+            franchiseTerritory: payload.franchiseTerritory,
+            franchiseStoreFormat: payload.franchiseStoreFormat,
+            franchiseManagerName: payload.franchiseManagerName,
+            franchisePersona: payload.franchisePersona ?? "STANDARD",
+          });
+          return;
+        }
+        set({
+          ...hydrateFromTemplate(template),
+          orgType: normalizedOrgType ?? template.orgType,
+          templateId: payload.templateId ?? template.id,
+          enabledModules: (payload.enabledModules?.length
+            ? payload.enabledModules
+            : template.enabledModules) as ModuleKey[],
+          featureFlags: {
+            ...template.featureFlags,
+            ...(payload.featureFlags ?? {}),
+          } as Partial<Record<FeatureFlagKey, boolean>>,
+          terminology: {
+            ...template.terminology,
+            ...(payload.terminology ?? {}),
+          } as TerminologyOverrides,
+          orgRole: payload.orgRole ?? "STANDARD",
+          parentOrgId: payload.parentOrgId,
+          franchiseNetworkId: payload.franchiseNetworkId,
+          franchiseCode: payload.franchiseCode,
+          franchiseTerritory: payload.franchiseTerritory,
+          franchiseStoreFormat: payload.franchiseStoreFormat,
+          franchiseManagerName: payload.franchiseManagerName,
+          franchisePersona: payload.franchisePersona ?? "STANDARD",
+          template: payload.defaultNav?.length
+            ? { ...template, defaultNav: payload.defaultNav as typeof template.defaultNav }
+            : template,
+        });
       },
 
       reset() {
@@ -111,6 +212,14 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
         terminology: s.terminology,
         defaultKPIs: s.defaultKPIs,
         defaultRoleDashboards: s.defaultRoleDashboards,
+        orgRole: s.orgRole,
+        parentOrgId: s.parentOrgId,
+        franchiseNetworkId: s.franchiseNetworkId,
+        franchiseCode: s.franchiseCode,
+        franchiseTerritory: s.franchiseTerritory,
+        franchiseStoreFormat: s.franchiseStoreFormat,
+        franchiseManagerName: s.franchiseManagerName,
+        franchisePersona: s.franchisePersona,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.templateId && !state.template) {

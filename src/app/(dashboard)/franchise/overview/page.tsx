@@ -10,18 +10,19 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { FranchiseHealthCard } from "@/components/operational/FranchiseHealthCard";
-import { fetchFranchiseeStock, fetchVMIReplenishmentOrders, fetchCommissionRuns, fetchTopUps } from "@/lib/api/cool-catch";
+import { fetchFranchiseNetworkSummary } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 
 type FranchiseOverviewRow = {
   franchiseeId: string;
   franchiseeName: string;
-  skuCount: number;
+  territory?: string;
+  storeFormat?: string;
   qtyOnHand: number;
-  suggestedOrderQty: number;
-  openReplenishments: number;
-  postedCommission: number;
-  topUpExposure: number;
+  lowStockCount: number;
+  invoiceCount: number;
+  revenue: number;
+  arOverdue: number;
 };
 
 export default function FranchiseOverviewPage() {
@@ -31,49 +32,22 @@ export default function FranchiseOverviewPage() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      fetchFranchiseeStock(),
-      fetchVMIReplenishmentOrders(),
-      fetchCommissionRuns({ status: "POSTED" }),
-      fetchTopUps(),
-    ])
-      .then(([stock, orders, runs, topUps]) => {
+    fetchFranchiseNetworkSummary()
+      .then((summary) => {
         if (cancelled) return;
-        const byId = new Map<string, FranchiseOverviewRow>();
-        for (const s of stock) {
-          const row = byId.get(s.franchiseeId) ?? {
-            franchiseeId: s.franchiseeId,
-            franchiseeName: s.franchiseeName,
-            skuCount: 0,
-            qtyOnHand: 0,
-            suggestedOrderQty: 0,
-            openReplenishments: 0,
-            postedCommission: 0,
-            topUpExposure: 0,
-          };
-          row.skuCount += 1;
-          row.qtyOnHand += s.qty;
-          row.suggestedOrderQty += s.suggestedOrder;
-          byId.set(s.franchiseeId, row);
-        }
-        for (const o of orders) {
-          const row = byId.get(o.franchiseeId);
-          if (!row) continue;
-          if (o.status !== "RECEIVED") row.openReplenishments += 1;
-        }
-        for (const r of runs) {
-          for (const l of r.lines ?? []) {
-            const row = byId.get(l.franchiseeId);
-            if (!row) continue;
-            row.postedCommission += l.commissionAmount;
-          }
-        }
-        for (const t of topUps) {
-          const row = byId.get(t.franchiseeId);
-          if (!row) continue;
-          row.topUpExposure += t.amount;
-        }
-        setRows(Array.from(byId.values()).sort((a, b) => b.qtyOnHand - a.qtyOnHand));
+        setRows(
+          summary.outlets.map((outlet) => ({
+            franchiseeId: outlet.id,
+            franchiseeName: outlet.name,
+            territory: outlet.territory,
+            storeFormat: outlet.storeFormat,
+            qtyOnHand: outlet.totalStockQty,
+            lowStockCount: outlet.lowStockCount,
+            invoiceCount: outlet.invoiceCount,
+            revenue: outlet.revenue,
+            arOverdue: outlet.arOverdue,
+          }))
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -90,16 +64,17 @@ export default function FranchiseOverviewPage() {
       accessor: (r: FranchiseOverviewRow) => (
         <div className="flex items-center gap-2">
           <span className="font-medium">{r.franchiseeName}</span>
-          <Badge variant="secondary">{r.skuCount} SKUs</Badge>
+          {r.storeFormat ? <Badge variant="secondary">{r.storeFormat}</Badge> : null}
         </div>
       ),
       sticky: true,
     },
+    { id: "territory", header: "Territory", accessor: (r: FranchiseOverviewRow) => r.territory ?? "—" },
     { id: "qty", header: "Qty on hand", accessor: (r: FranchiseOverviewRow) => r.qtyOnHand },
-    { id: "replenishment", header: "Suggested replenishment", accessor: (r: FranchiseOverviewRow) => r.suggestedOrderQty },
-    { id: "openOrders", header: "Open replenishments", accessor: (r: FranchiseOverviewRow) => r.openReplenishments },
-    { id: "commission", header: "Posted commission", accessor: (r: FranchiseOverviewRow) => formatMoney(r.postedCommission, "KES") },
-    { id: "topup", header: "Top-up exposure", accessor: (r: FranchiseOverviewRow) => formatMoney(r.topUpExposure, "KES") },
+    { id: "lowStock", header: "Low stock alerts", accessor: (r: FranchiseOverviewRow) => r.lowStockCount },
+    { id: "invoiceCount", header: "Invoices", accessor: (r: FranchiseOverviewRow) => r.invoiceCount },
+    { id: "revenue", header: "Revenue", accessor: (r: FranchiseOverviewRow) => formatMoney(r.revenue, "KES") },
+    { id: "arOverdue", header: "AR overdue", accessor: (r: FranchiseOverviewRow) => formatMoney(r.arOverdue, "KES") },
     {
       id: "actions",
       header: "",
@@ -140,23 +115,23 @@ export default function FranchiseOverviewPage() {
           />
           <OperationalKpiCard
             title="Low Stock Exposure"
-            value={rows.reduce((a, r) => a + (r.suggestedOrderQty > 0 ? 1 : 0), 0)}
+            value={rows.reduce((a, r) => a + (r.lowStockCount > 0 ? 1 : 0), 0)}
             subtitle="Franchisees needing replenishment"
             severity="warning"
             href="/franchise/vmi"
           />
           <OperationalKpiCard
-            title="Open Replenishments"
-            value={rows.reduce((a, r) => a + r.openReplenishments, 0)}
-            subtitle="Orders not fully received"
-            href="/distribution/transfer-planning"
+            title="Network Revenue"
+            value={formatMoney(rows.reduce((a, r) => a + r.revenue, 0), "KES")}
+            subtitle="Posted outlet invoices"
+            href="/analytics/explore"
           />
           <OperationalKpiCard
-            title="Top-up Exposure"
-            value={formatMoney(rows.reduce((a, r) => a + r.topUpExposure, 0), "KES")}
-            subtitle="Current support obligations"
+            title="AR Overdue"
+            value={formatMoney(rows.reduce((a, r) => a + r.arOverdue, 0), "KES")}
+            subtitle="Collections pressure across outlets"
             severity="danger"
-            href="/finance/commission-topup"
+            href="/treasury/collections"
           />
         </div>
 
@@ -167,9 +142,9 @@ export default function FranchiseOverviewPage() {
               franchiseeId={row.franchiseeId}
               franchiseeName={row.franchiseeName}
               qtyOnHand={row.qtyOnHand}
-              skuCount={row.skuCount}
-              topUpExposure={row.topUpExposure}
-              openReplenishments={row.openReplenishments}
+              skuCount={row.invoiceCount}
+              topUpExposure={row.arOverdue}
+              openReplenishments={row.lowStockCount}
             />
           ))}
         </div>

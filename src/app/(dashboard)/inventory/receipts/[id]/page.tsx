@@ -17,6 +17,7 @@ import { ProcurementVariancePanel } from "@/components/operational/ProcurementVa
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchGRNById, postGRN, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow } from "@/lib/api/grn";
+import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/mock/purchasing";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { formatMoney } from "@/lib/money";
@@ -30,10 +31,26 @@ export default function ReceiptDetailPage() {
   const [grn, setGrn] = React.useState<GrnDetailRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [posting, setPosting] = React.useState(false);
+  const [putawayLink, setPutawayLink] = React.useState<{ id: string; label: string } | null>(null);
 
   React.useEffect(() => {
     setLoading(true);
     fetchGRNById(id).then((g) => { setGrn(g ?? null); setLoading(false); });
+  }, [id]);
+
+  React.useEffect(() => {
+    let active = true;
+    void fetchPutawayTasks({ sourceDocumentId: id })
+      .then((items) => {
+        if (!active) return;
+        setPutawayLink(items[0] ? { id: items[0].id, label: items[0].grnNumber } : null);
+      })
+      .catch(() => {
+        if (active) setPutawayLink(null);
+      });
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   if (loading && !grn) {
@@ -88,7 +105,7 @@ export default function ReceiptDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            {grn.status !== "POSTED" && (
+            {grn.status === "DRAFT" && (
               <Button
                 size="sm"
                 disabled={posting}
@@ -117,6 +134,11 @@ export default function ReceiptDetailPage() {
                 <Link href="/purchasing/cash-weight-audit">Cash-to-weight audit</Link>
               </Button>
             )}
+            {putawayLink ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/warehouse/putaway/${putawayLink.id}`}>Open putaway</Link>
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" asChild>
               <Link href="/inventory/receipts">Back to list</Link>
             </Button>
@@ -219,7 +241,8 @@ export default function ReceiptDetailPage() {
                 { id: "po", label: "Purchase order approved", status: "completed", detail: grn.poRef ?? "PO linked" },
                 { id: "arrive", label: "Stock arrived at facility", status: "completed", timestamp: `${grn.date}T08:00:00Z` },
                 { id: "verify", label: "Weight / QA verification", status: hasCashWeightAudit ? "current" : "completed", detail: hasCashWeightAudit ? "Compare paid vs received weight" : "Verification complete" },
-                { id: "post", label: "Receipt posted to inventory", status: grn.status === "POSTED" ? "completed" : "upcoming" },
+                { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED"].includes(grn.status) ? "completed" : "upcoming" },
+                { id: "putaway", label: "Putaway completed", status: grn.status === "RECEIVED" ? "completed" : "upcoming", detail: putawayLink ? "Warehouse execution closed" : "Awaiting putaway" },
               ]}
             />
 
@@ -231,7 +254,10 @@ export default function ReceiptDetailPage() {
                 <ActivityPanel
                   auditEntries={[
                     { id: "a1", action: "GRN created", user: "Warehouse Clerk", timestamp: grn.date, detail: `${grn.number} for ${grn.supplier ?? grn.party}` },
-                    { id: "a2", action: grn.status === "POSTED" ? "GRN posted" : "Awaiting posting", user: "System", timestamp: new Date().toISOString(), detail: `Warehouse ${grn.warehouse ?? "—"}` },
+                    { id: "a2", action: ["POSTED", "RECEIVED"].includes(grn.status) ? "GRN posted" : "Awaiting posting", user: "System", timestamp: new Date().toISOString(), detail: `Warehouse ${grn.warehouse ?? "—"}` },
+                    ...(grn.status === "RECEIVED"
+                      ? [{ id: "a3", action: "Putaway confirmed", user: "Warehouse", timestamp: new Date().toISOString(), detail: "Receipt operationally closed" }]
+                      : []),
                   ]}
                   comments={[
                     { id: "c1", user: "QA", text: "Verify weights against farm-gate payment before closure.", timestamp: new Date().toLocaleString() },

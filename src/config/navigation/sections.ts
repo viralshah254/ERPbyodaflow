@@ -152,10 +152,11 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     moduleKey: "franchise",
     order: 8.5,
     items: [
-      { key: "franchise-overview", label: "Franchise Overview", href: "/franchise/overview", icon: "LayoutDashboard", moduleKey: "franchise", requiresFlags: ["commissionEngine"], requiresPermissions: ["inventory.read"] },
-      { key: "franchise-commission", label: "Commission & Rebates", href: "/franchise/commission", icon: "Percent", moduleKey: "franchise", termKey: "commission", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
-      { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment"], requiresPermissions: ["inventory.read"] },
-      { key: "franchise-comparison", label: "Franchise Comparison", href: "/franchise/comparison", icon: "BarChart3", moduleKey: "franchise", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
+      { key: "franchise-outlet-workspace", label: "Outlet Workspace", href: "/franchise/outlet", icon: "Store", moduleKey: "franchise", requiresFlags: ["franchiseLightErp"], requiresPermissions: ["sales.read"] },
+      { key: "franchise-overview", label: "Franchise Overview", href: "/franchise/overview", icon: "LayoutDashboard", moduleKey: "franchise", requiresFlags: ["commissionEngine", "franchiseNetworkMonitoring"], requiresPermissions: ["inventory.read"] },
+      { key: "franchise-commission", label: "Commission & Rebates", href: "/franchise/commission", icon: "Percent", moduleKey: "franchise", termKey: "commission", requiresFlags: ["commissionEngine", "franchiseSettlement"], requiresPermissions: ["finance.read"] },
+      { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment", "franchiseNetworkMonitoring"], requiresPermissions: ["inventory.read"] },
+      { key: "franchise-comparison", label: "Franchise Comparison", href: "/franchise/comparison", icon: "BarChart3", moduleKey: "franchise", requiresFlags: ["franchiseNetworkAnalytics"], requiresPermissions: ["finance.read"] },
     ],
   },
   {
@@ -332,6 +333,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     order: 20,
     items: [
       { key: "settings-org", label: "Organization Profile", href: "/settings/org", icon: "Building", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
+      { key: "settings-platform", label: "Platform Control", href: "/settings/platform", icon: "Shield", moduleKey: "settings", requiresPermissions: ["admin.settings"] },
       { key: "settings-entities", label: "Entities", href: "/settings/organization/entities", icon: "Building2", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       { key: "settings-branches", label: "Branches", href: "/settings/branches", icon: "MapPin", moduleKey: "settings", termKey: "branch", requiresPermissions: ["settings.branches.read"] },
       { key: "settings-users-roles", label: "Users & Roles", href: "/settings/users-roles", icon: "Users", moduleKey: "settings", requiresPermissions: ["settings.users.read"] },

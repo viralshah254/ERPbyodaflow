@@ -6,60 +6,62 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getMockPickPack, type PickPackOrderRow, type PickPackStatus } from "@/lib/mock/warehouse/pick-pack";
-import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { fetchPickPackTasks, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
-const STATUS_OPTIONS: { label: string; value: string }[] = [
+const STATUS_OPTIONS = [
   { label: "All", value: "" },
-  { label: "Pick", value: "PICK" },
-  { label: "Pack", value: "PACK" },
-  { label: "Dispatch", value: "DISPATCH" },
+  { label: "Pending", value: "PENDING" },
+  { label: "Picked", value: "PICKED" },
+  { label: "Packed", value: "PACKED" },
+  { label: "Dispatched", value: "DISPATCHED" },
+  { label: "Completed", value: "COMPLETED" },
 ];
-
-function statusVariant(s: PickPackStatus): "default" | "secondary" | "outline" {
-  if (s === "DISPATCH") return "secondary";
-  if (s === "PICK") return "default";
-  return "outline";
-}
 
 export default function PickPackPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
+  const [rows, setRows] = React.useState<WarehousePickPackRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const allRows = React.useMemo(() => getMockPickPack(), []);
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void fetchPickPackTasks(statusFilter ? { status: statusFilter } : undefined)
+      .then((items) => {
+        if (!cancelled) setRows(items);
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to load pick-pack tasks.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [statusFilter]);
+
   const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.reference.toLowerCase().includes(q) ||
-          (r.customer?.toLowerCase().includes(q)) ||
-          r.warehouse.toLowerCase().includes(q)
-      );
-    }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    return out;
-  }, [allRows, search, statusFilter]);
+    const query = search.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.reference, row.customer, row.number].filter(Boolean).some((value) => value!.toLowerCase().includes(query))
+    );
+  }, [rows, search]);
 
   const columns = React.useMemo(
     () => [
-      { id: "reference", header: "Reference", accessor: (r: PickPackOrderRow) => <span className="font-medium">{r.reference}</span>, sticky: true },
-      { id: "type", header: "Type", accessor: (r: PickPackOrderRow) => r.type === "delivery" ? "Delivery" : "Sales order" },
-      { id: "customer", header: "Customer", accessor: "customer" as keyof PickPackOrderRow },
-      { id: "warehouse", header: "Warehouse", accessor: "warehouse" as keyof PickPackOrderRow },
-      {
-        id: "status",
-        header: "Status",
-        accessor: (r: PickPackOrderRow) => <Badge variant={statusVariant(r.status)}>{r.status}</Badge>,
-      },
-      { id: "lines", header: "Lines", accessor: (r: PickPackOrderRow) => r.lines.length },
+      { id: "reference", header: "Reference", accessor: (r: WarehousePickPackRow) => <span className="font-medium">{r.reference}</span>, sticky: true },
+      { id: "delivery", header: "Delivery", accessor: (r: WarehousePickPackRow) => r.sourceDocumentNumber ?? "—" },
+      { id: "deliveryStatus", header: "Delivery status", accessor: (r: WarehousePickPackRow) => r.sourceDocumentStatus ?? "—" },
+      { id: "customer", header: "Customer", accessor: (r: WarehousePickPackRow) => r.customer ?? "—" },
+      { id: "status", header: "Status", accessor: (r: WarehousePickPackRow) => <Badge variant="outline">{r.status}</Badge> },
+      { id: "lines", header: "Lines", accessor: (r: WarehousePickPackRow) => r.lines.length },
+      { id: "cartons", header: "Cartons", accessor: (r: WarehousePickPackRow) => r.cartonsCount ?? 0 },
     ],
     []
   );
@@ -68,38 +70,32 @@ export default function PickPackPage() {
     <PageShell>
       <PageHeader
         title="Pick & Pack"
-        description="Fulfill deliveries and sales orders"
+        description="Live warehouse execution tasks for picking, packing, and dispatch."
         breadcrumbs={[
           { label: "Warehouse", href: "/warehouse/overview" },
           { label: "Pick & Pack" },
         ]}
         sticky
         showCommandHint
-        actions={
-          <ExplainThis prompt="Explain pick/pack/putaway workflow." label="Explain pick-pack" />
-        }
       />
-      <div className="p-6 space-y-4">
+      <div className="space-y-4 p-6">
         <DataTableToolbar
           searchPlaceholder="Search by reference, customer..."
           searchValue={search}
           onSearchChange={setSearch}
-          filters={[
-            { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
-          ]}
-          onExport={() => toast.info("Export (stub)")}
+          filters={[{ id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: setStatusFilter }]}
         />
         <Card>
           <CardHeader>
-            <CardTitle>Open orders</CardTitle>
-            <CardDescription>Picklist → Pack → Dispatch. Click row to view.</CardDescription>
+            <CardTitle>Execution queue</CardTitle>
+            <CardDescription>Pick tasks now come from backend warehouse execution state.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <DataTable<PickPackOrderRow>
+            <DataTable<WarehousePickPackRow>
               data={filtered}
               columns={columns}
               onRowClick={(row) => router.push(`/warehouse/pick-pack/${row.id}`)}
-              emptyMessage="No orders needing fulfillment."
+              emptyMessage={loading ? "Loading pick-pack tasks..." : "No pick-pack tasks."}
             />
           </CardContent>
         </Card>

@@ -8,16 +8,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { SegmentMixCard } from "@/components/operational/SegmentMixCard";
-import { fetchFranchiseeStock, fetchTopUps } from "@/lib/api/cool-catch";
+import { fetchFranchiseNetworkOutlets } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 
 type ComparisonRow = {
   franchiseeId: string;
   franchiseeName: string;
   totalQty: number;
-  skus: number;
-  stockTurnProxy: number;
-  topUpDependency: number;
+  territory?: string;
+  stockRisk: number;
+  revenue: number;
+  arOverdue: number;
 };
 
 export default function FranchiseComparisonPage() {
@@ -27,30 +28,22 @@ export default function FranchiseComparisonPage() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchFranchiseeStock(), fetchTopUps()])
-      .then(([stock, topUps]) => {
+    fetchFranchiseNetworkOutlets()
+      .then((outlets) => {
         if (cancelled) return;
-        const topUpByFranchisee = new Map<string, number>();
-        for (const t of topUps) {
-          topUpByFranchisee.set(t.franchiseeId, (topUpByFranchisee.get(t.franchiseeId) ?? 0) + t.amount);
-        }
-        const byId = new Map<string, ComparisonRow>();
-        for (const s of stock) {
-          const row = byId.get(s.franchiseeId) ?? {
-            franchiseeId: s.franchiseeId,
-            franchiseeName: s.franchiseeName,
-            totalQty: 0,
-            skus: 0,
-            stockTurnProxy: 0,
-            topUpDependency: topUpByFranchisee.get(s.franchiseeId) ?? 0,
-          };
-          row.totalQty += s.qty;
-          row.skus += 1;
-          // Mock proxy: lower qty with higher reorder points implies faster turns.
-          row.stockTurnProxy += Math.max(0, s.reorderPoint - s.qty);
-          byId.set(s.franchiseeId, row);
-        }
-        setRows(Array.from(byId.values()).sort((a, b) => b.stockTurnProxy - a.stockTurnProxy));
+        setRows(
+          outlets
+            .map((outlet) => ({
+              franchiseeId: outlet.id,
+              franchiseeName: outlet.name,
+              territory: outlet.territory,
+              totalQty: outlet.totalStockQty,
+              stockRisk: outlet.lowStockCount,
+              revenue: outlet.revenue,
+              arOverdue: outlet.arOverdue,
+            }))
+            .sort((a, b) => b.revenue - a.revenue)
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -62,10 +55,11 @@ export default function FranchiseComparisonPage() {
 
   const columns = [
     { id: "name", header: "Franchisee", accessor: (r: ComparisonRow) => r.franchiseeName, sticky: true },
+    { id: "territory", header: "Territory", accessor: (r: ComparisonRow) => r.territory ?? "—" },
     { id: "qty", header: "Qty on hand", accessor: (r: ComparisonRow) => r.totalQty },
-    { id: "skus", header: "SKU count", accessor: (r: ComparisonRow) => r.skus },
-    { id: "turns", header: "Stock velocity (proxy)", accessor: (r: ComparisonRow) => r.stockTurnProxy },
-    { id: "topup", header: "Top-up dependency", accessor: (r: ComparisonRow) => formatMoney(r.topUpDependency, "KES") },
+    { id: "revenue", header: "Revenue", accessor: (r: ComparisonRow) => formatMoney(r.revenue, "KES") },
+    { id: "risk", header: "Stock risk", accessor: (r: ComparisonRow) => r.stockRisk },
+    { id: "ar", header: "AR overdue", accessor: (r: ComparisonRow) => formatMoney(r.arOverdue, "KES") },
     {
       id: "actions",
       header: "",
@@ -81,7 +75,7 @@ export default function FranchiseComparisonPage() {
     <PageShell>
       <PageHeader
         title="Franchise Comparison"
-        description="Rank franchisees by stock velocity and top-up dependency."
+        description="Compare outlet revenue, stock exposure, and collections risk across the franchise network."
         breadcrumbs={[{ label: "Franchise", href: "/franchise/overview" }, { label: "Comparison" }]}
         sticky
         showCommandHint
@@ -106,7 +100,7 @@ export default function FranchiseComparisonPage() {
         <Card>
           <CardHeader>
             <CardTitle>Comparison table</CardTitle>
-            <CardDescription>This view can be upgraded to analytics-backed ranking once backend metrics are ready.</CardDescription>
+            <CardDescription>Network ranking now uses real revenue, stock, and receivables exposure signals.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (

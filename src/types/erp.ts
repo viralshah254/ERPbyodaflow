@@ -11,14 +11,20 @@ export type UserId = string;
 export type RoleId = string;
 
 export type OrgType = "MANUFACTURER" | "DISTRIBUTOR" | "SHOP";
+export type OrgRole = "STANDARD" | "FRANCHISOR" | "FRANCHISEE";
 
 export interface Tenant {
   tenantId: TenantId;
   name: string;
   plan: "STARTER" | "PROFESSIONAL" | "ENTERPRISE";
+  status?: "ACTIVE" | "TRIAL" | "SUSPENDED";
   region: string;
   currency: string;
   timeZone: string;
+  edition?: string;
+  defaultTemplateId?: string;
+  enabledModules?: string[];
+  featureFlags?: Record<string, boolean>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,7 +33,21 @@ export interface Org {
   orgId: OrgId;
   tenantId: TenantId;
   orgType: OrgType;
+  orgRole?: OrgRole;
   name: string;
+  edition?: string;
+  templateId?: string;
+  enabledModules?: string[];
+  featureFlags?: Record<string, boolean>;
+  terminology?: Record<string, string>;
+  defaultNav?: string[];
+  parentOrgId?: string;
+  franchiseNetworkId?: string;
+  franchiseCode?: string;
+  franchiseTerritory?: string;
+  franchiseStoreFormat?: string;
+  franchiseManagerName?: string;
+  franchisePersona?: "STANDARD" | "LIGHT_ERP";
   taxId?: string;
   registrationNumber?: string;
   address?: Address;
@@ -78,6 +98,8 @@ export interface User {
   lastLoginAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  /** When true, user must set a new password (e.g. after first sign-in). */
+  mustChangePassword?: boolean;
 }
 
 export interface Role {

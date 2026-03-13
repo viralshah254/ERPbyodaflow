@@ -107,6 +107,39 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     totals: { total: true },
     actions: ["submit", "cancel"],
   },
+  "credit-note": {
+    typeKey: "credit-note",
+    termKey: "creditNote",
+    listColumns: [
+      { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "date", header: "Date", accessor: "date" },
+      { id: "party", header: "Customer", accessor: "party" },
+      { id: "total", header: "Total", accessor: "total" },
+      { id: "status", header: "Status", accessor: "status" },
+    ],
+    createFormSections: [
+      {
+        id: "header",
+        label: "Header",
+        fields: [
+          { id: "date", label: "Date", type: "date", required: true },
+          { id: "customer", label: "Customer", type: "entity", entityType: "customer", required: true },
+          { id: "warehouse", label: "Warehouse", type: "select" },
+        ],
+      },
+      { id: "lines", label: "Lines", fields: [] },
+    ],
+    statusWorkflow: [
+      { id: "DRAFT", label: "Draft" },
+      { id: "POSTED", label: "Posted" },
+    ],
+    validations: [
+      { id: "has-lines", message: "At least one line required" },
+      { id: "customer-required", message: "Customer is required" },
+    ],
+    totals: { subtotal: true, tax: true, total: true },
+    actions: ["submit", "post", "cancel", "reverse"],
+  },
   "purchase-order": {
     typeKey: "purchase-order",
     termKey: "purchaseOrder",
@@ -316,6 +349,7 @@ export const DOC_TYPES: DocTypeKey[] = [
   "sales-order",
   "delivery-note",
   "invoice",
+  "credit-note",
   "purchase-request",
   "purchase-order",
   "grn",

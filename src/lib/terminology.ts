@@ -11,6 +11,7 @@ const FALLBACK = {
   purchaseOrder: "Purchase Order",
   goodsReceipt: "Goods Receipt",
   invoice: "Invoice",
+  creditNote: "Credit Note",
   journalEntry: "Journal Entry",
   workOrder: "Work Order",
   bom: "BOM",

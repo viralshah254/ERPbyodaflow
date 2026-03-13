@@ -10,19 +10,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CurrencyCode } from "@/lib/org/financial-settings";
-import { CURRENCY_META } from "@/lib/mock/financial-settings";
+import type { FinancialCurrencyRow } from "@/lib/api/financial-settings";
 import * as Icons from "lucide-react";
 
 interface BaseCurrencyCardProps {
   value: CurrencyCode;
   onChange: (code: CurrencyCode) => void;
-  enabledCurrencies: CurrencyCode[];
+  currencies: FinancialCurrencyRow[];
 }
 
 export function BaseCurrencyCard({
   value,
   onChange,
-  enabledCurrencies,
+  currencies,
 }: BaseCurrencyCardProps) {
   return (
     <Card>
@@ -43,9 +43,9 @@ export function BaseCurrencyCard({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {enabledCurrencies.map((code) => (
-                <SelectItem key={code} value={code}>
-                  {code} — {CURRENCY_META[code]?.name ?? code}
+              {currencies.filter((currency) => currency.enabled).map((currency) => (
+                <SelectItem key={currency.code} value={currency.code}>
+                  {currency.code} — {currency.name}
                 </SelectItem>
               ))}
             </SelectContent>

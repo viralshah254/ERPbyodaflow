@@ -23,6 +23,11 @@ const MOCK_DIM_VALUES: Record<DimensionKey, string[]> = {
   employee: ["Jane Wanjiku", "John Kamau"],
   entity: ["OdaFlow KE", "OdaFlow TZ"],
   currency: ["KES", "USD"],
+  franchisee: ["Nairobi West Outlet", "Kisumu Central"],
+  network: ["Cool Catch Network"],
+  territory: ["Nairobi", "Kisumu"],
+  store_format: ["Express", "Standard"],
+  agreement_status: ["ACTIVE", "PIPELINE"],
 };
 
 /** Deterministic seed from query for reproducible mock data */
@@ -60,6 +65,8 @@ function mockValue(metric: MetricKey, seed: number, i: number, prior = false): n
     vat: 14400,
     wht: 3200,
     fx_impact: -800,
+    commission_payout: 56000,
+    topup_exposure: 18000,
   };
   const b = base[metric] ?? 10000;
   const variation = (r - 0.5) * 0.4 * b;

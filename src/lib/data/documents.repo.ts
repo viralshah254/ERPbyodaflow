@@ -28,11 +28,15 @@ export interface DocumentDetailRecord {
   type: DocTypeKey;
   number: string;
   date: string;
+  partyId?: string;
   party?: string;
+  warehouseId?: string;
   total?: number;
   currency: string;
   status: string;
+  outputTemplateId?: string;
   lines: Array<{
+    id?: string;
     description: string;
     qty?: number;
     amount?: number;
@@ -43,6 +47,27 @@ export interface DocumentDetailRecord {
     accountId?: string;
     accountName?: string;
     accountCode?: string;
+    sourceDocumentId?: string;
+    sourceDocumentType?: DocTypeKey;
+    sourceLineId?: string;
+    sourceQuantity?: number;
+    convertedQuantity?: number;
+    remainingQuantity?: number;
+  }>;
+  sourceDocument?: {
+    id: string;
+    typeKey: DocTypeKey;
+    number: string;
+    status: string;
+    date: string;
+  } | null;
+  relatedDocuments?: Array<{
+    id: string;
+    typeKey: DocTypeKey;
+    number: string;
+    status: string;
+    date: string;
+    total?: number;
   }>;
   attachments: DocumentAttachmentRecord[];
   comments: DocumentCommentRecord[];
@@ -87,11 +112,16 @@ function seedDocumentDetails(type: DocTypeKey): Record<string, DocumentDetailRec
       type,
       number: row.number,
       date: row.date,
+      partyId: undefined,
       party: row.party,
       total: row.total,
       currency: "KES",
       status: row.status,
+      warehouseId: row.warehouse,
       lines: buildDefaultLines(type, row.number),
+      outputTemplateId: undefined,
+      sourceDocument: null,
+      relatedDocuments: [],
       attachments: [],
       comments: [],
       approvalHistory: [
@@ -280,6 +310,7 @@ function getLocalDocumentPrefix(type: DocTypeKey): string {
     "sales-order": "SO",
     "delivery-note": "DN",
     invoice: "INV",
+    "credit-note": "CRN",
     "purchase-request": "PR",
     "purchase-order": "PO",
     grn: "GRN",
@@ -299,6 +330,7 @@ export function createDocumentDraft(
     reference?: string;
     total: number;
     currency?: string;
+    outputTemplateId?: string;
     lines: Array<{
       description?: string;
       quantity?: number;
@@ -327,10 +359,13 @@ export function createDocumentDraft(
     type,
     number,
     date: payload.date,
+    partyId: payload.partyId,
     party: payload.partyId,
     total: payload.total,
     currency: payload.currency ?? "KES",
     status: "DRAFT",
+    warehouseId: payload.warehouseId,
+    outputTemplateId: payload.outputTemplateId,
     lines: payload.lines.map((line, index) => ({
       description: line.description ?? `Line ${index + 1}`,
       qty: line.quantity,
