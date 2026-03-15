@@ -1,14 +1,9 @@
 import { test, expect } from "@playwright/test";
-
-async function login(page: import("@playwright/test").Page) {
-  await page.goto("/login");
-  await page.getByRole("button", { name: /Manufacturer Demo/i }).click();
-  await page.waitForURL(/\/dashboard/, { timeout: 10000 });
-}
+import { bootstrapLocalSession } from "./auth";
 
 test.describe("Payroll", () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await bootstrapLocalSession(page);
   });
 
   test("create employee", async ({ page }) => {

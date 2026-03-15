@@ -30,7 +30,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import * as Icons from "lucide-react";
 import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
-import { createDocumentApi } from "@/lib/api/documents";
+import { createDocumentApi, previewDocumentPostingApi, type DocumentPostingPreviewLine } from "@/lib/api/documents";
 import { fetchPartiesApi } from "@/lib/api/parties";
 import { fetchBranchOptions, fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { fetchCustomerDefaultPriceLists, fetchPriceListOptions } from "@/lib/api/pricing";
@@ -223,6 +223,8 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [loadingFxRate, setLoadingFxRate] = React.useState(false);
+  const [postingPreview, setPostingPreview] = React.useState<DocumentPostingPreviewLine[]>([]);
+  const [loadingPostingPreview, setLoadingPostingPreview] = React.useState(false);
   const [fieldOptions, setFieldOptions] = React.useState<Record<string, LookupOption[]>>({});
   const [customerDefaultPriceLists, setCustomerDefaultPriceLists] = React.useState<Record<string, string>>({});
   const [fallbackPriceListId, setFallbackPriceListId] = React.useState<string>("pl-retail");
@@ -305,7 +307,42 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     [form]
   );
 
-  const onReview = () => setStep(4);
+  const buildDraftPayload = React.useCallback(
+    () => ({
+      date: form.getValues("date"),
+      branchId: form.getValues("branch") || undefined,
+      partyId: form.getValues("party") || undefined,
+      warehouseId: form.getValues("warehouse") || undefined,
+      poRef: form.getValues("poRef") || undefined,
+      reference: form.getValues("reference") || undefined,
+      dueDate: form.getValues("dueDate") || undefined,
+      lines: lines.map((line) => ({
+        productId: line.productId,
+        description: line.name,
+        quantity: line.qty,
+        unit: line.uom,
+        unitPrice: line.price,
+        amount: line.amount,
+      })),
+      subtotal: form.getValues("totalAmount") ?? 0,
+      total: form.getValues("totalAmount") ?? 0,
+      currency: form.getValues("currency") || baseCurrency,
+    }),
+    [baseCurrency, form, lines]
+  );
+
+  const onReview = async () => {
+    setStep(4);
+    try {
+      setLoadingPostingPreview(true);
+      setPostingPreview(await previewDocumentPostingApi(type as DocTypeKey, buildDraftPayload()));
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to load posting preview.");
+      setPostingPreview([]);
+    } finally {
+      setLoadingPostingPreview(false);
+    }
+  };
 
   const validateAndNext = async () => {
     if (step === 1) {
@@ -319,24 +356,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     try {
       setSubmitting(true);
       const result = await createDocumentApi(type as DocTypeKey, {
-        date: form.getValues("date"),
-        branchId: form.getValues("branch") || undefined,
-        partyId: form.getValues("party") || undefined,
-        warehouseId: form.getValues("warehouse") || undefined,
-        poRef: form.getValues("poRef") || undefined,
-        reference: form.getValues("reference") || undefined,
-        dueDate: form.getValues("dueDate") || undefined,
-        lines: lines.map((line) => ({
-          productId: line.productId,
-          description: line.name,
-          quantity: line.qty,
-          unit: line.uom,
-          unitPrice: line.price,
-          amount: line.amount,
-        })),
-        subtotal: form.getValues("totalAmount") ?? 0,
-        total: form.getValues("totalAmount") ?? 0,
-        currency: form.getValues("currency") || baseCurrency,
+        ...buildDraftPayload(),
       });
       try {
         localStorage.removeItem(storageKey);
@@ -610,20 +630,27 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                   <span>Credit</span>
                   <span>Memo</span>
                 </div>
-                {[
-                  { account: "1100 · Cash", debit: 10000, credit: 0, memo: "Settlement account" },
-                  { account: "4000 · Revenue", debit: 0, credit: 10000, memo: "Document posting" },
-                ].map((row, i) => (
+                {loadingPostingPreview ? (
+                  <div className="p-3 text-sm text-muted-foreground">Loading live posting preview...</div>
+                ) : postingPreview.length > 0 ? (
+                  postingPreview.map((row, i) => (
+                    <div
+                      key={i}
+                      className="grid grid-cols-4 gap-2 p-2 border-t"
+                    >
+                      <span>{row.accountCode} · {row.accountName}</span>
+                      <span>{row.debit ? formatMoney(row.debit, baseCurrency) : "—"}</span>
+                      <span>{row.credit ? formatMoney(row.credit, baseCurrency) : "—"}</span>
+                      <span>{row.memo}</span>
+                    </div>
+                  ))
+                ) : (
                   <div
-                    key={i}
-                    className="grid grid-cols-4 gap-2 p-2 border-t"
+                    className="p-3 text-sm text-muted-foreground"
                   >
-                    <span>{row.account}</span>
-                    <span>{row.debit ? formatMoney(row.debit, baseCurrency) : "—"}</span>
-                    <span>{row.credit ? formatMoney(row.credit, baseCurrency) : "—"}</span>
-                    <span>{row.memo}</span>
+                    No GL preview available for this draft type yet.
                   </div>
-                ))}
+                )}
                 {selectedCurrency !== baseCurrency && (
                   <div className="p-2 border-t bg-amber-500/10 text-amber-800 dark:text-amber-200 text-xs">
                     FX gain/loss line will be included if document and base currency differ.

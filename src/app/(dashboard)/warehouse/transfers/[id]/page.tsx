@@ -183,12 +183,12 @@ export default function TransferDetailPage() {
           <CardContent>
             <DocumentTimeline
               entries={
-                t.status === "DRAFT"
-                  ? [{ id: "1", action: "Created", by: "System", at: t.createdAt ?? t.date }]
-                  : [
-                      { id: "1", action: "Created", by: "System", at: t.createdAt ?? t.date },
-                      { id: "2", action: "Approved", by: "Jane Doe", at: "2025-01-25T10:00:00Z" },
-                    ]
+                [
+                  { id: "1", action: "Created", by: "System", at: t.createdAt ?? t.date },
+                  ...(t.receivedAt
+                    ? [{ id: "2", action: "Received", by: "System", at: t.receivedAt }]
+                    : []),
+                ]
               }
             />
           </CardContent>

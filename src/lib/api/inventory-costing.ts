@@ -1,4 +1,4 @@
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export type InventoryCostingSnapshot = {
   method: string;
@@ -36,15 +36,11 @@ export type InventoryValuationResponse = {
 };
 
 export async function fetchLatestInventoryCosting(): Promise<InventoryCostingSnapshot> {
-  if (!isApiConfigured()) {
-    return { method: "WEIGHTED_AVERAGE", ranAt: null, updated: 0, totalValue: 0, items: [] };
-  }
+  requireLiveApi("Latest inventory costing");
   return apiRequest<InventoryCostingSnapshot>("/api/inventory/costing/latest");
 }
 
 export async function fetchInventoryValuation(): Promise<InventoryValuationResponse> {
-  if (!isApiConfigured()) {
-    return { summary: [], rows: [] };
-  }
+  requireLiveApi("Inventory valuation");
   return apiRequest<InventoryValuationResponse>("/api/inventory/valuation");
 }

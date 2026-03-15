@@ -5,12 +5,58 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import * as Icons from "lucide-react";
+import {
+  acknowledgeNotificationApi,
+  fetchInboxNotificationsApi,
+  syncOverdueAlertsApi,
+  type InboxNotification,
+} from "@/lib/api/notifications";
+import { toast } from "sonner";
+import * as React from "react";
 
 export default function AlertsPage() {
+  const [alerts, setAlerts] = React.useState<InboxNotification[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await syncOverdueAlertsApi();
+      const items = await fetchInboxNotificationsApi();
+      setAlerts(items);
+      if (result.created > 0) {
+        toast.success(`Generated ${result.created} overdue alert(s).`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load alerts.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleAcknowledge = async (id: string) => {
+    try {
+      await acknowledgeNotificationApi(id);
+      setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to acknowledge alert.");
+    }
+  };
+
   return (
     <PageLayout
       title="Alerts & Notifications"
       description="Manage and respond to system alerts"
+      actions={
+        <Button variant="outline" onClick={() => void load()} disabled={loading}>
+          <Icons.RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
+      }
     >
       <Card>
         <CardHeader>
@@ -18,28 +64,9 @@ export default function AlertsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {[
-              {
-                title: "Stock below reorder level",
-                description: "Product ABC123 has fallen below minimum stock",
-                severity: "high",
-                time: "2 hours ago",
-              },
-              {
-                title: "Invoice overdue",
-                description: "Invoice INV-001 from ABC Corp is 15 days overdue",
-                severity: "medium",
-                time: "5 hours ago",
-              },
-              {
-                title: "Near expiry detected",
-                description: "3 batches expiring within 30 days",
-                severity: "medium",
-                time: "1 day ago",
-              },
-            ].map((alert, i) => (
+            {alerts.map((alert) => (
               <div
-                key={i}
+                key={alert.id}
                 className="flex items-start justify-between p-4 border rounded-lg hover:bg-accent transition-colors"
               >
                 <div className="flex-1">
@@ -56,14 +83,12 @@ export default function AlertsPage() {
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {alert.description}
+                    {alert.message}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {alert.time}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{new Date(alert.createdAt).toLocaleString()}</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" onClick={() => void handleAcknowledge(alert.id)}>
                     <Icons.Check className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="sm">
@@ -72,6 +97,9 @@ export default function AlertsPage() {
                 </div>
               </div>
             ))}
+            {!loading && alerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No active alerts.</p>
+            ) : null}
           </div>
         </CardContent>
       </Card>

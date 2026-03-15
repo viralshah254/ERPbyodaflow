@@ -1,6 +1,5 @@
 import type { OrgProfileRecord } from "@/lib/data/org-profile.repo";
-import { getOrgProfile } from "@/lib/data/org-profile.repo";
-import { apiRequest, isApiConfigured } from "./client";
+import { apiRequest, requireLiveApi } from "./client";
 
 type BackendOrg = {
   id: string;
@@ -10,9 +9,7 @@ type BackendOrg = {
 };
 
 export async function fetchOrgProfileApi(): Promise<OrgProfileRecord> {
-  if (!isApiConfigured()) {
-    return getOrgProfile();
-  }
+  requireLiveApi("Organization profile");
   const org = await apiRequest<BackendOrg>("/api/org");
   return {
     name: org.name ?? "",

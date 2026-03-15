@@ -24,6 +24,7 @@ export interface OpenInvoiceRow {
   outstanding: number;
   dueDate: string;
   status: string;
+  currency?: string;
 }
 
 export interface PaymentRow {

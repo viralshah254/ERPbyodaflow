@@ -30,9 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getCostingSettings } from "@/lib/mock/inventory/costing";
-import { getMockLandedCostTemplates } from "@/lib/mock/inventory/landed-cost";
-import { getMockCOARootFirst } from "@/lib/mock/coa";
+import { fetchFinanceAccountsApi } from "@/lib/api/finance";
+import {
+  createLandedCostTemplate,
+  fetchLandedCostTemplates,
+  type LandedCostTemplateRow,
+} from "@/lib/api/landed-cost";
+import {
+  fetchInventoryCostingSettingsApi,
+  saveInventoryCostingSettingsApi,
+} from "@/lib/api/inventory-settings";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -40,12 +47,70 @@ import * as Icons from "lucide-react";
 const COSTING_METHODS = ["FIFO", "WEIGHTED_AVERAGE", "STANDARD_COST"] as const;
 
 export default function InventoryCostingSettingsPage() {
-  const [method, setMethod] = React.useState(getCostingSettings().method);
-  const [valuationAccount, setValuationAccount] = React.useState(getCostingSettings().valuationAccountCode ?? "");
+  const [method, setMethod] = React.useState<(typeof COSTING_METHODS)[number]>("FIFO");
+  const [valuationAccount, setValuationAccount] = React.useState("");
   const [templateSheetOpen, setTemplateSheetOpen] = React.useState(false);
+  const [templates, setTemplates] = React.useState<LandedCostTemplateRow[]>([]);
+  const [accounts, setAccounts] = React.useState<Array<{ id: string; code: string; name: string; type: string }>>([]);
+  const [savingSettings, setSavingSettings] = React.useState(false);
+  const [templateForm, setTemplateForm] = React.useState({
+    name: "",
+    type: "freight" as LandedCostTemplateRow["type"],
+    allocationBasis: "qty" as LandedCostTemplateRow["allocationBasis"],
+  });
 
-  const coa = React.useMemo(() => getMockCOARootFirst(), []);
-  const templates = React.useMemo(() => getMockLandedCostTemplates(), []);
+  const reload = React.useCallback(async () => {
+    const [settings, templateItems, accountItems] = await Promise.all([
+      fetchInventoryCostingSettingsApi(),
+      fetchLandedCostTemplates(),
+      fetchFinanceAccountsApi(),
+    ]);
+    setMethod(settings.method);
+    setValuationAccount(settings.valuationAccountCode ?? "");
+    setTemplates(templateItems);
+    setAccounts(accountItems);
+  }, []);
+
+  React.useEffect(() => {
+    void reload().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load inventory costing settings.");
+    });
+  }, [reload]);
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await saveInventoryCostingSettingsApi({
+        method,
+        valuationAccountCode: valuationAccount || undefined,
+      });
+      toast.success("Inventory costing settings saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save costing settings.");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleCreateTemplate = async () => {
+    if (!templateForm.name.trim()) {
+      toast.error("Template name is required.");
+      return;
+    }
+    try {
+      await createLandedCostTemplate({
+        name: templateForm.name.trim(),
+        type: templateForm.type,
+        allocationBasis: templateForm.allocationBasis,
+      });
+      setTemplateForm({ name: "", type: "freight", allocationBasis: "qty" });
+      setTemplateSheetOpen(false);
+      await reload();
+      toast.success("Landed cost template created.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create landed cost template.");
+    }
+  };
 
   return (
     <PageShell>
@@ -67,7 +132,7 @@ export default function InventoryCostingSettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Costing method</CardTitle>
-            <CardDescription>Default method for inventory valuation. UI only.</CardDescription>
+            <CardDescription>Default method for inventory valuation and live costing runs.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -83,6 +148,9 @@ export default function InventoryCostingSettingsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <Button onClick={() => void handleSaveSettings()} disabled={savingSettings}>
+              {savingSettings ? "Saving..." : "Save settings"}
+            </Button>
           </CardContent>
         </Card>
 
@@ -101,12 +169,15 @@ export default function InventoryCostingSettingsPage() {
                   <SelectValue placeholder="Select COA account" />
                 </SelectTrigger>
                 <SelectContent>
-                  {coa.filter((r) => r.type === "Asset").map((r) => (
+                  {accounts.filter((r) => r.type === "ASSET" || r.type === "Asset").map((r) => (
                     <SelectItem key={r.id} value={r.code}>{r.code} — {r.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            <Button variant="outline" onClick={() => void handleSaveSettings()} disabled={savingSettings}>
+              Save valuation account
+            </Button>
           </CardContent>
         </Card>
 
@@ -150,20 +221,28 @@ export default function InventoryCostingSettingsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Add landed cost template</SheetTitle>
-            <SheetDescription>Stub. Freight, insurance, duty, etc.</SheetDescription>
+            <SheetDescription>Create a live landed cost template.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
               <Label>Code</Label>
-              <Input placeholder="e.g. FREIGHT" />
+              <Input
+                placeholder="Auto-generated from name"
+                value={templateForm.name ? templateForm.name.toUpperCase().replace(/\s+/g, "-") : ""}
+                readOnly
+              />
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input placeholder="e.g. Freight" />
+              <Input
+                placeholder="e.g. Freight"
+                value={templateForm.name}
+                onChange={(event) => setTemplateForm((current) => ({ ...current, name: event.target.value }))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select>
+              <Select value={templateForm.type} onValueChange={(value) => setTemplateForm((current) => ({ ...current, type: value as LandedCostTemplateRow["type"] }))}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="freight">Freight</SelectItem>
@@ -175,7 +254,7 @@ export default function InventoryCostingSettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>Allocation basis</Label>
-              <Select>
+              <Select value={templateForm.allocationBasis} onValueChange={(value) => setTemplateForm((current) => ({ ...current, allocationBasis: value as LandedCostTemplateRow["allocationBasis"] }))}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="qty">Quantity</SelectItem>
@@ -187,7 +266,7 @@ export default function InventoryCostingSettingsPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setTemplateSheetOpen(false)}>Cancel</Button>
-            <Button onClick={() => { setTemplateSheetOpen(false); toast.info("Save (stub). API pending."); }}>Save</Button>
+            <Button onClick={() => void handleCreateTemplate()}>Save</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

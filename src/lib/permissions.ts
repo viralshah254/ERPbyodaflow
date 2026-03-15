@@ -1,4 +1,14 @@
-import type { User, Permission, PermissionContext, Role } from "@/types/erp";
+import type { User, Permission, PermissionContext } from "@/types/erp";
+import { useAuthStore } from "@/stores/auth-store";
+
+function hasRuntimePermission(permissions: string[], required: string): boolean {
+  if (permissions.includes("*")) return true;
+  if (permissions.includes(required)) return true;
+  const wildcardPrefixes = permissions
+    .filter((entry) => entry.endsWith(".*"))
+    .map((entry) => entry.slice(0, -2));
+  return wildcardPrefixes.some((prefix) => required.startsWith(`${prefix}.`));
+}
 
 /**
  * Permission evaluation system for client-side access control
@@ -8,19 +18,11 @@ export function can(
   permission: Permission,
   context?: PermissionContext
 ): boolean {
+  void context;
   if (!user) return false;
-
-  // In a real app, this would fetch roles and evaluate policies
-  // For now, we'll use a simple mock implementation
-  // The backend should handle the actual permission checks
-
-  // Mock: Check if user has the permission in any of their roles
-  // This is a simplified version - real implementation would:
-  // 1. Fetch user's roles with their permissions
-  // 2. Evaluate context-based rules
-  // 3. Check attribute-based conditions
-
-  return true; // Placeholder - will be replaced with actual role/permission checks
+  const runtimePermissions = useAuthStore.getState().permissions;
+  if (runtimePermissions.length === 0) return false;
+  return hasRuntimePermission(runtimePermissions, permission);
 }
 
 export function hasAnyPermission(
@@ -74,6 +76,10 @@ export const Permissions = {
   ADMIN_USERS: "admin.users",
   ADMIN_SETTINGS: "admin.settings",
   ADMIN_CUSTOMIZATION: "admin.customization",
+  PLATFORM_READ: "platform.read",
+  PLATFORM_WRITE: "platform.write",
+  PLATFORM_PROVISION: "platform.provision",
+  PLATFORM_AUDIT_READ: "platform.audit.read",
   /** Required to delete master data (products, parties, etc.). Backend must enforce. */
   ADMIN_DELETE: "admin.delete",
 } as const;

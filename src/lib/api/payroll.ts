@@ -1,16 +1,6 @@
 import type { Employee, PayRun, PayRunLine, Payslip } from "@/lib/payroll/types";
-import {
-  createEmployee,
-  createPayRun,
-  getPayRunById,
-  listEmployees,
-  listPayslips,
-  listPayRunLines,
-  listPayRuns,
-  postPayRunJournal,
-  requestPayRunApproval,
-} from "@/lib/data/payroll.repo";
-import { apiRequest, isApiConfigured } from "./client";
+import { apiRequest, requireLiveApi } from "./client";
+import type { StatutoryConfig } from "@/lib/mock/payroll/statutories";
 
 type BackendEmployee = {
   id: string;
@@ -118,11 +108,19 @@ function mapPayRunLines(item: BackendPayRun, employees: Employee[]): PayRunLine[
 }
 
 export async function fetchEmployeesApi(): Promise<Employee[]> {
-  if (!isApiConfigured()) {
-    return listEmployees();
-  }
+  requireLiveApi("Payroll employees");
   const data = await apiRequest<{ items: BackendEmployee[] }>("/api/payroll/employees");
   return data.items.map(mapEmployee);
+}
+
+export async function fetchEmployeeByIdApi(id: string): Promise<Employee | null> {
+  requireLiveApi("Payroll employee detail");
+  try {
+    const data = await apiRequest<BackendEmployee>(`/api/payroll/employees/${encodeURIComponent(id)}`);
+    return mapEmployee(data);
+  } catch {
+    return null;
+  }
 }
 
 export async function createEmployeeApi(payload: {
@@ -132,20 +130,7 @@ export async function createEmployeeApi(payload: {
   baseSalary: number;
   currency?: string;
 }): Promise<void> {
-  if (!isApiConfigured()) {
-    createEmployee({
-      name: payload.name,
-      department: payload.department,
-      branch: payload.branch,
-      employmentType: "PERMANENT",
-      salaryType: "MONTHLY",
-      baseSalary: payload.baseSalary,
-      currency: payload.currency ?? "KES",
-      allowances: [],
-      deductions: [],
-    });
-    return;
-  }
+  requireLiveApi("Payroll employee creation");
   const trimmed = payload.name.trim();
   const [firstName, ...rest] = trimmed.split(/\s+/);
   const lastName = rest.join(" ") || "-";
@@ -165,9 +150,7 @@ export async function createEmployeeApi(payload: {
 }
 
 export async function fetchPayRunsApi(): Promise<PayRun[]> {
-  if (!isApiConfigured()) {
-    return listPayRuns();
-  }
+  requireLiveApi("Payroll runs");
   const data = await apiRequest<{ items: BackendPayRun[] }>("/api/payroll/pay-runs");
   return data.items.map(mapPayRun);
 }
@@ -175,11 +158,7 @@ export async function fetchPayRunsApi(): Promise<PayRun[]> {
 export async function fetchPayRunDetailApi(
   id: string
 ): Promise<{ run: PayRun; lines: PayRunLine[] } | null> {
-  if (!isApiConfigured()) {
-    const run = getPayRunById(id);
-    if (!run) return null;
-    return { run, lines: listPayRunLines(id) };
-  }
+  requireLiveApi("Payroll run detail");
   const [run, employees] = await Promise.all([
     apiRequest<BackendPayRun>(`/api/payroll/pay-runs/${id}`),
     fetchEmployeesApi(),
@@ -197,25 +176,7 @@ export async function createPayRunApi(payload: {
   currency: string;
   lines: { employeeId: string; grossPay: number; deductions?: number }[];
 }): Promise<{ id: string; number?: string }> {
-  if (!isApiConfigured()) {
-    const month = payload.periodStart.slice(0, 7);
-    const gross = payload.lines.reduce((sum, line) => sum + line.grossPay, 0);
-    const net = payload.lines.reduce(
-      (sum, line) => sum + (line.grossPay - (line.deductions ?? 0)),
-      0
-    );
-    const created = createPayRun({
-      number: `PR-${month}`,
-      month,
-      branch: payload.branchId,
-      currency: payload.currency,
-      status: "DRAFT",
-      lineCount: payload.lines.length,
-      totalGross: gross,
-      totalNet: net,
-    });
-    return { id: created.id, number: created.number };
-  }
+  requireLiveApi("Payroll run creation");
   return apiRequest<{ id: string; number?: string }>("/api/payroll/pay-runs", {
     method: "POST",
     body: payload,
@@ -223,10 +184,7 @@ export async function createPayRunApi(payload: {
 }
 
 export async function submitPayRunForApprovalApi(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    requestPayRunApproval(id);
-    return;
-  }
+  requireLiveApi("Payroll approval submission");
   await apiRequest(`/api/payroll/pay-runs/${id}/action`, {
     method: "POST",
     body: { action: "request-approval" },
@@ -234,10 +192,7 @@ export async function submitPayRunForApprovalApi(id: string): Promise<void> {
 }
 
 export async function postPayRunJournalApi(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    postPayRunJournal(id);
-    return;
-  }
+  requireLiveApi("Payroll journal posting");
   await apiRequest(`/api/payroll/pay-runs/${id}/post-journal`, {
     method: "POST",
     body: {},
@@ -245,9 +200,7 @@ export async function postPayRunJournalApi(id: string): Promise<void> {
 }
 
 export async function fetchPayslipsApi(payRunId?: string): Promise<Payslip[]> {
-  if (!isApiConfigured()) {
-    return listPayslips(payRunId);
-  }
+  requireLiveApi("Payroll payslips");
   const [data, employees] = await Promise.all([
     apiRequest<{ items: BackendPayslip[] }>("/api/payroll/payslips", {
       params: payRunId ? { payRunId } : undefined,
@@ -266,4 +219,10 @@ export async function fetchPayslipsApi(payRunId?: string): Promise<Payslip[]> {
     net: item.netPay,
     currency: item.currency ?? "KES",
   }));
+}
+
+export async function fetchPayrollStatutoriesApi(): Promise<StatutoryConfig[]> {
+  requireLiveApi("Payroll statutories");
+  const data = await apiRequest<{ items: StatutoryConfig[] }>("/api/payroll/statutories");
+  return data.items ?? [];
 }

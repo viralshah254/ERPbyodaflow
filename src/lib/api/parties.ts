@@ -1,11 +1,5 @@
-import {
-  getMockParties,
-  type CustomerType,
-  type PartyRole,
-  type PartyRow,
-  type SupplierType,
-} from "@/lib/mock/masters";
-import { apiRequest, isApiConfigured } from "./client";
+import { type CustomerType, type PartyRole, type PartyRow, type SupplierType } from "@/lib/mock/masters";
+import { apiRequest, requireLiveApi } from "./client";
 
 type BackendParty = {
   id: string;
@@ -16,6 +10,10 @@ type BackendParty = {
   channel?: string;
   email?: string;
   phone?: string;
+  taxId?: string;
+  creditLimit?: number;
+  paymentTermsId?: string;
+  defaultCurrency?: string;
   status?: string;
 };
 
@@ -26,7 +24,18 @@ export type PartyPayload = {
   supplierType?: SupplierType;
   email?: string;
   phone?: string;
+  taxId?: string;
+  creditLimit?: number;
+  paymentTermsId?: string;
+  defaultCurrency?: string;
   status?: "ACTIVE" | "INACTIVE";
+};
+
+export type PartyDetail = PartyRow & {
+  taxId?: string;
+  creditLimit?: number;
+  paymentTermsId?: string;
+  defaultCurrency?: string;
 };
 
 function mapParty(item: BackendParty): PartyRow {
@@ -51,31 +60,7 @@ export async function fetchPartiesApi(filters?: {
   status?: string;
   search?: string;
 }): Promise<PartyRow[]> {
-  if (!isApiConfigured()) {
-    let rows = getMockParties();
-    if (filters?.role) {
-      rows = rows.filter((row) => row.roles?.includes(filters.role!));
-    }
-    if (filters?.customerType) {
-      rows = rows.filter((row) => row.customerType === filters.customerType);
-    }
-    if (filters?.supplierType) {
-      rows = rows.filter((row) => row.supplierType === filters.supplierType);
-    }
-    if (filters?.status) {
-      rows = rows.filter((row) => row.status === filters.status);
-    }
-    if (filters?.search?.trim()) {
-      const query = filters.search.trim().toLowerCase();
-      rows = rows.filter(
-        (row) =>
-          row.name.toLowerCase().includes(query) ||
-          row.email?.toLowerCase().includes(query) ||
-          row.phone?.toLowerCase().includes(query)
-      );
-    }
-    return rows;
-  }
+  requireLiveApi("Parties");
   const params = new URLSearchParams();
   if (filters?.role) params.set("role", filters.role);
   if (filters?.customerType) params.set("customerType", filters.customerType);
@@ -89,19 +74,7 @@ export async function fetchPartiesApi(filters?: {
 }
 
 export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
-  if (!isApiConfigured()) {
-    return {
-      id: `local-party-${Date.now()}`,
-      name: payload.name,
-      type: payload.roles.includes("supplier") ? "supplier" : "customer",
-      roles: payload.roles,
-      customerType: payload.customerType,
-      supplierType: payload.supplierType,
-      email: payload.email,
-      phone: payload.phone,
-      status: payload.status ?? "ACTIVE",
-    };
-  }
+  requireLiveApi("Party creation");
   const created = await apiRequest<{ id: string }>("/api/parties", {
     method: "POST",
     body: payload,
@@ -120,22 +93,23 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
 }
 
 export async function updatePartyApi(id: string, payload: Partial<PartyPayload>): Promise<PartyRow> {
-  if (!isApiConfigured()) {
-    return {
-      id,
-      name: payload.name ?? "Updated party",
-      type: payload.roles?.includes("supplier") ? "supplier" : "customer",
-      roles: payload.roles ?? ["customer"],
-      customerType: payload.customerType,
-      supplierType: payload.supplierType,
-      email: payload.email,
-      phone: payload.phone,
-      status: payload.status ?? "ACTIVE",
-    };
-  }
+  requireLiveApi("Party update");
   const updated = await apiRequest<BackendParty>(`/api/parties/${id}`, {
     method: "PATCH",
     body: payload,
   });
   return mapParty(updated);
+}
+
+export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null> {
+  requireLiveApi("Party detail");
+  const data = await apiRequest<BackendParty>(`/api/parties/${id}`);
+  const mapped = mapParty(data);
+  return {
+    ...mapped,
+    taxId: data.taxId,
+    creditLimit: data.creditLimit,
+    paymentTermsId: data.paymentTermsId,
+    defaultCurrency: data.defaultCurrency,
+  };
 }

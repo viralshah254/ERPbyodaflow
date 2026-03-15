@@ -30,10 +30,15 @@ import {
 } from "@/components/ui/select";
 import {
   fetchCashWeightAuditLines,
+  fetchCashWeightExceptions,
   fetchCashDisbursements,
   createCashDisbursement,
   reconcileCashWeightAudit,
   buildCashWeightAudit,
+  assignCashWeightException,
+  investigateCashWeightException,
+  approveCashWeightException,
+  resolveCashWeightException,
 } from "@/lib/api/cool-catch";
 import type { CashWeightAuditLineRow, CashDisbursementRow } from "@/lib/mock/purchasing/cash-weight-audit";
 import { formatMoney } from "@/lib/money";
@@ -44,6 +49,7 @@ export default function CashWeightAuditPage() {
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [view, setView] = React.useState<"audit" | "disbursements">("audit");
   const [auditLines, setAuditLines] = React.useState<CashWeightAuditLineRow[]>([]);
+  const [exceptions, setExceptions] = React.useState<CashWeightAuditLineRow[]>([]);
   const [disbursements, setDisbursements] = React.useState<CashDisbursementRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [reconcilingId, setReconcilingId] = React.useState<string | null>(null);
@@ -65,6 +71,7 @@ export default function CashWeightAuditPage() {
     Promise.all([
       fetchCashWeightAuditLines(statusFilter ? { status: statusFilter } : undefined).then(setAuditLines),
       fetchCashDisbursements().then(setDisbursements),
+      fetchCashWeightExceptions().then(setExceptions),
     ])
       .then(() => setLoading(false))
       .catch((e) => {
@@ -167,6 +174,63 @@ export default function CashWeightAuditPage() {
           {reconcilingId === r.id ? "Reconciling…" : "Reconcile"}
         </Button>
       ) : null,
+    },
+  ];
+
+  const exceptionColumns = [
+    { id: "po", header: "PO", accessor: (r: CashWeightAuditLineRow) => r.poNumber, sticky: true },
+    { id: "sku", header: "SKU", accessor: (r: CashWeightAuditLineRow) => r.sku },
+    { id: "variance", header: "Variance (kg)", accessor: (r: CashWeightAuditLineRow) => (r.varianceKg != null ? r.varianceKg : "—") },
+    { id: "assignee", header: "Assigned", accessor: (r: CashWeightAuditLineRow) => r.assignedToUserId ?? "—" },
+    {
+      id: "status",
+      header: "Lifecycle",
+      accessor: (r: CashWeightAuditLineRow) => (
+        <Badge variant={r.exceptionStatus === "OPEN" ? "destructive" : r.exceptionStatus === "RESOLVED" ? "default" : "secondary"}>
+          {r.exceptionStatus ?? "OPEN"}
+        </Badge>
+      ),
+    },
+    {
+      id: "sla",
+      header: "SLA age",
+      accessor: (r: CashWeightAuditLineRow) => (
+        <span className={r.slaOverdue ? "text-red-600 font-medium" : ""}>{r.slaAgeHours ?? 0}h{r.slaOverdue ? " (overdue)" : ""}</span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      accessor: (r: CashWeightAuditLineRow) => (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={async () => { await assignCashWeightException(r.id); await load(); }}>Assign</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={async () => {
+              const notes = window.prompt("Investigation notes", r.investigationNotes ?? "");
+              if (notes == null) return;
+              await investigateCashWeightException(r.id, notes);
+              await load();
+            }}
+          >
+            Investigate
+          </Button>
+          <Button size="sm" variant="ghost" onClick={async () => { await approveCashWeightException(r.id); await load(); }}>Approve</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={async () => {
+              const notes = window.prompt("Resolution notes", r.resolutionNotes ?? "");
+              if (notes == null) return;
+              await resolveCashWeightException(r.id, notes);
+              await load();
+            }}
+          >
+            Resolve
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -291,6 +355,15 @@ export default function CashWeightAuditPage() {
           />
           <LiveCurrencyConverterCard />
         </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Exception queue</CardTitle>
+            <CardDescription>Assign, investigate, approve, and resolve cash-weight variances with SLA aging.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <DataTable data={exceptions} columns={exceptionColumns} emptyMessage="No open exceptions." />
+          </CardContent>
+        </Card>
         <div className="flex gap-2 border-b">
           <Button variant={view === "audit" ? "secondary" : "ghost"} size="sm" onClick={() => setView("audit")}>
             Audit lines

@@ -38,7 +38,7 @@ export default function SecurityPage() {
         <div className="text-center mb-16">
           <h1 className="text-4xl font-bold mb-4">Enterprise-grade security</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Your data is secure and compliant. We take security seriously.
+            Bank-grade controls for every transaction, approval, and audit event.
           </p>
         </div>
 
@@ -73,6 +73,9 @@ export default function SecurityPage() {
               </div>
             ))}
           </div>
+          <p className="mt-6 text-xs text-muted-foreground">
+            Security tooling and core compliance controls are included in every plan with no hidden platform fees.
+          </p>
         </Card>
       </div>
     </div>

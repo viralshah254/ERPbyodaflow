@@ -1,4 +1,4 @@
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export type WarehousePickPackRow = {
   id: string;
@@ -81,7 +81,7 @@ export type WarehouseLocationStockRow = {
 };
 
 export async function fetchPickPackTasks(filters?: { status?: string; sourceDocumentId?: string }): Promise<WarehousePickPackRow[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Pick-pack tasks");
   const payload = await apiRequest<{ items: WarehousePickPackRow[] }>("/api/warehouse/pick-pack", {
     params: filters,
   });
@@ -89,7 +89,7 @@ export async function fetchPickPackTasks(filters?: { status?: string; sourceDocu
 }
 
 export async function fetchPickPackTask(id: string): Promise<WarehousePickPackRow | null> {
-  if (!isApiConfigured()) return null;
+  requireLiveApi("Pick-pack task detail");
   try {
     return await apiRequest<WarehousePickPackRow>(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`);
   } catch {
@@ -115,7 +115,7 @@ export async function runPickPackAction(
 }
 
 export async function fetchPutawayTasks(filters?: { status?: string; sourceDocumentId?: string }): Promise<WarehousePutawayRow[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Putaway tasks");
   const payload = await apiRequest<{ items: WarehousePutawayRow[] }>("/api/warehouse/putaway", {
     params: filters,
   });
@@ -123,7 +123,7 @@ export async function fetchPutawayTasks(filters?: { status?: string; sourceDocum
 }
 
 export async function fetchPutawayTask(id: string): Promise<WarehousePutawayRow | null> {
-  if (!isApiConfigured()) return null;
+  requireLiveApi("Putaway task detail");
   try {
     return await apiRequest<WarehousePutawayRow>(`/api/warehouse/putaway/${encodeURIComponent(id)}`);
   } catch {
@@ -145,7 +145,7 @@ export async function confirmPutawayTask(id: string): Promise<void> {
 }
 
 export async function fetchCycleCountTasks(warehouseId?: string): Promise<WarehouseCycleCountRow[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Cycle count tasks");
   const payload = await apiRequest<{ items: WarehouseCycleCountRow[] }>("/api/warehouse/cycle-counts", {
     params: warehouseId ? { warehouseId } : undefined,
   });
@@ -153,7 +153,7 @@ export async function fetchCycleCountTasks(warehouseId?: string): Promise<Wareho
 }
 
 export async function fetchCycleCountTask(id: string): Promise<WarehouseCycleCountRow | null> {
-  if (!isApiConfigured()) return null;
+  requireLiveApi("Cycle count task detail");
   try {
     return await apiRequest<WarehouseCycleCountRow>(`/api/warehouse/cycle-counts/${encodeURIComponent(id)}`);
   } catch {
@@ -182,7 +182,7 @@ export async function submitCycleCountTask(id: string): Promise<void> {
 }
 
 export async function fetchLocationStock(warehouseId?: string): Promise<WarehouseLocationStockRow[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Warehouse location stock");
   const payload = await apiRequest<{ items: WarehouseLocationStockRow[] }>("/api/warehouse/location-stock", {
     params: warehouseId ? { warehouseId } : undefined,
   });

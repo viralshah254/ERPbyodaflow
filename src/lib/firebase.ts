@@ -12,6 +12,16 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+async function getClientAuth() {
+  if (typeof window === "undefined") {
+    throw new Error("Firebase Auth is only available in the browser");
+  }
+  const { getApp, getApps, initializeApp } = await import("firebase/app");
+  const { getAuth } = await import("firebase/auth");
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  return getAuth(app);
+}
+
 export function isFirebaseConfigured(): boolean {
   return !!(
     typeof window !== "undefined" &&
@@ -27,12 +37,8 @@ export async function signInAndGetIdToken(
   email: string,
   password: string
 ): Promise<string> {
-  if (typeof window === "undefined")
-    throw new Error("Firebase Auth is only available in the browser");
-  const { getApp, getApps, initializeApp } = await import("firebase/app");
-  const { getAuth, signInWithEmailAndPassword } = await import("firebase/auth");
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  const auth = getAuth(app);
+  const auth = await getClientAuth();
+  const { signInWithEmailAndPassword } = await import("firebase/auth");
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const token = await userCredential.user.getIdToken();
   return token;
@@ -43,11 +49,14 @@ export async function signInAndGetIdToken(
  */
 export async function getIdToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
-  const { getApp, getApps, initializeApp } = await import("firebase/app");
-  const { getAuth } = await import("firebase/auth");
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  const auth = getAuth(app);
+  const auth = await getClientAuth();
   const user = auth.currentUser;
   if (!user) return null;
   return user.getIdToken();
+}
+
+export async function sendPasswordReset(email: string): Promise<void> {
+  const auth = await getClientAuth();
+  const { sendPasswordResetEmail } = await import("firebase/auth");
+  await sendPasswordResetEmail(auth, email);
 }

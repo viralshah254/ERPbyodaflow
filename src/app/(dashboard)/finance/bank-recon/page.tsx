@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import {
   createBankReconPaymentFromStatementApi,
+  fetchBankReconOpenItemsApi,
   fetchBankReconSnapshotApi,
   matchBankReconLinesApi,
   type BankStatementLine,
@@ -50,6 +51,8 @@ export default function BankReconPage() {
   const [counterpartySearch, setCounterpartySearch] = React.useState("");
   const [counterpartyId, setCounterpartyId] = React.useState("");
   const [counterpartyOptions, setCounterpartyOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [openItems, setOpenItems] = React.useState<Array<{ id: string; number: string; outstanding: number; currency?: string }>>([]);
+  const [openItemAllocations, setOpenItemAllocations] = React.useState<Record<string, number>>({});
 
   const refreshSnapshot = React.useCallback(async () => {
     setLoading(true);
@@ -106,6 +109,37 @@ export default function BankReconPage() {
     };
   }, [createOpen, pendingLine, counterpartySearch]);
 
+  React.useEffect(() => {
+    if (!createOpen || !pendingLine || !counterpartyId) {
+      setOpenItems([]);
+      setOpenItemAllocations({});
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      const items = await fetchBankReconOpenItemsApi({
+        direction: pendingLine.amount >= 0 ? "AR" : "AP",
+        partyId: counterpartyId,
+      });
+      if (!cancelled) {
+        setOpenItems(
+          items.map((item) => ({
+            id: item.id,
+            number: item.number,
+            outstanding: item.outstanding,
+            currency: item.currency,
+          }))
+        );
+      }
+    };
+    void load().catch((e) => {
+      if (!cancelled) toast.error((e as Error).message || "Failed to load open items.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, pendingLine, counterpartyId]);
+
   const handleCreatePayment = (lineId: string) => {
     const line = statements.find((item) => item.id === lineId);
     if (!line) return;
@@ -113,6 +147,8 @@ export default function BankReconPage() {
     setCounterpartySearch("");
     setCounterpartyId("");
     setCounterpartyOptions([]);
+    setOpenItems([]);
+    setOpenItemAllocations({});
     setCreateOpen(true);
   };
 
@@ -123,7 +159,10 @@ export default function BankReconPage() {
     }
     setCreating(true);
     try {
-      const result = await createBankReconPaymentFromStatementApi(pendingLine, counterpartyId);
+      const allocations = Object.entries(openItemAllocations)
+        .filter(([, amount]) => amount > 0)
+        .map(([documentId, amount]) => ({ documentId, amount }));
+      const result = await createBankReconPaymentFromStatementApi(pendingLine, counterpartyId, allocations);
       toast.success(`Created and matched payment ${result.number}.`);
       setCreateOpen(false);
       setPendingLine(null);
@@ -376,6 +415,36 @@ export default function BankReconPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Allocate to open items</Label>
+              <div className="rounded border divide-y max-h-48 overflow-auto">
+                {openItems.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    No open invoices or bills for this counterparty.
+                  </div>
+                ) : (
+                  openItems.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-2 p-2 text-sm">
+                      <span className="truncate">
+                        {item.number} · {item.outstanding.toLocaleString()} {item.currency ?? "KES"}
+                      </span>
+                      <Input
+                        type="number"
+                        className="w-28 h-8 shrink-0"
+                        placeholder="Amount"
+                        value={openItemAllocations[item.id] ?? ""}
+                        onChange={(e) =>
+                          setOpenItemAllocations((current) => ({
+                            ...current,
+                            [item.id]: parseFloat(e.target.value) || 0,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
           <SheetFooter className="mt-6">

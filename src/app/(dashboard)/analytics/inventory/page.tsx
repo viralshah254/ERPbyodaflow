@@ -6,22 +6,37 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { InsightCard } from "@/components/analytics";
-import {
-  MOCK_STOCKOUT_CAUSE,
-  MOCK_DEAD_STOCK,
-  MOCK_SHRINKAGE_VARIANCE,
-} from "@/lib/mock/analytics/intelligence";
+import { fetchAnalyticsInsights } from "@/lib/api/analytics";
+import { fetchInventoryValuation } from "@/lib/api/inventory-costing";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
-
-const CAUSE_LABELS: Record<string, string> = {
-  demand_spike: "Demand spike",
-  replenishment_delay: "Replenishment delay",
-  supplier: "Supplier",
-  other: "Other",
-};
+import { toast } from "sonner";
 
 export default function AnalyticsInventoryPage() {
+  const [insights, setInsights] = React.useState<Awaited<ReturnType<typeof fetchAnalyticsInsights>> | null>(null);
+  const [valuation, setValuation] = React.useState<Awaited<ReturnType<typeof fetchInventoryValuation>> | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void Promise.all([fetchAnalyticsInsights("inventory"), fetchInventoryValuation()])
+      .then(([insightItems, valuationItems]) => {
+        if (!cancelled) {
+          setInsights(insightItems);
+          setValuation(valuationItems);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load inventory analytics.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const lowStock = insights?.data.filter((item) => item.type === "low_stock") ?? [];
+
   return (
     <PageShell>
       <PageHeader
@@ -38,8 +53,8 @@ export default function AnalyticsInventoryPage() {
       />
       <div className="p-6 space-y-6">
         <InsightCard
-          title="Stockout root cause"
-          description="Why stockouts occurred"
+          title="Low stock alerts"
+          description="Live low-stock and replenishment risk insights"
           action={
             <Button size="sm" variant="outline" asChild>
               <Link href="/inventory/stock-levels">View stock</Link>
@@ -50,30 +65,31 @@ export default function AnalyticsInventoryPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="text-left font-medium px-3 py-2">SKU</th>
-                  <th className="text-left font-medium px-3 py-2">Cause</th>
-                  <th className="text-right font-medium px-3 py-2">Days out</th>
+                  <th className="text-left font-medium px-3 py-2">Product</th>
+                  <th className="text-left font-medium px-3 py-2">Warehouse</th>
+                  <th className="text-right font-medium px-3 py-2">Qty</th>
                 </tr>
               </thead>
               <tbody>
-                {MOCK_STOCKOUT_CAUSE.map((r, i) => (
+                {lowStock.map((r, i) => (
                   <tr key={i} className="border-t">
-                    <td className="px-3 py-2">{r.sku}</td>
-                    <td className="px-3 py-2">{CAUSE_LABELS[r.cause] ?? r.cause}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{r.daysOut}</td>
+                    <td className="px-3 py-2">{r.productId}</td>
+                    <td className="px-3 py-2">{r.warehouseId}</td>
+                    <td className="text-right tabular-nums px-3 py-2">{r.quantity}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {lowStock.length === 0 && <p className="p-3 text-sm text-muted-foreground">No inventory alerts right now.</p>}
           </div>
         </InsightCard>
 
         <InsightCard
-          title="Dead stock"
-          description="Value and days since movement"
+          title="Warehouse valuation"
+          description="Live valuation totals by warehouse"
           action={
             <Button size="sm" variant="outline" asChild>
-              <Link href="/inventory/stock-levels">Review</Link>
+              <Link href="/inventory/costing">Review</Link>
             </Button>
           }
         >
@@ -81,30 +97,31 @@ export default function AnalyticsInventoryPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="text-left font-medium px-3 py-2">SKU</th>
+                  <th className="text-left font-medium px-3 py-2">Warehouse</th>
+                  <th className="text-right font-medium px-3 py-2">SKUs</th>
                   <th className="text-right font-medium px-3 py-2">Value</th>
-                  <th className="text-right font-medium px-3 py-2">Days since movement</th>
                 </tr>
               </thead>
               <tbody>
-                {MOCK_DEAD_STOCK.map((r, i) => (
+                {(valuation?.summary ?? []).map((r, i) => (
                   <tr key={i} className="border-t">
-                    <td className="px-3 py-2">{r.sku}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.value, "KES")}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{r.daysSinceMovement}</td>
+                    <td className="px-3 py-2">{r.warehouse}</td>
+                    <td className="text-right tabular-nums px-3 py-2">{r.skuCount}</td>
+                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.totalValue, "KES")}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {(valuation?.summary?.length ?? 0) === 0 && <p className="p-3 text-sm text-muted-foreground">No valuation rows yet.</p>}
           </div>
         </InsightCard>
 
         <InsightCard
-          title="Shrinkage variance"
-          description="Expected vs actual by period"
+          title="Inventory recommendations"
+          description="Anomalies and planner recommendations"
           action={
             <Button size="sm" variant="outline" asChild>
-              <Link href="/warehouse/cycle-counts">Cycle counts</Link>
+              <Link href="/analytics/insights">Open insights</Link>
             </Button>
           }
         >
@@ -112,40 +129,43 @@ export default function AnalyticsInventoryPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="text-left font-medium px-3 py-2">Period</th>
-                  <th className="text-right font-medium px-3 py-2">Expected</th>
-                  <th className="text-right font-medium px-3 py-2">Actual</th>
-                  <th className="text-right font-medium px-3 py-2">Variance %</th>
+                  <th className="text-left font-medium px-3 py-2">Title</th>
+                  <th className="text-left font-medium px-3 py-2">Summary</th>
+                  <th className="text-right font-medium px-3 py-2">Severity</th>
                 </tr>
               </thead>
               <tbody>
-                {MOCK_SHRINKAGE_VARIANCE.map((r, i) => (
+                {(insights?.data ?? []).filter((item) => item.type !== "low_stock").map((r, i) => (
                   <tr key={i} className="border-t">
-                    <td className="px-3 py-2">{r.period}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.expected, "KES")}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.actual, "KES")}</td>
+                    <td className="px-3 py-2">{r.title}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.description}</td>
                     <td className="text-right tabular-nums px-3 py-2">
-                      <Badge variant={r.variancePct > 0 ? "destructive" : "secondary"}>
-                        {r.variancePct > 0 ? "+" : ""}{r.variancePct}%
+                      <Badge variant={r.severity === "high" || r.severity === "critical" ? "destructive" : "secondary"}>
+                        {r.severity ?? "info"}
                       </Badge>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {(insights?.data ?? []).filter((item) => item.type !== "low_stock").length === 0 && (
+              <p className="p-3 text-sm text-muted-foreground">No recommendation items right now.</p>
+            )}
           </div>
         </InsightCard>
 
         <InsightCard
           title="Reorder health"
-          description="Landed cost impact (stub)"
+          description="Current valuation coverage and costing health"
           action={
             <Button size="sm" variant="outline" asChild>
               <Link href="/inventory/costing">Costing</Link>
             </Button>
           }
         >
-          <p className="text-sm text-muted-foreground">Reorder point coverage and landed cost impact. Run in Explore.</p>
+          <p className="text-sm text-muted-foreground">
+            {valuation ? `Tracking ${valuation.rows.length} valuation rows across ${valuation.summary.length} warehouses.` : "Loading valuation health..."}
+          </p>
         </InsightCard>
       </div>
     </PageShell>

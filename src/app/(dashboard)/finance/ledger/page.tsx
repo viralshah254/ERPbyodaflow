@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { fetchFinanceAccountsApi, fetchFinancePeriodsApi, fetchLedgerEntriesApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ export default function LedgerPage() {
   const [accounts, setAccounts] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
   const [entries, setEntries] = React.useState<Awaited<ReturnType<typeof fetchLedgerEntriesApi>>>([]);
+  const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
 
   React.useEffect(() => {
     Promise.all([fetchFinanceAccountsApi(), fetchFinancePeriodsApi()])
@@ -131,6 +133,7 @@ export default function LedgerPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Account</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead className="text-right">Debit</TableHead>
                 <TableHead className="text-right">Credit</TableHead>
                 <TableHead className="text-right">Balance</TableHead>
@@ -142,6 +145,16 @@ export default function LedgerPage() {
                   <TableCell>{entry.date.slice(0, 10)}</TableCell>
                   <TableCell className="font-medium">{entry.accountCode} · {entry.accountName}</TableCell>
                   <TableCell>{entry.description}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={() => setPostingSource({ sourceType: entry.sourceType, sourceId: entry.sourceId })}
+                    >
+                      {entry.documentNumber}
+                    </Button>
+                  </TableCell>
                   <TableCell className="text-right">
                     {entry.debit > 0 ? formatMoney(entry.debit, "KES") : "-"}
                   </TableCell>
@@ -157,6 +170,14 @@ export default function LedgerPage() {
           </Table>
         </CardContent>
       </Card>
+      <PostingBatchSheet
+        open={!!postingSource}
+        onOpenChange={(open) => {
+          if (!open) setPostingSource(null);
+        }}
+        sourceType={postingSource?.sourceType}
+        sourceId={postingSource?.sourceId}
+      />
     </div>
   );
 }

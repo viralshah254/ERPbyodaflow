@@ -1,4 +1,5 @@
-import { apiRequest, isApiConfigured } from "./client";
+import { apiRequest, requireLiveApi } from "./client";
+import type { CopilotContext, CopilotResponse } from "@/types/copilot";
 
 export type ErpSearchHit = {
   id: string;
@@ -32,7 +33,7 @@ export type ErpSearchResponse = {
   suggestions: string[];
 };
 
-export async function searchErpApi(query: string): Promise<ErpSearchResponse> {
+export async function searchErpApi(query: string, context?: CopilotContext): Promise<CopilotResponse> {
   const normalized = query.trim();
   if (!normalized) {
     return {
@@ -43,17 +44,9 @@ export async function searchErpApi(query: string): Promise<ErpSearchResponse> {
       suggestions: [],
     };
   }
-  if (!isApiConfigured()) {
-    return {
-      query: normalized,
-      summary: `Search preview for "${normalized}" requires the backend connection.`,
-      topIntent: "search",
-      hits: [],
-      suggestions: ["Connect the backend to resolve customers, products, invoices, and stock."],
-    };
-  }
-  return apiRequest<ErpSearchResponse>("/api/search/resolve", {
+  requireLiveApi("ERP search");
+  return apiRequest<CopilotResponse>("/api/search/resolve", {
     method: "POST",
-    body: { query: normalized },
+    body: { query: normalized, context },
   });
 }

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { isFirebaseConfigured, sendPasswordReset } from "@/lib/firebase";
 import * as Icons from "lucide-react";
 
 const forgotPasswordSchema = z.object({
@@ -19,18 +20,36 @@ type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
   const [isSubmitted, setIsSubmitted] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
   const {
     register,
     handleSubmit,
     formState: { errors },
+    setError,
   } = useForm<ForgotPasswordForm>({
     resolver: zodResolver(forgotPasswordSchema),
   });
 
   const onSubmit = async (data: ForgotPasswordForm) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsSubmitted(true);
+    if (!isFirebaseConfigured()) {
+      setError("root", {
+        message: "Password reset requires Firebase client configuration.",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await sendPasswordReset(data.email);
+      setIsSubmitted(true);
+    } catch (error) {
+      setError("root", {
+        message:
+          error instanceof Error ? error.message : "Failed to send reset email",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isSubmitted) {
@@ -69,6 +88,9 @@ export default function ForgotPasswordPage() {
 
         <Card className="p-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {errors.root && (
+              <p className="text-sm text-destructive">{errors.root.message}</p>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -82,8 +104,8 @@ export default function ForgotPasswordPage() {
               )}
             </div>
 
-            <Button type="submit" className="w-full">
-              Send reset link
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Sending..." : "Send reset link"}
             </Button>
           </form>
 

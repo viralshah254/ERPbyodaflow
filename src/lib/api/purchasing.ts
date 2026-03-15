@@ -1,30 +1,20 @@
-import { apiRequest, downloadTextFile, isApiConfigured } from "@/lib/api/client";
+import { apiRequest, downloadTextFile, requireLiveApi } from "@/lib/api/client";
 import type { PurchasingDocRow } from "@/lib/mock/purchasing";
-import {
-  type PurchaseOrderDetailRow,
-  getPurchaseOrderById,
-  listPurchaseOrders,
-  updatePurchaseOrderStatuses,
-} from "@/lib/data/purchasing.repo";
+import { type PurchaseOrderDetailRow } from "@/lib/data/purchasing.repo";
 
 export async function fetchPurchaseOrders(): Promise<PurchasingDocRow[]> {
-  if (!isApiConfigured()) {
-    return listPurchaseOrders().map(({ supplier, currency, fxRate, country, region, cashMode, lines, ...row }) => row);
-  }
+  requireLiveApi("Purchase orders");
   const res = await apiRequest<{ items: PurchasingDocRow[] }>("/api/purchasing/orders");
   return res.items ?? [];
 }
 
 export async function fetchPurchaseOrderById(id: string): Promise<PurchaseOrderDetailRow | null> {
-  if (!isApiConfigured()) return getPurchaseOrderById(id);
+  requireLiveApi("Purchase order detail");
   return apiRequest<PurchaseOrderDetailRow>(`/api/purchasing/orders/${encodeURIComponent(id)}`);
 }
 
 export async function approvePurchaseOrders(ids: string[]): Promise<void> {
-  if (!isApiConfigured()) {
-    updatePurchaseOrderStatuses(ids, "APPROVED");
-    return;
-  }
+  requireLiveApi("Approve purchase orders");
   await apiRequest("/api/purchasing/orders/approve-bulk", { method: "POST", body: { ids } });
 }
 

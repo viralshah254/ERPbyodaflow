@@ -1,16 +1,10 @@
-import {
-  createBankReconPaymentFromStatement,
-  getBankReconSession,
-  listStatementLines,
-  listSystemTransactions,
-  matchBankReconLines,
-} from "@/lib/data/bank-recon.repo";
+import { fetchOpenBillsApi, fetchOpenInvoicesApi } from "./payments";
 import type {
   BankStatementLine,
   ReconcileSession,
   SystemTransaction,
 } from "@/lib/mock/bank-recon";
-import { apiRequest, isApiConfigured } from "./client";
+import { apiRequest, requireLiveApi } from "./client";
 
 export type { BankStatementLine, ReconcileSession, SystemTransaction };
 
@@ -68,20 +62,7 @@ function buildSession(
 export async function fetchBankReconSnapshotApi(
   bankAccountId?: string
 ): Promise<BankReconSnapshot> {
-  if (!isApiConfigured()) {
-    return {
-      bankAccounts: [
-        {
-          id: getBankReconSession().bankAccountId,
-          name: getBankReconSession().bankAccountName,
-          currency: getBankReconSession().statementCurrency,
-        },
-      ],
-      session: getBankReconSession(),
-      statements: listStatementLines(),
-      systemTxns: listSystemTransactions(),
-    };
-  }
+  requireLiveApi("Bank reconciliation");
 
   const [bankAccountsRes, statementsRes, paymentsRes] = await Promise.all([
     apiRequest<{ items: BankAccount[] }>("/api/treasury/bank-accounts"),
@@ -130,10 +111,7 @@ export async function matchBankReconLinesApi(
   statementId: string,
   paymentId: string
 ): Promise<void> {
-  if (!isApiConfigured()) {
-    matchBankReconLines(statementId, paymentId);
-    return;
-  }
+  requireLiveApi("Bank reconciliation matching");
   await apiRequest("/api/finance/bank-recon/match", {
     method: "POST",
     body: { lineId: statementId, paymentId },
@@ -142,17 +120,26 @@ export async function matchBankReconLinesApi(
 
 export async function createBankReconPaymentFromStatementApi(
   line: BankStatementLine,
-  partyId: string
+  partyId: string,
+  allocations?: { documentId: string; amount: number }[]
 ): Promise<{ paymentId: string; number: string }> {
-  if (!isApiConfigured()) {
-    createBankReconPaymentFromStatement(line.id);
-    return { paymentId: line.id, number: `mock-${line.id}` };
-  }
+  requireLiveApi("Bank reconciliation payment creation");
   return apiRequest<{ paymentId: string; number: string }>("/api/finance/bank-recon/create-payment", {
     method: "POST",
     body: {
       lineId: line.id,
       partyId,
+      allocations,
     },
   });
+}
+
+export async function fetchBankReconOpenItemsApi(params: {
+  direction: "AR" | "AP";
+  partyId?: string;
+}) {
+  if (!params.partyId) return [];
+  return params.direction === "AR"
+    ? fetchOpenInvoicesApi(params.partyId)
+    : fetchOpenBillsApi(params.partyId);
 }

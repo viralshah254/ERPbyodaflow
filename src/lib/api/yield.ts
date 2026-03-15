@@ -1,15 +1,9 @@
 /**
- * Yield / mass balance API — backend when NEXT_PUBLIC_API_URL set, else mocks.
+ * Yield / mass balance API.
  * See BACKEND_SPEC_COOL_CATCH.md §3.9.
  */
 
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
-import {
-  buildMassBalanceSummary,
-  createYieldRecordEntry,
-  getYieldRecordById,
-  listYieldRecords,
-} from "@/lib/data/yield.repo";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export type YieldRecordRow = {
   id: string;
@@ -55,11 +49,7 @@ export async function fetchYieldRecords(params?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<YieldRecordRow[]> {
-  if (!isApiConfigured()) {
-    let rows = listYieldRecords();
-    if (params?.workOrderId) rows = rows.filter((r) => r.workOrderId === params.workOrderId);
-    return rows;
-  }
+  requireLiveApi("Yield records");
   const q: Record<string, string> = {};
   if (params?.workOrderId) q.workOrderId = params.workOrderId;
   if (params?.dateFrom) q.dateFrom = params.dateFrom;
@@ -71,7 +61,7 @@ export async function fetchYieldRecords(params?: {
 }
 
 export async function fetchYieldById(id: string): Promise<YieldRecordRow | null> {
-  if (!isApiConfigured()) return getYieldRecordById(id);
+  requireLiveApi("Yield record detail");
   try {
     return await apiRequest<YieldRecordRow>(`/api/manufacturing/yield/${encodeURIComponent(id)}`);
   } catch {
@@ -80,9 +70,7 @@ export async function fetchYieldById(id: string): Promise<YieldRecordRow | null>
 }
 
 export async function fetchMassBalanceReport(params?: { period?: string }): Promise<MassBalanceSummaryRow[]> {
-  if (!isApiConfigured()) {
-    return buildMassBalanceSummary(listYieldRecords());
-  }
+  requireLiveApi("Mass balance report");
   const q = params?.period ? { period: params.period } : undefined;
   const res = await apiRequest<{ items: MassBalanceSummaryRow[] }>("/api/manufacturing/yield/mass-balance-report", {
     params: q,
@@ -98,10 +86,7 @@ export interface CreateYieldRequest {
 }
 
 export async function createYieldRecord(body: CreateYieldRequest): Promise<{ id: string }> {
-  if (!isApiConfigured()) {
-    const row = createYieldRecordEntry(body);
-    return Promise.resolve({ id: row.id });
-  }
+  requireLiveApi("Create yield record");
   return apiRequest<{ id: string }>("/api/manufacturing/yield", {
     method: "POST",
     body,

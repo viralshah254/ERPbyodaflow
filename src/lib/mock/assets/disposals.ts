@@ -13,6 +13,7 @@ export interface DisposalRow {
   gainLoss: number;
   reason: string;
   status: "DRAFT" | "POSTED";
+  journalId?: string;
 }
 
 export const MOCK_DISPOSALS: DisposalRow[] = [

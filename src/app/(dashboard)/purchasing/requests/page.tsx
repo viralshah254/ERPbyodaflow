@@ -9,7 +9,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getMockPurchaseRequests, type PurchasingDocRow } from "@/lib/mock/purchasing";
+import { fetchPurchaseRequestsApi } from "@/lib/api/purchase-requests";
+import type { PurchasingDocRow } from "@/lib/mock/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
@@ -30,14 +31,31 @@ export default function PurchaseRequestsPage() {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [rows, setRows] = React.useState<PurchasingDocRow[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
   );
 
-  const allRows = React.useMemo(() => getMockPurchaseRequests(), []);
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const items = await fetchPurchaseRequestsApi();
+        if (!cancelled) setRows(items);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load purchase requests.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const filtered = React.useMemo(() => {
-    let out = allRows;
+    let out = rows;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       out = out.filter(
@@ -48,7 +66,7 @@ export default function PurchaseRequestsPage() {
     }
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
     return out;
-  }, [allRows, search, statusFilter]);
+  }, [rows, search, statusFilter]);
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -158,16 +176,12 @@ export default function PurchaseRequestsPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => toast.info("Export (stub)")}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Approve (stub)")}>
-                  Approve
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => toast.info("Export (stub)")}>
-                  Export
+                <Button variant="outline" size="sm" onClick={() => router.push("/purchasing/orders")}>
+                  Open orders
                 </Button>
               </div>
             ) : undefined

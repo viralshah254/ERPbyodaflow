@@ -284,7 +284,6 @@ export default function MasterPartiesPage() {
                   onChange: (v) => setCustomerType(v as CustomerType | ""),
                 },
               ]}
-              onExport={() => toast.info("Export (stub)")}
               actions={
                 <Link
                   href="/settings/customizer/fields"
@@ -337,7 +336,6 @@ export default function MasterPartiesPage() {
                   onChange: (v) => setSupplierType(v as SupplierType | ""),
                 },
               ]}
-              onExport={() => toast.info("Export (stub)")}
               actions={
                 <Link
                   href="/settings/customizer/fields"
@@ -375,7 +373,6 @@ export default function MasterPartiesPage() {
               searchPlaceholder={`Search ${franchiseeLabel.toLowerCase()}s...`}
               searchValue={search}
               onSearchChange={setSearch}
-              onExport={() => toast.info("Export (stub)")}
               actions={
                 <Link
                   href="/settings/customizer/fields"
@@ -417,7 +414,6 @@ export default function MasterPartiesPage() {
         title={editingId ? `Edit ${label}` : `New ${label}`}
         description={editingId ? `Update ${label.toLowerCase()} details.` : `Add a new ${label.toLowerCase()}.`}
         mode={editingId ? "edit" : "create"}
-        duplicateWarning={!editingId ? `Possible duplicate: similar name exists (stub).` : undefined}
         footer={
           <>
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>
@@ -465,7 +461,7 @@ export default function MasterPartiesPage() {
           {tab === "franchisees" && (
             <div className="space-y-2">
               <Label>Franchisee type</Label>
-              <Input placeholder="e.g. Exclusive, Non-exclusive (stub)" />
+              <Input placeholder="e.g. Exclusive, Non-exclusive" />
             </div>
           )}
           {tab === "suppliers" && (

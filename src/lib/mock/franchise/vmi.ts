@@ -23,6 +23,9 @@ export interface VMIReplenishmentOrderRow {
   franchiseeName: string;
   sourceWarehouse: string;
   status: "DRAFT" | "SENT" | "RECEIVED";
+  transferId?: string | null;
+  transferNumber?: string | null;
+  transferStatus?: string | null;
   lineCount: number;
   totalQty: number;
   createdAt: string;

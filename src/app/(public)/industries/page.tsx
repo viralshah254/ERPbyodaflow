@@ -14,8 +14,7 @@ export default function IndustriesPage() {
         <div className="text-center mb-16">
           <h1 className="text-4xl font-bold mb-4">Built for your industry</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Templates tailored to your business type with the right terminology and
-            workflows from day one.
+            Launch with terminology, flows, and controls that match your business from day one.
           </p>
         </div>
 
@@ -30,8 +29,8 @@ export default function IndustriesPage() {
                 <h3 className="text-2xl font-semibold mb-3">{template.name}</h3>
                 <p className="text-muted-foreground mb-6">{template.description}</p>
                 <Button variant="outline" className="w-full" asChild>
-                  <Link href={`/industries/${template.orgType.toLowerCase()}`}>
-                    Learn more
+                  <Link href={`/signup?orgType=${template.orgType}`}>
+                    Start with {template.name}
                   </Link>
                 </Button>
               </Card>

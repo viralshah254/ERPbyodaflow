@@ -52,8 +52,12 @@ cp .env.example .env.local
 Variables in `.env.example`:
 
 - **`NEXT_PUBLIC_API_URL`** — Backend API base URL (e.g. `http://localhost:4000`). When set, the app calls live endpoints; when unset, mocks are used.
-- **`NEXT_PUBLIC_API_DEMO_MODE`** — Set to `1` for local dev: sends `X-Demo-Mode: 1` so the backend uses the seeded user (no user/branch headers needed).
-- **`NEXT_PUBLIC_DEV_USER_ID`** / **`NEXT_PUBLIC_CURRENT_BRANCH_ID`** — Optional; use when not in demo mode to send `X-Dev-User-Id` and `X-Current-Branch-Id` on every request.
+- **`NEXT_PUBLIC_ENABLE_DEV_AUTH`** — Must be `1` before local dev headers are sent. Keeps normal runtime from silently authenticating as a dev user.
+- **`NEXT_PUBLIC_ENABLE_MOCK_AUTH`** — Must be `1` before mock/demo auth fallback is allowed locally.
+- **`NEXT_PUBLIC_ENABLE_DEV_PAGES`** — Must be `1` before `/dev/*` QA routes are exposed locally.
+- **`NEXT_PUBLIC_API_DEMO_MODE`** — Only respected when `NEXT_PUBLIC_ENABLE_MOCK_AUTH=1`; sends `X-Demo-Mode: 1` for seeded local demo users.
+- **`NEXT_PUBLIC_DEV_USER_ID`** / **`NEXT_PUBLIC_CURRENT_BRANCH_ID`** — Optional; when `NEXT_PUBLIC_ENABLE_DEV_AUTH=1`, sends `X-Dev-User-Id` and `X-Current-Branch-Id` on requests.
+- **`NEXT_PUBLIC_FIREBASE_*`** — Required for true browser sign-in. Without these public web app keys, the login page will fail closed instead of fabricating a mock session.
 
 ### Build
 
@@ -148,7 +152,8 @@ This app is no longer frontend-only.
 
 ## Notes
 
-- This repo supports both **mock-first development** and **live backend integration**
+- This repo supports both **guarded local development** and **live backend integration**
+- Dev auth, mock auth, and `/dev/*` routes now require explicit env flags instead of being silently available
 - Authentication headers are passed through the shared API client when the backend is configured
 - Some screens still use local repo/mock data as fallback when live APIs are unavailable
 - Forecast and command-bar ML features rely on the backend-owned `../erp_odaflow_backend/ml_service`

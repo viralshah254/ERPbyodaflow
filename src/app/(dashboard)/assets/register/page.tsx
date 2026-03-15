@@ -25,9 +25,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { listAssets, createAsset, updateAsset } from "@/lib/data/assets.repo";
+import { createAssetApi, fetchAssetsApi, updateAssetApi } from "@/lib/api/assets";
 import { type AssetRow, type DepreciationMethod } from "@/lib/mock/assets/register";
-import { getMockAPSuppliers } from "@/lib/mock/ap";
+import { fetchApSuppliersApi } from "@/lib/api/payments";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -38,8 +38,10 @@ const CATEGORIES = ["IT Equipment", "Machinery", "Furniture", "Vehicles", "Other
 export default function AssetRegisterPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<AssetRow | null>(null);
+  const [suppliers, setSuppliers] = React.useState<Array<{ id: string; name: string }>>([]);
   const [form, setForm] = React.useState({
     code: "",
     name: "",
@@ -53,8 +55,22 @@ export default function AssetRegisterPage() {
     linkedInvoiceId: "",
   });
 
-  const [rows, setRows] = React.useState<AssetRow[]>(() => listAssets());
-  const refresh = React.useCallback(() => setRows(listAssets()), []);
+  const [rows, setRows] = React.useState<AssetRow[]>([]);
+  const refresh = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [assets, supplierOptions] = await Promise.all([
+        fetchAssetsApi(),
+        fetchApSuppliersApi(),
+      ]);
+      setRows(assets);
+      setSuppliers(supplierOptions);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -65,7 +81,10 @@ export default function AssetRegisterPage() {
         r.category.toLowerCase().includes(q)
     );
   }, [rows, search]);
-  const suppliers = React.useMemo(() => getMockAPSuppliers(), []);
+
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const openCreate = () => {
     setEditing(null);
@@ -139,19 +158,18 @@ export default function AssetRegisterPage() {
           searchPlaceholder="Search by code, name, category..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
             <CardTitle>Assets</CardTitle>
-            <CardDescription>Code, name, category, acquisition date, cost, salvage, useful life. Straight-line (mock).</CardDescription>
+            <CardDescription>Live asset register with cost, salvage, useful life, and linked source references.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<AssetRow>
               data={filtered}
               columns={columns}
               onRowClick={(row) => router.push(`/assets/register/${row.id}`)}
-              emptyMessage="No assets."
+              emptyMessage={isLoading ? "Loading assets..." : "No assets."}
             />
           </CardContent>
         </Card>
@@ -161,7 +179,7 @@ export default function AssetRegisterPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit asset" : "Add asset"}</SheetTitle>
-            <SheetDescription>Saved to browser storage. API pending.</SheetDescription>
+            <SheetDescription>Create and maintain fixed assets in the backend register.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -211,7 +229,7 @@ export default function AssetRegisterPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Linked vendor (stub)</Label>
+              <Label>Linked vendor</Label>
               <Select value={form.linkedVendorId} onValueChange={(v) => setForm((p) => ({ ...p, linkedVendorId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
                 <SelectContent>
@@ -222,46 +240,50 @@ export default function AssetRegisterPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Linked invoice (stub)</Label>
+              <Label>Linked invoice</Label>
               <Input value={form.linkedInvoiceId} onChange={(e) => setForm((p) => ({ ...p, linkedInvoiceId: e.target.value }))} placeholder="Optional" />
             </div>
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => {
-                if (editing) {
-                  updateAsset(editing.id, {
-                    code: form.code,
-                    name: form.name,
-                    category: form.category,
-                    acquisitionDate: form.acquisitionDate,
-                    cost: form.cost,
-                    salvage: form.salvage,
-                    usefulLifeYears: form.usefulLifeYears,
-                    depreciationMethod: form.depreciationMethod,
-                    linkedVendorId: form.linkedVendorId || undefined,
-                    linkedInvoiceId: form.linkedInvoiceId || undefined,
-                  });
-                  toast.success("Asset updated.");
-                } else {
-                  createAsset({
-                    code: form.code,
-                    name: form.name,
-                    category: form.category,
-                    acquisitionDate: form.acquisitionDate,
-                    cost: form.cost,
-                    salvage: form.salvage,
-                    usefulLifeYears: form.usefulLifeYears,
-                    depreciationMethod: form.depreciationMethod,
-                    linkedVendorId: form.linkedVendorId || undefined,
-                    linkedInvoiceId: form.linkedInvoiceId || undefined,
-                    status: "ACTIVE",
-                  });
-                  toast.success("Asset created.");
+              onClick={async () => {
+                try {
+                  if (editing) {
+                    await updateAssetApi(editing.id, {
+                      code: form.code,
+                      name: form.name,
+                      category: form.category,
+                      acquisitionDate: form.acquisitionDate,
+                      cost: form.cost,
+                      salvage: form.salvage,
+                      usefulLifeYears: form.usefulLifeYears,
+                      depreciationMethod: form.depreciationMethod,
+                      linkedVendorId: form.linkedVendorId || undefined,
+                      linkedInvoiceId: form.linkedInvoiceId || undefined,
+                    });
+                    toast.success("Asset updated.");
+                  } else {
+                    await createAssetApi({
+                      code: form.code,
+                      name: form.name,
+                      category: form.category,
+                      acquisitionDate: form.acquisitionDate,
+                      cost: form.cost,
+                      salvage: form.salvage,
+                      usefulLifeYears: form.usefulLifeYears,
+                      depreciationMethod: form.depreciationMethod,
+                      linkedVendorId: form.linkedVendorId || undefined,
+                      linkedInvoiceId: form.linkedInvoiceId || undefined,
+                      status: "ACTIVE",
+                    });
+                    toast.success("Asset created.");
+                  }
+                  setDrawerOpen(false);
+                  await refresh();
+                } catch (error) {
+                  toast.error((error as Error).message);
                 }
-                setDrawerOpen(false);
-                refresh();
               }}
             >
               {editing ? "Save" : "Create"}

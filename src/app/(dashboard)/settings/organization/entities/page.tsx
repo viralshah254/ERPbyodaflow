@@ -9,7 +9,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { EntityRow } from "@/lib/mock/intercompany/entities";
-import { createEntity, listEntities } from "@/lib/data/entities.repo";
+import { createEntityApi, fetchEntitiesApi } from "@/lib/api/entities";
 import { downloadCsv } from "@/lib/export/csv";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
@@ -17,7 +17,20 @@ import * as Icons from "lucide-react";
 
 export default function EntitiesPage() {
   const [search, setSearch] = React.useState("");
-  const [rows, setRows] = React.useState<EntityRow[]>(() => listEntities());
+  const [rows, setRows] = React.useState<EntityRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const loadEntities = React.useCallback(async () => {
+    const items = await fetchEntitiesApi();
+    setRows(items);
+  }, []);
+
+  React.useEffect(() => {
+    loadEntities()
+      .catch((error) => toast.error((error as Error).message))
+      .finally(() => setLoading(false));
+  }, [loadEntities]);
+
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -55,15 +68,21 @@ export default function EntitiesPage() {
             <ExplainThis prompt="Explain multi-entity and intercompany accounts mapping." label="Explain entities" />
             <Button
               size="sm"
-              onClick={() => {
-                const created = createEntity({
-                  code: `NEW${rows.length + 1}`,
-                  name: `New Entity ${rows.length + 1}`,
-                  baseCurrency: "KES",
-                  isReporting: false,
-                });
-                setRows(listEntities());
-                toast.success(`Entity ${created.code} added.`);
+              onClick={async () => {
+                const code = `NEW${rows.length + 1}`;
+                try {
+                  const created = await createEntityApi({
+                    code,
+                    name: `New Entity ${rows.length + 1}`,
+                    baseCurrency: "KES",
+                    isReporting: false,
+                  });
+                  await loadEntities();
+                  toast.success(`Entity ${code} added.`);
+                  void created;
+                } catch (error) {
+                  toast.error((error as Error).message);
+                }
               }}
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
@@ -101,7 +120,7 @@ export default function EntitiesPage() {
             <DataTable<EntityRow>
               data={filtered}
               columns={columns}
-              emptyMessage="No entities."
+              emptyMessage={loading ? "Loading entities..." : "No entities."}
             />
           </CardContent>
         </Card>

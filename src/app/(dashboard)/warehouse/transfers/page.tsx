@@ -141,7 +141,6 @@ export default function WarehouseTransfersPage() {
     }
     setSavingTransfer(true);
     try {
-      // For now we treat from/to warehouse as IDs = codes
       const res = await import("@/lib/api/warehouse-transfers").then((m) =>
         m.createTransfer({
           date,
@@ -171,12 +170,7 @@ export default function WarehouseTransfersPage() {
       await load();
       router.push(`/warehouse/transfers/${res.id}`);
     } catch (e) {
-      const msg = (e as Error).message;
-      if (msg === "STUB") {
-        toast.info("Create transfer (stub). Set NEXT_PUBLIC_API_URL to use backend.");
-      } else {
-        toast.error(msg ?? "Failed to create transfer.");
-      }
+      toast.error((e as Error).message ?? "Failed to create transfer.");
     } finally {
       setSavingTransfer(false);
     }
@@ -324,7 +318,7 @@ export default function WarehouseTransfersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Transfers</CardTitle>
-            <CardDescription>Draft → Approved → In transit → Received. Bulk actions work in demo mode and against the backend.</CardDescription>
+            <CardDescription>Draft to approved to in transit to received with live warehouse movements.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (

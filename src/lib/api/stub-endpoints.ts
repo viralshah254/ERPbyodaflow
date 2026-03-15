@@ -1,32 +1,14 @@
 /**
- * Demo-safe endpoint helpers — call backend when API is configured, otherwise
- * fall back to lightweight client-side behaviors so primary actions still work.
+ * Backend-only endpoint helpers for actions that must execute on the server.
  */
 
-import { apiRequest, downloadFile, downloadTextFile, isApiConfigured } from "./client";
-import { updateFiscalPeriodStatus } from "@/lib/data/fiscal.repo";
-import { listPaymentRuns, updatePaymentRunStatus } from "@/lib/data/payment-runs.repo";
-import { updateApprovalStatus } from "@/lib/data/approvals.repo";
-import { updateTransferStatus } from "@/lib/api/warehouse-transfers";
-import {
-  applyDocumentAction,
-  requestDocumentApproval,
-} from "@/lib/data/documents.repo";
-import type { DocTypeKey } from "@/config/documents/types";
-import { saveOrgProfile } from "@/lib/data/org-profile.repo";
-import { completePickPackOrder, confirmPutaway } from "@/lib/data/warehouse-execution.repo";
-import { approvePayRun } from "@/lib/data/payroll.repo";
-import { createPurchaseReturn, updatePurchaseReturnStatus } from "@/lib/data/purchasing.repo";
-import { createThreeWayMatch } from "@/lib/data/ap-match.repo";
-import { recordCostingRun } from "@/lib/data/inventory-costing.repo";
-import { submitCycleCount } from "@/lib/data/cycle-counts.repo";
-import { allocateArPayment } from "@/lib/data/ar.repo";
-import { recordDepreciationRun } from "@/lib/data/depreciation.repo";
-import { saveStoredValue } from "@/lib/data/persisted-store";
-import { getMockDepreciationPreview } from "@/lib/mock/assets/depreciation";
-import { deleteProduct as deleteProductRecord } from "@/lib/data/products.repo";
+import { apiRequest, downloadFile, requireLiveApi } from "./client";
 
 const API = "/api";
+
+function requireLiveApiForCritical(action: string): void {
+  requireLiveApi(action);
+}
 
 // —— Documents ——
 export async function documentRequestApproval(
@@ -34,10 +16,7 @@ export async function documentRequestApproval(
   id: string,
   comment?: string
 ): Promise<void> {
-  if (!isApiConfigured()) {
-    requestDocumentApproval(docType as DocTypeKey, id);
-    return;
-  }
+  requireLiveApiForCritical("Document approval request");
   await apiRequest(`${API}/documents/${docType}/${id}/request-approval`, {
     method: "POST",
     body: comment != null ? { comment } : {},
@@ -50,13 +29,7 @@ export async function documentAction(
   action: "approve" | "post" | "cancel" | "reverse",
   comment?: string
 ): Promise<void> {
-  if (!isApiConfigured()) {
-    if (action === "approve" || action === "post") {
-      applyDocumentAction(docType as DocTypeKey, id, action);
-      return;
-    }
-    return;
-  }
+  requireLiveApiForCritical(`Document action '${action}'`);
   await apiRequest(`${API}/documents/${docType}/${id}/action`, {
     method: "POST",
     body: { action, ...(comment != null ? { comment } : {}) },
@@ -69,13 +42,7 @@ export function documentDownloadPdf(
   filename: string,
   onNotAvailable: (msg: string) => void
 ): void {
-  if (!isApiConfigured()) {
-    downloadTextFile(
-      filename.replace(/\.pdf$/i, ".txt"),
-      `Document export preview\nType: ${docType}\nID: ${id}\nGenerated: ${new Date().toISOString()}`
-    );
-    return;
-  }
+  requireLiveApiForCritical("Document PDF export");
   downloadFile(
     `${API}/documents/${docType}/${id}/pdf`,
     filename || `${docType}-${id}.pdf`,
@@ -85,69 +52,45 @@ export function documentDownloadPdf(
 
 // —— Inventory ——
 export async function runCosting(): Promise<void> {
-  if (!isApiConfigured()) {
-    recordCostingRun(new Date().toISOString().slice(0, 7));
-    return;
-  }
+  requireLiveApiForCritical("Inventory costing run");
   await apiRequest(`${API}/inventory/costing/run`, { method: "POST", body: {} });
 }
 
 // —— Warehouse ——
 export async function warehouseTransferReceive(id: string, body?: { lines?: unknown }): Promise<void> {
-  if (!isApiConfigured()) {
-    await updateTransferStatus(id, "RECEIVED");
-    return;
-  }
+  requireLiveApiForCritical("Warehouse transfer receipt");
   await apiRequest(`${API}/warehouse/transfers/${id}/receive`, { method: "POST", body: body ?? {} });
 }
 
 export async function warehousePickPackComplete(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    completePickPackOrder(id);
-    return;
-  }
+  requireLiveApiForCritical("Pick-pack completion");
   await apiRequest(`${API}/warehouse/pick-pack/${id}/complete`, { method: "POST", body: {} });
 }
 
 export async function warehousePutawayConfirm(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    confirmPutaway(id);
-    return;
-  }
+  requireLiveApiForCritical("Putaway confirmation");
   await apiRequest(`${API}/warehouse/putaway/${id}/confirm`, { method: "POST", body: {} });
 }
 
 export async function warehouseCycleCountSubmit(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    submitCycleCount(id);
-    return;
-  }
+  requireLiveApiForCritical("Cycle count submission");
   await apiRequest(`${API}/warehouse/cycle-counts/${id}/submit`, { method: "POST", body: {} });
 }
 
 // —— Finance ——
 export async function periodClose(payload: { periodId?: string; date?: string }): Promise<void> {
-  if (!isApiConfigured()) {
-    if (payload.periodId) updateFiscalPeriodStatus(payload.periodId, "Closed");
-    return;
-  }
+  requireLiveApiForCritical("Period close");
   await apiRequest(`${API}/finance/period/close`, { method: "POST", body: payload });
 }
 
 export async function periodReopen(periodId: string): Promise<void> {
-  if (!isApiConfigured()) {
-    updateFiscalPeriodStatus(periodId, "Open");
-    return;
-  }
+  requireLiveApiForCritical("Period reopen");
   await apiRequest(`${API}/finance/period/reopen`, { method: "POST", body: { periodId } });
 }
 
 // —— Treasury ——
 export async function paymentRunApprove(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    updatePaymentRunStatus(id, "APPROVED");
-    return;
-  }
+  requireLiveApiForCritical("Payment run approval");
   await apiRequest(`${API}/treasury/payment-runs/${id}/action`, {
     method: "POST",
     body: { action: "approve" },
@@ -156,10 +99,7 @@ export async function paymentRunApprove(id: string): Promise<void> {
 
 // —— Payroll ——
 export async function payRunApprove(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    approvePayRun(id);
-    return;
-  }
+  requireLiveApiForCritical("Pay run approval");
   await apiRequest(`${API}/payroll/pay-runs/${id}/action`, {
     method: "POST",
     body: { action: "approve" },
@@ -168,10 +108,7 @@ export async function payRunApprove(id: string): Promise<void> {
 
 // —— Approvals ——
 export async function approvalApprove(id: string, comment?: string): Promise<void> {
-  if (!isApiConfigured()) {
-    updateApprovalStatus(id, "approved");
-    return;
-  }
+  requireLiveApiForCritical("Approval approve");
   await apiRequest(`${API}/approvals/${id}/approve`, {
     method: "POST",
     body: comment != null ? { comment } : {},
@@ -179,10 +116,7 @@ export async function approvalApprove(id: string, comment?: string): Promise<voi
 }
 
 export async function approvalReject(id: string, comment?: string): Promise<void> {
-  if (!isApiConfigured()) {
-    updateApprovalStatus(id, "rejected");
-    return;
-  }
+  requireLiveApiForCritical("Approval reject");
   await apiRequest(`${API}/approvals/${id}/reject`, {
     method: "POST",
     body: comment != null ? { comment } : {},
@@ -191,28 +125,18 @@ export async function approvalReject(id: string, comment?: string): Promise<void
 
 // —— Settings ——
 export async function orgSave(payload: Record<string, unknown>): Promise<void> {
-  if (!isApiConfigured()) {
-    saveOrgProfile({
-      name: String(payload.name ?? ""),
-      taxId: String(payload.taxId ?? ""),
-      registrationNumber: String(payload.registrationNumber ?? ""),
-    });
-    return;
-  }
+  requireLiveApiForCritical("Organization settings save");
   await apiRequest(`${API}/org`, { method: "PATCH", body: payload });
 }
 
 // —— Products (masters) ——
 export async function productDelete(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    deleteProductRecord(id);
-    return;
-  }
+  requireLiveApiForCritical("Product delete");
   await apiRequest(`${API}/products/${id}`, { method: "DELETE" });
 }
 
 export async function productApplyPricingTemplate(productId: string, templateId: string): Promise<void> {
-  if (!isApiConfigured()) return;
+  requireLiveApiForCritical("Product pricing template apply");
   await apiRequest(`${API}/products/${productId}/pricing/apply-template`, {
     method: "POST",
     body: { templateId },
@@ -221,24 +145,13 @@ export async function productApplyPricingTemplate(productId: string, templateId:
 
 // —— Assets ——
 export async function runDepreciation(payload?: { period?: string }): Promise<void> {
-  if (!isApiConfigured()) {
-    recordDepreciationRun(getMockDepreciationPreview(payload?.period));
-    return;
-  }
+  requireLiveApiForCritical("Depreciation run");
   await apiRequest(`${API}/assets/depreciation/run`, { method: "POST", body: payload ?? {} });
 }
 
 // —— Purchasing (returns) ——
 export async function purchaseReturnCreate(body?: { lines?: unknown[] }): Promise<{ id: string }> {
-  if (!isApiConfigured()) {
-    const created = createPurchaseReturn({
-      date: new Date().toISOString().slice(0, 10),
-      party: "Supplier Return",
-      total: 0,
-      poRef: body?.lines?.length ? "PO-linked" : undefined,
-    });
-    return { id: created.id };
-  }
+  requireLiveApiForCritical("Purchase return creation");
   return apiRequest<{ id: string }>(`${API}/purchasing/returns`, {
     method: "POST",
     body: body ?? {},
@@ -246,10 +159,7 @@ export async function purchaseReturnCreate(body?: { lines?: unknown[] }): Promis
 }
 
 export async function purchaseReturnApprove(returnId: string): Promise<void> {
-  if (!isApiConfigured()) {
-    updatePurchaseReturnStatus(returnId, "APPROVED");
-    return;
-  }
+  requireLiveApiForCritical("Purchase return approval");
   await apiRequest(`${API}/purchasing/returns/${returnId}/action`, {
     method: "POST",
     body: { action: "approve" },
@@ -257,14 +167,7 @@ export async function purchaseReturnApprove(returnId: string): Promise<void> {
 }
 
 export function purchaseReturnsExport(onNotAvailable: (msg: string) => void): void {
-  if (!isApiConfigured()) {
-    downloadTextFile(
-      `purchase-returns-${new Date().toISOString().slice(0, 10)}.csv`,
-      "number,status\nPRET-001,APPROVED\nPRET-002,DRAFT",
-      "text/csv;charset=utf-8"
-    );
-    return;
-  }
+  requireLiveApiForCritical("Purchase returns export");
   downloadFile(
     `${API}/purchasing/returns/export`,
     `purchase-returns-${new Date().toISOString().slice(0, 10)}.csv`,
@@ -274,10 +177,7 @@ export function purchaseReturnsExport(onNotAvailable: (msg: string) => void): vo
 
 // —— AP three-way match ——
 export async function threeWayMatch(grnLineIds: string[], billLineIds: string[]): Promise<void> {
-  if (!isApiConfigured()) {
-    createThreeWayMatch([], grnLineIds, billLineIds);
-    return;
-  }
+  requireLiveApiForCritical("AP three-way match");
   await apiRequest(`${API}/ap/three-way-match/match`, {
     method: "POST",
     body: { grnLineIds, billLineIds },
@@ -289,29 +189,16 @@ export async function arAllocate(
   paymentId: string,
   body: { invoiceIds: string[]; amounts: number[] }
 ): Promise<void> {
-  if (!isApiConfigured()) {
-    allocateArPayment(
-      paymentId,
-      Object.fromEntries(body.invoiceIds.map((invoiceId, index) => [invoiceId, body.amounts[index] ?? 0]))
-    );
-    return;
-  }
+  requireLiveApiForCritical("AR allocation");
   await apiRequest(`${API}/ar/payments/${paymentId}/allocate`, {
     method: "POST",
     body,
   });
 }
 
-// —— Analytics / Automation (stub only; backend may add later) ——
+// —— Analytics / Automation ——
 export async function analyticsApplySuggestion(suggestionId: string, override?: unknown): Promise<void> {
-  if (!isApiConfigured()) {
-    saveStoredValue("odaflow_analytics_last_applied_suggestion", {
-      suggestionId,
-      override,
-      appliedAt: new Date().toISOString(),
-    });
-    return;
-  }
+  requireLiveApiForCritical("Analytics suggestion apply");
   await apiRequest(`${API}/analytics/simulations/apply`, {
     method: "POST",
     body: { suggestionId, ...(override != null && { override }) },
@@ -319,7 +206,7 @@ export async function analyticsApplySuggestion(suggestionId: string, override?: 
 }
 
 export async function automationInsightApply(insightId: string, actionId: string): Promise<void> {
-  if (!isApiConfigured()) return;
+  requireLiveApiForCritical("Automation insight apply");
   await apiRequest(`${API}/automation/insights/${insightId}/apply`, {
     method: "POST",
     body: { actionId },
@@ -327,17 +214,7 @@ export async function automationInsightApply(insightId: string, actionId: string
 }
 
 export function exportPaymentRunFile(id: string, onNotAvailable: (msg: string) => void): void {
-  if (!isApiConfigured()) {
-    const run = listPaymentRuns().find((row) => row.id === id);
-    const csv = [
-      "paymentRun,method,total,currency,status",
-      [run?.number ?? id, run?.paymentMethod ?? "", run?.totalAmount ?? 0, run?.currency ?? "KES", run?.status ?? ""]
-        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-        .join(","),
-    ].join("\n");
-    downloadTextFile(`payment-run-${id}.csv`, csv, "text/csv;charset=utf-8");
-    return;
-  }
+  requireLiveApiForCritical("Payment run export");
   void downloadFile(
     `${API}/treasury/payment-runs/${encodeURIComponent(id)}/export`,
     `payment-run-${id}.csv`,

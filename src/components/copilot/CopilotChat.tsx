@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { searchErpApi, type ErpSearchHit } from "@/lib/api/erp-search";
+import { apiRequest } from "@/lib/api/client";
 import { Send, MessageSquare } from "lucide-react";
+import type { CopilotBlock } from "@/types/copilot";
+import { CopilotBlocks } from "./CopilotBlocks";
+import { useCopilotStore } from "@/stores/copilot-store";
 
 export interface ThreadSummary {
   id: string;
@@ -31,6 +35,7 @@ type ChatMessage = {
   role: "assistant" | "user";
   text: string;
   hits?: ErpSearchHit[];
+  blocks?: CopilotBlock[];
 };
 
 const defaultThreads: ThreadSummary[] = [
@@ -52,6 +57,7 @@ export function CopilotChat({
   prefillPrompt,
   onConsumePrefill,
 }: CopilotChatProps) {
+  const context = useCopilotStore((state) => state.context);
   const [message, setMessage] = React.useState("");
   const [messages, setMessages] = React.useState<ChatMessage[]>([
     {
@@ -77,14 +83,15 @@ export function CopilotChat({
     ]);
     setSending(true);
     try {
-      const response = await searchErpApi(trimmed);
+      const response = await searchErpApi(trimmed, context);
       setMessages((current) => [
         ...current,
         {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          text: response.summary,
+          text: response.copilot?.summary ?? response.summary,
           hits: response.hits,
+          blocks: response.copilot?.blocks,
         },
       ]);
       setMessage("");
@@ -99,6 +106,35 @@ export function CopilotChat({
       ]);
     } finally {
       setSending(false);
+    }
+  }, []);
+
+  const confirmAction = React.useCallback(async (actionId: string, actionType: string) => {
+    const query = actionType === "approve_document" ? "approve document" : "create invoice draft";
+    try {
+      const result = await apiRequest<{ success: boolean; message?: string }>("/api/command/execute", {
+        method: "POST",
+        body: { confirm: true, requestId: actionId, query },
+      });
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-confirm-${Date.now()}`,
+          role: "assistant",
+          text: result.message ?? "Action confirmed.",
+          blocks: [{ type: "execution_status", status: "success", message: result.message ?? "Action accepted." }],
+        },
+      ]);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-confirm-${Date.now()}`,
+          role: "assistant",
+          text: (error as Error).message || "Confirmation failed.",
+          blocks: [{ type: "execution_status", status: "failed", message: (error as Error).message || "Confirmation failed." }],
+        },
+      ]);
     }
   }, []);
 
@@ -136,6 +172,7 @@ export function CopilotChat({
               className={`rounded-lg border p-3 text-sm ${entry.role === "user" ? "bg-primary/5" : "bg-muted/30"}`}
             >
               <p className="text-muted-foreground">{entry.text}</p>
+              {entry.blocks?.length ? <CopilotBlocks blocks={entry.blocks} onConfirmAction={confirmAction} /> : null}
               {entry.hits?.length ? (
                 <div className="mt-3 space-y-2">
                   {entry.hits.map((hit) => (

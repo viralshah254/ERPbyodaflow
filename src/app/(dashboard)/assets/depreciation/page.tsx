@@ -17,10 +17,12 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getMockDepreciationPreview } from "@/lib/mock/assets/depreciation";
-import { listDepreciationRuns } from "@/lib/data/depreciation.repo";
+import {
+  fetchDepreciationPreviewApi,
+  fetchDepreciationRunsApi,
+  runDepreciationApi,
+} from "@/lib/api/assets-lifecycle";
 import { formatMoney } from "@/lib/money";
-import { runDepreciation } from "@/lib/api/stub-endpoints";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -29,15 +31,35 @@ export default function DepreciationPage() {
   const router = useRouter();
   const [period, setPeriod] = React.useState("2025-01");
   const [posting, setPosting] = React.useState(false);
-  const [runs, setRuns] = React.useState(() => listDepreciationRuns());
+  const [runs, setRuns] = React.useState<Array<{ id: string; periodKey: string; totalDepreciation: number; runDate: string; journalId?: string }>>([]);
+  const [preview, setPreview] = React.useState<{
+    lines: Array<{ id: string; accountCode: string; accountName: string; description: string; debit: number; credit: number }>;
+    totalDepreciation: number;
+  }>({ lines: [], totalDepreciation: 0 });
 
-  const preview = React.useMemo(() => getMockDepreciationPreview(period), [period]);
+  const reload = React.useCallback(async () => {
+    const [previewPayload, runItems] = await Promise.all([
+      fetchDepreciationPreviewApi(period),
+      fetchDepreciationRunsApi(),
+    ]);
+    setPreview({
+      lines: previewPayload.lines ?? [],
+      totalDepreciation: previewPayload.totalDepreciation ?? 0,
+    });
+    setRuns(runItems);
+  }, [period]);
+
+  React.useEffect(() => {
+    void reload().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load depreciation data.");
+    });
+  }, [reload]);
 
   const handlePost = async () => {
     setPosting(true);
     try {
-      await runDepreciation({ period });
-      setRuns(listDepreciationRuns());
+      await runDepreciationApi(period);
+      await reload();
       toast.success("Depreciation run completed.");
       router.push("/docs/journal/new");
     } catch (e) {
@@ -86,7 +108,7 @@ export default function DepreciationPage() {
         <Card>
           <CardHeader>
             <CardTitle>Preview entries</CardTitle>
-            <CardDescription>Journal lines prepared for depreciation posting and journal review.</CardDescription>
+            <CardDescription>Live journal lines prepared for depreciation posting.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -125,7 +147,8 @@ export default function DepreciationPage() {
             ) : (
               runs.slice(0, 5).map((run) => (
                 <p key={run.id} className="text-muted-foreground">
-                  {run.period} · {formatMoney(run.totalDepreciation, "KES")} · {new Date(run.createdAt).toLocaleString()}
+                  {run.periodKey} · {formatMoney(run.totalDepreciation, "KES")} · {run.runDate}
+                  {run.journalId ? ` · Journal ${run.journalId}` : ""}
                 </p>
               ))
             )}

@@ -117,6 +117,8 @@ export default function FranchiseVmiPage() {
     { id: "number", header: "Order", accessor: (r: VMIReplenishmentOrderRow) => <span className="font-medium">{r.number}</span>, sticky: true },
     { id: "franchisee", header: "Franchisee", accessor: (r: VMIReplenishmentOrderRow) => r.franchiseeName },
     { id: "source", header: "From", accessor: (r: VMIReplenishmentOrderRow) => r.sourceWarehouse },
+    { id: "transfer", header: "Transfer", accessor: (r: VMIReplenishmentOrderRow) => r.transferNumber ?? "—" },
+    { id: "transferStatus", header: "Transfer status", accessor: (r: VMIReplenishmentOrderRow) => r.transferStatus ?? "—" },
     { id: "status", header: "Status", accessor: (r: VMIReplenishmentOrderRow) => <Badge variant={r.status === "RECEIVED" ? "default" : r.status === "SENT" ? "secondary" : "outline"}>{r.status}</Badge> },
     { id: "totalQty", header: "Total qty", accessor: (r: VMIReplenishmentOrderRow) => r.totalQty },
     { id: "actions", header: "", accessor: (r: VMIReplenishmentOrderRow) =>

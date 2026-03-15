@@ -38,10 +38,10 @@ import { buildPayRunLinesFromEmployees } from "@/lib/mock/payroll/payruns";
 import type { PayRun } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-const BRANCHES = ["Head Office", "East"];
 const CURRENCIES = ["KES"];
 
 function statusVariant(s: string): "default" | "secondary" | "outline" {
@@ -52,9 +52,11 @@ function statusVariant(s: string): "default" | "secondary" | "outline" {
 
 export default function PayRunsPage() {
   const router = useRouter();
+  const branches = useAuthStore((state) => state.branches);
+  const currentBranch = useAuthStore((state) => state.currentBranch);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [month, setMonth] = React.useState("");
-  const [branch, setBranch] = React.useState("Head Office");
+  const [branchId, setBranchId] = React.useState("");
   const [currency, setCurrency] = React.useState("KES");
   const [loading, setLoading] = React.useState(true);
   const [runs, setRuns] = React.useState<PayRun[]>([]);
@@ -64,6 +66,12 @@ export default function PayRunsPage() {
     const d = new Date();
     setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }, []);
+
+  React.useEffect(() => {
+    if (!branchId) {
+      setBranchId(currentBranch?.branchId ?? branches[0]?.branchId ?? "");
+    }
+  }, [branchId, branches, currentBranch]);
 
   const refreshData = React.useCallback(async () => {
     setLoading(true);
@@ -85,7 +93,12 @@ export default function PayRunsPage() {
     void refreshData();
   }, [refreshData]);
 
-  const filteredEmployees = employees.filter((e) => !branch || e.branch === branch);
+  const branchNameById = React.useMemo(
+    () => new Map(branches.map((branch) => [branch.branchId, branch.name])),
+    [branches]
+  );
+
+  const filteredEmployees = employees.filter((employee) => !branchId || employee.branch === branchId);
   const previewLines = month && filteredEmployees.length
     ? buildPayRunLinesFromEmployees(filteredEmployees, "preview", month)
     : [];
@@ -96,7 +109,7 @@ export default function PayRunsPage() {
     () => ({
       periodStart: `${month}-01`,
       periodEnd: `${month}-31`,
-      branchId: branch,
+      branchId,
       currency,
       lines: previewLines.map((line) => ({
         employeeId: line.employeeId,
@@ -104,7 +117,7 @@ export default function PayRunsPage() {
         deductions: line.gross - line.net,
       })),
     }),
-    [branch, currency, month, previewLines]
+    [branchId, currency, month, previewLines]
   );
 
   const handleCreate = async () => {
@@ -138,12 +151,16 @@ export default function PayRunsPage() {
     () => [
       { id: "number", header: "Number", accessor: (r: PayRun) => <span className="font-medium">{r.number}</span>, sticky: true },
       { id: "month", header: "Month", accessor: "month" as keyof PayRun },
-      { id: "branch", header: "Branch", accessor: (r: PayRun) => r.branch ?? "—" },
+      {
+        id: "branch",
+        header: "Branch",
+        accessor: (r: PayRun) => branchNameById.get(r.branch ?? "") ?? r.branch ?? "—",
+      },
       { id: "totalGross", header: "Gross", accessor: (r: PayRun) => formatMoney(r.totalGross, r.currency) },
       { id: "totalNet", header: "Net", accessor: (r: PayRun) => formatMoney(r.totalNet, r.currency) },
       { id: "status", header: "Status", accessor: (r: PayRun) => <Badge variant={statusVariant(r.status)}>{r.status.replace("_", " ")}</Badge> },
     ],
-    []
+    [branchNameById]
   );
 
   return (
@@ -217,11 +234,13 @@ export default function PayRunsPage() {
             </div>
             <div className="space-y-2">
               <Label>Branch</Label>
-              <Select value={branch} onValueChange={setBranch}>
+              <Select value={branchId} onValueChange={setBranchId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {BRANCHES.map((b) => (
-                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.branchId} value={branch.branchId}>
+                      {branch.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

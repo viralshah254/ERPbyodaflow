@@ -14,12 +14,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getMockStatutories } from "@/lib/mock/payroll/statutories";
+import { fetchPayrollStatutoriesApi } from "@/lib/api/payroll";
+import type { StatutoryConfig } from "@/lib/mock/payroll/statutories";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import * as Icons from "lucide-react";
+import { toast } from "sonner";
 
 export default function StatutoriesPage() {
-  const stats = React.useMemo(() => getMockStatutories(), []);
+  const [stats, setStats] = React.useState<StatutoryConfig[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetchPayrollStatutoriesApi()
+      .then((items) => {
+        if (!cancelled) setStats(items);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load payroll statutories.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <PageShell>
@@ -45,7 +63,7 @@ export default function StatutoriesPage() {
         <Card>
           <CardHeader>
             <CardTitle>Kenya statutories</CardTitle>
-            <CardDescription>NSSF, NHIF, PAYE. Seed list; allow edit (stub).</CardDescription>
+            <CardDescription>NSSF, NHIF, and PAYE reference configuration from the backend.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>

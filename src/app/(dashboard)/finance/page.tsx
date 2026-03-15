@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/layout/page-layout";
+import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { fetchFinanceOverviewApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -12,6 +13,7 @@ import * as Icons from "lucide-react";
 
 export default function FinanceDashboardPage() {
   const [overview, setOverview] = React.useState<Awaited<ReturnType<typeof fetchFinanceOverviewApi>> | null>(null);
+  const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
 
   React.useEffect(() => {
     fetchFinanceOverviewApi()
@@ -157,6 +159,14 @@ export default function FinanceDashboardPage() {
                   <div className="text-right">
                       <p className="font-semibold">{formatMoney(item.total, "KES")}</p>
                       <p className="text-xs text-muted-foreground">{item.status}</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-1 h-7 px-2"
+                        onClick={() => setPostingSource({ sourceType: "journal", sourceId: item.id })}
+                      >
+                        Posting
+                      </Button>
                   </div>
                 </div>
               ))}
@@ -169,6 +179,14 @@ export default function FinanceDashboardPage() {
           </CardContent>
         </Card>
       </div>
+      <PostingBatchSheet
+        open={!!postingSource}
+        onOpenChange={(open) => {
+          if (!open) setPostingSource(null);
+        }}
+        sourceType={postingSource?.sourceType}
+        sourceId={postingSource?.sourceId}
+      />
     </PageLayout>
   );
 }

@@ -26,6 +26,7 @@ import {
   fetchArPaymentsApi,
   fetchOpenInvoicesApi,
 } from "@/lib/api/payments";
+import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
@@ -46,6 +47,8 @@ export default function ARPaymentsPage() {
   const [loading, setLoading] = React.useState(true);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
   const [customerOptions, setCustomerOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [bankAccountId, setBankAccountId] = React.useState("");
   const [openInvoices, setOpenInvoices] = React.useState<OpenInvoiceRow[]>([]);
   const [allocateInvoices, setAllocateInvoices] = React.useState<OpenInvoiceRow[]>([]);
 
@@ -55,10 +58,11 @@ export default function ARPaymentsPage() {
 
   React.useEffect(() => {
     setLoading(true);
-    Promise.all([fetchArPaymentsApi(), fetchArCustomersApi()])
-      .then(([nextPayments, nextCustomers]) => {
+    Promise.all([fetchArPaymentsApi(), fetchArCustomersApi(), fetchBankAccountsApi()])
+      .then(([nextPayments, nextCustomers, nextBankAccounts]) => {
         setPayments(nextPayments);
         setCustomerOptions(nextCustomers);
+        setBankAccountOptions(nextBankAccounts.map((item) => ({ id: item.id, name: item.name })));
       })
       .catch((error) => toast.error((error as Error).message || "Failed to load AR payments."))
       .finally(() => setLoading(false));
@@ -127,6 +131,7 @@ export default function ARPaymentsPage() {
   const handleReceivePayment = () => {
     setStep(1);
     setCustomerId("");
+    setBankAccountId("");
     setAllocations({});
     setWizardOpen(true);
   };
@@ -150,7 +155,7 @@ export default function ARPaymentsPage() {
       return;
     }
     try {
-      const payment = await createArPaymentApi({ customerId, amount: totalAmount });
+      const payment = await createArPaymentApi({ customerId, amount: totalAmount, bankAccountId: bankAccountId || undefined });
       const nextAllocations = Object.entries(allocations)
         .filter(([, amount]) => amount > 0)
         .map(([documentId, amount]) => ({ documentId, amount }));
@@ -240,18 +245,7 @@ export default function ARPaymentsPage() {
         />
         <DataTable<PaymentRow>
           data={filtered}
-          columns={[
-            ...columns,
-            {
-              id: "actions",
-              header: "",
-              accessor: (r: PaymentRow) => (
-                <Button variant="ghost" size="sm" onClick={() => openAllocateRef.current(r)}>
-                  Allocate
-                </Button>
-              ),
-            },
-          ]}
+          columns={columns}
           emptyMessage="No payments yet."
         />
         {loading ? <p className="text-sm text-muted-foreground">Loading AR payments...</p> : null}
@@ -276,6 +270,16 @@ export default function ARPaymentsPage() {
                     options={customerOptions.map((customer) => ({ id: customer.id, label: customer.name }))}
                     placeholder="Select customer"
                     searchPlaceholder="Type to search customer"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Bank account</Label>
+                  <SearchableSelect
+                    value={bankAccountId}
+                    onValueChange={setBankAccountId}
+                    options={bankAccountOptions.map((account) => ({ id: account.id, label: account.name }))}
+                    placeholder="Select bank account"
+                    searchPlaceholder="Type to search bank account"
                   />
                 </div>
                 <Button onClick={() => setStep(2)}>Next</Button>

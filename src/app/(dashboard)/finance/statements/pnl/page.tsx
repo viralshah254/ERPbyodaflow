@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { fetchFinancePeriodsApi, fetchFinancialStatementApi } from "@/lib/api/finance";
+import { fetchFinancePeriodsApi, fetchFinancialStatementApi, fetchFinancialStatementDrilldownApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -20,6 +20,8 @@ export default function ProfitAndLossPage() {
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
   const [periodId, setPeriodId] = React.useState("");
   const [statement, setStatement] = React.useState<Awaited<ReturnType<typeof fetchFinancialStatementApi>> | null>(null);
+  const [selectedSection, setSelectedSection] = React.useState<string | null>(null);
+  const [drilldown, setDrilldown] = React.useState<Array<Awaited<ReturnType<typeof fetchFinancialStatementDrilldownApi>>[number]>>([]);
 
   React.useEffect(() => {
     fetchFinancePeriodsApi()
@@ -36,6 +38,13 @@ export default function ProfitAndLossPage() {
       .then(setStatement)
       .catch((error) => toast.error((error as Error).message || "Failed to load P&L."));
   }, [periodId]);
+
+  React.useEffect(() => {
+    if (!periodId || !selectedSection) return;
+    fetchFinancialStatementDrilldownApi("pnl", selectedSection, periodId)
+      .then(setDrilldown)
+      .catch((error) => toast.error((error as Error).message || "Failed to load statement drilldown."));
+  }, [periodId, selectedSection]);
 
   return (
     <PageLayout
@@ -69,15 +78,34 @@ export default function ProfitAndLossPage() {
         <CardContent>
           <div className="space-y-4">
             {(statement?.sections ?? []).map((section) => (
-              <div key={section.key} className="flex items-center justify-between rounded border p-3">
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => setSelectedSection(section.key)}
+                className="flex w-full items-center justify-between rounded border p-3 text-left hover:bg-muted/40"
+              >
                 <span className="font-medium">{section.label}</span>
                 <span>{formatMoney(section.amount, "KES")}</span>
-              </div>
+              </button>
             ))}
             {!statement || statement.sections.length === 0 ? (
               <p className="text-sm text-muted-foreground">Select a period to generate the profit and loss statement.</p>
             ) : null}
           </div>
+          {selectedSection && (
+            <div className="mt-6">
+              <p className="mb-2 text-sm font-medium">Drilldown: {selectedSection}</p>
+              <div className="space-y-2">
+                {drilldown.map((item) => (
+                  <div key={item.postingLineId} className="flex items-center justify-between rounded border p-2 text-xs">
+                    <span>{item.documentNumber ?? item.sourceNumber} · {item.accountCode ?? "NA"}</span>
+                    <span>{formatMoney(item.amount, "KES")}</span>
+                  </div>
+                ))}
+                {drilldown.length === 0 ? <p className="text-xs text-muted-foreground">No source lines for this section.</p> : null}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </PageLayout>

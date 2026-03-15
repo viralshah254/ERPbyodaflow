@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -92,12 +91,6 @@ export default function MasterProductsPage() {
     []
   );
 
-  const handleImport = () => {
-    if (typeof window !== "undefined") {
-      toast.info("Bulk import (stub): CSV preview would open here.");
-    }
-  };
-
   const resetForm = () => {
     setSku("");
     setName("");
@@ -148,22 +141,16 @@ export default function MasterProductsPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleImport}>
-              <Icons.Upload className="mr-2 h-4 w-4" />
-              Import
-            </Button>
-            <Button
-              onClick={() => {
-                setEditingId(null);
-                resetForm();
-                setDrawerOpen(true);
-              }}
-            >
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Add {productLabel}
-            </Button>
-          </div>
+          <Button
+            onClick={() => {
+              setEditingId(null);
+              resetForm();
+              setDrawerOpen(true);
+            }}
+          >
+            <Icons.Plus className="mr-2 h-4 w-4" />
+            Add {productLabel}
+          </Button>
         }
       />
       <div className="p-6 space-y-4">
@@ -184,15 +171,6 @@ export default function MasterProductsPage() {
               onChange: (v) => setStatusFilter(v),
             },
           ]}
-          onExport={() => toast.info("Export (stub)")}
-          actions={
-            <Link
-              href="/settings/customizer/fields"
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              Custom fields
-            </Link>
-          }
         />
         {loading ? (
           <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
@@ -224,7 +202,6 @@ export default function MasterProductsPage() {
         title={editingId ? `Edit ${productLabel}` : `New ${productLabel}`}
         description={editingId ? "Update product details." : "Add a new product."}
         mode={editingId ? "edit" : "create"}
-        duplicateWarning={!editingId ? "Possible duplicate: similar SKU exists (stub)." : undefined}
         footer={
           <>
             <Button variant="outline" onClick={() => { setDrawerOpen(false); }}>

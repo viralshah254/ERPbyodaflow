@@ -79,7 +79,7 @@ export default function CashflowPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="KES">KES</SelectItem>
-                <SelectItem value="USD">USD (stub)</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -95,7 +95,7 @@ export default function CashflowPage() {
         <Card>
           <CardHeader>
             <CardTitle>Forecast</CardTitle>
-            <CardDescription>Base vs doc currency. Drilldown to source docs (stub).</CardDescription>
+            <CardDescription>Base vs document currency with live treasury cashflow data.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -126,7 +126,7 @@ export default function CashflowPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => toast.info(`Drilldown (stub): ${r.sourceDoc}. Would open doc view.`)}
+                          onClick={() => toast.info(`Source document: ${r.sourceDoc}`)}
                         >
                           View doc
                         </Button>

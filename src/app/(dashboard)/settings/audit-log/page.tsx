@@ -6,51 +6,67 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getMockAuditLog, type AuditEntry } from "@/lib/mock/audit-log";
+import { exportAuditLogApi, fetchAuditLogApi, type AuditLogEntry } from "@/lib/api/audit-log";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function AuditLogPage() {
   const [search, setSearch] = React.useState("");
+  const [rows, setRows] = React.useState<AuditLogEntry[]>([]);
 
-  const allRows = React.useMemo(() => getMockAuditLog(), []);
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const entries = await fetchAuditLogApi();
+        if (!cancelled) setRows(entries);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load audit log.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const filtered = React.useMemo(() => {
-    if (!search.trim()) return allRows;
+    if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
-    return allRows.filter(
+    return rows.filter(
       (r) =>
-        r.who.toLowerCase().includes(q) ||
-        r.what.toLowerCase().includes(q) ||
-        r.entityType.toLowerCase().includes(q) ||
-        r.action.toLowerCase().includes(q)
+        (r.who ?? "").toLowerCase().includes(q) ||
+        (r.what ?? "").toLowerCase().includes(q) ||
+        (r.entityType ?? "").toLowerCase().includes(q) ||
+        (r.action ?? "").toLowerCase().includes(q)
     );
-  }, [allRows, search]);
+  }, [rows, search]);
 
   const columns = React.useMemo(
     () => [
       {
         id: "when",
         header: "When",
-        accessor: (r: AuditEntry) => (
+        accessor: (r: AuditLogEntry) => (
           <span className="text-muted-foreground text-sm">
             {format(new Date(r.when), "MMM d, yyyy HH:mm")}
           </span>
         ),
         sticky: true,
       },
-      { id: "who", header: "Who", accessor: "who" as keyof AuditEntry },
+      { id: "who", header: "Who", accessor: "who" as keyof AuditLogEntry },
       {
         id: "what",
         header: "What",
-        accessor: (r: AuditEntry) => (
+        accessor: (r: AuditLogEntry) => (
           <span className="font-medium">{r.what}</span>
         ),
       },
       {
         id: "action",
         header: "Action",
-        accessor: (r: AuditEntry) => (
+        accessor: (r: AuditLogEntry) => (
           <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium">
             {r.action}
           </span>
@@ -59,7 +75,7 @@ export default function AuditLogPage() {
       {
         id: "diff",
         header: "Change",
-        accessor: (r: AuditEntry) => {
+        accessor: (r: AuditLogEntry) => {
           if (!r.before && !r.after) return "—";
           return (
             <details className="text-xs">
@@ -98,7 +114,7 @@ export default function AuditLogPage() {
           searchPlaceholder="Search by user, entity, action..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
+          onExport={() => void exportAuditLogApi()}
         />
         <Card>
           <CardHeader>
@@ -108,7 +124,7 @@ export default function AuditLogPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <DataTable<AuditEntry>
+            <DataTable<AuditLogEntry>
               data={filtered}
               columns={columns}
               emptyMessage="No audit entries found."

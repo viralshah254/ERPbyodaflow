@@ -22,7 +22,7 @@ export default function FeaturesPage() {
     {
       title: "AI that drives action",
       description:
-        "Get intelligent suggestions for reordering, anomaly detection, and automated summaries. AI that actually helps.",
+        "Ask Copilot for sales, inventory, treasury, and anomaly insights, then move into guided actions with approval guardrails.",
       icon: Icons.Brain,
     },
     {
@@ -49,10 +49,25 @@ export default function FeaturesPage() {
     <div className="py-24 lg:py-32">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <h1 className="text-4xl font-bold mb-4">Everything you need to run your business</h1>
+          <h1 className="text-4xl font-bold mb-4">Everything you need to run a modern trade business</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Powerful features designed for manufacturers, distributors, and shops.
+            Faster operations, cleaner controls, and AI assistance built for real-world teams.
           </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-4 mb-12 max-w-4xl mx-auto">
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground">Order to cash</p>
+            <p className="text-lg font-semibold">Accelerated</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground">Auditability</p>
+            <p className="text-lg font-semibold">Built in by default</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground">Cross-team alignment</p>
+            <p className="text-lg font-semibold">Live and role-based</p>
+          </Card>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">

@@ -1,13 +1,10 @@
 /**
- * Landed cost API — uses backend when NEXT_PUBLIC_API_URL is set, else mocks.
+ * Landed cost API.
  * See BACKEND_SPEC_COOL_CATCH.md §3.6.
  */
 
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
-import { saveLandedCostAllocation } from "@/lib/data/inventory-costing.repo";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 import {
-  getMockLandedCostTemplates,
-  getMockLandedCostSources,
   type LandedCostTemplateRow,
   type LandedCostSourceRow,
 } from "@/lib/mock/inventory/landed-cost";
@@ -15,9 +12,22 @@ import {
 export type { LandedCostTemplateRow, LandedCostSourceRow };
 
 export async function fetchLandedCostTemplates(): Promise<LandedCostTemplateRow[]> {
-  if (!isApiConfigured()) return getMockLandedCostTemplates();
+  requireLiveApi("Landed cost templates");
   const res = await apiRequest<{ items: LandedCostTemplateRow[] }>("/api/inventory/landed-cost/templates");
   return res?.items ?? [];
+}
+
+export async function createLandedCostTemplate(body: {
+  name: string;
+  type: LandedCostTemplateRow["type"];
+  allocationBasis: LandedCostTemplateRow["allocationBasis"];
+  currency?: string;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create landed cost template");
+  return apiRequest<{ id: string }>("/api/inventory/landed-cost/templates", {
+    method: "POST",
+    body,
+  });
 }
 
 export async function fetchLandedCostSources(params?: {
@@ -25,7 +35,7 @@ export async function fetchLandedCostSources(params?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<LandedCostSourceRow[]> {
-  if (!isApiConfigured()) return getMockLandedCostSources();
+  requireLiveApi("Landed cost sources");
   const q: Record<string, string> = {};
   if (params?.type) q.type = params.type;
   if (params?.dateFrom) q.dateFrom = params.dateFrom;
@@ -37,10 +47,7 @@ export async function fetchLandedCostSources(params?: {
 }
 
 export async function fetchLandedCostSourceById(id: string): Promise<LandedCostSourceRow | null> {
-  if (!isApiConfigured()) {
-    const list = getMockLandedCostSources();
-    return list.find((s) => s.id === id) ?? null;
-  }
+  requireLiveApi("Landed cost source detail");
   try {
     return await apiRequest<LandedCostSourceRow>(`/api/inventory/landed-cost/sources/${encodeURIComponent(id)}`);
   } catch {
@@ -54,9 +61,7 @@ export interface LandedCostAllocationRequest {
 }
 
 export async function postLandedCostAllocation(body: LandedCostAllocationRequest): Promise<{ id?: string }> {
-  if (!isApiConfigured()) {
-    return Promise.resolve({ id: saveLandedCostAllocation(body).id });
-  }
+  requireLiveApi("Landed cost allocation");
   return apiRequest<{ id: string }>("/api/inventory/landed-cost/allocation", {
     method: "POST",
     body,

@@ -32,6 +32,7 @@ import {
   fetchOpenBillsApi,
   type OpenBillRow,
 } from "@/lib/api/payments";
+import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { downloadCsv } from "@/lib/export/csv";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -44,6 +45,8 @@ export default function APPaymentsPage() {
   const [wizardOpen, setWizardOpen] = React.useState(false);
   const [supplierId, setSupplierId] = React.useState("");
   const [supplierOptions, setSupplierOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [bankAccountId, setBankAccountId] = React.useState("");
   const [openBills, setOpenBills] = React.useState<OpenBillRow[]>([]);
   const [allocations, setAllocations] = React.useState<Record<string, number>>({});
   const [saving, setSaving] = React.useState(false);
@@ -54,10 +57,11 @@ export default function APPaymentsPage() {
 
   React.useEffect(() => {
     setLoading(true);
-    Promise.all([fetchApPaymentsApi(), fetchApSuppliersApi()])
-      .then(([payments, suppliers]) => {
+    Promise.all([fetchApPaymentsApi(), fetchApSuppliersApi(), fetchBankAccountsApi()])
+      .then(([payments, suppliers, bankAccounts]) => {
         setAllRows(payments);
         setSupplierOptions(suppliers);
+        setBankAccountOptions(bankAccounts.map((item) => ({ id: item.id, name: item.name })));
       })
       .catch((error) => toast.error((error as Error).message || "Failed to load AP payments."))
       .finally(() => setLoading(false));
@@ -118,12 +122,13 @@ export default function APPaymentsPage() {
     }
     setSaving(true);
     try {
-      const created = await createApPaymentApi({ supplierId, amount: totalAmount });
+      const created = await createApPaymentApi({ supplierId, amount: totalAmount, bankAccountId: bankAccountId || undefined });
       await allocateApPaymentApi(created.id, nextAllocations);
       await refreshPayments();
       toast.success(`Supplier payment ${created.number} created.`);
       setWizardOpen(false);
       setSupplierId("");
+      setBankAccountId("");
       setAllocations({});
     } catch (error) {
       toast.error((error as Error).message || "Failed to create supplier payment.");
@@ -195,6 +200,21 @@ export default function APPaymentsPage() {
                   {supplierOptions.map((supplier) => (
                     <SelectItem key={supplier.id} value={supplier.id}>
                       {supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Bank account</Label>
+              <Select value={bankAccountId} onValueChange={setBankAccountId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select bank account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bankAccountOptions.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

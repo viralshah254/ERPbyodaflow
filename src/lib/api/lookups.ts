@@ -1,5 +1,4 @@
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
-import { getMockWarehouses } from "@/lib/mock/masters";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export interface LookupOption {
   id: string;
@@ -7,11 +6,7 @@ export interface LookupOption {
 }
 
 export async function fetchBranchOptions(): Promise<LookupOption[]> {
-  if (!isApiConfigured()) {
-    return [
-      { id: "main-branch", label: "MAIN - Main Branch" },
-    ];
-  }
+  requireLiveApi("Branch options");
   const payload = await apiRequest<{ items: Array<{ id: string; name: string; code?: string }> }>("/api/branches");
   return (payload.items ?? []).map((item) => ({
     id: item.id,
@@ -20,12 +15,7 @@ export async function fetchBranchOptions(): Promise<LookupOption[]> {
 }
 
 export async function fetchWarehouseOptions(): Promise<LookupOption[]> {
-  if (!isApiConfigured()) {
-    return getMockWarehouses().map((item) => ({
-      id: item.id,
-      label: item.code ? `${item.code} - ${item.name}` : item.name,
-    }));
-  }
+  requireLiveApi("Warehouse options");
   const payload = await apiRequest<{ items: Array<{ id: string; name: string; code?: string }> }>("/api/master/warehouses");
   return (payload.items ?? []).map((item) => ({
     id: item.id,

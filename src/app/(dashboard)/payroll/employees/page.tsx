@@ -30,6 +30,7 @@ import type { Employee, EmploymentType, SalaryType } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { downloadCsv } from "@/lib/export/csv";
+import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -37,11 +38,13 @@ const EMPLOYMENT_TYPES: EmploymentType[] = ["PERMANENT", "CONTRACT"];
 const SALARY_TYPES: SalaryType[] = ["MONTHLY", "HOURLY"];
 
 export default function PayrollEmployeesPage() {
+  const branches = useAuthStore((state) => state.branches);
+  const currentBranch = useAuthStore((state) => state.currentBranch);
   const [search, setSearch] = React.useState("");
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [name, setName] = React.useState("");
   const [department, setDepartment] = React.useState("");
-  const [branch, setBranch] = React.useState("Head Office");
+  const [branchId, setBranchId] = React.useState("");
   const [employmentType, setEmploymentType] = React.useState<EmploymentType>("PERMANENT");
   const [salaryType, setSalaryType] = React.useState<SalaryType>("MONTHLY");
   const [baseSalary, setBaseSalary] = React.useState(0);
@@ -64,6 +67,17 @@ export default function PayrollEmployeesPage() {
     void refreshRows();
   }, [refreshRows]);
 
+  React.useEffect(() => {
+    if (!branchId) {
+      setBranchId(currentBranch?.branchId ?? branches[0]?.branchId ?? "");
+    }
+  }, [branchId, branches, currentBranch]);
+
+  const branchNameById = React.useMemo(
+    () => new Map(branches.map((branch) => [branch.branchId, branch.name])),
+    [branches]
+  );
+
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -71,30 +85,43 @@ export default function PayrollEmployeesPage() {
       (r) =>
         r.name.toLowerCase().includes(q) ||
         (r.department?.toLowerCase().includes(q)) ||
-        (r.branch?.toLowerCase().includes(q))
+        ((branchNameById.get(r.branch ?? "") ?? r.branch ?? "").toLowerCase().includes(q))
     );
-  }, [rows, search]);
+  }, [branchNameById, rows, search]);
 
   const columns = React.useMemo(
     () => [
-      { id: "name", header: "Name", accessor: (r: Employee) => <span className="font-medium">{r.name}</span>, sticky: true },
+      {
+        id: "name",
+        header: "Name",
+        accessor: (r: Employee) => (
+          <Link href={`/payroll/employees/${r.id}`} className="font-medium text-primary hover:underline">
+            {r.name}
+          </Link>
+        ),
+        sticky: true,
+      },
       { id: "department", header: "Department", accessor: (r: Employee) => r.department ?? "—" },
       { id: "role", header: "Role", accessor: (r: Employee) => r.role ?? "—" },
-      { id: "branch", header: "Branch", accessor: (r: Employee) => r.branch ?? "—" },
+      {
+        id: "branch",
+        header: "Branch",
+        accessor: (r: Employee) => branchNameById.get(r.branch ?? "") ?? r.branch ?? "—",
+      },
       { id: "employmentType", header: "Type", accessor: (r: Employee) => r.employmentType },
       { id: "baseSalary", header: "Base", accessor: (r: Employee) => formatMoney(r.baseSalary, r.currency) },
     ],
-    []
+    [branchNameById]
   );
 
   const handleCreate = async () => {
     try {
       await createEmployeeApi({
-      name: name || "New Employee",
-      department: department || undefined,
-      branch: branch || undefined,
-      baseSalary: baseSalary || 0,
-      currency: "KES",
+        name: name || "New Employee",
+        department: department || undefined,
+        branch: branchId || undefined,
+        baseSalary: baseSalary || 0,
+        currency: "KES",
       });
       setSheetOpen(false);
       setName("");
@@ -111,7 +138,7 @@ export default function PayrollEmployeesPage() {
     <PageShell>
       <PageHeader
         title="Employees"
-        description="Personal, job, pay, bank. KRA/NHIF/NSSF stubs."
+        description="Personal, job, compensation, statutory setup, and bank details."
         breadcrumbs={[
           { label: "Payroll", href: "/payroll/overview" },
           { label: "Employees" },
@@ -154,7 +181,7 @@ export default function PayrollEmployeesPage() {
         <Card>
           <CardHeader>
             <CardTitle>Employees</CardTitle>
-            <CardDescription>Name, id/passport (masked), KRA/NHIF/NSSF, department, branch, pay, bank.</CardDescription>
+            <CardDescription>Live payroll employee master records across department, branch, and compensation.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<Employee>
@@ -170,7 +197,7 @@ export default function PayrollEmployeesPage() {
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Create employee</SheetTitle>
-            <SheetDescription>Personal, job, pay. Bank & statutory stubs.</SheetDescription>
+            <SheetDescription>Capture personal profile and payroll compensation setup.</SheetDescription>
           </SheetHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -183,7 +210,18 @@ export default function PayrollEmployeesPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-employee-branch">Branch</Label>
-              <Input id="create-employee-branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="Head Office" />
+              <Select value={branchId} onValueChange={setBranchId}>
+                <SelectTrigger id="create-employee-branch">
+                  <SelectValue placeholder="Select branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.branchId} value={branch.branchId}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-employee-employment-type">Employment type</Label>

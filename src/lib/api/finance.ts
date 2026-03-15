@@ -1,8 +1,4 @@
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
-import { listFiscalYears } from "@/lib/data/fiscal.repo";
-import { getMockCOARootFirst } from "@/lib/mock/coa";
-import { getMockCashflowForecast } from "@/lib/mock/treasury/cashflow";
-import { getMockOverdueInvoices } from "@/lib/mock/treasury/collections";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export type FinanceOverview = {
   summary: {
@@ -51,6 +47,22 @@ export type FinanceStatement = {
   summary: Record<string, number>;
 };
 
+export type FinanceStatementDrilldownItem = {
+  postingLineId: string;
+  postingDate: string;
+  sourceType: string;
+  sourceId: string;
+  sourceNumber: string;
+  documentNumber?: string;
+  ledgerAccountId?: string;
+  accountCode?: string;
+  accountName?: string;
+  debit: number;
+  credit: number;
+  amount: number;
+  reference?: string;
+};
+
 export type LedgerEntry = {
   date: string;
   accountId: string;
@@ -62,6 +74,42 @@ export type LedgerEntry = {
   balance: number;
   documentId: string;
   documentNumber: string;
+  sourceType: string;
+  sourceId: string;
+};
+
+export type PostingBatchSummary = {
+  id: string;
+  sourceType: string;
+  sourceId: string;
+  sourceNumber?: string;
+  postingDate: string;
+  currency: string;
+  reference?: string;
+  journalDocumentId?: string;
+  reversalOfBatchId?: string;
+  reversedByBatchId?: string;
+  createdBy?: string;
+};
+
+export type PostingBatchDetail = PostingBatchSummary & {
+  lines: Array<{
+    id: string;
+    ledgerAccountId: string;
+    accountCode?: string;
+    accountName?: string;
+    accountType?: string;
+    description?: string;
+    debit: number;
+    credit: number;
+    partyId?: string;
+    documentId?: string;
+    paymentId?: string;
+  }>;
+  totals: {
+    debit: number;
+    credit: number;
+  };
 };
 
 export type FinanceAccount = {
@@ -94,50 +142,18 @@ export type PostingMappingRow = {
 };
 
 export async function fetchFinanceOverviewApi(): Promise<FinanceOverview> {
-  if (!isApiConfigured()) {
-    const overdue = getMockOverdueInvoices();
-    const cashflow = getMockCashflowForecast();
-    return {
-      summary: {
-        cashBalance: cashflow[cashflow.length - 1]?.balance ?? 0,
-        bankAccountCount: 2,
-        arOutstanding: overdue.reduce((sum, row) => sum + row.outstanding, 0),
-        apOutstanding: 0,
-        postedJournalCount: 0,
-        netRevenue: overdue.reduce((sum, row) => sum + row.total, 0),
-      },
-      arOutstandingItems: overdue.map((row) => ({
-        id: row.id,
-        number: row.number,
-        outstanding: row.outstanding,
-        dueDate: row.dueDate,
-      })),
-      apOutstandingItems: [],
-      recentJournals: [],
-    };
-  }
+  requireLiveApi("Finance overview");
   return apiRequest<FinanceOverview>("/api/finance/overview");
 }
 
 export async function fetchFinancePeriodsApi(): Promise<FinancePeriod[]> {
-  if (!isApiConfigured()) {
-    return listFiscalYears().flatMap((year) =>
-      year.periods.map((period) => ({
-        id: period.id,
-        fiscalYear: year.year,
-        periodNumber: period.month,
-        startDate: year.startDate,
-        endDate: year.endDate,
-        status: period.status === "Closed" ? "CLOSED" : "OPEN",
-      }))
-    );
-  }
+  requireLiveApi("Finance periods");
   const payload = await apiRequest<{ periods: FinancePeriod[] }>("/api/finance/period-close");
   return payload.periods;
 }
 
 export async function closeFinancePeriodApi(periodId: string): Promise<void> {
-  if (!isApiConfigured()) return;
+  requireLiveApi("Close finance period");
   await apiRequest("/api/finance/period-close", {
     method: "POST",
     body: { periodId },
@@ -145,7 +161,7 @@ export async function closeFinancePeriodApi(periodId: string): Promise<void> {
 }
 
 export async function reopenFinancePeriodApi(periodId: string): Promise<void> {
-  if (!isApiConfigured()) return;
+  requireLiveApi("Reopen finance period");
   await apiRequest("/api/finance/period-reopen", {
     method: "POST",
     body: { periodId },
@@ -156,21 +172,29 @@ export async function fetchFinancialStatementApi(
   type: "pnl" | "balance-sheet" | "cash-flow",
   periodId?: string
 ): Promise<FinanceStatement> {
-  if (!isApiConfigured()) {
-    return {
-      type,
-      periodId,
-      sections: [],
-      summary: {},
-    };
-  }
+  requireLiveApi("Financial statements");
   const params = new URLSearchParams();
   if (periodId) params.set("periodId", periodId);
   return apiRequest<FinanceStatement>(`/api/finance/statements/${type}`, { params });
 }
 
+export async function fetchFinancialStatementDrilldownApi(
+  type: "pnl" | "balance-sheet" | "cash-flow",
+  sectionKey: string,
+  periodId?: string
+): Promise<FinanceStatementDrilldownItem[]> {
+  requireLiveApi("Financial statement drilldown");
+  const params = new URLSearchParams();
+  if (periodId) params.set("periodId", periodId);
+  const payload = await apiRequest<{ items: FinanceStatementDrilldownItem[] }>(
+    `/api/finance/statements/${encodeURIComponent(type)}/drilldown/${encodeURIComponent(sectionKey)}`,
+    { params }
+  );
+  return payload.items ?? [];
+}
+
 export async function fetchLedgerEntriesApi(accountId?: string, periodId?: string): Promise<LedgerEntry[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Ledger entries");
   const params = new URLSearchParams();
   if (accountId) params.set("accountId", accountId);
   if (periodId) params.set("periodId", periodId);
@@ -178,15 +202,28 @@ export async function fetchLedgerEntriesApi(accountId?: string, periodId?: strin
   return payload.entries ?? [];
 }
 
+export async function fetchPostingBatchesApi(sourceType?: string, sourceId?: string): Promise<PostingBatchSummary[]> {
+  requireLiveApi("Posting batches");
+  const params = new URLSearchParams();
+  if (sourceType) params.set("sourceType", sourceType);
+  if (sourceId) params.set("sourceId", sourceId);
+  const payload = await apiRequest<{ items: PostingBatchSummary[] }>("/api/finance/posting-batches", { params });
+  return payload.items ?? [];
+}
+
+export async function fetchPostingBatchDetailApi(batchId: string): Promise<PostingBatchDetail> {
+  return apiRequest<PostingBatchDetail>(`/api/finance/posting-batches/${encodeURIComponent(batchId)}`);
+}
+
+export async function fetchPostingBatchBySourceApi(sourceType: string, sourceId: string): Promise<PostingBatchSummary | null> {
+  const payload = await apiRequest<{ items: PostingBatchSummary[] }>(
+    `/api/finance/posting-batches/source/${encodeURIComponent(sourceType)}/${encodeURIComponent(sourceId)}`
+  );
+  return payload.items?.[0] ?? null;
+}
+
 export async function fetchFinanceAccountsApi(): Promise<FinanceAccount[]> {
-  if (!isApiConfigured()) {
-    return getMockCOARootFirst().map((row) => ({
-      id: row.id,
-      code: row.code,
-      name: row.name,
-      type: row.type,
-    }));
-  }
+  requireLiveApi("Finance accounts");
   const payload = await apiRequest<{ items: Array<{ id: string; code: string; name: string; type: string }> }>(
     "/api/finance/accounts"
   );
@@ -200,7 +237,7 @@ export async function createFinanceAccountApi(payload: {
   parentId?: string;
   currency?: string;
 }): Promise<void> {
-  if (!isApiConfigured()) return;
+  requireLiveApi("Finance account creation");
   await apiRequest("/api/finance/accounts", {
     method: "POST",
     body: payload,
@@ -211,70 +248,7 @@ export async function fetchPostingMappingsApi(): Promise<{
   items: PostingMappingRow[];
   accounts: FinanceAccount[];
 }> {
-  if (!isApiConfigured()) {
-    const accounts = await fetchFinanceAccountsApi();
-    return {
-      items: [
-        {
-          key: "accountsReceivableAccountId",
-          label: "Accounts receivable",
-          accountId: null,
-          accountCode: null,
-          accountName: null,
-          fallback: { code: "1100", name: "Accounts Receivable", type: "ASSET" },
-        },
-        {
-          key: "salesRevenueAccountId",
-          label: "Sales revenue",
-          accountId: null,
-          accountCode: null,
-          accountName: null,
-          fallback: { code: "4000", name: "Sales Revenue", type: "REVENUE" },
-        },
-        {
-          key: "accountsPayableAccountId",
-          label: "Accounts payable",
-          accountId: null,
-          accountCode: null,
-          accountName: null,
-          fallback: { code: "2100", name: "Accounts Payable", type: "LIABILITY" },
-        },
-        {
-          key: "purchaseExpenseAccountId",
-          label: "Purchase expense",
-          accountId: null,
-          accountCode: null,
-          accountName: null,
-          fallback: { code: "5100", name: "Purchases Expense", type: "EXPENSE" },
-        },
-        {
-          key: "inventoryAccountId",
-          label: "Inventory",
-          accountId: null,
-          accountCode: null,
-          accountName: null,
-          fallback: { code: "1300", name: "Inventory", type: "ASSET" },
-        },
-        {
-          key: "goodsReceivedNotInvoicedAccountId",
-          label: "Goods received not invoiced",
-          accountId: null,
-          accountCode: null,
-          accountName: null,
-          fallback: { code: "2200", name: "Goods Received Not Invoiced", type: "LIABILITY" },
-        },
-        {
-          key: "bankClearingAccountId",
-          label: "Bank clearing",
-          accountId: null,
-          accountCode: null,
-          accountName: null,
-          fallback: { code: "1120", name: "Main Bank", type: "ASSET" },
-        },
-      ],
-      accounts,
-    };
-  }
+  requireLiveApi("Posting mappings");
   return apiRequest<{ items: PostingMappingRow[]; accounts: FinanceAccount[] }>(
     "/api/settings/financial/posting-mappings"
   );
@@ -283,7 +257,7 @@ export async function fetchPostingMappingsApi(): Promise<{
 export async function savePostingMappingsApi(
   mappings: Partial<Record<PostingMappingKey, string | null>>
 ): Promise<void> {
-  if (!isApiConfigured()) return;
+  requireLiveApi("Save posting mappings");
   await apiRequest("/api/settings/financial/posting-mappings", {
     method: "PATCH",
     body: mappings,

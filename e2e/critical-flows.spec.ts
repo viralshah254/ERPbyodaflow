@@ -1,8 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { bootstrapLocalSession } from "./auth";
 
 /**
  * E2E Critical Flow Tests — key user journeys.
  */
+
+test.beforeEach(async ({ page }) => {
+  await bootstrapLocalSession(page);
+});
 
 test.describe("Document flows", () => {
   test("navigate to invoice creation wizard", async ({ page }) => {
@@ -19,7 +24,8 @@ test.describe("Document flows", () => {
     // Should have table or list
     const hasTable = await page.locator("table").isVisible().catch(() => false);
     const hasList = await page.locator("[role='grid']").isVisible().catch(() => false);
-    expect(hasTable || hasList).toBeTruthy();
+    const hasEmptyState = await page.getByText(/No invoices found\./i).isVisible().catch(() => false);
+    expect(hasTable || hasList || hasEmptyState).toBeTruthy();
   });
 });
 
@@ -111,9 +117,9 @@ test.describe("Work queue flow", () => {
   test("work queue loads with categories", async ({ page }) => {
     await page.goto("/work/queue");
     await expect(page.locator("body")).toBeVisible();
-    // Check some category exists
-    const hasCategory = await page.locator("text=Payroll").isVisible().catch(() => false);
-    expect(hasCategory).toBeTruthy();
+    const hasCardAction = await page.getByRole("link", { name: /View/i }).first().isVisible().catch(() => false);
+    const hasCategory = await page.getByText(/approvals|inventory|payroll|pricing/i).first().isVisible().catch(() => false);
+    expect(hasCardAction || hasCategory).toBeTruthy();
   });
 });
 

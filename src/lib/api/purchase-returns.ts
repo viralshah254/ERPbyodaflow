@@ -1,4 +1,4 @@
-import { apiRequest, downloadFile, isApiConfigured } from "@/lib/api/client";
+import { apiRequest, downloadFile, requireLiveApi } from "@/lib/api/client";
 
 export type PurchaseReturnRow = {
   id: string;
@@ -14,7 +14,7 @@ export type PurchaseReturnRow = {
 };
 
 export async function fetchPurchaseReturns(status?: string): Promise<PurchaseReturnRow[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Purchase returns");
   const payload = await apiRequest<{ items: PurchaseReturnRow[] }>("/api/purchasing/purchase-returns", {
     params: status ? { status } : undefined,
   });
@@ -35,9 +35,6 @@ export async function approvePurchaseReturnApi(id: string): Promise<void> {
 }
 
 export function exportPurchaseReturnsApi(onError: (message: string) => void): void {
-  if (!isApiConfigured()) {
-    onError("API not configured.");
-    return;
-  }
+  requireLiveApi("Purchase returns export");
   void downloadFile("/api/purchasing/purchase-returns/export?format=csv", "purchase-returns.csv", onError);
 }

@@ -16,6 +16,8 @@ export interface ProjectRow {
   budget: number;
   costCenterCode?: string;
   costCenterName?: string;
+  timesheetCostingMode?: "EMPLOYEE_SALARY_MONTHLY_173" | "PROJECT_DEFAULT_RATE";
+  defaultHourlyRate?: number;
 }
 
 export const MOCK_PROJECTS: ProjectRow[] = [

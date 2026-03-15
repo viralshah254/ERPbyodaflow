@@ -15,16 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
-import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function PayrollSettingsPage() {
   const [defaultCurrency, setDefaultCurrency] = React.useState("KES");
   const [payPeriod, setPayPeriod] = React.useState("MONTHLY");
-
-  const handleSave = () => {
-    toast.info("Save (stub). API pending.");
-  };
 
   return (
     <PageShell>
@@ -40,7 +34,6 @@ export default function PayrollSettingsPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain payroll settings and pay period." label="Explain" />
-            <Button size="sm" onClick={handleSave}>Save</Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/payroll/overview">Payroll</Link>
             </Button>

@@ -1,115 +1,238 @@
 "use client";
 
 import * as React from "react";
-import { PageLayout } from "@/components/layout/page-layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import * as Icons from "lucide-react";
+import { toast } from "sonner";
+import { PageLayout } from "@/components/layout/page-layout";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { apiRequest, isApiConfigured } from "@/lib/api/client";
 
-type IntStatus = "connected" | "disconnected" | "coming_soon";
+type IntegrationStatus = "connected" | "disconnected";
+type IntegrationHealth = "healthy" | "attention" | "idle";
 
-const INTEGRATIONS: Array<{
+type IntegrationItem = {
   id: string;
   name: string;
   description: string;
   icon: string;
-  status: IntStatus;
-  setupSteps?: string[];
-}> = [
+  status: IntegrationStatus;
+  health: IntegrationHealth;
+  configured: boolean;
+  lastSyncAt: string | null;
+  setupSteps: string[];
+};
+
+const FALLBACK_INTEGRATIONS: IntegrationItem[] = [
   {
-    id: "accounting",
-    name: "Accounting exports",
-    description: "Export to QuickBooks, Xero, or generic formats",
-    icon: "Calculator",
+    id: "vmi-webhook",
+    name: "VMI ingest",
+    description: "Receive outlet stock and sales feeds from external producers",
+    icon: "PackagePlus",
     status: "disconnected",
-    setupSteps: ["Connect account", "Map accounts", "Set schedule"],
-  },
-  {
-    id: "email-inbox",
-    name: "Email inbox ingestion",
-    description: "Parse orders and documents from email",
-    icon: "Mail",
-    status: "disconnected",
-    setupSteps: ["Link mailbox", "Configure rules", "Map fields"],
+    health: "idle",
+    configured: false,
+    lastSyncAt: null,
+    setupSteps: [
+      "Configure webhook shared secret",
+      "Allow producer identifiers",
+      "Send a signed stock snapshot test payload",
+    ],
   },
   {
     id: "whatsapp",
-    name: "WhatsApp (future)",
-    description: "Order and support via WhatsApp",
+    name: "WhatsApp",
+    description: "Inbound order and support webhook for command processing",
     icon: "MessageCircle",
-    status: "coming_soon",
+    status: "disconnected",
+    health: "idle",
+    configured: false,
+    lastSyncAt: null,
+    setupSteps: [
+      "Set webhook verify token",
+      "Point Meta webhook to the backend endpoint",
+      "Complete a challenge and send a test message",
+    ],
   },
   {
-    id: "webhooks",
-    name: "Webhooks & API keys",
-    description: "External access and event webhooks",
-    icon: "Plug",
+    id: "accounting-exports",
+    name: "Accounting exports",
+    description: "Export commission, tax, and finance data to external ledgers",
+    icon: "Calculator",
     status: "disconnected",
-    setupSteps: ["Create API key", "Configure endpoints", "Test"],
+    health: "idle",
+    configured: false,
+    lastSyncAt: null,
+    setupSteps: [
+      "Choose an export format",
+      "Map ledger accounts",
+      "Schedule outbound jobs",
+    ],
   },
 ];
 
+function integrationIcon(id: string): string {
+  switch (id) {
+    case "vmi-webhook":
+      return "PackagePlus";
+    case "whatsapp":
+      return "MessageCircle";
+    default:
+      return "Calculator";
+  }
+}
+
+function renderHealthLabel(health: IntegrationHealth): string {
+  switch (health) {
+    case "healthy":
+      return "Healthy";
+    case "attention":
+      return "Needs attention";
+    default:
+      return "Idle";
+  }
+}
+
 export default function IntegrationsPage() {
+  const [integrations, setIntegrations] = React.useState<IntegrationItem[]>(
+    FALLBACK_INTEGRATIONS
+  );
   const [setupOpen, setSetupOpen] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(isApiConfigured());
+
+  const loadIntegrations = React.useCallback(async () => {
+    if (!isApiConfigured()) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await apiRequest<{
+        items: Array<Omit<IntegrationItem, "icon">>;
+      }>("/api/automation/integrations");
+      setIntegrations(
+        response.items.map((item) => ({
+          ...item,
+          icon: integrationIcon(item.id),
+        }))
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load integrations"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void loadIntegrations();
+  }, [loadIntegrations]);
 
   return (
     <PageLayout
       title="Integrations"
-      description="Connect with accounting, email, and APIs"
+      description="Review live integration status and setup readiness"
     >
+      {loading ? (
+        <p className="text-sm text-muted-foreground">
+          Loading integration status...
+        </p>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2">
-        {INTEGRATIONS.map((int) => {
-          const IconComponent = (Icons[int.icon as keyof typeof Icons] || Icons.Plug) as React.ComponentType<{ className?: string }>;
-          const isComingSoon = int.status === "coming_soon";
+        {integrations.map((integration) => {
+          const IconComponent =
+            (Icons[
+              integration.icon as keyof typeof Icons
+            ] || Icons.Plug) as React.ComponentType<{ className?: string }>;
 
           return (
-            <Card key={int.id} className={isComingSoon ? "opacity-75" : ""}>
+            <Card key={integration.id}>
               <CardHeader className="flex flex-row items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
                     <IconComponent className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">{int.name}</CardTitle>
-                    <CardDescription>{int.description}</CardDescription>
+                    <CardTitle className="text-base">
+                      {integration.name}
+                    </CardTitle>
+                    <CardDescription>
+                      {integration.description}
+                    </CardDescription>
                   </div>
                 </div>
-                {isComingSoon ? (
-                  <Badge variant="secondary">Coming soon</Badge>
-                ) : (
-                  <Badge variant={int.status === "connected" ? "default" : "outline"}>
-                    {int.status === "connected" ? "Connected" : "Not connected"}
+                <div className="flex flex-wrap gap-2">
+                  <Badge
+                    variant={
+                      integration.status === "connected" ? "default" : "outline"
+                    }
+                  >
+                    {integration.status === "connected"
+                      ? "Connected"
+                      : "Not connected"}
                   </Badge>
-                )}
+                  <Badge
+                    variant={
+                      integration.health === "attention"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                  >
+                    {renderHealthLabel(integration.health)}
+                  </Badge>
+                </div>
               </CardHeader>
-              {!isComingSoon && (
-                <CardContent className="space-y-4">
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSetupOpen(setupOpen === int.id ? null : int.id)}
-                    >
-                      {int.status === "connected" ? "Manage" : "Setup"}
-                    </Button>
-                    <Button size="sm" variant="ghost" disabled title="Test connection (stub)">
-                      Test connection
-                    </Button>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setSetupOpen(
+                        setupOpen === integration.id ? null : integration.id
+                      )
+                    }
+                  >
+                    {integration.status === "connected" ? "Details" : "Setup"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void loadIntegrations()}
+                    disabled={loading || !isApiConfigured()}
+                  >
+                    Refresh
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {integration.lastSyncAt
+                    ? `Last activity: ${new Date(
+                        integration.lastSyncAt
+                      ).toLocaleString()}`
+                    : integration.configured
+                      ? "Configured and waiting for activity."
+                      : "Configuration is still incomplete."}
+                </p>
+                {setupOpen === integration.id ? (
+                  <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
+                    <p className="font-medium">Setup checklist</p>
+                    <ul className="list-disc list-inside text-muted-foreground">
+                      {integration.setupSteps.map((step, index) => (
+                        <li key={`${integration.id}-${index}`}>{step}</li>
+                      ))}
+                    </ul>
                   </div>
-                  {setupOpen === int.id && "setupSteps" in int && (
-                    <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
-                      <p className="font-medium">Setup wizard (stub)</p>
-                      <ul className="list-disc list-inside text-muted-foreground">
-                        {(int.setupSteps as string[]).map((s, i) => (
-                          <li key={i}>{s}</li>
-                        ))}
-                      </ul>
-                      <p className="text-muted-foreground pt-2">Mapping table UI would appear here.</p>
-                    </div>
-                  )}
-                </CardContent>
-              )}
+                ) : null}
+              </CardContent>
             </Card>
           );
         })}

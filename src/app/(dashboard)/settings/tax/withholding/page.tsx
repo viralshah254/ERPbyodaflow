@@ -6,7 +6,6 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -16,16 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
-import { listWhtCodes, saveWhtCodes } from "@/lib/data/tax.repo";
+import { createWithholdingCodeApi, fetchWithholdingCodesApi } from "@/lib/api/settings-tax";
 import type { KenyaWhtCode } from "@/lib/mock/tax/kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
@@ -33,33 +24,36 @@ import * as Icons from "lucide-react";
 
 export default function WithholdingTaxPage() {
   const [codes, setCodes] = React.useState<KenyaWhtCode[]>([]);
-  const [applyOnAp, setApplyOnAp] = React.useState(true);
-  const [applyOnPayments, setApplyOnPayments] = React.useState(true);
-  const [editOpen, setEditOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<KenyaWhtCode | null>(null);
   const [form, setForm] = React.useState({ code: "", name: "", rate: 0 });
 
-  React.useEffect(() => {
-    setCodes(listWhtCodes());
+  const reload = React.useCallback(async () => {
+    const items = await fetchWithholdingCodesApi();
+    setCodes(items);
   }, []);
 
-  const openEdit = (r: KenyaWhtCode) => {
-    setEditing(r);
-    setForm({ code: r.code, name: r.name, rate: r.rate });
-    setEditOpen(true);
-  };
+  React.useEffect(() => {
+    void reload().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load withholding tax codes.");
+    });
+  }, [reload]);
 
-  const handleSave = () => {
-    const next = codes.map((r) =>
-      r.id === editing?.id ? { ...r, code: form.code, name: form.name, rate: form.rate } : r
-    );
-    saveWhtCodes(next);
-    setCodes(next);
-    setEditOpen(false);
-  };
-
-  const handleWhtCertificate = () => {
-    toast.info("WHT certificate (stub). API pending.");
+  const handleSave = async () => {
+    if (!form.code.trim() || !form.name.trim()) {
+      toast.error("Code and name are required.");
+      return;
+    }
+    try {
+      await createWithholdingCodeApi({
+        code: form.code.trim().toUpperCase(),
+        name: form.name.trim(),
+        rate: form.rate,
+      });
+      setForm({ code: "", name: "", rate: 0 });
+      await reload();
+      toast.success("Withholding tax code created.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save withholding tax code.");
+    }
   };
 
   return (
@@ -77,9 +71,6 @@ export default function WithholdingTaxPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain WHT in Kenya. When to apply on AP and payments." label="Explain" />
-            <Button variant="outline" size="sm" onClick={handleWhtCertificate}>
-              WHT certificate
-            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/settings/tax/kenya">Kenya profile</Link>
             </Button>
@@ -89,24 +80,49 @@ export default function WithholdingTaxPage() {
       <div className="p-6 space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Apply WHT on</CardTitle>
-            <CardDescription>Supplier bills (AP), Payments (Treasury).</CardDescription>
+            <CardTitle className="text-base">Create WHT code</CardTitle>
+            <CardDescription>Add withholding tax codes to the live tax configuration.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Checkbox id="wht-ap" checked={applyOnAp} onCheckedChange={(c) => setApplyOnAp(c === true)} />
-              <Label htmlFor="wht-ap">Supplier bills (AP)</Label>
+          <CardContent className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="wht-code">Code</Label>
+              <Input
+                id="wht-code"
+                value={form.code}
+                onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))}
+                placeholder="e.g. WHT-5"
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox id="wht-pay" checked={applyOnPayments} onCheckedChange={(c) => setApplyOnPayments(c === true)} />
-              <Label htmlFor="wht-pay">Payments (Treasury)</Label>
+            <div className="space-y-2">
+              <Label htmlFor="wht-name">Name</Label>
+              <Input
+                id="wht-name"
+                value={form.name}
+                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Professional fees"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="wht-rate">Rate %</Label>
+              <Input
+                id="wht-rate"
+                type="number"
+                value={form.rate}
+                onChange={(e) => setForm((p) => ({ ...p, rate: Number(e.target.value) || 0 }))}
+              />
+            </div>
+            <div className="md:col-span-3">
+              <Button onClick={() => void handleSave()}>
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Add WHT code
+              </Button>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle>WHT codes</CardTitle>
-            <CardDescription>Seed list; allow edit.</CardDescription>
+            <CardDescription>Live withholding tax codes available for AP and treasury flows.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -120,15 +136,11 @@ export default function WithholdingTaxPage() {
               </TableHeader>
               <TableBody>
                 {codes.map((r) => (
-                  <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openEdit(r)}>
+                  <TableRow key={r.id}>
                     <TableCell className="font-medium">{r.code}</TableCell>
                     <TableCell>{r.name}</TableCell>
                     <TableCell>{r.rate}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(r); }}>
-                        Edit
-                      </Button>
-                    </TableCell>
+                    <TableCell className="text-muted-foreground">Live</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -136,33 +148,6 @@ export default function WithholdingTaxPage() {
           </CardContent>
         </Card>
       </div>
-
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Edit WHT code</SheetTitle>
-            <SheetDescription>Code, name, rate.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Rate %</Label>
-              <Input type="number" value={form.rate} onChange={(e) => setForm((p) => ({ ...p, rate: Number(e.target.value) || 0 }))} />
-            </div>
-          </div>
-          <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>Save</Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
     </PageShell>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -54,9 +55,8 @@ export default function ScheduledReportsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" onClick={() => toast.info("Schedule report (stub)")}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Schedule Report
+          <Button size="sm" asChild>
+            <Link href="/reports">Open reports</Link>
           </Button>
         }
       />
@@ -105,8 +105,8 @@ export default function ScheduledReportsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => toast.info("Edit (stub)")}>
-                            Edit
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href="/reports">Open</Link>
                           </Button>
                         </div>
                       </TableCell>

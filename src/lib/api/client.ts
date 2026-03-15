@@ -1,15 +1,15 @@
 /**
  * API client for backend (erp_odaflow_backend).
- * When NEXT_PUBLIC_API_URL is set, requests are sent to the backend; otherwise stubs are used.
+ * When NEXT_PUBLIC_API_URL is set, requests are sent to the backend.
  *
  * Auth (see docs/COOL_CATCH_API_CONNECT.md):
  * - Production: Authorization: Bearer <firebase-id-token>
- * - Demo (local): set NEXT_PUBLIC_API_DEMO_MODE=1 → sends X-Demo-Mode: 1 (backend uses seeded user)
+ * - Local dev: set NEXT_PUBLIC_ENABLE_DEV_AUTH=1 before using dev headers
  * - Dev: X-Dev-User-Id, X-Current-Branch-Id (set via setApiAuth or NEXT_PUBLIC_DEV_* env)
  */
+import { canUseDevHeaders } from "@/lib/runtime-flags";
 
 const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL ?? "") : "";
-const DEMO_MODE = typeof window !== "undefined" && (process.env.NEXT_PUBLIC_API_DEMO_MODE === "1" || process.env.NEXT_PUBLIC_API_DEMO_MODE === "true");
 const ENV_DEV_USER_ID = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_DEV_USER_ID ?? "") : "";
 const ENV_BRANCH_ID = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_CURRENT_BRANCH_ID ?? "") : "";
 
@@ -19,6 +19,12 @@ export function getApiBase(): string {
 
 export function isApiConfigured(): boolean {
   return !!API_BASE;
+}
+
+export function requireLiveApi(feature: string): void {
+  if (!isApiConfigured()) {
+    throw new Error(`${feature} requires a live API connection.`);
+  }
 }
 
 export type ApiAuthOptions = {
@@ -47,11 +53,18 @@ function getAuthHeaders(includeJsonContentType = false): HeadersInit {
   if (includeJsonContentType) {
     headers["Content-Type"] = "application/json";
   }
-  if (DEMO_MODE) {
-    headers["X-Demo-Mode"] = "1";
-  }
   if (authOptions.bearerToken) {
     headers["Authorization"] = `Bearer ${authOptions.bearerToken}`;
+  }
+  const branchId = authOptions.branchId || ENV_BRANCH_ID;
+  if (branchId) {
+    headers["X-Current-Branch-Id"] = branchId;
+  }
+  if (headers["Authorization"]) {
+    return headers;
+  }
+  if (!canUseDevHeaders()) {
+    return headers;
   }
   const devUserId = authOptions.devUserId || ENV_DEV_USER_ID;
   if (devUserId) {
@@ -59,10 +72,6 @@ function getAuthHeaders(includeJsonContentType = false): HeadersInit {
   }
   if (authOptions.devFirebaseUid) {
     headers["X-Dev-Firebase-Uid"] = authOptions.devFirebaseUid;
-  }
-  const branchId = authOptions.branchId || ENV_BRANCH_ID;
-  if (branchId) {
-    headers["X-Current-Branch-Id"] = branchId;
   }
   return headers;
 }

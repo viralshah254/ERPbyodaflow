@@ -11,11 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
-  listProducts,
-  listVariants,
-  listPackaging,
-  createProduct,
-} from "@/lib/data/products.repo";
+  fetchProductsApi,
+} from "@/lib/api/products";
 import type { ProductRow } from "@/lib/mock/masters";
 import { productDelete } from "@/lib/api/stub-endpoints";
 import { canDeleteEntity } from "@/lib/permissions";
@@ -37,21 +34,18 @@ interface Product {
 }
 
 function buildProductRow(row: ProductRow): Product {
-  const variantsCount = listVariants(row.id).length;
-  const packagingCount = listPackaging(row.id).length;
-
   return {
     id: row.id,
     name: row.name,
     sku: row.sku,
     category: row.category ?? "",
     stock: row.currentStock ?? 0,
-    // Placeholder pricing/last updated until backend wiring
+    // Until the products list returns richer pricing metadata, keep these read-only fields neutral.
     price: 0,
     status: row.status === "ACTIVE" ? "Active" : row.status,
     lastUpdated: "",
-    variantsCount,
-    packagingCount,
+    variantsCount: 0,
+    packagingCount: 0,
   };
 }
 
@@ -64,8 +58,18 @@ export default function ProductsPage() {
   const [rows, setRows] = React.useState<Product[]>([]);
 
   React.useEffect(() => {
-    const products = listProducts().map(buildProductRow);
-    setRows(products);
+    let active = true;
+    void fetchProductsApi()
+      .then((products) => {
+        if (!active) return;
+        setRows(products.map(buildProductRow));
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Failed to load products.");
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const filteredProducts = React.useMemo(() => {
@@ -89,17 +93,7 @@ export default function ProductsPage() {
   };
 
   const handleDuplicate = (id: string) => {
-    const all = listProducts();
-    const original = all.find((p) => p.id === id);
-    if (!original) {
-      toast.error("Product not found.");
-      return;
-    }
-    const { id: _id, ...rest } = original;
-    const newSku = `${original.sku}-COPY`;
-    const created = createProduct({ ...rest, sku: newSku });
-    setRows((prev) => [...prev, buildProductRow(created)]);
-    toast.success("Product duplicated (local only).");
+    router.push(`/master/products/${id}`);
   };
 
   const handleDelete = async (id: string) => {
@@ -108,10 +102,7 @@ export default function ProductsPage() {
       await productDelete(id);
       toast.success("Product deleted.");
     } catch (err) {
-      const message = (err as Error).message === "STUB"
-        ? "Delete (stub). Set NEXT_PUBLIC_API_URL to use backend."
-        : (err as Error).message;
-      toast.info(message);
+      toast.error((err as Error).message);
     }
   };
 

@@ -17,6 +17,7 @@ import * as Icons from "lucide-react";
 import { isFirebaseConfigured, signInAndGetIdToken } from "@/lib/firebase";
 import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
+import { isDevAuthEnabled } from "@/lib/runtime-flags";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 
 const loginSchema = z.object({
@@ -26,13 +27,6 @@ const loginSchema = z.object({
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
-
-const demoAccounts = [
-  { type: "MANUFACTURER", label: "Manufacturer Demo" },
-  { type: "DISTRIBUTOR", label: "Distributor Demo" },
-  { type: "SHOP", label: "Shop Demo" },
-  { type: "PLATFORM", label: "Platform Demo" },
-];
 
 function LoginContent() {
   const router = useRouter();
@@ -60,99 +54,53 @@ function LoginContent() {
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
     try {
-      // Firebase + API: real sign-in and backend session
-      if (isFirebaseConfigured() && isApiConfigured()) {
-        const token = await signInAndGetIdToken(data.email, data.password);
-        setApiAuth({ bearerToken: token });
-        const session = await fetchRuntimeSession();
-        const { setSession } = useAuthStore.getState();
-        const { hydrateFromBackend } = useOrgContextStore.getState();
-        setSession({
-          user: session.user,
-          org: session.org,
-          tenant: session.tenant,
-          currentBranch: session.currentBranch,
-          branches: session.branches,
-          permissions: session.permissions,
-        });
-        hydrateFromBackend({
-          orgType: session.org.orgType,
-          templateId: session.orgContext.templateId,
-          enabledModules: session.orgContext.enabledModules,
-          featureFlags: session.orgContext.featureFlags,
-          terminology: session.orgContext.terminology,
-          defaultNav: session.orgContext.defaultNav,
-          orgRole: session.orgContext.orgRole,
-          parentOrgId: session.orgContext.parentOrgId,
-          franchiseNetworkId: session.orgContext.franchiseNetworkId,
-          franchiseCode: session.orgContext.franchiseCode,
-          franchiseTerritory: session.orgContext.franchiseTerritory,
-          franchiseStoreFormat: session.orgContext.franchiseStoreFormat,
-          franchiseManagerName: session.orgContext.franchiseManagerName,
-          franchisePersona: session.orgContext.franchisePersona,
-        });
-        setApiAuth({
-          bearerToken: token,
-          branchId: session.currentBranch?.branchId,
-        });
+      if (!isApiConfigured() || !isFirebaseConfigured()) {
+        const message = !isApiConfigured()
+          ? "Sign-in is unavailable until the backend API is configured."
+          : "Sign-in is unavailable until the Firebase web app keys are configured.";
+        setError("root", { message });
         setIsLoading(false);
-        if (session.user.mustChangePassword) {
-          router.push("/change-password");
-          return;
-        }
-        const redirectTo = searchParams.get("redirect") || "/dashboard";
-        router.push(redirectTo);
         return;
       }
-
-      // Fallback: mock auth (no Firebase or no API)
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const mockUser = {
-        userId: "user-1",
-        orgId: "org-1",
-        branchIds: ["branch-1"],
-        roleIds: ["role-admin"],
-        email: data.email,
-        firstName: "Admin",
-        lastName: "User",
-        status: "ACTIVE" as const,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const mockOrg = {
-        orgId: "org-1",
-        tenantId: "tenant-1",
-        orgType: "MANUFACTURER" as const,
-        name: "Acme Manufacturing",
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const mockTenant = {
-        tenantId: "tenant-1",
-        name: "Acme Corp",
-        plan: "ENTERPRISE" as const,
-        region: "US",
-        currency: "USD",
-        timeZone: "America/New_York",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      const mockBranch = {
-        branchId: "branch-1",
-        orgId: "org-1",
-        name: "Head Office",
-        isHeadOffice: true,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      setUser(mockUser);
-      setOrg(mockOrg);
-      setTenant(mockTenant);
-      setBranches([mockBranch]);
-      setCurrentBranch(mockBranch);
+      // Firebase + API: real sign-in and backend session
+      const token = await signInAndGetIdToken(data.email, data.password);
+      setApiAuth({ bearerToken: token });
+      const session = await fetchRuntimeSession();
+      const { setSession } = useAuthStore.getState();
+      const { hydrateFromBackend } = useOrgContextStore.getState();
+      setSession({
+        user: session.user,
+        org: session.org,
+        tenant: session.tenant,
+        currentBranch: session.currentBranch,
+        branches: session.branches,
+        permissions: session.permissions,
+      });
+      hydrateFromBackend({
+        orgType: session.org.orgType,
+        templateId: session.orgContext.templateId,
+        enabledModules: session.orgContext.enabledModules,
+        featureFlags: session.orgContext.featureFlags,
+        terminology: session.orgContext.terminology,
+        defaultNav: session.orgContext.defaultNav,
+        orgRole: session.orgContext.orgRole,
+        parentOrgId: session.orgContext.parentOrgId,
+        franchiseNetworkId: session.orgContext.franchiseNetworkId,
+        franchiseCode: session.orgContext.franchiseCode,
+        franchiseTerritory: session.orgContext.franchiseTerritory,
+        franchiseStoreFormat: session.orgContext.franchiseStoreFormat,
+        franchiseManagerName: session.orgContext.franchiseManagerName,
+        franchisePersona: session.orgContext.franchisePersona,
+      });
+      setApiAuth({
+        bearerToken: token,
+        branchId: session.currentBranch?.branchId,
+      });
       setIsLoading(false);
+      if (session.user.mustChangePassword) {
+        router.push("/change-password");
+        return;
+      }
       const redirectTo = searchParams.get("redirect") || "/dashboard";
       router.push(redirectTo);
     } catch (err) {
@@ -183,45 +131,6 @@ function LoginContent() {
     }
   };
 
-  const handleDemoLogin = async (type: string) => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const orgTypeMap: Record<string, "MANUFACTURER" | "DISTRIBUTOR" | "SHOP"> = {
-      MANUFACTURER: "MANUFACTURER",
-      DISTRIBUTOR: "DISTRIBUTOR",
-      SHOP: "SHOP",
-      PLATFORM: "MANUFACTURER", // Default
-    };
-
-    const mockOrg = {
-      orgId: "org-demo",
-      tenantId: "tenant-demo",
-      orgType: orgTypeMap[type] || "MANUFACTURER",
-      name: `${orgTypeMap[type] || "Demo"} Organization`,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    setOrg(mockOrg);
-    setUser({
-      userId: "user-demo",
-      orgId: "org-demo",
-      branchIds: ["branch-demo"],
-      roleIds: ["role-admin"],
-      email: "demo@odaflow.com",
-      firstName: "Demo",
-      lastName: "User",
-      status: "ACTIVE" as const,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    setIsLoading(false);
-    router.push("/dashboard");
-  };
-
   return (
     <div className="min-h-[calc(100vh-8rem)] flex items-center py-12">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -233,6 +142,12 @@ function LoginContent() {
               <p className="text-muted-foreground">
                 Welcome back. Enter your credentials to continue.
               </p>
+              {isDevAuthEnabled() && (
+                <p className="text-sm text-muted-foreground mt-3">
+                  Local developer auth headers are enabled. Visit `/dashboard` directly to use
+                  the configured dev account.
+                </p>
+              )}
             </div>
 
             <Card className="p-6">
@@ -299,30 +214,10 @@ function LoginContent() {
 
             </Card>
 
-            {/* Demo Accounts */}
-            <div className="mt-6">
-              <p className="text-sm text-muted-foreground mb-3 text-center">
-                Continue with demo account
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {demoAccounts.map((account) => (
-                  <Button
-                    key={account.type}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDemoLogin(account.type)}
-                    disabled={isLoading}
-                  >
-                    {account.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
             <p className="text-center text-sm text-muted-foreground mt-6">
-              Don&apos;t have an account?{" "}
+              Need an organization provisioned?{" "}
               <Link href="/signup" className="text-primary hover:underline">
-                Sign up
+                Request setup
               </Link>
             </p>
           </div>

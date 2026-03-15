@@ -1,17 +1,7 @@
 import type { DocTypeKey } from "@/config/documents/types";
-import {
-  addDocumentAttachment,
-  addDocumentComment,
-  applyDocumentAction,
-  createDocumentDraft,
-  getDocumentDetail,
-  listDocuments,
-  requestDocumentApproval,
-  type DocumentDetailRecord,
-  type DocumentTimelineEntry,
-} from "@/lib/data/documents.repo";
+import { type DocumentDetailRecord, type DocumentTimelineEntry } from "@/lib/data/documents.repo";
 import type { DocListRow } from "@/lib/mock/docs";
-import { apiRequest, downloadFile, isApiConfigured } from "./client";
+import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
 
 type BackendDocumentLine = {
   id?: string;
@@ -148,6 +138,14 @@ export type DocumentConvertPayload = {
   lines?: Array<{ sourceLineId?: string; quantity?: number }>;
 };
 
+export type DocumentPostingPreviewLine = {
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+  memo: string;
+};
+
 function mapTimeline(entries?: BackendTimelineEntry[]): DocumentTimelineEntry[] {
   return (entries ?? []).map((entry) => ({
     id: entry.id,
@@ -247,17 +245,13 @@ export async function fetchDocumentDetailApi(
   type: DocTypeKey,
   id: string
 ): Promise<DocumentDetailRecord | null> {
-  if (!isApiConfigured()) {
-    return getDocumentDetail(type, id);
-  }
+  requireLiveApi("Document detail");
   const payload = await apiRequest<BackendDocumentDetail>(`/api/documents/${type}/${id}`);
   return mapDocumentDetail(type, payload);
 }
 
 export async function fetchDocumentListApi(type: DocTypeKey): Promise<DocListRow[]> {
-  if (!isApiConfigured()) {
-    return listDocuments(type);
-  }
+  requireLiveApi("Document list");
   const payload = await apiRequest<BackendDocumentListResponse>(`/api/documents/${type}`);
   return payload.items.map(mapDocumentListItem);
 }
@@ -268,18 +262,7 @@ export async function bulkDocumentActionApi(
   ids: string[]
 ): Promise<void> {
   if (!ids.length) return;
-  if (!isApiConfigured()) {
-    ids.forEach((id) => {
-      if (action === "submit") {
-        requestDocumentApproval(type, id);
-        return;
-      }
-      if (action === "approve" || action === "post") {
-        applyDocumentAction(type, id, action);
-      }
-    });
-    return;
-  }
+  requireLiveApi("Document actions");
   await apiRequest(`/api/documents/${type}/bulk-action`, {
     method: "POST",
     body: { action, ids },
@@ -290,14 +273,23 @@ export async function createDocumentApi(
   type: DocTypeKey,
   payload: DocumentDraftPayload
 ): Promise<{ id: string; number?: string; status?: string }> {
-  if (!isApiConfigured()) {
-    const created = createDocumentDraft(type, payload);
-    return { id: created.id, number: created.number, status: created.status };
-  }
+  requireLiveApi("Document creation");
   return apiRequest<{ id: string; number?: string; status?: string }>(`/api/documents/${type}`, {
     method: "POST",
     body: payload,
   });
+}
+
+export async function previewDocumentPostingApi(
+  type: DocTypeKey,
+  payload: DocumentDraftPayload
+): Promise<DocumentPostingPreviewLine[]> {
+  requireLiveApi("Document posting preview");
+  const result = await apiRequest<{ items: DocumentPostingPreviewLine[] }>(`/api/documents/${type}/posting-preview`, {
+    method: "POST",
+    body: payload,
+  });
+  return result.items ?? [];
 }
 
 export async function convertDocumentApi(
@@ -305,24 +297,7 @@ export async function convertDocumentApi(
   id: string,
   payload: DocumentConvertPayload
 ): Promise<{ id: string; typeKey?: DocTypeKey; number?: string; status?: string }> {
-  if (!isApiConfigured()) {
-    const source = getDocumentDetail(type, id);
-    const created = createDocumentDraft(payload.targetType, {
-      date: payload.date ?? new Date().toISOString().slice(0, 10),
-      partyId: payload.partyId ?? source?.partyId,
-      warehouseId: payload.warehouseId,
-      lines: (source?.lines ?? []).map((line) => ({
-        productId: line.productId,
-        description: line.description,
-        quantity: payload.lines?.find((item) => item.sourceLineId === line.id)?.quantity ?? line.qty ?? 0,
-        amount: line.amount,
-      })),
-      total: source?.total ?? 0,
-      currency: source?.currency,
-      outputTemplateId: payload.outputTemplateId,
-    });
-    return { id: created.id, number: created.number, status: created.status };
-  }
+  requireLiveApi("Document conversion");
   return apiRequest<{ id: string; typeKey?: DocTypeKey; number?: string; status?: string }>(
     `/api/documents/${type}/${id}/convert`,
     {
@@ -337,10 +312,7 @@ export function exportDocumentListApi(
   fileName: string,
   onNotAvailable: (message: string) => void
 ): void {
-  if (!isApiConfigured()) {
-    onNotAvailable("API not configured.");
-    return;
-  }
+  requireLiveApi("Document list export");
   downloadFile(`/api/documents/${type}/export`, fileName, onNotAvailable);
 }
 
@@ -349,10 +321,7 @@ export async function addDocumentCommentApi(
   id: string,
   body: string
 ): Promise<void> {
-  if (!isApiConfigured()) {
-    addDocumentComment(type, id, body);
-    return;
-  }
+  requireLiveApi("Document comments");
   await apiRequest(`/api/documents/${type}/${id}/comments`, {
     method: "POST",
     body: { text: body },
@@ -364,10 +333,7 @@ export async function uploadDocumentAttachmentApi(
   id: string,
   file: File
 ): Promise<void> {
-  if (!isApiConfigured()) {
-    addDocumentAttachment(type, id, file.name);
-    return;
-  }
+  requireLiveApi("Document attachments");
   const content = await fileToBase64(file);
   await apiRequest(`/api/documents/${type}/${id}/attachments`, {
     method: "POST",
@@ -386,10 +352,7 @@ export function downloadDocumentAttachmentApi(
   fileName: string,
   onNotAvailable: (message: string) => void
 ): void {
-  if (!isApiConfigured()) {
-    onNotAvailable("Attachment downloads require the backend.");
-    return;
-  }
+  requireLiveApi("Document attachment downloads");
   downloadFile(
     `/api/documents/${type}/${id}/attachments/${attachmentId}`,
     fileName,

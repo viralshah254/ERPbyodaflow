@@ -14,30 +14,37 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { listFiscalYears } from "@/lib/data/fiscal.repo";
+import { fetchFiscalYearsApi } from "@/lib/api/fiscal-years";
 import type { FiscalYearRow } from "@/lib/mock/fiscal";
 import { periodClose, periodReopen } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function FiscalYearsPage() {
-  const [years, setYears] = React.useState<FiscalYearRow[]>(() => listFiscalYears());
-  const [selectedYearId, setSelectedYearId] = React.useState<string | null>(() => listFiscalYears()[0]?.id ?? null);
+  const [years, setYears] = React.useState<FiscalYearRow[]>([]);
+  const [selectedYearId, setSelectedYearId] = React.useState<string | null>(null);
   const selected = years.find((y) => y.id === selectedYearId) ?? years[0] ?? null;
 
-  const refreshYears = React.useCallback(() => {
-    setYears(listFiscalYears());
+  const refreshYears = React.useCallback(async () => {
+    const items = await fetchFiscalYearsApi();
+    setYears(items);
+    setSelectedYearId((current) => current ?? items[0]?.id ?? null);
   }, []);
+
+  React.useEffect(() => {
+    void refreshYears().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load fiscal years.");
+    });
+  }, [refreshYears]);
 
   const handleClosePeriod = async (periodId: string) => {
     await periodClose({ periodId });
-    refreshYears();
+    await refreshYears();
     toast.success(`Period ${periodId} closed.`);
   };
 
   const handleReopen = async (periodId: string) => {
     await periodReopen(periodId);
-    refreshYears();
+    await refreshYears();
     toast.success(`Period ${periodId} reopened.`);
   };
 
@@ -45,7 +52,7 @@ export default function FiscalYearsPage() {
     <PageShell>
       <PageHeader
         title="Fiscal years"
-        description="Years and periods. Close and reopen periods in demo mode or against the backend."
+        description="Years and periods backed by the finance close calendar."
         breadcrumbs={[
           { label: "Settings", href: "/settings/org" },
           { label: "Financial", href: "/settings/financial/currencies" },

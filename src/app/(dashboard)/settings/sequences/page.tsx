@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { listSequences, createSequence, updateSequence } from "@/lib/data/sequences.repo";
+import { fetchSequencesApi, saveSequenceApi } from "@/lib/api/sequences";
 import type { SequenceRow } from "@/lib/mock/sequences";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -31,8 +31,18 @@ import * as Icons from "lucide-react";
 const DOC_TYPES = ["Sales Order", "Invoice", "Purchase Order", "Bill", "Journal Entry", "Quote", "Delivery Note", "Goods Receipt"];
 
 export default function NumberingSequencesPage() {
-  const [rows, setRows] = React.useState<SequenceRow[]>(() => listSequences());
-  const refresh = React.useCallback(() => setRows(listSequences()), []);
+  const [rows, setRows] = React.useState<SequenceRow[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const refresh = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      setRows(await fetchSequencesApi());
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<SequenceRow | null>(null);
   const [form, setForm] = React.useState({
@@ -72,6 +82,10 @@ export default function NumberingSequencesPage() {
     return `${form.prefix}${n}${form.suffix}`;
   };
 
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
   return (
     <PageShell>
       <PageHeader
@@ -95,7 +109,7 @@ export default function NumberingSequencesPage() {
           <CardHeader>
             <CardTitle>Sequences</CardTitle>
             <CardDescription>
-              {rows.length} sequence(s). Example: SO-0001, INV-0502.
+              {isLoading ? "Loading sequence configuration..." : `${rows.length} sequence(s). Example: SO-0001, INV-0502.`}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -140,9 +154,7 @@ export default function NumberingSequencesPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit sequence" : "Add sequence"}</SheetTitle>
-            <SheetDescription>
-              Saved to browser storage. API pending.
-            </SheetDescription>
+            <SheetDescription>Persist document numbering rules in the backend.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -196,28 +208,21 @@ export default function NumberingSequencesPage() {
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => {
-                if (editing) {
-                  updateSequence(editing.id, {
+              onClick={async () => {
+                try {
+                  await saveSequenceApi({
                     documentType: form.documentType,
                     prefix: form.prefix,
                     nextNumber: form.nextNumber,
                     suffix: form.suffix,
                     padding: form.padding,
                   });
-                  toast.success("Sequence updated.");
-                } else {
-                  createSequence({
-                    documentType: form.documentType,
-                    prefix: form.prefix,
-                    nextNumber: form.nextNumber,
-                    suffix: form.suffix,
-                    padding: form.padding,
-                  });
-                  toast.success("Sequence created.");
+                  toast.success(editing ? "Sequence updated." : "Sequence created.");
+                  setDrawerOpen(false);
+                  await refresh();
+                } catch (error) {
+                  toast.error((error as Error).message);
                 }
-                setDrawerOpen(false);
-                refresh();
               }}
             >
               {editing ? "Save" : "Create"}

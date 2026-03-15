@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
+import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { format } from "date-fns";
 import { downloadCsv } from "@/lib/export/csv";
@@ -33,6 +34,7 @@ export default function JournalEntriesPage() {
   const [statusFilter, setStatusFilter] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [rows, setRows] = React.useState<JournalEntry[]>([]);
+  const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
 
   const refresh = React.useCallback(async () => {
     const docs = await fetchDocumentListApi("journal");
@@ -116,6 +118,18 @@ export default function JournalEntriesPage() {
         header: "Status",
         accessor: (row: JournalEntry) => <StatusBadge status={row.status} />,
       },
+      {
+        id: "posting",
+        header: "",
+        accessor: (row: JournalEntry) => (
+          <Button variant="ghost" size="sm" onClick={(event) => {
+            event.stopPropagation();
+            setPostingSource({ sourceType: "journal", sourceId: row.id });
+          }}>
+            Posting
+          </Button>
+        ),
+      },
     ],
     []
   );
@@ -184,6 +198,14 @@ export default function JournalEntriesPage() {
           />
         )}
       </div>
+      <PostingBatchSheet
+        open={!!postingSource}
+        onOpenChange={(open) => {
+          if (!open) setPostingSource(null);
+        }}
+        sourceType={postingSource?.sourceType}
+        sourceId={postingSource?.sourceId}
+      />
     </PageShell>
   );
 }

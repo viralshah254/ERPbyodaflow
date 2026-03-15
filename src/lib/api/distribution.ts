@@ -1,4 +1,4 @@
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export type DistributionRouteRow = {
   id: string;
@@ -8,7 +8,7 @@ export type DistributionRouteRow = {
 };
 
 export async function fetchDistributionRoutes(): Promise<DistributionRouteRow[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Distribution routes");
   const payload = await apiRequest<{ items: DistributionRouteRow[] }>("/api/distribution/routes");
   return payload.items ?? [];
 }

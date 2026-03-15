@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -13,12 +14,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getMockSavedViews, type SavedViewRow } from "@/lib/mock/reports";
+import { fetchSavedReportViewsApi } from "@/lib/api/reports";
+import type { SavedViewRow } from "@/lib/mock/reports";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function SavedViewsPage() {
-  const rows = React.useMemo(() => getMockSavedViews(), []);
+  const [rows, setRows] = React.useState<SavedViewRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const data = await fetchSavedReportViewsApi();
+        if (!cancelled) setRows(data);
+      } catch (error) {
+        if (!cancelled) toast.error((error as Error).message || "Failed to load saved views.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <PageShell>
@@ -32,9 +54,8 @@ export default function SavedViewsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" onClick={() => toast.info("Save view (stub)")}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Save view
+          <Button size="sm" asChild>
+            <Link href="/reports">Open reports</Link>
           </Button>
         }
       />
@@ -47,7 +68,11 @@ export default function SavedViewsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {rows.length === 0 ? (
+            {loading ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                Loading saved views...
+              </div>
+            ) : rows.length === 0 ? (
               <div className="py-12 text-center text-sm text-muted-foreground">
                 No saved views. Save a report view from the Report library.
               </div>
@@ -71,11 +96,8 @@ export default function SavedViewsPage() {
                       <TableCell className="text-muted-foreground">{r.filters ?? "—"}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => toast.info(`Run (stub): ${r.name}`)}>
-                            Run
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => toast.info("Edit (stub)")}>
-                            Edit
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href="/reports">Open</Link>
                           </Button>
                         </div>
                       </TableCell>

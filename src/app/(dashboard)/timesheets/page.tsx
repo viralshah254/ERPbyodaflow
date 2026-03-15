@@ -23,7 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getMockTimesheetEntries, getMockWeekStarts } from "@/lib/mock/timesheets";
+import { fetchRuntimeSession } from "@/lib/api/context";
+import { fetchProjectsApi } from "@/lib/api/projects";
+import { fetchTimesheetsApi } from "@/lib/api/timesheets";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { toast } from "sonner";
@@ -47,25 +49,105 @@ function weekRange(weekStart: string): string {
   return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${end.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
 }
 
+function startOfWeek(value: string): string {
+  const date = new Date(`${value}T00:00:00Z`);
+  const day = date.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setUTCDate(date.getUTCDate() + diff);
+  return date.toISOString().slice(0, 10);
+}
+
+type WeeklyRow = {
+  id: string;
+  projectCode: string;
+  taskName?: string;
+  notes?: string;
+  status: "RECORDED";
+  mon: number;
+  tue: number;
+  wed: number;
+  thu: number;
+  fri: number;
+  sat: number;
+  sun: number;
+};
+
+type DayKey = (typeof DAYS)[number];
+
 export default function TimesheetsPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const weekStarts = React.useMemo(() => getMockWeekStarts(), []);
-  const [weekStart, setWeekStart] = React.useState(weekStarts[0] ?? "2025-01-27");
-  const entries = React.useMemo(() => getMockTimesheetEntries(weekStart), [weekStart]);
+  const [weekStarts, setWeekStarts] = React.useState<string[]>([]);
+  const [weekStart, setWeekStart] = React.useState("");
+  const [rawEntries, setRawEntries] = React.useState<Array<{ projectId: string; userId: string; date: string; hours: number; description?: string }>>([]);
+  const [projectCodes, setProjectCodes] = React.useState<Map<string, string>>(new Map());
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        setLoading(true);
+        const session = await fetchRuntimeSession();
+        const [projects, timesheets] = await Promise.all([
+          fetchProjectsApi(),
+          fetchTimesheetsApi({ userId: session.user.userId }),
+        ]);
+        if (cancelled) return;
+        const projectMap = new Map(projects.map((project) => [project.id, project.code]));
+        const weeks = Array.from(new Set(timesheets.map((item) => startOfWeek(item.date)))).sort((a, b) => b.localeCompare(a));
+        setWeekStarts(weeks);
+        setWeekStart((current) => current || weeks[0] || "");
+        setRawEntries(timesheets);
+        setProjectCodes(projectMap);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load timesheets.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const visibleEntries = React.useMemo(() => {
+    const grouped = new Map<string, WeeklyRow>();
+    for (const item of rawEntries.filter((row) => !weekStart || startOfWeek(row.date) === weekStart)) {
+      const dayIndex = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date(`${item.date}T00:00:00Z`).getUTCDay()] as DayKey;
+      const key = `${item.projectId}:${item.description ?? ""}`;
+      const current =
+        grouped.get(key) ??
+        {
+          id: key,
+          projectCode: projectCodes.get(item.projectId) ?? item.projectId,
+          taskName: undefined,
+          notes: item.description,
+          status: "RECORDED" as const,
+          mon: 0,
+          tue: 0,
+          wed: 0,
+          thu: 0,
+          fri: 0,
+          sat: 0,
+          sun: 0,
+        };
+      current[dayIndex] += item.hours;
+      grouped.set(key, current);
+    }
+    return Array.from(grouped.values());
+  }, [projectCodes, rawEntries, weekStart]);
 
   const totalHours = React.useMemo(() => {
-    return entries.reduce((s, e) => s + e.mon + e.tue + e.wed + e.thu + e.fri + e.sat + e.sun, 0);
-  }, [entries]);
-
-  const handleSubmit = () => {
-    toast.info("Submit for approval (stub). Reuse approvals module.");
-  };
+    return visibleEntries.reduce((s, e) => s + e.mon + e.tue + e.wed + e.thu + e.fri + e.sat + e.sun, 0);
+  }, [visibleEntries]);
 
   return (
     <PageShell>
       <PageHeader
         title="Timesheets"
-        description="Weekly grid, project/task, hours, submit for approval"
+        description="Weekly grid of live project hours"
         breadcrumbs={[
           { label: "Projects", href: "/projects/overview" },
           { label: "Timesheets" },
@@ -78,9 +160,6 @@ export default function TimesheetsPage() {
             <Button variant="outline" size="sm" onClick={() => openWithPrompt("Help me fill my timesheet for this week.")}>
               <Icons.Sparkles className="mr-2 h-4 w-4" />
               Ask Copilot
-            </Button>
-            <Button size="sm" onClick={handleSubmit} disabled={entries.every((e) => e.status !== "DRAFT")}>
-              Submit for approval
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/approvals/requests">My requests</Link>
@@ -112,52 +191,56 @@ export default function TimesheetsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Entries</CardTitle>
-            <CardDescription>Project/task, hours per day, notes. Submit for approval (reuse approvals).</CardDescription>
+            <CardDescription>Live weekly entries grouped by project and note.</CardDescription>
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[120px]">Project / Task</TableHead>
-                  {DAYS.map((d) => (
-                    <TableHead key={d} className="w-16 text-center">{DAY_LABELS[d]}</TableHead>
-                  ))}
-                  <TableHead className="min-w-[140px]">Notes</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="font-medium">
-                      {e.projectCode} {e.taskName ? `· ${e.taskName}` : ""}
-                    </TableCell>
+            {loading ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">Loading timesheets...</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[120px]">Project / Task</TableHead>
                     {DAYS.map((d) => (
-                      <TableCell key={d} className="text-center">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={24}
-                          step={0.5}
-                          className="w-14 h-8 text-center mx-auto"
-                          value={e[d]}
-                          readOnly
-                        />
-                      </TableCell>
+                      <TableHead key={d} className="w-16 text-center">{DAY_LABELS[d]}</TableHead>
                     ))}
-                    <TableCell className="text-muted-foreground text-sm max-w-[160px] truncate">{e.notes ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={e.status === "APPROVED" ? "secondary" : e.status === "SUBMITTED" ? "default" : "outline"}>
-                        {e.status}
-                      </Badge>
-                    </TableCell>
+                    <TableHead className="min-w-[140px]">Notes</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {entries.length === 0 && (
+                </TableHeader>
+                <TableBody>
+                  {visibleEntries.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="font-medium">
+                        {e.projectCode} {e.taskName ? `· ${e.taskName}` : ""}
+                      </TableCell>
+                      {DAYS.map((d) => (
+                        <TableCell key={d} className="text-center">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={24}
+                            step={0.5}
+                            className="w-14 h-8 text-center mx-auto"
+                            value={e[d]}
+                            readOnly
+                          />
+                        </TableCell>
+                      ))}
+                      <TableCell className="text-muted-foreground text-sm max-w-[160px] truncate">{e.notes ?? "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {e.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {!loading && visibleEntries.length === 0 && (
               <div className="py-12 text-center text-sm text-muted-foreground">
-                No entries for this week. Add project/task rows (stub).
+                No entries for this week.
               </div>
             )}
           </CardContent>

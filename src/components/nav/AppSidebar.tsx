@@ -51,7 +51,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
         : baseModules;
     const personaNav =
       franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE"
-        ? ["core", "docs", "sales", "inventory", "warehouse", "purchasing", "finance", "franchise", "settings"]
+        ? ["core", "docs", "sales", "inventory", "warehouse", "franchise", "settings"]
         : null;
     const input = {
       orgType,

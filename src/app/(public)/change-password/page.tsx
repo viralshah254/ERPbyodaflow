@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -119,11 +118,6 @@ export default function ChangePasswordPage() {
               {isLoading ? "Updating..." : "Update password"}
             </Button>
           </form>
-          <p className="text-center text-sm text-muted-foreground mt-4">
-            <Link href="/dashboard" className="text-primary hover:underline">
-              Skip for now
-            </Link>
-          </p>
         </Card>
       </div>
     </div>

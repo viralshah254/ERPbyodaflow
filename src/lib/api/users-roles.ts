@@ -1,5 +1,5 @@
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
-import { getMockUsers, getMockRoles, type RoleRow, type UserRow } from "@/lib/mock/users-roles";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
+import { type RoleRow, type UserRow } from "@/lib/mock/users-roles";
 
 export interface RoleDetailRow extends RoleRow {
   scope?: "ORG" | "BRANCH" | "DEPARTMENT";
@@ -49,7 +49,7 @@ function mapRole(role: BackendRole): RoleDetailRow {
 }
 
 export async function fetchUsersApi(search?: string): Promise<UserRow[]> {
-  if (!isApiConfigured()) return getMockUsers();
+  requireLiveApi("Users");
   const params = new URLSearchParams();
   if (search?.trim()) params.set("search", search.trim());
   const payload = await apiRequest<{ items: BackendUser[] }>("/api/settings/users", { params });
@@ -57,13 +57,7 @@ export async function fetchUsersApi(search?: string): Promise<UserRow[]> {
 }
 
 export async function createUserApi(body: Omit<UserRow, "id" | "roleNames">): Promise<UserRow> {
-  if (!isApiConfigured()) {
-    return {
-      id: `local-user-${Date.now()}`,
-      ...body,
-      roleNames: [],
-    };
-  }
+  requireLiveApi("Create user");
   const payload = await apiRequest<BackendUser>("/api/settings/users", {
     method: "POST",
     body,
@@ -75,17 +69,7 @@ export async function updateUserApi(
   id: string,
   body: Partial<Omit<UserRow, "id" | "roleNames">>
 ): Promise<UserRow> {
-  if (!isApiConfigured()) {
-    const existing = getMockUsers().find((user) => user.id === id);
-    return {
-      id,
-      email: body.email ?? existing?.email ?? "",
-      firstName: body.firstName ?? existing?.firstName ?? "",
-      lastName: body.lastName ?? existing?.lastName ?? "",
-      roleIds: body.roleIds ?? existing?.roleIds ?? [],
-      roleNames: existing?.roleNames ?? [],
-    };
-  }
+  requireLiveApi("Update user");
   const payload = await apiRequest<BackendUser>(`/api/settings/users/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body,
@@ -94,9 +78,7 @@ export async function updateUserApi(
 }
 
 export async function fetchRolesApi(search?: string): Promise<RoleDetailRow[]> {
-  if (!isApiConfigured()) {
-    return getMockRoles().map((role) => ({ ...role, permissions: [] }));
-  }
+  requireLiveApi("Roles");
   const params = new URLSearchParams();
   if (search?.trim()) params.set("search", search.trim());
   const payload = await apiRequest<{ items: BackendRole[] }>("/api/settings/roles", { params });
@@ -109,16 +91,7 @@ export async function createRoleApi(body: {
   scope?: "ORG" | "BRANCH" | "DEPARTMENT";
   permissions: string[];
 }): Promise<RoleDetailRow> {
-  if (!isApiConfigured()) {
-    return {
-      id: `local-role-${Date.now()}`,
-      name: body.name,
-      description: body.description,
-      scope: body.scope,
-      permissions: body.permissions,
-      permissionCount: body.permissions.length,
-    };
-  }
+  requireLiveApi("Create role");
   const payload = await apiRequest<BackendRole>("/api/settings/roles", {
     method: "POST",
     body,
@@ -135,17 +108,7 @@ export async function updateRoleApi(
     permissions: string[];
   }>
 ): Promise<RoleDetailRow> {
-  if (!isApiConfigured()) {
-    const existing = getMockRoles().find((role) => role.id === id);
-    return {
-      id,
-      name: body.name ?? existing?.name ?? "",
-      description: body.description ?? existing?.description,
-      scope: body.scope,
-      permissions: body.permissions ?? [],
-      permissionCount: body.permissions?.length ?? existing?.permissionCount ?? 0,
-    };
-  }
+  requireLiveApi("Update role");
   const payload = await apiRequest<BackendRole>(`/api/settings/roles/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body,

@@ -1,9 +1,6 @@
-import { apiRequest, downloadFile, isApiConfigured } from "@/lib/api/client";
-import { listBankAccounts, createBankAccount, updateBankAccount } from "@/lib/data/bank-accounts.repo";
-import { createPaymentRunFromBills, listBillsDue, listPaymentRuns } from "@/lib/data/payment-runs.repo";
+import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "@/lib/api/client";
 import type { BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
 import type { OverdueInvoiceRow } from "@/lib/mock/treasury/collections";
-import { getMockOverdueInvoices } from "@/lib/mock/treasury/collections";
 import type { BillDueRow, PaymentMethod, PaymentRunRow } from "@/lib/mock/treasury/payment-runs";
 
 type BackendBankAccount = {
@@ -79,16 +76,13 @@ function mapPaymentRun(run: BackendPaymentRun): PaymentRunRow {
 }
 
 export async function fetchBankAccountsApi(): Promise<BankAccountRow[]> {
-  if (!isApiConfigured()) return listBankAccounts();
+  requireLiveApi("Treasury bank accounts");
   const payload = await apiRequest<{ items: BackendBankAccount[] }>("/api/treasury/bank-accounts");
   return payload.items.map(mapBankAccount);
 }
 
 export async function createBankAccountApi(body: Omit<BankAccountRow, "id">): Promise<void> {
-  if (!isApiConfigured()) {
-    createBankAccount(body);
-    return;
-  }
+  requireLiveApi("Create bank account");
   await apiRequest("/api/treasury/bank-accounts", {
     method: "POST",
     body: {
@@ -104,10 +98,7 @@ export async function createBankAccountApi(body: Omit<BankAccountRow, "id">): Pr
 }
 
 export async function updateBankAccountApi(id: string, body: Partial<BankAccountRow>): Promise<void> {
-  if (!isApiConfigured()) {
-    updateBankAccount(id, body);
-    return;
-  }
+  requireLiveApi("Update bank account");
   await apiRequest(`/api/treasury/bank-accounts/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: {
@@ -123,26 +114,18 @@ export async function updateBankAccountApi(id: string, body: Partial<BankAccount
 }
 
 export async function fetchPaymentRunsApi(): Promise<PaymentRunRow[]> {
-  if (!isApiConfigured()) return listPaymentRuns();
+  requireLiveApi("Payment runs");
   const payload = await apiRequest<{ items: BackendPaymentRun[] }>("/api/treasury/payment-runs");
   return payload.items.map(mapPaymentRun);
 }
 
 export async function fetchPaymentRunApi(id: string): Promise<BackendPaymentRunDetail | null> {
-  if (!isApiConfigured()) {
-    const item = listPaymentRuns().find((run) => run.id === id);
-    return item
-      ? {
-          ...item,
-          paymentMethod: item.paymentMethod,
-        }
-      : null;
-  }
+  requireLiveApi("Payment run detail");
   return apiRequest<BackendPaymentRunDetail>(`/api/treasury/payment-runs/${encodeURIComponent(id)}`);
 }
 
 export async function fetchBillsDueApi(): Promise<BillDueRow[]> {
-  if (!isApiConfigured()) return listBillsDue();
+  requireLiveApi("Bills due");
   const payload = await apiRequest<{
     items: Array<{
       id: string;
@@ -175,10 +158,7 @@ export async function createPaymentRunApi(body: {
   paymentMethod: PaymentMethod;
   bills: BillDueRow[];
 }): Promise<void> {
-  if (!isApiConfigured()) {
-    createPaymentRunFromBills(body.bills, body.paymentMethod);
-    return;
-  }
+  requireLiveApi("Create payment run");
   await apiRequest("/api/treasury/payment-runs", {
     method: "POST",
     body: {
@@ -194,7 +174,7 @@ export async function createPaymentRunApi(body: {
 }
 
 export async function approvePaymentRunApi(id: string): Promise<void> {
-  if (!isApiConfigured()) return;
+  requireLiveApi("Approve payment run");
   await apiRequest(`/api/treasury/payment-runs/${encodeURIComponent(id)}/action`, {
     method: "POST",
     body: { action: "approve" },
@@ -202,15 +182,12 @@ export async function approvePaymentRunApi(id: string): Promise<void> {
 }
 
 export function exportPaymentRunApi(id: string, onError: (message: string) => void): void {
-  if (!isApiConfigured()) {
-    onError("API not configured.");
-    return;
-  }
+  requireLiveApi("Payment run export");
   void downloadFile(`/api/treasury/payment-runs/${encodeURIComponent(id)}/export`, `payment-run-${id}.csv`, onError);
 }
 
 export async function fetchCollectionsApi(): Promise<OverdueInvoiceRow[]> {
-  if (!isApiConfigured()) return getMockOverdueInvoices();
+  requireLiveApi("Collections");
   const payload = await apiRequest<{
     items: Array<{
       id: string;

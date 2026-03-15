@@ -1,12 +1,5 @@
-import {
-  getMockExportHistory,
-  getMockScheduledReports,
-  getMockSavedViews,
-  type ExportHistoryRow,
-  type ScheduledReportRow,
-  type SavedViewRow,
-} from "@/lib/mock/reports";
-import { apiRequest, downloadFile, downloadTextFile, isApiConfigured } from "./client";
+import { type ExportHistoryRow, type ScheduledReportRow, type SavedViewRow } from "@/lib/mock/reports";
+import { apiRequest, downloadFile, downloadTextFile, isApiConfigured, requireLiveApi } from "./client";
 
 type BackendReportLibraryItem = {
   id: string;
@@ -30,9 +23,7 @@ type BackendScheduledReport = {
 };
 
 export async function fetchScheduledReportsApi(): Promise<ScheduledReportRow[]> {
-  if (!isApiConfigured()) {
-    return getMockScheduledReports();
-  }
+  requireLiveApi("Scheduled reports");
   const data = await apiRequest<{ items: BackendScheduledReport[] }>("/api/reports/scheduled");
   return data.items.map((item) => ({
     id: item.id,
@@ -50,9 +41,7 @@ export async function fetchScheduledReportsApi(): Promise<ScheduledReportRow[]> 
 }
 
 export async function fetchSavedReportViewsApi(): Promise<SavedViewRow[]> {
-  if (!isApiConfigured()) {
-    return getMockSavedViews();
-  }
+  requireLiveApi("Saved report views");
   const data = await apiRequest<{ items: BackendSavedView[] }>("/api/reports/saved");
   return data.items.map((item) => ({
     id: item.id,
@@ -64,12 +53,7 @@ export async function fetchSavedReportViewsApi(): Promise<SavedViewRow[]> {
 }
 
 export async function fetchReportLibraryApi(): Promise<Array<{ id: string; name: string; description: string; category: string }>> {
-  if (!isApiConfigured()) {
-    return [
-      { id: "vat-summary", name: "VAT Summary", description: "VAT output, input, and net tax summary.", category: "finance" },
-      { id: "wht-summary", name: "WHT Summary", description: "Withholding tax summary by reporting period.", category: "finance" },
-    ];
-  }
+  requireLiveApi("Report library");
   const data = await apiRequest<{ items: BackendReportLibraryItem[] }>("/api/reports");
   return data.items.map((item) => ({
     id: item.id,
@@ -104,9 +88,7 @@ function mapExportStatus(status: BackendReportExport["status"]): ExportHistoryRo
 }
 
 export async function fetchReportExportsApi(): Promise<ExportHistoryRow[]> {
-  if (!isApiConfigured()) {
-    return getMockExportHistory();
-  }
+  requireLiveApi("Report exports");
   const data = await apiRequest<{ items: BackendReportExport[] }>("/api/reports/exports");
   return data.items.map((item) => ({
     id: item.id,
@@ -119,9 +101,7 @@ export async function fetchReportExportsApi(): Promise<ExportHistoryRow[]> {
 }
 
 export async function runReportExportApi(reportId = "vat-summary"): Promise<void> {
-  if (!isApiConfigured()) {
-    return;
-  }
+  requireLiveApi("Run report export");
   await apiRequest("/api/reports/run", {
     method: "POST",
     body: { reportId },
@@ -134,9 +114,7 @@ export async function fetchVatSummaryApi(input?: { dateFrom?: string; dateTo?: s
   totalVat: number;
   invoiceCount: number;
 }> {
-  if (!isApiConfigured()) {
-    return { totalVat: 0, invoiceCount: 0, ...input };
-  }
+  requireLiveApi("VAT summary");
   const params = new URLSearchParams();
   if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
   if (input?.dateTo) params.set("dateTo", input.dateTo);
@@ -149,13 +127,47 @@ export async function fetchWhtSummaryApi(input?: { dateFrom?: string; dateTo?: s
   totalWht: number;
   billCount: number;
 }> {
-  if (!isApiConfigured()) {
-    return { totalWht: 0, billCount: 0, ...input };
-  }
+  requireLiveApi("WHT summary");
   const params = new URLSearchParams();
   if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
   if (input?.dateTo) params.set("dateTo", input.dateTo);
   return apiRequest("/api/reports/wht-summary", { params });
+}
+
+export type CommissionReconciliationRow = {
+  runId: string;
+  runNumber: string;
+  periodStart: string;
+  periodEnd: string;
+  runStatus: string;
+  salesBase: number;
+  commissionAmount: number;
+  topUpAmount: number;
+  totalPayout: number;
+  commissionJournalId: string | null;
+  topUpJournalIds: string[];
+  paymentSettlementStatus: string;
+};
+
+export async function fetchCommissionReconciliationApi(input?: {
+  dateFrom?: string;
+  dateTo?: string;
+  status?: "DRAFT" | "POSTED" | "ALL";
+}): Promise<CommissionReconciliationRow[]> {
+  requireLiveApi("Commission reconciliation");
+  const params = new URLSearchParams();
+  if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
+  if (input?.dateTo) params.set("dateTo", input.dateTo);
+  if (input?.status && input.status !== "ALL") params.set("status", input.status);
+  const payload = await apiRequest<{ items: CommissionReconciliationRow[] }>("/api/reports/cool-catch/commission-reconciliation", {
+    params,
+  });
+  return payload.items ?? [];
+}
+
+export function downloadCommissionReconciliationCsvApi(onError: (message: string) => void): void {
+  requireLiveApi("Commission reconciliation export");
+  downloadFile("/api/reports/cool-catch/commission-reconciliation?format=csv", "commission-reconciliation.csv", onError);
 }
 
 export function downloadTaxSummaryCsvApi(
@@ -163,21 +175,12 @@ export function downloadTaxSummaryCsvApi(
   filename: string,
   onError: (message: string) => void
 ): void {
-  if (!isApiConfigured()) {
-    onError("API not configured.");
-    return;
-  }
+  requireLiveApi(`${reportId} export`);
   downloadFile(`/api/reports/${reportId}?format=csv`, filename, onError);
 }
 
 export async function downloadReportExportApi(row: ExportHistoryRow): Promise<void> {
-  if (!isApiConfigured()) {
-    downloadTextFile(
-      `${row.name.replaceAll(" ", "-").toLowerCase()}.${row.format}`,
-      `Report export\nName: ${row.name}\nFormat: ${row.format}\nCreated: ${row.createdAt}`
-    );
-    return;
-  }
+  requireLiveApi("Report export detail");
   const detail = await apiRequest<BackendReportExportDetail>(`/api/reports/export/${row.id}`);
   downloadTextFile(
     `${detail.reportId}-${detail.id}.json`,

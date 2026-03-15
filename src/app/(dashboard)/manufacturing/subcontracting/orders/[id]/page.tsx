@@ -14,7 +14,7 @@ import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimelin
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocationBadge";
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
-import { fetchSubcontractOrderById, receiveSubcontractOrder } from "@/lib/api/cool-catch";
+import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, receiveSubcontractOrder } from "@/lib/api/cool-catch";
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -25,6 +25,7 @@ export default function SubcontractOrderDetailPage() {
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchSubcontractOrderById>>>(null);
   const [loading, setLoading] = React.useState(true);
   const [receiving, setReceiving] = React.useState(false);
+  const [drilldown, setDrilldown] = React.useState<Awaited<ReturnType<typeof fetchSubcontractCostingDrilldown>>>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -32,6 +33,9 @@ export default function SubcontractOrderDetailPage() {
       .then((r) => { if (!cancelled) setOrder(r); })
       .catch(() => { if (!cancelled) setOrder(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
+    fetchSubcontractCostingDrilldown(id).then((r) => {
+      if (!cancelled) setDrilldown(r);
+    });
     return () => { cancelled = true; };
   }, [id]);
 
@@ -169,6 +173,27 @@ export default function SubcontractOrderDetailPage() {
                 { label: "Secondary/byproduct fees", amount: feeLines.filter((line) => line.type !== "OUTPUT_PRIMARY").reduce((a, line) => a + (line.amount ?? 0), 0) },
               ]}
             />
+            {drilldown && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Fee-to-COGS drilldown</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 text-sm md:grid-cols-3">
+                  <div>
+                    <p className="text-muted-foreground">Expected vs actual yield</p>
+                    <p className="font-medium">{(drilldown.expectedYield * 100).toFixed(2)}% vs {(drilldown.actualYield * 100).toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Yield variance</p>
+                    <p className="font-medium">{(drilldown.yieldVariance * 100).toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Service fee variance</p>
+                    <p className="font-medium">{formatMoney(drilldown.feeVariance, "KES")}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="space-y-6">

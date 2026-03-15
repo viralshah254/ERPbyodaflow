@@ -9,27 +9,46 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
-import { loadStoredValue, saveStoredValue } from "@/lib/data/persisted-store";
+import {
+  fetchNotificationSettingsApi,
+  updateNotificationSettingsApi,
+} from "@/lib/api/notifications";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function NotificationsPage() {
-  const saved = React.useMemo(
-    () =>
-      loadStoredValue("odaflow_notification_settings", () => ({
-        email: true,
-        sms: false,
-        whatsapp: false,
-      })),
-    []
-  );
-  const [email, setEmail] = React.useState(saved.email);
-  const [sms, setSms] = React.useState(saved.sms);
-  const [whatsapp, setWhatsapp] = React.useState(saved.whatsapp);
+  const [email, setEmail] = React.useState(true);
+  const [sms, setSms] = React.useState(false);
+  const [whatsapp, setWhatsapp] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
-  const handleSave = () => {
-    saveStoredValue("odaflow_notification_settings", { email, sms, whatsapp });
-    toast.success("Notification settings saved.");
+  React.useEffect(() => {
+    let active = true;
+    void fetchNotificationSettingsApi()
+      .then((settings) => {
+        if (!active) return;
+        setEmail(!!settings.email);
+        setSms(!!settings.sms);
+        setWhatsapp(!!settings.whatsapp);
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Failed to load notification settings.");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateNotificationSettingsApi({ inApp: true, email, sms, whatsapp });
+      toast.success("Notification settings saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save notification settings.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -46,7 +65,7 @@ export default function NotificationsPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain notification channels and rules." label="Explain notifications" />
-            <Button size="sm" onClick={handleSave}>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
               Save
             </Button>
           </div>
@@ -56,7 +75,7 @@ export default function NotificationsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Channels</CardTitle>
-            <CardDescription>Email, SMS, and WhatsApp channel preferences stored for demo mode.</CardDescription>
+            <CardDescription>Channel preferences are saved to backend org settings.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2">

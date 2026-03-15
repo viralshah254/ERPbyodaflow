@@ -1,4 +1,4 @@
-import { apiRequest, isApiConfigured } from "@/lib/api/client";
+import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export type ManufacturingBomItem = {
   id: string;
@@ -95,13 +95,13 @@ export type ManufacturingMrpResponse = {
 };
 
 export async function fetchManufacturingBoms(): Promise<ManufacturingBom[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Manufacturing BOMs");
   const payload = await apiRequest<{ items: ManufacturingBom[] }>("/api/manufacturing/boms");
   return payload.items ?? [];
 }
 
 export async function fetchManufacturingBom(id: string): Promise<ManufacturingBom | null> {
-  if (!isApiConfigured()) return null;
+  requireLiveApi("Manufacturing BOM detail");
   try {
     return await apiRequest<ManufacturingBom>(`/api/manufacturing/boms/${encodeURIComponent(id)}`);
   } catch {
@@ -125,7 +125,7 @@ export async function updateManufacturingBom(id: string, payload: Partial<Manufa
 }
 
 export async function fetchManufacturingRoutes(): Promise<ManufacturingRoute[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Manufacturing routes");
   const payload = await apiRequest<{ items: ManufacturingRoute[] }>("/api/manufacturing/routing");
   return payload.items ?? [];
 }
@@ -144,7 +144,7 @@ export async function updateManufacturingRoute(id: string, payload: Partial<Manu
 }
 
 export async function fetchManufacturingWorkOrders(): Promise<ManufacturingWorkOrder[]> {
-  if (!isApiConfigured()) return [];
+  requireLiveApi("Manufacturing work orders");
   const payload = await apiRequest<{ items: ManufacturingWorkOrder[] }>("/api/manufacturing/work-orders");
   return payload.items ?? [];
 }
@@ -172,13 +172,7 @@ export async function runManufacturingWorkOrderAction(
 }
 
 export async function fetchManufacturingMrp(): Promise<ManufacturingMrpResponse> {
-  if (!isApiConfigured()) {
-    return {
-      items: [],
-      suggestions: [],
-      summary: { workOrderSuggestions: 0, purchaseSuggestions: 0, totalShortageQty: 0 },
-    };
-  }
+  requireLiveApi("Manufacturing MRP");
   return apiRequest<ManufacturingMrpResponse>("/api/manufacturing/mrp");
 }
 

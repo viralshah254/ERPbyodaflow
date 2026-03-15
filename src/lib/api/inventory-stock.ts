@@ -1,10 +1,8 @@
 import {
-  getMockStock,
-  getStockItemById,
   type StockRow,
 } from "@/lib/mock/stock";
-import { getMockMovements, type MovementRow } from "@/lib/mock/movements";
-import { apiRequest, isApiConfigured } from "./client";
+import { type MovementRow } from "@/lib/mock/movements";
+import { apiRequest, requireLiveApi } from "./client";
 
 export type InventoryStockRow = StockRow & { productId?: string };
 
@@ -54,25 +52,7 @@ export async function fetchStockLevelsApi(filters?: {
   status?: "In Stock" | "Low Stock" | "Out of Stock" | "all";
   search?: string;
 }): Promise<InventoryStockRow[]> {
-  if (!isApiConfigured()) {
-    let rows = getMockStock();
-    if (filters?.warehouseId) {
-      rows = rows.filter((row) => row.warehouseId === filters.warehouseId || row.warehouse === filters.warehouseId);
-    }
-    if (filters?.productId) {
-      rows = rows.filter((row) => row.id === filters.productId || row.sku === filters.productId);
-    }
-    if (filters?.status && filters.status !== "all") {
-      rows = rows.filter((row) => row.status === filters.status);
-    }
-    if (filters?.search?.trim()) {
-      const query = filters.search.trim().toLowerCase();
-      rows = rows.filter(
-        (row) => row.sku.toLowerCase().includes(query) || row.name.toLowerCase().includes(query)
-      );
-    }
-    return rows;
-  }
+  requireLiveApi("Inventory stock levels");
   const statusMap: Record<string, string | undefined> = {
     "In Stock": "IN_STOCK",
     "Low Stock": "LOW_STOCK",
@@ -94,9 +74,7 @@ export async function fetchStockLevelsApi(filters?: {
 }
 
 export async function fetchStockLevelApi(id: string): Promise<InventoryStockRow | null> {
-  if (!isApiConfigured()) {
-    return getStockItemById(id) ?? null;
-  }
+  requireLiveApi("Inventory stock level detail");
   const data = await apiRequest<BackendStockLevel>(`/api/inventory/stock-levels/${id}`);
   return mapStock(data);
 }
@@ -106,9 +84,7 @@ export async function createStockAdjustmentApi(payload: {
   quantityDelta: number;
   reason?: string;
 }): Promise<void> {
-  if (!isApiConfigured()) {
-    return;
-  }
+  requireLiveApi("Inventory stock adjustment");
   await apiRequest("/api/inventory/stock-adjustments", {
     method: "POST",
     body: {
@@ -135,21 +111,7 @@ export async function fetchInventoryMovementsApi(filters?: {
   search?: string;
   type?: string;
 }): Promise<MovementRow[]> {
-  if (!isApiConfigured()) {
-    let rows = getMockMovements();
-    if (filters?.warehouseId) rows = rows.filter((row) => row.warehouse === filters.warehouseId);
-    if (filters?.type) rows = rows.filter((row) => row.type === filters.type);
-    if (filters?.search?.trim()) {
-      const query = filters.search.trim().toLowerCase();
-      rows = rows.filter(
-        (row) =>
-          row.sku.toLowerCase().includes(query) ||
-          row.productName.toLowerCase().includes(query) ||
-          row.reference?.toLowerCase().includes(query)
-      );
-    }
-    return rows;
-  }
+  requireLiveApi("Inventory movements");
   const params = new URLSearchParams();
   if (filters?.warehouseId) params.set("warehouseId", filters.warehouseId);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());

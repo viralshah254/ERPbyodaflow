@@ -5,8 +5,7 @@ const nextConfig = {
     domains: [],
   },
   eslint: {
-    // Allow build to complete; address hooks/formatting warnings in follow-up
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: process.env.CI !== "1",
   },
 };
 

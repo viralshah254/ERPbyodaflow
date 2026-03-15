@@ -74,6 +74,9 @@ export interface DiscountPolicy {
   name: string;
   /** e.g. volume, promo, channel */
   type: string;
+  priority?: number;
+  enabled?: boolean;
+  discountPercent?: number;
   /** Approval required before apply. */
   requiresApproval?: boolean;
   startDate?: string;

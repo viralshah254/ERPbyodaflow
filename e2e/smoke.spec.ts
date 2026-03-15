@@ -1,4 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { bootstrapLocalSession } from "./auth";
+
+async function expectHiddenRoute(page: import("@playwright/test").Page, route: string) {
+  await page.goto(route);
+  await expect(page.locator("body")).toContainText(/404|not found|sign in to your account/i);
+}
 
 /**
  * E2E Smoke Tests — visit all major routes, check PageHeader renders.
@@ -99,6 +105,10 @@ const MAJOR_ROUTES = [
 ];
 
 test.describe("Smoke tests", () => {
+  test.beforeEach(async ({ page }) => {
+    await bootstrapLocalSession(page);
+  });
+
   for (const route of MAJOR_ROUTES) {
     test(`renders ${route}`, async ({ page }) => {
       await page.goto(route);
@@ -112,29 +122,28 @@ test.describe("Smoke tests", () => {
   }
 });
 
-test.describe("QA toolkit routes", () => {
-  test("dev hub loads", async ({ page }) => {
-    await page.goto("/dev");
-    await expect(page.locator("body")).toBeVisible();
+test.describe("QA toolkit routes are hidden by default", () => {
+  test.beforeEach(async ({ page }) => {
+    await bootstrapLocalSession(page);
   });
 
-  test("route-check loads", async ({ page }) => {
-    await page.goto("/dev/route-check");
-    await expect(page.locator("text=Route check")).toBeVisible();
+  test("dev hub is not routable", async ({ page }) => {
+    await expectHiddenRoute(page, "/dev");
   });
 
-  test("action-audit loads", async ({ page }) => {
-    await page.goto("/dev/action-audit");
-    await expect(page.locator("text=Action audit")).toBeVisible();
+  test("route-check is not routable", async ({ page }) => {
+    await expectHiddenRoute(page, "/dev/route-check");
   });
 
-  test("data-health loads", async ({ page }) => {
-    await page.goto("/dev/data-health");
-    await expect(page.locator("text=Data health")).toBeVisible();
+  test("action-audit is not routable", async ({ page }) => {
+    await expectHiddenRoute(page, "/dev/action-audit");
   });
 
-  test("link-check loads", async ({ page }) => {
-    await page.goto("/dev/link-check");
-    await expect(page.locator("text=Link check")).toBeVisible();
+  test("data-health is not routable", async ({ page }) => {
+    await expectHiddenRoute(page, "/dev/data-health");
+  });
+
+  test("link-check is not routable", async ({ page }) => {
+    await expectHiddenRoute(page, "/dev/link-check");
   });
 });

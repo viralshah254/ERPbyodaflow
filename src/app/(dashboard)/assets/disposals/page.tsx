@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -26,18 +25,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getMockDisposals, type DisposalRow } from "@/lib/mock/assets/disposals";
-import { getMockAssets } from "@/lib/mock/assets/register";
+import { createAssetDisposalApi, fetchAssetDisposalsApi } from "@/lib/api/asset-disposals";
+import { fetchAssetsApi } from "@/lib/api/assets";
+import { postDisposalJournalApi } from "@/lib/api/assets-lifecycle";
+import type { DisposalRow } from "@/lib/mock/assets/disposals";
+import type { AssetRow } from "@/lib/mock/assets/register";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function DisposalsPage() {
-  const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [wizardOpen, setWizardOpen] = React.useState(false);
+  const [postingId, setPostingId] = React.useState<string | null>(null);
   const [wizardStep, setWizardStep] = React.useState(1);
+  const [rows, setRows] = React.useState<DisposalRow[]>([]);
+  const [assets, setAssets] = React.useState<AssetRow[]>([]);
   const [wizardForm, setWizardForm] = React.useState({
     assetId: "",
     disposalDate: "",
@@ -45,7 +49,21 @@ export default function DisposalsPage() {
     reason: "",
   });
 
-  const rows = React.useMemo(() => getMockDisposals(), []);
+  const reload = React.useCallback(async () => {
+    const [disposalItems, assetItems] = await Promise.all([
+      fetchAssetDisposalsApi(),
+      fetchAssetsApi(),
+    ]);
+    setRows(disposalItems);
+    setAssets(assetItems.filter((asset) => asset.status === "ACTIVE"));
+  }, []);
+
+  React.useEffect(() => {
+    void reload().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load disposals.");
+    });
+  }, [reload]);
+
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -55,7 +73,6 @@ export default function DisposalsPage() {
         r.assetName.toLowerCase().includes(q)
     );
   }, [rows, search]);
-  const assets = React.useMemo(() => getMockAssets().filter((a) => a.status === "ACTIVE"), []);
 
   const openWizard = () => {
     setWizardForm({
@@ -88,8 +105,38 @@ export default function DisposalsPage() {
         ),
       },
       { id: "status", header: "Status", accessor: (r: DisposalRow) => <Badge variant={r.status === "POSTED" ? "secondary" : "outline"}>{r.status}</Badge> },
+      {
+        id: "actions",
+        header: "Actions",
+        accessor: (r: DisposalRow) =>
+          r.status === "DRAFT" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={postingId === r.id}
+              onClick={() => {
+                void (async () => {
+                  try {
+                    setPostingId(r.id);
+                    const result = await postDisposalJournalApi(r.id);
+                    await reload();
+                    toast.success(`Disposal posted. Journal ${result.journalId}.`);
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Failed to post disposal journal.");
+                  } finally {
+                    setPostingId(null);
+                  }
+                })();
+              }}
+            >
+              Post journal
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">{r.journalId ? `Journal ${r.journalId}` : "Posted"}</span>
+          ),
+      },
     ],
-    []
+    [postingId, reload]
   );
 
   return (
@@ -118,12 +165,11 @@ export default function DisposalsPage() {
           searchPlaceholder="Search by asset..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export (stub)")}
         />
         <Card>
           <CardHeader>
             <CardTitle>Disposals</CardTitle>
-            <CardDescription>Sale price, date, reason. Preview gain/loss (mock).</CardDescription>
+            <CardDescription>Sale price, date, reason, and live gain/loss preview.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<DisposalRow>
@@ -139,7 +185,7 @@ export default function DisposalsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Disposal wizard</SheetTitle>
-            <SheetDescription>Step {wizardStep} of 2. Stub.</SheetDescription>
+            <SheetDescription>Step {wizardStep} of 2. Record a live asset disposal.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             {wizardStep === 1 && (
@@ -178,7 +224,7 @@ export default function DisposalsPage() {
             )}
             {wizardStep === 2 && (
               <div className="text-sm text-muted-foreground">
-                Review and post (stub). Would create journal entries.
+                Review the disposal before posting it to the asset register.
               </div>
             )}
           </div>
@@ -191,7 +237,27 @@ export default function DisposalsPage() {
             ) : (
               <>
                 <Button variant="outline" onClick={() => setWizardStep(1)}>Back</Button>
-                <Button onClick={() => { setWizardOpen(false); toast.info("Post disposal (stub)."); }}>Post</Button>
+                <Button
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        await createAssetDisposalApi({
+                          assetId: wizardForm.assetId,
+                          disposalDate: wizardForm.disposalDate,
+                          proceeds: wizardForm.salePrice,
+                          reason: wizardForm.reason || undefined,
+                        });
+                        setWizardOpen(false);
+                        await reload();
+                        toast.success("Asset disposal recorded.");
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Failed to record disposal.");
+                      }
+                    })();
+                  }}
+                >
+                  Post
+                </Button>
               </>
             )}
           </SheetFooter>

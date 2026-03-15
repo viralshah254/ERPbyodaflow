@@ -1,6 +1,5 @@
 import type { ApprovalItem } from "@/lib/mock/approvals";
-import { listApprovalInbox, listApprovalRequests } from "@/lib/data/approvals.repo";
-import { apiRequest, isApiConfigured } from "./client";
+import { apiRequest, requireLiveApi } from "./client";
 
 type BackendApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -40,17 +39,13 @@ function mapApprovalItem(item: BackendApprovalItem, isMine = false): ApprovalIte
 }
 
 export async function fetchApprovalInbox(): Promise<ApprovalItem[]> {
-  if (!isApiConfigured()) {
-    return listApprovalInbox().filter((item) => item.status === "pending");
-  }
+  requireLiveApi("Approval inbox");
   const data = await apiRequest<{ items: BackendApprovalItem[] }>("/api/approvals/inbox");
   return data.items.map((item) => mapApprovalItem(item));
 }
 
 export async function fetchApprovalRequests(): Promise<ApprovalItem[]> {
-  if (!isApiConfigured()) {
-    return listApprovalRequests();
-  }
+  requireLiveApi("Approval requests");
   const data = await apiRequest<{ items: BackendApprovalItem[] }>("/api/approvals/requests");
   return data.items.map((item) => mapApprovalItem(item, true));
 }

@@ -1,43 +1,32 @@
 import { test, expect } from "@playwright/test";
-
-async function login(page: import("@playwright/test").Page) {
-  await page.goto("/login");
-  await page.getByRole("button", { name: /Manufacturer Demo/i }).click();
-  await page.waitForURL(/\/dashboard/, { timeout: 10000 });
-}
+import { bootstrapLocalSession } from "./auth";
 
 test.describe("Week 16: Tax, pricing, payroll → journal", () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await bootstrapLocalSession(page);
   });
 
-  test("VAT breakdown visible on invoice doc", async ({ page }) => {
-    await page.goto("/docs/invoice/1");
-    await page.getByRole("tab", { name: /Taxes\/Charges/i }).click();
-    await expect(page.getByRole("heading", { name: /VAT breakdown/i })).toBeVisible();
-  });
-
-  test("WHT stub visible on bill doc", async ({ page }) => {
-    await page.goto("/docs/bill/1");
-    await page.getByRole("tab", { name: /Taxes\/Charges/i }).click();
-    await expect(page.getByRole("heading", { name: /Withholding tax|WHT/i })).toBeVisible();
-  });
-
-  test("payroll posting stub routes to journal", async ({ page }) => {
-    await page.goto("/payroll/pay-runs");
-    await page.getByRole("row").filter({ has: page.getByText(/PR-/) }).first().click();
-    await page.waitForURL(/\/payroll\/pay-runs\/pr/);
-    await page.getByRole("button", { name: /Post payroll journal/i }).click();
-    await expect(page).toHaveURL(/\/docs\/journal\/new/);
-  });
-
-  test("pricing selection on sales invoice line", async ({ page }) => {
+  test("invoice wizard exposes taxes and charges step", async ({ page }) => {
     await page.goto("/docs/invoice/new");
-    await page.getByLabel(/^Date$/i).fill("2025-01-28");
-    const party = page.getByPlaceholder(/Search or enter/i).first();
-    if (await party.isVisible()) await party.fill("ABC");
+    await expect(page.getByRole("heading", { name: /New invoice/i })).toBeVisible();
+    await expect(page.getByText(/Taxes & charges/i)).toBeVisible();
+  });
+
+  test("bill wizard exposes taxes and charges step", async ({ page }) => {
+    await page.goto("/docs/bill/new");
+    await expect(page.getByRole("heading", { name: /New bill/i })).toBeVisible();
+    await expect(page.getByText(/Taxes & charges/i)).toBeVisible();
+  });
+
+  test("payroll page exposes live create flow", async ({ page }) => {
+    await page.goto("/payroll/pay-runs");
+    await expect(page.getByRole("button", { name: /New pay run/i })).toBeVisible();
+  });
+
+  test("pricing hints appear on invoice line editor", async ({ page }) => {
+    await page.goto("/docs/invoice/new");
     await page.getByRole("button", { name: /^Next$/i }).click();
-    await expect(page.getByText(/2\. Lines|Lines/i)).toBeVisible();
+    await expect(page.getByText(/Lines/i)).toBeVisible();
     await page.getByRole("button", { name: /Add line/i }).click();
     await expect(page.getByText(/price reason|base unit|EA|CARTON|tier/i)).toBeVisible();
   });

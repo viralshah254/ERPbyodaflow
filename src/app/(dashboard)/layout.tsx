@@ -3,6 +3,7 @@
 import { MainLayout } from "@/components/layout/main-layout";
 import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
+import { getIdToken } from "@/lib/firebase";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useEffect } from "react";
@@ -14,99 +15,12 @@ const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   SHOP: "retail-multi-store",
 };
 
-// Mock auth initialization
-function initializeMockAuth() {
-  const { setSession } = useAuthStore.getState();
-  const { hydrateFromBackend } = useOrgContextStore.getState();
-
-  // Mock data
-  const branch1 = {
-    branchId: "branch-1",
-    orgId: "org-1",
-    name: "Head Office",
-    isHeadOffice: true,
-    isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  setSession({
-    user: {
-      userId: "user-1",
-      orgId: "org-1",
-      branchIds: ["branch-1", "branch-2"],
-      roleIds: ["role-admin"],
-      email: "admin@odaflow.com",
-      firstName: "Admin",
-      lastName: "User",
-      status: "ACTIVE",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    org: {
-      orgId: "org-1",
-      tenantId: "tenant-1",
-      orgType: "MANUFACTURER",
-      name: "Acme Manufacturing",
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    tenant: {
-      tenantId: "tenant-1",
-      name: "Acme Corp",
-      plan: "ENTERPRISE",
-      region: "US",
-      currency: "USD",
-      timeZone: "America/New_York",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    currentBranch: branch1,
-    branches: [branch1],
-    permissions: ["*"],
-  });
-  hydrateFromBackend({
-    orgType: "MANUFACTURER",
-    templateId: "fmcg-manufacturer",
-    enabledModules: [
-      "dashboard",
-      "masters",
-      "inventory",
-      "sales",
-      "purchasing",
-      "pricing",
-      "finance",
-      "manufacturing",
-      "crm",
-      "projects",
-      "reports",
-      "automation",
-      "analytics",
-      "settings",
-      "docs",
-    ],
-    featureFlags: {
-      approvals: true,
-      batchExpiry: true,
-      bomMrpWorkOrders: true,
-      costing: true,
-      multiWarehouse: true,
-      workOrders: true,
-    },
-    orgRole: "STANDARD",
-    franchisePersona: "STANDARD",
-  });
-  // So Cool Catch (and other) API requests send dev auth when backend is configured
-  setApiAuth({ devUserId: "user-1", branchId: branch1.branchId });
-}
-
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isLoading } = useAuthStore();
   const router = useRouter();
 
   const org = useAuthStore((s) => s.org);
@@ -117,10 +31,15 @@ export default function DashboardLayout({
     const bootstrap = async () => {
       if (!isLoading) return;
       if (!isApiConfigured()) {
-        initializeMockAuth();
+        useAuthStore.getState().logout();
+        router.replace("/login?reason=backend");
         return;
       }
       try {
+        const token = await getIdToken();
+        if (token) {
+          setApiAuth({ bearerToken: token });
+        }
         const session = await fetchRuntimeSession();
         if (!active) return;
         useAuthStore.getState().setSession(session);
@@ -143,7 +62,9 @@ export default function DashboardLayout({
         setApiAuth({ branchId: session.currentBranch?.branchId });
       } catch (_error) {
         if (!active) return;
-        initializeMockAuth();
+        useAuthStore.getState().logout();
+        useAuthStore.getState().finishHydration();
+        router.replace("/login?reason=session");
       }
     };
     void bootstrap();
@@ -159,6 +80,15 @@ export default function DashboardLayout({
     }
   }, [org, templateId, applyTemplate]);
 
-  return <MainLayout>{children}</MainLayout>;
+  return (
+    <MainLayout>
+      {!isApiConfigured() ? (
+        <div className="w-full bg-amber-500/15 border-b border-amber-500/40 px-4 py-2 text-xs text-amber-200">
+          Non-live mode: API is not configured. Critical finance/accounting actions are disabled.
+        </div>
+      ) : null}
+      {children}
+    </MainLayout>
+  );
 }
 

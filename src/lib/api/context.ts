@@ -1,4 +1,4 @@
-import { apiRequest, isApiConfigured } from "./client";
+import { apiRequest, requireLiveApi } from "./client";
 import type { Branch, Org, Tenant, User } from "@/types/erp";
 
 export type RuntimeOrgContext = {
@@ -176,9 +176,7 @@ export async function fetchRuntimeSession(): Promise<{
   permissions: string[];
   orgContext: RuntimeOrgContext;
 }> {
-  if (!isApiConfigured()) {
-    throw new Error("API not configured.");
-  }
+  requireLiveApi("Runtime session");
   const payload = await apiRequest<BackendSession>("/api/me");
   const branches = (payload.branches ?? []).map(mapBranch);
   return {

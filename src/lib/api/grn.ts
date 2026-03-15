@@ -1,21 +1,16 @@
 /**
- * GRN (goods receipt) API — backend when NEXT_PUBLIC_API_URL set, else mocks.
+ * GRN (goods receipt) API.
  * See BACKEND_SPEC_COOL_CATCH.md §3.7 (GRN line weight).
  */
 
-import { apiRequest, downloadFile, downloadTextFile, isApiConfigured } from "@/lib/api/client";
-import {
-  getGrnById,
-  listGrns,
-  updateGrnStatus,
-} from "@/lib/data/grn.repo";
+import { apiRequest, downloadFile, downloadTextFile, requireLiveApi } from "@/lib/api/client";
 import { type GrnDetailRow } from "@/lib/mock/purchasing";
 import type { PurchasingDocRow } from "@/lib/mock/purchasing";
 
 export type { GrnDetailRow };
 
 export async function fetchGRNs(): Promise<PurchasingDocRow[]> {
-  if (!isApiConfigured()) return listGrns();
+  requireLiveApi("Goods receipts");
   try {
     const res = await apiRequest<{ items: PurchasingDocRow[] }>("/api/purchasing/grn");
     return res?.items ?? [];
@@ -25,7 +20,7 @@ export async function fetchGRNs(): Promise<PurchasingDocRow[]> {
 }
 
 export async function fetchGRNById(id: string): Promise<GrnDetailRow | null> {
-  if (!isApiConfigured()) return getGrnById(id);
+  requireLiveApi("Goods receipt detail");
   try {
     const res = await apiRequest<GrnDetailRow>(`/api/purchasing/grn/${encodeURIComponent(id)}`);
     return res;
@@ -35,10 +30,7 @@ export async function fetchGRNById(id: string): Promise<GrnDetailRow | null> {
 }
 
 export async function postGRN(id: string): Promise<void> {
-  if (!isApiConfigured()) {
-    updateGrnStatus(id, "POSTED");
-    return;
-  }
+  requireLiveApi("Post goods receipt");
   await apiRequest(`/api/purchasing/grn/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
 }
 
@@ -84,9 +76,6 @@ export function exportGRNDetailCsv(grn: GrnDetailRow): void {
 }
 
 export function exportGRNPdf(id: string, onNotAvailable: (message: string) => void): void {
-  if (!isApiConfigured()) {
-    onNotAvailable("PDF export is only available when API is configured. CSV export works in demo mode.");
-    return;
-  }
+  requireLiveApi("Goods receipt PDF export");
   void downloadFile(`/api/purchasing/grn/${encodeURIComponent(id)}/pdf`, `grn-${id}.pdf`, onNotAvailable);
 }

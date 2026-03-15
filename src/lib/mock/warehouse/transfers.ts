@@ -21,6 +21,7 @@ export interface TransferRow {
   status: TransferStatus;
   lines: TransferLineRow[];
   createdAt?: string;
+  receivedAt?: string;
 }
 
 export const MOCK_TRANSFERS: TransferRow[] = [
