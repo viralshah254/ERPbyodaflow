@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import type { TutorialForRoute } from "@/config/tutorial";
-import { BookOpen, Sparkles } from "lucide-react";
+import { BookOpen, Sparkles, ArrowRight, Play } from "lucide-react";
 
 export interface PageGuideSheetProps {
   open: boolean;
@@ -17,6 +17,9 @@ export interface PageGuideSheetProps {
   /** Current route guide; when null, show fallback and only Ask Copilot. */
   info: TutorialForRoute | null;
   onAskCopilot: () => void;
+  /** Optional: start spotlight tour when available */
+  onStartTour?: () => void;
+  hasTour?: boolean;
 }
 
 const FALLBACK_SUMMARY =
@@ -27,10 +30,15 @@ export function PageGuideSheet({
   onOpenChange,
   info,
   onAskCopilot,
+  onStartTour,
+  hasTour,
 }: PageGuideSheetProps) {
   const pageTitle = info?.itemLabel ?? info?.chapterTitle ?? "This page";
   const guideSummary = info?.guideSummary ?? FALLBACK_SUMMARY;
   const guideSteps = info?.guideSteps ?? [];
+  const guideTips = info?.guideTips ?? [];
+  const elementHints = info?.elementHints ?? [];
+  const recommendedNextStep = info?.recommendedNextStep;
   const hasChapterLink = !!info?.hrefToChapter;
 
   return (
@@ -59,10 +67,57 @@ export function PageGuideSheet({
               </ol>
             </div>
           )}
+          {guideTips.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tips</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                {guideTips.map((tip, i) => (
+                  <li key={i}>{tip}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {elementHints.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium mb-2">Element hints</h4>
+              <ul className="space-y-1.5 text-sm text-muted-foreground">
+                {elementHints.map((eh, i) => (
+                  <li key={i}>
+                    <code className="text-xs bg-muted px-1 rounded">{eh.selector}</code>: {eh.hint}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {recommendedNextStep && (
+            <div>
+              <h4 className="text-sm font-medium mb-2">Next step</h4>
+              <Button variant="outline" size="sm" className="w-full justify-start" asChild>
+                <Link href={recommendedNextStep.href} onClick={() => onOpenChange(false)}>
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  {recommendedNextStep.label}
+                </Link>
+              </Button>
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-2 pt-4 border-t shrink-0">
+          {hasTour && onStartTour && (
+            <Button
+              variant="default"
+              size="sm"
+              className="w-full justify-center"
+              onClick={() => {
+                onStartTour();
+                onOpenChange(false);
+              }}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Start tour
+            </Button>
+          )}
           <Button
-            variant="default"
+            variant={hasTour ? "outline" : "default"}
             size="sm"
             className="w-full justify-center"
             onClick={() => {

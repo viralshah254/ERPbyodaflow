@@ -12,6 +12,7 @@ import { AlertsCard } from "./cards/AlertsCard";
 import { CopilotSuggestionsCard } from "./cards/CopilotSuggestionsCard";
 import { RecentDocumentsCard } from "./cards/RecentDocumentsCard";
 import { SetupChecklistCard } from "./SetupChecklistCard";
+import { GuidedWorkflowCard } from "@/components/tutorial/GuidedWorkflowCard";
 
 const ADMIN_KPI_IDS = [
   "pending-approvals",
@@ -115,7 +116,7 @@ export function DashboardRenderer() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" data-tour-step="dashboard-kpis">
         {kpiIds.map((id) => {
           const k = kpiById[id];
           if (!k) return null;
@@ -134,8 +135,18 @@ export function DashboardRenderer() {
         })}
       </div>
 
-      {/* Setup checklist + standard cards — approvals/alerts from backend when available */}
+      {/* Guided workflow for new users + Setup checklist */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <GuidedWorkflowCard
+          title="Create your first sales order"
+          description="Set up products and customers, then create a sales order."
+          steps={[
+            { label: "Add products", href: "/master/products" },
+            { label: "Add customers", href: "/master/parties" },
+            { label: "Create sales order", href: "/docs/sales-order/new" },
+          ]}
+          showWhenExploredLessThan={5}
+        />
         <SetupChecklistCard />
         <MyApprovalsCard items={approvals} />
         <MyTasksCard items={[]} />

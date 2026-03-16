@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { createWithholdingCodeApi, fetchWithholdingCodesApi } from "@/lib/api/settings-tax";
+import { downloadWhtCertificateApi } from "@/lib/api/reports";
 import type { KenyaWhtCode } from "@/lib/types/tax-kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
@@ -70,6 +71,16 @@ export default function WithholdingTaxPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadWhtCertificateApi(undefined, (msg) => toast.error(msg))
+              }
+            >
+              <Icons.FileDown className="mr-2 h-4 w-4" />
+              WHT certificate
+            </Button>
             <ExplainThis prompt="Explain WHT in Kenya. When to apply on AP and payments." label="Explain" />
             <Button variant="outline" size="sm" asChild>
               <Link href="/settings/tax/kenya">Kenya profile</Link>

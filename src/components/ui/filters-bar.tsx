@@ -24,6 +24,10 @@ interface FiltersBarProps {
   /** Controlled search: when provided, search input is controlled by parent (e.g. for saved views). */
   searchValue?: string;
   onSearchChange?: (value: string) => void;
+  /** Optional data attributes for tutorial hints. When set, wraps input in div with data-tutorial-hint. */
+  searchInputDataHint?: string;
+  /** Optional extra props for search input */
+  searchInputProps?: React.InputHTMLAttributes<HTMLInputElement>;
   filters?: Array<{
     id: string;
     label: string;
@@ -43,6 +47,8 @@ export function FiltersBar({
   filters = [],
   activeFiltersCount = 0,
   onClearFilters,
+  searchInputDataHint,
+  searchInputProps,
   className,
 }: FiltersBarProps) {
   const [internalValue, setInternalValue] = React.useState("");
@@ -62,7 +68,10 @@ export function FiltersBar({
       )}
     >
       {/* Search */}
-      <div className="relative flex-1 min-w-[200px]">
+      <div
+        className="relative flex-1 min-w-[200px]"
+        {...(searchInputDataHint ? { "data-tutorial-hint": searchInputDataHint } : {})}
+      >
         <Icons.Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
@@ -70,6 +79,7 @@ export function FiltersBar({
           className="pl-9"
           value={searchValue}
           onChange={(e) => handleSearchChange(e.target.value)}
+          {...searchInputProps}
         />
       </div>
 

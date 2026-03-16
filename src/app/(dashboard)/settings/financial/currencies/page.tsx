@@ -26,11 +26,14 @@ import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import {
   createFinancialCurrencyApi,
   fetchFinancialCurrenciesApi,
+  fetchSupportedCurrenciesApi,
   type FinancialCurrencyRow,
 } from "@/lib/api/financial-settings";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+type SupportedCurrency = { code: string; name: string; symbol?: string };
 
 export default function CurrenciesSettingsPage() {
   const { settings, update } = useFinancialSettings();
@@ -41,22 +44,35 @@ export default function CurrenciesSettingsPage() {
   const [newCurrencyName, setNewCurrencyName] = React.useState("");
   const [newCurrencySymbol, setNewCurrencySymbol] = React.useState("");
   const [currencies, setCurrencies] = React.useState<FinancialCurrencyRow[]>([]);
+  const [supportedCurrencies, setSupportedCurrencies] = React.useState<SupportedCurrency[]>(CURRENCY_LIST);
+
+  React.useEffect(() => {
+    if (!addOpen || !isApiConfigured()) return;
+    fetchSupportedCurrenciesApi()
+      .then((res) => {
+        setSupportedCurrencies(res.fromApi ? res.items.map((c) => ({ code: c.code, name: c.name })) : CURRENCY_LIST);
+      })
+      .catch(() => setSupportedCurrencies(CURRENCY_LIST));
+  }, [addOpen]);
 
   const currencySelectOptions: SearchableSelectOption[] = React.useMemo(() => {
     const enabledSet = new Set(settings.enabledCurrencies);
-    return CURRENCY_LIST.filter((c) => !enabledSet.has(c.code as CurrencyCode))
+    return supportedCurrencies
+      .filter((c) => !enabledSet.has(c.code as CurrencyCode))
       .map((c) => ({ id: c.code, label: `${c.code} - ${c.name}` }));
-  }, [settings.enabledCurrencies]);
+  }, [settings.enabledCurrencies, supportedCurrencies]);
 
   const onCurrencySelect = React.useCallback((code: string) => {
     setSelectedCurrencyCode(code);
-    const c = getCurrencyByCode(code);
+    const fromApi = supportedCurrencies.find((c) => c.code === code);
+    const fromStatic = getCurrencyByCode(code);
+    const c = fromStatic ?? fromApi;
     if (c) {
       setNewCurrencyCode(c.code);
       setNewCurrencyName(c.name);
-      setNewCurrencySymbol(c.symbol);
+      setNewCurrencySymbol("symbol" in c && c.symbol ? c.symbol : "");
     }
-  }, []);
+  }, [supportedCurrencies]);
 
   const resetAddForm = React.useCallback(() => {
     setSelectedCurrencyCode("");

@@ -120,6 +120,8 @@ export type DocumentDraftPayload = {
   tax?: number;
   total: number;
   currency?: string;
+  /** Document currency → base currency. From exchange rate API or user override. */
+  exchangeRate?: number;
   outputTemplateId?: string;
 };
 

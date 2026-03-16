@@ -5,7 +5,7 @@
 
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation/sections";
 import type { NavItemConfig } from "@/config/navigation/types";
-import { ITEM_GUIDES } from "./tutorial-guides";
+import { ITEM_GUIDES, type ElementHint } from "./tutorial-guides";
 
 export interface TutorialItem {
   key: string;
@@ -16,6 +16,12 @@ export interface TutorialItem {
   guideSummary?: string;
   /** Optional "How to use this page" steps. */
   guideSteps?: string[];
+  /** Optional power-user shortcuts and tips. */
+  guideTips?: string[];
+  /** Optional element-level hints (selector + hint text). */
+  elementHints?: ElementHint[];
+  /** Recommended next step after this page. */
+  recommendedNextStep?: { label: string; href: string };
 }
 
 export interface TutorialChapter {
@@ -48,6 +54,13 @@ const ITEM_PROMPTS: Partial<Record<string, string>> = {
   "automation-rules": "Explain automation rules: triggers, conditions, and actions.",
   "franchise-manage-outlets": "Explain how to add franchisees and give them login access.",
   "inventory-movements": "Guide me through this page: what it shows, how to filter and use the table, and how movements are created from documents.",
+  "docs-hub": "Explain the document center. How do I create a sales order, purchase order, or invoice? What document types are available?",
+  "masters-products": "Explain how to add and manage products. What fields are required? How do variants and pricing work?",
+  "masters-parties": "Explain how to add customers and suppliers. What information do I need for each?",
+  "inventory-stock-levels": "Explain stock levels and how to interpret on-hand, reserved, and available quantities.",
+  "finance-chart-of-accounts": "Explain the chart of accounts. How do I add or edit accounts? What account types exist?",
+  "sales-orders": "Explain the sales order flow. How do I create an order, post delivery, and invoice?",
+  "purchasing-orders": "Explain purchase orders. How do I create a PO, receive goods, and match the invoice?",
 };
 
 /** Section-level descriptions and default Copilot prompts. */
@@ -215,6 +228,9 @@ function flattenNavItems(items: NavItemConfig[]): TutorialItem[] {
         copilotPrompt: ITEM_PROMPTS[key],
         guideSummary: guide?.guideSummary,
         guideSteps: guide?.guideSteps,
+        guideTips: guide?.guideTips,
+        elementHints: guide?.elementHints,
+        recommendedNextStep: guide?.recommendedNextStep,
       });
     }
     if (item.children?.length) {
@@ -252,6 +268,12 @@ export interface TutorialForRoute {
   guideSummary: string;
   /** Guide steps (item or empty). */
   guideSteps: string[];
+  /** Guide tips (power-user shortcuts). */
+  guideTips: string[];
+  /** Element-level hints. */
+  elementHints: ElementHint[];
+  /** Recommended next step. */
+  recommendedNextStep?: { label: string; href: string };
 }
 
 /**
@@ -275,6 +297,9 @@ export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
           itemLabel: item.label,
           guideSummary: item.guideSummary ?? chapter.description,
           guideSteps: item.guideSteps ?? [],
+          guideTips: item.guideTips ?? [],
+          elementHints: item.elementHints ?? [],
+          recommendedNextStep: item.recommendedNextStep,
         };
       }
       if (normalized.startsWith(itemPath + "/") && itemPath.length > (best?.score ?? 0)) {
@@ -302,6 +327,9 @@ export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
       itemLabel: best.item?.label,
       guideSummary: best.item?.guideSummary ?? best.chapter.description,
       guideSteps: best.item?.guideSteps ?? [],
+      guideTips: best.item?.guideTips ?? [],
+      elementHints: best.item?.elementHints ?? [],
+      recommendedNextStep: best.item?.recommendedNextStep,
     };
   }
   return null;

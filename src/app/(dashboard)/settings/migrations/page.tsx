@@ -14,6 +14,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
+  downloadImportTemplateApi,
+  exportCustomersCsvApi,
+  exportProductPackagingCsvApi,
+  exportProductsCsvApi,
+  exportProductVariantsCsvApi,
+  exportSuppliersCsvApi,
+  importPartiesApi,
+  importProductPackagingApi,
+  importProductsApi,
+  importProductVariantsApi,
+  isImportExportAvailable,
+} from "@/lib/api/import-export";
+import {
   approveImportStageRecordApi,
   createImportRunApi,
   fetchImportReconciliationDashboardApi,
@@ -124,6 +137,12 @@ export default function MigrationConsolePage() {
   const [actioningRecordId, setActioningRecordId] = React.useState<string | null>(null);
   const [resolutionDrafts, setResolutionDrafts] = React.useState<Record<string, ImportConflictResolution>>({});
   const [matchedEntityDrafts, setMatchedEntityDrafts] = React.useState<Record<string, string>>({});
+  const [csvImportType, setCsvImportType] = React.useState<
+    "customers" | "suppliers" | "products" | "product-packaging" | "product-variants"
+  >("customers");
+  const [csvImportFile, setCsvImportFile] = React.useState<File | null>(null);
+  const [csvImporting, setCsvImporting] = React.useState(false);
+  const csvImportInputRef = React.useRef<HTMLInputElement>(null);
 
   const conflictRecords = React.useMemo(
     () =>
@@ -443,6 +462,7 @@ export default function MigrationConsolePage() {
             <TabsTrigger value="preview">Dry-run preview</TabsTrigger>
             <TabsTrigger value="conflicts">Conflict review</TabsTrigger>
             <TabsTrigger value="reconciliation">Reconciliation</TabsTrigger>
+            <TabsTrigger value="csv">CSV Import / Export</TabsTrigger>
           </TabsList>
 
           <TabsContent value="preview" className="space-y-4">
@@ -813,6 +833,160 @@ export default function MigrationConsolePage() {
                         </p>
                       </div>
                     ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="csv" className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Export masters</CardTitle>
+                  <CardDescription>
+                    Download products, packaging, variants, customers, or suppliers as CSV. Use for backup or migration. Import products before packaging/variants.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!isImportExportAvailable() ? (
+                    <p className="text-sm text-muted-foreground">Set NEXT_PUBLIC_API_URL to use export.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportProductsCsvApi((msg) => toast.error(msg))}
+                      >
+                        <Icons.Download className="mr-2 h-4 w-4" />
+                        Export products
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportProductPackagingCsvApi((msg) => toast.error(msg))}
+                      >
+                        <Icons.Download className="mr-2 h-4 w-4" />
+                        Export packaging
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportProductVariantsCsvApi((msg) => toast.error(msg))}
+                      >
+                        <Icons.Download className="mr-2 h-4 w-4" />
+                        Export variants
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportCustomersCsvApi((msg) => toast.error(msg))}
+                      >
+                        <Icons.Download className="mr-2 h-4 w-4" />
+                        Export customers
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportSuppliersCsvApi((msg) => toast.error(msg))}
+                      >
+                        <Icons.Download className="mr-2 h-4 w-4" />
+                        Export suppliers
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Import from CSV</CardTitle>
+                  <CardDescription>
+                    Add customers, suppliers, products, packaging, or variants via CSV. Download a template for required fields. Import products before packaging/variants.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!isImportExportAvailable() ? (
+                    <p className="text-sm text-muted-foreground">Set NEXT_PUBLIC_API_URL to use import.</p>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Entity type</Label>
+                        <Select value={csvImportType} onValueChange={(v) => setCsvImportType(v as typeof csvImportType)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="customers">Customers</SelectItem>
+                            <SelectItem value="suppliers">Suppliers</SelectItem>
+                            <SelectItem value="products">Products</SelectItem>
+                            <SelectItem value="product-packaging">Product packaging</SelectItem>
+                            <SelectItem value="product-variants">Product variants</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadImportTemplateApi(csvImportType, (msg) => toast.error(msg))}
+                        >
+                          <Icons.FileDown className="mr-2 h-4 w-4" />
+                          Download template
+                        </Button>
+                        <input
+                          ref={csvImportInputRef}
+                          type="file"
+                          accept=".csv"
+                          className="hidden"
+                          onChange={(e) => setCsvImportFile(e.target.files?.[0] ?? null)}
+                        />
+                        <Button
+                          size="sm"
+                          disabled={!csvImportFile || csvImporting}
+                          onClick={async () => {
+                            if (!csvImportFile) {
+                              csvImportInputRef.current?.click();
+                              return;
+                            }
+                            setCsvImporting(true);
+                            try {
+                              if (csvImportType === "products") {
+                                const res = await importProductsApi(csvImportFile);
+                                toast.success(`Imported ${res.imported} product(s).`);
+                              } else if (csvImportType === "product-packaging") {
+                                const res = await importProductPackagingApi(csvImportFile);
+                                toast.success(`Imported ${res.imported} packaging row(s).`);
+                              } else if (csvImportType === "product-variants") {
+                                const res = await importProductVariantsApi(csvImportFile);
+                                toast.success(`Imported ${res.imported} variant(s).`);
+                              } else {
+                                const partyType = csvImportType === "suppliers" ? "supplier" : "customer";
+                                const res = await importPartiesApi(csvImportFile, partyType);
+                                toast.success(`Imported ${res.imported} ${res.type.toLowerCase()}(s).`);
+                              }
+                              setCsvImportFile(null);
+                              csvImportInputRef.current && (csvImportInputRef.current.value = "");
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : "Import failed.");
+                            } finally {
+                              setCsvImporting(false);
+                            }
+                          }}
+                        >
+                          <Icons.Upload className="mr-2 h-4 w-4" />
+                          {csvImporting ? "Importing..." : csvImportFile ? `Import ${csvImportFile.name}` : "Select file"}
+                        </Button>
+                        {!csvImportFile && (
+                          <Button variant="ghost" size="sm" onClick={() => csvImportInputRef.current?.click()}>
+                            Choose CSV
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Required: <strong>code</strong>, <strong>name</strong>. See docs/CSV_IMPORT_FORMAT_SPEC.md for full format. Migrating from Tally, Zoho, or QuickBooks? Use the provider JSON import above, or export from your ERP to CSV and map columns.
+                      </p>
+                    </>
                   )}
                 </CardContent>
               </Card>

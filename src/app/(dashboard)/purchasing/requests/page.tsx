@@ -10,6 +10,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchPurchaseRequestsApi } from "@/lib/api/purchase-requests";
+import { downloadCsv } from "@/lib/export/csv";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
@@ -158,6 +159,18 @@ export default function PurchaseRequestsPage() {
           searchPlaceholder="Search by number, requester..."
           searchValue={search}
           onSearchChange={setSearch}
+          onExport={() =>
+            downloadCsv(
+              `purchase-requests-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((row) => ({
+                number: row.number,
+                date: row.date,
+                party: row.party ?? "",
+                total: row.total ?? "",
+                status: row.status,
+              }))
+            )
+          }
           filters={[
             {
               id: "status",

@@ -135,6 +135,28 @@ export function downloadTextFile(
 }
 
 /**
+ * POST multipart form data and return parsed JSON. Use for imports that need the response.
+ */
+export async function uploadFormData<T = unknown>(path: string, formData: FormData): Promise<T> {
+  if (!getApiBase()) {
+    throw new Error("API not configured.");
+  }
+  const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error((data as { error?: string }).error ?? `Upload failed (${res.status})`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return data as T;
+}
+
+/**
  * POST multipart form data (file upload). Returns JSON body or throws.
  */
 export async function uploadFile(

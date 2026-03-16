@@ -8,6 +8,7 @@ type BackendRule = {
   conditions?: Record<string, unknown>;
   actions?: unknown[];
   enabled?: boolean;
+  requireApproval?: boolean;
 };
 
 function mapRule(r: BackendRule): AutomationRule {
@@ -18,6 +19,7 @@ function mapRule(r: BackendRule): AutomationRule {
     conditions: r.conditions ? JSON.stringify(r.conditions) : "",
     actions: Array.isArray(r.actions) ? r.actions.map(String).join(", ") : "",
     enabled: r.enabled ?? true,
+    requireApproval: r.requireApproval ?? false,
   };
 }
 
@@ -31,6 +33,7 @@ export async function createAutomationRuleApi(body: {
   name: string;
   trigger?: string;
   enabled?: boolean;
+  requireApproval?: boolean;
 }): Promise<{ id: string }> {
   requireLiveApi("Create automation rule");
   return apiRequest<{ id: string }>("/api/automation/rules", { method: "POST", body });
@@ -51,4 +54,12 @@ export async function updateAutomationRuleApi(
 export async function deleteAutomationRuleApi(id: string): Promise<void> {
   requireLiveApi("Delete automation rule");
   await apiRequest(`/api/automation/rules/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function requireApprovalAutomationRuleApi(id: string): Promise<{ id: string; requireApproval: boolean }> {
+  requireLiveApi("Require approval for rule");
+  return apiRequest<{ id: string; requireApproval: boolean }>(
+    `/api/automation/rules/${encodeURIComponent(id)}/require-approval`,
+    { method: "POST" }
+  );
 }

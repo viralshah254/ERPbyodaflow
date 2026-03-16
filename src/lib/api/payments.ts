@@ -222,6 +222,13 @@ export async function allocateArPaymentApi(paymentId: string, allocations: { doc
   });
 }
 
+export async function submitArPaymentApi(paymentId: string): Promise<{ id: string; status: string }> {
+  requireLiveApi("AR payment submit");
+  return apiRequest<{ id: string; status: string }>(`/api/ar/payments/${encodeURIComponent(paymentId)}/submit`, {
+    method: "POST",
+  });
+}
+
 export async function fetchApPaymentsApi(): Promise<APPaymentRow[]> {
   requireLiveApi("AP payments");
   const payload = await apiRequest<{ items: BackendPayment[] }>("/api/ap/payments");

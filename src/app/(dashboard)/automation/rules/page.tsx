@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import type { AutomationRule } from "@/lib/types/automation-rules";
-import { fetchAutomationRulesApi, createAutomationRuleApi } from "@/lib/api/automation-rules";
+import { fetchAutomationRulesApi, createAutomationRuleApi, requireApprovalAutomationRuleApi } from "@/lib/api/automation-rules";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -30,8 +30,10 @@ export default function AutomationRulesPage() {
   const [formTrigger, setFormTrigger] = React.useState("");
   const [formConditions, setFormConditions] = React.useState("");
   const [formActions, setFormActions] = React.useState("");
+  const [formRequireApproval, setFormRequireApproval] = React.useState(false);
   const [allRows, setAllRows] = React.useState<AutomationRule[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [requiringId, setRequiringId] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -52,6 +54,7 @@ export default function AutomationRulesPage() {
     setFormTrigger("");
     setFormConditions("");
     setFormActions("");
+    setFormRequireApproval(false);
   };
   const filtered = React.useMemo(() => {
     if (!search.trim()) return allRows;
@@ -85,8 +88,37 @@ export default function AutomationRulesPage() {
           </Badge>
         ),
       },
+      {
+        id: "rowActions",
+        header: "",
+        accessor: (r: AutomationRule) => (
+          <div className="flex gap-1">
+            {!r.requireApproval && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={requiringId === r.id}
+                onClick={async () => {
+                  setRequiringId(r.id);
+                  try {
+                    await requireApprovalAutomationRuleApi(r.id);
+                    await refresh();
+                    toast.success("Rule now requires approval.");
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setRequiringId(null);
+                  }
+                }}
+              >
+                {requiringId === r.id ? "…" : "Require approval"}
+              </Button>
+            )}
+          </div>
+        ),
+      },
     ],
-    []
+    [requiringId]
   );
 
   const handleGenerateWithCopilot = () => {
@@ -208,11 +240,19 @@ export default function AutomationRulesPage() {
                     <Button
                       key={a}
                       type="button"
-                      variant="outline"
+                      variant={a === "Require approval" && formRequireApproval ? "default" : "outline"}
                       size="sm"
                       className="text-xs"
                       onClick={() => {
-                        if (a === "Require approval") toast.info("Require approval (stub): API pending.");
+                        if (a === "Require approval") {
+                          setFormRequireApproval((v) => !v);
+                          setFormActions((prev) => {
+                            if (formRequireApproval) {
+                              return prev.replace(/,?\s*Require approval/g, "").trim();
+                            }
+                            return prev ? `${prev}, Require approval` : "Require approval";
+                          });
+                        }
                       }}
                     >
                       {a}
@@ -241,6 +281,7 @@ export default function AutomationRulesPage() {
                         name: formTrigger.slice(0, 80),
                         trigger: formTrigger,
                         enabled: true,
+                        requireApproval: formRequireApproval,
                       });
                       await refresh();
                       handleOpenCreate(false);

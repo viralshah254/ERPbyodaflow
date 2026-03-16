@@ -27,6 +27,7 @@ import {
   fetchArPaymentsApi,
   fetchOpenInvoicesApi,
   searchArCustomerOptionsApi,
+  submitArPaymentApi,
 } from "@/lib/api/payments";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
@@ -47,6 +48,7 @@ export default function ARPaymentsPage() {
   const [allocateSheetOpen, setAllocateSheetOpen] = React.useState(false);
   const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
   const [allocating, setAllocating] = React.useState(false);
+  const [submittingId, setSubmittingId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
   const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
@@ -133,13 +135,36 @@ export default function ARPaymentsPage() {
         id: "actions",
         header: "",
         accessor: (r: PaymentRow) => (
-          <Button variant="ghost" size="sm" onClick={() => openAllocateRef.current(r as PaymentRow)}>
-            Allocate
-          </Button>
+          <div className="flex gap-1">
+            {r.status === "DRAFT" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={submittingId === r.id}
+                onClick={async () => {
+                  setSubmittingId(r.id);
+                  try {
+                    await submitArPaymentApi(r.id);
+                    await refreshData();
+                    toast.success(`Payment ${r.number} submitted.`);
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setSubmittingId(null);
+                  }
+                }}
+              >
+                {submittingId === r.id ? "Submitting…" : "Submit"}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => openAllocateRef.current(r as PaymentRow)}>
+              Allocate
+            </Button>
+          </div>
         ),
       },
     ],
-    []
+    [submittingId]
   );
 
   const handleReceivePayment = () => {

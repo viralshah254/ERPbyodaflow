@@ -3,6 +3,8 @@
 import { AppSidebar } from "@/components/nav/AppSidebar";
 import { Header } from "./header";
 import { CommandPalette } from "@/components/command/CommandPalette";
+import { FirstVisitBanner } from "@/components/tutorial/FirstVisitBanner";
+import { TutorialProgressTracker } from "@/components/tutorial/TutorialProgressTracker";
 import { useUIStore } from "@/stores/ui-store";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -56,7 +58,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       {sidebarOpen && <AppSidebar />}
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto flex flex-col">
+          <TutorialProgressTracker />
+          <FirstVisitBanner />
+          <div className="flex-1 p-6">{children}</div>
+        </main>
       </div>
       <CommandPalette />
       <CopilotDrawer

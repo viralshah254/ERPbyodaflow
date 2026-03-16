@@ -216,7 +216,9 @@ export default function StockLevelsPage() {
       <Card>
         <FiltersBar
           searchPlaceholder="Search by SKU or product name..."
+          searchValue={searchQuery}
           onSearchChange={setSearchQuery}
+          searchInputDataHint="search"
           filters={[
             {
               id: "warehouse",

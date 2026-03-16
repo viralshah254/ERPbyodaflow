@@ -3,8 +3,22 @@
  * Keys match nav item keys. Missing keys fall back to chapter description in getTutorialForRoute.
  */
 
+export interface ElementHint {
+  selector: string;
+  hint: string;
+}
+
 export const ITEM_GUIDES: Partial<
-  Record<string, { guideSummary: string; guideSteps?: string[] }>
+  Record<
+    string,
+    {
+      guideSummary: string;
+      guideSteps?: string[];
+      guideTips?: string[];
+      elementHints?: ElementHint[];
+      recommendedNextStep?: { label: string; href: string };
+    }
+  >
 > = {
   // Core
   "control-tower": {
@@ -25,6 +39,8 @@ export const ITEM_GUIDES: Partial<
       "Use quick links or search to open documents or lists.",
       "Open the command palette (⌘K) to search or ask Copilot.",
     ],
+    guideTips: ["Press ⌘K to open command palette and jump anywhere.", "Click a KPI card to drill into detail."],
+    recommendedNextStep: { label: "Documents", href: "/docs" },
   },
   approvals: {
     guideSummary:
@@ -70,6 +86,8 @@ export const ITEM_GUIDES: Partial<
       "Use search and filters to find existing documents.",
       "Click Create or New to start a new document.",
     ],
+    guideTips: ["Use ⌘K and type document type to jump directly.", "Documents link to each other (e.g. SO → delivery → invoice)."],
+    recommendedNextStep: { label: "Create a sales order", href: "/docs/sales-order/new" },
   },
   "docs-so": {
     guideSummary:
@@ -114,6 +132,42 @@ export const ITEM_GUIDES: Partial<
       "Create a journal entry and add debit/credit lines.",
       "Ensure total debits equal total credits.",
       "Post the entry to update the ledger.",
+    ],
+  },
+  "docs-credit-note": {
+    guideSummary:
+      "Sales Credit Notes reverse revenue when customers return goods or receive credit. Create a credit note linked to an invoice to reduce receivables.",
+    guideSteps: [
+      "Create a credit note linked to the original sales invoice.",
+      "Enter lines and amounts to credit.",
+      "Post to update receivables and inventory if applicable.",
+    ],
+  },
+  "docs-debit-note": {
+    guideSummary:
+      "Sales Debit Notes add charges or adjustments to customer accounts. Use them for additional fees, interest, or corrections.",
+    guideSteps: [
+      "Create a debit note and select the customer.",
+      "Add lines for the charge or adjustment.",
+      "Post to update receivables.",
+    ],
+  },
+  "docs-purchase-credit-note": {
+    guideSummary:
+      "Purchase Credit Notes record credits from suppliers (returns or price adjustments). Link to the original purchase invoice to reduce payables.",
+    guideSteps: [
+      "Create a purchase credit note linked to the original bill.",
+      "Enter lines and amounts to credit.",
+      "Post to update payables and inventory if applicable.",
+    ],
+  },
+  "docs-purchase-debit-note": {
+    guideSummary:
+      "Purchase Debit Notes add charges or adjustments from suppliers. Use them for additional fees, interest, or corrections to payables.",
+    guideSteps: [
+      "Create a purchase debit note and select the supplier.",
+      "Add lines for the charge or adjustment.",
+      "Post to update payables.",
     ],
   },
   // Masters
@@ -179,6 +233,11 @@ export const ITEM_GUIDES: Partial<
       "Filter by warehouse and/or movement type using the dropdowns.",
       "Export the table to CSV with the Export button.",
       "Movements link to source documents; open a row or reference to trace back.",
+    ],
+    guideTips: ["Click a reference to open the source document.", "Export to CSV for offline analysis."],
+    elementHints: [
+      { selector: "[data-tutorial-hint=search]", hint: "Search by SKU or product name." },
+      { selector: "[data-tutorial-hint=export]", hint: "Export the table to CSV." },
     ],
   },
   "inventory-receipts": {
@@ -767,6 +826,26 @@ export const ITEM_GUIDES: Partial<
       "Financial Statements includes P&L, Balance Sheet, and Cash Flow. Run statements for a period and compare to budget if configured.",
     guideSteps: ["Select period and statement type.", "Run and view or export.", "Drill into a line for detail."],
   },
+  "finance-statements-pnl": {
+    guideSummary:
+      "Profit & Loss (P&L) shows revenue, cost, and profit for a period. Run for management reporting and variance analysis.",
+    guideSteps: ["Select period and run P&L.", "Drill into a line for transaction detail.", "Compare to budget if configured."],
+  },
+  "finance-statements-balance-sheet": {
+    guideSummary:
+      "Balance Sheet shows assets, liabilities, and equity at a point in time. Run for period-end reporting.",
+    guideSteps: ["Select period end date and run.", "Drill into account lines for detail.", "Export for auditors or filing."],
+  },
+  "finance-statements-cash-flow": {
+    guideSummary:
+      "Cash Flow Statement shows cash movements from operating, investing, and financing activities. Run for liquidity analysis.",
+    guideSteps: ["Select period and run cash flow.", "Review operating vs investing vs financing.", "Drill into lines for source transactions."],
+  },
+  "finance-budgets": {
+    guideSummary:
+      "Budgets define planned revenue and expenses by account or dimension. Use for variance analysis and forecasting.",
+    guideSteps: ["Create a budget and set period and accounts.", "Enter or import budget amounts.", "Compare actual vs budget in reports."],
+  },
   "finance-period-close": {
     guideSummary:
       "Period Close locks a period so no more postings can be made. Run close after all entries are posted and reconciled.",
@@ -971,6 +1050,21 @@ export const ITEM_GUIDES: Partial<
       "Numbering Sequences defines how document numbers are generated (e.g. SO-001, INV-2025-001). Set prefix, length, and next number.",
     guideSteps: ["Create or edit a sequence per document type.", "Set prefix and next number.", "Assign to branch or org if needed."],
   },
+  "settings-financial-currencies": {
+    guideSummary:
+      "Currencies defines your base and foreign currencies. Set exchange rates and use for multi-currency transactions.",
+    guideSteps: ["Add currencies and set as base or foreign.", "Enter exchange rates for foreign currencies."],
+  },
+  "settings-financial-rates": {
+    guideSummary:
+      "Exchange rates stores historical and current rates for foreign currencies. Update rates for accurate FX valuation.",
+    guideSteps: ["Create rate entries per currency and date.", "Use for revaluation and reporting."],
+  },
+  "settings-financial-coa": {
+    guideSummary:
+      "Chart of Accounts (under Financial) defines the account structure. Create or edit accounts for posting and reporting.",
+    guideSteps: ["Create accounts with type and parent.", "Set posting rules and tax mapping."],
+  },
   "settings-financial-taxes": {
     guideSummary:
       "Taxes (under Financial) configures tax rates and accounts. Set VAT, WHT, or other taxes and map to GL accounts.",
@@ -990,6 +1084,81 @@ export const ITEM_GUIDES: Partial<
     guideSummary:
       "UOM catalog defines units of measure and conversions. Use for products and transactions.",
     guideSteps: ["Create UOMs and base unit.", "Add conversions (e.g. 1 box = 12 ea)."],
+  },
+  "settings-products-pricing-rules": {
+    guideSummary:
+      "Pricing rules (under Products) configures product-level pricing rules, discount logic, and tiered pricing.",
+    guideSteps: ["Create or edit pricing rules.", "Set conditions and price effects.", "Assign to products or channels."],
+  },
+  "settings-tax-kenya": {
+    guideSummary:
+      "Kenya tax profile configures Kenya-specific tax settings: KRA PIN, VAT, WHT, and filing preferences.",
+    guideSteps: ["Enter KRA PIN and tax registration.", "Configure VAT and WHT rates.", "Set filing preferences."],
+  },
+  "settings-tax-vat": {
+    guideSummary:
+      "VAT settings configures VAT rates, accounts, and exemptions for Kenya or other jurisdictions.",
+    guideSteps: ["Add VAT codes and rates.", "Map to GL accounts.", "Set exempt products or categories."],
+  },
+  "settings-tax-withholding": {
+    guideSummary:
+      "Withholding tax configures WHT rates and accounts for supplier payments and compliance.",
+    guideSteps: ["Add WHT codes and rates.", "Map to GL accounts.", "Set applicability by supplier type."],
+  },
+  "settings-tax-mappings": {
+    guideSummary:
+      "Tax mappings links tax codes to GL accounts and document types for correct posting.",
+    guideSteps: ["Map tax codes to input/output accounts.", "Set defaults per document type."],
+  },
+  "settings-preferences": {
+    guideSummary:
+      "Preferences stores user and org-level preferences: date format, currency display, notifications, and defaults.",
+    guideSteps: ["Set date format and timezone.", "Configure notification preferences.", "Save to apply."],
+  },
+  "settings-compliance": {
+    guideSummary:
+      "Compliance configures regulatory and audit settings. Set retention, audit trails, and compliance flags.",
+    guideSteps: ["Review compliance requirements.", "Enable audit trails or retention.", "Configure as needed."],
+  },
+  "settings-notifications": {
+    guideSummary:
+      "Notifications configures how and when users receive alerts: email, in-app, or external channels.",
+    guideSteps: ["Set notification channels.", "Configure templates and triggers.", "Test delivery."],
+  },
+  "settings-migrations": {
+    guideSummary:
+      "Migration Console helps import data from legacy systems. Stage, validate, and load master and transaction data.",
+    guideSteps: ["Upload or connect to source.", "Map fields and validate.", "Run migration and reconcile."],
+  },
+  "settings-payroll": {
+    guideSummary:
+      "Payroll settings configures pay periods, statutory rates (NSSF, NHIF, PAYE), and payroll defaults.",
+    guideSteps: ["Set pay period and cut-off.", "Configure statutory rates.", "Map payroll accounts."],
+  },
+  "settings-audit-log": {
+    guideSummary:
+      "Audit Log (Settings) shows system-wide audit trail. Filter by user, entity, or action for compliance.",
+    guideSteps: ["Filter by date, user, or action.", "Export for auditors.", "Review retention settings."],
+  },
+  "settings-customizer-modules": {
+    guideSummary:
+      "Customizer Modules enables or configures optional modules. Turn on features like manufacturing or franchise.",
+    guideSteps: ["Enable or disable modules.", "Configure module-specific settings.", "Apply to org."],
+  },
+  "settings-customizer-fields": {
+    guideSummary:
+      "Custom Fields adds user-defined fields to products, parties, or documents. Extend the data model without code.",
+    guideSteps: ["Create a custom field and set type.", "Assign to entity (product, party, etc.).", "Use in forms and reports."],
+  },
+  "settings-customizer-workflows": {
+    guideSummary:
+      "Customizer Workflows defines custom approval or business process flows. Extend standard workflows.",
+    guideSteps: ["Create a workflow and add steps.", "Define conditions and actions.", "Link to document types."],
+  },
+  "settings-customizer-dashboards": {
+    guideSummary:
+      "Customizer Dashboards lets you build custom dashboards with widgets and KPIs. Personalize the control tower.",
+    guideSteps: ["Add widgets and arrange layout.", "Set data source and filters.", "Save and share."],
   },
   // Help
   tutorial: {

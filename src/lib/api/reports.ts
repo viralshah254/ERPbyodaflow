@@ -1,6 +1,26 @@
 import { type ExportHistoryRow, type ScheduledReportRow, type SavedViewRow } from "@/lib/types/reports";
 import { apiRequest, downloadFile, downloadTextFile, isApiConfigured, requireLiveApi } from "./client";
 
+/** Download WHT certificate for tax compliance (Kenya). */
+export function downloadWhtCertificateApi(
+  params?: { dateFrom?: string; dateTo?: string },
+  onError?: (message: string) => void
+): void {
+  if (!isApiConfigured()) {
+    onError?.("API not configured.");
+    return;
+  }
+  const search = new URLSearchParams();
+  if (params?.dateFrom) search.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) search.set("dateTo", params.dateTo);
+  search.set("format", "csv");
+  void downloadFile(
+    `/api/reports/wht-certificate?${search.toString()}`,
+    "wht-certificate.csv",
+    onError ?? (() => undefined)
+  );
+}
+
 type BackendReportLibraryItem = {
   id: string;
   name: string;

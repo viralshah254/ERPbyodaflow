@@ -43,6 +43,10 @@ interface DataTableToolbarProps {
   bulkActions?: React.ReactNode;
   /** Extra actions (e.g. Add, Import) */
   actions?: React.ReactNode;
+  /** Optional data-tutorial-hint value for search input wrapper */
+  searchInputDataHint?: string;
+  /** Optional data-tutorial-hint value for export button */
+  exportButtonDataHint?: string;
   className?: string;
   children?: React.ReactNode;
 }
@@ -64,6 +68,8 @@ export function DataTableToolbar({
   onExport,
   bulkActions,
   actions,
+  searchInputDataHint,
+  exportButtonDataHint,
   className,
   children,
 }: DataTableToolbarProps) {
@@ -74,6 +80,7 @@ export function DataTableToolbar({
           searchPlaceholder={searchPlaceholder}
           searchValue={searchValue}
           onSearchChange={onSearchChange}
+          searchInputDataHint={searchInputDataHint}
           filters={filters.map((f) => ({
             id: f.id,
             label: f.label,
@@ -92,10 +99,12 @@ export function DataTableToolbar({
           onDeleteView={onDeleteView}
         />
         {onExport && (
-          <Button variant="outline" size="sm" onClick={onExport}>
-            <Icons.Download className="h-4 w-4 mr-1.5" />
-            Export
-          </Button>
+          <span {...(exportButtonDataHint ? { "data-tutorial-hint": exportButtonDataHint } : {})}>
+            <Button variant="outline" size="sm" onClick={onExport}>
+              <Icons.Download className="h-4 w-4 mr-1.5" />
+              Export
+            </Button>
+          </span>
         )}
         {actions}
       </div>

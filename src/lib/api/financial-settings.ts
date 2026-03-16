@@ -66,6 +66,21 @@ export async function createFinancialCurrencyApi(input: {
   });
 }
 
+export interface SupportedCurrencyRow {
+  code: string;
+  name: string;
+}
+
+export async function fetchSupportedCurrenciesApi(): Promise<{
+  items: SupportedCurrencyRow[];
+  fromApi: boolean;
+}> {
+  requireLiveApi("Supported currencies");
+  return apiRequest<{ items: SupportedCurrencyRow[]; fromApi: boolean }>(
+    "/api/settings/financial/currencies/supported-codes"
+  );
+}
+
 export async function fetchFinancialExchangeRatesApi(filters?: {
   date?: string;
   fromCurrency?: string;

@@ -98,6 +98,16 @@ A summary of all **built** frontend features in the ERP OdaFlow Next.js app. Thi
 - **Notifications** — Bell icon (UI only)
 - **User menu** — Avatar, name, email, Profile, Settings, Log out
 
+### Tutorial & Help System
+
+- **Tutorial hub** (`/tutorial`) — Product tutorial by module; progress summary ("You've explored X of Y modules"); recommended next; quick start workflows (Create first sales order, Create first purchase order); search/filter modules; recently visited; role-based filtering (chapters filtered by user permissions and org type)
+- **PageHelp** — Tutorial + Ask Copilot buttons in page header; opens PageGuideSheet with guide summary, steps, tips, element hints, recommended next step
+- **FirstVisitBanner** — Shown on first visit to a page; "Open guide", "Ask Copilot", "Skip", "Don't show again"; optional "Start tour" when spotlight tour exists
+- **Spotlight tours** (driver.js) — Step-by-step UI highlights on high-value pages (Dashboard, Documents, Sales Orders, Purchase Orders, Masters, Inventory, Treasury, Finance); "Start tour" in PageHelp and FirstVisitBanner
+- **Tutorial progress store** — Persisted visited pages, completed tours, dismissed hints (localStorage)
+- **GuidedWorkflowCard** — On Dashboard for new users; "Create your first sales order" with step checklist and links
+- **Guide coverage** — Every nav item has `guideSummary` and `guideSteps`; optional `guideTips`, `elementHints`, `recommendedNextStep`
+
 ---
 
 ## 4. Core & Dashboard

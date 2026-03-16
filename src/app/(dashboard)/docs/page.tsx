@@ -37,7 +37,7 @@ export default function DocumentCenterHubPage() {
         </Button>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-tour-step="doc-type-list">
         {DOC_TYPES.map((doc) => {
           const IconComponent = (Icons[doc.icon as keyof typeof Icons] || Icons.FileText) as React.ComponentType<{ className?: string }>;
           return (

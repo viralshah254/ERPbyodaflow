@@ -103,6 +103,8 @@ export default function StockMovementsPage() {
           searchPlaceholder="Search by SKU, product, reference..."
           searchValue={search}
           onSearchChange={setSearch}
+          searchInputDataHint="search"
+          exportButtonDataHint="export"
           filters={[
             {
               id: "warehouse",

@@ -438,26 +438,31 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   );
 
   const buildDraftPayload = React.useCallback(
-    () => ({
-      date: form.getValues("date"),
-      branchId: form.getValues("branch") || undefined,
-      partyId: form.getValues("party") || undefined,
-      warehouseId: form.getValues("warehouse") || undefined,
-      poRef: form.getValues("poRef") || undefined,
-      reference: form.getValues("reference") || undefined,
-      dueDate: form.getValues("dueDate") || undefined,
-      lines: lines.map((line) => ({
-        productId: line.productId,
-        description: line.name,
-        quantity: line.qty,
-        unit: line.uom,
-        unitPrice: line.price,
-        amount: line.amount,
-      })),
-      subtotal: form.getValues("totalAmount") ?? 0,
-      total: form.getValues("totalAmount") ?? 0,
-      currency: form.getValues("currency") || baseCurrency,
-    }),
+    () => {
+      const selectedCurrency = form.getValues("currency") || baseCurrency;
+      const exchangeRate = selectedCurrency === baseCurrency ? 1 : (form.getValues("exchangeRate") || 1);
+      return {
+        date: form.getValues("date"),
+        branchId: form.getValues("branch") || undefined,
+        partyId: form.getValues("party") || undefined,
+        warehouseId: form.getValues("warehouse") || undefined,
+        poRef: form.getValues("poRef") || undefined,
+        reference: form.getValues("reference") || undefined,
+        dueDate: form.getValues("dueDate") || undefined,
+        lines: lines.map((line) => ({
+          productId: line.productId,
+          description: line.name,
+          quantity: line.qty,
+          unit: line.uom,
+          unitPrice: line.price,
+          amount: line.amount,
+        })),
+        subtotal: form.getValues("totalAmount") ?? 0,
+        total: form.getValues("totalAmount") ?? 0,
+        currency: selectedCurrency,
+        ...(selectedCurrency !== baseCurrency && { exchangeRate }),
+      };
+    },
     [baseCurrency, form, lines]
   );
 

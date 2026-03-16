@@ -5,4 +5,5 @@ export type AutomationRule = {
   conditions?: string;
   actions?: string;
   enabled: boolean;
+  requireApproval?: boolean;
 };

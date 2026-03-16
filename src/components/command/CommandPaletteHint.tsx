@@ -15,6 +15,7 @@ export function CommandPaletteHint({ className }: CommandPaletteHintProps) {
   return (
     <button
       type="button"
+      data-tour-step="command-hint"
       onClick={() => setOpen(true)}
       className={cn(
         "hidden sm:inline-flex h-6 items-center gap-1 rounded border bg-muted px-2 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground",

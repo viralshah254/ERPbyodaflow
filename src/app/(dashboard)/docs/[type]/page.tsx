@@ -261,7 +261,7 @@ export default function DocTypeListPage() {
         showCommandHint
         actions={
           <Button asChild>
-            <Link href={`/docs/${type}/new`}>
+            <Link href={`/docs/${type}/new`} data-tour-step="create-button">
               <Icons.Plus className="mr-2 h-4 w-4" />
               New {label}
             </Link>
