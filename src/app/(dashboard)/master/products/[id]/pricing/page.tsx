@@ -88,6 +88,7 @@ export default function ProductPricingPage() {
     () => validateTiers(draftTiers, packaging, { unitCost: undefined }),
     [draftTiers, packaging]
   );
+  const uomOptions = React.useMemo(() => listUoms().map((u) => u.code), []);
   const warnings = [...tierValidation.errors, ...tierValidation.warnings];
 
   const handleSaveTiers = () => {
@@ -322,7 +323,7 @@ export default function ProductPricingPage() {
         }}
         onCancel={() => { setTierSheetOpen(false); setEditingTierIndex(null); }}
         isEdit={editingTierIndex != null}
-        uomOptions={React.useMemo(() => listUoms().map((u) => u.code), [])}
+        uomOptions={uomOptions}
       />
     </PageShell>
   );

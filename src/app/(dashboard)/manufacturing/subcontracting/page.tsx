@@ -392,7 +392,7 @@ export default function SubcontractingPage() {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle>External work centers</CardTitle>
-                    <CardDescription>Factories and women's groups; stock is sent here for processing.</CardDescription>
+                    <CardDescription>Factories and women&apos;s groups; stock is sent here for processing.</CardDescription>
                   </div>
                   <Sheet open={workCenterSheetOpen} onOpenChange={setWorkCenterSheetOpen}>
                     <SheetTrigger asChild>
@@ -404,7 +404,7 @@ export default function SubcontractingPage() {
                     <SheetContent>
                       <SheetHeader>
                         <SheetTitle>New external work center</SheetTitle>
-                        <SheetDescription>Register a factory or women's group that receives stock for processing.</SheetDescription>
+                        <SheetDescription>Register a factory or women&apos;s group that receives stock for processing.</SheetDescription>
                       </SheetHeader>
                       <div className="grid gap-4 py-6">
                         <div className="grid gap-2">
@@ -423,7 +423,7 @@ export default function SubcontractingPage() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="FACTORY">Factory</SelectItem>
-                              <SelectItem value="GROUP">Women's group</SelectItem>
+                              <SelectItem value="GROUP">Women&apos;s group</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
