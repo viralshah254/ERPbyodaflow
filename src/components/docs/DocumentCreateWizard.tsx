@@ -44,9 +44,13 @@ import { fetchCustomerDefaultPriceLists, fetchPriceListOptions } from "@/lib/api
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
+import { hydrateProductsFromApi } from "@/lib/data/products.repo";
+import {
+  deleteDocumentDraftApi,
+  fetchDocumentDraftApi,
+  saveDocumentDraftApi,
+} from "@/lib/api/document-drafts";
 import { toast } from "sonner";
-
-const DRAFT_KEY = "odaflow_draft";
 
 const schema = z.object({
   date: z.string().min(1, "Date is required"),
@@ -286,7 +290,6 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [selectedPartyDetail, setSelectedPartyDetail] = React.useState<PartyDetail | null>(null);
   const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
   const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
-  const storageKey = `${DRAFT_KEY}_${type}`;
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
     [baseCurrency]
@@ -294,31 +297,29 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: (() => {
-      if (typeof window === "undefined") return defaults;
-      try {
-        const s = localStorage.getItem(storageKey);
-        if (s) {
-          const parsed = JSON.parse(s) as Partial<FormValues>;
-          return { ...defaults, ...parsed };
-        }
-      } catch {
-        /* ignore */
-      }
-      return defaults;
-    })(),
+    defaultValues: defaults,
   });
 
   React.useEffect(() => {
+    let cancelled = false;
+    fetchDocumentDraftApi(type)
+      .then((draft) => {
+        if (cancelled || !draft) return;
+        form.reset({ ...defaults, ...(draft as Partial<FormValues>) });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [defaults, form, type]);
+
+  React.useEffect(() => {
     const sub = form.watch((data) => {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(data));
-      } catch {
-        /* ignore */
-      }
+      const payload = data as Record<string, unknown>;
+      void saveDocumentDraftApi(type, payload).catch(() => {});
     });
     return () => sub.unsubscribe();
-  }, [storageKey, form]);
+  }, [type, form]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -329,8 +330,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
       fetchPriceListOptions(),
       fetchPaymentTermsApi(),
       fetchCustomerCategoriesApi(),
+      hydrateProductsFromApi(),
     ])
-      .then(([branches, warehouses, customerDefaults, priceLists, paymentTerms, customerCategories]) => {
+      .then(([branches, warehouses, customerDefaults, priceLists, paymentTerms, customerCategories, _products]) => {
         if (cancelled) return;
         setFieldOptions({
           branch: branches,
@@ -358,6 +360,10 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (step === 2) void hydrateProductsFromApi();
+  }, [step]);
 
   const handleLinesChange = React.useCallback(
     (next: DocumentLine[]) => {
@@ -420,11 +426,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
       const result = await createDocumentApi(type as DocTypeKey, {
         ...buildDraftPayload(),
       });
-      try {
-        localStorage.removeItem(storageKey);
-      } catch {
-        /* ignore */
-      }
+      await deleteDocumentDraftApi(type);
       toast.success(`${label} draft created.`);
       router.push(`/docs/${type}/${result.id}`);
     } catch (error) {

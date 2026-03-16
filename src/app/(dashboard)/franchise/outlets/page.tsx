@@ -45,7 +45,11 @@ export default function FranchiseOutletsPage() {
   const [form, setForm] = React.useState<CreateFranchiseOutletPayload>(emptyForm);
   const [saving, setSaving] = React.useState(false);
   const permissions = useAuthStore((s) => s.permissions);
-  const canAdd = permissions.includes("franchise.network.write");
+  const canView =
+    permissions.includes("franchise.network.read") ||
+    permissions.includes("franchise.analytics.read") ||
+    permissions.includes("admin.users");
+  const canAdd = permissions.includes("franchise.network.write") || permissions.includes("admin.users");
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -56,8 +60,13 @@ export default function FranchiseOutletsPage() {
   }, []);
 
   React.useEffect(() => {
+    if (!canView) {
+      setOutlets([]);
+      setLoading(false);
+      return;
+    }
     load();
-  }, [load]);
+  }, [canView, load]);
 
   const handleAdd = async () => {
     if (!form.name.trim() || !form.outletCode.trim() || !form.adminEmail.trim() || !form.initialPassword.trim()) {
@@ -81,14 +90,10 @@ export default function FranchiseOutletsPage() {
       setAddOpen(false);
       setForm(emptyForm);
       load();
-      toast.success(
-        `Franchisee created. They can log in with ${result.adminEmail} and the password you set. Ask them to change it on first sign-in.`
-      );
-      if (result.billingImpact?.invoiceId) {
+      toast.success("Franchisee staged for checkout.");
+      if (result.checkout) {
         toast.info(
-          result.billingImpact.lineItems?.length
-            ? `Billing created: ${result.billingImpact.lineItems.map((line) => line.description).join(", ")}`
-            : `Billing linked: invoice ${result.billingImpact.invoiceId.slice(0, 8)}…`
+          `Checkout updated: ${result.checkout.items.length} staged item(s) ready to confirm from Billing.`
         );
       }
     } catch (err) {
@@ -107,7 +112,7 @@ export default function FranchiseOutletsPage() {
         breadcrumbs={[{ label: "Franchise", href: "/franchise/overview" }, { label: "Manage franchisees" }]}
         sticky
         actions={
-          canAdd ? (
+          canView && canAdd ? (
             <Button onClick={() => setAddOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Add franchisee
@@ -121,7 +126,11 @@ export default function FranchiseOutletsPage() {
           <CardDescription>Outlets that can log in to the ERP. Add a new franchisee to create an org and admin user for them.</CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {!canView ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              You do not have permission to view franchise network outlets.
+            </div>
+          ) : loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <Table>
@@ -153,7 +162,7 @@ export default function FranchiseOutletsPage() {
               </TableBody>
             </Table>
           )}
-          {!loading && outlets.length === 0 && (
+          {canView && !loading && outlets.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">
               No franchisees yet. {canAdd ? "Click “Add franchisee” to create one and give them login access." : "You need franchise.network.write permission to add franchisees."}
             </div>
@@ -161,16 +170,16 @@ export default function FranchiseOutletsPage() {
         </CardContent>
       </Card>
 
-      <Sheet open={addOpen} onOpenChange={setAddOpen}>
+      <Sheet open={canView && addOpen} onOpenChange={setAddOpen}>
         <SheetContent className="overflow-y-auto sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Add franchisee</SheetTitle>
             <SheetDescription>
-              Create a new outlet and admin user. They will be able to log in with the email and password you set.
+              Stage a new outlet and admin user. They will only be created and activated after you confirm checkout from Billing.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-4 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            Each active franchise outlet is billed at $50/month and includes 2 users before additional-seat charges apply. Mid-month setup is prorated through month end.
+            Each active franchise outlet is billed at $50/month and includes 2 users before additional-seat charges apply. You can stage multiple outlets here and check out once.
           </div>
           <div className="grid gap-4 py-6">
             <div className="space-y-2">
@@ -233,7 +242,7 @@ export default function FranchiseOutletsPage() {
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleAdd()} disabled={saving}>{saving ? "Creating…" : "Add franchisee"}</Button>
+            <Button onClick={() => void handleAdd()} disabled={saving}>{saving ? "Saving…" : "Add to checkout"}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

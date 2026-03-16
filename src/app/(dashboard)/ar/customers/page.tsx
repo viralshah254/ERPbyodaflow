@@ -15,6 +15,8 @@ import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { fetchArCustomerSummariesApi } from "@/lib/api/payments";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
+import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { createCustomerCategoryApi, fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import {
   createPartyApi,
@@ -53,6 +55,8 @@ function ARCustomersContent() {
   const [allRows, setAllRows] = React.useState<ARCustomerRow[]>([]);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string }>>([]);
   const [categories, setCategories] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [currencies, setCurrencies] = React.useState<Array<{ id: string; code: string; name: string; isBaseCurrency?: boolean }>>([]);
+  const { settings: financialSettings } = useFinancialSettings();
   const [form, setForm] = React.useState({
     name: "",
     email: "",
@@ -77,15 +81,17 @@ function ARCustomersContent() {
   }, [search]);
 
   const reload = React.useCallback(async () => {
-    const [customers, termsData, categoriesData] = await Promise.all([
+    const [customers, termsData, categoriesData, currenciesData] = await Promise.all([
       fetchArCustomerSummariesApi(debouncedSearch),
       fetchPaymentTermsApi(),
       fetchCustomerCategoriesApi(),
+      fetchFinancialCurrenciesApi(),
     ]);
     const termById = new Map(termsData.map((term) => [term.id, term.name]));
     const categoryById = new Map(categoriesData.map((category) => [category.id, category.name]));
     setTerms(termsData.map((term) => ({ id: term.id, name: term.name })));
     setCategories(categoriesData.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
+    setCurrencies(currenciesData.filter((c) => c.enabled).map((c) => ({ id: c.code, code: c.code, name: c.name ?? c.code, isBaseCurrency: c.isBaseCurrency })));
     setAllRows(
       customers.map((item) => ({
         id: item.id,
@@ -122,17 +128,18 @@ function ARCustomersContent() {
   React.useEffect(() => {
     if (!drawerOpen) return;
     if (!editingId) {
+      const baseCode = financialSettings.baseCurrency || currencies.find((c) => c.isBaseCurrency)?.code || currencies[0]?.code || "KES";
       setForm({
         name: "",
         email: "",
         creditLimit: "",
         paymentTermsId: "",
-          customerCategoryId: "",
-          creditControlMode: "AMOUNT",
-          maxOutstandingInvoiceAgeDays: "",
-          perInvoiceDaysToPayCap: "",
-          creditWarningThresholdPct: "",
-        defaultCurrency: "KES",
+        customerCategoryId: "",
+        creditControlMode: "AMOUNT",
+        maxOutstandingInvoiceAgeDays: "",
+        perInvoiceDaysToPayCap: "",
+        creditWarningThresholdPct: "",
+        defaultCurrency: baseCode,
         taxId: "",
       });
       setErrors({});
@@ -531,15 +538,24 @@ function ARCustomersContent() {
           </div>
           <div className="space-y-2">
             <Label>Currency preference</Label>
-            <Input
-              placeholder="e.g. KES"
-              value={form.defaultCurrency}
-              onChange={(e) => {
-                const value = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+            <Select
+              value={form.defaultCurrency && currencies.some((c) => c.code === form.defaultCurrency) ? form.defaultCurrency : (currencies[0]?.code ?? form.defaultCurrency ?? "")}
+              onValueChange={(value) => {
                 setForm((prev) => ({ ...prev, defaultCurrency: value }));
                 if (errors.defaultCurrency) setErrors((prev) => ({ ...prev, defaultCurrency: "" }));
               }}
-            />
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent>
+                {currencies.map((c) => (
+                  <SelectItem key={c.id} value={c.code}>
+                    {c.code} {c.name && c.name !== c.code ? `- ${c.name}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.defaultCurrency ? <p className="text-xs text-destructive">{errors.defaultCurrency}</p> : null}
           </div>
           <div className="space-y-2">

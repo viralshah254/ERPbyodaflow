@@ -13,6 +13,24 @@ export async function runAnalyticsQueryApi(query: AnalyticsQuery): Promise<Analy
   });
 }
 
+export async function fetchAnalyticsMetricsApi(): Promise<
+  Array<{ key: string; label: string; allowedDimensions: string[] }>
+> {
+  requireLiveApi("Analytics metrics");
+  const payload = await apiRequest<{ items: Array<{ key: string; label: string; allowedDimensions: string[] }> }>(
+    "/api/analytics/metrics"
+  );
+  return payload.items ?? [];
+}
+
+export async function validateAnalyticsQueryApi(query: AnalyticsQuery): Promise<void> {
+  requireLiveApi("Analytics query validation");
+  await apiRequest("/api/analytics/query/validate", {
+    method: "POST",
+    body: query,
+  });
+}
+
 export interface InventoryInsightItem {
   type: "low_stock" | string;
   productId?: string;

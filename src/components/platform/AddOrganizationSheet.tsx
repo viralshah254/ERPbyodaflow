@@ -52,13 +52,18 @@ export function AddOrganizationSheet({
     }
     setSaving(true);
     try {
-      await createPlatformOrgApi({
+      const result = await createPlatformOrgApi({
         tenantId,
         name: name.trim(),
         orgType: orgType as "MANUFACTURER" | "DISTRIBUTOR" | "SHOP",
         orgRole: orgRole as "STANDARD" | "FRANCHISOR" | "FRANCHISEE",
       });
-      toast.success("Organization created.");
+      toast.success("Organization staged for platform checkout.");
+      toast.info(`Pending platform checkout total: ${new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+      }).format((result.checkout.quoteTotalCents ?? 0) / 100)}.`);
       handleOpenChange(false);
       onSuccess?.();
     } catch (err) {
@@ -74,7 +79,7 @@ export function AddOrganizationSheet({
         <SheetHeader>
           <SheetTitle>Add organization</SheetTitle>
           <SheetDescription>
-            Create a new organization under this company. You can add branches and users from the ERP settings for that org.
+            Stage a new organization under this company, then confirm it from platform billing with the rest of the batch.
           </SheetDescription>
         </SheetHeader>
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -117,7 +122,7 @@ export function AddOrganizationSheet({
               Cancel
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Creating…" : "Add organization"}
+              {saving ? "Staging…" : "Add to checkout"}
             </Button>
           </SheetFooter>
         </form>

@@ -31,10 +31,39 @@ export interface BuildVisibleNavInput {
   defaultNav: string[];
   terminology: TerminologyOverrides;
   user: User | null;
+  permissions: string[];
 }
 
-/** Include all nav items so the full nav is visible; route-level auth still applies on navigation. */
-function itemPasses(_item: NavItemConfig, _input: BuildVisibleNavInput): boolean {
+function hasRuntimePermission(permissions: string[], required: string): boolean {
+  if (permissions.includes("*")) return true;
+  if (permissions.includes(required)) return true;
+  const wildcardPrefixes = permissions
+    .filter((entry) => entry.endsWith(".*"))
+    .map((entry) => entry.slice(0, -2));
+  return wildcardPrefixes.some((prefix) => required.startsWith(`${prefix}.`));
+}
+
+function itemPasses(item: NavItemConfig, input: BuildVisibleNavInput): boolean {
+  if (item.moduleKey && !input.enabledModules.includes(item.moduleKey)) return false;
+  if (item.requiresOrgTypes?.length) {
+    if (!input.orgType || !item.requiresOrgTypes.includes(input.orgType)) return false;
+  }
+  if (item.requiresFlags?.length) {
+    const hasFlags = item.requiresFlags.every((flag) => input.featureFlags[flag] === true);
+    if (!hasFlags) return false;
+  }
+  if (item.requiresPermissions?.length) {
+    const hasPermission = item.requiresPermissions.some((perm) => hasRuntimePermission(input.permissions, perm));
+    if (!hasPermission) return false;
+  }
+  return true;
+}
+
+function sectionPasses(section: NavSectionConfig, input: BuildVisibleNavInput): boolean {
+  if (section.moduleKey && !input.enabledModules.includes(section.moduleKey)) return false;
+  if (section.requiresOrgTypes?.length) {
+    if (!input.orgType || !section.requiresOrgTypes.includes(input.orgType)) return false;
+  }
   return true;
 }
 
@@ -62,8 +91,7 @@ function resolveItems(items: NavItemConfig[], input: BuildVisibleNavInput): Reso
   return out;
 }
 
-/** Build visible nav sections. Shows every section from the config; defaultNav only controls order.
- * Module/flag/orgType/permission gating and terminology are applied. Core is always first when dashboard is enabled. */
+/** Build visible nav sections with module/flag/orgType/permission gating applied. */
 export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection[] {
   const fullSectionKeys = NAV_SECTIONS_CONFIG.map((s) => s.key);
   // Include every section from config; use defaultNav only for ordering (sections in defaultNav first, then the rest in config order)
@@ -85,7 +113,7 @@ export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection
   for (const sectionKey of order) {
     const section = byKey.get(sectionKey);
     if (!section) continue;
-    // Show every section (no module/orgType gating); full nav visible, route-level auth on navigation
+    if (!sectionPasses(section, input)) continue;
     const items = resolveItems(section.items, input);
     if (items.length === 0) continue;
 

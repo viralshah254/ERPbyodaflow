@@ -196,6 +196,24 @@ export async function fetchRuntimeSession(): Promise<{
   };
 }
 
+export type SetupStatus = {
+  companySetupDone: boolean;
+  currenciesDone: boolean;
+  coaDone: boolean;
+  taxesDone: boolean;
+  bankAccountsDone: boolean;
+  usersDone: boolean;
+  firstDocDone: boolean;
+};
+
+export async function fetchSetupStatusApi(): Promise<SetupStatus | null> {
+  try {
+    return await apiRequest<SetupStatus>("/api/me/setup-status");
+  } catch {
+    return null;
+  }
+}
+
 export async function saveCurrentOrgContext(payload: {
   templateId?: string;
   edition?: string;

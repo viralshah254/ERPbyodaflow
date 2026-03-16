@@ -33,7 +33,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getProductById, listPackaging, savePackaging } from "@/lib/data/products.repo";
+import { fetchProductApi } from "@/lib/api/products";
+import {
+  fetchProductPackagingApi,
+  saveProductPackagingApi,
+} from "@/lib/api/product-master";
 import type { ProductPackaging } from "@/lib/products/pricing-types";
 import { validateProductPackaging } from "@/lib/products/validation";
 import { listUoms } from "@/lib/data/uom.repo";
@@ -41,6 +45,7 @@ import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 function getUomOptions(): string[] {
@@ -53,14 +58,42 @@ export default function ProductPackagingPage() {
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
-  const product = React.useMemo(() => getProductById(id), [id]);
+  const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
   const [packaging, setPackaging] = React.useState<ProductPackaging[]>([]);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [allowDecimals, setAllowDecimals] = React.useState(false);
 
   React.useEffect(() => {
-    if (product) setPackaging(listPackaging(product.id));
+    let cancelled = false;
+    fetchProductApi(id)
+      .then((value) => {
+        if (!cancelled) setProduct(value);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error((error as Error).message);
+          setProduct(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  React.useEffect(() => {
+    if (!product) return;
+    let cancelled = false;
+    fetchProductPackagingApi(product.id)
+      .then((items) => {
+        if (!cancelled) setPackaging(items);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error((error as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [product]);
 
   const baseUom = product?.baseUom ?? product?.unit ?? "EA";
@@ -72,7 +105,7 @@ export default function ProductPackagingPage() {
   const hasWarnings = validation.warnings.length > 0;
   const uomOptions = React.useMemo(() => getUomOptions(), []);
 
-  const handleSave = (p: ProductPackaging) => {
+  const handleSave = async (p: ProductPackaging) => {
     const next = [...packaging];
     if (editingIndex != null && editingIndex >= 0 && editingIndex < next.length) {
       next[editingIndex] = p;
@@ -80,16 +113,25 @@ export default function ProductPackagingPage() {
       next.push(p);
     }
     setPackaging(next);
-    if (product) savePackaging(product.id, next);
+    if (product) await saveProductPackagingApi(product.id, next);
     setSheetOpen(false);
     setEditingIndex(null);
   };
 
-  const handleRemove = (idx: number) => {
+  const handleRemove = async (idx: number) => {
     const next = packaging.filter((_, i) => i !== idx);
     setPackaging(next);
-    if (product) savePackaging(product.id, next);
+    if (product) await saveProductPackagingApi(product.id, next);
   };
+
+  if (product === undefined) {
+    return (
+      <PageShell>
+        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      </PageShell>
+    );
+  }
 
   if (!product) {
     return (

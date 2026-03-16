@@ -125,16 +125,21 @@ export default function PlatformCustomersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground">
-            Provision first organization and first admin here. Use business owner name as tenant name and company name for the org. Customer admins manage teams, franchise setup, and operations in their own workspace.
+            Stage first organizations and first admin accounts here, then confirm them from platform billing. Customer admins manage teams, franchise setup, and operations in their own workspace after activation.
           </p>
         </div>
-        <Button
-          onClick={() => setCreateCompanyOpen(true)}
-          disabled={!canOwnerManage || refreshingAccess}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          {refreshingAccess ? "Checking access..." : "Create company"}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/platform/billing">View checkout</Link>
+          </Button>
+          <Button
+            onClick={() => setCreateCompanyOpen(true)}
+            disabled={!canOwnerManage || refreshingAccess}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {refreshingAccess ? "Checking access..." : "Create company"}
+          </Button>
+        </div>
       </div>
       {!canOwnerManage && !refreshingAccess ? (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">

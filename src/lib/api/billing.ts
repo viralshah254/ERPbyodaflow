@@ -38,8 +38,30 @@ export type BillingInvoiceRow = {
   status: string;
   totalCents: number;
   currency: string;
+  billingKind?: string;
+  checkoutId?: string;
   lineItems: BillingLineItem[];
   createdAt: string;
+};
+
+export type BillingCheckoutItem = {
+  id: string;
+  itemType: "USER" | "FRANCHISE_OUTLET";
+  label: string;
+  payload: Record<string, unknown>;
+};
+
+export type BillingCheckout = {
+  id: string | null;
+  status: string;
+  items: BillingCheckoutItem[];
+  quoteTotalCents: number;
+  quoteLineItems: BillingLineItem[];
+  projectedMonthlyCents: number;
+  finalizedInvoiceId: string | null;
+  liveUsage: BillingUsagePreview;
+  stagedUserCount?: number;
+  stagedFranchiseCount?: number;
 };
 
 export type BillingPricing = {
@@ -65,4 +87,29 @@ export async function fetchBillingInvoicesApi(): Promise<BillingInvoiceRow[]> {
 export async function fetchBillingPricingApi(): Promise<BillingPricing> {
   requireLiveApi("Billing pricing");
   return apiRequest<BillingPricing>("/api/billing/pricing");
+}
+
+export async function fetchBillingCheckoutApi(): Promise<BillingCheckout> {
+  requireLiveApi("Billing checkout");
+  return apiRequest<BillingCheckout>("/api/billing/checkout");
+}
+
+export async function removeBillingCheckoutItemApi(itemId: string): Promise<BillingCheckout> {
+  requireLiveApi("Remove checkout item");
+  return apiRequest<BillingCheckout>(`/api/billing/checkout/items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+}
+
+export async function confirmBillingCheckoutApi(): Promise<{
+  checkoutId: string;
+  invoiceId: string;
+  quoteTotalCents: number;
+  lineItems: BillingLineItem[];
+}> {
+  requireLiveApi("Confirm billing checkout");
+  return apiRequest("/api/billing/checkout/confirm", { method: "POST" });
+}
+
+export async function cancelBillingCheckoutApi(): Promise<BillingCheckout> {
+  requireLiveApi("Cancel billing checkout");
+  return apiRequest<BillingCheckout>("/api/billing/checkout/cancel", { method: "POST" });
 }

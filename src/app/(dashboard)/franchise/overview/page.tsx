@@ -12,6 +12,7 @@ import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard"
 import { FranchiseHealthCard } from "@/components/operational/FranchiseHealthCard";
 import { fetchFranchiseNetworkSummary } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
+import { useAuthStore } from "@/stores/auth-store";
 
 type FranchiseOverviewRow = {
   franchiseeId: string;
@@ -28,8 +29,18 @@ type FranchiseOverviewRow = {
 export default function FranchiseOverviewPage() {
   const [rows, setRows] = React.useState<FranchiseOverviewRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const permissions = useAuthStore((s) => s.permissions);
+  const canView =
+    permissions.includes("franchise.network.read") ||
+    permissions.includes("franchise.analytics.read") ||
+    permissions.includes("admin.users");
 
   React.useEffect(() => {
+    if (!canView) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     fetchFranchiseNetworkSummary()
@@ -55,7 +66,7 @@ export default function FranchiseOverviewPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canView]);
 
   const columns = [
     {
@@ -95,18 +106,27 @@ export default function FranchiseOverviewPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link href="/franchise/vmi">VMI & Replenishment</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/franchise/commission">Commission & Rebates</Link>
-            </Button>
-          </div>
+          canView ? (
+            <div className="flex gap-2">
+              <Button variant="outline" asChild>
+                <Link href="/franchise/vmi">VMI & Replenishment</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/franchise/commission">Commission & Rebates</Link>
+              </Button>
+            </div>
+          ) : null
         }
       />
       <div className="p-6 space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {!canView ? (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              You do not have permission to view franchise overview data.
+            </CardContent>
+          </Card>
+        ) : null}
+        {canView ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <OperationalKpiCard
             title="Franchisees Visible"
             value={rows.length}
@@ -133,9 +153,9 @@ export default function FranchiseOverviewPage() {
             severity="danger"
             href="/treasury/collections"
           />
-        </div>
+        </div> : null}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        {canView ? <div className="grid gap-4 lg:grid-cols-2">
           {rows.slice(0, 4).map((row) => (
             <FranchiseHealthCard
               key={row.franchiseeId}
@@ -147,9 +167,9 @@ export default function FranchiseOverviewPage() {
               openReplenishments={row.lowStockCount}
             />
           ))}
-        </div>
+        </div> : null}
 
-        <Card>
+        {canView ? <Card>
           <CardHeader>
             <CardTitle>Network health</CardTitle>
             <CardDescription>Operational visibility for parent company team.</CardDescription>
@@ -161,7 +181,7 @@ export default function FranchiseOverviewPage() {
               <DataTable<FranchiseOverviewRow> data={rows} columns={columns} emptyMessage="No franchise data available." />
             )}
           </CardContent>
-        </Card>
+        </Card> : null}
       </div>
     </PageShell>
   );

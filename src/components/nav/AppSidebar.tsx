@@ -31,7 +31,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ className }: AppSidebarProps) {
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore();
-  const { user, org } = useAuthStore();
+  const { user, org, permissions } = useAuthStore();
   const {
     orgType: ctxOrgType,
     enabledModules,
@@ -59,9 +59,10 @@ export function AppSidebar({ className }: AppSidebarProps) {
       defaultNav: personaNav ?? (template?.defaultNav?.length ? template.defaultNav : DEFAULT_NAV_ORDER),
       terminology: template?.terminology ?? {},
       user,
+      permissions,
     };
     return buildVisibleNav(input);
-  }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, orgRole, franchisePersona]);
+  }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]);
 
   return (
     <div

@@ -341,7 +341,7 @@ export default function UsersRolesPage() {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Active users are billed immediately with month-end reconciliation. Franchise outlets include 2 seats before additional-seat charges apply.
+                New users are staged for checkout first. Nothing is activated or billed until you confirm the pending checkout from Billing.
               </p>
             </div>
           </div>
@@ -378,12 +378,14 @@ export default function UsersRolesPage() {
                       copilotEnabled: userForm.copilotEnabled,
                       roleIds: userForm.roleIds,
                     });
-                    toast.success("User created.");
-                    if (created.billingImpact?.invoiceId) {
+                    toast.success("User staged for checkout.");
+                    if (created.checkout) {
                       toast.info(
-                        created.billingImpact.lineItems?.length
-                          ? `Billing created: ${created.billingImpact.lineItems.map((line) => line.description).join(", ")}`
-                          : `Billing linked: invoice ${created.billingImpact.invoiceId.slice(0, 8)}…`
+                        `Checkout updated: ${created.checkout.items.length} staged item(s), ${new Intl.NumberFormat("en-US", {
+                          style: "currency",
+                          currency: "USD",
+                          minimumFractionDigits: 2,
+                        }).format(created.checkout.quoteTotalCents / 100)} due at checkout.`
                       );
                     }
                   }
@@ -396,7 +398,7 @@ export default function UsersRolesPage() {
                 }
               }}
             >
-              {savingUser ? "Saving..." : editingUser ? "Save" : "Create"}
+              {savingUser ? "Saving..." : editingUser ? "Save" : "Add to checkout"}
             </Button>
           </SheetFooter>
         </SheetContent>

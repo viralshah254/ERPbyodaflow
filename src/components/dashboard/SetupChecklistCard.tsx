@@ -3,24 +3,25 @@
 import * as React from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { fetchSetupStatusApi, type SetupStatus } from "@/lib/api/context";
 import * as Icons from "lucide-react";
 
-const CHECKLIST_KEY = "odaflow_setup_checklist";
+const MARKED_INCOMPLETE_KEY = "odaflow_setup_marked_incomplete";
 
-const STEPS: { id: string; label: string; href: string }[] = [
-  { id: "company", label: "Company setup", href: "/settings/org" },
-  { id: "currencies", label: "Currencies", href: "/settings/financial/currencies" },
-  { id: "coa", label: "Chart of Accounts", href: "/settings/financial/chart-of-accounts" },
-  { id: "taxes", label: "Taxes", href: "/settings/financial/taxes" },
-  { id: "bank", label: "Bank accounts", href: "/treasury/bank-accounts" },
-  { id: "invite", label: "Invite users", href: "/settings/users-roles" },
-  { id: "first-doc", label: "Create first doc", href: "/docs" },
+const STEPS: { id: string; label: string; href: string; statusKey: keyof SetupStatus }[] = [
+  { id: "company", label: "Company setup", href: "/settings/org", statusKey: "companySetupDone" },
+  { id: "currencies", label: "Currencies", href: "/settings/financial/currencies", statusKey: "currenciesDone" },
+  { id: "coa", label: "Chart of Accounts", href: "/settings/financial/chart-of-accounts", statusKey: "coaDone" },
+  { id: "taxes", label: "Taxes", href: "/settings/financial/taxes", statusKey: "taxesDone" },
+  { id: "bank", label: "Bank accounts", href: "/treasury/bank-accounts", statusKey: "bankAccountsDone" },
+  { id: "invite", label: "Invite users", href: "/settings/users-roles", statusKey: "usersDone" },
+  { id: "first-doc", label: "Create first doc", href: "/docs", statusKey: "firstDocDone" },
 ];
 
-function getCompleted(): Set<string> {
+function getMarkedIncomplete(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(CHECKLIST_KEY);
+    const raw = localStorage.getItem(MARKED_INCOMPLETE_KEY);
     if (!raw) return new Set();
     const arr = JSON.parse(raw) as string[];
     return new Set(Array.isArray(arr) ? arr : []);
@@ -29,28 +30,67 @@ function getCompleted(): Set<string> {
   }
 }
 
-function setCompleted(ids: Set<string>) {
+function setMarkedIncomplete(ids: Set<string>) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(CHECKLIST_KEY, JSON.stringify([...ids]));
+    localStorage.setItem(MARKED_INCOMPLETE_KEY, JSON.stringify([...ids]));
   } catch {
     /* ignore */
   }
 }
 
-export function SetupChecklistCard() {
-  const [completed, setCompletedState] = React.useState<Set<string>>(new Set());
+function completedFromStatus(status: SetupStatus | null): Set<string> {
+  if (!status) return new Set();
+  const set = new Set<string>();
+  for (const step of STEPS) {
+    if (status[step.statusKey]) set.add(step.id);
+  }
+  return set;
+}
 
-  React.useEffect(() => {
-    setCompletedState(getCompleted());
+export function SetupChecklistCard() {
+  const [apiCompleted, setApiCompleted] = React.useState<Set<string>>(new Set());
+  const [markedIncomplete, setMarkedIncompleteState] = React.useState<Set<string>>(new Set());
+  const [loading, setLoading] = React.useState(true);
+
+  const refreshStatus = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const status = await fetchSetupStatusApi();
+      setApiCompleted(completedFromStatus(status));
+    } catch {
+      setApiCompleted(new Set());
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  React.useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
+
+  React.useEffect(() => {
+    const onFocus = () => void refreshStatus();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshStatus]);
+
+  React.useEffect(() => {
+    setMarkedIncompleteState(getMarkedIncomplete());
+  }, []);
+
+  const completed = React.useMemo(() => {
+    const out = new Set(apiCompleted);
+    for (const id of markedIncomplete) out.delete(id);
+    return out;
+  }, [apiCompleted, markedIncomplete]);
+
   const toggle = (id: string) => {
-    const next = new Set(completed);
+    const next = new Set(markedIncomplete);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    setCompletedState(next);
-    setCompleted(next);
+    setMarkedIncompleteState(next);
+    setMarkedIncomplete(next);
   };
 
   const done = completed.size;
@@ -64,7 +104,7 @@ export function SetupChecklistCard() {
           Setup checklist
         </CardTitle>
         <CardDescription>
-          {done} of {total} complete. Guided onboarding.
+          {loading ? "Checking…" : `${done} of ${total} complete. Guided onboarding.`}
         </CardDescription>
       </CardHeader>
       <CardContent>

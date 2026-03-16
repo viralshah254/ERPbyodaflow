@@ -185,14 +185,12 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
       setAttemptedSubmit(false);
       onOpenChange(false);
       onSuccess?.();
-      toast.success("Customer provisioned. Share credentials securely and ask admin to change password on first login.");
-      if (result.billingImpact?.invoiceId) {
-        toast.info(
-          result.billingImpact.lineItems?.length
-            ? `Billing created: ${result.billingImpact.lineItems.map((line) => line.description).join(", ")}`
-            : `Billing linked: invoice ${result.billingImpact.invoiceId.slice(0, 8)}… created`
-        );
-      }
+      toast.success("Customer staged for platform checkout.");
+      toast.info(`Pending platform checkout total: ${new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+      }).format((result.checkout.quoteTotalCents ?? 0) / 100)}. Confirm from Platform Billing when ready.`);
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -211,10 +209,10 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
         </SheetHeader>
         <div className="mt-6 space-y-4">
           <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            Quick setup: create first customer org + first admin login. Use defaults to avoid manual setup.
+            Quick setup: stage the first customer org + first admin login, then confirm one batched provisioning checkout.
           </div>
           <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            Billing automation: standard orgs bill active users monthly, while franchise outlets bill $50/month with 2 included users and prorated mid-month activation.
+            Billing automation: standard orgs bill active users monthly, while franchise outlets bill $50/month with 2 included users and prorated mid-month activation after checkout confirmation.
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" onClick={applyDistributorDefaults}>
@@ -421,7 +419,7 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
         </div>
         <SheetFooter className="mt-6">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => void submit()} disabled={saving}>Provision</Button>
+          <Button onClick={() => void submit()} disabled={saving}>{saving ? "Staging..." : "Add to checkout"}</Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

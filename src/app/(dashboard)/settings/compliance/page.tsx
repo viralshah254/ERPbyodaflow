@@ -17,34 +17,55 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
-import { loadStoredValue, saveStoredValue } from "@/lib/data/persisted-store";
+import {
+  fetchComplianceSettingsApi,
+  updateComplianceSettingsApi,
+} from "@/lib/api/compliance";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CompliancePage() {
-  const saved = React.useMemo(
-    () =>
-      loadStoredValue("odaflow_compliance_settings", () => ({
-        taxId: "",
-        invoiceTemplate: "standard",
-        eInvoice: false,
-        withholdingEnabled: false,
-      })),
-    []
-  );
-  const [taxId, setTaxId] = React.useState(saved.taxId);
-  const [invoiceTemplate, setInvoiceTemplate] = React.useState(saved.invoiceTemplate);
-  const [eInvoice, setEInvoice] = React.useState(saved.eInvoice);
-  const [withholdingEnabled, setWithholdingEnabled] = React.useState(saved.withholdingEnabled);
+  const [taxId, setTaxId] = React.useState("");
+  const [invoiceTemplate, setInvoiceTemplate] = React.useState("standard");
+  const [eInvoice, setEInvoice] = React.useState(false);
+  const [withholdingEnabled, setWithholdingEnabled] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
 
-  const handleSave = () => {
-    saveStoredValue("odaflow_compliance_settings", {
-      taxId,
-      invoiceTemplate,
-      eInvoice,
-      withholdingEnabled,
-    });
-    toast.success("Compliance settings saved.");
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchComplianceSettingsApi()
+      .then((settings) => {
+        if (cancelled) return;
+        setTaxId(settings.taxId ?? "");
+        setInvoiceTemplate(settings.invoiceTemplate ?? "standard");
+        setEInvoice(settings.eInvoice === true);
+        setWithholdingEnabled(settings.withholdingEnabled === true);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load compliance settings.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      await updateComplianceSettingsApi({
+        taxId,
+        invoiceTemplate,
+        eInvoice,
+        withholdingEnabled,
+      });
+      toast.success("Compliance settings saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save compliance settings.");
+    }
   };
 
   return (
@@ -68,6 +89,7 @@ export default function CompliancePage() {
         }
       />
       <div className="p-6 space-y-6">
+        {loading ? <p className="text-sm text-muted-foreground">Loading settings...</p> : null}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Tax IDs</CardTitle>

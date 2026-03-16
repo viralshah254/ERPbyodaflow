@@ -35,6 +35,7 @@ export default function AnalyticsExplorePage() {
   const [savedViews, setSavedViews] = React.useState(() => getSavedAnalysisViews());
   const [result, setResult] = React.useState<AnalyticsResult | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [queryError, setQueryError] = React.useState<string | null>(null);
 
   const query: AnalyticsQuery = React.useMemo(
     () => ({ metric, dimensions: dims, filters, limit: 20 }),
@@ -44,18 +45,20 @@ export default function AnalyticsExplorePage() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setQueryError(null);
     runAnalyticsQueryApi(query)
       .then((res) => {
-        if (!cancelled) setResult(res);
+        if (!cancelled) {
+          setResult(res);
+        }
       })
       .catch((e) => {
         if (!cancelled) {
           console.error(e);
-          toast.error(e instanceof Error ? e.message : "Analytics query failed.");
-          // Fallback to mock engine to avoid blank UI
-          import("@/lib/analytics/engine").then((mod) => {
-            if (!cancelled) setResult(mod.runAnalyticsQuery(query));
-          });
+          const message = e instanceof Error ? e.message : "Analytics query failed.";
+          toast.error(message);
+          setResult(null);
+          setQueryError(message);
         }
       })
       .finally(() => {
@@ -152,7 +155,9 @@ export default function AnalyticsExplorePage() {
         <GlobalFilterBar filters={filters} onChange={setFilters} />
 
         {loading || !result ? (
-          <p className="text-sm text-muted-foreground">Loading analytics…</p>
+          <p className="text-sm text-muted-foreground">
+            {loading ? "Loading analytics…" : queryError ? `Query failed: ${queryError}` : "No analytics result."}
+          </p>
         ) : (
           <>
             <div className="grid gap-4 lg:grid-cols-3">

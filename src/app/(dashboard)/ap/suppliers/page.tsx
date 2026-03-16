@@ -8,6 +8,8 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchApSupplierSummariesApi } from "@/lib/api/payments";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
+import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
@@ -39,6 +41,8 @@ export default function APSuppliersPage() {
   const [saving, setSaving] = React.useState(false);
   const [allRows, setAllRows] = React.useState<APSupplierRow[]>([]);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [currencies, setCurrencies] = React.useState<Array<{ id: string; code: string; name: string; isBaseCurrency?: boolean }>>([]);
+  const { settings: financialSettings } = useFinancialSettings();
   const [form, setForm] = React.useState({
     name: "",
     email: "",
@@ -50,9 +54,14 @@ export default function APSuppliersPage() {
   const [duplicateWarning, setDuplicateWarning] = React.useState<string | undefined>(undefined);
 
   const reload = React.useCallback(async () => {
-    const [suppliers, termsData] = await Promise.all([fetchApSupplierSummariesApi(), fetchPaymentTermsApi()]);
+    const [suppliers, termsData, currenciesData] = await Promise.all([
+      fetchApSupplierSummariesApi(),
+      fetchPaymentTermsApi(),
+      fetchFinancialCurrenciesApi(),
+    ]);
     const termById = new Map(termsData.map((term) => [term.id, term.name]));
     setTerms(termsData.map((term) => ({ id: term.id, name: term.name })));
+    setCurrencies(currenciesData.filter((c) => c.enabled).map((c) => ({ id: c.code, code: c.code, name: c.name ?? c.code, isBaseCurrency: c.isBaseCurrency })));
     setAllRows(
       suppliers.map((item) => ({
         id: item.id,
@@ -74,11 +83,12 @@ export default function APSuppliersPage() {
   React.useEffect(() => {
     if (!drawerOpen) return;
     if (!editingId) {
+      const baseCode = financialSettings.baseCurrency || currencies.find((c) => c.isBaseCurrency)?.code || currencies[0]?.code || "KES";
       setForm({
         name: "",
         email: "",
         paymentTermsId: "",
-        defaultCurrency: "KES",
+        defaultCurrency: baseCode,
         taxId: "",
       });
       setErrors({});
@@ -307,14 +317,24 @@ export default function APSuppliersPage() {
           </div>
           <div className="space-y-2">
             <Label>Currency preference</Label>
-            <Input
-              value={form.defaultCurrency}
-              onChange={(e) => {
-                const value = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+            <Select
+              value={form.defaultCurrency && currencies.some((c) => c.code === form.defaultCurrency) ? form.defaultCurrency : (currencies[0]?.code ?? form.defaultCurrency ?? "")}
+              onValueChange={(value) => {
                 setForm((prev) => ({ ...prev, defaultCurrency: value }));
                 if (errors.defaultCurrency) setErrors((prev) => ({ ...prev, defaultCurrency: "" }));
               }}
-            />
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent>
+                {currencies.map((c) => (
+                  <SelectItem key={c.id} value={c.code}>
+                    {c.code} {c.name && c.name !== c.code ? `- ${c.name}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.defaultCurrency ? <p className="text-xs text-destructive">{errors.defaultCurrency}</p> : null}
           </div>
           <div className="space-y-2">

@@ -19,7 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { createProductApi, fetchProductsApi } from "@/lib/api/products";
+import { fetchProductCategoriesApi, createProductCategoryApi } from "@/lib/api/product-categories";
 import { setProductsCache } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
 import type { ProductRow } from "@/lib/types/masters";
@@ -44,12 +52,30 @@ export default function MasterProductsPage() {
   const [saving, setSaving] = React.useState(false);
   const [sku, setSku] = React.useState("");
   const [name, setName] = React.useState("");
-  const [category, setCategory] = React.useState("");
+  const [categoryId, setCategoryId] = React.useState("");
   const [unit, setUnit] = React.useState("");
   const [baseBarcode, setBaseBarcode] = React.useState("");
   const [defaultSize, setDefaultSize] = React.useState("");
+  const [categories, setCategories] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [addCategoryOpen, setAddCategoryOpen] = React.useState(false);
+  const [newCategoryCode, setNewCategoryCode] = React.useState("");
+  const [newCategoryName, setNewCategoryName] = React.useState("");
+  const [addingCategory, setAddingCategory] = React.useState(false);
 
   const uomOptions = React.useMemo(() => listUoms().map((u) => u.code), []);
+
+  const loadCategories = React.useCallback(async () => {
+    try {
+      const list = await fetchProductCategoriesApi();
+      setCategories(list.filter((c) => c.isActive).map((c) => ({ id: c.id, code: c.code, name: c.name })));
+    } catch {
+      setCategories([]);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
   const filtered = allRows;
 
   const refreshProducts = React.useCallback(async () => {
@@ -69,6 +95,8 @@ export default function MasterProductsPage() {
     void refreshProducts();
   }, [refreshProducts]);
 
+  const categoryNameById = React.useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
+
   const columns = React.useMemo(
     () => [
       {
@@ -78,7 +106,11 @@ export default function MasterProductsPage() {
         sticky: true,
       },
       { id: "name", header: "Name", accessor: "name" as keyof ProductRow },
-      { id: "category", header: "Category", accessor: "category" as keyof ProductRow },
+      {
+        id: "category",
+        header: "Category",
+        accessor: (r: ProductRow) => (r.category ? categoryNameById.get(r.category) ?? r.category : "—"),
+      },
       { id: "unit", header: "Unit", accessor: "unit" as keyof ProductRow },
       {
         id: "currentStock",
@@ -91,13 +123,13 @@ export default function MasterProductsPage() {
         accessor: (r: ProductRow) => <StatusBadge status={r.status} />,
       },
     ],
-    []
+    [categoryNameById]
   );
 
   const resetForm = () => {
     setSku("");
     setName("");
-    setCategory("");
+    setCategoryId("");
     setUnit("");
     setBaseBarcode("");
     setDefaultSize("");
@@ -112,7 +144,7 @@ export default function MasterProductsPage() {
     const payload = {
       sku: sku.trim(),
       name: name.trim(),
-      category: category.trim() || undefined,
+      category: categoryId.trim() || undefined,
       unit: selectedUnit,
       baseUom: selectedUnit,
       status: "ACTIVE" as const,
@@ -236,12 +268,39 @@ export default function MasterProductsPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Category</Label>
-            <Input
-              placeholder="Category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
+            <div className="flex items-center justify-between gap-2">
+              <Label>Category</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  setNewCategoryCode("");
+                  setNewCategoryName("");
+                  setAddCategoryOpen(true);
+                }}
+              >
+                <Icons.Plus className="h-3.5 w-3.5 mr-1" />
+                Add category
+              </Button>
+            </div>
+            <Select
+              value={categoryId || "__none__"}
+              onValueChange={(v) => setCategoryId(v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name} ({c.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label>Unit</Label>
@@ -282,6 +341,62 @@ export default function MasterProductsPage() {
           </div>
         </div>
       </EntityDrawer>
+
+      <Sheet open={addCategoryOpen} onOpenChange={setAddCategoryOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Add category</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Code</Label>
+              <Input
+                placeholder="e.g. FISH"
+                value={newCategoryCode}
+                onChange={(e) => setNewCategoryCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 24))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                placeholder="e.g. Fish & Seafood"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setAddCategoryOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!newCategoryCode.trim() || !newCategoryName.trim() || addingCategory}
+              onClick={async () => {
+                if (!newCategoryCode.trim() || !newCategoryName.trim()) return;
+                setAddingCategory(true);
+                try {
+                  const { id } = await createProductCategoryApi({
+                    code: newCategoryCode.trim(),
+                    name: newCategoryName.trim(),
+                  });
+                  setCategories((prev) => [...prev, { id, code: newCategoryCode.trim(), name: newCategoryName.trim() }]);
+                  setCategoryId(id);
+                  setAddCategoryOpen(false);
+                  setNewCategoryCode("");
+                  setNewCategoryName("");
+                  toast.success("Category added.");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Failed to add category.");
+                } finally {
+                  setAddingCategory(false);
+                }
+              }}
+            >
+              {addingCategory ? "Adding..." : "Add"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

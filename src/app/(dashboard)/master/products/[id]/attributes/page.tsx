@@ -33,11 +33,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getProductById, listAttributeDefs, saveAttributeDefs, listVariants } from "@/lib/data/products.repo";
+import { fetchProductApi } from "@/lib/api/products";
+import {
+  createProductAttributeDefApi,
+  deleteProductAttributeDefApi,
+  fetchProductAttributeDefsApi,
+  fetchProductVariantsApi,
+  updateProductAttributeDefApi,
+} from "@/lib/api/product-master";
 import type { ProductAttributeDef } from "@/lib/products/types";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const KINDS: ProductAttributeDef["kind"][] = ["size", "grade", "flavor", "packagingType", "spec", "custom"];
@@ -47,16 +55,57 @@ export default function ProductAttributesPage() {
   const id = params.id as string;
   const terminology = useTerminology();
 
-  const product = React.useMemo(() => getProductById(id), [id]);
+  const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
   const [defs, setDefs] = React.useState<ProductAttributeDef[]>([]);
+  const [variants, setVariants] = React.useState<Awaited<ReturnType<typeof fetchProductVariantsApi>>>([]);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ProductAttributeDef | null>(null);
 
   React.useEffect(() => {
-    setDefs(listAttributeDefs());
+    let cancelled = false;
+    fetchProductApi(id)
+      .then((value) => {
+        if (!cancelled) setProduct(value);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error((error as Error).message);
+          setProduct(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchProductAttributeDefsApi()
+      .then((rows) => {
+        if (!cancelled) setDefs(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error((error as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const variants = React.useMemo(() => (product ? listVariants(product.id) : []), [product]);
+  React.useEffect(() => {
+    if (!product) return;
+    let cancelled = false;
+    fetchProductVariantsApi(product.id)
+      .then((rows) => {
+        if (!cancelled) setVariants(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error((error as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [product]);
 
   const sortedDefs = React.useMemo(() => {
     const order = new Map<ProductAttributeDef["kind"], number>();
@@ -69,25 +118,38 @@ export default function ProductAttributesPage() {
     });
   }, [defs]);
 
-  const handleSave = (d: Omit<ProductAttributeDef, "id">) => {
-    if (editing) {
-      const next = defs.map((x) => (x.id === editing.id ? { ...x, ...d, id: x.id } : x));
-      saveAttributeDefs(next);
-      setDefs(next);
-    } else {
-      const created: ProductAttributeDef = { ...d, id: `ad${Date.now()}` };
-      saveAttributeDefs([...defs, created]);
-      setDefs([...defs, created]);
+  const handleSave = async (d: Omit<ProductAttributeDef, "id">) => {
+    try {
+      if (editing) {
+        await updateProductAttributeDefApi(editing.id, d);
+      } else {
+        await createProductAttributeDefApi(d);
+      }
+      setDefs(await fetchProductAttributeDefsApi());
+      setSheetOpen(false);
+      setEditing(null);
+    } catch (error) {
+      toast.error((error as Error).message);
     }
-    setSheetOpen(false);
-    setEditing(null);
   };
 
-  const handleRemove = (defId: string) => {
-    const next = defs.filter((x) => x.id !== defId);
-    saveAttributeDefs(next);
-    setDefs(next);
+  const handleRemove = async (defId: string) => {
+    try {
+      await deleteProductAttributeDefApi(defId);
+      setDefs(await fetchProductAttributeDefsApi());
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
+
+  if (product === undefined) {
+    return (
+      <PageShell>
+        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      </PageShell>
+    );
+  }
 
   if (!product) {
     return (

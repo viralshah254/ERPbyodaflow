@@ -68,6 +68,7 @@ export default function PlatformSubscriptionsPage() {
                   <TableHead>Cycle</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Billing mix</TableHead>
+                  <TableHead>Pending checkout</TableHead>
                   <TableHead>Period</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -87,6 +88,15 @@ export default function PlatformSubscriptionsPage() {
                       <TableCell className="text-sm text-muted-foreground">
                         {s.billingSnapshot
                           ? `${s.billingSnapshot.franchiseCount} franchise(s), ${s.billingSnapshot.activeUserCount} users, ${s.billingSnapshot.billableAdditionalUserCount} extra seats`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {s.pendingCheckout
+                          ? `${s.pendingCheckout.itemCount} item(s) · ${new Intl.NumberFormat("en-US", {
+                              style: "currency",
+                              currency: "USD",
+                              minimumFractionDigits: 2,
+                            }).format(s.pendingCheckout.quoteTotalCents / 100)}`
                           : "—"}
                       </TableCell>
                     <TableCell className="text-muted-foreground text-sm">

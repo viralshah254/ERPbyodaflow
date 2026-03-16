@@ -17,7 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { listPackaging, listProductPrices } from "@/lib/data/products.repo";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -26,6 +25,12 @@ import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
 import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
+import {
+  fetchProductVatCategoryApi,
+  updateProductVatCategoryApi,
+  type ProductVatCategory,
+} from "@/lib/api/product-vat";
+import { fetchProductPackagingApi, fetchProductPricingApi } from "@/lib/api/product-master";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -37,16 +42,25 @@ export default function ProductDetailPage() {
   const canDelete = canDeleteEntity(user);
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const [vatCategory, setVatCategory] = React.useState<string>("standard");
+  const [vatCategory, setVatCategory] = React.useState<ProductVatCategory>("standard");
   const [deleting, setDeleting] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | undefined>(undefined);
+  const [packaging, setPackaging] = React.useState<Awaited<ReturnType<typeof fetchProductPackagingApi>>>([]);
+  const [prices, setPrices] = React.useState<Awaited<ReturnType<typeof fetchProductPricingApi>>>([]);
 
   React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const key = `odaflow_product_vat_${id}`;
-    const raw = localStorage.getItem(key);
-    if (raw && ["standard", "zero", "exempt"].includes(raw)) setVatCategory(raw);
+    let cancelled = false;
+    fetchProductVatCategoryApi(id)
+      .then((value) => {
+        if (!cancelled) setVatCategory(value);
+      })
+      .catch(() => {
+        if (!cancelled) setVatCategory("standard");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   React.useEffect(() => {
@@ -68,13 +82,34 @@ export default function ProductDetailPage() {
     };
   }, [id]);
 
-  const saveVatCategory = (v: string) => {
-    setVatCategory(v);
-    if (typeof window !== "undefined") localStorage.setItem(`odaflow_product_vat_${id}`, v);
+  const saveVatCategory = async (v: string) => {
+    const next = v as ProductVatCategory;
+    setVatCategory(next);
+    try {
+      await updateProductVatCategoryApi(id, next);
+      toast.success("Product VAT category updated.");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
 
-  const packaging = React.useMemo(() => (product ? listPackaging(product.id) : []), [product]);
-  const prices = React.useMemo(() => (product ? listProductPrices(product.id) : []), [product]);
+  React.useEffect(() => {
+    if (!product) return;
+    let cancelled = false;
+    Promise.all([fetchProductPackagingApi(product.id), fetchProductPricingApi(product.id)])
+      .then(([packagingRows, pricingRows]) => {
+        if (cancelled) return;
+        setPackaging(packagingRows);
+        setPrices(pricingRows);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error((error as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [product]);
+
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});

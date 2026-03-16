@@ -14,6 +14,10 @@ const DOC_TYPES = [
   { type: "purchase-order", labelKey: "purchaseOrder" as const, icon: "FileText", href: "/docs/purchase-order" },
   { type: "grn", labelKey: "goodsReceipt" as const, icon: "PackageCheck", href: "/docs/grn" },
   { type: "invoice", labelKey: "invoice" as const, icon: "Receipt", href: "/docs/invoice" },
+  { type: "credit-note", label: "Sales Credit Notes", icon: "RotateCcw", href: "/docs/credit-note" },
+  { type: "debit-note", label: "Sales Debit Notes", icon: "BadgePlus", href: "/docs/debit-note" },
+  { type: "purchase-credit-note", label: "Purchase Credit Notes", icon: "RotateCcw", href: "/docs/purchase-credit-note" },
+  { type: "purchase-debit-note", label: "Purchase Debit Notes", icon: "BadgePlus", href: "/docs/purchase-debit-note" },
   { type: "journal", labelKey: "journalEntry" as const, icon: "FileEdit", href: "/docs/journal" },
 ] as const;
 
@@ -44,7 +48,7 @@ export default function DocumentCenterHubPage() {
                     <IconComponent className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">{t(doc.labelKey, terminology)}</CardTitle>
+                    <CardTitle className="text-base">{"labelKey" in doc ? t(doc.labelKey, terminology) : doc.label}</CardTitle>
                     <CardDescription>List, create, and manage</CardDescription>
                   </div>
                 </CardHeader>

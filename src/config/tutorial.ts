@@ -5,12 +5,17 @@
 
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation/sections";
 import type { NavItemConfig } from "@/config/navigation/types";
+import { ITEM_GUIDES } from "./tutorial-guides";
 
 export interface TutorialItem {
   key: string;
   label: string;
   href: string;
   copilotPrompt?: string;
+  /** Short explanation of what the page does and what the user sees. */
+  guideSummary?: string;
+  /** Optional "How to use this page" steps. */
+  guideSteps?: string[];
 }
 
 export interface TutorialChapter {
@@ -42,6 +47,7 @@ const ITEM_PROMPTS: Partial<Record<string, string>> = {
   "reports-scheduled": "Explain scheduled reports and delivery.",
   "automation-rules": "Explain automation rules: triggers, conditions, and actions.",
   "franchise-manage-outlets": "Explain how to add franchisees and give them login access.",
+  "inventory-movements": "Guide me through this page: what it shows, how to filter and use the table, and how movements are created from documents.",
 };
 
 /** Section-level descriptions and default Copilot prompts. */
@@ -195,21 +201,24 @@ const CHAPTER_META: Record<
   },
 };
 
-function flattenNavItems(items: NavItemConfig[], prefix = ""): TutorialItem[] {
+function flattenNavItems(items: NavItemConfig[]): TutorialItem[] {
   const out: TutorialItem[] = [];
   for (const item of items) {
     const key = item.key;
     const href = item.href;
     if (href) {
+      const guide = ITEM_GUIDES[key];
       out.push({
         key,
         label: item.label,
         href,
         copilotPrompt: ITEM_PROMPTS[key],
+        guideSummary: guide?.guideSummary,
+        guideSteps: guide?.guideSteps,
       });
     }
     if (item.children?.length) {
-      out.push(...flattenNavItems(item.children, key));
+      out.push(...flattenNavItems(item.children));
     }
   }
   return out;
@@ -239,6 +248,10 @@ export interface TutorialForRoute {
   copilotPrompt: string;
   hrefToChapter: string;
   itemLabel?: string;
+  /** Guide summary (item or chapter fallback). */
+  guideSummary: string;
+  /** Guide steps (item or empty). */
+  guideSteps: string[];
 }
 
 /**
@@ -260,6 +273,8 @@ export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
           copilotPrompt: item.copilotPrompt ?? chapter.copilotPrompt,
           hrefToChapter: `/tutorial/${chapter.id}`,
           itemLabel: item.label,
+          guideSummary: item.guideSummary ?? chapter.description,
+          guideSteps: item.guideSteps ?? [],
         };
       }
       if (normalized.startsWith(itemPath + "/") && itemPath.length > (best?.score ?? 0)) {
@@ -285,6 +300,8 @@ export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
       copilotPrompt: best.item?.copilotPrompt ?? best.chapter.copilotPrompt,
       hrefToChapter: `/tutorial/${best.chapter.id}`,
       itemLabel: best.item?.label,
+      guideSummary: best.item?.guideSummary ?? best.chapter.description,
+      guideSteps: best.item?.guideSteps ?? [],
     };
   }
   return null;

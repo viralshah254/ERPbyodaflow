@@ -16,6 +16,13 @@ type BackendUser = {
   branchIds?: string[];
   roleIds?: string[];
   roleNames?: string[];
+  stagedForCheckout?: boolean;
+  checkout?: {
+    id: string | null;
+    quoteTotalCents: number;
+    projectedMonthlyCents: number;
+    items: Array<{ id: string; itemType: string; label: string }>;
+  };
   billingImpact?: {
     invoiceId: string;
     proratedCents?: number;
@@ -43,6 +50,8 @@ function mapUser(user: BackendUser): UserRow {
     copilotEnabled: user.copilotEnabled ?? false,
     roleIds: user.roleIds ?? [],
     roleNames: user.roleNames ?? [],
+    stagedForCheckout: user.stagedForCheckout ?? false,
+    checkout: user.checkout,
     billingImpact: user.billingImpact,
   };
 }

@@ -16,7 +16,20 @@ export interface CommandItemNav extends CommandItemBase {
 
 export interface CommandItemCreate extends CommandItemBase {
   group: "create";
-  docType: "quote" | "sales-order" | "delivery-note" | "invoice" | "purchase-request" | "purchase-order" | "grn" | "bill" | "journal";
+  docType:
+    | "quote"
+    | "sales-order"
+    | "delivery-note"
+    | "invoice"
+    | "credit-note"
+    | "debit-note"
+    | "purchase-request"
+    | "purchase-order"
+    | "grn"
+    | "bill"
+    | "purchase-credit-note"
+    | "purchase-debit-note"
+    | "journal";
 }
 
 export interface CommandItemCopilot extends CommandItemBase {
@@ -102,10 +115,14 @@ export const COMMAND_CREATE_ITEMS: CommandItemCreate[] = [
   { id: "create-so", label: "Create Sales Order", group: "create", docType: "sales-order", keywords: ["so", "order", "docs"], icon: "ShoppingCart" },
   { id: "create-dn", label: "Create Delivery Note", group: "create", docType: "delivery-note", keywords: ["delivery", "dn", "docs"], icon: "Truck" },
   { id: "create-inv", label: "Create Invoice", group: "create", docType: "invoice", keywords: ["invoice", "docs"], icon: "Receipt" },
+  { id: "create-sales-cn", label: "Create Sales Credit Note", group: "create", docType: "credit-note", keywords: ["credit note", "sales return", "docs"], icon: "RotateCcw" },
+  { id: "create-sales-dn", label: "Create Sales Debit Note", group: "create", docType: "debit-note", keywords: ["debit note", "sales adjustment", "docs"], icon: "BadgePlus" },
   { id: "create-pr", label: "Create Purchase Request", group: "create", docType: "purchase-request", keywords: ["pr", "requisition", "docs"], icon: "ClipboardList" },
   { id: "create-po", label: "Create Purchase Order", group: "create", docType: "purchase-order", keywords: ["po", "order", "docs"], icon: "FileText" },
   { id: "create-grn", label: "Create Goods Receipt", group: "create", docType: "grn", keywords: ["grn", "receipt", "docs"], icon: "PackageCheck" },
   { id: "create-bill", label: "Create Bill", group: "create", docType: "bill", keywords: ["bill", "supplier invoice", "docs"], icon: "Receipt" },
+  { id: "create-purchase-cn", label: "Create Purchase Credit Note", group: "create", docType: "purchase-credit-note", keywords: ["purchase credit note", "supplier adjustment", "docs"], icon: "RotateCcw" },
+  { id: "create-purchase-dn", label: "Create Purchase Debit Note", group: "create", docType: "purchase-debit-note", keywords: ["purchase debit note", "purchase return", "docs"], icon: "BadgePlus" },
   { id: "create-je", label: "Create Journal Entry", group: "create", docType: "journal", keywords: ["journal", "je", "docs"], icon: "FileEdit" },
 ];
 

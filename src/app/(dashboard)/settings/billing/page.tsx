@@ -14,12 +14,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  cancelBillingCheckoutApi,
+  confirmBillingCheckoutApi,
+  fetchBillingCheckoutApi,
   fetchBillingInvoicesApi,
   fetchBillingPricingApi,
-  fetchBillingUsageApi,
+  removeBillingCheckoutItemApi,
+  type BillingCheckout,
   type BillingInvoiceRow,
   type BillingPricing,
-  type BillingUsagePreview,
 } from "@/lib/api/billing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -33,20 +36,21 @@ function formatCents(cents: number): string {
 }
 
 export default function SettingsBillingPage() {
-  const [usage, setUsage] = React.useState<BillingUsagePreview | null>(null);
+  const [checkout, setCheckout] = React.useState<BillingCheckout | null>(null);
   const [pricing, setPricing] = React.useState<BillingPricing | null>(null);
   const [invoices, setInvoices] = React.useState<BillingInvoiceRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [checkoutBusy, setCheckoutBusy] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [usagePayload, pricingPayload, invoicePayload] = await Promise.all([
-        fetchBillingUsageApi(),
+      const [checkoutPayload, pricingPayload, invoicePayload] = await Promise.all([
+        fetchBillingCheckoutApi(),
         fetchBillingPricingApi(),
         fetchBillingInvoicesApi(),
       ]);
-      setUsage(usagePayload);
+      setCheckout(checkoutPayload);
       setPricing(pricingPayload);
       setInvoices(invoicePayload);
     } catch (error) {
@@ -85,7 +89,7 @@ export default function SettingsBillingPage() {
               <CardTitle className="text-sm">Franchise units</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">{usage?.franchiseCount ?? 0}</p>
+              <p className="text-2xl font-semibold">{checkout?.liveUsage.franchiseCount ?? 0}</p>
             </CardContent>
           </Card>
           <Card>
@@ -93,7 +97,7 @@ export default function SettingsBillingPage() {
               <CardTitle className="text-sm">Included seats</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">{usage?.includedSeatCount ?? 0}</p>
+              <p className="text-2xl font-semibold">{checkout?.liveUsage.includedSeatCount ?? 0}</p>
             </CardContent>
           </Card>
           <Card>
@@ -101,7 +105,7 @@ export default function SettingsBillingPage() {
               <CardTitle className="text-sm">Active users</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">{usage?.activeUserCount ?? 0}</p>
+              <p className="text-2xl font-semibold">{checkout?.liveUsage.activeUserCount ?? 0}</p>
             </CardContent>
           </Card>
           <Card>
@@ -109,7 +113,7 @@ export default function SettingsBillingPage() {
               <CardTitle className="text-sm">Billable extra seats</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">{usage?.billableAdditionalUserCount ?? 0}</p>
+              <p className="text-2xl font-semibold">{checkout?.liveUsage.billableAdditionalUserCount ?? 0}</p>
             </CardContent>
           </Card>
           <Card>
@@ -117,7 +121,7 @@ export default function SettingsBillingPage() {
               <CardTitle className="text-sm">Pending prorations</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold">{formatCents(usage?.pendingProrationCents ?? 0)}</p>
+              <p className="text-2xl font-semibold">{formatCents(checkout?.liveUsage.pendingProrationCents ?? 0)}</p>
             </CardContent>
           </Card>
         </div>
@@ -127,13 +131,13 @@ export default function SettingsBillingPage() {
             <CardHeader>
               <CardTitle>Current month projection</CardTitle>
               <CardDescription>
-                {usage ? `${usage.periodStart} to ${usage.periodEnd}` : "Monthly billing preview"}
+                {checkout ? `${checkout.liveUsage.periodStart} to ${checkout.liveUsage.periodEnd}` : "Monthly billing preview"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">Projected total</p>
-                <p className="text-3xl font-semibold">{formatCents(usage?.projectedTotalCents ?? 0)}</p>
+                <p className="text-3xl font-semibold">{formatCents(checkout?.liveUsage.projectedTotalCents ?? 0)}</p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Pricing model</p>
@@ -150,7 +154,7 @@ export default function SettingsBillingPage() {
           <Card>
             <CardHeader>
               <CardTitle>Billing breakdown</CardTitle>
-              <CardDescription>Monthly lines driving the projected total.</CardDescription>
+              <CardDescription>Live monthly lines driving the projected total.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -163,12 +167,12 @@ export default function SettingsBillingPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading && !usage ? (
+                  {loading && !checkout ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-muted-foreground">Loading billing breakdown...</TableCell>
                     </TableRow>
-                  ) : usage?.lineBreakdown.length ? (
-                    usage.lineBreakdown.map((line, index) => (
+                  ) : checkout?.liveUsage.lineBreakdown.length ? (
+                    checkout.liveUsage.lineBreakdown.map((line, index) => (
                       <TableRow key={`${line.description}-${index}`}>
                         <TableCell>{line.description}</TableCell>
                         <TableCell>{line.quantity}</TableCell>
@@ -188,6 +192,133 @@ export default function SettingsBillingPage() {
         </div>
 
         <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle>Pending checkout</CardTitle>
+              <CardDescription>
+                Stage multiple users and franchise outlets, then confirm one consolidated prorated invoice.
+              </CardDescription>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">Checkout now</p>
+              <p className="text-2xl font-semibold">{formatCents(checkout?.quoteTotalCents ?? 0)}</p>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!checkout || checkout.items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No staged users or franchise outlets yet. Add them from the user or franchise screens, then return here to check out.</p>
+            ) : (
+              <>
+                <div className="rounded-lg border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium">{checkout.items.length} staged item(s)</p>
+                      <p className="text-sm text-muted-foreground">
+                        {checkout.stagedUserCount ?? 0} user(s) and {checkout.stagedFranchiseCount ?? 0} franchise outlet(s) pending activation
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground">Projected monthly after checkout</p>
+                      <p className="text-lg font-semibold">{formatCents(checkout.projectedMonthlyCents)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Label</TableHead>
+                      <TableHead className="w-[120px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {checkout.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.itemType === "USER" ? "User" : "Franchise outlet"}</TableCell>
+                        <TableCell>{item.label}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={checkoutBusy}
+                            onClick={async () => {
+                              try {
+                                setCheckoutBusy(true);
+                                setCheckout(await removeBillingCheckoutItemApi(item.id));
+                                toast.success("Removed from checkout.");
+                              } catch (error) {
+                                toast.error(error instanceof Error ? error.message : "Failed to remove staged item.");
+                              } finally {
+                                setCheckoutBusy(false);
+                              }
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Prorated checkout quote</p>
+                  <div className="space-y-2">
+                    {checkout.quoteLineItems.map((line, index) => (
+                      <div key={`${line.description}-${index}`} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                        <span className="text-muted-foreground">
+                          {line.description}
+                          {line.prorated ? " · prorated" : ""}
+                        </span>
+                        <span>{formatCents(line.amountCents)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={checkoutBusy}
+                    onClick={async () => {
+                      try {
+                        setCheckoutBusy(true);
+                        setCheckout(await cancelBillingCheckoutApi());
+                        toast.success("Checkout basket canceled.");
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Failed to cancel checkout.");
+                      } finally {
+                        setCheckoutBusy(false);
+                      }
+                    }}
+                  >
+                    Cancel basket
+                  </Button>
+                  <Button
+                    disabled={checkoutBusy || checkout.items.length === 0}
+                    onClick={async () => {
+                      try {
+                        setCheckoutBusy(true);
+                        const result = await confirmBillingCheckoutApi();
+                        toast.success(`Checkout complete. Invoice ${result.invoiceId.slice(0, 8)}… created.`);
+                        await load();
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Failed to confirm checkout.");
+                      } finally {
+                        setCheckoutBusy(false);
+                      }
+                    }}
+                  >
+                    {checkoutBusy ? "Processing..." : "Confirm checkout"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader>
             <CardTitle>Recent internal invoices</CardTitle>
             <CardDescription>Prorations and month-end invoices generated for this organization.</CardDescription>
@@ -204,7 +335,7 @@ export default function SettingsBillingPage() {
                     <div>
                       <p className="font-medium">{invoice.status} · {invoice.id.slice(0, 8)}…</p>
                       <p className="text-sm text-muted-foreground">
-                        {invoice.periodStart} to {invoice.periodEnd} · Due {invoice.dueDate}
+                        {(invoice.billingKind ?? "MONTH_END").replaceAll("_", " ")} · {invoice.periodStart} to {invoice.periodEnd} · Due {invoice.dueDate}
                       </p>
                     </div>
                     <p className="text-lg font-semibold">{formatCents(invoice.totalCents)}</p>

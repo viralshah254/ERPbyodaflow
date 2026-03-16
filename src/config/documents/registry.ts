@@ -140,6 +140,39 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     totals: { subtotal: true, tax: true, total: true },
     actions: ["submit", "post", "cancel", "reverse"],
   },
+  "debit-note": {
+    typeKey: "debit-note",
+    termKey: "debitNote",
+    listColumns: [
+      { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "date", header: "Date", accessor: "date" },
+      { id: "party", header: "Customer", accessor: "party" },
+      { id: "total", header: "Total", accessor: "total" },
+      { id: "status", header: "Status", accessor: "status" },
+    ],
+    createFormSections: [
+      {
+        id: "header",
+        label: "Header",
+        fields: [
+          { id: "date", label: "Date", type: "date", required: true },
+          { id: "customer", label: "Customer", type: "entity", entityType: "customer", required: true },
+          { id: "dueDate", label: "Due date", type: "date" },
+        ],
+      },
+      { id: "lines", label: "Lines", fields: [] },
+    ],
+    statusWorkflow: [
+      { id: "DRAFT", label: "Draft" },
+      { id: "POSTED", label: "Posted" },
+    ],
+    validations: [
+      { id: "has-lines", message: "At least one line required" },
+      { id: "customer-required", message: "Customer is required" },
+    ],
+    totals: { subtotal: true, tax: true, total: true },
+    actions: ["submit", "post", "cancel", "reverse"],
+  },
   "purchase-order": {
     typeKey: "purchase-order",
     termKey: "purchaseOrder",
@@ -274,6 +307,71 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     totals: { subtotal: true, tax: true, total: true },
     actions: ["submit", "post", "cancel", "reverse"],
   },
+  "purchase-credit-note": {
+    typeKey: "purchase-credit-note",
+    termKey: "purchaseCreditNote",
+    listColumns: [
+      { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "date", header: "Date", accessor: "date" },
+      { id: "party", header: "Supplier", accessor: "party" },
+      { id: "total", header: "Total", accessor: "total" },
+      { id: "status", header: "Status", accessor: "status" },
+    ],
+    createFormSections: [
+      {
+        id: "header",
+        label: "Header",
+        fields: [
+          { id: "date", label: "Date", type: "date", required: true },
+          { id: "supplier", label: "Supplier", type: "entity", entityType: "supplier", required: true },
+        ],
+      },
+      { id: "lines", label: "Lines", fields: [] },
+    ],
+    statusWorkflow: [
+      { id: "DRAFT", label: "Draft" },
+      { id: "POSTED", label: "Posted" },
+    ],
+    validations: [
+      { id: "has-lines", message: "At least one line required" },
+      { id: "supplier-required", message: "Supplier is required" },
+    ],
+    totals: { subtotal: true, tax: true, total: true },
+    actions: ["submit", "post", "cancel", "reverse"],
+  },
+  "purchase-debit-note": {
+    typeKey: "purchase-debit-note",
+    termKey: "purchaseDebitNote",
+    listColumns: [
+      { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "date", header: "Date", accessor: "date" },
+      { id: "party", header: "Supplier", accessor: "party" },
+      { id: "total", header: "Total", accessor: "total" },
+      { id: "status", header: "Status", accessor: "status" },
+    ],
+    createFormSections: [
+      {
+        id: "header",
+        label: "Header",
+        fields: [
+          { id: "date", label: "Date", type: "date", required: true },
+          { id: "supplier", label: "Supplier", type: "entity", entityType: "supplier", required: true },
+          { id: "warehouse", label: "Warehouse", type: "select" },
+        ],
+      },
+      { id: "lines", label: "Lines", fields: [] },
+    ],
+    statusWorkflow: [
+      { id: "DRAFT", label: "Draft" },
+      { id: "POSTED", label: "Posted" },
+    ],
+    validations: [
+      { id: "has-lines", message: "At least one line required" },
+      { id: "supplier-required", message: "Supplier is required" },
+    ],
+    totals: { subtotal: true, tax: true, total: true },
+    actions: ["submit", "post", "cancel", "reverse"],
+  },
   invoice: {
     typeKey: "invoice",
     termKey: "invoice",
@@ -351,9 +449,12 @@ export const DOC_TYPES: DocTypeKey[] = [
   "delivery-note",
   "invoice",
   "credit-note",
+  "debit-note",
   "purchase-request",
   "purchase-order",
   "grn",
   "bill",
+  "purchase-credit-note",
+  "purchase-debit-note",
   "journal",
 ];

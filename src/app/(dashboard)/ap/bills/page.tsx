@@ -139,12 +139,26 @@ export default function APBillsPage() {
         sticky
         showCommandHint
         actions={
-          <Button asChild>
-            <Link href="/docs/bill/new">
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Create Bill
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/docs/purchase-credit-note/new">
+                <Icons.RotateCcw className="mr-2 h-4 w-4" />
+                Credit Note
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/docs/purchase-debit-note/new">
+                <Icons.BadgePlus className="mr-2 h-4 w-4" />
+                Debit Note
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/docs/bill/new">
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Create Bill
+              </Link>
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-4">

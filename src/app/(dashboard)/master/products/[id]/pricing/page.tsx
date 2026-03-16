@@ -32,13 +32,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getProductById, listPackaging, listProductPrices, saveProductPrices } from "@/lib/data/products.repo";
+import { fetchProductApi } from "@/lib/api/products";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { listUoms } from "@/lib/data/uom.repo";
 import type { PricingTier, ProductPrice } from "@/lib/products/pricing-types";
 import { validateTiers } from "@/lib/pricing/validation";
 import { formatMoney } from "@/lib/money";
 import { applyProductPricingTemplateApi } from "@/lib/api/products";
+import {
+  fetchProductPackagingApi,
+  fetchProductPricingApi,
+  saveProductPricingApi,
+} from "@/lib/api/product-master";
 import { toast } from "sonner";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -58,18 +63,53 @@ export default function ProductPricingPage() {
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
-  const product = React.useMemo(() => getProductById(id), [id]);
-  const packaging = React.useMemo(() => (product ? listPackaging(product.id) : []), [product]);
+  const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
+  const [packaging, setPackaging] = React.useState<{ uom: string; unitsPer: number; baseUom: string }[]>([]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
+  const [allPrices, setAllPrices] = React.useState<ProductPrice[]>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
   }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchProductApi(id)
+      .then((value) => {
+        if (!cancelled) setProduct(value);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error((error as Error).message);
+          setProduct(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  React.useEffect(() => {
+    if (!product) return;
+    let cancelled = false;
+    Promise.all([fetchProductPackagingApi(product.id), fetchProductPricingApi(product.id)])
+      .then(([packagingItems, prices]) => {
+        if (cancelled) return;
+        setPackaging(packagingItems);
+        setAllPrices(prices);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error((error as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [product]);
 
   const [selectedListId, setSelectedListId] = React.useState<string>("");
   React.useEffect(() => {
     if (priceLists.length && !selectedListId) setSelectedListId(priceLists[0].id);
   }, [priceLists, selectedListId]);
-  const prices = React.useMemo(() => (product ? listProductPrices(product.id, selectedListId) : []), [product, selectedListId]);
+  const prices = React.useMemo(() => allPrices.filter((p) => p.priceListId === selectedListId), [allPrices, selectedListId]);
   const tiers = React.useMemo(() => prices[0]?.tiers ?? [], [prices]);
   const [draftTiers, setDraftTiers] = React.useState<PricingTier[]>([]);
   const [compareView, setCompareView] = React.useState(false);
@@ -101,7 +141,14 @@ export default function ProductPricingPage() {
       endDate: prices[0]?.endDate,
       notes: prices[0]?.notes,
     };
-    saveProductPrices([pp]);
+    void saveProductPricingApi(product.id, [pp])
+      .then(() => {
+        setAllPrices((prev) => {
+          const rest = prev.filter((row) => !(row.productId === pp.productId && row.priceListId === pp.priceListId));
+          return [...rest, pp];
+        });
+      })
+      .catch((error) => toast.error((error as Error).message));
     setTierSheetOpen(false);
     setEditingTierIndex(null);
   };
@@ -121,6 +168,15 @@ export default function ProductPricingPage() {
       setApplyingTemplate(false);
     }
   };
+
+  if (product === undefined) {
+    return (
+      <PageShell>
+        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      </PageShell>
+    );
+  }
 
   if (!product) {
     return (
@@ -226,7 +282,7 @@ export default function ProductPricingPage() {
                 </TableHeader>
                 <TableBody>
                   {priceLists.map((l) => {
-                    const pp = listProductPrices(product.id, l.id)[0];
+                    const pp = allPrices.find((row) => row.priceListId === l.id);
                     const trs = pp?.tiers ?? [];
                     const minEff = trs.length
                       ? Math.min(

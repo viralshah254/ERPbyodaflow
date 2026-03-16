@@ -124,15 +124,16 @@ export type CreateFranchiseOutletPayload = {
 
 export type CreateFranchiseOutletResult = {
   id: string;
-  outletId: string;
-  userId: string;
+  outletId: string | null;
+  userId: string | null;
   adminEmail: string;
   initialPassword: string;
-  billingImpact?: {
-    invoiceId: string;
-    proratedCents?: number;
-    charged?: boolean;
-    lineItems?: { description: string; amountCents: number }[];
+  stagedForCheckout?: boolean;
+  checkout?: {
+    id: string | null;
+    quoteTotalCents: number;
+    projectedMonthlyCents: number;
+    items: Array<{ id: string; itemType: string; label: string }>;
   };
   message?: string;
 };

@@ -8,10 +8,13 @@ export type DocTypeKey =
   | "delivery-note"
   | "invoice"
   | "credit-note"
+  | "debit-note"
   | "purchase-request"
   | "purchase-order"
   | "grn"
   | "bill"
+  | "purchase-credit-note"
+  | "purchase-debit-note"
   | "journal";
 
 export type TerminologyKey =
@@ -20,6 +23,9 @@ export type TerminologyKey =
   | "deliveryNote"
   | "invoice"
   | "creditNote"
+  | "debitNote"
+  | "purchaseCreditNote"
+  | "purchaseDebitNote"
   | "journalEntry"
   | "purchaseOrder"
   | "goodsReceipt"

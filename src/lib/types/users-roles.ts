@@ -7,6 +7,13 @@ export type UserRow = {
   copilotEnabled?: boolean;
   roleIds: string[];
   roleNames: string[];
+  stagedForCheckout?: boolean;
+  checkout?: {
+    id: string | null;
+    quoteTotalCents: number;
+    projectedMonthlyCents: number;
+    items: Array<{ id: string; itemType: string; label: string }>;
+  };
   billingImpact?: {
     invoiceId: string;
     proratedCents?: number;

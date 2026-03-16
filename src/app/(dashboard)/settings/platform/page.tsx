@@ -162,6 +162,14 @@ function parseFlags(value: string): Record<string, boolean> {
   );
 }
 
+function formatCents(cents: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
 function parseList(value: string): string[] {
   return value
     .split(",")
@@ -193,10 +201,10 @@ export default function PlatformSettingsPage() {
   const [createOrgForm, setCreateOrgForm] = React.useState<OrgFormState>(emptyOrgForm);
   const [provisionForm, setProvisionForm] = React.useState<ProvisionFormState>(emptyProvisionForm);
   const [lastProvisionResult, setLastProvisionResult] = React.useState<{
-    adminEmail: string;
-    initialPassword?: string;
-    tenantId: string;
-    orgId: string;
+    label: string;
+    quoteTotalCents: number;
+    stagedCustomerCount: number;
+    stagedOrgCount: number;
   } | null>(null);
 
   const refresh = React.useCallback(
@@ -344,7 +352,7 @@ export default function PlatformSettingsPage() {
   const submitCreateOrg = async () => {
     setSaving(true);
     try {
-      await createPlatformOrgApi({
+      const result = await createPlatformOrgApi({
         tenantId: createOrgForm.tenantId,
         name: createOrgForm.name,
         orgType: createOrgForm.orgType,
@@ -366,7 +374,14 @@ export default function PlatformSettingsPage() {
       await refresh(search);
       setCreateOrgSheetOpen(false);
       setCreateOrgForm(emptyOrgForm());
-      toast.success("Organization created.");
+      setLastProvisionResult({
+        label: `${createOrgForm.name} staged`,
+        quoteTotalCents: result.checkout.quoteTotalCents,
+        stagedCustomerCount: result.checkout.stagedCustomerCount,
+        stagedOrgCount: result.checkout.stagedOrgCount,
+      });
+      toast.success("Organization staged for platform checkout.");
+      toast.info(`Current platform checkout total: ${formatCents(result.checkout.quoteTotalCents)}.`);
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
@@ -404,14 +419,15 @@ export default function PlatformSettingsPage() {
         templateId: provisionForm.defaultTemplateId || "fmcg-distributor",
       });
       setLastProvisionResult({
-        adminEmail: result.adminEmail,
-        initialPassword: result.initialPassword,
-        tenantId: result.tenantId,
-        orgId: result.orgId,
+        label: `${provisionForm.tenantName} staged`,
+        quoteTotalCents: result.checkout.quoteTotalCents,
+        stagedCustomerCount: result.checkout.stagedCustomerCount,
+        stagedOrgCount: result.checkout.stagedOrgCount,
       });
       await refresh(search);
       setProvisionSheetOpen(false);
-      toast.success("Customer provisioned.");
+      toast.success("Customer staged for platform checkout.");
+      toast.info(`Current platform checkout total: ${formatCents(result.checkout.quoteTotalCents)}.`);
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
@@ -446,26 +462,23 @@ export default function PlatformSettingsPage() {
         {lastProvisionResult ? (
           <Card>
             <CardHeader>
-              <CardTitle>Latest provisioned customer</CardTitle>
+              <CardTitle>Latest staged platform checkout</CardTitle>
               <CardDescription>
-                Share credentials out of band and require first-login password rotation.
+                Confirm staged customers and orgs from platform billing when you are ready to activate them.
               </CardDescription>
             </CardHeader>
             <CardContent className="text-sm space-y-1">
               <p>
-                Admin: <span className="font-medium">{lastProvisionResult.adminEmail}</span>
+                Latest item: <span className="font-medium">{lastProvisionResult.label}</span>
               </p>
               <p>
-                Tenant ID: <span className="font-mono">{lastProvisionResult.tenantId}</span>
+                Staged customers: <span className="font-mono">{lastProvisionResult.stagedCustomerCount}</span>
               </p>
               <p>
-                Org ID: <span className="font-mono">{lastProvisionResult.orgId}</span>
+                Staged orgs: <span className="font-mono">{lastProvisionResult.stagedOrgCount}</span>
               </p>
               <p>
-                Temporary password:{" "}
-                <span className="font-mono">
-                  {lastProvisionResult.initialPassword ?? "Firebase not configured"}
-                </span>
+                Pending checkout total: <span className="font-mono">{formatCents(lastProvisionResult.quoteTotalCents)}</span>
               </p>
             </CardContent>
           </Card>

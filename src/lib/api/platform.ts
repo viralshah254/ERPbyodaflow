@@ -126,8 +126,11 @@ export async function updatePlatformOrgApi(
 
 export async function createPlatformOrgApi(
   payload: Partial<PlatformOrgRow> & { tenantId: string; name: string; orgType: string }
-): Promise<{ id: string }> {
-  return apiRequest<{ id: string }>("/api/platform/orgs", { method: "POST", body: payload });
+): Promise<{ stagedForCheckout: boolean; checkout: PlatformProvisioningCheckout }> {
+  return apiRequest<{ stagedForCheckout: boolean; checkout: PlatformProvisioningCheckout }>("/api/platform/orgs", {
+    method: "POST",
+    body: payload,
+  });
 }
 
 export async function setPlatformOrgAccessApi(
@@ -160,6 +163,11 @@ export type PlatformSubscriptionRow = {
     isFranchiseBilling: boolean;
     projectedMonthlyCents: number;
   };
+  pendingCheckout?: {
+    id: string;
+    itemCount: number;
+    quoteTotalCents: number;
+  };
 };
 
 export type PlatformInvoiceRow = {
@@ -171,10 +179,56 @@ export type PlatformInvoiceRow = {
   periodEnd: string;
   dueDate: string;
   status: string;
+  billingKind?: string;
+  checkoutId?: string;
   totalCents: number;
   currency: string;
   lineItems: Array<{ category?: string; description: string; quantity: number; unitPriceCents: number; amountCents: number; prorated?: boolean }>;
   createdAt: string;
+};
+
+export type PlatformBillingCheckoutRow = {
+  id: string;
+  tenantId: string;
+  orgId: string;
+  status: string;
+  itemCount: number;
+  quoteTotalCents: number;
+  projectedMonthlyCents: number;
+  quoteLineItems: Array<{ category?: string; description: string; quantity: number; unitPriceCents: number; amountCents: number; prorated?: boolean }>;
+  updatedAt: string;
+};
+
+export type PlatformProvisioningCheckoutItem = {
+  id: string;
+  itemType: "CUSTOMER_PROVISION" | "ORG_CREATE";
+  label: string;
+  payload: Record<string, unknown>;
+};
+
+export type PlatformProvisioningCheckout = {
+  id: string | null;
+  status: "OPEN" | "COMPLETED" | "CANCELED";
+  items: PlatformProvisioningCheckoutItem[];
+  quoteTotalCents: number;
+  quoteLineItems: Array<{
+    category?: string;
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    amountCents: number;
+    prorated?: boolean;
+    periodStart?: string;
+    periodEnd?: string;
+  }>;
+  finalizedInvoices: Array<{
+    tenantId: string;
+    orgId: string;
+    invoiceId: string;
+    totalCents: number;
+  }>;
+  stagedCustomerCount: number;
+  stagedOrgCount: number;
 };
 
 export async function fetchPlatformSubscriptionsApi(tenantId?: string): Promise<PlatformSubscriptionRow[]> {
@@ -206,6 +260,50 @@ export async function fetchPlatformInvoicesApi(tenantId?: string, status?: strin
   if (status) params.status = status;
   const payload = await apiRequest<{ items: PlatformInvoiceRow[] }>("/api/platform/invoices", { params: Object.keys(params).length ? params : undefined });
   return payload.items ?? [];
+}
+
+export async function fetchPlatformBillingCheckoutsApi(tenantId?: string): Promise<PlatformBillingCheckoutRow[]> {
+  const params = tenantId ? { tenantId } : undefined;
+  const payload = await apiRequest<{ items: PlatformBillingCheckoutRow[] }>("/api/platform/billing/checkouts", { params });
+  return payload.items ?? [];
+}
+
+export async function fetchPlatformProvisioningCheckoutApi(): Promise<PlatformProvisioningCheckout> {
+  return apiRequest<PlatformProvisioningCheckout>("/api/platform/provisioning-checkout");
+}
+
+export async function removePlatformProvisioningCheckoutItemApi(itemId: string): Promise<PlatformProvisioningCheckout> {
+  return apiRequest<PlatformProvisioningCheckout>(`/api/platform/provisioning-checkout/items/${itemId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function cancelPlatformProvisioningCheckoutApi(): Promise<PlatformProvisioningCheckout> {
+  return apiRequest<PlatformProvisioningCheckout>("/api/platform/provisioning-checkout/cancel", {
+    method: "POST",
+  });
+}
+
+export type PlatformProvisioningCheckoutReceipt = {
+  checkoutId: string;
+  quoteTotalCents: number;
+  lineItems: PlatformProvisioningCheckout["quoteLineItems"];
+  createdCustomers: Array<{
+    tenantId: string;
+    orgId: string;
+    branchId: string;
+    roleId: string;
+    userId: string;
+    adminEmail: string;
+    initialPassword: string;
+    mustChangePassword: boolean;
+  }>;
+  createdOrgs: Array<{ id: string; tenantId: string; name: string }>;
+  finalizedInvoices: PlatformProvisioningCheckout["finalizedInvoices"];
+};
+
+export async function confirmPlatformProvisioningCheckoutApi(): Promise<PlatformProvisioningCheckoutReceipt> {
+  return apiRequest<PlatformProvisioningCheckoutReceipt>("/api/platform/provisioning-checkout/confirm", { method: "POST" });
 }
 
 export async function createPlatformInvoiceApi(payload: {
@@ -325,20 +423,8 @@ export async function provisionPlatformCustomerApi(payload: {
   featureFlags?: Record<string, boolean>;
   defaultNav?: string[];
 }): Promise<{
-  tenantId: string;
-  orgId: string;
-  branchId: string;
-  roleId: string;
-  userId: string;
-  adminEmail: string;
-  initialPassword?: string;
-  mustChangePassword: boolean;
-  billingImpact?: {
-    invoiceId: string;
-    proratedCents?: number;
-    charged?: boolean;
-    lineItems?: { description: string; amountCents: number }[];
-  };
+  stagedForCheckout: boolean;
+  checkout: PlatformProvisioningCheckout;
 }> {
   return apiRequest("/api/platform/provision/customer", {
     method: "POST",

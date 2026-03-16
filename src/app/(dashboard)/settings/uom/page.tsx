@@ -33,14 +33,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  listConversions,
   deleteUom,
   setUomsCache,
   validateUomCatalog,
-  saveConversion,
-  deleteConversion,
 } from "@/lib/data/uom.repo";
 import { fetchUomsApi, createUomApi, updateUomApi } from "@/lib/api/uom";
+import {
+  createUomConversionApi,
+  deleteUomConversionApi,
+  fetchUomConversionsApi,
+} from "@/lib/api/uom-conversions";
 import { canDeleteEntity } from "@/lib/permissions";
 import type { UomDefinition, UomConversion } from "@/lib/products/types";
 import { useAuthStore } from "@/stores/auth-store";
@@ -57,17 +59,20 @@ export default function UomSettingsPage() {
   const [validation, setValidation] = React.useState(validateUomCatalog());
   const [sheetOpen, setSheetOpen] = React.useState<"uom" | "conversion" | null>(null);
   const [editingUom, setEditingUom] = React.useState<UomDefinition | null>(null);
-  const [editingConv, setEditingConv] = React.useState<UomConversion | null>(null);
 
   const refresh = React.useCallback(async () => {
     try {
-      const fromApi = await fetchUomsApi();
+      const [fromApi, conversionRows] = await Promise.all([
+        fetchUomsApi(),
+        fetchUomConversionsApi(),
+      ]);
       setUoms(fromApi);
       setUomsCache(fromApi);
+      setConversions(conversionRows);
     } catch {
       setUoms([]);
+      setConversions([]);
     }
-    setConversions(listConversions());
     setValidation(validateUomCatalog());
   }, []);
 
@@ -84,7 +89,6 @@ export default function UomSettingsPage() {
     setSheetOpen("uom");
   };
   const openAddConversion = () => {
-    setEditingConv(null);
     setSheetOpen("conversion");
   };
 
@@ -207,7 +211,7 @@ export default function UomSettingsPage() {
                       <TableCell>1 {c.fromUom} = {c.factor} {c.toUom}</TableCell>
                       <TableCell>
                         {canDelete && (
-                          <Button variant="ghost" size="sm" onClick={() => { deleteConversion(c.id); refresh(); }}>
+                          <Button variant="ghost" size="sm" onClick={async () => { await deleteUomConversionApi(c.id); await refresh(); }}>
                             Remove
                           </Button>
                         )}
@@ -246,9 +250,13 @@ export default function UomSettingsPage() {
       {sheetOpen === "conversion" && (
         <ConversionSheet
           uomCodes={uoms.map((u) => u.code)}
-          onSave={(c) => {
-            saveConversion(c);
-            refresh();
+          onSave={async (c) => {
+            await createUomConversionApi({
+              fromUom: c.fromUom,
+              toUom: c.toUom,
+              factor: c.factor,
+            });
+            await refresh();
             setSheetOpen(null);
           }}
           onClose={() => setSheetOpen(null)}

@@ -33,7 +33,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getProductById, listVariants, saveVariants, createVariant, updateVariant, deleteVariant, listAttributeDefs } from "@/lib/data/products.repo";
+import { fetchProductApi } from "@/lib/api/products";
+import {
+  createProductVariantApi,
+  deleteProductVariantApi,
+  fetchProductAttributeDefsApi,
+  fetchProductVariantsApi,
+  updateProductVariantApi,
+} from "@/lib/api/product-master";
 import type { ProductVariant, VariantAttribute } from "@/lib/products/types";
 import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
@@ -41,6 +48,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ProductVariantsPage() {
@@ -51,34 +59,77 @@ export default function ProductVariantsPage() {
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
-  const product = React.useMemo(() => getProductById(id), [id]);
+  const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
   const [variants, setVariants] = React.useState<ProductVariant[]>([]);
+  const [attributeDefs, setAttributeDefs] = React.useState<{ id: string; name: string; kind: string; options: string[] }[]>([]);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ProductVariant | null>(null);
 
   React.useEffect(() => {
-    if (product) setVariants(listVariants(product.id));
+    let cancelled = false;
+    fetchProductApi(id)
+      .then((value) => {
+        if (!cancelled) setProduct(value);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error((error as Error).message);
+          setProduct(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  React.useEffect(() => {
+    if (!product) return;
+    let cancelled = false;
+    Promise.all([fetchProductVariantsApi(product.id), fetchProductAttributeDefsApi()])
+      .then(([variantRows, attributeRows]) => {
+        if (cancelled) return;
+        setVariants(variantRows);
+        setAttributeDefs(attributeRows);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error((error as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [product]);
 
-  const attributeDefs = React.useMemo(() => listAttributeDefs(), []);
-
-  const handleSave = (v: Omit<ProductVariant, "id" | "productId">) => {
+  const handleSave = async (v: Omit<ProductVariant, "id" | "productId">) => {
     if (!product) return;
-    if (editing) {
-      updateVariant(product.id, editing.id, v);
-    } else {
-      createVariant(product.id, v);
+    try {
+      if (editing) await updateProductVariantApi(product.id, editing.id, v);
+      else await createProductVariantApi(product.id, v);
+      setVariants(await fetchProductVariantsApi(product.id));
+      setSheetOpen(false);
+      setEditing(null);
+    } catch (error) {
+      toast.error((error as Error).message);
     }
-    setVariants(listVariants(product.id));
-    setSheetOpen(false);
-    setEditing(null);
   };
 
-  const handleRemove = (variantId: string) => {
+  const handleRemove = async (variantId: string) => {
     if (!product) return;
-    deleteVariant(product.id, variantId);
-    setVariants(listVariants(product.id));
+    try {
+      await deleteProductVariantApi(product.id, variantId);
+      setVariants(await fetchProductVariantsApi(product.id));
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
+
+  if (product === undefined) {
+    return (
+      <PageShell>
+        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      </PageShell>
+    );
+  }
 
   if (!product) {
     return (
