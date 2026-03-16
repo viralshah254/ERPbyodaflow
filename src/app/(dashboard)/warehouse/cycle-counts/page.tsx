@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { createCycleCountTask, fetchCycleCountTasks, type WarehouseCycleCountRow } from "@/lib/api/warehouse-execution";
 import { fetchWarehouseLocations } from "@/lib/api/warehouse-locations";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -95,6 +96,17 @@ export default function CycleCountsPage() {
           searchPlaceholder="Search by number or warehouse..."
           searchValue={search}
           onSearchChange={setSearch}
+          onExport={() =>
+            downloadCsv(
+              `cycle-counts-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((r) => ({
+                number: r.number,
+                warehouse: r.warehouse ?? r.warehouseId ?? "",
+                status: r.status,
+                lineCount: r.lines.length,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>

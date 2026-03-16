@@ -19,8 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import { listProducts } from "@/lib/data/products.repo";
-import { listPackaging } from "@/lib/data/products.repo";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import { formatMoney } from "@/lib/money";
@@ -46,6 +46,10 @@ interface DocumentLineEditorProps {
   onLinesChange: (lines: DocumentLine[]) => void;
   /** Sales vs purchasing: optional supplier price list stub */
   mode?: "sales" | "purchasing";
+  /** Preloaded packaging per product (from API); when provided, used instead of localStorage */
+  packagingByProductId?: Record<string, ProductPackaging[]>;
+  /** Preloaded pricing per product (from API); when provided, used for price resolution */
+  pricingByProductId?: Record<string, ProductPrice[]>;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -56,6 +60,8 @@ export function DocumentLineEditor({
   lines,
   onLinesChange,
   mode = "sales",
+  packagingByProductId,
+  pricingByProductId,
 }: DocumentLineEditorProps) {
   const products = React.useMemo(() => listProducts(), []);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
@@ -67,10 +73,10 @@ export function DocumentLineEditor({
   const addRow = () => {
     const p = products[0];
     if (!p) return;
-    const packaging = listPackaging(p.id);
+    const packaging = packagingByProductId?.[p.id] ?? [];
     const uom = packaging.find((x) => x.isDefaultSalesUom)?.uom ?? packaging[0]?.uom ?? "EA";
-    const { price, reason } = getPriceForLine(p.id, priceListIdResolved, 1, uom);
-    const baseQty = getBaseQty(p.id, uom, 1);
+    const { price, reason } = getPriceForLine(p.id, priceListIdResolved, 1, uom, pricingByProductId?.[p.id]);
+    const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
     onLinesChange([
       ...lines,
       {
@@ -97,8 +103,8 @@ export function DocumentLineEditor({
       const productId = patch.productId ?? prev.productId;
       const uom = patch.uom ?? prev.uom;
       const qty = patch.qty ?? prev.qty;
-      next.baseQty = getBaseQty(productId, uom, qty);
-      const { price, reason } = getPriceForLine(productId, priceListId, qty, uom);
+      next.baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
+      const { price, reason } = getPriceForLine(productId, priceListId, qty, uom, pricingByProductId?.[productId]);
       next.price = price;
       next.priceReason = reason;
       next.amount = qty * price;
@@ -111,12 +117,12 @@ export function DocumentLineEditor({
   const setProduct = (lineId: string, productId: string) => {
     const p = products.find((x) => x.id === productId);
     if (!p) return;
-    const packaging = listPackaging(productId);
+    const packaging = packagingByProductId?.[productId] ?? [];
     const uom = packaging.find((x) => x.isDefaultSalesUom)?.uom ?? packaging[0]?.uom ?? "EA";
     const line = lines.find((l) => l.id === lineId);
     const qty = line?.qty ?? 1;
-    const { price, reason } = getPriceForLine(productId, priceListId, qty, uom);
-    const baseQty = getBaseQty(productId, uom, qty);
+    const { price, reason } = getPriceForLine(productId, priceListId, qty, uom, pricingByProductId?.[productId]);
+    const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
     updateLine(lineId, {
       productId: p.id,
       sku: p.sku,
@@ -132,16 +138,16 @@ export function DocumentLineEditor({
   const setUom = (lineId: string, uom: string) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, line.qty, uom);
-    const baseQty = getBaseQty(line.productId, uom, line.qty);
+    const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, line.qty, uom, pricingByProductId?.[line.productId]);
+    const baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
     updateLine(lineId, { uom, baseQty, price, priceReason: reason, amount: line.qty * price });
   };
 
   const setQty = (lineId: string, qty: number) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, qty, line.uom);
-    const baseQty = getBaseQty(line.productId, line.uom, qty);
+    const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, qty, line.uom, pricingByProductId?.[line.productId]);
+    const baseQty = getBaseQty(line.productId, line.uom, qty, packagingByProductId?.[line.productId]);
     updateLine(lineId, { qty, baseQty, price, priceReason: reason, amount: qty * price });
   };
 
@@ -196,7 +202,13 @@ export function DocumentLineEditor({
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <UomSelect lineId={l.id} productId={l.productId} value={l.uom} onChange={setUom} />
+                      <UomSelect
+                        lineId={l.id}
+                        productId={l.productId}
+                        value={l.uom}
+                        onChange={setUom}
+                        packagingForProduct={packagingByProductId?.[l.productId]}
+                      />
                     </TableCell>
                     <TableCell>
                       <Input
@@ -233,17 +245,18 @@ export function DocumentLineEditor({
 
 function UomSelect({
   lineId,
-  productId,
+  productId: _productId,
   value,
   onChange,
+  packagingForProduct = [],
 }: {
   lineId: string;
   productId: string;
   value: string;
   onChange: (lineId: string, uom: string) => void;
+  packagingForProduct?: ProductPackaging[];
 }) {
-  const packaging = React.useMemo(() => listPackaging(productId), [productId]);
-  const options = packaging.length ? packaging.map((p) => p.uom) : ["EA"];
+  const options = packagingForProduct.length ? packagingForProduct.map((p) => p.uom) : ["EA"];
 
   return (
     <Select value={value} onValueChange={(v) => onChange(lineId, v)}>

@@ -3,7 +3,40 @@
  */
 
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { AnalyticsQuery, AnalyticsResult } from "@/lib/analytics/types";
+import type { AnalyticsQuery, AnalyticsResult, AnalyticsGlobalFilters } from "@/lib/analytics/types";
+
+export interface AnalyticsSavedViewResponse {
+  id: string;
+  name: string;
+  query: AnalyticsQuery;
+  filters?: AnalyticsGlobalFilters;
+  createdAt?: string;
+  createdBy?: string;
+}
+
+export async function fetchAnalyticsSavedViewsApi(): Promise<AnalyticsSavedViewResponse[]> {
+  requireLiveApi("Analytics saved views");
+  const payload = await apiRequest<{ items: AnalyticsSavedViewResponse[] }>("/api/analytics/saved-views");
+  return payload.items ?? [];
+}
+
+export async function createAnalyticsSavedViewApi(
+  name: string,
+  query: AnalyticsQuery,
+  filters?: AnalyticsGlobalFilters
+): Promise<{ id: string; name: string }> {
+  requireLiveApi("Save analytics view");
+  return apiRequest<{ id: string; name: string }>("/api/analytics/saved-views", {
+    method: "POST",
+    body: { name, query, filters },
+  });
+}
+
+export async function getAnalyticsSavedViewApi(id: string): Promise<AnalyticsSavedViewResponse | null> {
+  requireLiveApi("Get analytics saved view");
+  const view = await apiRequest<AnalyticsSavedViewResponse>(`/api/analytics/saved-views/${encodeURIComponent(id)}`);
+  return view ?? null;
+}
 
 export async function runAnalyticsQueryApi(query: AnalyticsQuery): Promise<AnalyticsResult> {
   requireLiveApi("Analytics query");

@@ -15,10 +15,40 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { fetchPayrollSettingsApi, savePayrollSettingsApi } from "@/lib/api/payroll";
+import { isApiConfigured } from "@/lib/api/client";
+import { toast } from "sonner";
 
 export default function PayrollSettingsPage() {
   const [defaultCurrency, setDefaultCurrency] = React.useState("KES");
-  const [payPeriod, setPayPeriod] = React.useState("MONTHLY");
+  const [payPeriod, setPayPeriod] = React.useState<"MONTHLY" | "BIWEEKLY" | "WEEKLY">("MONTHLY");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isApiConfigured()) return;
+    fetchPayrollSettingsApi()
+      .then((s) => {
+        setDefaultCurrency(s.currency);
+        setPayPeriod(s.payFrequency);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    if (!isApiConfigured()) {
+      toast.info("Set NEXT_PUBLIC_API_URL to save payroll settings.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await savePayrollSettingsApi({ currency: defaultCurrency, payFrequency: payPeriod });
+      toast.success("Payroll settings saved.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <PageShell>
@@ -33,6 +63,9 @@ export default function PayrollSettingsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
             <ExplainThis prompt="Explain payroll settings and pay period." label="Explain" />
             <Button variant="outline" size="sm" asChild>
               <Link href="/payroll/overview">Payroll</Link>
@@ -61,7 +94,7 @@ export default function PayrollSettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>Pay period</Label>
-              <Select value={payPeriod} onValueChange={setPayPeriod}>
+              <Select value={payPeriod} onValueChange={(v) => setPayPeriod(v as "MONTHLY" | "BIWEEKLY" | "WEEKLY")}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>

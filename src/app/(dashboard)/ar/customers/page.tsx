@@ -26,6 +26,7 @@ import {
   type PartyPayload,
 } from "@/lib/api/parties";
 import { formatMoney } from "@/lib/money";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -350,7 +351,20 @@ function ARCustomersContent() {
           searchPlaceholder="Search customers..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export endpoint pending wiring.")}
+          onExport={() =>
+            downloadCsv(
+              `ar-customers-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((r) => ({
+                name: r.name,
+                email: r.email ?? "",
+                category: r.customerCategory ?? "",
+                creditLimit: r.creditLimit ?? "",
+                paymentTerms: r.paymentTerms ?? "",
+                creditControlMode: r.creditControlMode ?? "",
+                status: r.status ?? "",
+              }))
+            )
+          }
           actions={
             <Link
               href="/settings/customizer/fields"

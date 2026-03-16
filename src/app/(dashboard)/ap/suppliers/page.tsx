@@ -10,6 +10,7 @@ import { fetchApSupplierSummariesApi } from "@/lib/api/payments";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
@@ -250,7 +251,17 @@ export default function APSuppliersPage() {
           searchPlaceholder="Search suppliers..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export endpoint pending wiring.")}
+          onExport={() =>
+            downloadCsv(
+              `ap-suppliers-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((r) => ({
+                name: r.name,
+                email: r.email ?? "",
+                paymentTerms: r.paymentTerms ?? "",
+                status: r.status ?? "",
+              }))
+            )
+          }
         />
         <DataTable<APSupplierRow>
           data={filtered}

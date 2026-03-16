@@ -12,6 +12,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchPurchaseOrders, approvePurchaseOrders, exportPurchaseOrdersCsv } from "@/lib/api/purchasing";
+import { exportDocumentListApi } from "@/lib/api/documents";
+import { isApiConfigured } from "@/lib/api/client";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
@@ -188,7 +190,14 @@ export default function PurchaseOrdersPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => exportPurchaseOrdersCsv(filtered)}
+          onExport={() => {
+            const fileName = `purchase-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+            if (isApiConfigured()) {
+              exportDocumentListApi("purchase-order", fileName, (msg) => toast.error(msg));
+              return;
+            }
+            exportPurchaseOrdersCsv(filtered);
+          }}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">

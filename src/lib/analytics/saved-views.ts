@@ -49,6 +49,7 @@ export function deleteAnalysisView(id: string): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(views));
 }
 
-export function getShareableLink(_view: SavedAnalysisView): string {
-  return `${typeof window !== "undefined" ? window.location.origin : ""}/analytics/explore?view=stub`;
+export function getShareableLink(view: SavedAnalysisView): string {
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  return `${base}/analytics/explore?view=${encodeURIComponent(view.id)}`;
 }

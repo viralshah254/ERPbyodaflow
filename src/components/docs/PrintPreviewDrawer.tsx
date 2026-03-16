@@ -60,7 +60,7 @@ export function PrintPreviewDrawer({
     }
     if (isApiConfigured()) {
       downloadFile(
-        `/api/docs/${encodeURIComponent(doc.type)}/${encodeURIComponent(doc.id)}/pdf`,
+        `/api/documents/${encodeURIComponent(doc.type)}/${encodeURIComponent(doc.id)}/pdf`,
         `${doc.type}-${doc.id}.pdf`,
         (msg) => toast.info(msg || "PDF not yet available.")
       );

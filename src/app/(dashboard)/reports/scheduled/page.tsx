@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { ScheduledReportRow } from "@/lib/types/reports";
-import { fetchScheduledReportsApi } from "@/lib/api/reports";
+import { fetchScheduledReportsApi, runReportExportApi } from "@/lib/api/reports";
+import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -105,6 +106,22 @@ export default function ScheduledReportsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
+                          {isApiConfigured() && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await runReportExportApi(r.reportType);
+                                  toast.success(`Report ${r.name} run triggered.`);
+                                } catch (err) {
+                                  toast.error((err as Error).message || "Failed to run.");
+                                }
+                              }}
+                            >
+                              Run now
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" asChild>
                             <Link href="/reports">Open</Link>
                           </Button>

@@ -13,6 +13,7 @@ import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import Link from "next/link";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -87,7 +88,19 @@ export default function CollectionsPage() {
           searchPlaceholder="Search by invoice, customer..."
           searchValue={search}
           onSearchChange={setSearch}
-          onExport={() => toast.info("Export coming from finance reports/export flow.")}
+          onExport={() =>
+            downloadCsv(
+              `collections-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((r) => ({
+                number: r.number,
+                customerName: r.customerName,
+                outstanding: r.outstanding,
+                currency: r.currency,
+                dueDate: r.dueDate,
+                daysOverdue: r.daysOverdue,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>

@@ -14,8 +14,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchSavedReportViewsApi } from "@/lib/api/reports";
+import { fetchSavedReportViewsApi, runReportExportApi } from "@/lib/api/reports";
 import type { SavedViewRow } from "@/lib/types/reports";
+import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -96,8 +97,24 @@ export default function SavedViewsPage() {
                       <TableCell className="text-muted-foreground">{r.filters ?? "—"}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
+                          {isApiConfigured() && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await runReportExportApi(r.id);
+                                  toast.success(`Report ${r.name} run triggered.`);
+                                } catch (err) {
+                                  toast.error((err as Error).message || "Failed to run.");
+                                }
+                              }}
+                            >
+                              Run
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" asChild>
-                            <Link href="/reports">Open</Link>
+                            <Link href="/reports">Edit</Link>
                           </Button>
                         </div>
                       </TableCell>

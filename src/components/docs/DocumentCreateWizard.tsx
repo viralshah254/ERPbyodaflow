@@ -44,12 +44,18 @@ import { fetchCustomerDefaultPriceLists, fetchPriceListOptions } from "@/lib/api
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
-import { hydrateProductsFromApi } from "@/lib/data/products.repo";
+import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
+import { hydrateProductsFromApi, listProducts } from "@/lib/data/products.repo";
+import {
+  fetchProductPackagingApi,
+  fetchProductPricingApi,
+} from "@/lib/api/product-master";
 import {
   deleteDocumentDraftApi,
   fetchDocumentDraftApi,
   saveDocumentDraftApi,
 } from "@/lib/api/document-drafts";
+import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 
 const schema = z.object({
@@ -62,6 +68,7 @@ const schema = z.object({
   warehouse: z.string().optional(),
   linesCount: z.number().optional(),
   taxesNote: z.string().optional(),
+  defaultTaxCodeId: z.string().optional(),
   currency: z.string().optional(),
   exchangeRate: z.number().optional(),
   fxDate: z.string().optional(),
@@ -82,6 +89,7 @@ function getDefaultValues(baseCurrency: string): FormValues {
     warehouse: "",
     linesCount: 0,
     taxesNote: "—",
+    defaultTaxCodeId: "",
     currency: baseCurrency,
     exchangeRate: 1,
     fxDate: today,
@@ -290,6 +298,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [selectedPartyDetail, setSelectedPartyDetail] = React.useState<PartyDetail | null>(null);
   const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
   const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
+  const [taxCodes, setTaxCodes] = React.useState<Array<{ id: string; code: string; name: string; rate: number }>>([]);
+  const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>>>({});
+  const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
     [baseCurrency]
@@ -363,6 +374,57 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
 
   React.useEffect(() => {
     if (step === 2) void hydrateProductsFromApi();
+  }, [step]);
+
+  React.useEffect(() => {
+    if (step !== 3 || !isApiConfigured()) return;
+    let cancelled = false;
+    fetchFinancialTaxesApi()
+      .then((items) => {
+        if (!cancelled) setTaxCodes(items.map((t) => ({ id: t.id, code: t.code, name: t.name, rate: t.rate })));
+      })
+      .catch(() => {
+        if (!cancelled) setTaxCodes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
+  React.useEffect(() => {
+    if (step !== 2) return;
+    const products = listProducts();
+    if (!products.length) {
+      setPackagingByProductId({});
+      setPricingByProductId({});
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      products.map((p) =>
+        Promise.all([fetchProductPackagingApi(p.id), fetchProductPricingApi(p.id)])
+      )
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const packaging: Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>> = {};
+        const pricing: Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>> = {};
+        products.forEach((p, i) => {
+          packaging[p.id] = results[i][0];
+          pricing[p.id] = results[i][1];
+        });
+        setPackagingByProductId(packaging);
+        setPricingByProductId(pricing);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPackagingByProductId({});
+          setPricingByProductId({});
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [step]);
 
   const handleLinesChange = React.useCallback(
@@ -654,13 +716,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           </CardHeader>
           <CardContent>
             <DocumentLineEditor
-              {...{
-                priceListId: resolvedPriceListId,
-                currency: selectedCurrency,
-                lines,
-                onLinesChange: handleLinesChange,
-                mode: lineEditorMode,
-              }}
+              priceListId={resolvedPriceListId}
+              currency={selectedCurrency}
+              lines={lines}
+              onLinesChange={handleLinesChange}
+              mode={lineEditorMode}
+              packagingByProductId={packagingByProductId}
+              pricingByProductId={pricingByProductId}
             />
           </CardContent>
         </Card>
@@ -679,6 +741,27 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
               Taxes and pricing defaults now follow the selected customer/supplier setup where available. Review charges before posting.
             </div>
+            {taxCodes.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <Label className="text-muted-foreground">Default tax code</Label>
+                <Select
+                  value={form.watch("defaultTaxCodeId") || "__none__"}
+                  onValueChange={(v) => form.setValue("defaultTaxCodeId", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tax code" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {taxCodes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.code} {t.rate ? `(${t.rate}%)` : ""} — {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="mt-4">
               <Label className="text-muted-foreground">Tax / charge notes</Label>
               <Input

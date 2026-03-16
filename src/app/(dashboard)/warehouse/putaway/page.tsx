@@ -8,6 +8,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchPutawayTasks, type WarehousePutawayRow } from "@/lib/api/warehouse-execution";
+import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 
 export default function PutawayPage() {
@@ -75,6 +76,18 @@ export default function PutawayPage() {
           searchPlaceholder="Search by receipt, warehouse, PO..."
           searchValue={search}
           onSearchChange={setSearch}
+          onExport={() =>
+            downloadCsv(
+              `putaway-${new Date().toISOString().slice(0, 10)}.csv`,
+              filtered.map((r) => ({
+                grnNumber: r.grnNumber,
+                warehouse: r.warehouse ?? r.warehouseId ?? "",
+                status: r.status,
+                receiptStatus: r.sourceDocumentStatus ?? "",
+                lineCount: r.lines.length,
+              }))
+            )
+          }
         />
         <Card>
           <CardHeader>

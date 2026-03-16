@@ -12,9 +12,16 @@ import {
   fetchSavedReportViewsApi,
   fetchScheduledReportsApi,
   runReportExportApi,
+  scheduleReportApi,
 } from "@/lib/api/reports";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { isApiConfigured } from "@/lib/api/client";
 
 const QUICK_LINKS = [
   { href: "/reports/saved", label: "Saved Views", desc: "Your saved report views", icon: "Bookmark" as const },
@@ -33,11 +40,23 @@ const CATEGORY_LABELS: Record<string, string> = {
   general: "General",
 };
 
+const CRON_BY_FREQUENCY: Record<string, string> = {
+  daily: "0 9 * * *",
+  weekly: "0 9 * * 0",
+  monthly: "0 9 1 * *",
+};
+
 export default function ReportsPage() {
   const [savedCount, setSavedCount] = React.useState(0);
   const [scheduledCount, setScheduledCount] = React.useState(0);
   const [exports, setExports] = React.useState<Array<{ id: string }>>([]);
   const [library, setLibrary] = React.useState<Array<{ id: string; name: string; description: string; category: string }>>([]);
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
+  const [scheduleReport, setScheduleReport] = React.useState<{ id: string; name: string } | null>(null);
+  const [scheduleName, setScheduleName] = React.useState("");
+  const [scheduleFrequency, setScheduleFrequency] = React.useState<"daily" | "weekly" | "monthly">("daily");
+  const [scheduleRecipients, setScheduleRecipients] = React.useState("");
+  const [scheduleSaving, setScheduleSaving] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     const [saved, scheduled, exportRows, libraryRows] = await Promise.all([
@@ -116,27 +135,120 @@ export default function ReportsPage() {
                       {CATEGORY_LABELS[r.category] ?? r.category}
                     </Badge>
                   </div>
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline shrink-0"
-                    onClick={async () => {
-                      try {
-                        await runReportExportApi(r.id);
-                        await refresh();
-                        toast.success(`Report executed for ${r.name}.`);
-                      } catch (error) {
-                        toast.error((error as Error).message || "Failed to run report.");
-                      }
-                    }}
-                  >
-                    Run
-                  </button>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={async () => {
+                        try {
+                          await runReportExportApi(r.id);
+                          await refresh();
+                          toast.success(`Report executed for ${r.name}.`);
+                        } catch (error) {
+                          toast.error((error as Error).message || "Failed to run report.");
+                        }
+                      }}
+                    >
+                      Run
+                    </button>
+                    {isApiConfigured() && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline"
+                        onClick={() => {
+                          setScheduleReport({ id: r.id, name: r.name });
+                          setScheduleName(`${r.name} schedule`);
+                          setScheduleFrequency("daily");
+                          setScheduleRecipients("");
+                          setScheduleOpen(true);
+                        }}
+                      >
+                        Schedule
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Sheet open={scheduleOpen} onOpenChange={setScheduleOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Schedule report</SheetTitle>
+            <SheetDescription>
+              {scheduleReport ? `Schedule ${scheduleReport.name} to run automatically.` : "Select a report."}
+            </SheetDescription>
+          </SheetHeader>
+          {scheduleReport && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Schedule name</Label>
+                <Input
+                  value={scheduleName}
+                  onChange={(e) => setScheduleName(e.target.value)}
+                  placeholder="e.g. Monthly VAT report"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Frequency</Label>
+                <Select value={scheduleFrequency} onValueChange={(v) => setScheduleFrequency(v as "daily" | "weekly" | "monthly")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Recipients (comma-separated emails)</Label>
+                <Input
+                  value={scheduleRecipients}
+                  onChange={(e) => setScheduleRecipients(e.target.value)}
+                  placeholder="e.g. finance@example.com"
+                />
+              </div>
+            </div>
+          )}
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setScheduleOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!scheduleReport || scheduleSaving}
+              onClick={async () => {
+                if (!scheduleReport) return;
+                setScheduleSaving(true);
+                try {
+                  await scheduleReportApi({
+                    reportId: scheduleReport.id,
+                    name: scheduleName || scheduleReport.name,
+                    cron: CRON_BY_FREQUENCY[scheduleFrequency],
+                    recipients: scheduleRecipients
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  });
+                  toast.success("Report scheduled.");
+                  setScheduleOpen(false);
+                  await refresh();
+                } catch (error) {
+                  toast.error((error as Error).message || "Failed to schedule.");
+                } finally {
+                  setScheduleSaving(false);
+                }
+              }}
+            >
+              {scheduleSaving ? "Saving..." : "Save schedule"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

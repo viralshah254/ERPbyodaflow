@@ -15,9 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listProducts } from "@/lib/data/products.repo";
-import { listPackaging } from "@/lib/data/products.repo";
-import { listProductPrices } from "@/lib/data/products.repo";
+import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
+import type { ProductRow } from "@/lib/types/masters";
+import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductPackagingApi, fetchProductPricingApi } from "@/lib/api/product-master";
 
 interface Check {
   id: string;
@@ -26,12 +27,15 @@ interface Check {
   detail?: string;
 }
 
-function runChecks(): Check[] {
+function runChecks(
+  products: ProductRow[],
+  packagingByProductId: Record<string, ProductPackaging[]>,
+  pricingByProductId: Record<string, ProductPrice[]>
+): Check[] {
   const checks: Check[] = [];
-  const products = typeof window !== "undefined" ? listProducts() : [];
 
   for (const p of products) {
-    const baseUom = p.baseUom ?? p.unit;
+    const baseUom = p.baseUom ?? (p as { unit?: string }).unit;
     if (!baseUom) {
       checks.push({ id: `base-uom-${p.id}`, label: `Product ${p.sku} has baseUom`, ok: false, detail: "Missing" });
     } else {
@@ -40,7 +44,7 @@ function runChecks(): Check[] {
   }
 
   for (const p of products) {
-    const pack = listPackaging(p.id);
+    const pack = packagingByProductId[p.id] ?? [];
     for (const x of pack) {
       const valid = !!(x.unitsPer > 0 && x.baseUom);
       checks.push({
@@ -56,7 +60,7 @@ function runChecks(): Check[] {
   }
 
   for (const p of products) {
-    const prices = listProductPrices(p.id);
+    const prices = pricingByProductId[p.id] ?? [];
     for (const pp of prices) {
       const tiers = pp.tiers ?? [];
       let tierOk = true;
@@ -77,10 +81,39 @@ function runChecks(): Check[] {
 
 export default function DataHealthPage() {
   const [checks, setChecks] = React.useState<Check[]>([]);
+  const [products, setProducts] = React.useState<ProductRow[]>([]);
+  const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, ProductPackaging[]>>({});
+  const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, ProductPrice[]>>({});
+
+  const loadAndRunChecks = React.useCallback(() => {
+    let cancelled = false;
+    fetchProductsApi()
+      .then(async (list) => {
+        if (cancelled) return;
+        setProducts(list);
+        const [packResults, priceResults] = await Promise.all([
+          Promise.all(list.map((p) => fetchProductPackagingApi(p.id))),
+          Promise.all(list.map((p) => fetchProductPricingApi(p.id))),
+        ]);
+        if (cancelled) return;
+        const packMap: Record<string, ProductPackaging[]> = {};
+        const priceMap: Record<string, ProductPrice[]> = {};
+        list.forEach((p, i) => {
+          packMap[p.id] = packResults[i] ?? [];
+          priceMap[p.id] = priceResults[i] ?? [];
+        });
+        setPackagingByProductId(packMap);
+        setPricingByProductId(priceMap);
+        setChecks(runChecks(list, packMap, priceMap));
+      })
+      .catch(() => setChecks([]));
+    return () => { cancelled = true; };
+  }, []);
 
   React.useEffect(() => {
-    setChecks(runChecks());
-  }, []);
+    const cleanup = loadAndRunChecks();
+    return () => { cleanup?.(); };
+  }, [loadAndRunChecks]);
 
   const okCount = checks.filter((c) => c.ok).length;
   const failCount = checks.filter((c) => !c.ok).length;
@@ -95,7 +128,7 @@ export default function DataHealthPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setChecks(runChecks())}>
+            <Button variant="outline" size="sm" onClick={() => loadAndRunChecks()}>
               Re-run
             </Button>
             <Button variant="outline" size="sm" asChild>

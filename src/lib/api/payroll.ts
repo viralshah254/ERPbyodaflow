@@ -238,3 +238,29 @@ export async function fetchPayrollStatutoriesApi(): Promise<StatutoryConfig[]> {
   const data = await apiRequest<{ items: StatutoryConfig[] }>("/api/payroll/statutories");
   return data.items ?? [];
 }
+
+export type PayrollSettings = {
+  currency: string;
+  payFrequency: "MONTHLY" | "BIWEEKLY" | "WEEKLY";
+};
+
+export async function fetchPayrollSettingsApi(): Promise<PayrollSettings> {
+  requireLiveApi("Payroll settings");
+  const data = await apiRequest<Partial<PayrollSettings>>("/api/settings/payroll");
+  return {
+    currency: data.currency ?? "KES",
+    payFrequency: (data.payFrequency as PayrollSettings["payFrequency"]) ?? "MONTHLY",
+  };
+}
+
+export async function savePayrollSettingsApi(patch: Partial<PayrollSettings>): Promise<PayrollSettings> {
+  requireLiveApi("Save payroll settings");
+  const body: Record<string, string> = {};
+  if (patch.currency != null) body.currency = patch.currency;
+  if (patch.payFrequency != null) body.payFrequency = patch.payFrequency;
+  const data = await apiRequest<PayrollSettings>("/api/settings/payroll", {
+    method: "PATCH",
+    body,
+  });
+  return data;
+}

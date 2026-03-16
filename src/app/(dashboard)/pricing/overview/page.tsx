@@ -16,15 +16,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchPriceListsForUi, fetchDiscountPolicies } from "@/lib/api/pricing";
-import { listProducts } from "@/lib/data/products.repo";
-import { listProductPrices } from "@/lib/data/products.repo";
-import { formatMoney } from "@/lib/money";
-import * as Icons from "lucide-react";
+import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductPricingApi } from "@/lib/api/product-master";
+import type { ProductRow } from "@/lib/types/masters";
 
 export default function PricingOverviewPage() {
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   const [policies, setPolicies] = React.useState<Awaited<ReturnType<typeof fetchDiscountPolicies>>>([]);
-  const products = React.useMemo(() => listProducts(), []);
+  const [products, setProducts] = React.useState<ProductRow[]>([]);
+  const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
 
   React.useEffect(() => {
     let cancelled = false;
@@ -37,12 +37,27 @@ export default function PricingOverviewPage() {
     return () => { cancelled = true; };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchProductsApi()
+      .then(async (list) => {
+        if (cancelled) return;
+        setProducts(list);
+        const results = await Promise.all(list.map((p) => fetchProductPricingApi(p.id)));
+        if (cancelled) return;
+        const map: Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>> = {};
+        list.forEach((p, i) => {
+          map[p.id] = results[i] ?? [];
+        });
+        setPricingByProductId(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const productsWithPricing = React.useMemo(() => {
-    return products.filter((p) => {
-      const pp = listProductPrices(p.id);
-      return pp.length > 0;
-    });
-  }, [products]);
+    return products.filter((p) => (pricingByProductId[p.id]?.length ?? 0) > 0);
+  }, [products, pricingByProductId]);
 
   return (
     <PageShell>
@@ -173,7 +188,7 @@ export default function PricingOverviewPage() {
                     </TableRow>
                   ) : (
                     productsWithPricing.map((p) => {
-                      const pp = listProductPrices(p.id);
+                      const pp = pricingByProductId[p.id] ?? [];
                       const listNames = pp.map((x) => priceLists.find((l) => l.id === x.priceListId)?.name ?? x.priceListId).join(", ");
                       return (
                         <TableRow key={p.id}>

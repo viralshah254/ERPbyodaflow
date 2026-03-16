@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  createBankReconAdjustingEntryApi,
   createBankReconPaymentFromStatementApi,
   fetchBankReconOpenItemsApi,
   fetchBankReconSnapshotApi,
@@ -81,9 +82,29 @@ export default function BankReconPage() {
     (session.statementCurrency !== session.baseCurrency ||
       statements.some((s) => s.currency && s.currency !== session.baseCurrency));
 
-  const handleCreateAdjustingEntry = () => {
-    toast.success("Draft adjustment journal prepared for review.");
-    router.push("/docs/journal/new");
+  const [creatingAdjusting, setCreatingAdjusting] = React.useState(false);
+  const handleCreateAdjustingEntry = async () => {
+    if (!selectedStmt) {
+      toast.error("Select an unmatched statement line first.");
+      return;
+    }
+    if (!isApiConfigured()) {
+      toast.info("Set NEXT_PUBLIC_API_URL to create adjusting entry.");
+      router.push("/docs/journal/new");
+      return;
+    }
+    setCreatingAdjusting(true);
+    try {
+      const { journalId } = await createBankReconAdjustingEntryApi(selectedStmt);
+      toast.success("Draft adjustment journal created.");
+      await refreshSnapshot();
+      setSelectedStmt(null);
+      router.push(`/docs/journal/${journalId}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setCreatingAdjusting(false);
+    }
   };
 
   const handleAISuggest = () => {
@@ -346,10 +367,11 @@ export default function BankReconPage() {
             <Button
               variant="default"
               size="sm"
-              onClick={handleCreateAdjustingEntry}
+              disabled={!selectedStmt || creatingAdjusting}
+              onClick={() => void handleCreateAdjustingEntry()}
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
-              Create adjusting entry
+              {creatingAdjusting ? "Creating..." : "Create adjusting entry"}
             </Button>
           </CardContent>
         </Card>

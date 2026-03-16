@@ -12,6 +12,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
 import type { SalesDocRow } from "@/lib/types/sales";
 import { downloadCsv } from "@/lib/export/csv";
+import { exportDocumentListApi } from "@/lib/api/documents";
+import { isApiConfigured } from "@/lib/api/client";
 import {
   getSavedViews,
   saveView,
@@ -177,18 +179,20 @@ export default function SalesOrdersPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() =>
-            downloadCsv(
-              `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`,
-              filtered.map((row) => ({
-                number: row.number,
-                date: row.date,
-                party: row.party ?? "",
-                total: row.total ?? 0,
-                status: row.status,
-              }))
-            )
-          }
+          onExport={() => {
+            const fileName = `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+            if (isApiConfigured()) {
+              exportDocumentListApi("sales-order", fileName, (msg) => toast.error(msg));
+              return;
+            }
+            downloadCsv(fileName, filtered.map((row) => ({
+              number: row.number,
+              date: row.date,
+              party: row.party ?? "",
+              total: row.total ?? 0,
+              status: row.status,
+            })));
+          }}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">

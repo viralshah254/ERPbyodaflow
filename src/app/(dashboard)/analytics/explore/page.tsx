@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,14 @@ import {
   DrillDrawer,
 } from "@/components/analytics";
 import { getMetric, getSavedAnalysisViews, saveAnalysisView, getShareableLink } from "@/lib/analytics";
-import { runAnalyticsQueryApi } from "@/lib/api/analytics";
+import type { SavedAnalysisView } from "@/lib/analytics/saved-views";
+import {
+  runAnalyticsQueryApi,
+  fetchAnalyticsSavedViewsApi,
+  createAnalyticsSavedViewApi,
+  getAnalyticsSavedViewApi,
+} from "@/lib/api/analytics";
+import { isApiConfigured } from "@/lib/api/client";
 import type { MetricKey, DimensionKey } from "@/lib/analytics/semantic";
 import type { AnalyticsQuery, AnalyticsResult, AnalyticsRow, DrillContext } from "@/lib/analytics/types";
 import type { AnalyticsGlobalFilters } from "@/lib/analytics/types";
@@ -26,39 +34,88 @@ import {
 } from "@/components/ui/dropdown-menu";
 import * as Icons from "lucide-react";
 
-export default function AnalyticsExplorePage() {
+function mapApiViewToSaved(v: { id: string; name: string; query: AnalyticsQuery; filters?: AnalyticsGlobalFilters; createdAt?: string }): SavedAnalysisView {
+  return {
+    id: v.id,
+    name: v.name,
+    query: v.query,
+    filters: v.filters,
+    createdAt: v.createdAt ?? new Date().toISOString(),
+  };
+}
+
+function AnalyticsExploreContent() {
+  const searchParams = useSearchParams();
+  const viewIdFromUrl = searchParams.get("view");
   const [metric, setMetric] = React.useState<MetricKey>("revenue");
   const [dims, setDims] = React.useState<DimensionKey[]>(["time"]);
   const [filters, setFilters] = React.useState<AnalyticsGlobalFilters>({});
   const [drill, setDrill] = React.useState<DrillContext | null>(null);
   const [drillOpen, setDrillOpen] = React.useState(false);
-  const [savedViews, setSavedViews] = React.useState(() => getSavedAnalysisViews());
+  const [savedViews, setSavedViews] = React.useState<SavedAnalysisView[]>(() => getSavedAnalysisViews());
   const [result, setResult] = React.useState<AnalyticsResult | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [queryError, setQueryError] = React.useState<string | null>(null);
+  const [isSampleData, setIsSampleData] = React.useState(false);
 
   const query: AnalyticsQuery = React.useMemo(
     () => ({ metric, dimensions: dims, filters, limit: 20 }),
     [metric, dims, filters]
   );
 
+  // Load saved views from backend when API is configured
+  React.useEffect(() => {
+    if (!isApiConfigured()) return;
+    let cancelled = false;
+    fetchAnalyticsSavedViewsApi()
+      .then((items) => {
+        if (!cancelled) setSavedViews(items.map(mapApiViewToSaved));
+      })
+      .catch(() => {
+        if (!cancelled) setSavedViews(getSavedAnalysisViews());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Restore view from ?view= id when opening a shareable link
+  React.useEffect(() => {
+    if (!viewIdFromUrl || !isApiConfigured()) return;
+    let cancelled = false;
+    getAnalyticsSavedViewApi(viewIdFromUrl)
+      .then((view) => {
+        if (!cancelled && view) {
+          setMetric(view.query.metric as MetricKey);
+          setDims([...view.query.dimensions]);
+          setFilters(view.filters ?? {});
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [viewIdFromUrl]);
+
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setQueryError(null);
+    setIsSampleData(false);
     runAnalyticsQueryApi(query)
       .then((res) => {
-        if (!cancelled) {
-          setResult(res);
-        }
+        if (!cancelled) setResult(res);
       })
       .catch((e) => {
         if (!cancelled) {
           console.error(e);
           const message = e instanceof Error ? e.message : "Analytics query failed.";
           toast.error(message);
-          setResult(null);
           setQueryError(message);
+          setIsSampleData(true);
+          import("@/lib/analytics/engine").then((mod) => {
+            if (!cancelled) setResult(mod.runAnalyticsQuery(query));
+          });
         }
       })
       .finally(() => {
@@ -86,11 +143,29 @@ export default function AnalyticsExplorePage() {
     setDrillOpen(true);
   };
 
-  const handleSaveView = () => {
+  const handleSaveView = async () => {
     const name = `View ${metric} by ${dims.join(", ")}`;
+    if (isApiConfigured()) {
+      try {
+        const res = await createAnalyticsSavedViewApi(name, query, filters);
+        const newView = mapApiViewToSaved({
+          id: res.id,
+          name: res.name,
+          query,
+          filters,
+          createdAt: new Date().toISOString(),
+        });
+        setSavedViews((prev) => [newView, ...prev]);
+        const link = getShareableLink(newView);
+        toast.success(`Saved "${name}". Shareable link: ${link}`);
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
+      return;
+    }
     const view = saveAnalysisView(name, query, filters);
     setSavedViews(getSavedAnalysisViews());
-    toast.info(`Saved "${name}". Shareable link (stub): ${getShareableLink(view)}`);
+    toast.info(`Saved "${name}". Shareable link: ${getShareableLink(view)}`);
   };
 
   const handleRestoreView = (viewId: string) => {
@@ -160,6 +235,11 @@ export default function AnalyticsExplorePage() {
           </p>
         ) : (
           <>
+            {isSampleData && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-800 dark:text-amber-200">
+                Showing sample data. To see live data, set <code className="rounded bg-black/10 px-1">NEXT_PUBLIC_API_URL</code> to your backend and ensure you’re signed in.
+              </div>
+            )}
             <div className="grid gap-4 lg:grid-cols-3">
               <InsightCanvas result={result} />
               <div className="lg:col-span-2" />
@@ -176,5 +256,22 @@ export default function AnalyticsExplorePage() {
         context={drill}
       />
     </PageShell>
+  );
+}
+
+export default function AnalyticsExplorePage() {
+  return (
+    <React.Suspense
+      fallback={
+        <PageShell>
+          <PageHeader title="Explore" description="One metric, up to 3 dimensions." breadcrumbs={[{ label: "Analytics", href: "/analytics" }, { label: "Explore" }]} sticky showCommandHint />
+          <div className="p-6">
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          </div>
+        </PageShell>
+      }
+    >
+      <AnalyticsExploreContent />
+    </React.Suspense>
   );
 }

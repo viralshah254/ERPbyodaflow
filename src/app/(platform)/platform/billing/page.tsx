@@ -27,7 +27,7 @@ import {
   type PlatformProvisioningCheckout,
   type PlatformProvisioningCheckoutReceipt,
 } from "@/lib/api/platform";
-import { FileText } from "lucide-react";
+import { Copy } from "lucide-react";
 import { toast } from "sonner";
 
 function formatCents(cents: number): string {
@@ -36,6 +36,34 @@ function formatCents(cents: number): string {
     currency: "USD",
     minimumFractionDigits: 2,
   }).format(cents / 100);
+}
+
+function copyAdminCredentials(customer: {
+  adminEmail: string;
+  initialPassword: string;
+  tenantId: string;
+  orgId: string;
+  branchId: string;
+  roleId: string;
+  userId: string;
+  mustChangePassword: boolean;
+}) {
+  const lines = [
+    "Admin sign-in (share securely)",
+    "────────────────────────────",
+    `Email: ${customer.adminEmail}`,
+    `Temporary password: ${customer.initialPassword}`,
+    "",
+    "IDs (for support/admin):",
+    `Tenant ID: ${customer.tenantId}`,
+    `Org ID: ${customer.orgId}`,
+    `Branch ID: ${customer.branchId}`,
+    `Role ID: ${customer.roleId}`,
+    `User ID: ${customer.userId}`,
+    "",
+    customer.mustChangePassword ? "Password reset required on first login." : "",
+  ].filter(Boolean);
+  return lines.join("\n");
 }
 
 export default function PlatformBillingPage() {
@@ -128,11 +156,21 @@ export default function PlatformBillingPage() {
 
       {lastProvisioningReceipt ? (
         <Card>
-          <CardHeader>
-            <CardTitle>Latest activation receipt</CardTitle>
-            <CardDescription>
-              Newly activated customer records and temporary credentials from the last confirmed platform checkout.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle>Latest activation receipt</CardTitle>
+              <CardDescription>
+                Newly activated customer records and temporary credentials from the last confirmed platform checkout.
+              </CardDescription>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLastProvisioningReceipt(null)}
+              aria-label="Dismiss receipt"
+            >
+              Dismiss
+            </Button>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="rounded-lg border p-4">
@@ -156,29 +194,47 @@ export default function PlatformBillingPage() {
                 <div className="space-y-3">
                   {lastProvisioningReceipt.createdCustomers.map((customer) => (
                     <div key={customer.userId} className="rounded-lg border p-4 text-sm">
-                      <div className="grid gap-2 md:grid-cols-2">
-                        <p>
-                          Admin email: <span className="font-medium">{customer.adminEmail}</span>
-                        </p>
-                        <p>
-                          Temporary password: <span className="font-mono">{customer.initialPassword}</span>
-                        </p>
-                        <p>
-                          Tenant ID: <span className="font-mono">{customer.tenantId}</span>
-                        </p>
-                        <p>
-                          Org ID: <span className="font-mono">{customer.orgId}</span>
-                        </p>
-                        <p>
-                          Branch ID: <span className="font-mono">{customer.branchId}</span>
-                        </p>
-                        <p>
-                          Role ID: <span className="font-mono">{customer.roleId}</span>
-                        </p>
-                        <p>
-                          User ID: <span className="font-mono">{customer.userId}</span>
-                        </p>
-                        <p>{customer.mustChangePassword ? "Password reset required on first login" : "Password reset not enforced"}</p>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="grid gap-2 md:grid-cols-2 flex-1 min-w-0">
+                          <p>
+                            Admin email: <span className="font-medium">{customer.adminEmail}</span>
+                          </p>
+                          <p>
+                            Temporary password: <span className="font-mono">{customer.initialPassword}</span>
+                          </p>
+                          <p>
+                            Tenant ID: <span className="font-mono">{customer.tenantId}</span>
+                          </p>
+                          <p>
+                            Org ID: <span className="font-mono">{customer.orgId}</span>
+                          </p>
+                          <p>
+                            Branch ID: <span className="font-mono">{customer.branchId}</span>
+                          </p>
+                          <p>
+                            Role ID: <span className="font-mono">{customer.roleId}</span>
+                          </p>
+                          <p>
+                            User ID: <span className="font-mono">{customer.userId}</span>
+                          </p>
+                          <p>{customer.mustChangePassword ? "Password reset required on first login" : "Password reset not enforced"}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(copyAdminCredentials(customer));
+                              toast.success("Credentials copied to clipboard. Share securely.");
+                            } catch {
+                              toast.error("Could not copy to clipboard.");
+                            }
+                          }}
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Copy credentials
+                        </Button>
                       </div>
                     </div>
                   ))}

@@ -81,7 +81,7 @@ export type NavSectionKey =
   | "docs"
   | "help";
 
-/** Terminology keys — t(key) resolves from template.terminology */
+/** Terminology keys — t(key) resolves from template.terminology. Align with documents/types for doc labels. */
 export type TerminologyKey =
   | "customer"
   | "supplier"
@@ -94,6 +94,9 @@ export type TerminologyKey =
   | "goodsReceipt"
   | "invoice"
   | "creditNote"
+  | "debitNote"
+  | "purchaseCreditNote"
+  | "purchaseDebitNote"
   | "journalEntry"
   | "workOrder"
   | "bom"

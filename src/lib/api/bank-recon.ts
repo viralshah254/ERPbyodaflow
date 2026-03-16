@@ -134,6 +134,14 @@ export async function createBankReconPaymentFromStatementApi(
   });
 }
 
+export async function createBankReconAdjustingEntryApi(lineId: string): Promise<{ journalId: string; number: string }> {
+  requireLiveApi("Bank reconciliation adjusting entry");
+  return apiRequest<{ journalId: string; number: string }>("/api/finance/bank-recon/adjusting-entry", {
+    method: "POST",
+    body: { lineId },
+  });
+}
+
 export async function fetchBankReconOpenItemsApi(params: {
   direction: "AR" | "AP";
   partyId?: string;

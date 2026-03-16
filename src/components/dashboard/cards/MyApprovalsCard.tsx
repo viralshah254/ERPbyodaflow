@@ -9,6 +9,8 @@ import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import type { ApprovalItem } from "@/lib/types/dashboard";
 import { ApprovalDetailSheet } from "@/components/approvals/ApprovalDetailSheet";
+import { approvalApprove, approvalReject } from "@/lib/api/stub-endpoints";
+import { isApiConfigured } from "@/lib/api/client";
 
 interface MyApprovalsCardProps {
   items: ApprovalItem[];
@@ -24,12 +26,31 @@ export function MyApprovalsCard({ items }: MyApprovalsCardProps) {
   };
 
   const handleApprove = (id: string, comment?: string) => {
-    toast.success(comment ? `Approved with comment. (stub)` : `Approved. (stub). API pending.`);
+    if (isApiConfigured()) {
+      approvalApprove(id, comment)
+        .then(() => {
+          toast.success(comment ? "Approved with comment." : "Approved.");
+          setSheetOpen(false);
+          // Caller may refresh dashboard data; no in-card list refresh for now
+        })
+        .catch((e) => toast.error((e as Error).message));
+      return;
+    }
+    toast.info("Set NEXT_PUBLIC_API_URL to approve from this card.");
     setSheetOpen(false);
   };
 
   const handleReject = (id: string, comment?: string) => {
-    toast.info(comment ? `Rejected with comment. (stub)` : `Rejected. (stub). API pending.`);
+    if (isApiConfigured()) {
+      approvalReject(id, comment)
+        .then(() => {
+          toast.success(comment ? "Rejected with comment." : "Rejected.");
+          setSheetOpen(false);
+        })
+        .catch((e) => toast.error((e as Error).message));
+      return;
+    }
+    toast.info("Set NEXT_PUBLIC_API_URL to reject from this card.");
     setSheetOpen(false);
   };
 

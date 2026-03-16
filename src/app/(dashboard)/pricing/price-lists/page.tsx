@@ -38,12 +38,15 @@ import {
   fetchPriceListsForUi,
   createPriceListApi,
   updatePriceListApi,
+  deletePriceListApi,
 } from "@/lib/api/pricing";
 import type { PriceList } from "@/lib/products/pricing-types";
-import { listProducts } from "@/lib/data/products.repo";
+import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductPricingApi } from "@/lib/api/product-master";
+import type { ProductRow } from "@/lib/types/masters";
 import { canDeleteEntity } from "@/lib/permissions";
+import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
-import { listProductPrices } from "@/lib/data/products.repo";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -82,17 +85,37 @@ function PriceListsContent() {
   }, [refresh]);
 
   const selected = selectedDetail;
-  const products = React.useMemo(() => listProducts(), []);
+  const [products, setProducts] = React.useState<ProductRow[]>([]);
+  const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchProductsApi()
+      .then(async (list) => {
+        if (cancelled) return;
+        setProducts(list);
+        const results = await Promise.all(list.map((p) => fetchProductPricingApi(p.id)));
+        if (cancelled) return;
+        const map: Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>> = {};
+        list.forEach((p, i) => {
+          map[p.id] = results[i] ?? [];
+        });
+        setPricingByProductId(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const productCountByList = React.useMemo(() => {
     const m = new Map<string, number>();
     for (const p of products) {
-      const pp = listProductPrices(p.id);
+      const pp = pricingByProductId[p.id] ?? [];
       for (const x of pp) {
         m.set(x.priceListId, (m.get(x.priceListId) ?? 0) + 1);
       }
     }
     return m;
-  }, [products]);
+  }, [products, pricingByProductId]);
 
   const openAdd = () => {
     setEditing(null);
@@ -157,7 +180,26 @@ function PriceListsContent() {
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(pl)}>Edit</Button>
                       {canDelete && (
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { toast.info("Delete price list is not yet wired to the backend."); }}>Remove</Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={async () => {
+                            if (!isApiConfigured()) {
+                              toast.info("Set NEXT_PUBLIC_API_URL to delete price lists.");
+                              return;
+                            }
+                            try {
+                              await deletePriceListApi(pl.id);
+                              await refresh();
+                              toast.success("Price list removed.");
+                            } catch (e) {
+                              toast.error((e as Error).message || "Failed to delete.");
+                            }
+                          }}
+                        >
+                          Remove
+                        </Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -174,7 +216,11 @@ function PriceListsContent() {
               <CardDescription>Products with tiers on this list. Edit pricing per product.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <ProductPriceTable priceListId={selected.id} />
+              <ProductPriceTable
+                priceListId={selected.id}
+                products={products}
+                pricingByProductId={pricingByProductId}
+              />
             </CardContent>
           </Card>
         )}
@@ -217,11 +263,18 @@ export default function PriceListsPage() {
   );
 }
 
-function ProductPriceTable({ priceListId }: { priceListId: string }) {
-  const products = React.useMemo(() => listProducts(), []);
+function ProductPriceTable({
+  priceListId,
+  products,
+  pricingByProductId,
+}: {
+  priceListId: string;
+  products: ProductRow[];
+  pricingByProductId: Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>;
+}) {
   const withTiers = React.useMemo(() => {
-    return products.filter((p) => listProductPrices(p.id, priceListId).length > 0);
-  }, [products, priceListId]);
+    return products.filter((p) => (pricingByProductId[p.id] ?? []).some((pp) => pp.priceListId === priceListId));
+  }, [products, pricingByProductId, priceListId]);
 
   if (withTiers.length === 0) {
     return (
@@ -244,7 +297,7 @@ function ProductPriceTable({ priceListId }: { priceListId: string }) {
       </TableHeader>
       <TableBody>
         {withTiers.map((p) => {
-          const pp = listProductPrices(p.id, priceListId)[0];
+          const pp = (pricingByProductId[p.id] ?? []).find((x) => x.priceListId === priceListId);
           const tierCount = pp?.tiers?.length ?? 0;
           return (
             <TableRow key={p.id}>

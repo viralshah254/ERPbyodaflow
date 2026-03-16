@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createFinanceAccountApi, fetchFinanceAccountsApi, type FinanceAccount } from "@/lib/api/finance";
+import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -27,6 +28,7 @@ export default function ChartOfAccountsPage() {
   const [search, setSearch] = React.useState("");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
   const [form, setForm] = React.useState({
     code: "",
     name: "",
@@ -65,8 +67,40 @@ export default function ChartOfAccountsPage() {
     []
   );
 
+  const handleImportCsv = () => {
+    if (isApiConfigured()) {
+      importInputRef.current?.click();
+      return;
+    }
+    toast.info("Import COA: set NEXT_PUBLIC_API_URL to use backend.");
+  };
+
+  const onImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    uploadFile(
+      "/api/import/coa",
+      file,
+      (data) => {
+        if (data.imported != null) toast.success(`Imported ${data.imported} account(s).`);
+        else if (data.jobId) toast.success("Import queued. " + (data.message ?? ""));
+        else toast.success("Import completed.");
+        void refresh();
+      },
+      (msg) => toast.error(msg)
+    );
+  };
+
   return (
     <PageShell>
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={onImportFile}
+      />
       <PageHeader
         title="Chart of Accounts"
         description="Manage your live ledger account structure"
@@ -74,10 +108,16 @@ export default function ChartOfAccountsPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add Account
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleImportCsv}>
+              <Icons.Upload className="mr-2 h-4 w-4" />
+              Import COA
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add Account
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-4">

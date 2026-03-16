@@ -108,6 +108,19 @@ export async function runReportExportApi(reportId = "vat-summary"): Promise<void
   });
 }
 
+export async function scheduleReportApi(payload: {
+  reportId: string;
+  name?: string;
+  cron?: string;
+  recipients?: string[];
+}): Promise<{ id: string; reportId: string }> {
+  requireLiveApi("Schedule report");
+  return apiRequest<{ id: string; reportId: string }>("/api/reports/schedule", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function fetchVatSummaryApi(input?: { dateFrom?: string; dateTo?: string }): Promise<{
   dateFrom?: string;
   dateTo?: string;

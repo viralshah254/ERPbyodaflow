@@ -46,28 +46,27 @@ From `src/lib/qa/action-registry.ts` — every entry with `status: "stub"`. **Fr
 | File / location | Action or element | Current behavior |
 |-----------------|-------------------|-------------------|
 | **Layout & Copilot** | | |
-| `main-layout.tsx` | Copilot “Apply” | Toast: “Action applied (stub). API pending.” |
-| `CopilotActionCards.tsx` | Apply (all cards) | Opens review → Apply → toast; “Apply opens review (stub)” |
+| `main-layout.tsx` | Copilot "Apply" | **Wired** — calls automationInsightApply when API set |
+| `CopilotActionCards.tsx` | Apply (all cards) | **Wired** — calls applyAutomationInsightApi when API set → Apply → toast; |
 | `lib/mock/copilot-action-cards.ts` | Narrative text | “Apply will sync suggested tiers (stub)” etc. |
 | **Documents** | | |
 | `docs/[type]/[id]/page.tsx` | Request approval, Approve, Post, Export PDF | **Wired** — calls stub-endpoints; stub toast when API not configured |
-| `docs/[type]/[id]/page.tsx` | Doc header content | “Document #id — stub. Date, party, totals would render here.” |
-| `docs/[type]/[id]/page.tsx` | Lines table | “Line items table (stub)” |
-| `docs/[type]/page.tsx` | Export, Approve, Post (bulk) | Toast stubs with count |
-| `DocumentCreateWizard.tsx` | Taxes step | “Taxes (stub). Configure tax codes and charges.”; Notes (stub) |
-| `DocumentCreateWizard.tsx` | Posting preview | “Stub: mock GL lines in base currency.”; “FX Gain/Loss (stub)” |
+| `docs/[type]/[id]/page.tsx` | Doc header content | **Wired** — fetches doc via GET and renders number, date, party, totals |
+| `docs/[type]/[id]/page.tsx` | Lines table | **Wired** — renders lines from doc detail API |
+| `docs/[type]/page.tsx` | Export, Approve, Post (bulk) | **Wired** — bulkDocumentActionApi, exportDocumentListApi |
+| `DocumentCreateWizard.tsx` | Taxes step | **Wired** — tax code selector when API configured; notes field |
+| `DocumentCreateWizard.tsx` | Posting preview | **Wired** — previewDocumentPostingApi; FX note when multi-currency |
 | `PrintPreviewDrawer.tsx` | Line content | “Line 1 (stub)”, “Line 2 (stub)” |
-| `PrintPreviewDrawer.tsx` | Download PDF | `toast.info("Download PDF (stub). API pending.")` |
-| `DocumentAttachments.tsx` | Upload | “Upload (stub). API pending.” |
-| `DocumentAttachments.tsx` | Download | “Download (stub): {name}” |
-| `DocumentComments.tsx` | Add comment | “Add comment (stub). API pending.” when no handler |
+| `PrintPreviewDrawer.tsx` | Download PDF | **Wired** — `downloadFile(/api/documents/.../pdf)` when API set |
+| `DocumentAttachments.tsx` | Upload, Download | **Wired** — doc detail passes handlers when API set |
+| `DocumentComments.tsx` | Add comment | **Wired** — doc detail passes handler when API set |
 | **Warehouse** | | |
-| `warehouse/putaway/page.tsx` | Export | Toast “Export (stub)” |
-| `warehouse/putaway/[id]/page.tsx` | Save allocation | “Allocate to bins (stub). API pending.”; “Select bin and qty per line. Stub.” |
-| `warehouse/pick-pack/[id]/page.tsx` | Confirm pick, Confirm pack, Mark dispatched | Toast stubs; “Enter picked qty (stub)” |
-| `warehouse/transfers/[id]/page.tsx` | Approve, Mark in transit, Receive | **Receive = Wired**; Approve, Mark in transit = toast stubs |
-| `warehouse/cycle-counts/page.tsx` | Export; New count sheet | “Export (stub)”; “Post adjustments (stub)”; “Saved to browser storage. API pending.” |
-| `warehouse/cycle-counts/[id]/page.tsx` | Enter quantities, Post adjustments, Submit | **Submit = Wired**; others toast stubs |
+| `warehouse/putaway/page.tsx` | Export | **Wired** — downloadCsv with putaway list |
+| `warehouse/putaway/[id]/page.tsx` | Save allocation, Confirm | **Wired** — updatePutawayTask, confirmPutawayTask |
+| `warehouse/pick-pack/[id]/page.tsx` | Confirm pick, Confirm pack, Mark dispatched | **Wired** — runPickPackAction |
+| `warehouse/transfers/[id]/page.tsx` | Approve, Mark in transit, Receive | **Wired** — updateTransferStatus (warehouse-transfers) |
+| `warehouse/cycle-counts/page.tsx` | Export; New count sheet | **Wired** — downloadCsv; createCycleCountTask |
+| `warehouse/cycle-counts/[id]/page.tsx` | Enter quantities, Post adjustments, Submit | **Wired** — updateCycleCountTaskLine, submitCycleCountTask |
 | **Sales & purchasing** | | |
 | `sales/orders/page.tsx` | Export, Approve, Export (row) | Toast stubs |
 | `sales/invoices/page.tsx` | Export, Post, Export (row) | Toast stubs |
@@ -77,62 +76,64 @@ From `src/lib/qa/action-registry.ts` — every entry with `status: "stub"`. **Fr
 | `inventory/receipts/page.tsx` | Export, Post, Export (row) | Toast stubs |
 | **Finance & AP/AR** | | |
 | `ap/bills/page.tsx` | Export, Post, Export (row) | Toast stubs |
-| `ar/payments/page.tsx` | Submit payment, Export; Allocate flow | “Submit payment: API pending.”; “Export (stub)”; “Review & submit (stub)”; “API pending.” |
-| `finance/journals/page.tsx` | Export | Toast “Export (stub)” |
-| `finance/bank-recon/page.tsx` | Create adjusting entry, AI match, Create payment | Toast stubs; “Matching rules (stub)”; “Auto-match by amount/date (stub)”; “Match (stub): …” |
-| `finance/period-close/page.tsx` | Close period, Reopen period | “Close period (stub). API pending.”; “Reopen period (stub). API pending.” |
+| `ar/payments/page.tsx` | Submit payment, Export; Allocate flow | Export = **Wired** (downloadCsv); Allocate = **Wired**; Submit payment = API pending |
+| `finance/journals/page.tsx` | Export | **Wired** — downloadCsv with journal rows |
+| `finance/bank-recon/page.tsx` | Match, Create payment, Create adjusting entry | **Wired** — match, create payment, create adjusting entry (POST /api/finance/bank-recon/adjusting-entry); AI match = backend needed |
+| `finance/period-close/page.tsx` | Close period, Reopen period | **Wired** — closeFinancePeriodApi / reopenFinancePeriodApi (finance.ts) |
 | **Treasury** | | |
-| `treasury/payment-runs/[id]/page.tsx` | Approve, Export CSV / Bank | “Approve (stub). Reuse approvals module.”; “Export CSV / Bank format (stub). Set NEXT_PUBLIC_API_URL…” |
-| `treasury/collections/page.tsx` | Export | Toast “Export (stub)” |
+| `treasury/payment-runs/[id]/page.tsx` | Approve, Export CSV / Bank | **Wired** — approvePaymentRunApi, exportPaymentRunApi (treasury-ops) |
+| `treasury/collections/page.tsx` | Export | **Wired** — downloadCsv with collections list |
 | **Payroll** | | |
 | `payroll/pay-runs/page.tsx` | Request approval, Export | Toast stubs |
-| `payroll/pay-runs/[id]/page.tsx` | Approve, Request approval, Post payroll journal | **Approve = Wired**; others toast stubs |
-| `payroll/payslips/page.tsx` | Download PDF, Export | “Download PDF (stub). API pending.”; “Export (stub)” |
+| `payroll/pay-runs/[id]/page.tsx` | Approve, Request approval, Post payroll journal | **Wired** — submitPayRunForApprovalApi, postPayRunJournalApi, approvePayRunApi |
+| `payroll/payslips/page.tsx` | Download PDF, Export | **Download PDF = Wired** (downloadFile); Export = stub |
 | `payroll/employees/page.tsx` | Export; Create sheet | “Export (stub)”; “Bank & statutory stubs.” |
 | `payroll/statutories/page.tsx` | — | “Seed list; allow edit (stub).” |
 | **Assets** | | |
 | `assets/depreciation/page.tsx` | Post depreciation | “Post depreciation (stub). Creates journal and redirect to review.” |
 | `assets/register/[id]/page.tsx` | Linked vendor/invoice | “(stub)” labels |
 | **Reports** | | |
-| `reports/page.tsx` | Run report | “Run report (stub): {name}”; “Run (stub) or save as view” |
-| `reports/scheduled/page.tsx` | Schedule report, Edit | “Schedule report (stub)”; “Edit (stub)” |
-| `reports/saved/page.tsx` | Save view, Run, Edit | Toast stubs |
+| `reports/page.tsx` | Run report, Schedule report | **Wired** — runReportExportApi; Schedule report (sheet) |
+| `reports/scheduled/page.tsx` | Schedule report, Run now, Edit | **Wired** — scheduleReportApi; Run now; Edit links to reports |
+| `reports/saved/page.tsx` | Save view, Run, Edit | **Wired** — runReportExportApi; Edit links to reports |
 | `reports/exports/page.tsx` | Export, Download | “Export (stub)”; “Download (stub): …” |
-| `reports/vat-summary/page.tsx` | Export | “Export (stub)” |
-| `reports/wht-summary/page.tsx` | Export | “Export (stub)” |
+| `reports/vat-summary/page.tsx` | Export | **Wired** — downloadTaxSummaryCsvApi (VAT) when API set |
+| `reports/wht-summary/page.tsx` | Export | **Wired** — downloadTaxSummaryCsvApi (WHT) when API set |
 | **Settings** | | |
 | `settings/org/page.tsx` | Save | **Wired** — calls orgSave when API configured |
-| `settings/notifications/page.tsx` | Save | “Save (stub). API pending.”; “Email, SMS, WhatsApp toggles (stubs). No real integrations.” |
-| `settings/payroll/page.tsx` | Save | “Save (stub). API pending.” |
-| `settings/financial/currencies/page.tsx` | Add currency | “Add currency (stub). API pending.”; “Add (stub)” |
-| `settings/financial/chart-of-accounts/page.tsx` | Import COA | “Import COA (stub). Set NEXT_PUBLIC_API_URL…” |
-| `settings/inventory/costing/page.tsx` | Save template | “Save (stub). API pending.” |
-| `settings/products/pricing-rules/page.tsx` | Add rule | “Add rule (stub). API pending.”; “UI-only stub” |
+| `settings/notifications/page.tsx` | Save | **Wired** — calls API when configured; toggles still UI (no real integrations) |
+| `settings/payroll/page.tsx` | Save | **Wired** — fetchPayrollSettingsApi, savePayrollSettingsApi |
+| `settings/financial/currencies/page.tsx` | Add currency | **Wired** — upload/add when API set (see finance chart or currencies flow) |
+| `settings/financial/chart-of-accounts/page.tsx` | Import COA | **Wired** — uploadFile POST /api/import/coa when API set |
+| `settings/inventory/costing/page.tsx` | Save template | **Wired** — saveInventoryCostingSettingsApi, createLandedCostTemplate |
+| `settings/products/pricing-rules/page.tsx` | Add rule | **Wired** — createPricingRuleSettingApi |
 | `settings/tax/withholding/page.tsx` | WHT certificate | “WHT certificate (stub). API pending.” |
-| `settings/users-roles/page.tsx` | Add user / Add role sheets | “Saved to browser storage. API pending.” |
+| `settings/users-roles/page.tsx` | Add user / Add role sheets | **Wired** — calls API when configured (see BACKEND_SPEC) |
 | **Automation & approvals** | | |
 | `automation/rules/page.tsx` | “Require approval” action | “Require approval (stub): API pending.” |
 | `automation/workflows/page.tsx` | Create workflow | “Create workflow (stub). API pending.” |
 | `approvals/inbox/page.tsx` | Approve, Reject | **Wired** — calls stub-endpoints |
-| `components/dashboard/cards/MyApprovalsCard.tsx` | Approve, Reject | “Approved. (stub). API pending.” / “Rejected. (stub). API pending.” |
+| `components/dashboard/cards/MyApprovalsCard.tsx` | Approve, Reject | **Wired** — approvalApprove / approvalReject (stub-endpoints) when API set |
 | **Control tower & analytics** | | |
-| `control-tower/page.tsx` | Simulate, Approve, Modify, Explain (all cards) | Toast stubs; “Opens scenario builder.”, “API pending.”, etc. |
+| `control-tower/page.tsx` | Simulate, Approve, Modify, Explain (all cards) | Toast stubs; |
 | `analytics/simulations/page.tsx` | Apply suggestion | “Apply suggestion (stub). API pending.” |
-| `analytics/mrp/page.tsx` | Apply suggestion | “Apply suggestion (stub). API pending.”; “Suggestions based on demand and current stock (stub).” |
-| `analytics/explore/page.tsx` | Save view | “Shareable link (stub): …” |
+| `analytics/mrp/page.tsx` | Apply suggestion | “Apply suggestion (stub). API pending.”; |
+| `analytics/explore/page.tsx` | Save view | **Wired** — createAnalyticsSavedViewApi; shareable link uses view id |
 | `analytics/inventory/page.tsx` | Landed cost impact | “Landed cost impact (stub)” |
 | `analytics/payroll/page.tsx` | Cost per branch | “Cost per branch / department (stub)” |
 | `analytics/finance/page.tsx` | FX impact, tax burden | “FX impact visualization, tax burden (stub)” |
 | **Projects & intercompany** | | |
-| `projects/list/page.tsx` | Create project, Export | “Create project (stub). API pending.”; “Export (stub)” |
+| `projects/list/page.tsx` | Create project, Export | “Create project (stub). API pending.”; |
 | `projects/[id]/page.tsx` | Link transaction | “Link transaction (stub). Attach bill/journal/expense.” |
 | `intercompany/transactions/page.tsx` | Generate elimination journal, Create IC invoice/bill, Consolidation report, Export | Toast stubs |
-| **AR customers** | | |
-| `ar/customers/page.tsx` | Export; Tax PIN; Duplicate check | “Export (stub)”; “Tax PIN (stub)”; “Possible duplicate: similar name (stub).” |
+| **AR customers, AP suppliers, Pricing** | | |
+| `ar/customers/page.tsx` | Export; Tax PIN; Duplicate check | Export = **Wired** (downloadCsv); Tax PIN, Duplicate check = stub
+| `ap/suppliers/page.tsx` | Export | **Wired** — downloadCsv
+| `pricing/price-lists/page.tsx` | Delete price list | **Wired** — deletePriceListApi“Export (stub)”; |
 | **Manufacturing** | | |
 | `manufacturing/boms/[id]/page.tsx` | Co-products / by-products edit | “Edit via stub — API pending.” |
 | **Types / lib** | | |
-| `lib/manufacturing/types.ts` | WorkCenter, Route | Comments: “Work center (stub).”, “Route (routing stub).” |
+| `lib/manufacturing/types.ts` | WorkCenter, Route | Comments: “Work center (stub).”, |
 | `lib/data/pricing.repo.ts` | — | “Pricing repo … (stub).” |
 
 ---
@@ -149,6 +150,8 @@ From `src/lib/qa/action-registry.ts` — every entry with `status: "stub"`. **Fr
 - **Reports:** Run report, VAT/WHT summary, saved views, scheduled reports, export history.
 - **Import:** Currencies, exchange rates, COA, bank statement — backend implemented (see REMAINING_BACKEND_IMPLEMENTED); frontend to wire.
 - **Full costing:** FIFO/weighted average in worker; costing run event consumer.
+
+**Backend needed (documented):** Create adjusting entry (done), AI match for bank recon, list exports (optional; client-side CSV fallback added), automation workflows, WHT certificate.
 
 ### 2.2 Analytics (weeks 2–4 style)
 
@@ -174,29 +177,27 @@ From `src/lib/qa/action-registry.ts` — every entry with `status: "stub"`. **Fr
 
 | Location | Pending UI |
 |----------|------------|
-| `/docs/[type]/[id]` | Document header: “Document #id — stub. Date, party, totals would render here.” |
-| `/docs/[type]/[id]` | Lines: “Line items table (stub)” |
+| `/docs/[type]/[id]` | Document header | **Done** — GET doc and render number, date, party, totals |
+| `/docs/[type]/[id]` | Lines | **Done** — renders lines from doc detail API |
 | Document tabs (doc detail) | Taxes/Charges: “Taxes & charges (stub)” |
-| Document tabs | Attachments: “Attachments (stub)” |
-| Document tabs | Comments: “Comments (stub)” |
+| Document tabs | Attachments, Comments | **Done** — wired when doc detail passes handlers |
 | Document tabs | Approval: “Approval history (stub)” |
 | Document tabs | Audit: “Audit log (stub)” |
 | PrintPreviewDrawer | Content: “Line 1 (stub)”, “Line 2 (stub)” |
-| DocumentCreateWizard | Taxes step: “Taxes (stub). Configure tax codes and charges.”; Notes (stub) |
-| DocumentCreateWizard | Posting: “Stub: mock GL lines”; “FX Gain/Loss (stub)” |
-
+| DocumentCreateWizard | Taxes step | **Done** — tax code selector when API configured |
+| DocumentCreateWizard | Posting | **Done** — previewDocumentPostingApi wired |
 ### 3.2 List/detail placeholders
 
 | Location | Pending UI |
 |----------|------------|
-| Bank recon | “Rules sidebar (stub)”; “Matching rules (stub)” |
+| Bank recon | “Rules sidebar (stub)”; |
 | Putaway [id] | “Select bin and qty per line. Stub.” |
 | Pick-pack [id] | “Item, qty, suggested bin. Enter picked qty (stub).” |
 | Cycle count create | “Saved to browser storage. API pending.” |
 | Users-roles | “Saved to browser storage. API pending.” (add user, add role) |
 | Reports | “Browse report templates. Run (stub) or save as view.” |
 | Intercompany | “Consolidation report (stub)” |
-| Pricing rules | “Optional. Configure rules … (UI-only stub).”; “No rules. Add rules (stub) above.” |
+| Pricing rules | “Optional. Configure rules … (UI-only stub).”; |
 | Currencies | “Add a new currency. API pending — stub only.” |
 
 ### 3.3 Empty states
@@ -209,31 +210,31 @@ From `src/lib/qa/action-registry.ts` — every entry with `status: "stub"`. **Fr
 
 ### 4.1 Document lifecycle
 
-- **Current:** Create draft (wizard) → redirect to `/docs/{type}/1`; no real create API. Detail view shows stub header/lines.
+- **Current:** Create draft (wizard) → redirect to `/docs/{type}/1`; no real create API. Detail view uses GET doc and renders header and lines (**Wired**).
 - **Pending:** Draft → Submit → Request approval → Approve/Reject → Post → (optional) Reverse/Cancel. Backend: document state machine, approval inbox, GL posting.
 
 ### 4.2 Approval flow
 
-- **Current:** Approvals inbox/requests use mock data; Approve/Reject toast only.
+- **Current:** Approvals inbox Approve/Reject **Wired** (stub-endpoints); list may still be mock until API returns requests.
 - **Pending:** List from API; submit approval/rejection with comment; backend updates doc status and emits events; optional workflow (e.g. multi-step, escalation).
 
 ### 4.3 Payment & allocation
 
 - **AR:** Customer → open invoices → Allocate → Review & submit. Currently “API pending” / stub.
-- **AP:** Three-way match (PO ↔ GRN ↔ Bill); Match selected = stub. Payment run Approve = stub.
-- **Bank recon:** Match statement line ↔ system transaction; create adjusting entry; create payment from line. All stubs.
+- **AP:** Three-way match (PO ↔ GRN ↔ Bill); Match selected = stub. Payment run Approve = **Wired** (treasury-ops).
+- **Bank recon:** Match and Create payment from line = **Wired**; create adjusting entry = stub (backend needed).
 
 ### 4.4 Warehouse
 
-- **Transfer:** Approve → Mark in transit → Receive. All stubs.
+- **Transfer:** Approve → Mark in transit → Receive = **Wired** (updateTransferStatus). Putaway Confirm, Pick-pack, Cycle count = see action-registry / stub-endpoints.
 - **Putaway:** Allocate to bins → Confirm. Stub.
 - **Pick-pack:** Confirm pick → Confirm pack → Mark dispatched. Stubs.
 - **Cycle count:** Enter quantities → Post adjustments. Stubs.
 
 ### 4.5 Payroll & period close
 
-- **Pay run:** Request approval → Approve → Post payroll journal. Stubs (except CSV export when API configured).
-- **Period close:** Close period / Reopen period. Stubs.
+- **Pay run:** Request approval, Post journal, Approve = **Wired** (submitPayRunForApprovalApi, postPayRunJournalApi, approvePayRunApi); CSV/export when API configured.
+- **Period close:** Close / Reopen **Wired** (finance.ts).
 
 ### 4.6 Automation workflows
 

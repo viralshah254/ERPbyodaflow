@@ -149,3 +149,8 @@ export async function updatePriceListApi(
   requireLiveApi("Update price list");
   await apiRequest(`/api/pricing/price-lists/${encodeURIComponent(id)}`, { method: "PATCH", body });
 }
+
+export async function deletePriceListApi(id: string): Promise<void> {
+  requireLiveApi("Delete price list");
+  await apiRequest(`/api/pricing/price-lists/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
