@@ -140,7 +140,9 @@ export async function setPlatformOrgAccessApi(
 export type PlatformSubscriptionRow = {
   id: string;
   tenantId: string;
+  tenantName?: string;
   orgId: string;
+  orgName?: string;
   plan: string;
   billingCycle: "monthly" | "annual";
   status: string;
@@ -148,6 +150,16 @@ export type PlatformSubscriptionRow = {
   currentPeriodEnd: string;
   startedAt: string;
   stripeSubscriptionId?: string;
+  billingSnapshot?: {
+    activeUserCount: number;
+    copilotEnabledCount: number;
+    franchiseCount: number;
+    includedSeatCount: number;
+    billableAdditionalUserCount: number;
+    standardUserCount: number;
+    isFranchiseBilling: boolean;
+    projectedMonthlyCents: number;
+  };
 };
 
 export type PlatformInvoiceRow = {
@@ -161,7 +173,7 @@ export type PlatformInvoiceRow = {
   status: string;
   totalCents: number;
   currency: string;
-  lineItems: Array<{ description: string; quantity: number; unitPriceCents: number; amountCents: number }>;
+  lineItems: Array<{ category?: string; description: string; quantity: number; unitPriceCents: number; amountCents: number; prorated?: boolean }>;
   createdAt: string;
 };
 
@@ -272,7 +284,18 @@ export async function createPlatformUserApi(payload: {
   roleIds: string[];
   initialPassword?: string;
   mustChangePassword?: boolean;
-}): Promise<{ id: string; email: string; initialPassword?: string; mustChangePassword?: boolean; billingImpact?: { invoiceId: string } }> {
+}): Promise<{
+  id: string;
+  email: string;
+  initialPassword?: string;
+  mustChangePassword?: boolean;
+  billingImpact?: {
+    invoiceId: string;
+    proratedCents?: number;
+    charged?: boolean;
+    lineItems?: { description: string; amountCents: number }[];
+  };
+}> {
   return apiRequest("/api/platform/users", { method: "POST", body: payload });
 }
 
@@ -310,7 +333,12 @@ export async function provisionPlatformCustomerApi(payload: {
   adminEmail: string;
   initialPassword?: string;
   mustChangePassword: boolean;
-  billingImpact?: { invoiceId: string };
+  billingImpact?: {
+    invoiceId: string;
+    proratedCents?: number;
+    charged?: boolean;
+    lineItems?: { description: string; amountCents: number }[];
+  };
 }> {
   return apiRequest("/api/platform/provision/customer", {
     method: "POST",

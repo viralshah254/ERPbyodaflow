@@ -335,6 +335,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     items: [
       { key: "settings-org", label: "Organization Profile", href: "/settings/org", icon: "Building", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       { key: "settings-platform", label: "Platform Control", href: "/settings/platform", icon: "Shield", moduleKey: "settings", requiresPermissions: ["platform.read"] },
+      { key: "settings-billing", label: "Billing", href: "/settings/billing", icon: "CreditCard", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       { key: "settings-entities", label: "Entities", href: "/settings/organization/entities", icon: "Building2", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       { key: "settings-branches", label: "Branches", href: "/settings/branches", icon: "MapPin", moduleKey: "settings", termKey: "branch", requiresPermissions: ["settings.branches.read"] },
       { key: "settings-users-roles", label: "Users & Roles", href: "/settings/users-roles", icon: "Users", moduleKey: "settings", requiresPermissions: ["settings.users.read"] },
@@ -371,6 +372,15 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         { key: "settings-customizer-workflows", label: "Workflows", href: "/settings/customizer/workflows", icon: "Workflow", moduleKey: "settings", requiresPermissions: ["settings.customizer.read"] },
         { key: "settings-customizer-dashboards", label: "Dashboards", href: "/settings/customizer/dashboards", icon: "LayoutDashboard", moduleKey: "settings", requiresPermissions: ["settings.customizer.read"] },
       ]},
+    ],
+  },
+  {
+    key: "help",
+    label: "Help & Tutorial",
+    moduleKey: "dashboard",
+    order: 21,
+    items: [
+      { key: "tutorial", label: "Tutorial", href: "/tutorial", icon: "BookOpen", moduleKey: "dashboard" },
     ],
   },
 ];

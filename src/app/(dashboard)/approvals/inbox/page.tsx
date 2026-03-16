@@ -15,7 +15,7 @@ import { approveApprovalApi, fetchApprovalInbox, rejectApprovalApi } from "@/lib
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-export default function ApprovalsInboxPage() {
+function ApprovalsInboxContent() {
   const searchParams = useSearchParams();
   const [selected, setSelected] = React.useState<ApprovalItem | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -189,5 +189,20 @@ export default function ApprovalsInboxPage() {
         onReject={handleReject}
       />
     </PageShell>
+  );
+}
+
+export default function ApprovalsInboxPage() {
+  return (
+    <React.Suspense fallback={
+      <PageShell>
+        <PageHeader title="Approvals Inbox" description="Items requiring your approval" breadcrumbs={[{ label: "Approvals", href: "/approvals/inbox" }, { label: "Inbox" }]} sticky showCommandHint />
+        <div className="p-6">
+          <p className="text-sm text-muted-foreground py-8 text-center">Loading...</p>
+        </div>
+      </PageShell>
+    }>
+      <ApprovalsInboxContent />
+    </React.Suspense>
   );
 }

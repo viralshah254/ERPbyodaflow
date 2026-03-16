@@ -43,7 +43,7 @@ type ARCustomerRow = {
   status?: string;
 };
 
-export default function ARCustomersPage() {
+function ARCustomersContent() {
   const searchParams = useSearchParams();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -553,5 +553,20 @@ export default function ARCustomersPage() {
         </div>
       </EntityDrawer>
     </PageShell>
+  );
+}
+
+export default function ARCustomersPage() {
+  return (
+    <React.Suspense fallback={
+      <PageShell>
+        <PageHeader title="AR Customers" description="Customers with credit limit, payment terms, and AR settings" breadcrumbs={[{ label: "Finance", href: "/finance" }, { label: "AR Customers" }]} sticky showCommandHint />
+        <div className="p-6">
+          <p className="text-sm text-muted-foreground py-8 text-center">Loading...</p>
+        </div>
+      </PageShell>
+    }>
+      <ARCustomersContent />
+    </React.Suspense>
   );
 }

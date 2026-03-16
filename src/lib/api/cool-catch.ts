@@ -128,6 +128,12 @@ export type CreateFranchiseOutletResult = {
   userId: string;
   adminEmail: string;
   initialPassword: string;
+  billingImpact?: {
+    invoiceId: string;
+    proratedCents?: number;
+    charged?: boolean;
+    lineItems?: { description: string; amountCents: number }[];
+  };
   message?: string;
 };
 

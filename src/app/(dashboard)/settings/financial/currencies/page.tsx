@@ -15,6 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import type { SearchableSelectOption } from "@/components/ui/searchable-select";
+import { CURRENCY_LIST, getCurrencyByCode } from "@/lib/data/currencies";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import type { CurrencyCode } from "@/lib/org/financial-settings";
 import { BaseCurrencyCard } from "@/components/settings/financial/BaseCurrencyCard";
@@ -33,10 +36,34 @@ export default function CurrenciesSettingsPage() {
   const { settings, update } = useFinancialSettings();
   const [addOpen, setAddOpen] = React.useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
+  const [selectedCurrencyCode, setSelectedCurrencyCode] = React.useState("");
   const [newCurrencyCode, setNewCurrencyCode] = React.useState("");
   const [newCurrencyName, setNewCurrencyName] = React.useState("");
   const [newCurrencySymbol, setNewCurrencySymbol] = React.useState("");
   const [currencies, setCurrencies] = React.useState<FinancialCurrencyRow[]>([]);
+
+  const currencySelectOptions: SearchableSelectOption[] = React.useMemo(() => {
+    const enabledSet = new Set(settings.enabledCurrencies);
+    return CURRENCY_LIST.filter((c) => !enabledSet.has(c.code as CurrencyCode))
+      .map((c) => ({ id: c.code, label: `${c.code} - ${c.name}` }));
+  }, [settings.enabledCurrencies]);
+
+  const onCurrencySelect = React.useCallback((code: string) => {
+    setSelectedCurrencyCode(code);
+    const c = getCurrencyByCode(code);
+    if (c) {
+      setNewCurrencyCode(c.code);
+      setNewCurrencyName(c.name);
+      setNewCurrencySymbol(c.symbol);
+    }
+  }, []);
+
+  const resetAddForm = React.useCallback(() => {
+    setSelectedCurrencyCode("");
+    setNewCurrencyCode("");
+    setNewCurrencyName("");
+    setNewCurrencySymbol("");
+  }, []);
 
   const loadCurrencies = React.useCallback(async () => {
     try {
@@ -100,9 +127,7 @@ export default function CurrenciesSettingsPage() {
         await loadCurrencies();
         toast.success(`Currency ${code} enabled.`);
         setAddOpen(false);
-        setNewCurrencyCode("");
-        setNewCurrencyName("");
-        setNewCurrencySymbol("");
+        resetAddForm();
       })
       .catch((error) => toast.error((error as Error).message));
   };
@@ -198,7 +223,13 @@ export default function CurrenciesSettingsPage() {
         </Card>
       </div>
 
-      <Sheet open={addOpen} onOpenChange={setAddOpen}>
+      <Sheet
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) resetAddForm();
+        }}
+      >
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Add currency</SheetTitle>
@@ -208,16 +239,39 @@ export default function CurrenciesSettingsPage() {
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
+              <Label>Currency</Label>
+              <SearchableSelect
+                value={selectedCurrencyCode}
+                onValueChange={onCurrencySelect}
+                options={currencySelectOptions}
+                placeholder="Search by code or name..."
+                searchPlaceholder="Search by code or name..."
+                emptyMessage="No currencies found or already enabled."
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Code</Label>
-              <Input placeholder="e.g. CHF" value={newCurrencyCode} onChange={(e) => setNewCurrencyCode(e.target.value)} />
+              <Input
+                placeholder="e.g. CHF"
+                value={newCurrencyCode}
+                onChange={(e) => setNewCurrencyCode(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input placeholder="e.g. Swiss Franc" value={newCurrencyName} onChange={(e) => setNewCurrencyName(e.target.value)} />
+              <Input
+                placeholder="e.g. Swiss Franc"
+                value={newCurrencyName}
+                onChange={(e) => setNewCurrencyName(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Symbol</Label>
-              <Input placeholder="e.g. CHF" value={newCurrencySymbol} onChange={(e) => setNewCurrencySymbol(e.target.value)} />
+              <Input
+                placeholder="e.g. CHF"
+                value={newCurrencySymbol}
+                onChange={(e) => setNewCurrencySymbol(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Decimals</Label>

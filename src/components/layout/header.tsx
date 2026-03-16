@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound } from "lucide-react";
+import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound, BookOpen } from "lucide-react";
 import { signOut as firebaseSignOut } from "@/lib/firebase";
 import { setApiAuth } from "@/lib/api/client";
 
@@ -59,6 +59,12 @@ export function Header() {
         </div>
       )}
 
+      {/* Tutorial / Help */}
+      <Button variant="ghost" size="icon" asChild title="Tutorial">
+        <Link href="/tutorial">
+          <BookOpen className="h-5 w-5" />
+        </Link>
+      </Button>
       {/* Copilot */}
       <Button variant="ghost" size="icon" onClick={openDrawer} title="Open Copilot">
         <Sparkles className="h-5 w-5" />

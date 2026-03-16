@@ -3,8 +3,16 @@ export type UserRow = {
   email: string;
   firstName: string;
   lastName: string;
+  status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
+  copilotEnabled?: boolean;
   roleIds: string[];
   roleNames: string[];
+  billingImpact?: {
+    invoiceId: string;
+    proratedCents?: number;
+    charged?: boolean;
+    lineItems?: { description: string; amountCents: number }[];
+  };
 };
 
 export type RoleRow = {

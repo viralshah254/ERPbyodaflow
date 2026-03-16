@@ -63,9 +63,11 @@ export default function PlatformSubscriptionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Tenant</TableHead>
+                  <TableHead>Org</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Cycle</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Billing mix</TableHead>
                   <TableHead>Period</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -75,12 +77,18 @@ export default function PlatformSubscriptionsPage() {
                   <TableRow key={s.id}>
                     <TableCell>
                       <Link href={`/platform/customers/${s.tenantId}`} className="font-medium hover:underline">
-                        {s.tenantId}
+                          {s.tenantName ?? s.tenantId}
                       </Link>
                     </TableCell>
+                      <TableCell>{s.orgName ?? s.orgId}</TableCell>
                     <TableCell>{s.plan}</TableCell>
                     <TableCell>{s.billingCycle}</TableCell>
                     <TableCell>{s.status}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {s.billingSnapshot
+                          ? `${s.billingSnapshot.franchiseCount} franchise(s), ${s.billingSnapshot.activeUserCount} users, ${s.billingSnapshot.billableAdditionalUserCount} extra seats`
+                          : "—"}
+                      </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {s.currentPeriodStart} – {s.currentPeriodEnd}
                     </TableCell>

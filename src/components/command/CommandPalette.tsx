@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useUIStore } from "@/stores/ui-store";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { getTutorialForRoute } from "@/config/tutorial";
 import {
   COMMAND_NAV_ITEMS,
   COMMAND_CREATE_ITEMS,
@@ -73,10 +74,12 @@ function getIntentPreview(query: string): string {
 
 export function CommandPalette() {
   const router = useRouter();
+  const pathname = usePathname();
   const open = useUIStore((s) => s.commandPaletteOpen);
   const setOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
+  const setContext = useCopilotStore((s) => s.setContext);
 
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState(0);
@@ -179,12 +182,27 @@ export function CommandPalette() {
       }
       if (item.group === "copilot" && "copilotPrompt" in item) {
         setOpen(false);
-        const prompt = (item as { copilotPrompt?: string }).copilotPrompt;
-        if (prompt?.trim()) openDrawerWithPrompt(prompt);
-        else openDrawer();
+        const copilotItem = item as { id?: string; copilotPrompt?: string };
+        if (copilotItem.id === "copilot-ask" && pathname) {
+          const tutorial = getTutorialForRoute(pathname);
+          if (tutorial) {
+            setContext({
+              page: tutorial.itemLabel ?? tutorial.chapterTitle,
+              route: pathname,
+            });
+            openDrawerWithPrompt(tutorial.copilotPrompt);
+          } else {
+            setContext({ route: pathname });
+            openDrawerWithPrompt("Explain this page and suggest next steps.");
+          }
+        } else {
+          const prompt = copilotItem.copilotPrompt;
+          if (prompt?.trim()) openDrawerWithPrompt(prompt);
+          else openDrawer();
+        }
       }
     },
-    [router, setOpen, openDrawer, openDrawerWithPrompt]
+    [router, pathname, setOpen, openDrawer, openDrawerWithPrompt, setContext]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

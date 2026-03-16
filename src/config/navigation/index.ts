@@ -1,6 +1,5 @@
 import type { User } from "@/types/erp";
 import type { TemplateOrgType, ModuleKey, FeatureFlagKey, TerminologyOverrides } from "@/config/industryTemplates/index";
-import { can } from "@/lib/rbac/can";
 import { t } from "@/lib/terminology";
 import type { NavSectionConfig, NavItemConfig } from "./types";
 import { NAV_SECTIONS_CONFIG } from "./sections";
@@ -34,20 +33,8 @@ export interface BuildVisibleNavInput {
   user: User | null;
 }
 
-function itemPasses(
-  item: NavItemConfig,
-  input: BuildVisibleNavInput
-): boolean {
-  if (item.moduleKey && !input.enabledModules.includes(item.moduleKey)) return false;
-  if (item.requiresOrgTypes?.length && input.orgType && !item.requiresOrgTypes.includes(input.orgType)) return false;
-  if (item.requiresFlags?.length) {
-    const allOn = item.requiresFlags.every((f) => input.featureFlags[f] === true);
-    if (!allOn) return false;
-  }
-  if (item.requiresPermissions?.length) {
-    const allPass = item.requiresPermissions.every((p) => can(input.user, p));
-    if (!allPass) return false;
-  }
+/** Include all nav items so the full nav is visible; route-level auth still applies on navigation. */
+function itemPasses(_item: NavItemConfig, _input: BuildVisibleNavInput): boolean {
   return true;
 }
 
@@ -75,18 +62,30 @@ function resolveItems(items: NavItemConfig[], input: BuildVisibleNavInput): Reso
   return out;
 }
 
-/** Build visible nav sections ordered by template.defaultNav, with module/flag/orgType/permission gating and terminology applied */
+/** Build visible nav sections. Shows every section from the config; defaultNav only controls order.
+ * Module/flag/orgType/permission gating and terminology are applied. Core is always first when dashboard is enabled. */
 export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection[] {
-  const order = input.defaultNav.length ? input.defaultNav : NAV_SECTIONS_CONFIG.map((s) => s.key);
+  const fullSectionKeys = NAV_SECTIONS_CONFIG.map((s) => s.key);
+  // Include every section from config; use defaultNav only for ordering (sections in defaultNav first, then the rest in config order)
+  const fullSectionKeysStr = fullSectionKeys as readonly string[];
+  let order: string[] = input.defaultNav.length
+    ? [
+        ...input.defaultNav.filter((k) => fullSectionKeysStr.includes(k)),
+        ...fullSectionKeys.filter((k) => !input.defaultNav.includes(k)),
+      ]
+    : [...fullSectionKeys];
+  // Core (Dashboard, Control Tower, etc.) first when dashboard module is enabled
+  if (input.enabledModules.includes("dashboard")) {
+    if (!order.includes("core")) order = ["core", ...order];
+    else if (order[0] !== "core") order = ["core", ...order.filter((k) => k !== "core")];
+  }
   const byKey = new Map<string, NavSectionConfig>(NAV_SECTIONS_CONFIG.map((s) => [s.key, s]));
   const result: ResolvedNavSection[] = [];
 
   for (const sectionKey of order) {
     const section = byKey.get(sectionKey);
     if (!section) continue;
-    if (section.moduleKey && !input.enabledModules.includes(section.moduleKey)) continue;
-    if (section.requiresOrgTypes?.length && input.orgType && !section.requiresOrgTypes.includes(input.orgType)) continue;
-
+    // Show every section (no module/orgType gating); full nav visible, route-level auth on navigation
     const items = resolveItems(section.items, input);
     if (items.length === 0) continue;
 

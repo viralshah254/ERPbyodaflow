@@ -49,6 +49,7 @@ const SEAFOOD_DISTRIBUTOR_TEMPLATE: IndustryTemplateDefinition = {
     "analytics",
     "automation",
     "settings",
+    "help",
   ],
   featureFlags: {
     batchExpiry: true,
@@ -165,6 +166,7 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       "analytics",
       "automation",
       "settings",
+      "help",
     ],
     featureFlags: {
       batchExpiry: true,
@@ -253,6 +255,7 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       "analytics",
       "automation",
       "settings",
+      "help",
     ],
     featureFlags: {
       batchExpiry: true,
@@ -343,6 +346,7 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       "analytics",
       "automation",
       "settings",
+      "help",
     ],
     featureFlags: {
       approvals: true,

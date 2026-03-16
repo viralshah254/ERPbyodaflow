@@ -103,6 +103,12 @@ export function SetupChecklistCard() {
             Setup guide <Icons.ArrowRight className="h-3 w-3" />
           </Link>
           <Link
+            href="/tutorial"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            Full product tutorial <Icons.ArrowRight className="h-3 w-3" />
+          </Link>
+          <Link
             href="/signup/onboarding"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >

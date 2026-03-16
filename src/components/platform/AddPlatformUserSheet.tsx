@@ -67,7 +67,7 @@ export function AddPlatformUserSheet({
     }
     setSaving(true);
     try {
-      await createPlatformUserApi({
+      const result = await createPlatformUserApi({
         email: email.trim().toLowerCase(),
         firstName: firstName.trim() || undefined,
         lastName: lastName.trim() || undefined,
@@ -76,6 +76,13 @@ export function AddPlatformUserSheet({
         mustChangePassword,
       });
       toast.success("User created. Share the sign-in link and temporary password securely.");
+      if (result.billingImpact?.invoiceId) {
+        toast.info(
+          result.billingImpact.lineItems?.length
+            ? `Billing created: ${result.billingImpact.lineItems.map((line) => line.description).join(", ")}`
+            : `Billing linked: invoice ${result.billingImpact.invoiceId.slice(0, 8)}…`
+        );
+      }
       handleOpenChange(false);
       onSuccess?.();
     } catch (err) {

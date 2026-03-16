@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import * as Icons from "lucide-react";
 import { useUIStore } from "@/stores/ui-store";
 import { CommandPaletteHint } from "@/components/command/CommandPaletteHint";
+import { PageHelp } from "@/components/tutorial/PageHelp";
 
 interface Breadcrumb {
   label: string;
@@ -69,7 +70,8 @@ export function PageHeader({
           {description && (
             <p className="text-sm text-muted-foreground mt-1">{description}</p>
           )}
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <PageHelp />
             {showCommandHint && (
               <CommandPaletteHint />
             )}

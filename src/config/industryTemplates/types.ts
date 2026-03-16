@@ -78,7 +78,8 @@ export type NavSectionKey =
   | "automation"
   | "analytics"
   | "settings"
-  | "docs";
+  | "docs"
+  | "help";
 
 /** Terminology keys — t(key) resolves from template.terminology */
 export type TerminologyKey =

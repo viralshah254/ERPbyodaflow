@@ -25,6 +25,10 @@ export interface CopilotContext {
   dateFrom?: string;
   dateTo?: string;
   role?: string;
+  /** Current page/section title when opened from Tutorial or PageHelp */
+  page?: string;
+  /** Current route pathname for contextual Copilot responses */
+  route?: string;
 }
 
 export interface CopilotResponse {

@@ -203,6 +203,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
 
   // Settings
   { path: "/settings/org", module: "settings", description: "Organization profile", inNav: true },
+  { path: "/settings/billing", module: "settings", description: "Billing", inNav: true },
   { path: "/settings/organization/entities", module: "settings", description: "Entities", inNav: true },
   { path: "/settings/branches", module: "settings", description: "Branches", inNav: true },
   { path: "/settings/users-roles", module: "settings", description: "Users & roles", inNav: true },

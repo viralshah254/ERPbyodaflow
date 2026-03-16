@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import * as Icons from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { apiRequest } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
@@ -29,6 +30,7 @@ export default function ChangePasswordPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
   const {
     register,
     handleSubmit,
@@ -89,12 +91,29 @@ export default function ChangePasswordPage() {
             )}
             <div className="space-y-2">
               <Label htmlFor="newPassword">New password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                placeholder="••••••••"
-                {...register("newPassword")}
-              />
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  className="pr-10"
+                  {...register("newPassword")}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? (
+                    <Icons.EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Icons.Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
               {errors.newPassword && (
                 <p className="text-sm text-destructive">
                   {errors.newPassword.message}
@@ -103,12 +122,29 @@ export default function ChangePasswordPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="••••••••"
-                {...register("confirmPassword")}
-              />
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  className="pr-10"
+                  {...register("confirmPassword")}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? (
+                    <Icons.EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Icons.Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
               {errors.confirmPassword && (
                 <p className="text-sm text-destructive">
                   {errors.confirmPassword.message}

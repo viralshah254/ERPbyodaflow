@@ -60,7 +60,14 @@ export default function UsersRolesPage() {
   const [roleSheetOpen, setRoleSheetOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<UserRow | null>(null);
   const [editingRole, setEditingRole] = React.useState<RoleDetailRow | null>(null);
-  const [userForm, setUserForm] = React.useState({ email: "", firstName: "", lastName: "", roleIds: [] as string[] });
+  const [userForm, setUserForm] = React.useState({
+    email: "",
+    firstName: "",
+    lastName: "",
+    status: "ACTIVE" as "ACTIVE" | "INACTIVE" | "SUSPENDED",
+    copilotEnabled: false,
+    roleIds: [] as string[],
+  });
   const [roleForm, setRoleForm] = React.useState({ name: "", description: "", permissions: [] as string[] });
 
   const allPerms = React.useMemo(() => getAllPermissions(), []);
@@ -80,7 +87,7 @@ export default function UsersRolesPage() {
 
   const openCreateUser = () => {
     setEditingUser(null);
-    setUserForm({ email: "", firstName: "", lastName: "", roleIds: [] });
+    setUserForm({ email: "", firstName: "", lastName: "", status: "ACTIVE", copilotEnabled: false, roleIds: [] });
     setUserSheetOpen(true);
   };
 
@@ -90,6 +97,8 @@ export default function UsersRolesPage() {
       email: u.email,
       firstName: u.firstName,
       lastName: u.lastName,
+      status: u.status ?? "ACTIVE",
+      copilotEnabled: u.copilotEnabled === true,
       roleIds: [...u.roleIds],
     });
     setUserSheetOpen(true);
@@ -168,6 +177,8 @@ export default function UsersRolesPage() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Copilot</TableHead>
                       <TableHead>Roles</TableHead>
                       <TableHead className="w-24" />
                     </TableRow>
@@ -175,7 +186,7 @@ export default function UsersRolesPage() {
                   <TableBody>
                     {loading && users.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-muted-foreground">
+                        <TableCell colSpan={6} className="text-muted-foreground">
                           Loading users...
                         </TableCell>
                       </TableRow>
@@ -184,6 +195,8 @@ export default function UsersRolesPage() {
                       <TableRow key={u.id}>
                         <TableCell className="font-medium">{u.firstName} {u.lastName}</TableCell>
                         <TableCell>{u.email}</TableCell>
+                        <TableCell>{u.status ?? "ACTIVE"}</TableCell>
+                        <TableCell>{u.copilotEnabled ? "On" : "Off"}</TableCell>
                         <TableCell className="text-muted-foreground">{u.roleNames.join(", ")}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
@@ -283,6 +296,37 @@ export default function UsersRolesPage() {
                 />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <select
+                  value={userForm.status}
+                  onChange={(e) =>
+                    setUserForm((p) => ({
+                      ...p,
+                      status: e.target.value as "ACTIVE" | "INACTIVE" | "SUSPENDED",
+                    }))
+                  }
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Billing add-ons</Label>
+                <label className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <Checkbox
+                    checked={userForm.copilotEnabled}
+                    onCheckedChange={(checked) =>
+                      setUserForm((p) => ({ ...p, copilotEnabled: checked === true }))
+                    }
+                  />
+                  <span className="text-sm">Enable Copilot for this user</span>
+                </label>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Roles</Label>
               <div className="flex flex-wrap gap-2">
@@ -296,6 +340,9 @@ export default function UsersRolesPage() {
                   </label>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Active users are billed immediately with month-end reconciliation. Franchise outlets include 2 seats before additional-seat charges apply.
+              </p>
             </div>
           </div>
           <SheetFooter className="mt-6">
@@ -306,21 +353,39 @@ export default function UsersRolesPage() {
                 try {
                   setSavingUser(true);
                   if (editingUser) {
-                    await updateUserApi(editingUser.id, {
+                    const updated = await updateUserApi(editingUser.id, {
                       email: userForm.email,
                       firstName: userForm.firstName,
                       lastName: userForm.lastName,
+                      status: userForm.status,
+                      copilotEnabled: userForm.copilotEnabled,
                       roleIds: userForm.roleIds,
                     });
                     toast.success("User updated.");
+                    if (updated.billingImpact?.invoiceId) {
+                      toast.info(
+                        updated.billingImpact.lineItems?.length
+                          ? `Billing updated: ${updated.billingImpact.lineItems.map((line) => line.description).join(", ")}`
+                          : `Billing linked: invoice ${updated.billingImpact.invoiceId.slice(0, 8)}…`
+                      );
+                    }
                   } else {
-                    await createUserApi({
+                    const created = await createUserApi({
                       email: userForm.email,
                       firstName: userForm.firstName,
                       lastName: userForm.lastName,
+                      status: userForm.status,
+                      copilotEnabled: userForm.copilotEnabled,
                       roleIds: userForm.roleIds,
                     });
                     toast.success("User created.");
+                    if (created.billingImpact?.invoiceId) {
+                      toast.info(
+                        created.billingImpact.lineItems?.length
+                          ? `Billing created: ${created.billingImpact.lineItems.map((line) => line.description).join(", ")}`
+                          : `Billing linked: invoice ${created.billingImpact.invoiceId.slice(0, 8)}…`
+                      );
+                    }
                   }
                   setUserSheetOpen(false);
                   await refreshUsers();

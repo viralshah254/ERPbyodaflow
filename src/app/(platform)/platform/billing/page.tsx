@@ -133,6 +133,7 @@ export default function PlatformBillingPage() {
                   <TableHead>ID</TableHead>
                   <TableHead>Tenant</TableHead>
                   <TableHead>Period</TableHead>
+                  <TableHead>Breakdown</TableHead>
                   <TableHead>Due</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -150,6 +151,17 @@ export default function PlatformBillingPage() {
                     <TableCell className="text-muted-foreground text-sm">
                       {inv.periodStart} – {inv.periodEnd}
                     </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <div className="space-y-1">
+                          {inv.lineItems.slice(0, 3).map((line, index) => (
+                            <div key={`${inv.id}-${index}`}>
+                              {line.description}: {formatCents(line.amountCents)}
+                              {line.prorated ? " · prorated" : ""}
+                            </div>
+                          ))}
+                          {inv.lineItems.length > 3 ? <div>+{inv.lineItems.length - 3} more lines</div> : null}
+                        </div>
+                      </TableCell>
                     <TableCell className="text-sm">{inv.dueDate}</TableCell>
                     <TableCell>{inv.status}</TableCell>
                     <TableCell className="text-right font-medium">{formatCents(inv.totalCents)}</TableCell>

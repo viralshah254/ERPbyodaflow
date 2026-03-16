@@ -12,9 +12,16 @@ type BackendUser = {
   firstName?: string;
   lastName?: string;
   status?: string;
+  copilotEnabled?: boolean;
   branchIds?: string[];
   roleIds?: string[];
   roleNames?: string[];
+  billingImpact?: {
+    invoiceId: string;
+    proratedCents?: number;
+    charged?: boolean;
+    lineItems?: { description: string; amountCents: number }[];
+  };
 };
 
 type BackendRole = {
@@ -32,8 +39,11 @@ function mapUser(user: BackendUser): UserRow {
     email: user.email,
     firstName: user.firstName ?? "",
     lastName: user.lastName ?? "",
+    status: user.status as UserRow["status"],
+    copilotEnabled: user.copilotEnabled ?? false,
     roleIds: user.roleIds ?? [],
     roleNames: user.roleNames ?? [],
+    billingImpact: user.billingImpact,
   };
 }
 

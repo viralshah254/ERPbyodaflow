@@ -220,6 +220,11 @@ export function CopilotChat({
               </Button>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            <Link href="/tutorial" className="hover:text-foreground underline">
+              Open product tutorial
+            </Link>
+          </p>
         </div>
       )}
 

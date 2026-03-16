@@ -84,6 +84,13 @@ export default function FranchiseOutletsPage() {
       toast.success(
         `Franchisee created. They can log in with ${result.adminEmail} and the password you set. Ask them to change it on first sign-in.`
       );
+      if (result.billingImpact?.invoiceId) {
+        toast.info(
+          result.billingImpact.lineItems?.length
+            ? `Billing created: ${result.billingImpact.lineItems.map((line) => line.description).join(", ")}`
+            : `Billing linked: invoice ${result.billingImpact.invoiceId.slice(0, 8)}…`
+        );
+      }
     } catch (err) {
       const msg = err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "Failed to create franchisee";
       toast.error(msg);
@@ -162,6 +169,9 @@ export default function FranchiseOutletsPage() {
               Create a new outlet and admin user. They will be able to log in with the email and password you set.
             </SheetDescription>
           </SheetHeader>
+          <div className="mt-4 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            Each active franchise outlet is billed at $50/month and includes 2 users before additional-seat charges apply. Mid-month setup is prorated through month end.
+          </div>
           <div className="grid gap-4 py-6">
             <div className="space-y-2">
               <Label htmlFor="name">Outlet / franchisee name</Label>

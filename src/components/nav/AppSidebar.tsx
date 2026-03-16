@@ -3,7 +3,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUIStore } from "@/stores/ui-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -102,18 +101,16 @@ export function AppSidebar({ className }: AppSidebarProps) {
         </Button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <ScrollArea className="h-full">
-          <nav className="p-2 space-y-4">
-            {visibleSections.map((section) => (
-              <NavSection
-                key={section.id}
-                section={section}
-                isCollapsed={sidebarCollapsed}
-              />
-            ))}
-          </nav>
-        </ScrollArea>
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <nav className="p-2 space-y-4">
+          {visibleSections.map((section) => (
+            <NavSection
+              key={section.id}
+              section={section}
+              isCollapsed={sidebarCollapsed}
+            />
+          ))}
+        </nav>
       </div>
     </div>
   );
