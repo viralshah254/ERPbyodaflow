@@ -12,9 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   fetchProductsApi,
+  deleteProductApi,
 } from "@/lib/api/products";
-import type { ProductRow } from "@/lib/mock/masters";
-import { productDelete } from "@/lib/api/stub-endpoints";
+import { setProductsCache } from "@/lib/data/products.repo";
+import type { ProductRow } from "@/lib/types/masters";
 import { canDeleteEntity } from "@/lib/permissions";
 import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
@@ -62,6 +63,7 @@ export default function ProductsPage() {
     void fetchProductsApi()
       .then((products) => {
         if (!active) return;
+        setProductsCache(products);
         setRows(products.map(buildProductRow));
       })
       .catch((err) => {
@@ -99,7 +101,7 @@ export default function ProductsPage() {
   const handleDelete = async (id: string) => {
     setRows((prev) => prev.filter((p) => p.id !== id));
     try {
-      await productDelete(id);
+      await deleteProductApi(id);
       toast.success("Product deleted.");
     } catch (err) {
       toast.error((err as Error).message);

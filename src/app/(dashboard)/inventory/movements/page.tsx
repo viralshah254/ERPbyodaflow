@@ -7,7 +7,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { downloadCsv } from "@/lib/export/csv";
-import type { MovementRow } from "@/lib/mock/movements";
+import type { MovementRow } from "@/lib/types/inventory";
 import { fetchInventoryMovementsApi } from "@/lib/api/inventory-stock";
 import { toast } from "sonner";
 

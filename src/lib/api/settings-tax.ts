@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { KenyaWhtCode } from "@/lib/mock/tax/kenya";
+import type { KenyaWhtCode } from "@/lib/types/tax-kenya";
 
 type BackendTaxCode = {
   id: string;

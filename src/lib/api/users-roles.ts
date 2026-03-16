@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import { type RoleRow, type UserRow } from "@/lib/mock/users-roles";
+import type { RoleRow, UserRow } from "@/lib/types/users-roles";
 
 export interface RoleDetailRow extends RoleRow {
   scope?: "ORG" | "BRANCH" | "DEPARTMENT";

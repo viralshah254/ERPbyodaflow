@@ -42,6 +42,11 @@ export default function AnalyticsInsightsPage() {
     };
   }, []);
 
+  const recommendationProductId = inventoryInsights?.data.find((item) => item.productId)?.productId;
+  const recommendationLink = recommendationProductId
+    ? `/master/products/${recommendationProductId}/pricing`
+    : "/master/products";
+
   return (
     <PageShell>
       <PageHeader
@@ -88,7 +93,7 @@ export default function AnalyticsInsightsPage() {
           title="Fix margin on SKU-002"
           summary="Gross margin 12% vs target 25%. Consider list or cost review."
           actionLabel="Open pricing"
-          actionHref="/master/products/p2/pricing"
+          actionHref={recommendationLink}
         />
         <SimulationCard
           title="Price tier +5%"

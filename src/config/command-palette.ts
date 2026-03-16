@@ -60,6 +60,7 @@ export const COMMAND_NAV_ITEMS: CommandItemNav[] = [
   { id: "nav-taxes", label: "Taxes", group: "nav", href: "/settings/financial/taxes", keywords: ["tax", "vat", "financial"], icon: "Receipt" },
   { id: "nav-fiscal", label: "Fiscal years", group: "nav", href: "/settings/financial/fiscal-years", keywords: ["fiscal", "periods", "close"], icon: "Calendar" },
   { id: "nav-users", label: "Users & Roles", group: "nav", href: "/settings/users-roles", keywords: ["rbac", "users", "roles", "permissions"], icon: "Users" },
+  { id: "nav-migrations", label: "Migration Console", group: "nav", href: "/settings/migrations", keywords: ["migration", "import", "zoho", "quickbooks", "sap", "dry run"], icon: "DatabaseZap" },
   { id: "nav-sequences", label: "Numbering sequences", group: "nav", href: "/settings/sequences", keywords: ["numbering", "sequences", "prefix"], icon: "Hash" },
   { id: "nav-warehouse", label: "Warehouse Overview", group: "nav", href: "/warehouse/overview", keywords: ["warehouse", "pick", "pack", "putaway", "transfers"], icon: "LayoutDashboard" },
   { id: "nav-warehouse-transfers", label: "Warehouse Transfers", group: "nav", href: "/warehouse/transfers", keywords: ["transfers", "warehouse"], icon: "Truck" },

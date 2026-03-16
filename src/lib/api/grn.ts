@@ -4,8 +4,7 @@
  */
 
 import { apiRequest, downloadFile, downloadTextFile, requireLiveApi } from "@/lib/api/client";
-import { type GrnDetailRow } from "@/lib/mock/purchasing";
-import type { PurchasingDocRow } from "@/lib/mock/purchasing";
+import { type GrnDetailRow, type PurchasingDocRow } from "@/lib/types/purchasing";
 
 export type { GrnDetailRow };
 

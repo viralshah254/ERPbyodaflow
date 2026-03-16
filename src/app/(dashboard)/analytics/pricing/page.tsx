@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 export default function AnalyticsPricingPage() {
   const [leakageRows, setLeakageRows] = React.useState<
-    Array<{ sku: string; listPrice: number; realizedPrice: number; leakagePct: number }>
+    Array<{ productId: string; sku: string; listPrice: number; realizedPrice: number; leakagePct: number }>
   >([]);
   const [integrityRows, setIntegrityRows] = React.useState<
     Array<{ sku: string; issue: "ok" | "warning"; detail: string }>
@@ -35,6 +35,7 @@ export default function AnalyticsPricingPage() {
             const listPrice = priceByProduct.get(row.productId) ?? 0;
             const leakagePct = listPrice > 0 ? Math.round(((listPrice - row.unitCost) / listPrice) * 1000) / 10 : 0;
             return {
+              productId: row.productId,
               sku: row.sku,
               listPrice,
               realizedPrice: row.unitCost,
@@ -80,6 +81,10 @@ export default function AnalyticsPricingPage() {
     };
   }, []);
 
+  const primaryProductLink = leakageRows[0]?.productId
+    ? `/master/products/${leakageRows[0].productId}/pricing`
+    : "/master/products";
+
   return (
     <PageShell>
       <PageHeader
@@ -100,7 +105,7 @@ export default function AnalyticsPricingPage() {
           description="List vs realized price; leakage %"
           action={
             <Button size="sm" variant="outline" asChild>
-              <Link href="/master/products/p1/pricing">Fix pricing</Link>
+              <Link href={primaryProductLink}>Fix pricing</Link>
             </Button>
           }
         >

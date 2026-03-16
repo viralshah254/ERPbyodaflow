@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { WarehouseRow } from "@/lib/mock/masters";
+import type { WarehouseRow } from "@/lib/types/masters";
 import { fetchBranchOptions } from "@/lib/api/lookups";
 import {
   createWarehouseApi,

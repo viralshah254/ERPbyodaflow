@@ -110,6 +110,35 @@ export async function fetchFranchiseNetworkOutlets(): Promise<FranchiseNetworkOu
   return payload.items ?? [];
 }
 
+export type CreateFranchiseOutletPayload = {
+  name: string;
+  outletCode: string;
+  adminEmail: string;
+  initialPassword: string;
+  territory?: string;
+  storeFormat?: string;
+  managerName?: string;
+  firstName?: string;
+  lastName?: string;
+};
+
+export type CreateFranchiseOutletResult = {
+  id: string;
+  outletId: string;
+  userId: string;
+  adminEmail: string;
+  initialPassword: string;
+  message?: string;
+};
+
+export async function createFranchiseOutletApi(body: CreateFranchiseOutletPayload): Promise<CreateFranchiseOutletResult> {
+  requireLiveApi("Create franchise outlet");
+  return apiRequest<CreateFranchiseOutletResult>("/api/franchise/network/outlets", {
+    method: "POST",
+    body,
+  });
+}
+
 export async function fetchFranchiseOutletWorkspace(): Promise<FranchiseOutletWorkspace> {
   requireLiveApi("Franchise outlet workspace");
   return apiRequest<FranchiseOutletWorkspace>("/api/franchise/outlet/workspace");

@@ -24,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchSequencesApi, saveSequenceApi } from "@/lib/api/sequences";
-import type { SequenceRow } from "@/lib/mock/sequences";
+import type { SequenceRow } from "@/lib/types/sequences";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 

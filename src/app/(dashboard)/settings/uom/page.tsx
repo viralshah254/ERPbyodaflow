@@ -33,19 +33,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  listUoms,
   listConversions,
-  createUom,
-  updateUom,
   deleteUom,
+  setUomsCache,
   validateUomCatalog,
   saveConversion,
   deleteConversion,
-  resetUomFromMocks,
 } from "@/lib/data/uom.repo";
+import { fetchUomsApi, createUomApi, updateUomApi } from "@/lib/api/uom";
 import { canDeleteEntity } from "@/lib/permissions";
 import type { UomDefinition, UomConversion } from "@/lib/products/types";
 import { useAuthStore } from "@/stores/auth-store";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const CATEGORIES = ["base", "weight", "volume", "count"] as const;
@@ -60,13 +59,21 @@ export default function UomSettingsPage() {
   const [editingUom, setEditingUom] = React.useState<UomDefinition | null>(null);
   const [editingConv, setEditingConv] = React.useState<UomConversion | null>(null);
 
-  const refresh = React.useCallback(() => {
-    setUoms(listUoms());
+  const refresh = React.useCallback(async () => {
+    try {
+      const fromApi = await fetchUomsApi();
+      setUoms(fromApi);
+      setUomsCache(fromApi);
+    } catch {
+      setUoms([]);
+    }
     setConversions(listConversions());
     setValidation(validateUomCatalog());
   }, []);
 
-  React.useEffect(() => refresh(), [refresh]);
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const openAddUom = () => {
     setEditingUom(null);
@@ -95,9 +102,6 @@ export default function UomSettingsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { resetUomFromMocks(); refresh(); }}>
-              Reset to defaults
-            </Button>
             <Button size="sm" onClick={openAddUom}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add UOM
@@ -221,11 +225,20 @@ export default function UomSettingsPage() {
         <UomSheet
           initial={editingUom}
           uomCodes={uoms.map((u) => u.code)}
-          onSave={(u) => {
-            if (editingUom) updateUom(editingUom.id, u);
-            else createUom(u);
-            refresh();
-            setSheetOpen(null);
+          onSave={async (u) => {
+            try {
+              const baseRatio = u.isBase ? 1 : (u.factorToBase ?? 1);
+              if (editingUom) {
+                await updateUomApi(editingUom.id, { code: u.code, name: u.name, baseRatio });
+              } else {
+                await createUomApi({ code: u.code, name: u.name, baseRatio });
+              }
+              await refresh();
+              setSheetOpen(null);
+              toast.success(editingUom ? "UOM updated." : "UOM created.");
+            } catch (e) {
+              toast.error((e as Error).message);
+            }
           }}
           onClose={() => setSheetOpen(null)}
         />

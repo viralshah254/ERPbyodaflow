@@ -153,6 +153,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     order: 8.5,
     items: [
       { key: "franchise-outlet-workspace", label: "Outlet Workspace", href: "/franchise/outlet", icon: "Store", moduleKey: "franchise", requiresFlags: ["franchiseLightErp"], requiresPermissions: ["sales.read"] },
+      { key: "franchise-manage-outlets", label: "Manage franchisees", href: "/franchise/outlets", icon: "Users", moduleKey: "franchise", requiresFlags: ["franchiseNetworkMonitoring"], requiresPermissions: ["franchise.network.read"] },
       { key: "franchise-overview", label: "Franchise Overview", href: "/franchise/overview", icon: "LayoutDashboard", moduleKey: "franchise", requiresFlags: ["commissionEngine", "franchiseNetworkMonitoring"], requiresPermissions: ["inventory.read"] },
       { key: "franchise-commission", label: "Commission & Rebates", href: "/franchise/commission", icon: "Percent", moduleKey: "franchise", termKey: "commission", requiresFlags: ["commissionEngine", "franchiseSettlement"], requiresPermissions: ["franchise.commission.read"] },
       { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment", "franchiseNetworkMonitoring"], requiresPermissions: ["inventory.read"] },
@@ -341,6 +342,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "settings-sequences", label: "Numbering Sequences", href: "/settings/sequences", icon: "Hash", moduleKey: "settings", requiresPermissions: ["settings.sequences.read"] },
       { key: "settings-compliance", label: "Compliance", href: "/settings/compliance", icon: "ShieldCheck", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       { key: "settings-notifications", label: "Notifications", href: "/settings/notifications", icon: "Bell", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
+      { key: "settings-migrations", label: "Migration Console", href: "/settings/migrations", icon: "DatabaseZap", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       { key: "settings-payroll", label: "Payroll", href: "/settings/payroll", icon: "CreditCard", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       { key: "settings-audit-log", label: "Audit Log", href: "/settings/audit-log", icon: "FileSearch", moduleKey: "settings", requiresPermissions: ["settings.audit.read"] },
       { key: "settings-financial", label: "Financial", href: "/settings/financial/currencies", icon: "Wallet", moduleKey: "settings", requiresPermissions: ["settings.financial.read"], children: [

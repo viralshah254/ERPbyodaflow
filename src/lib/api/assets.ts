@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { AssetRow, DepreciationMethod } from "@/lib/mock/assets/register";
+import type { AssetRow, DepreciationMethod } from "@/lib/types/assets";
 
 type BackendAsset = {
   id: string;

@@ -1,7 +1,5 @@
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "@/lib/api/client";
-import type { BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
-import type { OverdueInvoiceRow } from "@/lib/mock/treasury/collections";
-import type { BillDueRow, PaymentMethod, PaymentRunRow } from "@/lib/mock/treasury/payment-runs";
+import type { BankAccountRow, BillDueRow, OverdueInvoiceRow, PaymentMethod, PaymentRunRow } from "@/lib/types/treasury";
 
 type BackendBankAccount = {
   id: string;

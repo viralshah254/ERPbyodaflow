@@ -27,14 +27,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import * as Icons from "lucide-react";
 import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
 import { createDocumentApi, previewDocumentPostingApi, type DocumentPostingPreviewLine } from "@/lib/api/documents";
-import { fetchPartiesApi } from "@/lib/api/parties";
+import {
+  fetchPartyByIdApi,
+  searchPartyLookupOptionsApi,
+  toPartyLookupOption,
+  type PartyDetail,
+} from "@/lib/api/parties";
+import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchBranchOptions, fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { fetchCustomerDefaultPriceLists, fetchPriceListOptions } from "@/lib/api/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
+import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import { toast } from "sonner";
 
 const DRAFT_KEY = "odaflow_draft";
@@ -97,15 +106,61 @@ function RenderField({
   field,
   form,
   options,
+  selectedPartyOption,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
   options?: LookupOption[];
+  selectedPartyOption?: { id: string; label: string; description?: string } | null;
 }) {
   const key = fieldIdToKey(field.id);
   const isDate = field.type === "date";
   const isNum = field.type === "number";
+  const isPartyEntity = field.type === "entity" && (field.id === "customer" || field.id === "supplier");
   const hasOptions = Boolean(options?.length) && (field.type === "entity" || field.type === "select");
+
+  if (isPartyEntity) {
+    const role = field.id === "supplier" ? "supplier" : "customer";
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-1">
+          <Label>
+            {field.label}
+            {field.required ? " *" : ""}
+          </Label>
+          <ExplainThis
+            prompt={`Explain: ${field.label} in document context.`}
+            label={`Explain ${field.label}`}
+          />
+        </div>
+        <AsyncSearchableSelect
+          value={(form.watch(key) as string | undefined) || ""}
+          onValueChange={(value) => form.setValue(key, value)}
+          loadOptions={
+            role === "customer"
+              ? searchArCustomerOptionsApi
+              : (query) =>
+                  searchPartyLookupOptionsApi({
+                    role,
+                    status: "ACTIVE",
+                    search: query,
+                    limit: 20,
+                  })
+          }
+          selectedOption={selectedPartyOption}
+          placeholder={`Select ${field.label.toLowerCase()}`}
+          searchPlaceholder="Type name, code, phone, or email"
+          emptyMessage={`No ${field.label.toLowerCase()}s found.`}
+          recentStorageKey={role === "customer" ? "lookup:recent-customers" : "lookup:recent-suppliers"}
+        />
+        {form.formState.errors[key] && (
+          <p className="text-sm text-destructive">
+            {form.formState.errors[key]?.message as string}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   if (field.type === "entity" && hasOptions) {
     return (
@@ -228,6 +283,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [fieldOptions, setFieldOptions] = React.useState<Record<string, LookupOption[]>>({});
   const [customerDefaultPriceLists, setCustomerDefaultPriceLists] = React.useState<Record<string, string>>({});
   const [fallbackPriceListId, setFallbackPriceListId] = React.useState<string>("pl-retail");
+  const [selectedPartyDetail, setSelectedPartyDetail] = React.useState<PartyDetail | null>(null);
+  const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
+  const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
   const storageKey = `${DRAFT_KEY}_${type}`;
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
@@ -265,18 +323,16 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   React.useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetchPartiesApi({ role: "customer", status: "ACTIVE" }),
-      fetchPartiesApi({ role: "supplier", status: "ACTIVE" }),
       fetchBranchOptions(),
       fetchWarehouseOptions(),
       fetchCustomerDefaultPriceLists(),
       fetchPriceListOptions(),
+      fetchPaymentTermsApi(),
+      fetchCustomerCategoriesApi(),
     ])
-      .then(([customers, suppliers, branches, warehouses, customerDefaults, priceLists]) => {
+      .then(([branches, warehouses, customerDefaults, priceLists, paymentTerms, customerCategories]) => {
         if (cancelled) return;
         setFieldOptions({
-          customer: customers.map((item) => ({ id: item.id, label: item.name })),
-          supplier: suppliers.map((item) => ({ id: item.id, label: item.name })),
           branch: branches,
           warehouse: warehouses,
         });
@@ -284,12 +340,18 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           Object.fromEntries(customerDefaults.map((item) => [item.customerId, item.priceListId]))
         );
         setFallbackPriceListId(priceLists[0]?.id ?? "pl-retail");
+        setPaymentTermsNameById(Object.fromEntries(paymentTerms.map((item) => [item.id, item.name])));
+        setCustomerCategoryNameById(
+          Object.fromEntries(customerCategories.map((item) => [item.id, item.name]))
+        );
       })
       .catch(() => {
         if (!cancelled) {
           setFieldOptions({});
           setCustomerDefaultPriceLists({});
           setFallbackPriceListId("pl-retail");
+          setPaymentTermsNameById({});
+          setCustomerCategoryNameById({});
         }
       });
     return () => {
@@ -376,11 +438,33 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const headerFields = headerSection?.fields ?? [];
   const selectedPartyId = form.watch("party");
   const selectedCurrency = form.watch("currency") || baseCurrency;
+  const selectedPartyOption = React.useMemo(
+    () => (selectedPartyDetail ? toPartyLookupOption(selectedPartyDetail) : null),
+    [selectedPartyDetail]
+  );
   const selectedFxDate = form.watch("fxDate") || form.watch("date") || new Date().toISOString().slice(0, 10);
   const resolvedPriceListId =
     (selectedPartyId ? customerDefaultPriceLists[selectedPartyId] : undefined) ?? fallbackPriceListId;
   const lineEditorMode =
     type === "bill" || type === "purchase-order" || type === "grn" ? "purchasing" : "sales";
+
+  React.useEffect(() => {
+    if (!selectedPartyId) {
+      setSelectedPartyDetail(null);
+      return;
+    }
+    let cancelled = false;
+    fetchPartyByIdApi(selectedPartyId)
+      .then((party) => {
+        if (!cancelled) setSelectedPartyDetail(party);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedPartyDetail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPartyId]);
 
   React.useEffect(() => {
     if (selectedCurrency === baseCurrency) {
@@ -436,7 +520,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
             <form className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 {headerFields.map((f) => (
-                    <RenderField key={f.id} field={f} form={form} options={fieldOptions[f.id]} />
+                    <RenderField
+                      key={f.id}
+                      field={f}
+                      form={form}
+                      options={fieldOptions[f.id]}
+                      selectedPartyOption={selectedPartyOption}
+                    />
                 ))}
               </div>
               <div className="border-t pt-4 mt-4">
@@ -503,6 +593,49 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                   )}
                 </div>
               </div>
+              {selectedPartyDetail && (
+                <div className="border-t pt-4 mt-4">
+                  <h4 className="text-sm font-medium mb-3">Customer credit and terms review</h4>
+                  <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                    <p>
+                      <span className="text-muted-foreground">Category:</span>{" "}
+                      {selectedPartyDetail.customerCategoryId
+                        ? customerCategoryNameById[selectedPartyDetail.customerCategoryId] ??
+                          selectedPartyDetail.customerCategoryId
+                        : "—"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Payment terms:</span>{" "}
+                      {selectedPartyDetail.paymentTermsId
+                        ? paymentTermsNameById[selectedPartyDetail.paymentTermsId] ??
+                          selectedPartyDetail.paymentTermsId
+                        : "—"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Credit mode:</span>{" "}
+                      {selectedPartyDetail.creditControlMode ?? "AMOUNT"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Credit amount limit:</span>{" "}
+                      {selectedPartyDetail.creditLimitAmount != null
+                        ? formatMoney(selectedPartyDetail.creditLimitAmount, selectedCurrency)
+                        : "—"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Max outstanding age:</span>{" "}
+                      {selectedPartyDetail.maxOutstandingInvoiceAgeDays != null
+                        ? `${selectedPartyDetail.maxOutstandingInvoiceAgeDays} days`
+                        : "—"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Per-invoice days-to-pay cap:</span>{" "}
+                      {selectedPartyDetail.perInvoiceDaysToPayCap != null
+                        ? `${selectedPartyDetail.perInvoiceDaysToPayCap} days`
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              )}
             </form>
           </CardContent>
         </Card>

@@ -10,7 +10,8 @@ interface AuthState {
   permissions: string[];
   isAuthenticated: boolean;
   isLoading: boolean;
-  
+  isPlatformOperator: boolean;
+
   setUser: (user: User | null) => void;
   setOrg: (org: Org | null) => void;
   setTenant: (tenant: Tenant | null) => void;
@@ -24,6 +25,7 @@ interface AuthState {
     currentBranch: Branch | null;
     branches: Branch[];
     permissions: string[];
+    isPlatformOperator?: boolean;
   }) => void;
   finishHydration: () => void;
   logout: () => void;
@@ -38,6 +40,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   permissions: [],
   isAuthenticated: false,
   isLoading: true,
+  isPlatformOperator: false,
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   setOrg: (org) => set({ org }),
@@ -45,7 +48,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setCurrentBranch: (branch) => set({ currentBranch: branch }),
   setBranches: (branches) => set({ branches }),
   setPermissions: (permissions) => set({ permissions }),
-  setSession: ({ user, org, tenant, currentBranch, branches, permissions }) =>
+  setSession: ({ user, org, tenant, currentBranch, branches, permissions, isPlatformOperator }) =>
     set({
       user,
       org,
@@ -55,6 +58,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       permissions,
       isAuthenticated: !!user,
       isLoading: false,
+      isPlatformOperator: isPlatformOperator === true,
     }),
   finishHydration: () => set({ isLoading: false }),
   logout: () => set({
@@ -66,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     permissions: [],
     isAuthenticated: false,
     isLoading: false,
+    isPlatformOperator: false,
   }),
 }));
 

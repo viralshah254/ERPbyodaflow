@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 
 const navItems = [
@@ -19,6 +20,8 @@ const navItems = [
 export function MarketingHeader() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -52,12 +55,20 @@ export function MarketingHeader() {
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center gap-3">
           <ThemeToggle />
-          <Button variant="ghost" asChild>
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/signup">Start Free</Link>
-          </Button>
+          {isAuthenticated ? (
+            <Button asChild>
+              <Link href={isPlatformOperator ? "/platform" : "/dashboard"}>Go to Dashboard</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/signup">Start Free</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu */}
@@ -89,16 +100,26 @@ export function MarketingHeader() {
                   <span className="text-sm text-muted-foreground">Theme</span>
                   <ThemeToggle />
                 </div>
-                <Button variant="outline" asChild>
-                  <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                    Sign In
-                  </Link>
-                </Button>
-                <Button asChild>
-                  <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-                    Start Free
-                  </Link>
-                </Button>
+                {isAuthenticated ? (
+                  <Button asChild>
+                    <Link href={isPlatformOperator ? "/platform" : "/dashboard"} onClick={() => setMobileMenuOpen(false)}>
+                      Go to Dashboard
+                    </Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" asChild>
+                      <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                        Sign In
+                      </Link>
+                    </Button>
+                    <Button asChild>
+                      <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                        Start Free
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
             </nav>
           </SheetContent>

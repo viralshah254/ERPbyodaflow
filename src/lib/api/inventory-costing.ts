@@ -44,3 +44,11 @@ export async function fetchInventoryValuation(): Promise<InventoryValuationRespo
   requireLiveApi("Inventory valuation");
   return apiRequest<InventoryValuationResponse>("/api/inventory/valuation");
 }
+
+export async function runInventoryCostingApi(): Promise<void> {
+  requireLiveApi("Inventory costing run");
+  await apiRequest("/api/inventory/costing/run", {
+    method: "POST",
+    body: {},
+  });
+}

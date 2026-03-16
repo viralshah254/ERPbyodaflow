@@ -1,10 +1,9 @@
 /**
- * Payroll repo: CRUD + localStorage overlay on mocks.
+ * Payroll repo: CRUD + localStorage. Prefer fetchEmployeesApi, fetchPayRunsApi, fetchPayRunDetailApi, fetchPayslipsApi for live data.
  */
 
 import type { Employee, PayRun, PayRunLine, Payslip } from "@/lib/payroll/types";
-import { getMockEmployees } from "@/lib/mock/payroll/employees";
-import { getMockPayRuns, getMockPayRunById, buildPayRunLinesFromEmployees } from "@/lib/mock/payroll/payruns";
+import { buildPayRunLinesFromEmployees } from "@/lib/payroll/build-pay-run-lines";
 
 const KEY_EMPLOYEES = "odaflow_payroll_employees";
 const KEY_PAY_RUNS = "odaflow_payroll_payruns";
@@ -31,7 +30,7 @@ function saveJson(key: string, value: unknown): void {
 export function listEmployees(): Employee[] {
   const stored = loadJson<Employee[]>(KEY_EMPLOYEES);
   if (stored && Array.isArray(stored)) return stored;
-  return getMockEmployees();
+  return [];
 }
 
 export function getEmployeeById(id: string): Employee | undefined {
@@ -60,7 +59,7 @@ export function updateEmployee(id: string, patch: Partial<Employee>): Employee |
 export function listPayRuns(): PayRun[] {
   const stored = loadJson<PayRun[]>(KEY_PAY_RUNS);
   if (stored && Array.isArray(stored)) return stored;
-  return getMockPayRuns();
+  return [];
 }
 
 export function getPayRunById(id: string): PayRun | undefined {
@@ -101,7 +100,9 @@ export function postPayRunJournal(id: string): PayRun | null {
 export function listPayRunLines(payRunId: string): PayRunLine[] {
   const run = getPayRunById(payRunId);
   if (!run) return [];
-  return buildPayRunLinesFromEmployees(listEmployees(), run.id, run.month);
+  const employees = listEmployees();
+  if (!employees.length) return [];
+  return buildPayRunLinesFromEmployees(employees, run.id, run.month);
 }
 
 export function listPayslips(payRunId?: string): Payslip[] {

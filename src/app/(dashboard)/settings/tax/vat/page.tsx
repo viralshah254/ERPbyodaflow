@@ -25,56 +25,57 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { listVatRates, saveVatRates } from "@/lib/data/tax.repo";
-import type { KenyaVatRate } from "@/lib/mock/tax/kenya";
+  createVatRate,
+  listVatRates,
+} from "@/lib/data/tax.repo";
+import type { KenyaVatRate } from "@/lib/types/tax-kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
-
-const KINDS = ["standard", "zero", "exempt"] as const;
 
 export default function VatSettingsPage() {
   const [rates, setRates] = React.useState<KenyaVatRate[]>([]);
-  const [editOpen, setEditOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<KenyaVatRate | null>(null);
-  const [form, setForm] = React.useState<{ code: string; name: string; rate: number; kind: "standard" | "zero" | "exempt" }>({
+  const [form, setForm] = React.useState<{ code: string; name: string; rate: number }>({
     code: "",
     name: "",
     rate: 0,
-    kind: "standard",
   });
 
-  React.useEffect(() => {
-    setRates(listVatRates());
+  const reload = React.useCallback(async () => {
+    const items = await listVatRates();
+    setRates(items);
   }, []);
 
-  const openEdit = (r: KenyaVatRate) => {
-    setEditing(r);
-    setForm({ code: r.code, name: r.name, rate: r.rate, kind: r.kind });
-    setEditOpen(true);
-  };
+  React.useEffect(() => {
+    void reload().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load VAT rates.");
+    });
+  }, [reload]);
 
-  const handleSave = () => {
-    const next = rates.map((r) =>
-      r.id === editing?.id
-        ? { ...r, code: form.code, name: form.name, rate: form.rate, kind: form.kind }
-        : r
-    );
-    saveVatRates(next);
-    setRates(next);
-    setEditOpen(false);
+  const handleCreate = async () => {
+    if (!form.code.trim() || !form.name.trim()) {
+      toast.error("Code and name are required.");
+      return;
+    }
+    try {
+      await createVatRate({
+        code: form.code.trim().toUpperCase(),
+        name: form.name.trim(),
+        rate: form.rate,
+      });
+      setForm({ code: "", name: "", rate: 0 });
+      await reload();
+      toast.success("VAT rate created.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create VAT rate.");
+    }
   };
 
   return (
     <PageShell>
       <PageHeader
         title="VAT (Kenya)"
-        description="Standard 16%, Zero-rated, Exempt. Seed list; allow edit."
+        description="VAT rates backed by live settings."
         breadcrumbs={[
           { label: "Settings", href: "/settings/org" },
           { label: "Tax", href: "/settings/tax/kenya" },
@@ -95,7 +96,7 @@ export default function VatSettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>VAT rates</CardTitle>
-            <CardDescription>Default seed: Standard 16%, Zero 0%, Exempt. Edit as needed.</CardDescription>
+            <CardDescription>Maintain VAT codes and rates used on documents.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -105,66 +106,46 @@ export default function VatSettingsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Rate %</TableHead>
                   <TableHead>Kind</TableHead>
-                  <TableHead className="w-24" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rates.map((r) => (
-                  <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openEdit(r)}>
+                  <TableRow key={r.id}>
                     <TableCell className="font-medium">{r.code}</TableCell>
                     <TableCell>{r.name}</TableCell>
                     <TableCell>{r.rate}</TableCell>
                     <TableCell>{r.kind}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(r); }}>
-                        Edit
-                      </Button>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
-      </div>
-
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Edit VAT rate</SheetTitle>
-            <SheetDescription>Code, name, rate, kind.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>Add VAT rate</CardTitle>
+            <CardDescription>Create a new VAT code and rate.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+              <Input value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} placeholder="e.g. VAT16" />
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+              <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Standard VAT" />
             </div>
             <div className="space-y-2">
               <Label>Rate %</Label>
               <Input type="number" value={form.rate} onChange={(e) => setForm((p) => ({ ...p, rate: Number(e.target.value) || 0 }))} />
             </div>
-            <div className="space-y-2">
-              <Label>Kind</Label>
-              <Select value={form.kind} onValueChange={(v) => setForm((p) => ({ ...p, kind: v as "standard" | "zero" | "exempt" }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {KINDS.map((k) => (
-                    <SelectItem key={k} value={k}>{k}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>Save</Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+            <Button onClick={handleCreate}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Create VAT code
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </PageShell>
   );
 }

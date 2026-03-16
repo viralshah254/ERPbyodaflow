@@ -21,8 +21,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
-import type { PartyRow, CustomerType, SupplierType } from "@/lib/mock/masters";
+import type { PartyRow, CustomerType, SupplierType } from "@/lib/types/masters";
 import { createPartyApi, fetchPartiesApi, updatePartyApi } from "@/lib/api/parties";
+import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
@@ -36,11 +37,13 @@ export default function MasterPartiesPage() {
 
   const [tab, setTab] = React.useState<"customers" | "franchisees" | "suppliers">("customers");
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [customerType, setCustomerType] = React.useState<CustomerType | "">("");
   const [supplierType, setSupplierType] = React.useState<SupplierType | "">("");
   const [parties, setParties] = React.useState<PartyRow[]>([]);
+  const [customerCategories, setCustomerCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [formName, setFormName] = React.useState("");
@@ -48,6 +51,12 @@ export default function MasterPartiesPage() {
   const [formPhone, setFormPhone] = React.useState("");
   const [formCustomerType, setFormCustomerType] = React.useState<CustomerType>("RETAILER");
   const [formSupplierType, setFormSupplierType] = React.useState<SupplierType>("RAW_MATERIAL");
+  const [formCustomerCategoryId, setFormCustomerCategoryId] = React.useState("");
+
+  React.useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
 
   const refreshParties = React.useCallback(async () => {
     setLoading(true);
@@ -58,58 +67,34 @@ export default function MasterPartiesPage() {
           role,
           customerType: tab === "customers" ? customerType : "",
           supplierType: tab === "suppliers" ? supplierType : "",
-          search,
+          search: debouncedSearch,
           status: "ACTIVE",
         })
       );
+      const categories = await fetchCustomerCategoriesApi();
+      setCustomerCategories(categories.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [customerType, search, supplierType, tab]);
+  }, [customerType, debouncedSearch, supplierType, tab]);
 
   React.useEffect(() => {
     void refreshParties();
   }, [refreshParties]);
 
   const filteredCustomers = React.useMemo(() => {
-    let base = parties;
-    if (customerType) {
-      base = base.filter((p) => p.customerType === customerType);
-    }
-    if (!search.trim()) return base;
-    const q = search.trim().toLowerCase();
-    return base.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.email?.toLowerCase().includes(q))
-    );
-  }, [customerType, parties, search]);
+    return parties;
+  }, [parties]);
 
   const filteredFranchisees = React.useMemo(() => {
-    if (!search.trim()) return parties;
-    const q = search.trim().toLowerCase();
-    return parties.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.email?.toLowerCase().includes(q))
-    );
-  }, [parties, search]);
+    return parties;
+  }, [parties]);
 
   const filteredSuppliers = React.useMemo(() => {
-    let base = parties;
-    if (supplierType) {
-      base = base.filter((p) => p.supplierType === supplierType);
-    }
-    if (!search.trim()) return base;
-    const q = search.trim().toLowerCase();
-    return base.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.email?.toLowerCase().includes(q))
-    );
-  }, [parties, search, supplierType]);
+    return parties;
+  }, [parties]);
 
   const columns = React.useMemo(
     () => [
@@ -185,6 +170,7 @@ export default function MasterPartiesPage() {
     setFormPhone("");
     setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
     setFormSupplierType(supplierType || "RAW_MATERIAL");
+    setFormCustomerCategoryId("");
     setDrawerOpen(true);
   };
 
@@ -195,6 +181,7 @@ export default function MasterPartiesPage() {
     setFormPhone(row.phone ?? "");
     setFormCustomerType(row.customerType ?? "RETAILER");
     setFormSupplierType(row.supplierType ?? "RAW_MATERIAL");
+    setFormCustomerCategoryId(row.customerCategoryId ?? "");
     setDrawerOpen(true);
   };
 
@@ -217,6 +204,7 @@ export default function MasterPartiesPage() {
         phone: formPhone.trim() || undefined,
         roles: [...roles],
         customerType: tab === "suppliers" ? undefined : formCustomerType,
+        customerCategoryId: tab === "suppliers" ? undefined : formCustomerCategoryId || undefined,
         supplierType: tab === "suppliers" ? formSupplierType : undefined,
         status: "ACTIVE" as const,
       };
@@ -439,23 +427,44 @@ export default function MasterPartiesPage() {
             <Input placeholder="Phone" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} />
           </div>
           {tab === "customers" && (
-            <div className="space-y-2">
-              <Label>Customer type</Label>
-              <Select
-                value={formCustomerType}
-                onValueChange={(v) => setFormCustomerType(v as CustomerType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DISTRIBUTOR">Distributor</SelectItem>
-                  <SelectItem value="WHOLESALER">Wholesaler</SelectItem>
-                  <SelectItem value="RETAILER">Retailer</SelectItem>
-                  <SelectItem value="FRANCHISEE">Franchisee</SelectItem>
-                  <SelectItem value="END_CUSTOMER">End customer</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Customer type</Label>
+                <Select
+                  value={formCustomerType}
+                  onValueChange={(v) => setFormCustomerType(v as CustomerType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DISTRIBUTOR">Distributor</SelectItem>
+                    <SelectItem value="WHOLESALER">Wholesaler</SelectItem>
+                    <SelectItem value="RETAILER">Retailer</SelectItem>
+                    <SelectItem value="FRANCHISEE">Franchisee</SelectItem>
+                    <SelectItem value="END_CUSTOMER">End customer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Customer category</Label>
+                <Select
+                  value={formCustomerCategoryId || "__none__"}
+                  onValueChange={(v) => setFormCustomerCategoryId(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {customerCategories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
           {tab === "franchisees" && (

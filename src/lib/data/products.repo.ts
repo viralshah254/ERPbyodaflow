@@ -1,16 +1,19 @@
 /**
- * Products repo: CRUD + localStorage overlay on mocks.
+ * Products repo: CRUD + localStorage. Prefer fetchProductsApi for list/get; use setProductsCache after fetch to keep sync helpers in sync.
  */
 
-import type { ProductRow } from "@/lib/mock/masters";
+import type { ProductRow } from "@/lib/types/masters";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import type { ProductVariant, ProductAttributeDef } from "@/lib/products/types";
-import { getMockProducts } from "@/lib/mock/masters";
-import { getMockPackaging } from "@/lib/mock/products/packaging";
-import { getMockProductPrices } from "@/lib/mock/products/pricing";
-import { getMockVariants, getMockAttributeDefs } from "@/lib/mock/products/variants";
+import { fetchProductsApi } from "@/lib/api/products";
 
 const KEY_PRODUCTS = "odaflow_products";
+let productsCache: ProductRow[] = [];
+
+/** Set in-memory product list (e.g. after fetchProductsApi()) so listProducts/getProductById stay in sync. */
+export function setProductsCache(rows: ProductRow[]): void {
+  productsCache = rows;
+}
 const KEY_PACKAGING = "odaflow_packaging";
 const KEY_PRICING = "odaflow_pricing";
 const KEY_VARIANTS = "odaflow_variants";
@@ -38,7 +41,14 @@ function saveJson(key: string, value: unknown): void {
 export function listProducts(): ProductRow[] {
   const stored = loadJson<ProductRow[]>(KEY_PRODUCTS);
   if (stored && Array.isArray(stored)) return stored;
-  return getMockProducts();
+  return productsCache;
+}
+
+/** Hydrate products cache from API; call from pages that need listProducts() to reflect live data. */
+export async function hydrateProductsFromApi(): Promise<ProductRow[]> {
+  const rows = await fetchProductsApi();
+  setProductsCache(rows);
+  return rows;
 }
 
 export function getProductById(id: string): ProductRow | undefined {
@@ -76,7 +86,7 @@ export function listPackaging(productId: string): ProductPackaging[] {
   const stored = loadJson<Record<string, ProductPackaging[]>>(KEY_PACKAGING);
   const override = stored?.[productId];
   if (override && Array.isArray(override)) return override;
-  return getMockPackaging(productId);
+  return [];
 }
 
 export function savePackaging(productId: string, rows: ProductPackaging[]): void {
@@ -93,11 +103,11 @@ export function listProductPrices(productId?: string, priceListId?: string): Pro
     if (priceListId) out = out.filter((p) => p.priceListId === priceListId);
     return out;
   }
-  return getMockProductPrices(productId, priceListId);
+  return [];
 }
 
 export function saveProductPrices(updates: ProductPrice[]): void {
-  const existing = loadJson<ProductPrice[]>(KEY_PRICING) ?? getMockProductPrices();
+  const existing = loadJson<ProductPrice[]>(KEY_PRICING) ?? [];
   const byKey = new Map<string, ProductPrice>();
   existing.forEach((p) => byKey.set(`${p.productId}:${p.priceListId}`, p));
   updates.forEach((p) => byKey.set(`${p.productId}:${p.priceListId}`, p));
@@ -108,7 +118,7 @@ export function listVariants(productId: string): ProductVariant[] {
   const stored = loadJson<Record<string, ProductVariant[]>>(KEY_VARIANTS);
   const override = stored?.[productId];
   if (override && Array.isArray(override)) return override;
-  return getMockVariants(productId);
+  return [];
 }
 
 export function getVariantById(variantId: string): ProductVariant | undefined {
@@ -155,7 +165,7 @@ export function deleteVariant(productId: string, variantId: string): boolean {
 export function listAttributeDefs(): ProductAttributeDef[] {
   const stored = loadJson<ProductAttributeDef[]>(KEY_ATTRIBUTE_DEFS);
   if (stored && Array.isArray(stored)) return stored;
-  return getMockAttributeDefs();
+  return [];
 }
 
 export function saveAttributeDefs(rows: ProductAttributeDef[]): void {

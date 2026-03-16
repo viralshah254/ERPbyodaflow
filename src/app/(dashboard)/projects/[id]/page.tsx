@@ -32,7 +32,7 @@ import {
   type ProjectCostingSummary,
   type ProjectCostLinkRow,
 } from "@/lib/api/projects";
-import type { ProjectRow } from "@/lib/mock/projects/list";
+import type { ProjectRow } from "@/lib/types/projects";
 import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -244,6 +244,7 @@ export default function ProjectDetailPage() {
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Rate</TableHead>
+                  <TableHead>Rate source</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -260,6 +261,15 @@ export default function ProjectDetailPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       {entry.unit === "HOURS" ? formatMoney(entry.rate ?? 0, entry.currency) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {entry.unit === "HOURS"
+                        ? entry.rateSource === "EMPLOYEE_OVERRIDE_RATE"
+                          ? "Employee override"
+                          : entry.rateSource === "EMPLOYEE_SALARY_MONTHLY_173"
+                            ? "Salary/173"
+                            : "Project default"
+                        : "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       {entry.unit === "HOURS" ? formatMoney(entry.amount, entry.currency) : formatMoney(entry.amount, entry.currency)}

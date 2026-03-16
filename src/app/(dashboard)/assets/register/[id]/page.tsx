@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { fetchAssetByIdApi } from "@/lib/api/assets";
-import type { AssetRow } from "@/lib/mock/assets/register";
+import type { AssetRow } from "@/lib/types/assets";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";

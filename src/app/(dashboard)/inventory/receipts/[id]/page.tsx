@@ -18,7 +18,7 @@ import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchGRNById, postGRN, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow } from "@/lib/api/grn";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
-import type { GrnLineRow } from "@/lib/mock/purchasing";
+import type { GrnLineRow } from "@/lib/types/purchasing";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";

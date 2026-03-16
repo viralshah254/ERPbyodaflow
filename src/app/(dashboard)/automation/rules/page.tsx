@@ -17,7 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { getMockRules, type AutomationRule } from "@/lib/mock/automation-rules";
+import type { AutomationRule } from "@/lib/types/automation-rules";
+import { fetchAutomationRulesApi, createAutomationRuleApi } from "@/lib/api/automation-rules";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -29,8 +30,23 @@ export default function AutomationRulesPage() {
   const [formTrigger, setFormTrigger] = React.useState("");
   const [formConditions, setFormConditions] = React.useState("");
   const [formActions, setFormActions] = React.useState("");
+  const [allRows, setAllRows] = React.useState<AutomationRule[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const allRows = React.useMemo(() => getMockRules(), []);
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setAllRows(await fetchAutomationRulesApi());
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   const resetForm = () => {
     setFormTrigger("");
@@ -214,7 +230,28 @@ export default function AutomationRulesPage() {
                 <Button variant="outline" onClick={() => handleOpenCreate(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => handleOpenCreate(false)}>Save rule</Button>
+                <Button
+                  onClick={async () => {
+                    if (!formTrigger.trim()) {
+                      toast.error("Trigger is required.");
+                      return;
+                    }
+                    try {
+                      await createAutomationRuleApi({
+                        name: formTrigger.slice(0, 80),
+                        trigger: formTrigger,
+                        enabled: true,
+                      });
+                      await refresh();
+                      handleOpenCreate(false);
+                      toast.success("Rule created.");
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
+                  }}
+                >
+                  Save rule
+                </Button>
               </div>
             </div>
           </div>

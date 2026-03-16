@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { listProducts } from "@/lib/data/products.repo";
 import { listPackaging } from "@/lib/data/products.repo";
-import { getMockPriceLists } from "@/lib/mock/products/price-lists";
+import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import { formatMoney } from "@/lib/money";
 import * as Icons from "lucide-react";
@@ -58,8 +58,11 @@ export function DocumentLineEditor({
   mode = "sales",
 }: DocumentLineEditorProps) {
   const products = React.useMemo(() => listProducts(), []);
-  const priceLists = React.useMemo(() => getMockPriceLists(), []);
-  const priceListIdResolved = priceListId || "pl-retail";
+  const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
+  React.useEffect(() => {
+    fetchPriceListsForUi().then(setPriceLists).catch(() => {});
+  }, []);
+  const priceListIdResolved = priceListId || priceLists[0]?.id || "pl-retail";
 
   const addRow = () => {
     const p = products[0];

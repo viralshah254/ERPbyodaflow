@@ -1,4 +1,4 @@
-import { type ExportHistoryRow, type ScheduledReportRow, type SavedViewRow } from "@/lib/mock/reports";
+import { type ExportHistoryRow, type ScheduledReportRow, type SavedViewRow } from "@/lib/types/reports";
 import { apiRequest, downloadFile, downloadTextFile, isApiConfigured, requireLiveApi } from "./client";
 
 type BackendReportLibraryItem = {

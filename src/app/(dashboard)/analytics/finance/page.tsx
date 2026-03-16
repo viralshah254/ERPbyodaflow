@@ -72,6 +72,8 @@ export default function AnalyticsFinancePage() {
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">Invoice</th>
                   <th className="text-left font-medium px-3 py-2">Party</th>
+                  <th className="text-left font-medium px-3 py-2">Category</th>
+                  <th className="text-left font-medium px-3 py-2">Channel</th>
                   <th className="text-right font-medium px-3 py-2">Amount</th>
                   <th className="text-right font-medium px-3 py-2">Due date</th>
                 </tr>
@@ -80,7 +82,9 @@ export default function AnalyticsFinancePage() {
                 {rows.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.number}</td>
-                    <td className="px-3 py-2">{r.partyId ?? "Customer"}</td>
+                    <td className="px-3 py-2">{r.partyName ?? r.partyId ?? "Customer"}</td>
+                    <td className="px-3 py-2">{r.customerCategory ?? "—"}</td>
+                    <td className="px-3 py-2">{r.channel ?? "—"}</td>
                     <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.amount ?? 0, "KES")}</td>
                     <td className="text-right tabular-nums px-3 py-2">{r.dueDate ? String(r.dueDate).slice(0, 10) : "—"}</td>
                   </tr>

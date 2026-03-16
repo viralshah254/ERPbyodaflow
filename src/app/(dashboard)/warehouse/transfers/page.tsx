@@ -21,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { exportTransfersCsv, fetchTransfers, updateTransferStatus, type TransferRow, type TransferStatus } from "@/lib/api/warehouse-transfers";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
-import { warehouseTransferReceive } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -118,7 +117,7 @@ export default function WarehouseTransfersPage() {
         await Promise.all(
           selected
             .filter((r) => r.status === "IN_TRANSIT")
-            .map((r) => warehouseTransferReceive(r.id))
+            .map((r) => updateTransferStatus(r.id, "RECEIVED"))
         );
         toast.success("Transfer(s) received.");
       }

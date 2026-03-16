@@ -34,6 +34,7 @@ function LoginContent() {
   const { setUser, setOrg, setTenant, setCurrentBranch, setBranches } =
     useAuthStore();
   const [isLoading, setIsLoading] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
 
   const {
     register,
@@ -75,6 +76,7 @@ function LoginContent() {
         currentBranch: session.currentBranch,
         branches: session.branches,
         permissions: session.permissions,
+        isPlatformOperator: session.isPlatformOperator,
       });
       hydrateFromBackend({
         orgType: session.org.orgType,
@@ -101,7 +103,8 @@ function LoginContent() {
         router.push("/change-password");
         return;
       }
-      const redirectTo = searchParams.get("redirect") || "/dashboard";
+      const defaultRedirect = session.isPlatformOperator ? "/platform" : "/dashboard";
+      const redirectTo = searchParams.get("redirect") || defaultRedirect;
       router.push(redirectTo);
     } catch (err) {
       setIsLoading(false);
@@ -170,12 +173,29 @@ function LoginContent() {
 
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    {...register("password")}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      className="pr-10"
+                      {...register("password")}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword((p) => !p)}
+                    >
+                      {showPassword ? (
+                        <Icons.EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Icons.Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
                   {errors.password && (
                     <p className="text-sm text-destructive">
                       {errors.password.message}

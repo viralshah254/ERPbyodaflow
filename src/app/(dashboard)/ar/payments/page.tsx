@@ -8,6 +8,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -16,16 +17,18 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { PaymentRow, OpenInvoiceRow } from "@/lib/mock/ar";
+import type { PaymentRow, OpenInvoiceRow } from "@/lib/types/ar";
 import {
   allocateArPaymentApi,
   createArPaymentApi,
-  fetchArCustomersApi,
   fetchArPaymentsApi,
   fetchOpenInvoicesApi,
+  searchArCustomerOptionsApi,
 } from "@/lib/api/payments";
+import type { PartyLookupOption } from "@/lib/api/parties";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { formatMoney } from "@/lib/money";
@@ -46,9 +49,11 @@ export default function ARPaymentsPage() {
   const [allocating, setAllocating] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
-  const [customerOptions, setCustomerOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
   const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
   const [bankAccountId, setBankAccountId] = React.useState("");
+  const [paymentMethod, setPaymentMethod] = React.useState<"BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA">("BANK_TRANSFER");
+  const [mpesaTransactionNo, setMpesaTransactionNo] = React.useState("");
   const [openInvoices, setOpenInvoices] = React.useState<OpenInvoiceRow[]>([]);
   const [allocateInvoices, setAllocateInvoices] = React.useState<OpenInvoiceRow[]>([]);
 
@@ -58,10 +63,9 @@ export default function ARPaymentsPage() {
 
   React.useEffect(() => {
     setLoading(true);
-    Promise.all([fetchArPaymentsApi(), fetchArCustomersApi(), fetchBankAccountsApi()])
-      .then(([nextPayments, nextCustomers, nextBankAccounts]) => {
+    Promise.all([fetchArPaymentsApi(), fetchBankAccountsApi()])
+      .then(([nextPayments, nextBankAccounts]) => {
         setPayments(nextPayments);
-        setCustomerOptions(nextCustomers);
         setBankAccountOptions(nextBankAccounts.map((item) => ({ id: item.id, name: item.name })));
       })
       .catch((error) => toast.error((error as Error).message || "Failed to load AR payments."))
@@ -116,6 +120,16 @@ export default function ARPaymentsPage() {
         ),
       },
       {
+        id: "paymentMethod",
+        header: "Method",
+        accessor: (r: PaymentRow) => r.paymentMethod ?? "—",
+      },
+      {
+        id: "mpesaTransactionNo",
+        header: "M-Pesa Txn",
+        accessor: (r: PaymentRow) => r.mpesaTransactionNo ?? "—",
+      },
+      {
         id: "actions",
         header: "",
         accessor: (r: PaymentRow) => (
@@ -131,7 +145,10 @@ export default function ARPaymentsPage() {
   const handleReceivePayment = () => {
     setStep(1);
     setCustomerId("");
+    setSelectedCustomerOption(null);
     setBankAccountId("");
+    setPaymentMethod("BANK_TRANSFER");
+    setMpesaTransactionNo("");
     setAllocations({});
     setWizardOpen(true);
   };
@@ -154,8 +171,18 @@ export default function ARPaymentsPage() {
       toast.error("Select a customer and allocate at least one invoice amount.");
       return;
     }
+    if (paymentMethod === "MPESA" && !mpesaTransactionNo.trim()) {
+      toast.error("M-Pesa transaction number is required for M-Pesa receipts.");
+      return;
+    }
     try {
-      const payment = await createArPaymentApi({ customerId, amount: totalAmount, bankAccountId: bankAccountId || undefined });
+      const payment = await createArPaymentApi({
+        customerId,
+        amount: totalAmount,
+        bankAccountId: bankAccountId || undefined,
+        paymentMethod,
+        mpesaTransactionNo: paymentMethod === "MPESA" ? mpesaTransactionNo.trim() : undefined,
+      });
       const nextAllocations = Object.entries(allocations)
         .filter(([, amount]) => amount > 0)
         .map(([documentId, amount]) => ({ documentId, amount }));
@@ -264,14 +291,50 @@ export default function ARPaymentsPage() {
               <>
                 <div className="space-y-2">
                   <Label>Customer</Label>
-                  <SearchableSelect
+                  <AsyncSearchableSelect
                     value={customerId}
-                    onValueChange={setCustomerId}
-                    options={customerOptions.map((customer) => ({ id: customer.id, label: customer.name }))}
+                    onValueChange={(value) => {
+                      setCustomerId(value);
+                      if (!value) setSelectedCustomerOption(null);
+                    }}
+                    onOptionSelect={(option) => setSelectedCustomerOption(option)}
+                    loadOptions={searchArCustomerOptionsApi}
+                    selectedOption={selectedCustomerOption}
                     placeholder="Select customer"
-                    searchPlaceholder="Type to search customer"
+                    searchPlaceholder="Type name, code, phone, or email"
+                    emptyMessage="No customers found."
+                    recentStorageKey="lookup:recent-customers"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Payment method</Label>
+                  <Select
+                    value={paymentMethod}
+                    onValueChange={(value) =>
+                      setPaymentMethod(value as "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA")
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BANK_TRANSFER">Bank transfer</SelectItem>
+                      <SelectItem value="CHEQUE">Cheque</SelectItem>
+                      <SelectItem value="CASH">Cash</SelectItem>
+                      <SelectItem value="MPESA">M-Pesa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {paymentMethod === "MPESA" && (
+                  <div className="space-y-2">
+                    <Label>M-Pesa transaction number</Label>
+                    <Input
+                      placeholder="e.g. SF94KX22Q"
+                      value={mpesaTransactionNo}
+                      onChange={(e) => setMpesaTransactionNo(e.target.value)}
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Bank account</Label>
                   <SearchableSelect

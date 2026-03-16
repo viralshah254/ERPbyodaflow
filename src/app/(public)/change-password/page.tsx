@@ -59,8 +59,9 @@ export default function ChangePasswordPage() {
         currentBranch: session.currentBranch,
         branches: session.branches,
         permissions: session.permissions,
+        isPlatformOperator: session.isPlatformOperator,
       });
-      router.push("/dashboard");
+      router.push(session.isPlatformOperator ? "/platform" : "/dashboard");
     } catch (err) {
       const message =
         err && typeof err === "object" && "message" in err

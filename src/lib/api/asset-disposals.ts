@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { DisposalRow } from "@/lib/mock/assets/disposals";
+import type { DisposalRow } from "@/lib/types/assets";
 
 type BackendDisposal = {
   id: string;

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -14,6 +15,7 @@ import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { fetchArCustomerSummariesApi } from "@/lib/api/payments";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { createCustomerCategoryApi, fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import {
   createPartyApi,
   fetchPartiesApi,
@@ -31,51 +33,91 @@ type ARCustomerRow = {
   name: string;
   email?: string;
   creditLimit?: number;
+  creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
+  customerCategoryId?: string;
+  customerCategory?: string;
+  maxOutstandingInvoiceAgeDays?: number;
+  perInvoiceDaysToPayCap?: number;
   paymentTermsId?: string;
   paymentTerms?: string;
   status?: string;
 };
 
 export default function ARCustomersPage() {
+  const searchParams = useSearchParams();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [allRows, setAllRows] = React.useState<ARCustomerRow[]>([]);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [categories, setCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [form, setForm] = React.useState({
     name: "",
     email: "",
     creditLimit: "",
     paymentTermsId: "",
+    customerCategoryId: "",
+    creditControlMode: "AMOUNT" as "AMOUNT" | "DAYS" | "HYBRID",
+    maxOutstandingInvoiceAgeDays: "",
+    perInvoiceDaysToPayCap: "",
+    creditWarningThresholdPct: "",
     defaultCurrency: "KES",
     taxId: "",
   });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [duplicateWarning, setDuplicateWarning] = React.useState<string | undefined>(undefined);
+  const [newCategoryName, setNewCategoryName] = React.useState("");
+  const requestedCustomerId = searchParams.get("id");
+
+  React.useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
 
   const reload = React.useCallback(async () => {
-    const [customers, termsData] = await Promise.all([fetchArCustomerSummariesApi(), fetchPaymentTermsApi()]);
+    const [customers, termsData, categoriesData] = await Promise.all([
+      fetchArCustomerSummariesApi(debouncedSearch),
+      fetchPaymentTermsApi(),
+      fetchCustomerCategoriesApi(),
+    ]);
     const termById = new Map(termsData.map((term) => [term.id, term.name]));
+    const categoryById = new Map(categoriesData.map((category) => [category.id, category.name]));
     setTerms(termsData.map((term) => ({ id: term.id, name: term.name })));
+    setCategories(categoriesData.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
     setAllRows(
       customers.map((item) => ({
         id: item.id,
         name: item.name,
         email: item.email,
         creditLimit: item.creditLimit,
+        creditControlMode: item.creditControlMode,
+        customerCategoryId: item.customerCategoryId,
+        customerCategory: item.customerCategoryId ? categoryById.get(item.customerCategoryId) ?? item.customerCategoryId : undefined,
+        maxOutstandingInvoiceAgeDays: item.maxOutstandingInvoiceAgeDays,
+        perInvoiceDaysToPayCap: item.perInvoiceDaysToPayCap,
         paymentTermsId: item.paymentTermsId,
         paymentTerms: item.paymentTermsId ? termById.get(item.paymentTermsId) ?? item.paymentTermsId : undefined,
         status: item.status ?? "ACTIVE",
       }))
     );
-  }, []);
+  }, [debouncedSearch]);
 
   React.useEffect(() => {
     void reload().catch((err) => {
       toast.error(err instanceof Error ? err.message : "Failed to load AR customers.");
     });
   }, [reload]);
+
+  React.useEffect(() => {
+    if (!requestedCustomerId || allRows.length === 0 || drawerOpen) return;
+    const match = allRows.find((row) => row.id === requestedCustomerId);
+    if (match) {
+      setEditingId(match.id);
+      setDrawerOpen(true);
+    }
+  }, [allRows, drawerOpen, requestedCustomerId]);
 
   React.useEffect(() => {
     if (!drawerOpen) return;
@@ -85,6 +127,11 @@ export default function ARCustomersPage() {
         email: "",
         creditLimit: "",
         paymentTermsId: "",
+          customerCategoryId: "",
+          creditControlMode: "AMOUNT",
+          maxOutstandingInvoiceAgeDays: "",
+          perInvoiceDaysToPayCap: "",
+          creditWarningThresholdPct: "",
         defaultCurrency: "KES",
         taxId: "",
       });
@@ -103,6 +150,14 @@ export default function ARCustomersPage() {
               ? String(party.creditLimit)
               : "",
           paymentTermsId: party.paymentTermsId ?? "",
+          customerCategoryId: party.customerCategoryId ?? "",
+          creditControlMode: party.creditControlMode ?? "AMOUNT",
+          maxOutstandingInvoiceAgeDays:
+            party.maxOutstandingInvoiceAgeDays != null ? String(party.maxOutstandingInvoiceAgeDays) : "",
+          perInvoiceDaysToPayCap:
+            party.perInvoiceDaysToPayCap != null ? String(party.perInvoiceDaysToPayCap) : "",
+          creditWarningThresholdPct:
+            party.creditWarningThresholdPct != null ? String(party.creditWarningThresholdPct) : "",
           defaultCurrency: party.defaultCurrency ?? "KES",
           taxId: party.taxId ?? "",
         });
@@ -159,11 +214,20 @@ export default function ARCustomersPage() {
       return;
     }
     const termNameById = new Map(terms.map((term) => [term.id, term.name]));
+    const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
     const payload: PartyPayload = {
       name: form.name.trim(),
       roles: ["customer"],
       email: form.email.trim() || undefined,
       creditLimit: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
+      creditLimitAmount: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
+      customerCategoryId: form.customerCategoryId || undefined,
+      creditControlMode: form.creditControlMode,
+      maxOutstandingInvoiceAgeDays: form.maxOutstandingInvoiceAgeDays.trim()
+        ? Number(form.maxOutstandingInvoiceAgeDays)
+        : undefined,
+      perInvoiceDaysToPayCap: form.perInvoiceDaysToPayCap.trim() ? Number(form.perInvoiceDaysToPayCap) : undefined,
+      creditWarningThresholdPct: form.creditWarningThresholdPct.trim() ? Number(form.creditWarningThresholdPct) : undefined,
       paymentTermsId: form.paymentTermsId || undefined,
       defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,
       taxId: form.taxId.trim() || undefined,
@@ -175,6 +239,11 @@ export default function ARCustomersPage() {
       name: payload.name,
       email: payload.email,
       creditLimit: payload.creditLimit,
+      creditControlMode: payload.creditControlMode,
+      customerCategoryId: payload.customerCategoryId,
+      customerCategory: payload.customerCategoryId ? categoryNameById.get(payload.customerCategoryId) ?? payload.customerCategoryId : undefined,
+      maxOutstandingInvoiceAgeDays: payload.maxOutstandingInvoiceAgeDays,
+      perInvoiceDaysToPayCap: payload.perInvoiceDaysToPayCap,
       paymentTermsId: payload.paymentTermsId,
       paymentTerms: payload.paymentTermsId ? termNameById.get(payload.paymentTermsId) ?? payload.paymentTermsId : undefined,
       status: payload.status ?? "ACTIVE",
@@ -202,15 +271,23 @@ export default function ARCustomersPage() {
       setSaving(false);
     }
   };
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    try {
+      const code = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 24) || "CATEGORY";
+      const created = await createCustomerCategoryApi({ code, name });
+      setCategories((prev) => [...prev, { id: created.id, name: created.name }].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((prev) => ({ ...prev, customerCategoryId: created.id }));
+      setNewCategoryName("");
+      toast.success("Customer category created.");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to create category.");
+    }
+  };
   const filtered = React.useMemo(() => {
-    if (!search.trim()) return allRows;
-    const q = search.trim().toLowerCase();
-    return allRows.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.email?.toLowerCase().includes(q))
-    );
-  }, [allRows, search]);
+    return allRows;
+  }, [allRows]);
 
   const columns = React.useMemo(
     () => [
@@ -222,12 +299,18 @@ export default function ARCustomersPage() {
       },
       { id: "email", header: "Email", accessor: "email" as keyof ARCustomerRow },
       {
+        id: "customerCategory",
+        header: "Category",
+        accessor: (r: ARCustomerRow) => r.customerCategory ?? "—",
+      },
+      {
         id: "creditLimit",
         header: "Credit limit",
         accessor: (r: ARCustomerRow) =>
           r.creditLimit != null ? formatMoney(r.creditLimit, "KES") : "—",
       },
       { id: "paymentTerms", header: "Payment terms", accessor: "paymentTerms" as keyof ARCustomerRow },
+      { id: "creditControlMode", header: "Credit mode", accessor: (r: ARCustomerRow) => r.creditControlMode ?? "—" },
       {
         id: "status",
         header: "Status",
@@ -347,6 +430,58 @@ export default function ARCustomersPage() {
             {errors.creditLimit ? <p className="text-xs text-destructive">{errors.creditLimit}</p> : null}
           </div>
           <div className="space-y-2">
+            <Label>Customer category</Label>
+            <Select
+              value={form.customerCategoryId || "__none__"}
+              onValueChange={(value) =>
+                setForm((prev) => ({ ...prev, customerCategoryId: value === "__none__" ? "" : value }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select customer category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Add new category"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+              <Button type="button" variant="outline" onClick={() => void handleCreateCategory()}>
+                Add
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Credit control mode</Label>
+            <Select
+              value={form.creditControlMode}
+              onValueChange={(value) =>
+                setForm((prev) => ({
+                  ...prev,
+                  creditControlMode: value as "AMOUNT" | "DAYS" | "HYBRID",
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AMOUNT">Amount</SelectItem>
+                <SelectItem value="DAYS">Days</SelectItem>
+                <SelectItem value="HYBRID">Hybrid</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
             <Label>Payment terms</Label>
             <Select
               value={form.paymentTermsId || "__none__"}
@@ -366,6 +501,33 @@ export default function ARCustomersPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Max outstanding invoice age (days)</Label>
+            <Input
+              type="number"
+              placeholder="Optional"
+              value={form.maxOutstandingInvoiceAgeDays}
+              onChange={(e) => setForm((prev) => ({ ...prev, maxOutstandingInvoiceAgeDays: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Per-invoice days to pay cap</Label>
+            <Input
+              type="number"
+              placeholder="Optional"
+              value={form.perInvoiceDaysToPayCap}
+              onChange={(e) => setForm((prev) => ({ ...prev, perInvoiceDaysToPayCap: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Credit warning threshold (%)</Label>
+            <Input
+              type="number"
+              placeholder="e.g. 80"
+              value={form.creditWarningThresholdPct}
+              onChange={(e) => setForm((prev) => ({ ...prev, creditWarningThresholdPct: e.target.value }))}
+            />
           </div>
           <div className="space-y-2">
             <Label>Currency preference</Label>

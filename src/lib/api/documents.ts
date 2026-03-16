@@ -1,6 +1,5 @@
 import type { DocTypeKey } from "@/config/documents/types";
-import { type DocumentDetailRecord, type DocumentTimelineEntry } from "@/lib/data/documents.repo";
-import type { DocListRow } from "@/lib/mock/docs";
+import type { DocListRow, DocumentDetailRecord, DocumentTimelineEntry } from "@/lib/types/documents";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
 
 type BackendDocumentLine = {
@@ -305,6 +304,41 @@ export async function convertDocumentApi(
       body: payload,
     }
   );
+}
+
+export async function requestDocumentApprovalApi(
+  type: DocTypeKey,
+  id: string,
+  comment?: string
+): Promise<void> {
+  requireLiveApi("Document approval request");
+  await apiRequest(`/api/documents/${type}/${id}/request-approval`, {
+    method: "POST",
+    body: comment != null ? { comment } : {},
+  });
+}
+
+export async function documentActionApi(
+  type: DocTypeKey,
+  id: string,
+  action: "approve" | "post" | "cancel" | "reverse",
+  comment?: string
+): Promise<void> {
+  requireLiveApi("Document action");
+  await apiRequest(`/api/documents/${type}/${id}/action`, {
+    method: "POST",
+    body: { action, ...(comment != null ? { comment } : {}) },
+  });
+}
+
+export function downloadDocumentPdfApi(
+  type: DocTypeKey,
+  id: string,
+  fileName: string,
+  onNotAvailable: (message: string) => void
+): void {
+  requireLiveApi("Document PDF export");
+  downloadFile(`/api/documents/${type}/${id}/pdf`, fileName, onNotAvailable);
 }
 
 export function exportDocumentListApi(

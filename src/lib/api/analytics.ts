@@ -25,6 +25,11 @@ export interface InventoryInsightItem {
   invoiceId?: string;
   number?: string;
   partyId?: string;
+  partyName?: string;
+  customerType?: string;
+  customerCategory?: string;
+  channel?: string;
+  creditLimit?: number;
   amount?: number;
   dueDate?: string;
   payRunId?: string;
@@ -40,5 +45,25 @@ export async function fetchAnalyticsInsights(
   return apiRequest<{ module: string; data: InventoryInsightItem[] }>(
     `/api/analytics/insights/${encodeURIComponent(module)}`
   );
+}
+
+export type SimulationApplyPayload = {
+  simulationId: string;
+  result: {
+    id: string;
+    type: "price" | "reorder" | "demand" | "payroll" | "fx";
+    impact: Record<string, number>;
+    summary: string;
+    applied: boolean;
+    createdAt: string;
+  };
+};
+
+export async function applySimulationSuggestionApi(payload: SimulationApplyPayload): Promise<void> {
+  requireLiveApi("Apply analytics simulation");
+  await apiRequest("/api/analytics/simulations/apply", {
+    method: "POST",
+    body: payload,
+  });
 }
 

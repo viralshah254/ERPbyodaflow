@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { createProjectApi, fetchProjectsApi } from "@/lib/api/projects";
-import type { ProjectRow, ProjectStatus } from "@/lib/mock/projects/list";
+import type { ProjectRow, ProjectStatus } from "@/lib/types/projects";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";

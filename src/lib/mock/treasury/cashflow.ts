@@ -1,18 +1,7 @@
 /**
  * Mock data for /treasury/cashflow (forecast).
  */
-
-export interface CashflowForecastRow {
-  id: string;
-  date: string;
-  description: string;
-  type: "receipt" | "payment" | "transfer" | "other";
-  inflow: number;
-  outflow: number;
-  balance: number;
-  currency: string;
-  sourceDoc?: string;
-}
+import type { CashflowForecastRow } from "@/lib/types/treasury";
 
 export const MOCK_CASHFLOW: CashflowForecastRow[] = [
   { id: "1", date: "2025-01-28", description: "Opening balance", type: "other", inflow: 0, outflow: 0, balance: 1250000, currency: "KES" },

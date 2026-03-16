@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Info, AlertCircle } from "lucide-react";
 import type { AnomalyDetection } from "@/types/erp";
-import { getMockAnomalies } from "@/lib/mock/anomalies";
 
 interface AnomalyDetectionProps {
   anomalies?: AnomalyDetection[];
@@ -36,7 +35,7 @@ const getSeverityBadge = (severity: AnomalyDetection["severity"]) => {
   return <Badge variant={variants[severity]}>{severity}</Badge>;
 };
 
-export function AnomalyDetection({ anomalies = getMockAnomalies(), getInvestigateHref }: AnomalyDetectionProps) {
+export function AnomalyDetection({ anomalies = [], getInvestigateHref }: AnomalyDetectionProps) {
   const formatTimeAgo = (date: Date) => {
     const hours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60));
     if (hours < 1) return "Just now";

@@ -24,13 +24,13 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  approvePayRunApi,
   fetchPayRunDetailApi,
   postPayRunJournalApi,
   submitPayRunForApprovalApi,
 } from "@/lib/api/payroll";
 import type { PayRun, PayRunLine } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
-import { payRunApprove } from "@/lib/api/stub-endpoints";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -92,7 +92,7 @@ export default function PayRunDetailPage() {
   const handleApprove = async () => {
     setApproving(true);
     try {
-      await payRunApprove(id);
+      await approvePayRunApi(id);
       await refreshRun();
       toast.success("Pay run approved.");
     } catch (e) {

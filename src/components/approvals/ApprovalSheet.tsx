@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import type { ApprovalItem } from "@/lib/mock/approvals";
+import type { ApprovalItem } from "@/lib/types/approvals";
 import { drillToDocument } from "@/lib/drill-through";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/money";
@@ -33,9 +33,13 @@ export function ApprovalSheet({
   onReject,
 }: ApprovalSheetProps) {
   const [comment, setComment] = React.useState("");
+  const [error, setError] = React.useState("");
 
   React.useEffect(() => {
-    if (!open) setComment("");
+    if (!open) {
+      setComment("");
+      setError("");
+    }
   }, [open]);
 
   if (!item) return null;
@@ -46,6 +50,10 @@ export function ApprovalSheet({
   };
 
   const handleReject = () => {
+    if (!comment.trim()) {
+      setError("Rejection note is required for this decision.");
+      return;
+    }
     onReject?.(item.id, comment || undefined);
     onOpenChange(false);
   };
@@ -60,6 +68,12 @@ export function ApprovalSheet({
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-4">
+          {item.creditBreachReason && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+              <p className="font-medium text-amber-800 dark:text-amber-200">Credit policy breach reason</p>
+              <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">{item.creditBreachReason}</p>
+            </div>
+          )}
           <div className="rounded-lg border p-4 space-y-2 text-sm">
             <p>
               <span className="text-muted-foreground">Document</span>{" "}
@@ -85,7 +99,7 @@ export function ApprovalSheet({
             </p>
           </div>
           <div className="space-y-2">
-            <Label>Comment (optional)</Label>
+            <Label>Comment {onReject ? "(required to reject)" : "(optional)"}</Label>
             <textarea
               placeholder="Add a comment..."
               value={comment}
@@ -97,6 +111,7 @@ export function ApprovalSheet({
                 "disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               )}
             />
+            {error ? <p className="text-xs text-destructive">{error}</p> : null}
           </div>
         </div>
         <SheetFooter className="mt-6 flex-wrap gap-2">

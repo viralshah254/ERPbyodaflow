@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import { getDocTypeConfig } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
 import { t } from "@/lib/terminology";
@@ -38,17 +38,16 @@ import { useTerminology } from "@/stores/orgContextStore";
 import {
   addDocumentCommentApi,
   convertDocumentApi,
+  documentActionApi,
+  downloadDocumentPdfApi,
   downloadDocumentAttachmentApi,
   fetchDocumentDetailApi,
+  requestDocumentApprovalApi,
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
-import { fetchApSuppliersApi, fetchArCustomersApi } from "@/lib/api/payments";
-import {
-  documentAction as documentActionEndpoint,
-  documentDownloadPdf as documentDownloadPdfEndpoint,
-  documentRequestApproval as documentRequestApprovalEndpoint,
-} from "@/lib/api/stub-endpoints";
+import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
+import type { PartyLookupOption } from "@/lib/api/parties";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -70,7 +69,7 @@ export default function DocViewPage() {
   const [convertPartyId, setConvertPartyId] = React.useState("");
   const [convertWarehouseId, setConvertWarehouseId] = React.useState("");
   const [outputTemplateId, setOutputTemplateId] = React.useState("");
-  const [counterpartyOptions, setCounterpartyOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [selectedConvertPartyOption, setSelectedConvertPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
   const convertTargets = document?.availableConversionTargets ?? [];
@@ -113,19 +112,9 @@ export default function DocViewPage() {
     if (!convertOpen || !convertType) return;
     let active = true;
     const loadOptions = async () => {
-      const needsSupplier = ["purchase-order", "bill"].includes(convertType);
-      const needsCustomer = ["quote", "sales-order", "delivery-note", "invoice"].includes(convertType);
       const needsWarehouse = ["delivery-note", "grn"].includes(convertType);
-      const [partyResults, warehouseResults] = await Promise.all([
-        needsSupplier
-          ? fetchApSuppliersApi()
-          : needsCustomer
-            ? fetchArCustomersApi()
-            : Promise.resolve([]),
-        needsWarehouse ? fetchWarehouseOptions() : Promise.resolve([]),
-      ]);
+      const warehouseResults = await (needsWarehouse ? fetchWarehouseOptions() : Promise.resolve([]));
       if (!active) return;
-      setCounterpartyOptions(partyResults);
       setWarehouseOptions(warehouseResults);
     };
     void loadOptions().catch((error) => toast.error((error as Error).message));
@@ -169,6 +158,14 @@ export default function DocViewPage() {
     (targetType: DocTypeKey) => {
       setConvertType(targetType);
       setConvertPartyId(document?.partyId ?? "");
+      setSelectedConvertPartyOption(
+        document?.partyId && document.party
+          ? {
+              id: document.partyId,
+              label: document.party,
+            }
+          : null
+      );
       setConvertWarehouseId(document?.warehouseId ?? "");
       setOutputTemplateId(document?.outputTemplateId ?? "");
       setConvertOpen(true);
@@ -198,6 +195,16 @@ export default function DocViewPage() {
     </DocumentRightPanel>
   );
 
+  const selectedConvertParty = React.useMemo(() => {
+    if (!convertPartyId || !document?.party || document.partyId !== convertPartyId) {
+      return selectedConvertPartyOption;
+    }
+    return {
+      id: convertPartyId,
+      label: document.party,
+    };
+  }, [convertPartyId, document?.party, document?.partyId, selectedConvertPartyOption]);
+
   return (
     <DocumentPageShell
       title={`${label} ${id}`}
@@ -218,7 +225,7 @@ export default function DocViewPage() {
               onClick={async () => {
                 setActionLoading(true);
                 try {
-                  await documentRequestApprovalEndpoint(type, id);
+                  await requestDocumentApprovalApi(type as DocTypeKey, id);
                   await refreshDocument();
                   toast.success("Approval requested.");
                 } catch (e) {
@@ -242,7 +249,7 @@ export default function DocViewPage() {
                 onClick={async () => {
                   setActionLoading(true);
                   try {
-                    await documentActionEndpoint(type, id, "approve");
+                    await documentActionApi(type as DocTypeKey, id, "approve");
                     await refreshDocument();
                     toast.success("Document approved.");
                   } catch (e) {
@@ -264,7 +271,7 @@ export default function DocViewPage() {
                 onClick={async () => {
                   setActionLoading(true);
                   try {
-                    await documentActionEndpoint(type, id, "post");
+                    await documentActionApi(type as DocTypeKey, id, "post");
                     await refreshDocument();
                     toast.success("Document posted.");
                   } catch (e) {
@@ -288,7 +295,7 @@ export default function DocViewPage() {
               onClick={async () => {
                 setActionLoading(true);
                 try {
-                  await documentActionEndpoint(type, id, "cancel");
+                  await documentActionApi(type as DocTypeKey, id, "cancel");
                   await refreshDocument();
                   toast.success("Document cancelled.");
                 } catch (e) {
@@ -310,7 +317,7 @@ export default function DocViewPage() {
               onClick={async () => {
                 setActionLoading(true);
                 try {
-                  await documentActionEndpoint(type, id, "reverse");
+                  await documentActionApi(type as DocTypeKey, id, "reverse");
                   await refreshDocument();
                   toast.success("Reversal created.");
                 } catch (e) {
@@ -340,7 +347,7 @@ export default function DocViewPage() {
             variant="outline"
             size="sm"
             onClick={() =>
-              documentDownloadPdfEndpoint(type, id, `${type}-${id}.pdf`, (msg) =>
+              downloadDocumentPdfApi(type as DocTypeKey, id, `${type}-${id}.pdf`, (msg) =>
                 toast.info(msg || "Export not available.")
               )
             }
@@ -523,12 +530,27 @@ export default function DocViewPage() {
                 <Label htmlFor="convert-party">
                   {["purchase-order", "bill"].includes(convertType) ? "Supplier" : "Customer"}
                 </Label>
-                <SearchableSelect
+                <AsyncSearchableSelect
                   value={convertPartyId}
-                  onValueChange={setConvertPartyId}
-                  options={counterpartyOptions.map((option) => ({ id: option.id, label: option.name }))}
+                  onValueChange={(value) => {
+                    setConvertPartyId(value);
+                    if (!value) setSelectedConvertPartyOption(null);
+                  }}
+                  onOptionSelect={(option) => setSelectedConvertPartyOption(option)}
+                  loadOptions={
+                    ["purchase-order", "bill"].includes(convertType)
+                      ? searchApSupplierOptionsApi
+                      : searchArCustomerOptionsApi
+                  }
+                  selectedOption={selectedConvertParty}
                   placeholder="Select counterparty"
-                  searchPlaceholder="Type to search counterparty"
+                  searchPlaceholder="Type name, code, phone, or email"
+                  emptyMessage="No counterparties found."
+                  recentStorageKey={
+                    ["purchase-order", "bill"].includes(convertType)
+                      ? "lookup:recent-suppliers"
+                      : "lookup:recent-customers"
+                  }
                   allowClear
                 />
               </div>

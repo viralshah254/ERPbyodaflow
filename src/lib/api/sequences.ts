@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { SequenceRow } from "@/lib/mock/sequences";
+import type { SequenceRow } from "@/lib/types/sequences";
 
 type BackendSequence = {
   id: string;

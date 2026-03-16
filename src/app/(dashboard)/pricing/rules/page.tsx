@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -41,7 +41,7 @@ import {
   setCustomerDefaultPriceList,
   type CustomerDefaultPriceListRow,
 } from "@/lib/api/pricing";
-import { fetchPartiesApi } from "@/lib/api/parties";
+import { searchPartyLookupOptionsApi, type PartyLookupOption } from "@/lib/api/parties";
 import type { DiscountPolicy } from "@/lib/products/pricing-types";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -63,8 +63,8 @@ export default function PricingRulesPage() {
 
   // Configure customer default
   const [customerDefaults, setCustomerDefaults] = React.useState<CustomerDefaultPriceListRow[]>([]);
-  const [customerOptions, setCustomerOptions] = React.useState<Array<{ id: string; name: string }>>([]);
   const [configCustomerId, setConfigCustomerId] = React.useState("");
+  const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
   const [configPriceListId, setConfigPriceListId] = React.useState("");
   const [priceListOptions, setPriceListOptions] = React.useState<Array<{ id: string; name: string }>>([]);
 
@@ -90,9 +90,6 @@ export default function PricingRulesPage() {
     fetchPriceListOptions()
       .then(setPriceListOptions)
       .catch(() => setPriceListOptions([]));
-    fetchPartiesApi({ role: "customer", status: "ACTIVE" })
-      .then((items) => setCustomerOptions(items.map((item) => ({ id: item.id, name: item.name }))))
-      .catch(() => setCustomerOptions([]));
   }, [configureOpen, loadCustomerDefaults]);
 
   const handleAddPolicy = async () => {
@@ -135,6 +132,7 @@ export default function PricingRulesPage() {
       await setCustomerDefaultPriceList(configCustomerId.trim(), configPriceListId);
       toast.success("Default price list set.");
       setConfigCustomerId("");
+      setSelectedCustomerOption(null);
       setConfigPriceListId("");
       loadCustomerDefaults();
     } catch (e) {
@@ -297,12 +295,26 @@ export default function PricingRulesPage() {
                     <Label>Set default</Label>
                     <div className="grid gap-2">
                       <Label htmlFor="configCustomerId" className="text-muted-foreground text-xs">Customer</Label>
-                      <SearchableSelect
+                      <AsyncSearchableSelect
                         value={configCustomerId}
-                        onValueChange={setConfigCustomerId}
-                        options={customerOptions.map((customer) => ({ id: customer.id, label: customer.name }))}
+                        onValueChange={(value) => {
+                          setConfigCustomerId(value);
+                          if (!value) setSelectedCustomerOption(null);
+                        }}
+                        onOptionSelect={(option) => setSelectedCustomerOption(option)}
+                        loadOptions={(query) =>
+                          searchPartyLookupOptionsApi({
+                            role: "customer",
+                            status: "ACTIVE",
+                            search: query,
+                            limit: 20,
+                          })
+                        }
+                        selectedOption={selectedCustomerOption}
                         placeholder="Select customer"
-                        searchPlaceholder="Type to search customer"
+                        searchPlaceholder="Type name, code, phone, or email"
+                        emptyMessage="No customers found."
+                        recentStorageKey="lookup:recent-customers"
                       />
                     </div>
                     <div className="grid gap-2">

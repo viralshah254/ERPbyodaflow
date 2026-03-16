@@ -28,8 +28,8 @@ import {
 import { createAssetDisposalApi, fetchAssetDisposalsApi } from "@/lib/api/asset-disposals";
 import { fetchAssetsApi } from "@/lib/api/assets";
 import { postDisposalJournalApi } from "@/lib/api/assets-lifecycle";
-import type { DisposalRow } from "@/lib/mock/assets/disposals";
-import type { AssetRow } from "@/lib/mock/assets/register";
+import type { DisposalRow } from "@/lib/types/assets";
+import type { AssetRow } from "@/lib/types/assets";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";

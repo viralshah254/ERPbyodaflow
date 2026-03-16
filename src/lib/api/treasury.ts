@@ -1,7 +1,6 @@
 import {
-  getMockCashflowForecast,
   type CashflowForecastRow,
-} from "@/lib/mock/treasury/cashflow";
+} from "@/lib/types/treasury";
 import { apiRequest, requireLiveApi } from "./client";
 
 type BackendCashflowItem = {
@@ -20,7 +19,6 @@ export async function fetchCashflowApi(filters?: {
   from?: string;
   to?: string;
 }): Promise<CashflowForecastRow[]> {
-  void getMockCashflowForecast;
   requireLiveApi("Treasury cashflow");
   const data = await apiRequest<BackendCashflowResponse>("/api/treasury/cashflow");
   let runningBalance = 0;

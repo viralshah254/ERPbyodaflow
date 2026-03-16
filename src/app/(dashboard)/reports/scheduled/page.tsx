@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { ScheduledReportRow } from "@/lib/mock/reports";
+import type { ScheduledReportRow } from "@/lib/types/reports";
 import { fetchScheduledReportsApi } from "@/lib/api/reports";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";

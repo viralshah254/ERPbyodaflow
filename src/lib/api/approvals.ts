@@ -1,4 +1,4 @@
-import type { ApprovalItem } from "@/lib/mock/approvals";
+import type { ApprovalItem } from "@/lib/types/approvals";
 import { apiRequest, requireLiveApi } from "./client";
 
 type BackendApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -23,6 +23,10 @@ function mapStatus(status: BackendApprovalStatus): ApprovalItem["status"] {
 }
 
 function mapApprovalItem(item: BackendApprovalItem, isMine = false): ApprovalItem {
+  const creditBreachReason =
+    item.comment && item.comment.toLowerCase().includes("credit policy breach")
+      ? item.comment
+      : undefined;
   return {
     id: item.id,
     documentType: item.documentType,
@@ -33,6 +37,8 @@ function mapApprovalItem(item: BackendApprovalItem, isMine = false): ApprovalIte
     requester: item.requesterName ?? item.requesterId ?? "Unknown user",
     requesterId: item.requesterId,
     requestedAt: item.requestedAt,
+    comment: item.comment,
+    creditBreachReason,
     status: mapStatus(item.status),
     isMine,
   };
@@ -48,4 +54,20 @@ export async function fetchApprovalRequests(): Promise<ApprovalItem[]> {
   requireLiveApi("Approval requests");
   const data = await apiRequest<{ items: BackendApprovalItem[] }>("/api/approvals/requests");
   return data.items.map((item) => mapApprovalItem(item, true));
+}
+
+export async function approveApprovalApi(id: string, comment?: string): Promise<void> {
+  requireLiveApi("Approve workflow item");
+  await apiRequest(`/api/approvals/${encodeURIComponent(id)}/approve`, {
+    method: "POST",
+    body: comment != null ? { comment } : {},
+  });
+}
+
+export async function rejectApprovalApi(id: string, comment?: string): Promise<void> {
+  requireLiveApi("Reject workflow item");
+  await apiRequest(`/api/approvals/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+    body: comment != null ? { comment } : {},
+  });
 }

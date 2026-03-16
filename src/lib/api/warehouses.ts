@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { WarehouseRow } from "@/lib/mock/masters";
+import type { WarehouseRow } from "@/lib/types/masters";
 
 type BackendWarehouse = {
   id: string;

@@ -16,6 +16,11 @@ export type InboxNotification = {
   severity: "low" | "medium" | "high";
   createdAt: string;
   status: "OPEN" | "ACKNOWLEDGED";
+  userId?: string;
+  dedupeKey?: string;
+  permission?: string;
+  entityType?: string;
+  entityId?: string;
 };
 
 const DEFAULT_SETTINGS: NotificationSettings = {

@@ -26,7 +26,7 @@ import {
   fetchIntercompanyEntitiesApi,
   fetchIntercompanyTransactionsApi,
 } from "@/lib/api/intercompany";
-import type { ICTransactionRow } from "@/lib/mock/intercompany/transactions";
+import type { ICTransactionRow } from "@/lib/types/intercompany";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";

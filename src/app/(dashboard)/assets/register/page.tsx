@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createAssetApi, fetchAssetsApi, updateAssetApi } from "@/lib/api/assets";
-import { type AssetRow, type DepreciationMethod } from "@/lib/mock/assets/register";
+import type { AssetRow, DepreciationMethod } from "@/lib/types/assets";
 import { fetchApSuppliersApi } from "@/lib/api/payments";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";

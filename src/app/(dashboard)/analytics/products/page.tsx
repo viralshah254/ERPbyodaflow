@@ -7,15 +7,76 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { InsightCard } from "@/components/analytics";
-import {
-  MOCK_MARGIN_WATERFALL,
-  MOCK_PACKAGING_PROFIT,
-  MOCK_CHANNEL_MARGIN,
-} from "@/lib/mock/analytics/intelligence";
+import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductsIntelligenceApi } from "@/lib/api/analytics-intelligence";
+import type {
+  MarginWaterfallRow,
+  PackagingProfitRow,
+  ChannelMarginRow,
+} from "@/lib/types/analytics-intelligence";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+const defaultMarginWaterfall: MarginWaterfallRow[] = [
+  { stage: "List", amount: 150000, cumulative: 150000 },
+  { stage: "Discount", amount: -12000, cumulative: 138000 },
+  { stage: "Net", amount: 0, cumulative: 138000 },
+  { stage: "Cost", amount: -82800, cumulative: 55200 },
+  { stage: "Margin", amount: 0, cumulative: 55200 },
+];
+const defaultPackagingProfit: PackagingProfitRow[] = [];
+const defaultChannelMargin: ChannelMarginRow[] = [];
+
 export default function AnalyticsProductsPage() {
+  const [firstProductId, setFirstProductId] = React.useState<string | null>(null);
+  const [marginWaterfall, setMarginWaterfall] = React.useState<MarginWaterfallRow[]>(defaultMarginWaterfall);
+  const [packagingProfit, setPackagingProfit] = React.useState<PackagingProfitRow[]>(defaultPackagingProfit);
+  const [channelMargin, setChannelMargin] = React.useState<ChannelMarginRow[]>(defaultChannelMargin);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchProductsIntelligenceApi()
+      .then((data) => {
+        if (!cancelled) {
+          setMarginWaterfall(data.marginWaterfall.length ? data.marginWaterfall : defaultMarginWaterfall);
+          setPackagingProfit(data.packagingProfit);
+          setChannelMargin(data.channelMargin);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMarginWaterfall(defaultMarginWaterfall);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetchProductsApi(undefined, "ACTIVE")
+      .then((products) => {
+        if (!cancelled) setFirstProductId(products[0]?.id ?? null);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Failed to load products.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const pricingLink = firstProductId ? `/master/products/${firstProductId}/pricing` : "/master/products";
+  const packagingLink = firstProductId ? `/master/products/${firstProductId}/packaging` : "/master/products";
+
   return (
     <PageShell>
       <PageHeader
@@ -36,7 +97,7 @@ export default function AnalyticsProductsPage() {
           description="List → discount → net → cost → margin"
           action={
             <Button size="sm" variant="outline" asChild>
-              <Link href="/master/products/p1/pricing">Fix pricing</Link>
+              <Link href={pricingLink}>Fix pricing</Link>
             </Button>
           }
         >
@@ -50,7 +111,7 @@ export default function AnalyticsProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {MOCK_MARGIN_WATERFALL.map((r, i) => (
+                {marginWaterfall.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.stage}</td>
                     <td className="text-right tabular-nums px-3 py-2">
@@ -71,7 +132,7 @@ export default function AnalyticsProductsPage() {
           description="Margin % and volume by UOM"
           action={
             <Button size="sm" variant="outline" asChild>
-              <Link href="/master/products/p1/packaging">Packaging</Link>
+              <Link href={packagingLink}>Packaging</Link>
             </Button>
           }
         >
@@ -86,7 +147,7 @@ export default function AnalyticsProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {MOCK_PACKAGING_PROFIT.map((r, i) => (
+                {packagingProfit.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.sku}</td>
                     <td className="px-3 py-2">{r.uom}</td>
@@ -119,7 +180,7 @@ export default function AnalyticsProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {MOCK_CHANNEL_MARGIN.map((r, i) => (
+                {channelMargin.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.channel}</td>
                     <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.revenue, "KES")}</td>

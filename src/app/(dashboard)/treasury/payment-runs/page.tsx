@@ -30,7 +30,7 @@ import {
   type BillDueRow,
   type PaymentRunRow,
   type PaymentMethod,
-} from "@/lib/mock/treasury/payment-runs";
+} from "@/lib/types/treasury";
 import {
   createPaymentRunApi,
   fetchBankAccountsApi,

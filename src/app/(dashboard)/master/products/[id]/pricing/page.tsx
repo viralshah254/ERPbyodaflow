@@ -33,12 +33,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getProductById, listPackaging, listProductPrices, saveProductPrices } from "@/lib/data/products.repo";
-import { listPriceLists } from "@/lib/data/pricing.repo";
+import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { listUoms } from "@/lib/data/uom.repo";
 import type { PricingTier, ProductPrice } from "@/lib/products/pricing-types";
 import { validateTiers } from "@/lib/pricing/validation";
 import { formatMoney } from "@/lib/money";
-import { productApplyPricingTemplate } from "@/lib/api/stub-endpoints";
+import { applyProductPricingTemplateApi } from "@/lib/api/products";
 import { toast } from "sonner";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -60,9 +60,15 @@ export default function ProductPricingPage() {
 
   const product = React.useMemo(() => getProductById(id), [id]);
   const packaging = React.useMemo(() => (product ? listPackaging(product.id) : []), [product]);
-  const priceLists = React.useMemo(() => listPriceLists(), []);
+  const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
+  React.useEffect(() => {
+    fetchPriceListsForUi().then(setPriceLists).catch(() => {});
+  }, []);
 
-  const [selectedListId, setSelectedListId] = React.useState<string>(priceLists[0]?.id ?? "");
+  const [selectedListId, setSelectedListId] = React.useState<string>("");
+  React.useEffect(() => {
+    if (priceLists.length && !selectedListId) setSelectedListId(priceLists[0].id);
+  }, [priceLists, selectedListId]);
   const prices = React.useMemo(() => (product ? listProductPrices(product.id, selectedListId) : []), [product, selectedListId]);
   const tiers = React.useMemo(() => prices[0]?.tiers ?? [], [prices]);
   const [draftTiers, setDraftTiers] = React.useState<PricingTier[]>([]);
@@ -106,7 +112,7 @@ export default function ProductPricingPage() {
     }
     setApplyingTemplate(true);
     try {
-      await productApplyPricingTemplate(product.id, selectedListId);
+      await applyProductPricingTemplateApi(product.id, selectedListId);
       toast.success("Pricing template applied.");
     } catch (e) {
       toast.error((e as Error).message);

@@ -8,7 +8,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { EntityRow } from "@/lib/mock/intercompany/entities";
+import type { EntityRow } from "@/lib/types/intercompany";
 import { createEntityApi, fetchEntitiesApi } from "@/lib/api/entities";
 import { downloadCsv } from "@/lib/export/csv";
 import { ExplainThis } from "@/components/copilot/ExplainThis";

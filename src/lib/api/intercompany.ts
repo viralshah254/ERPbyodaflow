@@ -1,6 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { EntityRow } from "@/lib/mock/intercompany/entities";
-import type { ICTransactionRow } from "@/lib/mock/intercompany/transactions";
+import type { EntityRow, ICTransactionRow } from "@/lib/types/intercompany";
 
 type BackendEntity = {
   id: string;

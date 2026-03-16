@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { ProjectRow, ProjectStatus } from "@/lib/mock/projects/list";
+import type { ProjectRow, ProjectStatus } from "@/lib/types/projects";
 
 type BackendProject = {
   id: string;
@@ -42,7 +42,7 @@ type BackendProjectCostLink = {
   sourceId: string;
   sourceType?: string;
   journalId?: string;
-  rateSource?: "EMPLOYEE_SALARY_MONTHLY_173" | "PROJECT_DEFAULT_RATE";
+  rateSource?: "EMPLOYEE_OVERRIDE_RATE" | "EMPLOYEE_SALARY_MONTHLY_173" | "PROJECT_DEFAULT_RATE";
 };
 
 type BackendProjectCostingResponse = {
@@ -94,7 +94,7 @@ export type ProjectCostLinkRow = {
   sourceId: string;
   sourceType?: string;
   journalId?: string;
-  rateSource?: "EMPLOYEE_SALARY_MONTHLY_173" | "PROJECT_DEFAULT_RATE";
+  rateSource?: "EMPLOYEE_OVERRIDE_RATE" | "EMPLOYEE_SALARY_MONTHLY_173" | "PROJECT_DEFAULT_RATE";
 };
 
 export type ProjectCostingSummary = {

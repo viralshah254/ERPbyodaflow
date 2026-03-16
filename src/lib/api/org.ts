@@ -1,4 +1,4 @@
-import type { OrgProfileRecord } from "@/lib/data/org-profile.repo";
+import type { OrgProfileRecord } from "@/lib/types/org";
 import { apiRequest, requireLiveApi } from "./client";
 
 type BackendOrg = {
@@ -16,4 +16,16 @@ export async function fetchOrgProfileApi(): Promise<OrgProfileRecord> {
     taxId: org.taxId ?? "",
     registrationNumber: org.registrationNumber ?? "",
   };
+}
+
+export async function saveOrgProfileApi(payload: {
+  name?: string;
+  taxId?: string;
+  registrationNumber?: string;
+}): Promise<void> {
+  requireLiveApi("Organization profile save");
+  await apiRequest("/api/org", {
+    method: "PATCH",
+    body: payload,
+  });
 }

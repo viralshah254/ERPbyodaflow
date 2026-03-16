@@ -1,6 +1,6 @@
 import type { Employee, PayRun, PayRunLine, Payslip } from "@/lib/payroll/types";
 import { apiRequest, requireLiveApi } from "./client";
-import type { StatutoryConfig } from "@/lib/mock/payroll/statutories";
+import type { StatutoryConfig } from "@/lib/types/payroll";
 
 type BackendEmployee = {
   id: string;
@@ -11,6 +11,7 @@ type BackendEmployee = {
   department?: string;
   jobTitle?: string;
   salary?: number;
+  hourlyCostRate?: number;
   currency?: string;
 };
 
@@ -69,6 +70,7 @@ function mapEmployee(item: BackendEmployee): Employee {
     employmentType: "PERMANENT",
     salaryType: "MONTHLY",
     baseSalary: item.salary ?? 0,
+    hourlyCostRate: item.hourlyCostRate,
     currency: item.currency ?? "KES",
     allowances: [],
     deductions: [],
@@ -128,6 +130,7 @@ export async function createEmployeeApi(payload: {
   department?: string;
   branch?: string;
   baseSalary: number;
+  hourlyCostRate?: number;
   currency?: string;
 }): Promise<void> {
   requireLiveApi("Payroll employee creation");
@@ -143,6 +146,7 @@ export async function createEmployeeApi(payload: {
       department: payload.department,
       startDate: new Date().toISOString(),
       salary: payload.baseSalary,
+      hourlyCostRate: payload.hourlyCostRate,
       currency: payload.currency ?? "KES",
       branchId: payload.branch,
     },
@@ -188,6 +192,14 @@ export async function submitPayRunForApprovalApi(id: string): Promise<void> {
   await apiRequest(`/api/payroll/pay-runs/${id}/action`, {
     method: "POST",
     body: { action: "request-approval" },
+  });
+}
+
+export async function approvePayRunApi(id: string): Promise<void> {
+  requireLiveApi("Payroll approval");
+  await apiRequest(`/api/payroll/pay-runs/${id}/action`, {
+    method: "POST",
+    body: { action: "approve" },
   });
 }
 

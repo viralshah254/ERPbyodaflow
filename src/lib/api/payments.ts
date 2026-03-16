@@ -1,6 +1,7 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { APPaymentRow } from "@/lib/mock/ap";
-import type { OpenInvoiceRow, PaymentRow } from "@/lib/mock/ar";
+import { sortPartyLookupOptions, toPartyLookupOption, type PartyLookupOption } from "@/lib/api/parties";
+import type { APBillRow, APPaymentRow } from "@/lib/types/ap";
+import type { OpenInvoiceRow, PaymentRow } from "@/lib/types/ar";
 
 export type OpenBillRow = {
   id: string;
@@ -24,6 +25,8 @@ type BackendPayment = {
   partyName?: string;
   amount: number;
   status: string;
+  paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
+  mpesaTransactionNo?: string;
   openAmount?: number;
   appliedAmount?: number;
 };
@@ -56,18 +59,49 @@ type BackendOpenBill = {
   currency?: string;
 };
 
+type BackendApBill = {
+  id: string;
+  number: string;
+  date: string;
+  dueDate?: string;
+  partyId?: string;
+  supplierName?: string;
+  total: number;
+  status: string;
+};
+
 type BackendPartyOption = {
   id: string;
   partyId?: string;
   name: string;
+  code?: string;
+  email?: string;
+  phone?: string;
+  taxId?: string;
+  customerType?: import("@/lib/types/masters").CustomerType;
+  supplierType?: import("@/lib/types/masters").SupplierType;
+  status?: string;
+  creditLimit?: number;
+  creditLimitAmount?: number;
+  outstandingBalance?: number;
 };
 
 export type ArCustomerSummary = {
   id: string;
   partyId: string;
   name: string;
+  customerType?: import("@/lib/types/masters").CustomerType;
   email?: string;
+  phone?: string;
+  code?: string;
+  taxId?: string;
   creditLimit?: number;
+  creditLimitAmount?: number;
+  creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
+  customerCategoryId?: string;
+  maxOutstandingInvoiceAgeDays?: number;
+  perInvoiceDaysToPayCap?: number;
+  creditWarningThresholdPct?: number;
   paymentTermsId?: string;
   status?: string;
   outstandingBalance?: number;
@@ -78,7 +112,11 @@ export type ApSupplierSummary = {
   id: string;
   partyId: string;
   name: string;
+  supplierType?: import("@/lib/types/masters").SupplierType;
   email?: string;
+  phone?: string;
+  code?: string;
+  taxId?: string;
   paymentTermsId?: string;
   status?: string;
   currency?: string;
@@ -95,6 +133,8 @@ export async function fetchArPaymentsApi(): Promise<PaymentRow[]> {
     customerName: item.partyName ?? item.partyId,
     amount: item.amount,
     status: item.status,
+    paymentMethod: item.paymentMethod,
+    mpesaTransactionNo: item.mpesaTransactionNo,
   }));
 }
 
@@ -104,6 +144,24 @@ export async function fetchArCustomersApi(search?: string): Promise<Array<{ id: 
   if (search?.trim()) params.set("search", search.trim());
   const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ar/customers", { params });
   return payload.items.map((item) => ({ id: item.id ?? item.partyId ?? "", name: item.name }));
+}
+
+export async function searchArCustomerOptionsApi(search?: string): Promise<PartyLookupOption[]> {
+  requireLiveApi("AR customer lookup");
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set("search", search.trim());
+  const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ar/customers", { params });
+  return sortPartyLookupOptions(
+    payload.items.map((item) =>
+      toPartyLookupOption({
+        ...item,
+        creditLimitAmount: item.creditLimitAmount,
+        creditLimit: item.creditLimit,
+        outstandingBalance: item.outstandingBalance,
+      })
+    ),
+    search ?? ""
+  );
 }
 
 export async function fetchArCustomerSummariesApi(search?: string): Promise<ArCustomerSummary[]> {
@@ -139,6 +197,8 @@ export async function createArPaymentApi(body: {
   amount: number;
   date?: string;
   bankAccountId?: string;
+  paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
+  mpesaTransactionNo?: string;
 }): Promise<{ id: string; number: string }> {
   requireLiveApi("AR payment creation");
   return apiRequest<{ id: string; number: string }>("/api/ar/payments", {
@@ -148,6 +208,8 @@ export async function createArPaymentApi(body: {
       amount: body.amount,
       date: body.date ?? new Date().toISOString().slice(0, 10),
       bankAccountId: body.bankAccountId,
+      paymentMethod: body.paymentMethod,
+      mpesaTransactionNo: body.mpesaTransactionNo,
     },
   });
 }
@@ -170,6 +232,24 @@ export async function fetchApPaymentsApi(): Promise<APPaymentRow[]> {
     party: item.partyName ?? item.partyId,
     amount: item.amount,
     status: item.status,
+    paymentMethod: item.paymentMethod,
+    mpesaTransactionNo: item.mpesaTransactionNo,
+  }));
+}
+
+export async function fetchApBillsApi(search?: string): Promise<APBillRow[]> {
+  requireLiveApi("AP bills");
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set("search", search.trim());
+  const payload = await apiRequest<{ items: BackendApBill[] }>("/api/ap/bills", { params });
+  return payload.items.map((item) => ({
+    id: item.id,
+    number: item.number,
+    date: item.date?.slice(0, 10) ?? "",
+    party: item.supplierName ?? item.partyId ?? "",
+    total: item.total ?? 0,
+    status: item.status ?? "DRAFT",
+    dueDate: item.dueDate?.slice(0, 10),
   }));
 }
 
@@ -179,6 +259,14 @@ export async function fetchApSuppliersApi(search?: string): Promise<Array<{ id: 
   if (search?.trim()) params.set("search", search.trim());
   const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ap/suppliers", { params });
   return payload.items.map((item) => ({ id: item.id ?? item.partyId ?? "", name: item.name }));
+}
+
+export async function searchApSupplierOptionsApi(search?: string): Promise<PartyLookupOption[]> {
+  requireLiveApi("AP supplier lookup");
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set("search", search.trim());
+  const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ap/suppliers", { params });
+  return sortPartyLookupOptions(payload.items.map((item) => toPartyLookupOption(item)), search ?? "");
 }
 
 export async function fetchApSupplierSummariesApi(search?: string): Promise<ApSupplierSummary[]> {
@@ -214,6 +302,8 @@ export async function createApPaymentApi(body: {
   amount: number;
   date?: string;
   bankAccountId?: string;
+  paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
+  mpesaTransactionNo?: string;
 }): Promise<{ id: string; number: string }> {
   requireLiveApi("AP payment creation");
   return apiRequest<{ id: string; number: string }>("/api/ap/payments", {
@@ -223,6 +313,8 @@ export async function createApPaymentApi(body: {
       amount: body.amount,
       date: body.date ?? new Date().toISOString().slice(0, 10),
       bankAccountId: body.bankAccountId,
+      paymentMethod: body.paymentMethod,
+      mpesaTransactionNo: body.mpesaTransactionNo,
     },
   });
 }

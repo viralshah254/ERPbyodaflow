@@ -8,7 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AnomalyDetection } from "@/components/ai/anomaly-detection";
-import { getMockAnomalies } from "@/lib/mock/anomalies";
+import { fetchAnomaliesApi } from "@/lib/api/anomalies";
+import type { AnomalyDetection as AnomalyDetectionType } from "@/types/erp";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const INVESTIGATE_BY_TYPE: Record<string, string> = {
@@ -22,7 +24,24 @@ const INVESTIGATE_BY_TYPE: Record<string, string> = {
 };
 
 export default function AnalyticsAnomaliesPage() {
-  const anomalies = React.useMemo(() => getMockAnomalies(), []);
+  const [anomalies, setAnomalies] = React.useState<AnomalyDetectionType[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+    void fetchAnomaliesApi()
+      .then((items) => {
+        if (!active) return;
+        setAnomalies(items);
+      })
+      .catch((error) => {
+        if (!active) return;
+        toast.error(error instanceof Error ? error.message : "Failed to load anomalies.");
+        setAnomalies([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const getInvestigateHref = React.useCallback((a: { type: string }) => INVESTIGATE_BY_TYPE[a.type] ?? "/analytics/explore", []);
 
   return (

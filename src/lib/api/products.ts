@@ -1,4 +1,4 @@
-import type { ProductRow } from "@/lib/mock/masters";
+import type { ProductRow } from "@/lib/types/masters";
 import { apiRequest, requireLiveApi } from "./client";
 
 type BackendProduct = {
@@ -64,5 +64,20 @@ export async function createProductApi(payload: ProductPayload): Promise<{ id: s
       status: payload.status,
       description: payload.description,
     },
+  });
+}
+
+export async function deleteProductApi(id: string): Promise<void> {
+  requireLiveApi("Product delete");
+  await apiRequest(`/api/products/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function applyProductPricingTemplateApi(productId: string, templateId: string): Promise<void> {
+  requireLiveApi("Apply product pricing template");
+  await apiRequest(`/api/products/${encodeURIComponent(productId)}/pricing/apply-template`, {
+    method: "POST",
+    body: { templateId },
   });
 }

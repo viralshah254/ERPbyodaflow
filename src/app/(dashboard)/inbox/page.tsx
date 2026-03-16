@@ -8,21 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import * as Icons from "lucide-react";
 import Link from "next/link";
-
-const MOCK_APPROVALS = [
-  { id: "1", ref: "PO-2025-101", summary: "Office supplies KES 85,000", requestedBy: "Jane Doe", severity: "medium" as const },
-  { id: "2", ref: "SO-2025-205", summary: "Bulk order ABC Ltd KES 320,000", requestedBy: "John Smith", severity: "high" as const },
-];
-
-const MOCK_ALERTS = [
-  { id: "1", title: "Low stock", message: "Widget B below reorder level.", severity: "warning" as const, suggested: "Create purchase order" },
-  { id: "2", title: "Overdue receivable", message: "INV-2025-089 30+ days. KES 45,000.", severity: "error" as const, suggested: "Send reminder" },
-];
-
-const MOCK_TASKS = [
-  { id: "1", title: "Review low stock report", due: "2025-01-28", status: "pending" as const },
-  { id: "2", title: "Approve PO-2025-101", due: "2025-01-27", status: "overdue" as const },
-];
+import { fetchApprovalInbox } from "@/lib/api/approvals";
+import { acknowledgeNotificationApi, fetchInboxNotificationsApi, type InboxNotification } from "@/lib/api/notifications";
+import type { ApprovalItem } from "@/lib/types/approvals";
+import { formatMoney } from "@/lib/money";
+import { drillFromNotification, drillToApprovalInbox } from "@/lib/drill-through";
+import { toast } from "sonner";
 
 const severityIcon: Record<string, string> = {
   low: "Info",
@@ -33,24 +24,54 @@ const severityIcon: Record<string, string> = {
 };
 
 export default function InboxPage() {
+  const [approvals, setApprovals] = React.useState<ApprovalItem[]>([]);
+  const [alerts, setAlerts] = React.useState<InboxNotification[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [approvalItems, notificationItems] = await Promise.all([
+        fetchApprovalInbox(),
+        fetchInboxNotificationsApi(),
+      ]);
+      setApprovals(approvalItems);
+      setAlerts(notificationItems);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load inbox.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
+
   return (
     <PageLayout
       title="Inbox"
       description="Approvals, alerts, and tasks"
+      actions={
+        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+          <Icons.RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
+      }
     >
       <Tabs defaultValue="approvals" className="space-y-4">
         <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="approvals">
             Approvals
-            <Badge variant="secondary" className="ml-1.5">{MOCK_APPROVALS.length}</Badge>
+            <Badge variant="secondary" className="ml-1.5">{approvals.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="alerts">
             Alerts
-            <Badge variant="secondary" className="ml-1.5">{MOCK_ALERTS.length}</Badge>
+            <Badge variant="secondary" className="ml-1.5">{alerts.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="tasks">
             Tasks
-            <Badge variant="secondary" className="ml-1.5">{MOCK_TASKS.length}</Badge>
+            <Badge variant="secondary" className="ml-1.5">0</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -61,8 +82,10 @@ export default function InboxPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {MOCK_APPROVALS.map((a) => {
-                  const Icon = Icons[severityIcon[a.severity] as keyof typeof Icons] as React.ComponentType<{ className?: string }>;
+                {approvals.map((a) => {
+                  const severity = a.creditBreachReason ? "high" : "medium";
+                  const Icon = Icons[severityIcon[severity] as keyof typeof Icons] as React.ComponentType<{ className?: string }>;
+                  const approvalLink = drillToApprovalInbox(a.id);
                   return (
                     <div
                       key={a.id}
@@ -71,20 +94,30 @@ export default function InboxPage() {
                       <div className="flex items-center gap-3">
                         <Icon className="h-5 w-5 text-muted-foreground" />
                         <div>
-                          <p className="font-medium">{a.ref}</p>
-                          <p className="text-sm text-muted-foreground">{a.summary}</p>
-                          <p className="text-xs text-muted-foreground">Requested by {a.requestedBy}</p>
+                          <p className="font-medium">{a.documentNumber}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {a.documentType} · {formatMoney(a.amount, a.currency)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Requested by {a.requester}</p>
+                          {a.creditBreachReason && (
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                              Credit breach flagged
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-muted-foreground">Suggested: Approve or reject</span>
-                        <Button size="sm">Approve</Button>
-                        <Button size="sm" variant="outline">Reject</Button>
-                        <Button size="sm" variant="ghost">Assign</Button>
+                        <span className="text-xs text-muted-foreground">Open the exact approval to act</span>
+                        <Button size="sm" asChild>
+                          <Link href={approvalLink.href}>{approvalLink.label}</Link>
+                        </Button>
                       </div>
                     </div>
                   );
                 })}
+                {!loading && approvals.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No pending approvals.</p>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -97,27 +130,46 @@ export default function InboxPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {MOCK_ALERTS.map((a) => {
+                {alerts.map((a) => {
+                  const kind = a.dedupeKey?.includes("credit-")
+                    ? "Credit risk"
+                    : a.dedupeKey?.includes("approval-")
+                      ? "Approval update"
+                      : "Alert";
+                  const hasErrorStyle = a.severity === "high";
                   const Icon = Icons[severityIcon[a.severity] as keyof typeof Icons] as React.ComponentType<{ className?: string }>;
+                  const drillLink = drillFromNotification(a);
                   return (
                     <div
                       key={a.id}
-                      className={`flex items-center justify-between gap-4 rounded-lg border p-4 ${a.severity === "error" ? "border-destructive/50 bg-destructive/5" : ""}`}
+                      className={`flex items-center justify-between gap-4 rounded-lg border p-4 ${hasErrorStyle ? "border-destructive/50 bg-destructive/5" : ""}`}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon className={`h-5 w-5 ${a.severity === "error" ? "text-destructive" : "text-muted-foreground"}`} />
+                        <Icon className={`h-5 w-5 ${hasErrorStyle ? "text-destructive" : "text-muted-foreground"}`} />
                         <div>
                           <p className="font-medium">{a.title}</p>
                           <p className="text-sm text-muted-foreground">{a.message}</p>
-                          {a.suggested && (
-                            <p className="text-xs text-primary mt-1">Suggested: {a.suggested}</p>
-                          )}
+                          <p className="text-xs text-primary mt-1">{kind}</p>
                         </div>
                       </div>
-                      <Button size="sm" variant="outline">View</Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={drillLink.href}>{drillLink.label}</Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void acknowledgeNotificationApi(a.id).then(load)}
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
+                {!loading && alerts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No active alerts.</p>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -129,25 +181,9 @@ export default function InboxPage() {
               <CardTitle>Tasks</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {MOCK_TASKS.map((t) => (
-                  <div
-                    key={t.id}
-                    className={`flex items-center justify-between gap-4 rounded-lg border p-4 ${t.status === "overdue" ? "border-destructive/50 bg-destructive/5" : ""}`}
-                  >
-                    <div>
-                      <p className="font-medium">{t.title}</p>
-                      <p className={`text-xs ${t.status === "overdue" ? "text-destructive" : "text-muted-foreground"}`}>
-                        Due {t.due} {t.status === "overdue" ? "· Overdue" : ""}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm">Start</Button>
-                      <Button size="sm" variant="outline">Assign</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Unified task routing is not wired yet. Use approvals and alerts tabs for live action items.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

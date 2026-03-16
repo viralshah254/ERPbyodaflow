@@ -6,11 +6,13 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getMockAssets } from "@/lib/mock/assets/register";
-import { getMockDisposals } from "@/lib/mock/assets/disposals";
+import { fetchAssetsApi } from "@/lib/api/assets";
+import { fetchAssetDisposalsApi } from "@/lib/api/asset-disposals";
+import { fetchDepreciationRunsApi } from "@/lib/api/assets-lifecycle";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const LINKS = [
@@ -21,11 +23,38 @@ const LINKS = [
 
 export default function AssetsOverviewPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const assets = React.useMemo(() => getMockAssets(), []);
-  const disposals = React.useMemo(() => getMockDisposals(), []);
+  const [activeAssets, setActiveAssets] = React.useState(0);
+  const [totalCost, setTotalCost] = React.useState(0);
+  const [disposalsCount, setDisposalsCount] = React.useState(0);
+  const [depreciationRunsCount, setDepreciationRunsCount] = React.useState(0);
 
-  const active = assets.filter((a) => a.status === "ACTIVE");
-  const totalCost = active.reduce((s, a) => s + a.cost, 0);
+  React.useEffect(() => {
+    let active = true;
+    async function load() {
+      const [assets, disposals, runs] = await Promise.all([
+        fetchAssetsApi(),
+        fetchAssetDisposalsApi(),
+        fetchDepreciationRunsApi(),
+      ]);
+      if (!active) return;
+      const openAssets = assets.filter((asset) => asset.status === "ACTIVE");
+      setActiveAssets(openAssets.length);
+      setTotalCost(openAssets.reduce((sum, asset) => sum + asset.cost, 0));
+      setDisposalsCount(disposals.length);
+      setDepreciationRunsCount(runs.length);
+    }
+    void load().catch((error) => {
+      if (!active) return;
+      toast.error(error instanceof Error ? error.message : "Failed to load asset overview.");
+      setActiveAssets(0);
+      setTotalCost(0);
+      setDisposalsCount(0);
+      setDepreciationRunsCount(0);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <PageShell>
@@ -54,7 +83,7 @@ export default function AssetsOverviewPage() {
               <Icons.BookOpen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{active.length}</div>
+              <div className="text-2xl font-bold">{activeAssets}</div>
               <p className="text-xs text-muted-foreground">In register</p>
             </CardContent>
           </Card>
@@ -74,7 +103,7 @@ export default function AssetsOverviewPage() {
               <Icons.Trash2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{disposals.length}</div>
+              <div className="text-2xl font-bold">{disposalsCount}</div>
               <p className="text-xs text-muted-foreground">Posted</p>
             </CardContent>
           </Card>
@@ -84,8 +113,8 @@ export default function AssetsOverviewPage() {
               <Icons.TrendingDown className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">—</div>
-              <p className="text-xs text-muted-foreground">Run per period</p>
+              <div className="text-2xl font-bold">{depreciationRunsCount}</div>
+              <p className="text-xs text-muted-foreground">Runs posted</p>
             </CardContent>
           </Card>
         </div>

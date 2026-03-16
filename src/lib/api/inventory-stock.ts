@@ -1,7 +1,7 @@
 import {
   type StockRow,
-} from "@/lib/mock/stock";
-import { type MovementRow } from "@/lib/mock/movements";
+  type MovementRow,
+} from "@/lib/types/inventory";
 import { apiRequest, requireLiveApi } from "./client";
 
 export type InventoryStockRow = StockRow & { productId?: string };

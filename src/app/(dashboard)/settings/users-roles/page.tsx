@@ -29,7 +29,7 @@ import {
   PERMISSION_GROUPS,
   getAllPermissions,
   type UserRow,
-} from "@/lib/mock/users-roles";
+} from "@/lib/types/users-roles";
 import {
   createRoleApi,
   createUserApi,

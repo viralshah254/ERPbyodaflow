@@ -1,9 +1,8 @@
 /**
- * Users & roles repo: CRUD + localStorage overlay on mocks.
+ * Users & roles repo: CRUD + localStorage. Prefer fetchUsersApi/fetchRolesApi for live data.
  */
 
-import type { UserRow, RoleRow } from "@/lib/mock/users-roles";
-import { getMockUsers, getMockRoles } from "@/lib/mock/users-roles";
+import type { UserRow, RoleRow } from "@/lib/types/users-roles";
 
 const KEY_USERS = "odaflow_users";
 const KEY_ROLES = "odaflow_roles";
@@ -30,7 +29,7 @@ function saveJson(key: string, value: unknown): void {
 export function listUsers(): UserRow[] {
   const stored = loadJson<UserRow[]>(KEY_USERS);
   if (stored && Array.isArray(stored)) return stored;
-  return getMockUsers();
+  return [];
 }
 
 export function getUserById(id: string): UserRow | undefined {
@@ -59,7 +58,7 @@ export function updateUser(id: string, patch: Partial<UserRow>): UserRow | null 
 export function listRoles(): RoleRow[] {
   const stored = loadJson<RoleRow[]>(KEY_ROLES);
   if (stored && Array.isArray(stored)) return stored;
-  return getMockRoles();
+  return [];
 }
 
 export function getRoleById(id: string): RoleRow | undefined {

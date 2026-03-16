@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import * as Icons from "lucide-react";
-import type { AlertItem } from "@/lib/mock/dashboard";
+import type { AlertItem } from "@/lib/types/dashboard";
 import { cn } from "@/lib/utils";
 
 interface AlertsCardProps {

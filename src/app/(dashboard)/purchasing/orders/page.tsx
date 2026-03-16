@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchPurchaseOrders, approvePurchaseOrders, exportPurchaseOrdersCsv } from "@/lib/api/purchasing";
-import type { PurchasingDocRow } from "@/lib/mock/purchasing";
+import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";

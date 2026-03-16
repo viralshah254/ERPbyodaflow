@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -33,7 +34,8 @@ import {
   type BankReconSnapshot,
   type SystemTransaction,
 } from "@/lib/api/bank-recon";
-import { fetchApSuppliersApi, fetchArCustomersApi } from "@/lib/api/payments";
+import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
+import type { PartyLookupOption } from "@/lib/api/parties";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -48,9 +50,8 @@ export default function BankReconPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
   const [pendingLine, setPendingLine] = React.useState<BankStatementLine | null>(null);
-  const [counterpartySearch, setCounterpartySearch] = React.useState("");
   const [counterpartyId, setCounterpartyId] = React.useState("");
-  const [counterpartyOptions, setCounterpartyOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [selectedCounterpartyOption, setSelectedCounterpartyOption] = React.useState<PartyLookupOption | null>(null);
   const [openItems, setOpenItems] = React.useState<Array<{ id: string; number: string; outstanding: number; currency?: string }>>([]);
   const [openItemAllocations, setOpenItemAllocations] = React.useState<Record<string, number>>({});
 
@@ -90,26 +91,6 @@ export default function BankReconPage() {
   };
 
   React.useEffect(() => {
-    if (!createOpen || !pendingLine) return;
-    let cancelled = false;
-    const load = async () => {
-      const items =
-        pendingLine.amount >= 0
-          ? await fetchArCustomersApi(counterpartySearch)
-          : await fetchApSuppliersApi(counterpartySearch);
-      if (!cancelled) {
-        setCounterpartyOptions(items);
-      }
-    };
-    void load().catch((e) => {
-      if (!cancelled) toast.error((e as Error).message || "Failed to load counterparties.");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [createOpen, pendingLine, counterpartySearch]);
-
-  React.useEffect(() => {
     if (!createOpen || !pendingLine || !counterpartyId) {
       setOpenItems([]);
       setOpenItemAllocations({});
@@ -144,9 +125,8 @@ export default function BankReconPage() {
     const line = statements.find((item) => item.id === lineId);
     if (!line) return;
     setPendingLine(line);
-    setCounterpartySearch("");
     setCounterpartyId("");
-    setCounterpartyOptions([]);
+    setSelectedCounterpartyOption(null);
     setOpenItems([]);
     setOpenItemAllocations({});
     setCreateOpen(true);
@@ -394,27 +374,29 @@ export default function BankReconPage() {
               </div>
             ) : null}
             <div className="space-y-2">
-              <Label>Search {pendingLine?.amount && pendingLine.amount >= 0 ? "customer" : "supplier"}</Label>
-              <Input
-                value={counterpartySearch}
-                onChange={(e) => setCounterpartySearch(e.target.value)}
-                placeholder="Type name, email, or code"
-              />
-            </div>
-            <div className="space-y-2">
               <Label>Counterparty</Label>
-              <Select value={counterpartyId} onValueChange={setCounterpartyId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select counterparty" />
-                </SelectTrigger>
-                <SelectContent>
-                  {counterpartyOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AsyncSearchableSelect
+                value={counterpartyId}
+                onValueChange={(value) => {
+                  setCounterpartyId(value);
+                  if (!value) setSelectedCounterpartyOption(null);
+                }}
+                onOptionSelect={(option) => setSelectedCounterpartyOption(option)}
+                loadOptions={
+                  pendingLine?.amount && pendingLine.amount >= 0
+                    ? searchArCustomerOptionsApi
+                    : searchApSupplierOptionsApi
+                }
+                selectedOption={selectedCounterpartyOption}
+                placeholder="Select counterparty"
+                searchPlaceholder="Type name, code, phone, or email"
+                emptyMessage="No counterparties found."
+                recentStorageKey={
+                  pendingLine?.amount && pendingLine.amount >= 0
+                    ? "lookup:recent-customers"
+                    : "lookup:recent-suppliers"
+                }
+              />
             </div>
             <div className="space-y-2">
               <Label>Allocate to open items</Label>

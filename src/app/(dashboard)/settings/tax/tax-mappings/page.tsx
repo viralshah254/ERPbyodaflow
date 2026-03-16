@@ -37,8 +37,9 @@ import {
   listWhtCodes,
   getCoaAccountsForMapping,
 } from "@/lib/data/tax.repo";
-import type { TaxMapping } from "@/lib/mock/tax/kenya";
+import type { TaxMapping } from "@/lib/types/tax-kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const MAPPING_TYPES = [
@@ -60,11 +61,27 @@ export default function TaxMappingsPage() {
   });
 
   React.useEffect(() => {
-    setMappings(listTaxMappings());
-    const acc = getCoaAccountsForMapping();
-    setAccounts(acc.map((a) => ({ id: a.id, code: a.code, name: a.name })));
-    setVatCodes(listVatRates().map((r) => r.code));
-    setWhtCodes(listWhtCodes().map((r) => r.code));
+    let active = true;
+    async function load() {
+      const [mapRows, accRows, vatRows, whtRows] = await Promise.all([
+        listTaxMappings(),
+        getCoaAccountsForMapping(),
+        listVatRates(),
+        listWhtCodes(),
+      ]);
+      if (!active) return;
+      setMappings(mapRows);
+      setAccounts(accRows);
+      setVatCodes(vatRows.map((r) => r.code));
+      setWhtCodes(whtRows.map((r) => r.code));
+    }
+    void load().catch((error) => {
+      if (!active) return;
+      toast.error(error instanceof Error ? error.message : "Failed to load tax mappings.");
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const taxCodes = React.useMemo(() => [...new Set([...vatCodes, ...whtCodes])], [vatCodes, whtCodes]);
@@ -74,7 +91,7 @@ export default function TaxMappingsPage() {
     return accounts.some((a) => a.id === m.coaAccountId);
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.taxCode || !form.coaAccountId) return;
     const acc = accountMap.get(form.coaAccountId);
     const newMap: TaxMapping = {
@@ -86,16 +103,26 @@ export default function TaxMappingsPage() {
       coaName: acc?.name,
     };
     const next = [...mappings, newMap];
-    saveTaxMappings(next);
-    setMappings(next);
-    setAddOpen(false);
-    setForm({ taxCode: "", mappingType: "vat_output", coaAccountId: "" });
+    try {
+      await saveTaxMappings(next);
+      setMappings(next);
+      setAddOpen(false);
+      setForm({ taxCode: "", mappingType: "vat_output", coaAccountId: "" });
+      toast.success("Mapping added.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save mapping.");
+    }
   };
 
-  const removeMapping = (id: string) => {
+  const removeMapping = async (id: string) => {
     const next = mappings.filter((m) => m.id !== id);
-    saveTaxMappings(next);
-    setMappings(next);
+    try {
+      await saveTaxMappings(next);
+      setMappings(next);
+      toast.success("Mapping removed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to remove mapping.");
+    }
   };
 
   return (

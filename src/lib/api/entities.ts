@@ -1,4 +1,4 @@
-import type { EntityRow } from "@/lib/mock/intercompany/entities";
+import type { EntityRow } from "@/lib/types/intercompany";
 import { apiRequest, requireLiveApi } from "./client";
 
 export async function fetchEntitiesApi(): Promise<EntityRow[]> {

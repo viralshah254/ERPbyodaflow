@@ -8,6 +8,14 @@ export interface DrillLink {
   label: string;
 }
 
+export interface NotificationDrillContext {
+  entityType?: string;
+  entityId?: string;
+  dedupeKey?: string;
+  title?: string;
+  message?: string;
+}
+
 /** Get drill link for a product/SKU */
 export function drillToProduct(productId: string): DrillLink {
   return {
@@ -79,6 +87,48 @@ export function drillToApproval(
   return {
     href: `/docs/${docType}/${docId}?approval=true`,
     label: "Review & approve",
+  };
+}
+
+export function drillToApprovalInbox(approvalId?: string): DrillLink {
+  return {
+    href: approvalId ? `/approvals/inbox?approvalId=${encodeURIComponent(approvalId)}` : "/approvals/inbox",
+    label: "Review approval",
+  };
+}
+
+export function drillFromNotification(notification: NotificationDrillContext): DrillLink {
+  if (notification.entityType === "approval" && notification.entityId) {
+    return drillToApprovalInbox(notification.entityId);
+  }
+  if (notification.entityType === "invoice" && notification.entityId) {
+    return drillToDocument("invoice", notification.entityId);
+  }
+  if (
+    notification.entityType === "Party" ||
+    notification.entityType === "party" ||
+    notification.entityType === "customer"
+  ) {
+    return drillToCustomer(notification.entityId);
+  }
+  if (notification.entityType === "bill" && notification.entityId) {
+    return drillToDocument("bill", notification.entityId);
+  }
+  if (notification.entityType === "journal" && notification.entityId) {
+    return drillToDocument("journal", notification.entityId);
+  }
+  if (notification.dedupeKey?.startsWith("approval-")) {
+    return drillToApprovalInbox(notification.entityId);
+  }
+  if (
+    notification.entityId &&
+    (notification.dedupeKey?.startsWith("credit-warning:") || notification.dedupeKey?.startsWith("invoice-overdue:"))
+  ) {
+    return drillToDocument("invoice", notification.entityId);
+  }
+  return {
+    href: "/automation/alerts",
+    label: "View alert",
   };
 }
 

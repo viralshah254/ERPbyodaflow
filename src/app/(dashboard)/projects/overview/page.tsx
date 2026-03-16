@@ -6,11 +6,11 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getMockProjects } from "@/lib/mock/projects/list";
-import { getMockProjectCosts } from "@/lib/mock/projects/costs";
+import { fetchProjectCostingLinksApi, fetchProjectsApi } from "@/lib/api/projects";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const LINKS = [
@@ -20,12 +20,41 @@ const LINKS = [
 
 export default function ProjectsOverviewPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const projects = React.useMemo(() => getMockProjects(), []);
-  const costs = React.useMemo(() => getMockProjectCosts(), []);
+  const [projects, setProjects] = React.useState<Awaited<ReturnType<typeof fetchProjectsApi>>>([]);
+  const [totalCost, setTotalCost] = React.useState(0);
+
+  React.useEffect(() => {
+    let active = true;
+    async function load() {
+      const projectRows = await fetchProjectsApi();
+      if (!active) return;
+      setProjects(projectRows);
+      const costing = await Promise.all(
+        projectRows.map(async (project) => {
+          try {
+            const payload = await fetchProjectCostingLinksApi(project.id);
+            return payload.summary.totalBurn ?? 0;
+          } catch {
+            return 0;
+          }
+        })
+      );
+      if (!active) return;
+      setTotalCost(costing.reduce((sum, amount) => sum + amount, 0));
+    }
+    void load().catch((error) => {
+      if (!active) return;
+      toast.error(error instanceof Error ? error.message : "Failed to load project overview.");
+      setProjects([]);
+      setTotalCost(0);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const active = projects.filter((p) => p.status === "ACTIVE");
   const totalBudget = active.reduce((s, p) => s + p.budget, 0);
-  const totalCost = costs.reduce((s, c) => s + c.amount, 0);
 
   return (
     <PageShell>

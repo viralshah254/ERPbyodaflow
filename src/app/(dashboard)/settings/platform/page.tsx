@@ -397,8 +397,11 @@ export default function PlatformSettingsPage() {
         branchCode: provisionForm.branchCode,
         roleName: provisionForm.roleName,
         adminEmail: provisionForm.adminEmail,
+        initialPassword: "ChangeMe123!",
+        mustChangePassword: true,
         adminFirstName: provisionForm.adminFirstName || undefined,
         adminLastName: provisionForm.adminLastName || undefined,
+        templateId: provisionForm.defaultTemplateId || "fmcg-distributor",
       });
       setLastProvisionResult({
         adminEmail: result.adminEmail,

@@ -20,8 +20,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createProductApi, fetchProductsApi } from "@/lib/api/products";
+import { setProductsCache } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
-import type { ProductRow } from "@/lib/mock/masters";
+import type { ProductRow } from "@/lib/types/masters";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
@@ -54,7 +55,9 @@ export default function MasterProductsPage() {
   const refreshProducts = React.useCallback(async () => {
     setLoading(true);
     try {
-      setAllRows(await fetchProductsApi(search, statusFilter || undefined));
+      const data = await fetchProductsApi(search, statusFilter || undefined);
+      setAllRows(data);
+      setProductsCache(data);
     } catch (error) {
       toast.error((error as Error).message);
     } finally {

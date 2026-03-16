@@ -24,7 +24,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getMockTaxes, type TaxRow } from "@/lib/mock/taxes";
+import { createFinancialTaxApi, fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
+import type { TaxRow } from "@/lib/types/taxes";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function TaxesSettingsPage() {
@@ -39,7 +41,18 @@ export default function TaxesSettingsPage() {
     effectiveTo: "" as string | null,
   });
 
-  const rows = React.useMemo(() => getMockTaxes(), []);
+  const [rows, setRows] = React.useState<TaxRow[]>([]);
+
+  const refreshRows = React.useCallback(async () => {
+    const items = await fetchFinancialTaxesApi();
+    setRows(items);
+  }, []);
+
+  React.useEffect(() => {
+    void refreshRows().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load tax codes.");
+    });
+  }, [refreshRows]);
 
   const openCreate = () => {
     setEditing(null);
@@ -211,7 +224,27 @@ export default function TaxesSettingsPage() {
             <Button variant="outline" onClick={() => setDrawerOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => setDrawerOpen(false)}>
+            <Button
+              onClick={async () => {
+                if (editing) {
+                  toast.info("Editing tax codes is not yet supported by the backend contract.");
+                  return;
+                }
+                try {
+                  await createFinancialTaxApi({
+                    code: form.code.trim(),
+                    name: form.name.trim(),
+                    rate: form.rate,
+                    type: "VAT",
+                  });
+                  await refreshRows();
+                  setDrawerOpen(false);
+                  toast.success("Tax code created.");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Failed to create tax code.");
+                }
+              }}
+            >
               {editing ? "Save" : "Create"}
             </Button>
           </SheetFooter>

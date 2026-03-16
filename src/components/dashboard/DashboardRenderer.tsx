@@ -3,16 +3,8 @@
 import * as React from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import {
-  MOCK_KPIS,
-  MOCK_APPROVALS,
-  MOCK_TASKS,
-  MOCK_ALERTS,
-  MOCK_SUGGESTIONS,
-  MOCK_RECENT_DOCS,
-} from "@/lib/mock/dashboard";
+import type { ApprovalItem, AlertItem, RecentDoc } from "@/lib/types/dashboard";
 import { fetchDashboardWidgets } from "@/lib/api/dashboard";
-import { isApiConfigured } from "@/lib/api/client";
 import { DashboardKpiCard } from "./cards/DashboardKpiCard";
 import { MyApprovalsCard } from "./cards/MyApprovalsCard";
 import { MyTasksCard } from "./cards/MyTasksCard";
@@ -22,10 +14,10 @@ import { RecentDocumentsCard } from "./cards/RecentDocumentsCard";
 import { SetupChecklistCard } from "./SetupChecklistCard";
 
 const ADMIN_KPI_IDS = [
-  "production-overview",
-  "inventory-levels",
-  "pending-work-orders",
-  "recent-grn",
+  "pending-approvals",
+  "active-alerts",
+  "recent-documents",
+  "copilot-suggestions",
 ];
 
 function getKpiIdsForRole(
@@ -33,9 +25,7 @@ function getKpiIdsForRole(
   defaultRoleDashboards: { roleId: string; widgetIds: string[] }[]
 ): string[] {
   const found = defaultRoleDashboards.find((r) => r.roleId === roleId);
-  if (found) {
-    return found.widgetIds.filter((id) => MOCK_KPIS[id]);
-  }
+  if (found && found.widgetIds.length > 0) return found.widgetIds;
   return ADMIN_KPI_IDS;
 }
 
@@ -43,46 +33,33 @@ export function DashboardRenderer() {
   const user = useAuthStore((s) => s.user);
   const { template, defaultRoleDashboards } = useOrgContextStore();
   const [widgets, setWidgets] = React.useState<{
-    approvals: typeof MOCK_APPROVALS;
-    alerts: typeof MOCK_ALERTS;
-    suggestions: typeof MOCK_SUGGESTIONS;
-    recentDocuments: typeof MOCK_RECENT_DOCS;
-  } | null>(null);
+    approvals: ApprovalItem[];
+    alerts: AlertItem[];
+    suggestions: Array<{ id: string; type: string; title: string; description: string; actionUrl: string }>;
+    recentDocuments: RecentDoc[];
+  }>({
+    approvals: [],
+    alerts: [],
+    suggestions: [],
+    recentDocuments: [],
+  });
 
   React.useEffect(() => {
-    if (!isApiConfigured()) {
-      setWidgets({
-        approvals: MOCK_APPROVALS,
-        alerts: MOCK_ALERTS,
-        suggestions: MOCK_SUGGESTIONS,
-        recentDocuments: MOCK_RECENT_DOCS,
-      });
-      return;
-    }
     let cancelled = false;
     fetchDashboardWidgets()
       .then((data) => {
         if (!cancelled) {
           setWidgets({
-            approvals: data.approvals.length > 0 ? data.approvals : MOCK_APPROVALS,
-            alerts: data.alerts.length > 0 ? data.alerts : MOCK_ALERTS,
-            suggestions:
-              data.suggestions.length > 0
-                ? (data.suggestions as typeof MOCK_SUGGESTIONS)
-                : MOCK_SUGGESTIONS,
-            recentDocuments:
-              data.recentDocuments.length > 0 ? data.recentDocuments : MOCK_RECENT_DOCS,
+            approvals: data.approvals,
+            alerts: data.alerts,
+            suggestions: data.suggestions,
+            recentDocuments: data.recentDocuments,
           });
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setWidgets({
-            approvals: MOCK_APPROVALS,
-            alerts: MOCK_ALERTS,
-            suggestions: MOCK_SUGGESTIONS,
-            recentDocuments: MOCK_RECENT_DOCS,
-          });
+          setWidgets({ approvals: [], alerts: [], suggestions: [], recentDocuments: [] });
         }
       });
     return () => {
@@ -94,17 +71,53 @@ export function DashboardRenderer() {
   const dashboards = template?.defaultRoleDashboards ?? defaultRoleDashboards ?? [];
   const kpiIds = getKpiIdsForRole(roleId, dashboards);
 
-  const approvals = widgets?.approvals ?? MOCK_APPROVALS;
-  const alerts = widgets?.alerts ?? MOCK_ALERTS;
-  const suggestions = widgets?.suggestions ?? MOCK_SUGGESTIONS;
-  const recentDocs = widgets?.recentDocuments ?? MOCK_RECENT_DOCS;
+  const approvals = widgets.approvals;
+  const alerts = widgets.alerts;
+  const suggestions = widgets.suggestions;
+  const recentDocs = widgets.recentDocuments;
+
+  const kpiById: Record<
+    string,
+    {
+      label: string;
+      value: string | number;
+      description?: string;
+      icon?: string;
+      change?: { value: string; type: "increase" | "decrease" | "neutral" };
+      sparkline?: boolean;
+    }
+  > = {
+    "pending-approvals": {
+      label: "Pending approvals",
+      value: approvals.length,
+      description: "Awaiting your action",
+      icon: "CheckCheck",
+    },
+    "active-alerts": {
+      label: "Active alerts",
+      value: alerts.length,
+      description: "Requires attention",
+      icon: "AlertTriangle",
+    },
+    "recent-documents": {
+      label: "Recent documents",
+      value: recentDocs.length,
+      description: "Recently updated",
+      icon: "FileText",
+    },
+    "copilot-suggestions": {
+      label: "Copilot suggestions",
+      value: suggestions.length,
+      description: "Operational recommendations",
+      icon: "Sparkles",
+    },
+  };
 
   return (
     <div className="space-y-6">
-      {/* KPI row — role-based (mock until backend KPI aggregation exists) */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {kpiIds.map((id) => {
-          const k = MOCK_KPIS[id];
+          const k = kpiById[id];
           if (!k) return null;
           return (
             <DashboardKpiCard
@@ -125,7 +138,7 @@ export function DashboardRenderer() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <SetupChecklistCard />
         <MyApprovalsCard items={approvals} />
-        <MyTasksCard items={MOCK_TASKS} />
+        <MyTasksCard items={[]} />
         <AlertsCard items={alerts} />
       </div>
 

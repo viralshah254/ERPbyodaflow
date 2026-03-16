@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ExportHistoryRow } from "@/lib/mock/reports";
+import type { ExportHistoryRow } from "@/lib/types/reports";
 import {
   downloadReportExportApi,
   fetchReportExportsApi,

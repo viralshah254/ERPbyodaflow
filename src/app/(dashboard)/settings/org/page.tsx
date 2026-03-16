@@ -11,10 +11,9 @@ import {
   PERISHABLE_DISTRIBUTION_TEMPLATE_IDS,
 } from "@/config/industryTemplates/templates";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { fetchOrgProfileApi } from "@/lib/api/org";
+import { fetchOrgProfileApi, saveOrgProfileApi } from "@/lib/api/org";
 import { saveCurrentOrgContext } from "@/lib/api/context";
 import { isApiConfigured } from "@/lib/api/client";
-import { orgSave } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -52,7 +51,7 @@ export default function OrganizationPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await orgSave({
+      await saveOrgProfileApi({
         name,
         taxId,
         registrationNumber,

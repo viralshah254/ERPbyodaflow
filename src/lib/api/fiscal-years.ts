@@ -1,6 +1,6 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
 import { fetchFinancePeriodsApi } from "@/lib/api/finance";
-import type { FiscalYearRow } from "@/lib/mock/fiscal";
+import type { FiscalYearRow } from "@/lib/types/fiscal";
 
 type BackendFiscalYear = {
   id: string;

@@ -18,11 +18,10 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { listPackaging, listProductPrices } from "@/lib/data/products.repo";
-import { getMockPriceLists } from "@/lib/mock/products/price-lists";
+import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
-import { productDelete } from "@/lib/api/stub-endpoints";
-import { fetchProductApi } from "@/lib/api/products";
+import { deleteProductApi, fetchProductApi } from "@/lib/api/products";
 import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
 import { useAuthStore } from "@/stores/auth-store";
@@ -76,7 +75,10 @@ export default function ProductDetailPage() {
 
   const packaging = React.useMemo(() => (product ? listPackaging(product.id) : []), [product]);
   const prices = React.useMemo(() => (product ? listProductPrices(product.id) : []), [product]);
-  const priceLists = React.useMemo(() => getMockPriceLists(), []);
+  const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
+  React.useEffect(() => {
+    fetchPriceListsForUi().then(setPriceLists).catch(() => {});
+  }, []);
 
   if (product === undefined) {
     return (
@@ -177,7 +179,7 @@ export default function ProductDetailPage() {
                   onConfirm={async () => {
                     setDeleting(true);
                     try {
-                      await productDelete(id);
+                      await deleteProductApi(id);
                       toast.success("Product deleted.");
                       router.push("/master/products");
                     } catch (err) {

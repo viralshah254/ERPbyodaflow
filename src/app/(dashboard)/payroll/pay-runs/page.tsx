@@ -34,7 +34,7 @@ import {
   submitPayRunForApprovalApi,
 } from "@/lib/api/payroll";
 import { downloadCsv } from "@/lib/export/csv";
-import { buildPayRunLinesFromEmployees } from "@/lib/mock/payroll/payruns";
+import { buildPayRunLinesFromEmployees } from "@/lib/payroll/build-pay-run-lines";
 import type { PayRun } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";

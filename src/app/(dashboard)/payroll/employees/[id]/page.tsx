@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchEmployeeByIdApi, fetchPayrollStatutoriesApi } from "@/lib/api/payroll";
 import type { Employee } from "@/lib/payroll/types";
-import type { StatutoryConfig } from "@/lib/mock/payroll/statutories";
+import type { StatutoryConfig } from "@/lib/types/payroll";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 
@@ -99,6 +99,12 @@ export default function PayrollEmployeeDetailPage() {
             <p><span className="text-muted-foreground">Employment type:</span> {employee.employmentType}</p>
             <p><span className="text-muted-foreground">Salary type:</span> {employee.salaryType}</p>
             <p><span className="text-muted-foreground">Base salary:</span> {formatMoney(employee.baseSalary, employee.currency)}</p>
+            <p>
+              <span className="text-muted-foreground">Hourly cost override:</span>{" "}
+              {employee.hourlyCostRate && employee.hourlyCostRate > 0
+                ? formatMoney(employee.hourlyCostRate, employee.currency)
+                : "Not set"}
+            </p>
           </CardContent>
         </Card>
 

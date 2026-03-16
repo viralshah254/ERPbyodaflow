@@ -32,6 +32,7 @@ export interface Employee {
   employmentType: EmploymentType;
   salaryType: SalaryType;
   baseSalary: number;
+  hourlyCostRate?: number;
   currency: string;
   allowances: PayComponent[];
   deductions: PayComponent[];

@@ -3,7 +3,7 @@ import type {
   BankStatementLine,
   ReconcileSession,
   SystemTransaction,
-} from "@/lib/mock/bank-recon";
+} from "@/lib/types/bank-recon";
 import { apiRequest, requireLiveApi } from "./client";
 
 export type { BankStatementLine, ReconcileSession, SystemTransaction };

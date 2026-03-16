@@ -16,7 +16,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Bell, Search, Settings, LogOut, User, Sparkles } from "lucide-react";
+import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound } from "lucide-react";
+import { signOut as firebaseSignOut } from "@/lib/firebase";
+import { setApiAuth } from "@/lib/api/client";
 
 export function Header() {
   const router = useRouter();
@@ -24,9 +26,11 @@ export function Header() {
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await firebaseSignOut();
+    setApiAuth({});
     logout();
-    router.push("/login");
+    router.push("/");
   };
 
   const userInitials = user
@@ -104,6 +108,12 @@ export function Header() {
             <Link href="/settings/org" className="flex cursor-pointer items-center">
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/change-password" className="flex cursor-pointer items-center">
+              <KeyRound className="mr-2 h-4 w-4" />
+              <span>Change password</span>
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />

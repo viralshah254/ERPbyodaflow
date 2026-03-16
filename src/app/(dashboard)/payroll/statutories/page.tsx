@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchPayrollStatutoriesApi } from "@/lib/api/payroll";
-import type { StatutoryConfig } from "@/lib/mock/payroll/statutories";
+import type { StatutoryConfig } from "@/lib/types/payroll";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";

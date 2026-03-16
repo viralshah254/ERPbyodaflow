@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getKenyaProfile, saveKenyaProfile } from "@/lib/data/tax.repo";
-import type { KenyaTaxProfile } from "@/lib/mock/tax/kenya";
+import type { KenyaTaxProfile } from "@/lib/types/tax-kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -28,12 +28,20 @@ export default function KenyaTaxProfilePage() {
   });
 
   React.useEffect(() => {
-    setProfile(getKenyaProfile());
+    void getKenyaProfile()
+      .then(setProfile)
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to load Kenya tax profile.");
+      });
   }, []);
 
-  const handleSave = () => {
-    saveKenyaProfile(profile);
-    toast.info("Saved.");
+  const handleSave = async () => {
+    try {
+      await saveKenyaProfile(profile);
+      toast.success("Saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save Kenya tax profile.");
+    }
   };
 
   const setVatRegistered = (v: boolean) =>

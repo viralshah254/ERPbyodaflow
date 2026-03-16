@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchSavedReportViewsApi } from "@/lib/api/reports";
-import type { SavedViewRow } from "@/lib/mock/reports";
+import type { SavedViewRow } from "@/lib/types/reports";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 

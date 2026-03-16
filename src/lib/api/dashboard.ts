@@ -3,7 +3,7 @@ import type {
   ApprovalItem,
   AlertItem,
   RecentDoc,
-} from "@/lib/mock/dashboard";
+} from "@/lib/types/dashboard";
 
 export type DashboardWidgets = {
   approvals: ApprovalItem[];

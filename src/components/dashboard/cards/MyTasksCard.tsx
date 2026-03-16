@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { TaskItem } from "@/lib/mock/dashboard";
+import type { TaskItem } from "@/lib/types/dashboard";
 import { cn } from "@/lib/utils";
 
 interface MyTasksCardProps {

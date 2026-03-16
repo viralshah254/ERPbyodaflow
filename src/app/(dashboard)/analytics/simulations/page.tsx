@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InsightCard, KpiHero } from "@/components/analytics";
-import { loadStoredValue } from "@/lib/data/persisted-store";
+import { loadStoredValue, saveStoredValue } from "@/lib/data/persisted-store";
 import { formatMoney } from "@/lib/money";
-import { analyticsApplySuggestion } from "@/lib/api/stub-endpoints";
+import { applySimulationSuggestionApi } from "@/lib/api/analytics";
+import { fetchProductsApi } from "@/lib/api/products";
 import { toast } from "sonner";
 
 /** Mock simulation: sliders + instant recalculation. */
@@ -21,17 +22,51 @@ export default function AnalyticsSimulationsPage() {
   const [payroll, setPayroll] = React.useState(0);
   const [fx, setFx] = React.useState(0);
   const [applying, setApplying] = React.useState(false);
+  const [firstProductId, setFirstProductId] = React.useState<string | null>(null);
   const [lastAppliedAt, setLastAppliedAt] = React.useState<string | null>(() =>
     loadStoredValue<{ appliedAt?: string } | null>("odaflow_analytics_last_applied_suggestion", () => null)?.appliedAt ?? null
   );
 
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetchProductsApi(undefined, "ACTIVE")
+      .then((products) => {
+        if (!cancelled) setFirstProductId(products[0]?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setFirstProductId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const pricingLink = firstProductId ? `/master/products/${firstProductId}/pricing` : "/master/products";
+
   const handleApplySuggestion = async () => {
     setApplying(true);
     try {
-      await analyticsApplySuggestion("sim-current");
-      setLastAppliedAt(
-        loadStoredValue<{ appliedAt?: string } | null>("odaflow_analytics_last_applied_suggestion", () => null)?.appliedAt ?? null
-      );
+      await applySimulationSuggestionApi({
+        simulationId: "sim-current",
+        result: {
+          id: "sim-current",
+          type: "price",
+          impact: {
+            marginImpact,
+            revenueImpactPct,
+            stockoutImpact,
+            cashImpactReorder,
+            cashImpactPayroll,
+            costImpactFx,
+          },
+          summary: "Client-side what-if simulation payload.",
+          applied: false,
+          createdAt: new Date().toISOString(),
+        },
+      });
+      const appliedAt = new Date().toISOString();
+      saveStoredValue("odaflow_analytics_last_applied_suggestion", { appliedAt });
+      setLastAppliedAt(appliedAt);
       toast.success("Suggestion applied.");
     } catch (e) {
       toast.error((e as Error).message);
@@ -83,7 +118,7 @@ export default function AnalyticsSimulationsPage() {
           description="Simulate +X% across tiers"
           action={
             <Button size="sm" variant="outline" asChild>
-              <Link href="/master/products/p1/pricing">Pricing</Link>
+              <Link href={pricingLink}>Pricing</Link>
             </Button>
           }
         >

@@ -9,14 +9,15 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { bulkDocumentActionApi, createDocumentApi, fetchDocumentListApi } from "@/lib/api/documents";
-import { fetchArCustomersApi } from "@/lib/api/payments";
+import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { fetchProductsApi } from "@/lib/api/products";
-import type { DocListRow } from "@/lib/mock/docs";
+import type { DocListRow } from "@/lib/types/documents";
+import type { PartyLookupOption } from "@/lib/api/parties";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -25,7 +26,7 @@ export default function SalesReturnsPage() {
   const [rows, setRows] = React.useState<DocListRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [sheetOpen, setSheetOpen] = React.useState(false);
-  const [customers, setCustomers] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouses, setWarehouses] = React.useState<Array<{ id: string; label: string }>>([]);
   const [customerId, setCustomerId] = React.useState("");
   const [warehouseId, setWarehouseId] = React.useState("");
@@ -50,8 +51,7 @@ export default function SalesReturnsPage() {
 
   React.useEffect(() => {
     void refresh();
-    void Promise.all([fetchArCustomersApi(), fetchWarehouseOptions(), fetchProductsApi()]).then(([customerItems, warehouseItems, productItems]) => {
-      setCustomers(customerItems);
+    void Promise.all([fetchWarehouseOptions(), fetchProductsApi()]).then(([warehouseItems, productItems]) => {
       setWarehouses(warehouseItems);
       setProducts(productItems.map((item) => ({ id: item.id, name: item.name, sku: item.sku })));
     });
@@ -132,12 +132,19 @@ export default function SalesReturnsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Customer</Label>
-              <SearchableSelect
+              <AsyncSearchableSelect
                 value={customerId}
-                onValueChange={setCustomerId}
-                options={customers.map((customer) => ({ id: customer.id, label: customer.name }))}
+                onValueChange={(value) => {
+                  setCustomerId(value);
+                  if (!value) setSelectedCustomerOption(null);
+                }}
+                onOptionSelect={(option) => setSelectedCustomerOption(option)}
+                loadOptions={searchArCustomerOptionsApi}
+                selectedOption={selectedCustomerOption}
                 placeholder="Select customer"
-                searchPlaceholder="Type to search customer"
+                searchPlaceholder="Type name, code, phone, or email"
+                emptyMessage="No customers found."
+                recentStorageKey="lookup:recent-customers"
               />
             </div>
             <div className="space-y-2">

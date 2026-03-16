@@ -48,6 +48,7 @@ export default function PayrollEmployeesPage() {
   const [employmentType, setEmploymentType] = React.useState<EmploymentType>("PERMANENT");
   const [salaryType, setSalaryType] = React.useState<SalaryType>("MONTHLY");
   const [baseSalary, setBaseSalary] = React.useState(0);
+  const [hourlyCostRate, setHourlyCostRate] = React.useState(0);
 
   const [rows, setRows] = React.useState<Employee[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -110,6 +111,11 @@ export default function PayrollEmployeesPage() {
       },
       { id: "employmentType", header: "Type", accessor: (r: Employee) => r.employmentType },
       { id: "baseSalary", header: "Base", accessor: (r: Employee) => formatMoney(r.baseSalary, r.currency) },
+      {
+        id: "hourlyCostRate",
+        header: "Hourly cost",
+        accessor: (r: Employee) => (r.hourlyCostRate && r.hourlyCostRate > 0 ? formatMoney(r.hourlyCostRate, r.currency) : "—"),
+      },
     ],
     [branchNameById]
   );
@@ -121,12 +127,14 @@ export default function PayrollEmployeesPage() {
         department: department || undefined,
         branch: branchId || undefined,
         baseSalary: baseSalary || 0,
+        hourlyCostRate: hourlyCostRate || undefined,
         currency: "KES",
       });
       setSheetOpen(false);
       setName("");
       setDepartment("");
       setBaseSalary(0);
+      setHourlyCostRate(0);
       await refreshRows();
       toast.success("Employee created.");
     } catch (e) {
@@ -173,6 +181,7 @@ export default function PayrollEmployeesPage() {
                 employmentType: row.employmentType,
                 salaryType: row.salaryType,
                 baseSalary: row.baseSalary,
+                hourlyCostRate: row.hourlyCostRate ?? "",
                 currency: row.currency,
               }))
             )
@@ -248,6 +257,17 @@ export default function PayrollEmployeesPage() {
             <div className="space-y-2">
               <Label htmlFor="create-employee-base-salary">Base salary (KES)</Label>
               <Input id="create-employee-base-salary" type="number" min={0} value={baseSalary || ""} onChange={(e) => setBaseSalary(Number((e.target as HTMLInputElement).value) || 0)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-employee-hourly-cost">Hourly cost override (KES)</Label>
+              <Input
+                id="create-employee-hourly-cost"
+                type="number"
+                min={0}
+                value={hourlyCostRate || ""}
+                onChange={(e) => setHourlyCostRate(Number((e.target as HTMLInputElement).value) || 0)}
+                placeholder="Optional project-costing override"
+              />
             </div>
           </div>
           <SheetFooter>

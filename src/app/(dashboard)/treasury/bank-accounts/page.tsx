@@ -30,7 +30,7 @@ import {
   createBankAccountApi,
   updateBankAccountApi,
 } from "@/lib/api/treasury-ops";
-import type { BankAccountRow } from "@/lib/mock/treasury/bank-accounts";
+import type { BankAccountRow } from "@/lib/types/treasury";
 import { fetchFinanceAccountsApi, type FinanceAccount } from "@/lib/api/finance";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { downloadCsv } from "@/lib/export/csv";

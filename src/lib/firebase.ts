@@ -17,9 +17,15 @@ async function getClientAuth() {
     throw new Error("Firebase Auth is only available in the browser");
   }
   const { getApp, getApps, initializeApp } = await import("firebase/app");
-  const { getAuth } = await import("firebase/auth");
+  const { getAuth, setPersistence, browserLocalPersistence } = await import("firebase/auth");
   const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  return getAuth(app);
+  const auth = getAuth(app);
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch {
+    // Ignore if already set or in unsupported env
+  }
+  return auth;
 }
 
 export function isFirebaseConfigured(): boolean {
@@ -59,4 +65,18 @@ export async function sendPasswordReset(email: string): Promise<void> {
   const auth = await getClientAuth();
   const { sendPasswordResetEmail } = await import("firebase/auth");
   await sendPasswordResetEmail(auth, email);
+}
+
+/**
+ * Sign out the current user. Call this on logout so the next visit does not restore session.
+ */
+export async function signOut(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const auth = await getClientAuth();
+    const { signOut: firebaseSignOut } = await import("firebase/auth");
+    await firebaseSignOut(auth);
+  } catch {
+    // Ignore if Firebase not configured or already signed out
+  }
 }

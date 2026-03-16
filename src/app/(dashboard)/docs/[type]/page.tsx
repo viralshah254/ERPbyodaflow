@@ -13,7 +13,7 @@ import { getDocTypeConfig, DOC_TYPES } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
-import { type DocListRow } from "@/lib/mock/docs";
+import { type DocListRow } from "@/lib/types/documents";
 import { downloadCsv } from "@/lib/export/csv";
 import {
   bulkDocumentActionApi,

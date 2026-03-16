@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import * as Icons from "lucide-react";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
-import type { ApprovalItem } from "@/lib/mock/dashboard";
+import type { ApprovalItem } from "@/lib/types/dashboard";
 import { ApprovalDetailSheet } from "@/components/approvals/ApprovalDetailSheet";
 
 interface MyApprovalsCardProps {

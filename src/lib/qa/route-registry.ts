@@ -210,6 +210,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/settings/sequences", module: "settings", description: "Numbering sequences", inNav: true },
   { path: "/settings/compliance", module: "settings", description: "Compliance", inNav: true },
   { path: "/settings/notifications", module: "settings", description: "Notifications", inNav: true },
+  { path: "/settings/migrations", module: "settings", description: "Migration console", inNav: true },
   { path: "/settings/payroll", module: "settings", description: "Payroll settings", inNav: true },
   { path: "/settings/audit-log", module: "settings", description: "Audit log", inNav: true },
   { path: "/settings/financial", module: "settings", description: "Financial settings", inNav: true },

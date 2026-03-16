@@ -9,7 +9,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getMockQuotes, type SalesDocRow } from "@/lib/mock/sales";
+import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
+import type { SalesDocRow } from "@/lib/types/sales";
 import { downloadCsv } from "@/lib/export/csv";
 import {
   getSavedViews,
@@ -19,6 +20,7 @@ import {
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
+import { bulkDocumentActionApi } from "@/lib/api/documents";
 import * as Icons from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -41,7 +43,18 @@ export default function SalesQuotesPage() {
     getSavedViews(scope)
   );
 
-  const [allRows, setAllRows] = React.useState<SalesDocRow[]>(() => getMockQuotes());
+  const [allRows, setAllRows] = React.useState<SalesDocRow[]>([]);
+
+  const refreshRows = React.useCallback(async () => {
+    const items = await fetchSalesDocumentsApi("quote");
+    setAllRows(items);
+  }, []);
+
+  React.useEffect(() => {
+    void refreshRows().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load quotes.");
+    });
+  }, [refreshRows]);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -185,16 +198,15 @@ export default function SalesQuotesPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setAllRows((prev) =>
-                      prev.map((row) =>
-                        selectedIds.includes(row.id) && row.status !== "CONVERTED"
-                          ? { ...row, status: "APPROVED" }
-                          : row
-                      )
-                    );
-                    toast.success("Quote(s) approved.");
-                    setSelectedIds([]);
+                  onClick={async () => {
+                    try {
+                      await bulkDocumentActionApi("quote", "approve", selectedIds);
+                      await refreshRows();
+                      toast.success("Quote(s) approved.");
+                      setSelectedIds([]);
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Failed to approve quotes.");
+                    }
                   }}
                 >
                   Approve

@@ -32,8 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchLandedCostSources, fetchLandedCostTemplates, postLandedCostAllocation, type LandedCostSourceRow, type LandedCostTemplateRow } from "@/lib/api/landed-cost";
-import { fetchInventoryValuation, fetchLatestInventoryCosting } from "@/lib/api/inventory-costing";
-import { runCosting } from "@/lib/api/stub-endpoints";
+import { fetchInventoryValuation, fetchLatestInventoryCosting, runInventoryCostingApi } from "@/lib/api/inventory-costing";
 import { listLandedCostAllocations } from "@/lib/data/inventory-costing.repo";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -179,7 +178,7 @@ export default function InventoryCostingPage() {
               onClick={async () => {
                 setRunCostingLoading(true);
                 try {
-                  await runCosting();
+                  await runInventoryCostingApi();
                   const [valuation, snapshot] = await Promise.all([
                     fetchInventoryValuation(),
                     fetchLatestInventoryCosting(),

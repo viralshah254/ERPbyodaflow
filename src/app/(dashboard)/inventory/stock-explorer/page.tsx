@@ -5,21 +5,39 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
-import { getMockStock, type StockRow } from "@/lib/mock/stock";
+import { fetchStockLevelsApi, type InventoryStockRow } from "@/lib/api/inventory-stock";
+import { toast } from "sonner";
 
-type ExplorerRow = StockRow & {
+type ExplorerRow = InventoryStockRow & {
   ownership: "CoolCatch" | "Franchise";
   ageDays: number;
 };
 
 export default function InventoryStockExplorerPage() {
-  const [rows] = React.useState<ExplorerRow[]>(
-    getMockStock().map((r, idx) => ({
-      ...r,
-      ownership: idx % 3 === 0 ? "Franchise" : "CoolCatch",
-      ageDays: 2 + ((idx * 3) % 12),
-    }))
-  );
+  const [rows, setRows] = React.useState<ExplorerRow[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+    void fetchStockLevelsApi()
+      .then((items) => {
+        if (!active) return;
+        setRows(
+          items.map((r, idx) => ({
+            ...r,
+            ownership: idx % 3 === 0 ? "Franchise" : "CoolCatch",
+            ageDays: 2 + ((idx * 3) % 12),
+          }))
+        );
+      })
+      .catch((error) => {
+        if (!active) return;
+        toast.error(error instanceof Error ? error.message : "Failed to load stock explorer.");
+        setRows([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const columns = [
     { id: "sku", header: "SKU", accessor: (r: ExplorerRow) => r.sku, sticky: true },
@@ -46,7 +64,7 @@ export default function InventoryStockExplorerPage() {
         <Card>
           <CardHeader>
             <CardTitle>Global stock explorer</CardTitle>
-            <CardDescription>Phase 1 baseline with mocked dimensions; can be switched to API-backed filters later.</CardDescription>
+            <CardDescription>Global stock by SKU, location, reserved, and available quantities from live inventory APIs.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable data={rows} columns={columns} emptyMessage="No stock rows." />

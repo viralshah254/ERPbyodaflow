@@ -1,6 +1,6 @@
 /**
  * UOM catalog: definitions + global conversions.
- * Mock + localStorage. Used by /settings/uom and product packaging validation.
+ * Prefer fetchUomsApi for list; setUomsCache after fetch so listUoms() stays in sync for other pages.
  */
 
 import type { UomDefinition, UomConversion, UomValidation } from "@/lib/products/types";
@@ -8,24 +8,12 @@ import type { UomDefinition, UomConversion, UomValidation } from "@/lib/products
 const KEY_UOM = "odaflow_uom";
 const KEY_CONVERSIONS = "odaflow_uom_conversions";
 
-const MOCK_UOM: UomDefinition[] = [
-  { id: "u1", code: "EA", name: "Each", category: "count", isBase: true, decimals: 0 },
-  { id: "u2", code: "KG", name: "Kilogram", category: "weight", isBase: true, decimals: 3 },
-  { id: "u3", code: "G", name: "Gram", category: "weight", factorToBase: 0.001, baseUom: "KG", decimals: 2 },
-  { id: "u4", code: "TON", name: "Metric ton", category: "weight", factorToBase: 1000, baseUom: "KG", decimals: 2 },
-  { id: "u5", code: "CTN", name: "Carton", category: "count", decimals: 0 },
-  { id: "u6", code: "BDL", name: "Bundle", category: "count", decimals: 0 },
-  { id: "u7", code: "BAG", name: "Bag", category: "count", decimals: 0 },
-  { id: "u8", code: "BALE", name: "Bale", category: "count", decimals: 0 },
-  { id: "u9", code: "L", name: "Litre", category: "volume", isBase: true, decimals: 2 },
-  { id: "u10", code: "ML", name: "Millilitre", category: "volume", factorToBase: 0.001, baseUom: "L", decimals: 0 },
-];
+let uomsCache: UomDefinition[] = [];
 
-const MOCK_CONVERSIONS: UomConversion[] = [
-  { id: "c1", fromUom: "G", toUom: "KG", factor: 0.001 },
-  { id: "c2", fromUom: "TON", toUom: "KG", factor: 1000 },
-  { id: "c3", fromUom: "ML", toUom: "L", factor: 0.001 },
-];
+/** Set in-memory UOM list (e.g. after fetchUomsApi()) so listUoms() returns live data for other pages. */
+export function setUomsCache(rows: UomDefinition[]): void {
+  uomsCache = rows;
+}
 
 function loadJson<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
@@ -49,7 +37,7 @@ function saveJson(key: string, value: unknown): void {
 export function listUoms(): UomDefinition[] {
   const stored = loadJson<UomDefinition[]>(KEY_UOM);
   if (stored && Array.isArray(stored)) return stored;
-  return [...MOCK_UOM];
+  return uomsCache;
 }
 
 export function getUomByCode(code: string): UomDefinition | undefined {
@@ -89,7 +77,7 @@ export function deleteUom(id: string): boolean {
 export function listConversions(): UomConversion[] {
   const stored = loadJson<UomConversion[]>(KEY_CONVERSIONS);
   if (stored && Array.isArray(stored)) return stored;
-  return [...MOCK_CONVERSIONS];
+  return [];
 }
 
 export function saveConversion(c: UomConversion): void {

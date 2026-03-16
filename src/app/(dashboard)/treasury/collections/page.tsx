@@ -7,7 +7,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { type OverdueInvoiceRow } from "@/lib/mock/treasury/collections";
+import { type OverdueInvoiceRow } from "@/lib/types/treasury";
 import { fetchCollectionsApi } from "@/lib/api/treasury-ops";
 import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";

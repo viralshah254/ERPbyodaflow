@@ -53,6 +53,12 @@ export default function AccountsReceivablePage() {
             <CardHeader><CardTitle className="text-sm">Receipts</CardTitle></CardHeader>
             <CardContent className="text-2xl font-semibold">{payments.length}</CardContent>
           </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-sm">M-Pesa receipts</CardTitle></CardHeader>
+            <CardContent className="text-2xl font-semibold">
+              {payments.filter((item) => item.paymentMethod === "MPESA").length}
+            </CardContent>
+          </Card>
         </div>
         <Card>
           <CardHeader>

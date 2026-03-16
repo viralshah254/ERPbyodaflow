@@ -6,10 +6,10 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getMockEntities } from "@/lib/mock/intercompany/entities";
-import { getMockICTransactions } from "@/lib/mock/intercompany/transactions";
+import { fetchIntercompanyEntitiesApi, fetchIntercompanyTransactionsApi } from "@/lib/api/intercompany";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const LINKS = [
@@ -19,8 +19,27 @@ const LINKS = [
 
 export default function IntercompanyOverviewPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const entities = React.useMemo(() => getMockEntities(), []);
-  const txns = React.useMemo(() => getMockICTransactions(), []);
+  const [entitiesCount, setEntitiesCount] = React.useState(0);
+  const [transactionsCount, setTransactionsCount] = React.useState(0);
+
+  React.useEffect(() => {
+    let active = true;
+    void Promise.all([fetchIntercompanyEntitiesApi(), fetchIntercompanyTransactionsApi()])
+      .then(([entities, txns]) => {
+        if (!active) return;
+        setEntitiesCount(entities.length);
+        setTransactionsCount(txns.length);
+      })
+      .catch((error) => {
+        if (!active) return;
+        toast.error(error instanceof Error ? error.message : "Failed to load intercompany overview.");
+        setEntitiesCount(0);
+        setTransactionsCount(0);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <PageShell>
@@ -49,7 +68,7 @@ export default function IntercompanyOverviewPage() {
               <Icons.Building2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{entities.length}</div>
+              <div className="text-2xl font-bold">{entitiesCount}</div>
               <p className="text-xs text-muted-foreground">Active</p>
             </CardContent>
           </Card>
@@ -59,7 +78,7 @@ export default function IntercompanyOverviewPage() {
               <Icons.ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{txns.length}</div>
+              <div className="text-2xl font-bold">{transactionsCount}</div>
               <p className="text-xs text-muted-foreground">This period</p>
             </CardContent>
           </Card>

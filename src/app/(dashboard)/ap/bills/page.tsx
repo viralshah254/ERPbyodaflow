@@ -9,7 +9,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { getMockAPBills, type APBillRow } from "@/lib/mock/ap";
+import { fetchApBillsApi } from "@/lib/api/payments";
+import type { APBillRow } from "@/lib/types/ap";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
@@ -36,7 +37,18 @@ export default function APBillsPage() {
     getSavedViews(scope)
   );
 
-  const [allRows, setAllRows] = React.useState<APBillRow[]>(() => getMockAPBills());
+  const [allRows, setAllRows] = React.useState<APBillRow[]>([]);
+
+  const reload = React.useCallback(async () => {
+    const rows = await fetchApBillsApi(search);
+    setAllRows(rows);
+  }, [search]);
+
+  React.useEffect(() => {
+    void reload().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load AP bills.");
+    });
+  }, [reload]);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -179,13 +191,7 @@ export default function APBillsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setAllRows((prev) =>
-                      prev.map((row) =>
-                        selectedIds.includes(row.id) ? { ...row, status: "POSTED" } : row
-                      )
-                    );
-                    toast.success("Bill(s) posted.");
-                    setSelectedIds([]);
+                    toast.info("Posting from this list is not yet wired. Open each bill to post.");
                   }}
                 >
                   Post

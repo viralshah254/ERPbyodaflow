@@ -1,4 +1,4 @@
-import type { DepreciationRunPreview } from "@/lib/mock/assets/depreciation";
+import type { DepreciationRunPreview } from "@/lib/types/depreciation";
 import { loadStoredValue, saveStoredValue } from "@/lib/data/persisted-store";
 
 export interface DepreciationRunRecord {

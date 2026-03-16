@@ -35,18 +35,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  listPriceLists,
-  getPriceListById,
-  createPriceList,
-  updatePriceList,
-  deletePriceList,
-  resetPricingFromMocks,
-} from "@/lib/data/pricing.repo";
+  fetchPriceListsForUi,
+  createPriceListApi,
+  updatePriceListApi,
+} from "@/lib/api/pricing";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { listProducts } from "@/lib/data/products.repo";
 import { canDeleteEntity } from "@/lib/permissions";
 import { useAuthStore } from "@/stores/auth-store";
 import { listProductPrices } from "@/lib/data/products.repo";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const CHANNELS = ["Retail", "Wholesale", "Distributor", "ModernTrade", "Export"];
@@ -57,13 +55,33 @@ function PriceListsContent() {
   const user = useAuthStore((s) => s.user);
   const canDelete = canDeleteEntity(user);
   const [lists, setLists] = React.useState<PriceList[]>([]);
+  const [selectedDetail, setSelectedDetail] = React.useState<PriceList | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PriceList | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
-  const refresh = React.useCallback(() => setLists(listPriceLists()), []);
-  React.useEffect(() => refresh(), [refresh]);
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const next = await fetchPriceListsForUi();
+      setLists(next);
+      if (selectedId) {
+        const found = next.find((pl) => pl.id === selectedId) ?? null;
+        setSelectedDetail(found);
+      } else {
+        setSelectedDetail(null);
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedId]);
+  React.useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  const selected = selectedId ? getPriceListById(selectedId) : null;
+  const selected = selectedDetail;
   const products = React.useMemo(() => listProducts(), []);
   const productCountByList = React.useMemo(() => {
     const m = new Map<string, number>();
@@ -95,9 +113,6 @@ function PriceListsContent() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { resetPricingFromMocks(); refresh(); }}>
-              Reset to defaults
-            </Button>
             <Button size="sm" onClick={openAdd}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add price list
@@ -142,7 +157,7 @@ function PriceListsContent() {
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(pl)}>Edit</Button>
                       {canDelete && (
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { deletePriceList(pl.id); refresh(); }}>Remove</Button>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { toast.info("Delete price list is not yet wired to the backend."); }}>Remove</Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -168,11 +183,19 @@ function PriceListsContent() {
       {sheetOpen && (
         <PriceListSheet
           initial={editing}
-          onSave={(pl) => {
-            if (editing) updatePriceList(editing.id, pl);
-            else createPriceList(pl);
-            refresh();
-            setSheetOpen(false);
+          onSave={async (pl) => {
+            try {
+              if (editing) {
+                await updatePriceListApi(editing.id, { name: pl.name, currency: pl.currency, code: pl.channel });
+              } else {
+                await createPriceListApi({ name: pl.name, currency: pl.currency, code: pl.channel });
+              }
+              await refresh();
+              setSheetOpen(false);
+              toast.success(editing ? "Price list updated." : "Price list created.");
+            } catch (e) {
+              toast.error((e as Error).message);
+            }
           }}
           onClose={() => setSheetOpen(false)}
         />

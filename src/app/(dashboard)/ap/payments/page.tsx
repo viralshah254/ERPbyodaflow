@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { APPaymentRow } from "@/lib/mock/ap";
+import type { APPaymentRow } from "@/lib/types/ap";
 import {
   allocateApPaymentApi,
   createApPaymentApi,

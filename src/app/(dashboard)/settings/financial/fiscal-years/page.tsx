@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { fetchFiscalYearsApi } from "@/lib/api/fiscal-years";
-import type { FiscalYearRow } from "@/lib/mock/fiscal";
-import { periodClose, periodReopen } from "@/lib/api/stub-endpoints";
+import type { FiscalYearRow } from "@/lib/types/fiscal";
+import { closeFinancePeriodApi, reopenFinancePeriodApi } from "@/lib/api/finance";
 import { toast } from "sonner";
 
 export default function FiscalYearsPage() {
@@ -37,13 +37,13 @@ export default function FiscalYearsPage() {
   }, [refreshYears]);
 
   const handleClosePeriod = async (periodId: string) => {
-    await periodClose({ periodId });
+    await closeFinancePeriodApi(periodId);
     await refreshYears();
     toast.success(`Period ${periodId} closed.`);
   };
 
   const handleReopen = async (periodId: string) => {
-    await periodReopen(periodId);
+    await reopenFinancePeriodApi(periodId);
     await refreshYears();
     toast.success(`Period ${periodId} reopened.`);
   };

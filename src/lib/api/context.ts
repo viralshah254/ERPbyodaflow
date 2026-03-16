@@ -87,6 +87,8 @@ type BackendSession = {
   currentBranchId: string | null;
   permissions: string[];
   orgContext: RuntimeOrgContext;
+  isPlatformOperator?: boolean;
+  hasPlatformOwnerManage?: boolean;
 };
 
 function mapDate(value?: string): Date {
@@ -175,6 +177,8 @@ export async function fetchRuntimeSession(): Promise<{
   currentBranch: Branch | null;
   permissions: string[];
   orgContext: RuntimeOrgContext;
+  isPlatformOperator: boolean;
+  hasPlatformOwnerManage: boolean;
 }> {
   requireLiveApi("Runtime session");
   const payload = await apiRequest<BackendSession>("/api/me");
@@ -187,6 +191,8 @@ export async function fetchRuntimeSession(): Promise<{
     currentBranch: branches.find((branch) => branch.branchId === payload.currentBranchId) ?? null,
     permissions: payload.permissions ?? [],
     orgContext: payload.orgContext,
+    isPlatformOperator: payload.isPlatformOperator === true,
+    hasPlatformOwnerManage: payload.hasPlatformOwnerManage === true,
   };
 }
 

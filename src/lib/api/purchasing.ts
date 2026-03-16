@@ -1,6 +1,5 @@
 import { apiRequest, downloadTextFile, requireLiveApi } from "@/lib/api/client";
-import type { PurchasingDocRow } from "@/lib/mock/purchasing";
-import { type PurchaseOrderDetailRow } from "@/lib/data/purchasing.repo";
+import type { PurchaseOrderDetailRow, PurchasingDocRow } from "@/lib/types/purchasing";
 
 export async function fetchPurchaseOrders(): Promise<PurchasingDocRow[]> {
   requireLiveApi("Purchase orders");

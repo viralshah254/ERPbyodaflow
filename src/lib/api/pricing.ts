@@ -3,7 +3,7 @@
  */
 
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { DiscountPolicy } from "@/lib/products/pricing-types";
+import type { DiscountPolicy, PriceList } from "@/lib/products/pricing-types";
 
 /** Customer default price list assignment (API shape). */
 export interface CustomerDefaultPriceListRow {
@@ -109,4 +109,43 @@ export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
     currency: item.currency ?? "KES",
     items: item.items ?? [],
   }));
+}
+
+/** Price lists as UI type (id, name, currency, channel). */
+export async function fetchPriceListsForUi(): Promise<PriceList[]> {
+  const list = await fetchPriceListsApi();
+  return list.map((d) => ({
+    id: d.id,
+    name: d.name,
+    currency: d.currency ?? "KES",
+    channel: d.code ?? "Retail",
+    isDefault: false,
+  }));
+}
+
+export async function fetchPriceListByIdApi(id: string): Promise<PriceListDetail | null> {
+  requireLiveApi("Price list by id");
+  try {
+    return await apiRequest<PriceListDetail>(`/api/pricing/price-lists/${encodeURIComponent(id)}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function createPriceListApi(body: {
+  name: string;
+  code?: string;
+  currency?: string;
+  items?: Array<{ productId: string; price: number; currency?: string }>;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create price list");
+  return apiRequest<{ id: string }>("/api/pricing/price-lists", { method: "POST", body });
+}
+
+export async function updatePriceListApi(
+  id: string,
+  body: Partial<{ name: string; code?: string; currency: string; items: Array<{ productId: string; price: number; currency?: string }> }>
+): Promise<void> {
+  requireLiveApi("Update price list");
+  await apiRequest(`/api/pricing/price-lists/${encodeURIComponent(id)}`, { method: "PATCH", body });
 }

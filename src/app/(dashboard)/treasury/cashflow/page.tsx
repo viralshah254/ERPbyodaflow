@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { CashflowForecastRow } from "@/lib/mock/treasury/cashflow";
+import type { CashflowForecastRow } from "@/lib/types/treasury";
 import { fetchCashflowApi } from "@/lib/api/treasury";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";

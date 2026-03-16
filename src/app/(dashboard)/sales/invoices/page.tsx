@@ -9,9 +9,10 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import type { SalesDocRow } from "@/lib/mock/sales";
+import type { SalesDocRow } from "@/lib/types/sales";
 import { downloadCsv } from "@/lib/export/csv";
-import { applyDocumentAction, listDocuments } from "@/lib/data/documents.repo";
+import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
+import { bulkDocumentActionApi } from "@/lib/api/documents";
 import {
   getSavedViews,
   saveView,
@@ -40,7 +41,18 @@ export default function SalesInvoicesPage() {
     getSavedViews(scope)
   );
 
-  const [allRows, setAllRows] = React.useState<SalesDocRow[]>(() => listDocuments("invoice") as SalesDocRow[]);
+  const [allRows, setAllRows] = React.useState<SalesDocRow[]>([]);
+
+  const refreshRows = React.useCallback(async () => {
+    const items = await fetchSalesDocumentsApi("invoice");
+    setAllRows(items);
+  }, []);
+
+  React.useEffect(() => {
+    void refreshRows().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load invoices.");
+    });
+  }, [refreshRows]);
   const filtered = React.useMemo(() => {
     let out = allRows;
     if (search.trim()) {
@@ -184,11 +196,15 @@ export default function SalesInvoicesPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    selectedIds.forEach((id) => applyDocumentAction("invoice", id, "post"));
-                    setAllRows(listDocuments("invoice") as SalesDocRow[]);
-                    setSelectedIds([]);
-                    toast.success("Invoice(s) posted.");
+                  onClick={async () => {
+                    try {
+                      await bulkDocumentActionApi("invoice", "post", selectedIds);
+                      await refreshRows();
+                      setSelectedIds([]);
+                      toast.success("Invoice(s) posted.");
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Failed to post invoices.");
+                    }
                   }}
                 >
                   Post

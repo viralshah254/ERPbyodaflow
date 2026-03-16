@@ -3,8 +3,7 @@
  */
 
 import { apiRequest, downloadTextFile, requireLiveApi } from "@/lib/api/client";
-import { type TransferRow } from "@/lib/mock/warehouse/transfers";
-import type { TransferStatus } from "@/lib/mock/warehouse/transfers";
+import type { TransferRow, TransferStatus } from "@/lib/types/warehouse";
 
 export type { TransferRow, TransferStatus };
 

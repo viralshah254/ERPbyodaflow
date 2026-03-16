@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { PurchasingDocRow } from "@/lib/mock/purchasing";
+import type { PurchasingDocRow } from "@/lib/types/purchasing";
 
 type BackendPurchaseRequest = {
   id: string;

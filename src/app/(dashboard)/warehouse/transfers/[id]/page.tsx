@@ -18,7 +18,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { fetchTransferById, updateTransferStatus, type TransferRow } from "@/lib/api/warehouse-transfers";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
-import { warehouseTransferReceive } from "@/lib/api/stub-endpoints";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -122,7 +121,7 @@ export default function TransferDetailPage() {
                 size="sm"
                 onClick={async () => {
                   try {
-                    await warehouseTransferReceive(id);
+                    await updateTransferStatus(id, "RECEIVED");
                     await refresh();
                     toast.success("Transfer received.");
                   } catch (e) {

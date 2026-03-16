@@ -17,17 +17,12 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCopilotStore } from "@/stores/copilot-store";
 import {
-  type BillLineRow,
-  type GRNLineRow,
-  type POLineRow,
-} from "@/lib/mock/ap-match";
-import {
-  createThreeWayMatch,
-  listBillLines,
-  listGRNLines,
-  listPOLines,
-  listThreeWayMatches,
-} from "@/lib/data/ap-match.repo";
+  createThreeWayMatchApi,
+  fetchMatchableBillsApi,
+  fetchMatchableGoodsReceiptsApi,
+  fetchMatchablePurchaseOrdersApi,
+} from "@/lib/api/ap-match";
+import type { MatchableDocumentRow, ThreeWayMatchDecision } from "@/lib/types/ap-match";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -36,58 +31,52 @@ type LineId = string;
 
 export default function ThreeWayMatchPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const [selectedPO, setSelectedPO] = React.useState<Set<LineId>>(new Set());
-  const [selectedGRN, setSelectedGRN] = React.useState<Set<LineId>>(new Set());
-  const [selectedBill, setSelectedBill] = React.useState<Set<LineId>>(new Set());
+  const [selectedPO, setSelectedPO] = React.useState<LineId | null>(null);
+  const [selectedGRN, setSelectedGRN] = React.useState<LineId | null>(null);
+  const [selectedBill, setSelectedBill] = React.useState<LineId | null>(null);
+  const [poRows, setPoRows] = React.useState<MatchableDocumentRow[]>([]);
+  const [grnRows, setGrnRows] = React.useState<MatchableDocumentRow[]>([]);
+  const [billRows, setBillRows] = React.useState<MatchableDocumentRow[]>([]);
+  const [decisions, setDecisions] = React.useState<ThreeWayMatchDecision[]>([]);
   const [matching, setMatching] = React.useState(false);
-  const [lastDecisionId, setLastDecisionId] = React.useState<string | null>(null);
 
-  const poLines = React.useMemo(() => listPOLines(), []);
-  const grnLines = React.useMemo(() => listGRNLines(), []);
-  const billLines = React.useMemo(() => listBillLines(), []);
-  const decisions = React.useMemo(() => listThreeWayMatches(), [lastDecisionId]);
+  const reload = React.useCallback(async () => {
+    const [po, grn, bill] = await Promise.all([
+      fetchMatchablePurchaseOrdersApi(),
+      fetchMatchableGoodsReceiptsApi(),
+      fetchMatchableBillsApi(),
+    ]);
+    setPoRows(po);
+    setGrnRows(grn);
+    setBillRows(bill);
+  }, []);
 
-  const togglePO = (id: LineId) => {
-    setSelectedPO((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  React.useEffect(() => {
+    void reload().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to load 3-way match data.");
     });
-  };
-  const toggleGRN = (id: LineId) => {
-    setSelectedGRN((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  const toggleBill = (id: LineId) => {
-    setSelectedBill((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  }, [reload]);
 
   const handleMatchSelected = async () => {
-    const grnIds = Array.from(selectedGRN);
-    const billIds = Array.from(selectedBill);
-    if (grnIds.length === 0 || billIds.length === 0) {
-      toast.info("Select at least one GRN line and one Bill line to match.");
+    if (!selectedPO || !selectedGRN || !selectedBill) {
+      toast.info("Select one PO, one GRN, and one Bill document.");
       return;
     }
     setMatching(true);
     try {
-      const decision = createThreeWayMatch(Array.from(selectedPO), grnIds, billIds);
-      setLastDecisionId(decision.id);
+      const decision = await createThreeWayMatchApi({
+        poId: selectedPO,
+        grnId: selectedGRN,
+        billId: selectedBill,
+      });
+      setDecisions((prev) => [decision, ...prev]);
       toast.success(
         decision.status === "MATCHED"
-          ? "Lines matched within tolerance."
-          : "Lines matched but blocked for variance review."
+          ? "Documents matched within tolerance."
+          : "Documents matched but blocked for variance review."
       );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create match.");
     } finally {
       setMatching(false);
     }
@@ -99,28 +88,16 @@ export default function ThreeWayMatchPage() {
 
   const askWhyMismatch = () => {
     const ctx = [
-      ...Array.from(selectedPO),
-      ...Array.from(selectedGRN),
-      ...Array.from(selectedBill),
+      selectedPO,
+      selectedGRN,
+      selectedBill,
     ].join(", ");
     openWithPrompt(
       `Why might we have a mismatch (qty or price) for these lines? ${ctx || "Select lines first."}`
     );
   };
 
-  const mismatchSkus = React.useMemo(() => {
-    const skus = new Set(poLines.map((l) => l.sku));
-    const check = (sku: string) => {
-      const po = poLines.find((l) => l.sku === sku);
-      const grn = grnLines.find((l) => l.sku === sku);
-      const bill = billLines.find((l) => l.sku === sku);
-      if (!po || !grn || !bill) return false;
-      const qtyMismatch = po.quantity !== grn.quantity || grn.quantity !== bill.quantity;
-      const priceMismatch = po.unitPrice !== bill.unitPrice;
-      return qtyMismatch || priceMismatch;
-    };
-    return Array.from(skus).filter(check);
-  }, [poLines, grnLines, billLines]);
+  const mismatchSkus: string[] = [];
 
   return (
     <PageShell>
@@ -177,7 +154,7 @@ export default function ThreeWayMatchPage() {
           <Card>
             <CardHeader>
               <CardTitle>PO lines</CardTitle>
-              <CardDescription>Purchase order lines (mock)</CardDescription>
+              <CardDescription>Purchase orders (live)</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[320px] overflow-auto">
@@ -185,26 +162,23 @@ export default function ThreeWayMatchPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Qty</TableHead>
-                      <TableHead>Price</TableHead>
+                      <TableHead>Number</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {poLines.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        className={mismatchSkus.includes(row.sku) ? "bg-amber-500/10" : ""}
-                      >
+                    {poRows.map((row) => (
+                      <TableRow key={row.id}>
                         <TableCell>
                           <Checkbox
-                            checked={selectedPO.has(row.id)}
-                            onCheckedChange={() => togglePO(row.id)}
+                            checked={selectedPO === row.id}
+                            onCheckedChange={() => setSelectedPO((prev) => (prev === row.id ? null : row.id))}
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{row.sku}</TableCell>
-                        <TableCell>{row.quantity}</TableCell>
-                        <TableCell>{formatMoney(row.unitPrice, "KES")}</TableCell>
+                        <TableCell className="font-medium">{row.number}</TableCell>
+                        <TableCell>{row.date?.slice(0, 10)}</TableCell>
+                        <TableCell>{formatMoney(row.total ?? 0, "KES")}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -216,7 +190,7 @@ export default function ThreeWayMatchPage() {
           <Card>
             <CardHeader>
               <CardTitle>GRN lines</CardTitle>
-              <CardDescription>Goods receipt lines (mock)</CardDescription>
+              <CardDescription>Goods receipts (live)</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[320px] overflow-auto">
@@ -224,24 +198,21 @@ export default function ThreeWayMatchPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Qty</TableHead>
+                      <TableHead>Number</TableHead>
+                      <TableHead>Date</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {grnLines.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        className={mismatchSkus.includes(row.sku) ? "bg-amber-500/10" : ""}
-                      >
+                    {grnRows.map((row) => (
+                      <TableRow key={row.id}>
                         <TableCell>
                           <Checkbox
-                            checked={selectedGRN.has(row.id)}
-                            onCheckedChange={() => toggleGRN(row.id)}
+                            checked={selectedGRN === row.id}
+                            onCheckedChange={() => setSelectedGRN((prev) => (prev === row.id ? null : row.id))}
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{row.sku}</TableCell>
-                        <TableCell>{row.quantity}</TableCell>
+                        <TableCell className="font-medium">{row.number}</TableCell>
+                        <TableCell>{row.date?.slice(0, 10)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -253,7 +224,7 @@ export default function ThreeWayMatchPage() {
           <Card>
             <CardHeader>
               <CardTitle>Bill lines</CardTitle>
-              <CardDescription>Supplier bill lines (mock)</CardDescription>
+              <CardDescription>Supplier bills (live)</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[320px] overflow-auto">
@@ -261,26 +232,23 @@ export default function ThreeWayMatchPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Qty</TableHead>
-                      <TableHead>Price</TableHead>
+                      <TableHead>Number</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {billLines.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        className={mismatchSkus.includes(row.sku) ? "bg-amber-500/10" : ""}
-                      >
+                    {billRows.map((row) => (
+                      <TableRow key={row.id}>
                         <TableCell>
                           <Checkbox
-                            checked={selectedBill.has(row.id)}
-                            onCheckedChange={() => toggleBill(row.id)}
+                            checked={selectedBill === row.id}
+                            onCheckedChange={() => setSelectedBill((prev) => (prev === row.id ? null : row.id))}
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{row.sku}</TableCell>
-                        <TableCell>{row.quantity}</TableCell>
-                        <TableCell>{formatMoney(row.unitPrice, "KES")}</TableCell>
+                        <TableCell className="font-medium">{row.number}</TableCell>
+                        <TableCell>{row.date?.slice(0, 10)}</TableCell>
+                        <TableCell>{formatMoney(row.total ?? 0, "KES")}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -301,13 +269,13 @@ export default function ThreeWayMatchPage() {
             <Button
               variant="default"
               size="sm"
-              disabled={matching || selectedPO.size === 0 || selectedGRN.size === 0 || selectedBill.size === 0}
+              disabled={matching || !selectedPO || !selectedGRN || !selectedBill}
               onClick={handleMatchSelected}
             >
               Match selected
             </Button>
             <span className="text-sm text-muted-foreground">
-              {selectedPO.size} PO · {selectedGRN.size} GRN · {selectedBill.size} Bill selected
+              {selectedPO ? 1 : 0} PO · {selectedGRN ? 1 : 0} GRN · {selectedBill ? 1 : 0} Bill selected
             </span>
           </CardContent>
         </Card>
@@ -323,7 +291,7 @@ export default function ThreeWayMatchPage() {
                   <p className="font-medium">{decision.status}</p>
                   <p className="text-muted-foreground">{decision.reason}</p>
                   <p className="text-xs text-muted-foreground">
-                    {decision.poLineIds.length} PO · {decision.grnLineIds.length} GRN · {decision.billLineIds.length} Bill · {new Date(decision.matchedAt).toLocaleString()}
+                    PO {decision.poId} · GRN {decision.grnId} · Bill {decision.billId} · {new Date(decision.matchedAt).toLocaleString()}
                   </p>
                 </div>
               ))}

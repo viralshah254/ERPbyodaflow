@@ -6,12 +6,11 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getMockTransfers } from "@/lib/mock/warehouse/transfers";
-import { getMockPickPack } from "@/lib/mock/warehouse/pick-pack";
-import { getMockPutaway } from "@/lib/mock/warehouse/putaway";
-import { getMockCycleCounts } from "@/lib/mock/warehouse/cycle-counts";
+import { fetchTransfers } from "@/lib/api/warehouse-transfers";
+import { fetchCycleCountTasks, fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const LINKS = [
@@ -24,15 +23,38 @@ const LINKS = [
 
 export default function WarehouseOverviewPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const transfers = React.useMemo(() => getMockTransfers(), []);
-  const pickPack = React.useMemo(() => getMockPickPack(), []);
-  const putaway = React.useMemo(() => getMockPutaway(), []);
-  const cycleCounts = React.useMemo(() => getMockCycleCounts(), []);
+  const [inTransit, setInTransit] = React.useState(0);
+  const [pendingPick, setPendingPick] = React.useState(0);
+  const [awaitingPutaway, setAwaitingPutaway] = React.useState(0);
+  const [openCounts, setOpenCounts] = React.useState(0);
 
-  const inTransit = transfers.filter((t) => t.status === "IN_TRANSIT").length;
-  const pendingPick = pickPack.filter((p) => p.status === "PICK").length;
-  const awaitingPutaway = putaway.length;
-  const openCounts = cycleCounts.filter((c) => c.status === "OPEN" || c.status === "IN_PROGRESS").length;
+  React.useEffect(() => {
+    let active = true;
+    async function load() {
+      const [transfers, pickPack, putaway, cycleCounts] = await Promise.all([
+        fetchTransfers(),
+        fetchPickPackTasks(),
+        fetchPutawayTasks(),
+        fetchCycleCountTasks(),
+      ]);
+      if (!active) return;
+      setInTransit(transfers.filter((t) => t.status === "IN_TRANSIT").length);
+      setPendingPick(pickPack.filter((p) => p.status !== "COMPLETED").length);
+      setAwaitingPutaway(putaway.filter((p) => p.status !== "CONFIRMED").length);
+      setOpenCounts(cycleCounts.filter((c) => c.status === "OPEN" || c.status === "IN_PROGRESS").length);
+    }
+    void load().catch((error) => {
+      if (!active) return;
+      toast.error(error instanceof Error ? error.message : "Failed to load warehouse overview.");
+      setInTransit(0);
+      setPendingPick(0);
+      setAwaitingPutaway(0);
+      setOpenCounts(0);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <PageShell>

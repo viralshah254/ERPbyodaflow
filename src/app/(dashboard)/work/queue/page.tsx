@@ -7,9 +7,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getMockWorkQueue, CATEGORY_LABELS } from "@/lib/mock/work-queue";
-import type { WorkQueueItem, WorkQueueCategory } from "@/lib/mock/work-queue";
+import { fetchWorkQueueApi } from "@/lib/api/work-queue";
+import { CATEGORY_LABELS, type WorkQueueItem, type WorkQueueCategory } from "@/lib/types/work-queue";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const SEVERITY_ICON: Record<string, keyof typeof Icons> = {
@@ -19,7 +20,25 @@ const SEVERITY_ICON: Record<string, keyof typeof Icons> = {
 };
 
 export default function WorkQueuePage() {
-  const items = React.useMemo(() => getMockWorkQueue(), []);
+  const [items, setItems] = React.useState<WorkQueueItem[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+    void fetchWorkQueueApi()
+      .then((rows) => {
+        if (!active) return;
+        setItems(rows);
+      })
+      .catch((error) => {
+        if (!active) return;
+        toast.error(error instanceof Error ? error.message : "Failed to load work queue.");
+        setItems([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const byCategory = React.useMemo(() => {
     const m = new Map<WorkQueueCategory, WorkQueueItem[]>();
     for (const it of items) {
@@ -46,18 +65,19 @@ export default function WorkQueuePage() {
         }
       />
       <div className="p-6 space-y-6">
-        {(["approvals", "inventory", "ar", "ap", "bank", "payroll", "tax", "pricing"] as const).map((cat) => {
+        {Array.from(byCategory.keys()).map((cat) => {
           const list = byCategory.get(cat) ?? [];
           if (list.length === 0) return null;
           return (
             <Card key={cat}>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  {CATEGORY_LABELS[cat]}
+                  {CATEGORY_LABELS[cat] ?? cat}
                   <Badge variant="secondary">{list.length}</Badge>
                 </CardTitle>
                 <CardDescription>
-                  {cat === "approvals" && "Documents pending your review and approval."}
+                  {(cat === "approvals" || cat === "approval") && "Documents pending your review and approval."}
+                  {(cat === "anomalies" || cat === "anomaly") && "Anomalies requiring investigation and corrective action."}
                   {cat === "inventory" && "Stockouts, low stock, and reorder alerts."}
                   {cat === "ar" && "Overdue invoices, unallocated receipts."}
                   {cat === "ap" && "Bills due, payment reminders."}

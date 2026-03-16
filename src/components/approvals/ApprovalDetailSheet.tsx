@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ApprovalItem } from "@/lib/mock/dashboard";
+import type { ApprovalItem } from "@/lib/types/dashboard";
 import { drillToDocument } from "@/lib/drill-through";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { createWithholdingCodeApi, fetchWithholdingCodesApi } from "@/lib/api/settings-tax";
-import type { KenyaWhtCode } from "@/lib/mock/tax/kenya";
+import type { KenyaWhtCode } from "@/lib/types/tax-kenya";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
