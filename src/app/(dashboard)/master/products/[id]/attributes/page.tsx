@@ -145,7 +145,7 @@ export default function ProductAttributesPage() {
   if (product === undefined) {
     return (
       <PageShell>
-        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: "Loading..." }]} />
         <div className="p-6 text-sm text-muted-foreground">Loading...</div>
       </PageShell>
     );
@@ -154,7 +154,7 @@ export default function ProductAttributesPage() {
   if (!product) {
     return (
       <PageShell>
-        <PageHeader title="Product not found" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <PageHeader title="Product not found" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: "Not found" }]} />
         <div className="p-6">
           <p className="text-muted-foreground">Product not found.</p>
           <Button variant="outline" className="mt-4" asChild>
@@ -167,13 +167,22 @@ export default function ProductAttributesPage() {
 
   return (
     <PageShell>
+      <div className="px-6 pt-4">
+        <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+          <Icons.ArrowLeftRight className="h-4 w-4 shrink-0" />
+          Option types are now managed on the Variants tab of the main product page.
+          <Link href={`/master/products/${id}`} className="ml-auto text-foreground underline underline-offset-4 hover:no-underline whitespace-nowrap">
+            Open product page →
+          </Link>
+        </div>
+      </div>
       <PageHeader
         title={`Attributes — ${product.sku}`}
         description="Size, grade, flavor, packaging type. Define once, reuse across all variants."
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: t("product", terminology) + "s", href: "/master/products" },
-          { label: product.sku, href: `/master/products/${id}` },
+          { label: product.name || product.sku, href: `/master/products/${id}` },
           { label: "Attributes" },
         ]}
         sticky

@@ -117,6 +117,9 @@ export type FinanceAccount = {
   code: string;
   name: string;
   type: string;
+  currency?: string;
+  parentId?: string;
+  description?: string;
 };
 
 export type PostingMappingKey =
@@ -224,9 +227,7 @@ export async function fetchPostingBatchBySourceApi(sourceType: string, sourceId:
 
 export async function fetchFinanceAccountsApi(): Promise<FinanceAccount[]> {
   requireLiveApi("Finance accounts");
-  const payload = await apiRequest<{ items: Array<{ id: string; code: string; name: string; type: string }> }>(
-    "/api/finance/accounts"
-  );
+  const payload = await apiRequest<{ items: FinanceAccount[] }>("/api/finance/accounts");
   return payload.items ?? [];
 }
 
@@ -236,11 +237,30 @@ export async function createFinanceAccountApi(payload: {
   type: string;
   parentId?: string;
   currency?: string;
+  description?: string;
 }): Promise<void> {
   requireLiveApi("Finance account creation");
   await apiRequest("/api/finance/accounts", {
     method: "POST",
     body: payload,
+  });
+}
+
+export async function updateFinanceAccountApi(
+  id: string,
+  payload: { code?: string; name?: string; type?: string; parentId?: string; currency?: string; description?: string }
+): Promise<void> {
+  requireLiveApi("Finance account update");
+  await apiRequest(`/api/master-data/finance/accounts/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function deleteFinanceAccountApi(id: string): Promise<void> {
+  requireLiveApi("Finance account delete");
+  await apiRequest(`/api/master-data/finance/accounts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }
 

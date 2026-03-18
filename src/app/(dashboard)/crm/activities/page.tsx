@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   createCrmActivityApi,
   deleteCrmActivityApi,
@@ -158,7 +159,16 @@ export default function CRMActivitiesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Type</Label>
-                  <Input value={form.type} onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))} />
+                  <Select value={form.type} onValueChange={(v) => setForm((prev) => ({ ...prev, type: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="task">Task</SelectItem>
+                      <SelectItem value="call">Call</SelectItem>
+                      <SelectItem value="meeting">Meeting</SelectItem>
+                      <SelectItem value="note">Note</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Due date</Label>

@@ -153,7 +153,7 @@ export default function APBillsPage() {
               </Link>
             </Button>
             <Button asChild>
-              <Link href="/docs/bill/new">
+              <Link href="/docs/bill/new" data-tour-step="create-button">
                 <Icons.Plus className="mr-2 h-4 w-4" />
                 Create Bill
               </Link>

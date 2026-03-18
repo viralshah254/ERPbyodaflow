@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   approveBudgetApi,
   createBudgetApi,
@@ -19,6 +20,8 @@ import {
   updateBudgetApi,
   type BudgetRow,
 } from "@/lib/api/budgets";
+import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
+import { CURRENCY_LIST } from "@/lib/data/currencies";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -39,6 +42,16 @@ export default function BudgetsPage() {
     currency: "KES",
     linesText: "6000,2026-01,100000\n6100,2026-01,50000",
   });
+  const [currencies, setCurrencies] = React.useState<{ code: string; name: string }[]>(
+    () => CURRENCY_LIST.map((c) => ({ code: c.code, name: c.name }))
+  );
+
+  React.useEffect(() => {
+    if (!drawerOpen) return;
+    fetchFinancialCurrenciesApi()
+      .then((items) => setCurrencies(items.filter((c) => c.enabled).map((c) => ({ code: c.code, name: c.name ?? c.code }))))
+      .catch(() => setCurrencies(CURRENCY_LIST.map((c) => ({ code: c.code, name: c.name }))));
+  }, [drawerOpen]);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -223,7 +236,16 @@ export default function BudgetsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Currency</Label>
-                  <Input value={form.currency} onChange={(event) => setForm((prev) => ({ ...prev, currency: event.target.value }))} />
+                  <Select value={form.currency} onValueChange={(v) => setForm((prev) => ({ ...prev, currency: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select currency" /></SelectTrigger>
+                    <SelectContent>
+                      {currencies.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.code} {c.name !== c.code ? `— ${c.name}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

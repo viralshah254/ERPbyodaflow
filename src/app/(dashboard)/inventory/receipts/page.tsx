@@ -139,7 +139,7 @@ export default function InventoryReceiptsPage() {
         showCommandHint
         actions={
           <Button asChild>
-            <Link href="/docs/grn/new">
+            <Link href="/docs/grn/new" data-tour-step="create-button">
               <Icons.Plus className="mr-2 h-4 w-4" />
               Create GRN
             </Link>

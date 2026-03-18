@@ -18,7 +18,9 @@ import {
   setPlatformOrgAccessApi,
   updatePlatformTenantApi,
   type PlatformTenantRow,
+  type PlatformTenantUserRow,
 } from "@/lib/api/platform";
+import { isApiConfigured } from "@/lib/api/client";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
@@ -27,7 +29,9 @@ export default function PlatformCustomerDetailPage() {
   const params = useParams();
   const tenantId = params.tenantId as string;
   const [tenant, setTenant] = React.useState<PlatformTenantRow | null>(null);
-  const [orgs, setOrgs] = React.useState<Array<{ id: string; name: string; orgType: string; orgRole: string; isActive: boolean }>>([]);
+  const [orgs, setOrgs] = React.useState<Array<{ id: string; name: string; orgType: string; orgRole: string; isActive: boolean; userCount?: number }>>([]);
+  const [users, setUsers] = React.useState<PlatformTenantUserRow[]>([]);
+  const [totalUserCount, setTotalUserCount] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [editPlan, setEditPlan] = React.useState("");
@@ -51,12 +55,22 @@ export default function PlatformCustomerDetailPage() {
               orgType: o.orgType,
               orgRole: o.orgRole ?? "STANDARD",
               isActive: o.isActive,
+              userCount: o.userCount,
             }))
           );
+          setUsers(data.users ?? []);
+          setTotalUserCount(data.totalUserCount ?? 0);
         }
       })
-      .catch(() => {
-        if (!cancelled) setTenant(null);
+      .catch((err) => {
+        if (!cancelled) {
+          setTenant(null);
+          if (!isApiConfigured()) {
+            toast.error("Set NEXT_PUBLIC_API_URL to connect to the backend.");
+          } else {
+            toast.error(err instanceof Error ? err.message : "Failed to load tenant.");
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -79,8 +93,11 @@ export default function PlatformCustomerDetailPage() {
           orgType: o.orgType,
           orgRole: o.orgRole ?? "STANDARD",
           isActive: o.isActive,
+          userCount: o.userCount,
         }))
       );
+      setUsers(data.users ?? []);
+      setTotalUserCount(data.totalUserCount ?? 0);
     });
   }, [tenantId]);
 
@@ -144,9 +161,62 @@ export default function PlatformCustomerDetailPage() {
           <h1 className="text-2xl font-bold tracking-tight">{tenant.name}</h1>
           <p className="text-muted-foreground">
             {tenant.slug ?? tenant.id} · {tenant.plan} · {tenant.status}
+            {orgs.length > 0 && ` · ${orgs.length} org${orgs.length !== 1 ? "s" : ""}`}
           </p>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Contact & team</CardTitle>
+          <CardDescription>Admin users, credentials, and team size</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Organizations</p>
+              <p className="text-lg font-semibold">{orgs.length} org{orgs.length !== 1 ? "s" : ""}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Team size</p>
+              <p className="text-lg font-semibold">{totalUserCount} user{totalUserCount !== 1 ? "s" : ""}</p>
+            </div>
+          </div>
+          {users.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Users</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Organization</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Last login</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium">
+                        {[u.firstName, u.lastName].filter(Boolean).join(" ") || "—"}
+                      </TableCell>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>{u.orgName ?? u.orgId}</TableCell>
+                      <TableCell>{u.status}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No users found for this tenant.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -196,7 +266,10 @@ export default function PlatformCustomerDetailPage() {
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle>Companies</CardTitle>
-            <CardDescription>Organizations (company names) under this tenant ({orgs.length})</CardDescription>
+            <CardDescription>
+            Organizations under this tenant ({orgs.length})
+            {totalUserCount > 0 && ` · ${totalUserCount} total user${totalUserCount !== 1 ? "s" : ""}`}
+          </CardDescription>
           </div>
           <p className="text-xs text-muted-foreground">Create new orgs inside customer admin</p>
         </CardHeader>
@@ -210,6 +283,7 @@ export default function PlatformCustomerDetailPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Users</TableHead>
                   <TableHead>Active</TableHead>
                   <TableHead>Access control</TableHead>
                 </TableRow>
@@ -220,6 +294,7 @@ export default function PlatformCustomerDetailPage() {
                     <TableCell className="font-medium">{o.name}</TableCell>
                     <TableCell>{o.orgType}</TableCell>
                     <TableCell>{o.orgRole}</TableCell>
+                    <TableCell>{o.userCount ?? 0}</TableCell>
                     <TableCell>{o.isActive ? "Yes" : "No"}</TableCell>
                     <TableCell>
                       <Button

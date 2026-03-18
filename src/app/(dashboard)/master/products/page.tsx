@@ -9,6 +9,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -26,10 +27,10 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
-import { createProductApi, fetchProductsApi } from "@/lib/api/products";
+import { createProductApi, fetchProductSkusApi, fetchProductsApi } from "@/lib/api/products";
 import { fetchProductCategoriesApi, createProductCategoryApi } from "@/lib/api/product-categories";
+import { fetchProductUomsApi } from "@/lib/api/uom";
 import { setProductsCache } from "@/lib/data/products.repo";
-import { listUoms } from "@/lib/data/uom.repo";
 import type { ProductRow } from "@/lib/types/masters";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
@@ -38,6 +39,43 @@ import * as Icons from "lucide-react";
 
 const productIcon = "Package" as const;
 
+/** Derive next sequential SKU from existing SKUs. */
+function suggestNextSku(existing: string[]): string {
+  const numbers = existing
+    .map((s) => {
+      const m = s.match(/(\d+)(?:\D*)$/);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter((n) => n > 0);
+  const max = numbers.length > 0 ? Math.max(...numbers) : 0;
+  return `SKU-${String(max + 1).padStart(3, "0")}`;
+}
+
+type ProductType = "RAW" | "FINISHED" | "BOTH" | undefined;
+
+function productTypeLabel(type: ProductType | string | undefined): string {
+  if (type === "RAW") return "Purchased item";
+  if (type === "FINISHED") return "Sellable item";
+  if (type === "BOTH") return "Stock item";
+  return "Stock item";
+}
+
+function ProductTypeBadge({ type }: { type: ProductType | string | undefined }) {
+  if (!type) return <span className="text-muted-foreground text-xs">—</span>;
+  const label = productTypeLabel(type);
+  const cls =
+    type === "RAW"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+      : type === "FINISHED"
+      ? "border-green-500/30 bg-green-500/10 text-green-400"
+      : "border-purple-500/30 bg-purple-500/10 text-purple-400";
+  return (
+    <Badge variant="outline" className={cls}>
+      {label}
+    </Badge>
+  );
+}
+
 export default function MasterProductsPage() {
   const router = useRouter();
   const terminology = useTerminology();
@@ -45,43 +83,54 @@ export default function MasterProductsPage() {
 
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
+  const [productTypeFilter, setProductTypeFilter] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
   const [allRows, setAllRows] = React.useState<ProductRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+
+  // Step 1 fields
+  const [step, setStep] = React.useState<1 | 2>(1);
   const [sku, setSku] = React.useState("");
+  const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
+  const [productType, setProductType] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
   const [categoryId, setCategoryId] = React.useState("");
   const [unit, setUnit] = React.useState("");
-  const [baseBarcode, setBaseBarcode] = React.useState("");
-  const [defaultSize, setDefaultSize] = React.useState("");
+
   const [categories, setCategories] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [addCategoryOpen, setAddCategoryOpen] = React.useState(false);
   const [newCategoryCode, setNewCategoryCode] = React.useState("");
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [addingCategory, setAddingCategory] = React.useState(false);
-
-  const uomOptions = React.useMemo(() => listUoms().map((u) => u.code), []);
+  const [uomOptions, setUomOptions] = React.useState<string[]>([]);
 
   const loadCategories = React.useCallback(async () => {
     try {
       const list = await fetchProductCategoriesApi();
       setCategories(list.filter((c) => c.isActive).map((c) => ({ id: c.id, code: c.code, name: c.name })));
-    } catch {
-      setCategories([]);
-    }
+    } catch { setCategories([]); }
   }, []);
 
-  React.useEffect(() => {
-    void loadCategories();
-  }, [loadCategories]);
-  const filtered = allRows;
+  const loadUoms = React.useCallback(async () => {
+    try {
+      const list = await fetchProductUomsApi();
+      const codes = list.map((u) => u.code);
+      setUomOptions(codes.length > 0 ? codes : ["EA", "KG", "L", "M", "PCS"]);
+    } catch { setUomOptions(["EA", "KG", "L", "M", "PCS"]); }
+  }, []);
+
+  React.useEffect(() => { void loadCategories(); }, [loadCategories]);
+  React.useEffect(() => { void loadUoms(); }, [loadUoms]);
 
   const refreshProducts = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchProductsApi(search, statusFilter || undefined);
+      const data = await fetchProductsApi({
+        search: search || undefined,
+        status: statusFilter || undefined,
+        productType: productTypeFilter || undefined,
+      });
       setAllRows(data);
       setProductsCache(data);
     } catch (error) {
@@ -89,27 +138,46 @@ export default function MasterProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter]);
+  }, [search, statusFilter, productTypeFilter]);
+
+  React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
   React.useEffect(() => {
-    void refreshProducts();
-  }, [refreshProducts]);
+    if (drawerOpen) {
+      fetchProductSkusApi()
+        .then((skus) => setSku(suggestNextSku(skus)))
+        .catch(() => {});
+    }
+  }, [drawerOpen]);
 
-  const categoryNameById = React.useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
+  const categoryNameById = React.useMemo(
+    () => new Map(categories.map((c) => [c.id, c.name])),
+    [categories]
+  );
 
   const columns = React.useMemo(
     () => [
       {
         id: "sku",
         header: "SKU",
-        accessor: (r: ProductRow) => <span className="font-medium">{r.sku}</span>,
+        accessor: (r: ProductRow) => (
+          <div>
+            <span className="font-mono font-medium">{r.sku}</span>
+          </div>
+        ),
         sticky: true,
       },
       { id: "name", header: "Name", accessor: "name" as keyof ProductRow },
       {
         id: "category",
         header: "Category",
-        accessor: (r: ProductRow) => (r.category ? categoryNameById.get(r.category) ?? r.category : "—"),
+        accessor: (r: ProductRow) =>
+          r.category ? categoryNameById.get(r.category) ?? r.category : "—",
+      },
+      {
+        id: "productType",
+        header: "Type",
+        accessor: (r: ProductRow) => <ProductTypeBadge type={r.productType} />,
       },
       { id: "unit", header: "Unit", accessor: "unit" as keyof ProductRow },
       {
@@ -127,48 +195,92 @@ export default function MasterProductsPage() {
   );
 
   const resetForm = () => {
+    setStep(1);
     setSku("");
+    setCode("");
     setName("");
     setCategoryId("");
+    setProductType("");
     setUnit("");
-    setBaseBarcode("");
-    setDefaultSize("");
   };
 
   const handleCreate = async () => {
-    if (!sku.trim() || !name.trim()) {
+    const trimmedSku = sku.trim();
+    if (!trimmedSku || !name.trim()) {
       toast.error("SKU and Name are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const freshSkus = await fetchProductSkusApi();
+      if (freshSkus.some((s) => s.toLowerCase() === trimmedSku.toLowerCase())) {
+        toast.error("This SKU is already in use.");
+        setSaving(false);
+        return;
+      }
+    } catch {
+      setSaving(false);
       return;
     }
     const selectedUnit = unit.trim() || (uomOptions[0] ?? "EA");
     const payload = {
-      sku: sku.trim(),
+      sku: trimmedSku,
+      code: code.trim() || undefined,
       name: name.trim(),
       category: categoryId.trim() || undefined,
+      productType: productType || undefined,
       unit: selectedUnit,
       baseUom: selectedUnit,
       status: "ACTIVE" as const,
     };
     try {
-      setSaving(true);
       const created = await createProductApi(payload);
-      toast.success("Product created.");
+      toast.success(`${productTypeLabel(productType)} created.`);
       resetForm();
       setDrawerOpen(false);
       await refreshProducts();
       router.push(`/master/products/${created.id}`);
     } catch (error) {
-      toast.error((error as Error).message);
+      const msg = (error as Error).message;
+      if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+        console.warn("[products] Create failed:", { payload, error: msg });
+      }
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
   };
 
+  // Product type option cards for the create drawer
+  const typeOptions: Array<{ value: "RAW" | "FINISHED" | "BOTH"; label: string; description: string; color: string; icon: keyof typeof Icons }> = [
+    {
+      value: "RAW",
+      label: "Purchased item",
+      description: "Buy from suppliers. Appears on purchase orders and bills.",
+      color: "border-blue-500/40 bg-blue-500/5 data-[active=true]:border-blue-500 data-[active=true]:bg-blue-500/10",
+      icon: "ShoppingCart",
+    },
+    {
+      value: "FINISHED",
+      label: "Sellable item",
+      description: "Sell to customers. Appears on sales orders and invoices.",
+      color: "border-green-500/40 bg-green-500/5 data-[active=true]:border-green-500 data-[active=true]:bg-green-500/10",
+      icon: "TrendingUp",
+    },
+    {
+      value: "BOTH",
+      label: "Stock item",
+      description: "Buy and sell. Appears on both purchase and sales documents.",
+      color: "border-purple-500/40 bg-purple-500/5 data-[active=true]:border-purple-500 data-[active=true]:bg-purple-500/10",
+      icon: "Package",
+    },
+  ];
+
   return (
     <PageShell>
       <PageHeader
         title={productLabel + "s"}
-        description="Manage products and SKUs"
+        description="Manage your product catalogue, pricing and variants"
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: productLabel + "s" },
@@ -178,10 +290,10 @@ export default function MasterProductsPage() {
         actions={
           <Button
             onClick={() => {
-              setEditingId(null);
               resetForm();
               setDrawerOpen(true);
             }}
+            data-tour-step="create-button"
           >
             <Icons.Plus className="mr-2 h-4 w-4" />
             Add {productLabel}
@@ -205,13 +317,25 @@ export default function MasterProductsPage() {
               value: statusFilter,
               onChange: (v) => setStatusFilter(v),
             },
+            {
+              id: "productType",
+              label: "Type",
+              options: [
+                { label: "All types", value: "" },
+                { label: "Purchased item", value: "RAW" },
+                { label: "Sellable item", value: "FINISHED" },
+                { label: "Stock item", value: "BOTH" },
+              ],
+              value: productTypeFilter,
+              onChange: (v) => setProductTypeFilter(v as "RAW" | "FINISHED" | "BOTH" | ""),
+            },
           ]}
         />
         {loading ? (
           <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
             Loading {productLabel.toLowerCase()}s...
           </div>
-        ) : filtered.length === 0 ? (
+        ) : allRows.length === 0 ? (
           <EmptyState
             icon={productIcon}
             title={`No ${productLabel.toLowerCase()}s found`}
@@ -223,7 +347,7 @@ export default function MasterProductsPage() {
           />
         ) : (
           <DataTable<ProductRow>
-            data={filtered}
+            data={allRows}
             columns={columns}
             onRowClick={(row) => router.push(`/master/products/${row.id}`)}
             emptyMessage={`No ${productLabel.toLowerCase()}s.`}
@@ -231,117 +355,161 @@ export default function MasterProductsPage() {
         )}
       </div>
 
+      {/* ── Create drawer ────────────────────────────────────────────────── */}
       <EntityDrawer
         open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        title={editingId ? `Edit ${productLabel}` : `New ${productLabel}`}
-        description={editingId ? "Update product details." : "Add a new product."}
-        mode={editingId ? "edit" : "create"}
+        onOpenChange={(o) => { if (!o) resetForm(); setDrawerOpen(o); }}
+        title={`New ${productLabel}`}
+        description={step === 1 ? "Step 1 of 2 — Product identity" : "Step 2 of 2 — Classification (optional)"}
+        mode="create"
         footer={
-          <>
-            <Button variant="outline" onClick={() => { setDrawerOpen(false); }}>
-              Cancel
-            </Button>
-            {!editingId && (
+          step === 1 ? (
+            <>
+              <Button variant="outline" onClick={() => { resetForm(); setDrawerOpen(false); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => setStep(2)}
+                disabled={!sku.trim() || !name.trim()}
+              >
+                Next
+                <Icons.ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setStep(1)}>
+                <Icons.ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
               <Button onClick={() => void handleCreate()} disabled={saving}>
                 {saving ? "Creating..." : "Create & configure"}
               </Button>
-            )}
-          </>
+            </>
+          )
         }
       >
         <div className="space-y-4 pr-4">
-          <div className="space-y-2">
-            <Label>SKU</Label>
-            <Input
-              placeholder="e.g. SKU-001"
-              value={sku}
-              onChange={(e) => setSku(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Name</Label>
-            <Input
-              placeholder="Product name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Category</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => {
-                  setNewCategoryCode("");
-                  setNewCategoryName("");
-                  setAddCategoryOpen(true);
-                }}
-              >
-                <Icons.Plus className="h-3.5 w-3.5 mr-1" />
-                Add category
-              </Button>
-            </div>
-            <Select
-              value={categoryId || "__none__"}
-              onValueChange={(v) => setCategoryId(v === "__none__" ? "" : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Unit</Label>
-            <Select
-              value={unit || (uomOptions[0] ?? "EA")}
-              onValueChange={(v) => setUnit(v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select unit" />
-              </SelectTrigger>
-              <SelectContent>
-                {uomOptions.map((code) => (
-                  <SelectItem key={code} value={code}>
-                    {code}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Base barcode (optional)</Label>
-            <Input
-              placeholder="Primary barcode used for base UOM"
-              value={baseBarcode}
-              onChange={(e) => setBaseBarcode(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Default size / variant hint (optional)</Label>
-            <Input
-              placeholder="e.g. 1kg, 500ml"
-              value={defaultSize}
-              onChange={(e) => setDefaultSize(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              This is a hint for the first variant you will set up on the Variants tab.
-            </p>
-          </div>
+          {step === 1 ? (
+            <>
+              {/* SKU */}
+              <div className="space-y-2">
+                <Label>SKU</Label>
+                <Input
+                  placeholder="e.g. SKU-001"
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Auto-suggested. Edit if needed.
+                </p>
+              </div>
+              {/* Product code */}
+              <div className="space-y-2">
+                <Label>Product code (optional)</Label>
+                <Input
+                  placeholder="e.g. PROD-001"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
+              </div>
+              {/* Name */}
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input
+                  placeholder="Product name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              {/* Base UOM */}
+              <div className="space-y-2">
+                <Label>Base unit of measure</Label>
+                <Select
+                  value={unit || (uomOptions[0] ?? "EA")}
+                  onValueChange={(v) => setUnit(v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uomOptions.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Product type visual selector */}
+              <div className="space-y-2">
+                <Label>Product type</Label>
+                <div className="space-y-2">
+                  {typeOptions.map((opt) => {
+                    const Icon = Icons[opt.icon] as React.FC<{ className?: string }>;
+                    const isActive = productType === opt.value || (!productType && opt.value === "BOTH");
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        data-active={isActive}
+                        className={`w-full text-left rounded-lg border px-4 py-3 transition-all ${opt.color} ${isActive ? "ring-1 ring-offset-0" : ""}`}
+                        onClick={() => setProductType(opt.value)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Icon className="h-5 w-5 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium">{opt.label}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
+                          </div>
+                          {isActive && (
+                            <Icons.CheckCircle2 className="ml-auto h-4 w-4 shrink-0 opacity-80" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Category */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Category (optional)</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => { setNewCategoryCode(""); setNewCategoryName(""); setAddCategoryOpen(true); }}
+                  >
+                    <Icons.Plus className="h-3.5 w-3.5 mr-1" />
+                    Add category
+                  </Button>
+                </div>
+                <Select
+                  value={categoryId || "__none__"}
+                  onValueChange={(v) => setCategoryId(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name} ({c.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
         </div>
       </EntityDrawer>
 
+      {/* Add category sheet */}
       <Sheet open={addCategoryOpen} onOpenChange={setAddCategoryOpen}>
         <SheetContent>
           <SheetHeader>
@@ -366,9 +534,7 @@ export default function MasterProductsPage() {
             </div>
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setAddCategoryOpen(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setAddCategoryOpen(false)}>Cancel</Button>
             <Button
               disabled={!newCategoryCode.trim() || !newCategoryName.trim() || addingCategory}
               onClick={async () => {
@@ -387,9 +553,7 @@ export default function MasterProductsPage() {
                   toast.success("Category added.");
                 } catch (err) {
                   toast.error(err instanceof Error ? err.message : "Failed to add category.");
-                } finally {
-                  setAddingCategory(false);
-                }
+                } finally { setAddingCategory(false); }
               }}
             >
               {addingCategory ? "Adding..." : "Add"}

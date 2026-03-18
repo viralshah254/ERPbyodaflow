@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table";
 import { fetchProductApi } from "@/lib/api/products";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
-import { listUoms } from "@/lib/data/uom.repo";
+import { fetchProductUomsApi } from "@/lib/api/uom";
 import type { PricingTier, ProductPrice } from "@/lib/products/pricing-types";
 import { validateTiers } from "@/lib/pricing/validation";
 import { formatMoney } from "@/lib/money";
@@ -67,8 +67,17 @@ export default function ProductPricingPage() {
   const [packaging, setPackaging] = React.useState<{ uom: string; unitsPer: number; baseUom: string }[]>([]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   const [allPrices, setAllPrices] = React.useState<ProductPrice[]>([]);
+  const [uomOptions, setUomOptions] = React.useState<string[]>(["EA", "KG", "L", "M", "PCS"]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
+  }, []);
+  React.useEffect(() => {
+    fetchProductUomsApi()
+      .then((list) => {
+        const codes = list.map((u) => u.code);
+        setUomOptions(codes.length > 0 ? codes : ["EA", "KG", "L", "M", "PCS"]);
+      })
+      .catch(() => setUomOptions(["EA", "KG", "L", "M", "PCS"]));
   }, []);
 
   React.useEffect(() => {
@@ -128,7 +137,6 @@ export default function ProductPricingPage() {
     () => validateTiers(draftTiers, packaging, { unitCost: undefined }),
     [draftTiers, packaging]
   );
-  const uomOptions = React.useMemo(() => listUoms().map((u) => u.code), []);
   const warnings = [...tierValidation.errors, ...tierValidation.warnings];
 
   const handleSaveTiers = () => {
@@ -172,7 +180,7 @@ export default function ProductPricingPage() {
   if (product === undefined) {
     return (
       <PageShell>
-        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: "Loading..." }]} />
         <div className="p-6 text-sm text-muted-foreground">Loading...</div>
       </PageShell>
     );
@@ -181,7 +189,7 @@ export default function ProductPricingPage() {
   if (!product) {
     return (
       <PageShell>
-        <PageHeader title="Product not found" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <PageHeader title="Product not found" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: "Not found" }]} />
         <div className="p-6">
           <p className="text-muted-foreground">Product not found.</p>
           <Button variant="outline" className="mt-4" asChild>
@@ -196,13 +204,22 @@ export default function ProductPricingPage() {
 
   return (
     <PageShell>
+      <div className="px-6 pt-4">
+        <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+          <Icons.ArrowLeftRight className="h-4 w-4 shrink-0" />
+          Pricing is now managed on the Pricing tab of the main product page.
+          <Link href={`/master/products/${id}`} className="ml-auto text-foreground underline underline-offset-4 hover:no-underline whitespace-nowrap">
+            Open product page →
+          </Link>
+        </div>
+      </div>
       <PageHeader
         title={`Pricing — ${product.sku}`}
         description="Tiered pricing, validity, compare price lists."
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: t("product", terminology) + "s", href: "/master/products" },
-          { label: product.sku, href: `/master/products/${id}` },
+          { label: product.name || product.sku, href: `/master/products/${id}` },
           { label: "Pricing" },
         ]}
         sticky

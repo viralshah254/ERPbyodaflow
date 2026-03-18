@@ -1,0 +1,32 @@
+/**
+ * Common IANA timezone identifiers for dropdown selection.
+ */
+export const TIMEZONE_LIST: { value: string; label: string }[] = [
+  { value: "Africa/Nairobi", label: "East Africa (Nairobi)" },
+  { value: "Africa/Lagos", label: "West Africa (Lagos)" },
+  { value: "Africa/Johannesburg", label: "South Africa (Johannesburg)" },
+  { value: "Africa/Cairo", label: "Egypt (Cairo)" },
+  { value: "Africa/Accra", label: "Ghana (Accra)" },
+  { value: "Africa/Dar_es_Salaam", label: "Tanzania (Dar es Salaam)" },
+  { value: "Africa/Kampala", label: "Uganda (Kampala)" },
+  { value: "Africa/Lusaka", label: "Zambia (Lusaka)" },
+  { value: "Africa/Harare", label: "Zimbabwe (Harare)" },
+  { value: "Africa/Addis_Ababa", label: "Ethiopia (Addis Ababa)" },
+  { value: "America/New_York", label: "Eastern (New York)" },
+  { value: "America/Chicago", label: "Central (Chicago)" },
+  { value: "America/Denver", label: "Mountain (Denver)" },
+  { value: "America/Los_Angeles", label: "Pacific (Los Angeles)" },
+  { value: "America/Toronto", label: "Canada (Toronto)" },
+  { value: "Europe/London", label: "UK (London)" },
+  { value: "Europe/Paris", label: "Central Europe (Paris)" },
+  { value: "Europe/Berlin", label: "Germany (Berlin)" },
+  { value: "Europe/Amsterdam", label: "Netherlands (Amsterdam)" },
+  { value: "Asia/Dubai", label: "UAE (Dubai)" },
+  { value: "Asia/Kolkata", label: "India (Mumbai/Delhi)" },
+  { value: "Asia/Singapore", label: "Singapore" },
+  { value: "Asia/Hong_Kong", label: "Hong Kong" },
+  { value: "Asia/Shanghai", label: "China (Shanghai)" },
+  { value: "Asia/Tokyo", label: "Japan (Tokyo)" },
+  { value: "Australia/Sydney", label: "Australia (Sydney)" },
+  { value: "UTC", label: "UTC" },
+];

@@ -115,7 +115,7 @@ export default function BomsPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/mrp">MRP</Link>
             </Button>
-            <Button size="sm" onClick={() => router.push("/manufacturing/boms/new")}>
+            <Button size="sm" onClick={() => router.push("/manufacturing/boms/new")} data-tour-step="create-button">
               <Icons.Plus className="mr-2 h-4 w-4" />
               New BOM
             </Button>

@@ -40,7 +40,7 @@ import {
 } from "@/lib/api/product-master";
 import type { ProductPackaging } from "@/lib/products/pricing-types";
 import { validateProductPackaging } from "@/lib/products/validation";
-import { listUoms } from "@/lib/data/uom.repo";
+import { fetchProductUomsApi } from "@/lib/api/uom";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { t } from "@/lib/terminology";
@@ -48,9 +48,7 @@ import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-function getUomOptions(): string[] {
-  return listUoms().map((u) => u.code);
-}
+const DEFAULT_UOM_OPTIONS = ["EA", "KG", "L", "M", "PCS"];
 
 export default function ProductPackagingPage() {
   const params = useParams();
@@ -60,6 +58,7 @@ export default function ProductPackagingPage() {
 
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
   const [packaging, setPackaging] = React.useState<ProductPackaging[]>([]);
+  const [uomOptions, setUomOptions] = React.useState<string[]>(DEFAULT_UOM_OPTIONS);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [allowDecimals, setAllowDecimals] = React.useState(false);
@@ -96,6 +95,15 @@ export default function ProductPackagingPage() {
     };
   }, [product]);
 
+  React.useEffect(() => {
+    fetchProductUomsApi()
+      .then((list) => {
+        const codes = list.map((u) => u.code);
+        setUomOptions(codes.length > 0 ? codes : DEFAULT_UOM_OPTIONS);
+      })
+      .catch(() => setUomOptions(DEFAULT_UOM_OPTIONS));
+  }, []);
+
   const baseUom = product?.baseUom ?? product?.unit ?? "EA";
   const validation = React.useMemo(
     () => (product ? validateProductPackaging(baseUom, packaging, { checkUomCatalog: true }) : { ok: true, errors: [] as string[], warnings: [] as string[] }),
@@ -103,7 +111,6 @@ export default function ProductPackagingPage() {
   );
   const hasErrors = validation.errors.length > 0;
   const hasWarnings = validation.warnings.length > 0;
-  const uomOptions = React.useMemo(() => getUomOptions(), []);
 
   const handleSave = async (p: ProductPackaging) => {
     const next = [...packaging];
@@ -127,7 +134,7 @@ export default function ProductPackagingPage() {
   if (product === undefined) {
     return (
       <PageShell>
-        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <PageHeader title="Loading product" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: "Loading..." }]} />
         <div className="p-6 text-sm text-muted-foreground">Loading...</div>
       </PageShell>
     );
@@ -136,7 +143,7 @@ export default function ProductPackagingPage() {
   if (!product) {
     return (
       <PageShell>
-        <PageHeader title="Product not found" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: id }]} />
+        <PageHeader title="Product not found" breadcrumbs={[{ label: "Masters", href: "/master" }, { label: "Products", href: "/master/products" }, { label: "Not found" }]} />
         <div className="p-6">
           <p className="text-muted-foreground">Product not found.</p>
           <Button variant="outline" className="mt-4" asChild>
@@ -151,13 +158,22 @@ export default function ProductPackagingPage() {
 
   return (
     <PageShell>
+      <div className="px-6 pt-4">
+        <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+          <Icons.ArrowLeftRight className="h-4 w-4 shrink-0" />
+          Packaging is now managed on the Packaging / UOM tab of the main product page.
+          <Link href={`/master/products/${id}`} className="ml-auto text-foreground underline underline-offset-4 hover:no-underline whitespace-nowrap">
+            Open product page →
+          </Link>
+        </div>
+      </div>
       <PageHeader
         title={`Packaging — ${product.sku}`}
         description="UOM conversions, barcode, dimensions, weight. Default sales/purchase."
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: t("product", terminology) + "s", href: "/master/products" },
-          { label: product.sku, href: `/master/products/${id}` },
+          { label: product.name || product.sku, href: `/master/products/${id}` },
           { label: "Packaging" },
         ]}
         sticky

@@ -20,10 +20,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
-import { listProducts } from "@/lib/data/products.repo";
+import { listProducts, fetchProductsForDocumentLines } from "@/lib/data/products.repo";
+import type { ProductRow } from "@/lib/types/masters";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export interface DocumentLine {
@@ -40,7 +42,9 @@ export interface DocumentLine {
 }
 
 interface DocumentLineEditorProps {
-  priceListId: string;
+  priceListId?: string;
+  /** When true, do not use price list; price is manual (cost from supplier). */
+  useCostPricing?: boolean;
   currency: string;
   lines: DocumentLine[];
   onLinesChange: (lines: DocumentLine[]) => void;
@@ -50,33 +54,67 @@ interface DocumentLineEditorProps {
   packagingByProductId?: Record<string, ProductPackaging[]>;
   /** Preloaded pricing per product (from API); when provided, used for price resolution */
   pricingByProductId?: Record<string, ProductPrice[]>;
+  /** Filter products: purchasable (PO), sellable (SO), or all. */
+  productFilter?: "purchasable" | "sellable" | "all";
 }
 
 const defaultPriceListId = "pl-retail";
 
 export function DocumentLineEditor({
   priceListId = defaultPriceListId,
+  useCostPricing = false,
   currency,
   lines,
   onLinesChange,
   mode = "sales",
   packagingByProductId,
   pricingByProductId,
+  productFilter,
 }: DocumentLineEditorProps) {
-  const products = React.useMemo(() => listProducts(), []);
+  const [filteredProducts, setFilteredProducts] = React.useState<ProductRow[] | null>(null);
+  const cachedProducts = React.useMemo(() => listProducts(), []);
+  const products = React.useMemo(() => {
+    if (productFilter && productFilter !== "all") {
+      return filteredProducts ?? cachedProducts;
+    }
+    return cachedProducts;
+  }, [productFilter, filteredProducts, cachedProducts]);
+
+  React.useEffect(() => {
+    if (!productFilter || productFilter === "all") {
+      setFilteredProducts(null);
+      return;
+    }
+    let cancelled = false;
+    fetchProductsForDocumentLines(productFilter)
+      .then((rows) => {
+        if (!cancelled) setFilteredProducts(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setFilteredProducts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [productFilter]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
   }, []);
-  const priceListIdResolved = priceListId || priceLists[0]?.id || "pl-retail";
+  const priceListIdResolved = useCostPricing ? "" : (priceListId || priceLists[0]?.id || "pl-retail");
 
   const addRow = () => {
     const p = products[0];
-    if (!p) return;
+    if (!p) {
+      toast.error("No products found. Add products in Masters > Finished Good / SKU first.");
+      return;
+    }
     const packaging = packagingByProductId?.[p.id] ?? [];
     const uom = packaging.find((x) => x.isDefaultSalesUom)?.uom ?? packaging[0]?.uom ?? "EA";
-    const { price, reason } = getPriceForLine(p.id, priceListIdResolved, 1, uom, pricingByProductId?.[p.id]);
     const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
+    const { price, reason } = useCostPricing
+      ? { price: 0, reason: "Manual" }
+      : getPriceForLine(p.id, priceListIdResolved, 1, uom, pricingByProductId?.[p.id]);
     onLinesChange([
       ...lines,
       {
@@ -104,10 +142,15 @@ export function DocumentLineEditor({
       const uom = patch.uom ?? prev.uom;
       const qty = patch.qty ?? prev.qty;
       next.baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
-      const { price, reason } = getPriceForLine(productId, priceListId, qty, uom, pricingByProductId?.[productId]);
-      next.price = price;
-      next.priceReason = reason;
-      next.amount = qty * price;
+      if (useCostPricing && patch.productId != null) {
+        next.price = 0;
+        next.priceReason = "Manual";
+      } else if (!useCostPricing) {
+        const { price, reason } = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+        next.price = price;
+        next.priceReason = reason;
+      }
+      next.amount = next.qty * next.price;
     }
     const arr = [...lines];
     arr[idx] = next;
@@ -121,8 +164,10 @@ export function DocumentLineEditor({
     const uom = packaging.find((x) => x.isDefaultSalesUom)?.uom ?? packaging[0]?.uom ?? "EA";
     const line = lines.find((l) => l.id === lineId);
     const qty = line?.qty ?? 1;
-    const { price, reason } = getPriceForLine(productId, priceListId, qty, uom, pricingByProductId?.[productId]);
     const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
+    const { price, reason } = useCostPricing
+      ? { price: 0, reason: "Manual" }
+      : getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
     updateLine(lineId, {
       productId: p.id,
       sku: p.sku,
@@ -138,17 +183,31 @@ export function DocumentLineEditor({
   const setUom = (lineId: string, uom: string) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, line.qty, uom, pricingByProductId?.[line.productId]);
     const baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
-    updateLine(lineId, { uom, baseQty, price, priceReason: reason, amount: line.qty * price });
+    if (useCostPricing) {
+      updateLine(lineId, { uom, baseQty, amount: line.qty * line.price });
+    } else {
+      const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, line.qty, uom, pricingByProductId?.[line.productId]);
+      updateLine(lineId, { uom, baseQty, price, priceReason: reason, amount: line.qty * price });
+    }
   };
 
   const setQty = (lineId: string, qty: number) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, qty, line.uom, pricingByProductId?.[line.productId]);
     const baseQty = getBaseQty(line.productId, line.uom, qty, packagingByProductId?.[line.productId]);
-    updateLine(lineId, { qty, baseQty, price, priceReason: reason, amount: qty * price });
+    if (useCostPricing) {
+      updateLine(lineId, { qty, baseQty, amount: qty * line.price });
+    } else {
+      const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, qty, line.uom, pricingByProductId?.[line.productId]);
+      updateLine(lineId, { qty, baseQty, price, priceReason: reason, amount: qty * price });
+    }
+  };
+
+  const setPrice = (lineId: string, price: number) => {
+    const line = lines.find((l) => l.id === lineId);
+    if (!line) return;
+    updateLine(lineId, { price, amount: line.qty * price });
   };
 
   const removeLine = (id: string) => {
@@ -157,18 +216,31 @@ export function DocumentLineEditor({
 
   const total = lines.reduce((s, l) => s + l.amount, 0);
 
+  const lineItemsLabel = useCostPricing
+    ? "Line items · Cost / unit (enter or from supplier)"
+    : `Line items · Price list: ${priceLists.find((pl) => pl.id === priceListIdResolved)?.name ?? priceListIdResolved}`;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Label>Line items · Price list: {priceLists.find((pl) => pl.id === priceListIdResolved)?.name ?? priceListIdResolved}</Label>
-        <Button type="button" variant="outline" size="sm" onClick={addRow}>
+        <Label>{lineItemsLabel}</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addRow}
+          disabled={products.length === 0}
+          title={products.length === 0 ? "Add products in Masters first" : undefined}
+        >
           <Icons.Plus className="mr-2 h-4 w-4" />
           Add line
         </Button>
       </div>
       {lines.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No lines. Add a line above. Product, UOM, qty, base qty, price (from price list), price reason.
+          {useCostPricing
+            ? "No lines. Add a line above. Product, UOM, qty, base qty, cost per unit (enter manually)."
+            : "No lines. Add a line above. Product, UOM, qty, base qty, price (from price list), price reason."}
         </div>
       ) : (
         <>
@@ -180,8 +252,8 @@ export function DocumentLineEditor({
                   <TableHead>UOM</TableHead>
                   <TableHead className="w-24">Qty</TableHead>
                   <TableHead className="w-24">Base qty</TableHead>
-                  <TableHead className="w-28">Price</TableHead>
-                  <TableHead>Price reason</TableHead>
+                  <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
+                  <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
                   <TableHead className="w-28">Amount</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
@@ -221,7 +293,20 @@ export function DocumentLineEditor({
                       />
                     </TableCell>
                     <TableCell className="text-muted-foreground">{l.baseQty}</TableCell>
-                    <TableCell>{formatMoney(l.price, currency)}</TableCell>
+                    <TableCell>
+                      {useCostPricing ? (
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          className="w-24"
+                          value={l.price}
+                          onChange={(e) => setPrice(l.id, Number((e.target as HTMLInputElement).value) || 0)}
+                        />
+                      ) : (
+                        formatMoney(l.price, currency)
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{l.priceReason}</TableCell>
                     <TableCell className="font-medium">{formatMoney(l.amount, currency)}</TableCell>
                     <TableCell>

@@ -24,6 +24,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -33,6 +39,7 @@ import {
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import { getDocTypeConfig } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
+import { formatMoney } from "@/lib/money";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import {
@@ -205,18 +212,32 @@ export default function DocViewPage() {
     };
   }, [convertPartyId, document?.party, document?.partyId, selectedConvertPartyOption]);
 
+  const displayTitle = document?.number ? `${document.number}` : `${label} ${id}`;
+  const breadcrumbLabel = document?.number ?? id;
+
   return (
     <DocumentPageShell
-      title={`${label} ${id}`}
+      title={displayTitle}
       breadcrumbs={[
         { label: "Documents", href: "/docs" },
         { label, href: `/docs/${type}` },
-        { label: id },
+        { label: breadcrumbLabel },
       ]}
       status={document?.status ?? "APPROVED"}
       rightSlot={rightSlot}
       actions={
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
+          {convertTargets.map((targetType) => (
+            <Button
+              key={targetType}
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => openConvertSheet(targetType)}
+            >
+              <Icons.GitBranchPlus className="mr-2 h-4 w-4" />
+              Convert to {targetType.replace(/-/g, " ")}
+            </Button>
+          ))}
           {canRequestApproval && (
             <Button
               variant="outline"
@@ -331,54 +352,68 @@ export default function DocViewPage() {
               Reverse
             </Button>
           )}
-          {convertTargets.map((targetType) => (
-            <Button
-              key={targetType}
-              variant="outline"
-              size="sm"
-              disabled={actionLoading}
-              onClick={() => openConvertSheet(targetType)}
-            >
-              <Icons.GitBranchPlus className="mr-2 h-4 w-4" />
-              Convert to {targetType.replace(/-/g, " ")}
-            </Button>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              downloadDocumentPdfApi(type as DocTypeKey, id, `${type}-${id}.pdf`, (msg) =>
-                toast.info(msg || "Export not available.")
-              )
-            }
-          >
-            <Icons.FileDown className="mr-2 h-4 w-4" />
-            Export PDF
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)}>
-            <Icons.Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/docs/${type}`}>Back to list</Link>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Icons.MoreHorizontal className="mr-2 h-4 w-4" />
+                More
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() =>
+                  downloadDocumentPdfApi(type as DocTypeKey, id, `${document?.number ?? type}-${id}.pdf`, (msg) =>
+                    toast.info(msg || "Export not available.")
+                  )
+                }
+              >
+                <Icons.FileDown className="mr-2 h-4 w-4" />
+                Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPrintOpen(true)}>
+                <Icons.Printer className="mr-2 h-4 w-4" />
+                Print
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/docs/${type}`}>
+                  <Icons.ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to list
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       }
     >
       <div className="space-y-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader>
             <CardTitle className="text-base">Header</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1 text-sm text-muted-foreground">
+          <CardContent>
             {loading ? (
-              <p>Loading document...</p>
+              <p className="text-sm text-muted-foreground">Loading document...</p>
             ) : (
-              <>
-                <p>{document?.number ?? `Document ${id}`}</p>
-                <p>{document?.date ?? "—"} · {document?.party ?? "Internal document"}</p>
-                <p>Status: {document?.status ?? "DRAFT"} · Total: {(document?.total ?? 0).toLocaleString()} {document?.currency ?? "KES"}</p>
-              </>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Number</p>
+                  <p className="font-medium">{document?.number ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date</p>
+                  <p className="font-medium">{document?.date ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer / Supplier</p>
+                  <p className="font-medium">{document?.party ?? "Internal document"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total</p>
+                  <p className="font-medium">
+                    {formatMoney(document?.total ?? 0, document?.currency ?? "KES")}
+                  </p>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -434,29 +469,44 @@ export default function DocViewPage() {
           lines={
             <Card>
               <CardContent className="pt-4">
-                <div className="rounded border">
-                  <div className="grid grid-cols-[1fr_90px_90px_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <span>Description</span>
-                    <span className="text-right">Qty</span>
-                    <span className="text-right">Remaining</span>
-                    <span className="text-right">Amount</span>
+                {(document?.lines ?? []).length === 0 ? (
+                  <div className="rounded border border-dashed py-12 text-center">
+                    <p className="text-muted-foreground mb-1">No line items</p>
+                    {document?.status === "DRAFT" ? (
+                      <p className="text-sm text-muted-foreground">
+                        Add lines to complete this document.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        This document has no line items.
+                      </p>
+                    )}
                   </div>
-                  {(document?.lines ?? []).map((line) => (
-                    <div key={line.id ?? line.description} className="grid grid-cols-[1fr_90px_90px_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0">
-                      <div>
-                        <span>{line.description}</span>
-                        {line.sourceDocumentType && line.sourceDocumentId ? (
-                          <p className="text-xs text-muted-foreground">
-                            From {line.sourceDocumentType.replace(/-/g, " ")}
-                          </p>
-                        ) : null}
-                      </div>
-                      <span className="text-right">{line.qty ?? "—"}</span>
-                      <span className="text-right">{line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}</span>
-                      <span className="text-right">{line.amount != null ? line.amount.toLocaleString() : "—"}</span>
+                ) : (
+                  <div className="rounded border">
+                    <div className="grid grid-cols-[1fr_90px_90px_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      <span>Description</span>
+                      <span className="text-right">Qty</span>
+                      <span className="text-right">Remaining</span>
+                      <span className="text-right">Amount</span>
                     </div>
-                  ))}
-                </div>
+                    {(document?.lines ?? []).map((line) => (
+                      <div key={line.id ?? line.description} className="grid grid-cols-[1fr_90px_90px_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0">
+                        <div>
+                          <span>{line.description}</span>
+                          {line.sourceDocumentType && line.sourceDocumentId ? (
+                            <p className="text-xs text-muted-foreground">
+                              From {line.sourceDocumentType.replace(/-/g, " ")}
+                            </p>
+                          ) : null}
+                        </div>
+                        <span className="text-right">{line.qty ?? "—"}</span>
+                        <span className="text-right">{line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}</span>
+                        <span className="text-right">{line.amount != null ? line.amount.toLocaleString() : "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           }

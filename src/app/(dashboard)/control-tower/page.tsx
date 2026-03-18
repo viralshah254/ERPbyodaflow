@@ -14,6 +14,7 @@ import { ProcurementVariancePanel } from "@/components/operational/ProcurementVa
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
 import {
   fetchCashWeightAuditLines,
+  fetchCashWeightAuditSummary,
   fetchFranchiseeStock,
   fetchSubcontractOrders,
   fetchTopUps,
@@ -73,6 +74,9 @@ export default function ControlTowerPage() {
     franchiseLowStockSkus: 0,
     replenishmentOrdersOpen: 0,
     topUpExposure: 0,
+    procurementMatched: 0,
+    procurementVariance: 0,
+    procurementPending: 0,
   });
   const [exceptions, setExceptions] = React.useState<ExceptionRow[]>([]);
   const [yieldSnapshot, setYieldSnapshot] = React.useState({
@@ -92,12 +96,13 @@ export default function ControlTowerPage() {
     setLoading(true);
     Promise.all([
       fetchCashWeightAuditLines(),
+      fetchCashWeightAuditSummary(),
       fetchSubcontractOrders(),
       fetchFranchiseeStock(),
       fetchVMIReplenishmentOrders(),
       fetchTopUps(),
     ])
-      .then(([auditLines, subOrders, stockRows, replenishments, topUps]) => {
+      .then(([auditLines, auditSummary, subOrders, stockRows, replenishments, topUps]) => {
         if (cancelled) return;
         const purchasedWeight = auditLines.reduce((acc, l) => acc + (l.paidWeightKg ?? 0), 0);
         const receivedWeight = auditLines.reduce((acc, l) => acc + (l.receivedWeightKg ?? 0), 0);
@@ -124,6 +129,7 @@ export default function ControlTowerPage() {
           return acc + fees;
         }, 0);
 
+        const summary = auditSummary?.summary;
         setKpis({
           purchasedWeight,
           receivedWeight,
@@ -131,6 +137,9 @@ export default function ControlTowerPage() {
           franchiseLowStockSkus,
           replenishmentOrdersOpen,
           topUpExposure,
+          procurementMatched: summary?.matchedCount ?? 0,
+          procurementVariance: summary?.varianceCount ?? 0,
+          procurementPending: summary?.pendingCount ?? 0,
         });
         setYieldSnapshot({
           inputKg: totalInput,
@@ -255,6 +264,13 @@ export default function ControlTowerPage() {
                 subtitle="Current support obligations"
                 severity={kpis.topUpExposure > 0 ? "danger" : "success"}
                 href="/finance/commission-topup"
+              />
+              <OperationalKpiCard
+                title="Procurement Recon"
+                value={`${kpis.procurementMatched} matched`}
+                subtitle={`${kpis.procurementVariance} variance · ${kpis.procurementPending} pending`}
+                severity={kpis.procurementVariance > 0 ? "warning" : "success"}
+                href="/purchasing/cash-weight-audit"
               />
             </div>
 

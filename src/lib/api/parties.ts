@@ -27,6 +27,7 @@ type BackendParty = {
 export type PartyPayload = {
   name: string;
   roles: PartyRole[];
+  code?: string;
   customerType?: CustomerType;
   supplierType?: SupplierType;
   customerCategoryId?: string;
@@ -214,13 +215,14 @@ export async function fetchPartiesApi(filters?: {
 
 export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
   requireLiveApi("Party creation");
-  const created = await apiRequest<{ id: string }>("/api/parties", {
+  const created = await apiRequest<{ id: string; code?: string }>("/api/parties", {
     method: "POST",
     body: payload,
   });
   return {
     id: created.id,
     name: payload.name,
+    code: created.code ?? payload.code,
     type: payload.roles.includes("supplier") ? "supplier" : "customer",
     roles: payload.roles,
     customerType: payload.customerType,

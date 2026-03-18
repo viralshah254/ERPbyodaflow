@@ -40,9 +40,9 @@ export type ApiAuthOptions = {
 
 let authOptions: ApiAuthOptions = {};
 
-/** Set auth options (e.g. from auth store after login). Call after Firebase auth or when using dev headers. */
+/** Set auth options (e.g. from auth store after login). Merges into existing options — pass only the keys you want to update. */
 export function setApiAuth(options: ApiAuthOptions): void {
-  authOptions = options;
+  authOptions = { ...authOptions, ...options };
 }
 
 /** Get auth headers per COOL_CATCH_API_CONNECT.md. Skip Content-Type so FormData can set its own. */

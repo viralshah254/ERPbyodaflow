@@ -204,6 +204,7 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
     }),
     {
       name: STORAGE_KEY,
+      skipHydration: true,
       partialize: (s) => ({
         orgType: s.orgType,
         templateId: s.templateId,

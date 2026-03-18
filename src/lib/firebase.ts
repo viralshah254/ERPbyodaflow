@@ -12,20 +12,45 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+const REMEMBER_ME_UNTIL_KEY = "odaflow_remember_me_until";
+const REMEMBER_ME_DAYS = 30;
+
+export function getRememberMeUntil(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(REMEMBER_ME_UNTIL_KEY);
+    if (!raw) return null;
+    return parseInt(raw, 10);
+  } catch {
+    return null;
+  }
+}
+
+export function setRememberMeUntil(): void {
+  if (typeof window === "undefined") return;
+  const until = Date.now() + REMEMBER_ME_DAYS * 24 * 60 * 60 * 1000;
+  localStorage.setItem(REMEMBER_ME_UNTIL_KEY, String(until));
+}
+
+export function clearRememberMeUntil(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(REMEMBER_ME_UNTIL_KEY);
+}
+
+export function isRememberMeExpired(): boolean {
+  const until = getRememberMeUntil();
+  if (!until) return false;
+  return Date.now() > until;
+}
+
 async function getClientAuth() {
   if (typeof window === "undefined") {
     throw new Error("Firebase Auth is only available in the browser");
   }
   const { getApp, getApps, initializeApp } = await import("firebase/app");
-  const { getAuth, setPersistence, browserLocalPersistence } = await import("firebase/auth");
+  const { getAuth } = await import("firebase/auth");
   const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  const auth = getAuth(app);
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-  } catch {
-    // Ignore if already set or in unsupported env
-  }
-  return auth;
+  return getAuth(app);
 }
 
 export function isFirebaseConfigured(): boolean {
@@ -38,13 +63,17 @@ export function isFirebaseConfigured(): boolean {
 
 /**
  * Sign in with email/password and return the Firebase ID token for the backend.
+ * @param rememberMe - If true, use local persistence (30 days). If false, use session persistence (until tab closes).
  */
 export async function signInAndGetIdToken(
   email: string,
-  password: string
+  password: string,
+  rememberMe = false
 ): Promise<string> {
   const auth = await getClientAuth();
-  const { signInWithEmailAndPassword } = await import("firebase/auth");
+  const { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } =
+    await import("firebase/auth");
+  await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const token = await userCredential.user.getIdToken();
   return token;
@@ -72,6 +101,7 @@ export async function sendPasswordReset(email: string): Promise<void> {
  */
 export async function signOut(): Promise<void> {
   if (typeof window === "undefined") return;
+  clearRememberMeUntil();
   try {
     const auth = await getClientAuth();
     const { signOut: firebaseSignOut } = await import("firebase/auth");

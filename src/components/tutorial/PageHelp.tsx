@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { getTutorialForRoute } from "@/config/tutorial";
 import { getTourForRoute } from "@/config/tutorial-tours";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useTutorialProgressStore } from "@/stores/tutorial-progress-store";
 import { useSpotlightTour } from "@/components/tutorial/SpotlightTour";
 import { Button } from "@/components/ui/button";
 import { PageGuideSheet } from "@/components/tutorial/PageGuideSheet";
-import { BookOpen, Sparkles, Play } from "lucide-react";
+import { BookOpen, Sparkles, Play, X } from "lucide-react";
 
 const DEFAULT_PROMPT = "Explain this page and suggest next steps.";
 
@@ -19,7 +20,11 @@ export function PageHelp() {
   const [guideSheetOpen, setGuideSheetOpen] = React.useState(false);
   const setContext = useCopilotStore((s) => s.setContext);
   const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
+  const isTourDismissed = useTutorialProgressStore((s) => s.isTourDismissed);
+  const dismissTour = useTutorialProgressStore((s) => s.dismissTour);
   const { startTour } = useSpotlightTour(tour);
+
+  const showTour = tour && !isTourDismissed(tour.tourId);
 
   const handleAskCopilot = React.useCallback(() => {
     const prompt = info?.copilotPrompt ?? DEFAULT_PROMPT;
@@ -33,16 +38,28 @@ export function PageHelp() {
   return (
     <>
       <div className="flex items-center gap-2 flex-wrap">
-        {tour && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={startTour}
-          >
-            <Play className="h-3.5 w-3.5 mr-1" />
-            Start tour
-          </Button>
+        {showTour && (
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={startTour}
+            >
+              <Play className="h-3.5 w-3.5 mr-1" />
+              Start tour
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={() => tour && dismissTour(tour.tourId)}
+              title="Don't show this tour again"
+              aria-label="Don't show this tour again"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
         )}
         <Button
           variant="ghost"
@@ -67,9 +84,10 @@ export function PageHelp() {
         open={guideSheetOpen}
         onOpenChange={setGuideSheetOpen}
         info={info}
+        route={pathname ?? undefined}
         onAskCopilot={handleAskCopilot}
-        onStartTour={tour ? startTour : undefined}
-        hasTour={!!tour}
+        onStartTour={showTour ? startTour : undefined}
+        hasTour={!!showTour}
       />
     </>
   );

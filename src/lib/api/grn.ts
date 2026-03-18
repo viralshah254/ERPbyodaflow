@@ -33,6 +33,19 @@ export async function postGRN(id: string): Promise<void> {
   await apiRequest(`/api/purchasing/grn/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
 }
 
+/** Patch GRN line weight (receivedWeightKg, paidWeightKg, weightKg). lineId is 0-based index. */
+export async function patchGRNLine(
+  grnId: string,
+  lineId: number,
+  body: { receivedWeightKg?: number; paidWeightKg?: number; weightKg?: number }
+): Promise<GrnDetailRow> {
+  requireLiveApi("Patch GRN line");
+  return apiRequest<GrnDetailRow>(`/api/purchasing/grn/${encodeURIComponent(grnId)}/lines/${lineId}`, {
+    method: "PATCH",
+    body,
+  });
+}
+
 function toCsv(rows: Array<Record<string, string | number | null | undefined>>): string {
   if (rows.length === 0) return "";
   const headers = Object.keys(rows[0]);

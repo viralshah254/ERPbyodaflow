@@ -15,7 +15,8 @@ export function formatMoney(
     GBP: "£",
   };
   const prefix = symbols[currencyCode] ?? `${currencyCode} `;
-  return `${prefix}${amount.toLocaleString(undefined, {
+  const safeAmount = typeof amount === "number" && !Number.isNaN(amount) ? amount : 0;
+  return `${prefix}${safeAmount.toLocaleString(undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })}`;

@@ -12,9 +12,20 @@ import { CopilotDrawer } from "@/components/copilot/CopilotDrawer";
 import { automationInsightApply } from "@/lib/api/stub-endpoints";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
-  const { sidebarOpen } = useUIStore();
+  const { sidebarOpen, setRightPanelOpen, setCompactMode } = useUIStore();
+
+  // Apply persisted UI preferences after hydration to avoid SSR mismatch.
+  // The store initializes with safe SSR defaults; this runs only on the client.
+  useEffect(() => {
+    const panel = localStorage.getItem("odaflow_right_panel");
+    if (panel !== null) setRightPanelOpen(panel === "true");
+    const compact = localStorage.getItem("odaflow_compact_mode");
+    if (compact !== null) setCompactMode(compact === "true");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const {
     drawerOpen,
     setDrawerOpen,

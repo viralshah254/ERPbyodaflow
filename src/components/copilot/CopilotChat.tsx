@@ -38,10 +38,7 @@ type ChatMessage = {
   blocks?: CopilotBlock[];
 };
 
-const defaultThreads: ThreadSummary[] = [
-  { id: "1", title: "Sales order suggestions", updatedAt: "2m ago" },
-  { id: "2", title: "Stock levels", updatedAt: "1h ago" },
-];
+const defaultThreads: ThreadSummary[] = [];
 
 export function CopilotChat({
   threads = defaultThreads,
@@ -107,7 +104,7 @@ export function CopilotChat({
     } finally {
       setSending(false);
     }
-  }, []);
+  }, [context]);
 
   const confirmAction = React.useCallback(async (actionId: string, actionType: string) => {
     const query = actionType === "approve_document" ? "approve document" : "create invoice draft";
@@ -146,21 +143,23 @@ export function CopilotChat({
           <MessageSquare className="h-4 w-4" />
           New chat
         </Button>
-        <ScrollArea className="mt-2 h-24">
-          <div className="space-y-1">
-            {threads.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => onSelectThread?.(t.id)}
-                className={`w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${currentThreadId === t.id ? "bg-accent" : ""}`}
-              >
-                <div className="truncate font-medium">{t.title}</div>
-                <div className="text-xs text-muted-foreground">{t.updatedAt}</div>
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
+        {threads.length > 0 ? (
+          <ScrollArea className="mt-2 h-24">
+            <div className="space-y-1">
+              {threads.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onSelectThread?.(t.id)}
+                  className={`w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${currentThreadId === t.id ? "bg-accent" : ""}`}
+                >
+                  <div className="truncate font-medium">{t.title}</div>
+                  <div className="text-xs text-muted-foreground">{t.updatedAt}</div>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        ) : null}
       </div>
 
       {/* Messages area */}

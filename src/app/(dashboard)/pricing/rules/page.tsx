@@ -37,9 +37,12 @@ import {
   fetchDiscountPolicies,
   createDiscountPolicy,
   fetchCustomerDefaultPriceLists,
+  fetchSupplierDefaultCostLists,
   fetchPriceListOptions,
   setCustomerDefaultPriceList,
+  setSupplierDefaultCostList,
   type CustomerDefaultPriceListRow,
+  type SupplierDefaultCostListRow,
 } from "@/lib/api/pricing";
 import { searchPartyLookupOptionsApi, type PartyLookupOption } from "@/lib/api/parties";
 import type { DiscountPolicy } from "@/lib/products/pricing-types";
@@ -68,6 +71,14 @@ export default function PricingRulesPage() {
   const [configPriceListId, setConfigPriceListId] = React.useState("");
   const [priceListOptions, setPriceListOptions] = React.useState<Array<{ id: string; name: string }>>([]);
 
+  // Configure supplier default cost list
+  const [supplierCostDefaults, setSupplierCostDefaults] = React.useState<SupplierDefaultCostListRow[]>([]);
+  const [configSupplierOpen, setConfigSupplierOpen] = React.useState(false);
+  const [configSupplierId, setConfigSupplierId] = React.useState("");
+  const [selectedSupplierOption, setSelectedSupplierOption] = React.useState<PartyLookupOption | null>(null);
+  const [configCostListId, setConfigCostListId] = React.useState("");
+  const [savingSupplierDefault, setSavingSupplierDefault] = React.useState(false);
+
   const loadPolicies = React.useCallback(() => {
     setLoading(true);
     fetchDiscountPolicies()
@@ -84,6 +95,10 @@ export default function PricingRulesPage() {
     fetchCustomerDefaultPriceLists().then(setCustomerDefaults).catch(() => setCustomerDefaults([]));
   }, []);
 
+  const loadSupplierCostDefaults = React.useCallback(() => {
+    fetchSupplierDefaultCostLists().then(setSupplierCostDefaults).catch(() => setSupplierCostDefaults([]));
+  }, []);
+
   React.useEffect(() => {
     if (!configureOpen) return;
     loadCustomerDefaults();
@@ -91,6 +106,14 @@ export default function PricingRulesPage() {
       .then(setPriceListOptions)
       .catch(() => setPriceListOptions([]));
   }, [configureOpen, loadCustomerDefaults]);
+
+  React.useEffect(() => {
+    if (!configSupplierOpen) return;
+    loadSupplierCostDefaults();
+    fetchPriceListOptions()
+      .then(setPriceListOptions)
+      .catch(() => setPriceListOptions([]));
+  }, [configSupplierOpen, loadSupplierCostDefaults]);
 
   const handleAddPolicy = async () => {
     if (!policyName.trim()) {
@@ -140,6 +163,27 @@ export default function PricingRulesPage() {
       toast.error(msg === "STUB" ? "Configure API to set customer default price list." : msg);
     } finally {
       setSavingDefault(false);
+    }
+  };
+
+  const handleSetSupplierCostList = async () => {
+    if (!configSupplierId.trim() || !configCostListId) {
+      toast.error("Enter supplier and select cost list.");
+      return;
+    }
+    setSavingSupplierDefault(true);
+    try {
+      await setSupplierDefaultCostList(configSupplierId.trim(), configCostListId);
+      toast.success("Default cost list set.");
+      setConfigSupplierId("");
+      setSelectedSupplierOption(null);
+      setConfigCostListId("");
+      loadSupplierCostDefaults();
+    } catch (e) {
+      const msg = (e as Error)?.message ?? "Set failed";
+      toast.error(msg === "STUB" ? "Configure API to set supplier default cost list." : msg);
+    } finally {
+      setSavingSupplierDefault(false);
     }
   };
 
@@ -330,6 +374,92 @@ export default function PricingRulesPage() {
                     </div>
                     <Button onClick={handleSetCustomerDefault} disabled={savingDefault}>
                       {savingDefault ? "Saving…" : "Set default"}
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Supplier default cost list</CardTitle>
+            <CardDescription>Assign default cost list per supplier for purchase orders. Price lists can be used as cost lists.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Sheet open={configSupplierOpen} onOpenChange={setConfigSupplierOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm">Configure</Button>
+              </SheetTrigger>
+              <SheetContent className="overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Supplier default cost list</SheetTitle>
+                  <SheetDescription>Set which cost list is used by default per supplier on purchase orders.</SheetDescription>
+                </SheetHeader>
+                <div className="space-y-6 py-6">
+                  <div className="grid gap-2">
+                    <Label>Current assignments</Label>
+                    {supplierCostDefaults.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No assignments yet (or configure API).</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Supplier</TableHead>
+                            <TableHead>Cost list</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {supplierCostDefaults.map((r) => (
+                            <TableRow key={r.supplierId}>
+                              <TableCell className="font-medium">{r.supplierName ?? r.supplierId}</TableCell>
+                              <TableCell>{r.costListName ?? r.costListId}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                  <div className="border-t pt-4 space-y-4">
+                    <Label>Set default</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="configSupplierId" className="text-muted-foreground text-xs">Supplier</Label>
+                      <AsyncSearchableSelect
+                        value={configSupplierId}
+                        onValueChange={(value) => {
+                          setConfigSupplierId(value);
+                          if (!value) setSelectedSupplierOption(null);
+                        }}
+                        onOptionSelect={(option) => setSelectedSupplierOption(option)}
+                        loadOptions={(query) =>
+                          searchPartyLookupOptionsApi({
+                            role: "supplier",
+                            status: "ACTIVE",
+                            search: query,
+                            limit: 20,
+                          })
+                        }
+                        selectedOption={selectedSupplierOption}
+                        placeholder="Select supplier"
+                        searchPlaceholder="Type name, code, phone, or email"
+                        emptyMessage="No suppliers found."
+                        recentStorageKey="lookup:recent-suppliers"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="configCostList">Cost list (price list)</Label>
+                      <Select value={configCostListId} onValueChange={setConfigCostListId}>
+                        <SelectTrigger id="configCostList"><SelectValue placeholder="Select cost list" /></SelectTrigger>
+                        <SelectContent>
+                          {priceListOptions.map((pl) => (
+                            <SelectItem key={pl.id} value={pl.id}>{pl.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button onClick={handleSetSupplierCostList} disabled={savingSupplierDefault}>
+                      {savingSupplierDefault ? "Saving…" : "Set default"}
                     </Button>
                   </div>
                 </div>

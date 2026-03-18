@@ -158,7 +158,7 @@ export default function SalesInvoicesPage() {
               </Link>
             </Button>
             <Button asChild>
-              <Link href="/docs/invoice/new">
+              <Link href="/docs/invoice/new" data-tour-step="create-button">
                 <Icons.Plus className="mr-2 h-4 w-4" />
                 Create Invoice
               </Link>

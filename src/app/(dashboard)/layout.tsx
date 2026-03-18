@@ -1,9 +1,7 @@
 "use client";
 
 import { MainLayout } from "@/components/layout/main-layout";
-import { isApiConfigured, setApiAuth } from "@/lib/api/client";
-import { fetchRuntimeSession } from "@/lib/api/context";
-import { getIdToken, isFirebaseConfigured } from "@/lib/firebase";
+import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useEffect } from "react";
@@ -43,62 +41,6 @@ export default function DashboardLayout({
       router.replace("/login");
     }
   }, [isLoading, user, router]);
-
-  // When loading, give AuthRestore time to restore from Firebase; only try session fetch if we have a token
-  useEffect(() => {
-    if (!isLoading) return;
-    if (!isApiConfigured()) {
-      useAuthStore.getState().logout();
-      useAuthStore.getState().finishHydration();
-      return;
-    }
-    let active = true;
-    const tryRestoreFromToken = async () => {
-      let token = await getIdToken();
-      if (!token && isFirebaseConfigured()) {
-        await new Promise((r) => setTimeout(r, 800));
-        token = await getIdToken();
-      }
-      if (!active) return;
-      if (!token) {
-        useAuthStore.getState().finishHydration();
-        return;
-      }
-      try {
-        setApiAuth({ bearerToken: token });
-        const session = await fetchRuntimeSession();
-        if (!active) return;
-        useAuthStore.getState().setSession({
-          ...session,
-          isPlatformOperator: session.isPlatformOperator,
-        });
-        useOrgContextStore.getState().hydrateFromBackend({
-          orgType: session.org.orgType,
-          templateId: session.orgContext.templateId,
-          enabledModules: session.orgContext.enabledModules,
-          featureFlags: session.orgContext.featureFlags,
-          terminology: session.orgContext.terminology,
-          defaultNav: session.orgContext.defaultNav,
-          orgRole: session.orgContext.orgRole,
-          parentOrgId: session.orgContext.parentOrgId,
-          franchiseNetworkId: session.orgContext.franchiseNetworkId,
-          franchiseCode: session.orgContext.franchiseCode,
-          franchiseTerritory: session.orgContext.franchiseTerritory,
-          franchiseStoreFormat: session.orgContext.franchiseStoreFormat,
-          franchiseManagerName: session.orgContext.franchiseManagerName,
-          franchisePersona: session.orgContext.franchisePersona,
-        });
-        setApiAuth({ branchId: session.currentBranch?.branchId });
-      } catch (_error) {
-        if (!active) return;
-        useAuthStore.getState().finishHydration();
-      }
-    };
-    void tryRestoreFromToken();
-    return () => {
-      active = false;
-    };
-  }, [isLoading, router]);
 
   useEffect(() => {
     if (org && !templateId) {

@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AppFrame } from "@/components/marketing/app-frame";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
-import { isFirebaseConfigured, signInAndGetIdToken } from "@/lib/firebase";
+import { isFirebaseConfigured, signInAndGetIdToken, setRememberMeUntil, clearRememberMeUntil } from "@/lib/firebase";
 import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isDevAuthEnabled } from "@/lib/runtime-flags";
@@ -64,7 +64,12 @@ function LoginContent() {
         return;
       }
       // Firebase + API: real sign-in and backend session
-      const token = await signInAndGetIdToken(data.email, data.password);
+      if (data.rememberMe) {
+        setRememberMeUntil();
+      } else {
+        clearRememberMeUntil();
+      }
+      const token = await signInAndGetIdToken(data.email, data.password, data.rememberMe);
       setApiAuth({ bearerToken: token });
       const session = await fetchRuntimeSession();
       const { setSession } = useAuthStore.getState();
@@ -164,6 +169,7 @@ function LoginContent() {
                     id="email"
                     type="email"
                     placeholder="you@example.com"
+                    autoComplete="email"
                     {...register("email")}
                   />
                   {errors.email && (
@@ -179,6 +185,7 @@ function LoginContent() {
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       className="pr-10"
+                      autoComplete="current-password"
                       {...register("password")}
                     />
                     <Button
@@ -216,7 +223,7 @@ function LoginContent() {
                       htmlFor="remember"
                       className="text-sm font-normal cursor-pointer"
                     >
-                      Remember me
+                      Remember me (30 days)
                     </Label>
                   </div>
                   <Link
@@ -230,6 +237,9 @@ function LoginContent() {
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? "Signing in..." : "Sign in"}
                 </Button>
+                <p className="text-xs text-muted-foreground">
+                  Your browser can save your password for faster sign-in next time.
+                </p>
               </form>
 
             </Card>

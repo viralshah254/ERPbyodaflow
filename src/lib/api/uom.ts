@@ -27,6 +27,13 @@ export async function fetchUomsApi(): Promise<UomDefinition[]> {
   return (payload.items ?? []).map(mapUom);
 }
 
+/** Fetch UOMs from master-data (allows inventory.read/sales.read). Use on product pages. */
+export async function fetchProductUomsApi(): Promise<UomDefinition[]> {
+  requireLiveApi("Product UOMs");
+  const payload = await apiRequest<{ items: BackendUom[] }>("/api/master-data/product/uoms");
+  return (payload.items ?? []).map(mapUom);
+}
+
 export async function createUomApi(body: { code: string; name?: string; baseRatio?: number }): Promise<{ id: string }> {
   requireLiveApi("Create UOM");
   return apiRequest<{ id: string }>("/api/settings/uom", {

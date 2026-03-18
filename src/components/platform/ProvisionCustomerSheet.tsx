@@ -52,9 +52,9 @@ const emptyForm = (): ProvisionFormState => ({
   timeZone: "Africa/Nairobi",
   edition: "",
   defaultTemplateId: "",
-  enabledModules: "dashboard, docs, inventory, sales, purchasing, finance, reports, settings",
+  enabledModules: "dashboard, docs, inventory, sales, purchasing, finance, franchise, reports, settings",
   featureFlags: "",
-  defaultNav: "core, docs, inventory, sales, purchasing, finance, reports, settings",
+  defaultNav: "core, docs, inventory, sales, purchasing, finance, franchise, reports, settings",
   orgName: "",
   orgType: "DISTRIBUTOR",
   orgRole: "STANDARD",
@@ -62,7 +62,7 @@ const emptyForm = (): ProvisionFormState => ({
   branchCode: "MAIN",
   roleName: "Owner",
   adminEmail: "",
-  initialPassword: "",
+  initialPassword: "1234@abcd",
   mustChangePassword: true,
   adminFirstName: "",
   adminLastName: "",
@@ -200,14 +200,14 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-xl">
-        <SheetHeader>
+      <SheetContent side="right" className="flex h-full w-full max-w-xl flex-col overflow-hidden p-0 sm:max-w-xl">
+        <SheetHeader className="shrink-0 px-6 pt-6">
           <SheetTitle>Provision customer</SheetTitle>
           <SheetDescription>
             Enter business owner name (tenant) and company name (org), then branch, owner role, admin user, and Firebase credentials. Company name is the main identifier for the customer.
           </SheetDescription>
         </SheetHeader>
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
             Quick setup: stage the first customer org + first admin login, then confirm one batched provisioning checkout.
           </div>
@@ -228,7 +228,7 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
               <Input
                 value={form.tenantName}
                 onChange={(e) => setForm((p) => ({ ...p, tenantName: e.target.value }))}
-                placeholder="e.g. Joram Kabach"
+                placeholder="e.g. John Doe"
                 className={errors.tenantName ? "border-destructive" : ""}
                 aria-invalid={!!errors.tenantName}
               />
@@ -274,7 +274,7 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
             <Input
               value={form.orgName}
               onChange={(e) => setForm((p) => ({ ...p, orgName: e.target.value }))}
-              placeholder="e.g. Cool Catch Distributors Ltd"
+              placeholder="e.g. XYZ Distributors Ltd"
               className={errors.orgName ? "border-destructive" : ""}
               aria-invalid={!!errors.orgName}
             />
@@ -303,8 +303,7 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
                 onChange={(e) => setForm((p) => ({ ...p, orgRole: e.target.value }))}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="STANDARD">Standard</option>
-                <option value="FRANCHISOR">Franchisor</option>
+                <option value="STANDARD">Standard (includes franchise)</option>
                 <option value="FRANCHISEE">Franchisee</option>
               </select>
             </div>
@@ -417,7 +416,7 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
             </>
           ) : null}
         </div>
-        <SheetFooter className="mt-6">
+        <SheetFooter className="shrink-0 border-t px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={() => void submit()} disabled={saving}>{saving ? "Staging..." : "Add to checkout"}</Button>
         </SheetFooter>

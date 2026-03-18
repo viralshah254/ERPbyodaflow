@@ -47,6 +47,7 @@ export default function MasterPartiesPage() {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [formName, setFormName] = React.useState("");
+  const [formCode, setFormCode] = React.useState("");
   const [formEmail, setFormEmail] = React.useState("");
   const [formPhone, setFormPhone] = React.useState("");
   const [formCustomerType, setFormCustomerType] = React.useState<CustomerType>("RETAILER");
@@ -98,6 +99,7 @@ export default function MasterPartiesPage() {
 
   const columns = React.useMemo(
     () => [
+      { id: "code", header: "Code", accessor: "code" as keyof PartyRow },
       {
         id: "name",
         header: "Name",
@@ -166,6 +168,7 @@ export default function MasterPartiesPage() {
   const openCreateDrawer = () => {
     setEditingId(null);
     setFormName("");
+    setFormCode("");
     setFormEmail("");
     setFormPhone("");
     setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
@@ -177,6 +180,7 @@ export default function MasterPartiesPage() {
   const openEditDrawer = (row: PartyRow) => {
     setEditingId(row.id);
     setFormName(row.name);
+    setFormCode(row.code ?? "");
     setFormEmail(row.email ?? "");
     setFormPhone(row.phone ?? "");
     setFormCustomerType(row.customerType ?? "RETAILER");
@@ -200,6 +204,7 @@ export default function MasterPartiesPage() {
             : (["customer"] as const);
       const payload = {
         name: formName.trim(),
+        code: formCode.trim() || undefined,
         email: formEmail.trim() || undefined,
         phone: formPhone.trim() || undefined,
         roles: [...roles],
@@ -417,6 +422,14 @@ export default function MasterPartiesPage() {
           <div className="space-y-2">
             <Label>Name</Label>
             <Input placeholder="Party name" value={formName} onChange={(e) => setFormName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Code</Label>
+            <Input
+              placeholder={editingId ? "Supplier code" : "Auto-generated if left blank"}
+              value={formCode}
+              onChange={(e) => setFormCode(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label>Email</Label>

@@ -7,6 +7,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActivityPanel } from "@/components/shared/ActivityPanel";
@@ -16,7 +17,7 @@ import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocati
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
-import { fetchGRNById, postGRN, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow } from "@/lib/api/grn";
+import { fetchGRNById, postGRN, patchGRNLine, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow } from "@/lib/api/grn";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -28,10 +29,16 @@ export default function ReceiptDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
+  const hasLandedCostMultiCurrency = useOrgContextStore((s) => s.hasFlag?.("landedCostMultiCurrency") ?? false);
   const [grn, setGrn] = React.useState<GrnDetailRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [posting, setPosting] = React.useState(false);
   const [putawayLink, setPutawayLink] = React.useState<{ id: string; label: string } | null>(null);
+  const [editingWeight, setEditingWeight] = React.useState<Record<number, string>>({});
+  const linesWithIndex = React.useMemo(
+    () => (grn?.lines ?? []).map((line, idx) => ({ ...line, _lineIndex: idx })),
+    [grn?.lines]
+  );
 
   React.useEffect(() => {
     setLoading(true);
@@ -75,18 +82,54 @@ export default function ReceiptDetailPage() {
     );
   }
 
-  const totalReceivedWeight = grn.lines.reduce((acc, line) => acc + (line.receivedWeightKg ?? 0), 0);
-  const totalPaidWeight = grn.lines.reduce((acc, line) => acc + (line.paidWeightKg ?? 0), 0);
-  const totalQty = grn.lines.reduce((acc, line) => acc + line.qty, 0);
+  const totalReceivedWeight = grn.lines.reduce((acc, line) => acc + (Number(line.receivedWeightKg) || 0), 0);
+  const totalPaidWeight = grn.lines.reduce((acc, line) => acc + (Number(line.paidWeightKg) || 0), 0);
+  const totalQty = grn.lines.reduce((acc, line) => acc + (Number(line.qty) || 0), 0);
+  const canEditWeight = hasCashWeightAudit && grn.status === "DRAFT";
+  const handleReceivedWeightBlur = async (lineIndex: number, value: string) => {
+    const num = value ? parseFloat(value) : undefined;
+    if (num == null || Number.isNaN(num) || num < 0) return;
+    try {
+      const updated = await patchGRNLine(grn.id, lineIndex, { receivedWeightKg: num });
+      setGrn(updated);
+      setEditingWeight((prev) => {
+        const next = { ...prev };
+        delete next[lineIndex];
+        return next;
+      });
+      toast.success("Weight updated");
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to update weight");
+    }
+  };
   const lineColumns = [
-    { id: "sku", header: "SKU", accessor: (line: GrnLineRow) => line.sku, sticky: true },
-    { id: "product", header: "Product", accessor: (line: GrnLineRow) => line.productName },
-    { id: "qty", header: "Qty", accessor: (line: GrnLineRow) => `${line.qty} ${line.uom}` },
-    { id: "value", header: "Value", accessor: (line: GrnLineRow) => formatMoney(line.value, grn.currency ?? "KES") },
+    { id: "sku", header: "SKU", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.sku ?? "—", sticky: true },
+    { id: "product", header: "Product", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.productName ?? "—" },
+    { id: "qty", header: "Qty", accessor: (line: GrnLineRow & { _lineIndex?: number }) => `${line.qty ?? 0} ${line.uom ?? ""}`.trim() },
+    { id: "value", header: "Value", accessor: (line: GrnLineRow & { _lineIndex?: number }) => formatMoney(line.value ?? 0, grn.currency ?? "KES") },
     ...(hasCashWeightAudit
       ? [
-          { id: "receivedWeightKg", header: "Received kg", accessor: (line: GrnLineRow) => line.receivedWeightKg ?? "—" },
-          { id: "paidWeightKg", header: "Paid kg", accessor: (line: GrnLineRow) => line.paidWeightKg ?? "—" },
+          {
+            id: "receivedWeightKg",
+            header: "Received kg",
+            accessor: (line: GrnLineRow & { _lineIndex?: number }) => {
+              const idx = line._lineIndex ?? 0;
+              return canEditWeight ? (
+                <Input
+                  type="number"
+                  step="0.01"
+                  className="w-24 h-8"
+                  placeholder="kg"
+                  value={editingWeight[idx] ?? line.receivedWeightKg ?? ""}
+                  onChange={(e) => setEditingWeight((prev) => ({ ...prev, [idx]: e.target.value }))}
+                  onBlur={(e) => handleReceivedWeightBlur(idx, e.target.value)}
+                />
+              ) : (
+                (line.receivedWeightKg ?? "—")
+              );
+            },
+          },
+          { id: "paidWeightKg", header: "Paid kg", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.paidWeightKg ?? "—" },
         ]
       : []),
   ];
@@ -132,6 +175,11 @@ export default function ReceiptDetailPage() {
             {hasCashWeightAudit && (
               <Button variant="outline" size="sm" asChild>
                 <Link href="/purchasing/cash-weight-audit">Cash-to-weight audit</Link>
+              </Button>
+            )}
+            {hasLandedCostMultiCurrency && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/inventory/costing?sourceId=${id}`}>Add landed costs</Link>
               </Button>
             )}
             {putawayLink ? (
@@ -218,7 +266,7 @@ export default function ReceiptDetailPage() {
                 <CardDescription>Received quantity and financial value per line.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <DataTable<GrnLineRow> data={grn.lines} columns={lineColumns} emptyMessage="No receipt lines." />
+                <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={lineColumns} emptyMessage="No receipt lines." />
               </CardContent>
             </Card>
 

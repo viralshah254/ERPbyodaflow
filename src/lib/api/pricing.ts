@@ -85,6 +85,28 @@ export async function setCustomerDefaultPriceList(customerId: string, priceListI
   });
 }
 
+/** Supplier default cost list (for purchase orders). */
+export interface SupplierDefaultCostListRow {
+  supplierId: string;
+  supplierName?: string;
+  costListId: string;
+  costListName?: string;
+}
+
+export async function fetchSupplierDefaultCostLists(): Promise<SupplierDefaultCostListRow[]> {
+  requireLiveApi("Supplier default cost lists");
+  const res = await apiRequest<{ items: SupplierDefaultCostListRow[] }>("/api/pricing/supplier-default-cost-lists");
+  return res.items ?? [];
+}
+
+export async function setSupplierDefaultCostList(supplierId: string, costListId: string): Promise<void> {
+  requireLiveApi("Set supplier default cost list");
+  await apiRequest("/api/pricing/supplier-default-cost-lists", {
+    method: "POST",
+    body: { supplierId, costListId },
+  });
+}
+
 export async function fetchPriceListOptions(): Promise<PricingOption[]> {
   requireLiveApi("Price list options");
   const res = await apiRequest<{ items: Array<{ id: string; name: string }> }>("/api/pricing/price-lists");

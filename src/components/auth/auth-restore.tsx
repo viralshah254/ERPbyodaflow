@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { isFirebaseConfigured } from "@/lib/firebase";
+import { isFirebaseConfigured, isRememberMeExpired, signOut } from "@/lib/firebase";
 import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 
@@ -65,6 +65,12 @@ export function AuthRestore() {
             pendingTimeout = null;
           }
           if (firebaseUser) {
+            if (isRememberMeExpired()) {
+              await signOut();
+              if (!cancelled) logout();
+              done();
+              return;
+            }
             try {
               const token = await firebaseUser.getIdToken();
               setApiAuth({ bearerToken: token });

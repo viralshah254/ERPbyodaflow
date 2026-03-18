@@ -26,6 +26,8 @@ import {
   fetchIntercompanyEntitiesApi,
   fetchIntercompanyTransactionsApi,
 } from "@/lib/api/intercompany";
+import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
+import { CURRENCY_LIST } from "@/lib/data/currencies";
 import type { ICTransactionRow } from "@/lib/types/intercompany";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -49,6 +51,16 @@ export default function IntercompanyTransactionsPage() {
     date: "",
     reference: "",
   });
+  const [currencies, setCurrencies] = React.useState<{ code: string; name: string }[]>(
+    () => CURRENCY_LIST.map((c) => ({ code: c.code, name: c.name }))
+  );
+
+  React.useEffect(() => {
+    if (!drawerOpen) return;
+    fetchFinancialCurrenciesApi()
+      .then((items) => setCurrencies(items.filter((c) => c.enabled).map((c) => ({ code: c.code, name: c.name ?? c.code }))))
+      .catch(() => setCurrencies(CURRENCY_LIST.map((c) => ({ code: c.code, name: c.name }))));
+  }, [drawerOpen]);
 
   const reload = React.useCallback(async () => {
     const [transactionItems, entityItems, consolidationItems] = await Promise.all([
@@ -255,7 +267,16 @@ export default function IntercompanyTransactionsPage() {
             </div>
             <div className="space-y-2">
               <Label>Currency</Label>
-              <Input value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+              <Select value={form.currency} onValueChange={(v) => setForm((current) => ({ ...current, currency: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select currency" /></SelectTrigger>
+                <SelectContent>
+                  {currencies.map((c) => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.code} {c.name !== c.code ? `— ${c.name}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="space-y-2">

@@ -191,7 +191,7 @@ export default function WarehouseTransfersPage() {
             <ExplainThis prompt="Explain inter-warehouse transfers and status lifecycle." label="Explain transfers" />
             <Sheet open={createOpen} onOpenChange={setCreateOpen}>
               <SheetTrigger asChild>
-                <Button size="sm">
+                <Button size="sm" data-tour-step="create-button">
                   <Icons.Plus className="mr-2 h-4 w-4" />
                   Create transfer
                 </Button>

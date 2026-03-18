@@ -80,9 +80,23 @@ export async function fetchPlatformTenantsApi(): Promise<PlatformTenantRow[]> {
   return payload.items ?? [];
 }
 
+export type PlatformTenantUserRow = {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  orgId: string;
+  orgName?: string;
+  status: string;
+  lastLoginAt: string | null;
+};
+
 export type PlatformTenantDetail = {
   tenant: PlatformTenantRow;
-  orgs: PlatformOrgRow[];
+  orgs: (PlatformOrgRow & { userCount?: number })[];
+  orgCount: number;
+  users: PlatformTenantUserRow[];
+  totalUserCount: number;
 };
 
 export async function fetchPlatformTenantDetailApi(tenantId: string): Promise<PlatformTenantDetail> {

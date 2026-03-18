@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   addCrmTicketCommentApi,
   createCrmTicketApi,
@@ -173,11 +174,25 @@ export default function CRMTicketsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Input value={form.status} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))} />
+                  <Select value={form.status} onValueChange={(v) => setForm((prev) => ({ ...prev, status: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Priority</Label>
-                  <Input value={form.priority} onChange={(event) => setForm((prev) => ({ ...prev, priority: event.target.value }))} />
+                  <Select value={form.priority} onValueChange={(v) => setForm((prev) => ({ ...prev, priority: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-2">

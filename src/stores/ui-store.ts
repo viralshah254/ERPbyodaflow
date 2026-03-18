@@ -30,24 +30,14 @@ interface Notification {
   duration?: number;
 }
 
-const compactFromStorage =
-  typeof window !== "undefined" ? localStorage.getItem("odaflow_compact_mode") === "true" : false;
-const rightPanelFromStorage =
-  typeof window !== "undefined"
-    ? (() => {
-        const v = localStorage.getItem("odaflow_right_panel");
-        return v === null ? true : v === "true";
-      })()
-    : true;
-
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
   sidebarCollapsed: false,
-  rightPanelOpen: rightPanelFromStorage,
+  rightPanelOpen: true,
   commandPaletteOpen: false,
   theme: "system",
   notifications: [],
-  compactMode: compactFromStorage,
+  compactMode: false,
 
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),

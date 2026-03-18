@@ -3,7 +3,7 @@
  * See docs/COOL_CATCH_API_CONNECT.md for endpoint contract.
  */
 
-import { apiRequest, requireLiveApi } from "@/lib/api/client";
+import { apiRequest, downloadFile, requireLiveApi } from "@/lib/api/client";
 import {
   type CommissionRunRow,
   type CommissionRuleRow,
@@ -345,6 +345,8 @@ export async function createCashDisbursement(body: {
   paidAt: string;
   reference?: string;
   paidWeightKg?: number;
+  /** Per-line paid weight for multi-line POs. poLineId format: `${poId}:${lineIndex}` */
+  lines?: { poLineId: string; paidWeightKg: number }[];
 }): Promise<{ id: string }> {
   requireLiveApi("Create cash disbursement");
   return apiRequest<{ id: string }>("/api/purchasing/cash-weight-audit/disbursements", {
@@ -386,6 +388,19 @@ export async function fetchCashWeightAuditSummary(): Promise<{
 }> {
   requireLiveApi("Cash-weight audit summary");
   return apiRequest("/api/purchasing/cash-weight-audit/summary");
+}
+
+/** Export cash-weight audit lines as CSV. */
+export function exportCashWeightAuditCsv(
+  params?: { dateFrom?: string; dateTo?: string },
+  onNotAvailable?: (message: string) => void
+): void {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  q.set("format", "csv");
+  const path = `/api/purchasing/cash-weight-audit/export?${q.toString()}`;
+  downloadFile(path, `cash-weight-audit-${new Date().toISOString().slice(0, 10)}.csv`, onNotAvailable ?? (() => {}));
 }
 
 // ——— Subcontracting ———

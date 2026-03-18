@@ -40,7 +40,12 @@ import {
 } from "@/lib/api/parties";
 import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchBranchOptions, fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
-import { fetchCustomerDefaultPriceLists, fetchPriceListOptions } from "@/lib/api/pricing";
+import {
+  fetchCustomerDefaultPriceLists,
+  fetchPriceListOptions,
+  fetchSupplierDefaultCostLists,
+  fetchPriceListByIdApi,
+} from "@/lib/api/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
@@ -50,6 +55,7 @@ import {
   fetchProductPackagingApi,
   fetchProductPricingApi,
 } from "@/lib/api/product-master";
+import type { ProductPrice } from "@/lib/products/pricing-types";
 import {
   deleteDocumentDraftApi,
   fetchDocumentDraftApi,
@@ -294,6 +300,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [loadingPostingPreview, setLoadingPostingPreview] = React.useState(false);
   const [fieldOptions, setFieldOptions] = React.useState<Record<string, LookupOption[]>>({});
   const [customerDefaultPriceLists, setCustomerDefaultPriceLists] = React.useState<Record<string, string>>({});
+  const [supplierDefaultCostLists, setSupplierDefaultCostLists] = React.useState<Record<string, string>>({});
   const [fallbackPriceListId, setFallbackPriceListId] = React.useState<string>("pl-retail");
   const [selectedPartyDetail, setSelectedPartyDetail] = React.useState<PartyDetail | null>(null);
   const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
@@ -301,6 +308,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [taxCodes, setTaxCodes] = React.useState<Array<{ id: string; code: string; name: string; rate: number }>>([]);
   const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>>>({});
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
+  const [costPricingByProductId, setCostPricingByProductId] = React.useState<Record<string, ProductPrice[]>>({});
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
     [baseCurrency]
@@ -338,12 +346,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
       fetchBranchOptions(),
       fetchWarehouseOptions(),
       fetchCustomerDefaultPriceLists(),
+      fetchSupplierDefaultCostLists(),
       fetchPriceListOptions(),
       fetchPaymentTermsApi(),
       fetchCustomerCategoriesApi(),
       hydrateProductsFromApi(),
     ])
-      .then(([branches, warehouses, customerDefaults, priceLists, paymentTerms, customerCategories, _products]) => {
+      .then(([branches, warehouses, customerDefaults, supplierCostLists, priceLists, paymentTerms, customerCategories, _products]) => {
         if (cancelled) return;
         setFieldOptions({
           branch: branches,
@@ -351,6 +360,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
         });
         setCustomerDefaultPriceLists(
           Object.fromEntries(customerDefaults.map((item) => [item.customerId, item.priceListId]))
+        );
+        setSupplierDefaultCostLists(
+          Object.fromEntries(supplierCostLists.map((item) => [item.supplierId, item.costListId]))
         );
         setFallbackPriceListId(priceLists[0]?.id ?? "pl-retail");
         setPaymentTermsNameById(Object.fromEntries(paymentTerms.map((item) => [item.id, item.name])));
@@ -362,6 +374,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
         if (!cancelled) {
           setFieldOptions({});
           setCustomerDefaultPriceLists({});
+          setSupplierDefaultCostLists({});
           setFallbackPriceListId("pl-retail");
           setPaymentTermsNameById({});
           setCustomerCategoryNameById({});
@@ -426,6 +439,42 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
       cancelled = true;
     };
   }, [step]);
+
+  const selectedPartyIdForCost = form.watch("party");
+  const lineEditorModeForCost = type === "bill" || type === "purchase-order" || type === "grn" ? "purchasing" : "sales";
+  const supplierCostListId =
+    lineEditorModeForCost === "purchasing" && selectedPartyIdForCost
+      ? supplierDefaultCostLists[selectedPartyIdForCost]
+      : undefined;
+
+  React.useEffect(() => {
+    if (!supplierCostListId || step !== 2) {
+      setCostPricingByProductId({});
+      return;
+    }
+    let cancelled = false;
+    fetchPriceListByIdApi(supplierCostListId)
+      .then((costList) => {
+        if (cancelled || !costList) return;
+        const byProduct: Record<string, ProductPrice[]> = {};
+        for (const item of costList.items ?? []) {
+          byProduct[item.productId] = [
+            {
+              productId: item.productId,
+              priceListId: supplierCostListId,
+              tiers: [{ minQty: 1, price: item.price, uom: "EA" }],
+            },
+          ];
+        }
+        setCostPricingByProductId(byProduct);
+      })
+      .catch(() => {
+        if (!cancelled) setCostPricingByProductId({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supplierCostListId, step]);
 
   const handleLinesChange = React.useCallback(
     (next: DocumentLine[]) => {
@@ -516,6 +565,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     (selectedPartyId ? customerDefaultPriceLists[selectedPartyId] : undefined) ?? fallbackPriceListId;
   const lineEditorMode =
     type === "bill" || type === "purchase-order" || type === "grn" ? "purchasing" : "sales";
+  const useCostPricing = lineEditorMode === "purchasing" && !supplierCostListId;
+  const lineEditorPriceListId = lineEditorMode === "purchasing"
+    ? (supplierCostListId ?? "")
+    : resolvedPriceListId;
+  const lineEditorPricingByProductId = lineEditorMode === "purchasing" && supplierCostListId
+    ? costPricingByProductId
+    : pricingByProductId;
 
   React.useEffect(() => {
     if (!selectedPartyId) {
@@ -721,13 +777,15 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           </CardHeader>
           <CardContent>
             <DocumentLineEditor
-              priceListId={resolvedPriceListId}
+              priceListId={lineEditorPriceListId}
+              useCostPricing={useCostPricing}
               currency={selectedCurrency}
               lines={lines}
               onLinesChange={handleLinesChange}
               mode={lineEditorMode}
+              productFilter={lineEditorMode === "purchasing" ? "purchasable" : "sellable"}
               packagingByProductId={packagingByProductId}
-              pricingByProductId={pricingByProductId}
+              pricingByProductId={lineEditorPricingByProductId}
             />
           </CardContent>
         </Card>

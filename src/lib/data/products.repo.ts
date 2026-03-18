@@ -17,6 +17,19 @@ export function listProducts(): ProductRow[] {
   return productsCache;
 }
 
+/** Fetch products filtered by purchasable (for purchase orders) or sellable (for sales orders). */
+export async function fetchProductsForDocumentLines(
+  filter: "purchasable" | "sellable" | "all"
+): Promise<ProductRow[]> {
+  if (filter === "all") {
+    return fetchProductsApi();
+  }
+  return fetchProductsApi({
+    purchasable: filter === "purchasable",
+    sellable: filter === "sellable",
+  });
+}
+
 /** Hydrate products cache from API; call from pages that need listProducts() to reflect live data. */
 export async function hydrateProductsFromApi(): Promise<ProductRow[]> {
   const rows = await fetchProductsApi();

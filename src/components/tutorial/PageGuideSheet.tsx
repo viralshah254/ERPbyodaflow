@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import {
   Sheet,
@@ -10,12 +11,15 @@ import {
 import { Button } from "@/components/ui/button";
 import type { TutorialForRoute } from "@/config/tutorial";
 import { BookOpen, Sparkles, ArrowRight, Play } from "lucide-react";
+import { emitTutorialEvent } from "@/lib/api/tutorial-events";
 
 export interface PageGuideSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Current route guide; when null, show fallback and only Ask Copilot. */
   info: TutorialForRoute | null;
+  /** Current pathname for analytics */
+  route?: string;
   onAskCopilot: () => void;
   /** Optional: start spotlight tour when available */
   onStartTour?: () => void;
@@ -29,10 +33,17 @@ export function PageGuideSheet({
   open,
   onOpenChange,
   info,
+  route,
   onAskCopilot,
   onStartTour,
   hasTour,
 }: PageGuideSheetProps) {
+  React.useEffect(() => {
+    if (open && route) {
+      emitTutorialEvent({ event: "tutorial_viewed", page: route });
+    }
+  }, [open, route]);
+
   const pageTitle = info?.itemLabel ?? info?.chapterTitle ?? "This page";
   const guideSummary = info?.guideSummary ?? FALLBACK_SUMMARY;
   const guideSteps = info?.guideSteps ?? [];

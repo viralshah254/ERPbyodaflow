@@ -24,9 +24,12 @@ export function FirstVisitBanner() {
   const {
     visitedPages,
     dismissedHints,
+    dismissedTours,
     markPageVisited,
     dismissHint,
   } = useTutorialProgressStore();
+
+  const showTour = tour && !dismissedTours[tour.tourId];
 
   const setContext = useCopilotStore((s) => s.setContext);
   const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
@@ -91,13 +94,13 @@ export function FirstVisitBanner() {
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {tour && (
+          {showTour && (
             <Button size="sm" variant="default" onClick={startTour}>
               <Play className="h-3.5 w-3.5 mr-1.5" />
               Start tour
             </Button>
           )}
-          <Button size="sm" variant={tour ? "outline" : "default"} onClick={handleOpenGuide}>
+          <Button size="sm" variant={showTour ? "outline" : "default"} onClick={handleOpenGuide}>
             <BookOpen className="h-3.5 w-3.5 mr-1.5" />
             Open guide
           </Button>
@@ -131,12 +134,13 @@ export function FirstVisitBanner() {
         open={guideSheetOpen}
         onOpenChange={handleGuideSheetClose}
         info={info}
+        route={pathname ?? undefined}
         onAskCopilot={() => {
           handleAskCopilot();
           setGuideSheetOpen(false);
         }}
-        onStartTour={tour ? () => { startTour(); setGuideSheetOpen(false); } : undefined}
-        hasTour={!!tour}
+        onStartTour={showTour ? () => { startTour(); setGuideSheetOpen(false); } : undefined}
+        hasTour={!!showTour}
       />
     </>
   );

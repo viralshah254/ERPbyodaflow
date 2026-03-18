@@ -5,6 +5,7 @@ export type ProductRow = {
   category?: string;
   unit?: string;
   baseUom?: string;
+  productType?: "RAW" | "FINISHED" | "BOTH";
   status: string;
   currentStock?: number;
 };

@@ -5,6 +5,7 @@ import { driver, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 import type { TourDef } from "@/config/tutorial-tours";
 import { useTutorialProgressStore } from "@/stores/tutorial-progress-store";
+import { emitTutorialEvent } from "@/lib/api/tutorial-events";
 
 export interface SpotlightTourProps {
   tour: TourDef | null;
@@ -30,20 +31,29 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
       },
     }));
 
+    let lastStepReached = false;
+
     const driverObj = driver({
       showProgress: true,
       steps,
+      onHighlighted: (_element, _step, index) => {
+        if (index === steps.length - 1) lastStepReached = true;
+      },
       onDestroyStarted: () => {
         driverObj.destroy();
-        markTourCompleted(tour.tourId);
-        onComplete?.();
       },
       onDestroyed: () => {
         markTourCompleted(tour.tourId);
+        emitTutorialEvent({
+          event: lastStepReached ? "tour_completed" : "tour_skipped",
+          tourId: tour.tourId,
+          page: tour.route,
+        });
         onComplete?.();
       },
     });
 
+    emitTutorialEvent({ event: "tour_started", tourId: tour.tourId, page: tour.route });
     driverObj.drive();
   }, [tour, markTourCompleted, onComplete]);
 
