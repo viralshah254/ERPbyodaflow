@@ -445,3 +445,15 @@ export async function provisionPlatformCustomerApi(payload: {
     body: payload,
   });
 }
+
+export type PlatformTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  orgType: "MANUFACTURER" | "DISTRIBUTOR" | "RETAIL";
+};
+
+export async function fetchPlatformTemplatesApi(): Promise<PlatformTemplate[]> {
+  const data = await apiRequest<{ templates: PlatformTemplate[] }>("/api/platform/templates");
+  return data.templates;
+}

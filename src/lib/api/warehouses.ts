@@ -22,6 +22,13 @@ export async function fetchWarehousesApi(): Promise<BackendWarehouse[]> {
   return payload.items ?? [];
 }
 
+/** Fetch all warehouse codes in the org. Used by New Warehouse form to suggest the next sequential code. */
+export async function fetchWarehouseCodesApi(): Promise<string[]> {
+  requireLiveApi("Warehouse codes");
+  const data = await apiRequest<{ codes: string[] }>("/api/master/warehouses/codes");
+  return data.codes ?? [];
+}
+
 export async function createWarehouseApi(payload: WarehouseUpsertInput): Promise<{ id: string; name: string }> {
   requireLiveApi("Create warehouse");
   return apiRequest<{ id: string; name: string }>("/api/master/warehouses", {

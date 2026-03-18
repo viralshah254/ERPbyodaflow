@@ -6,20 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  getAllTemplates,
-  PERISHABLE_DISTRIBUTION_TEMPLATE_IDS,
-} from "@/config/industryTemplates/templates";
+import { PERISHABLE_DISTRIBUTION_TEMPLATE_IDS } from "@/config/industryTemplates/templates";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { fetchOrgProfileApi, saveOrgProfileApi } from "@/lib/api/org";
-import { saveCurrentOrgContext } from "@/lib/api/context";
-import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function OrganizationPage() {
-  const { templateId, template, applyTemplate, hydrateFromBackend } = useOrgContextStore();
-  const templates = React.useMemo(() => getAllTemplates(), []);
+  const { templateId, template } = useOrgContextStore();
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [name, setName] = React.useState("");
@@ -110,56 +104,20 @@ export default function OrganizationPage() {
           <CardHeader>
             <CardTitle>Industry template</CardTitle>
             <CardDescription>
-              The template controls which modules and nav items you see (e.g. Franchise, Subcontracting). Switch to <strong>Cool Catch</strong> to access commission, VMI, cash-to-weight audit, and subcontracting.
+              Your industry template is set during onboarding and controls which modules and features are enabled. Contact your administrator to change it.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {template && (
-              <p className="text-sm text-muted-foreground">
-                Current: <strong>{template.name}</strong>
-              </p>
+          <CardContent>
+            {template ? (
+              <div className="flex items-center gap-2">
+                {PERISHABLE_DISTRIBUTION_TEMPLATE_IDS.includes(
+                  templateId as (typeof PERISHABLE_DISTRIBUTION_TEMPLATE_IDS)[number]
+                ) && <Icons.Fish className="h-4 w-4 text-muted-foreground" />}
+                <p className="text-sm font-medium">{template.name}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No template assigned.</p>
             )}
-            <div className="flex flex-wrap gap-2">
-              {templates.map((t) => (
-                <Button
-                  key={t.id}
-                  variant={templateId === t.id ? "default" : "outline"}
-                  size="sm"
-                  onClick={async () => {
-                    applyTemplate(t.id);
-                    if (!isApiConfigured()) {
-                      toast.success(`Switched to ${t.name}`);
-                      return;
-                    }
-                    try {
-                      const orgContext = await saveCurrentOrgContext({
-                        templateId: t.id,
-                        enabledModules: t.enabledModules,
-                        featureFlags: t.featureFlags,
-                        terminology: t.terminology,
-                        defaultNav: t.defaultNav,
-                      });
-                      hydrateFromBackend({
-                        orgType: t.orgType,
-                        templateId: orgContext.templateId,
-                        enabledModules: orgContext.enabledModules,
-                        featureFlags: orgContext.featureFlags,
-                        terminology: orgContext.terminology,
-                        defaultNav: orgContext.defaultNav,
-                      });
-                      toast.success(`Switched to ${t.name}`);
-                    } catch (e) {
-                      toast.error((e as Error).message);
-                    }
-                  }}
-                >
-                  {PERISHABLE_DISTRIBUTION_TEMPLATE_IDS.includes(
-                    t.id as (typeof PERISHABLE_DISTRIBUTION_TEMPLATE_IDS)[number]
-                  ) && <Icons.Fish className="mr-1.5 h-4 w-4" />}
-                  {t.name}
-                </Button>
-              ))}
-            </div>
           </CardContent>
         </Card>
       </div>

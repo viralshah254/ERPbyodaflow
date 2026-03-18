@@ -12,6 +12,7 @@ export type APBillRow = {
   date: string;
   party: string;
   total: number;
+  currency?: string;
   status: string;
   dueDate?: string;
 };

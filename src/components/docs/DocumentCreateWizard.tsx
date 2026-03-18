@@ -441,7 +441,10 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   }, [step]);
 
   const selectedPartyIdForCost = form.watch("party");
-  const lineEditorModeForCost = type === "bill" || type === "purchase-order" || type === "grn" ? "purchasing" : "sales";
+  const lineEditorModeForCost =
+    type === "bill" || type === "purchase-order" || type === "grn" ||
+    type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note"
+      ? "purchasing" : "sales";
   const supplierCostListId =
     lineEditorModeForCost === "purchasing" && selectedPartyIdForCost
       ? supplierDefaultCostLists[selectedPartyIdForCost]
@@ -564,7 +567,9 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const resolvedPriceListId =
     (selectedPartyId ? customerDefaultPriceLists[selectedPartyId] : undefined) ?? fallbackPriceListId;
   const lineEditorMode =
-    type === "bill" || type === "purchase-order" || type === "grn" ? "purchasing" : "sales";
+    type === "bill" || type === "purchase-order" || type === "grn" ||
+    type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note"
+      ? "purchasing" : "sales";
   const useCostPricing = lineEditorMode === "purchasing" && !supplierCostListId;
   const lineEditorPriceListId = lineEditorMode === "purchasing"
     ? (supplierCostListId ?? "")

@@ -59,6 +59,7 @@ export const useTutorialProgressStore = create<TutorialProgressState>()(
     }),
     {
       name: STORAGE_KEY,
+      skipHydration: true,
       partialize: (s) => ({
         visitedPages: s.visitedPages,
         completedTours: s.completedTours,

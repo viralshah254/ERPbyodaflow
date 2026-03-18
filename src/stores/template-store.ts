@@ -48,31 +48,4 @@ export const useTemplateStore = create<TemplateState>((set) => ({
   },
 }));
 
-// Initialize enabled modules from template or default
-if (typeof window !== "undefined") {
-  const stored = localStorage.getItem("odaflow_erp_template");
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      useTemplateStore.setState(parsed);
-    } catch (e) {
-      // Ignore parse errors
-    }
-  } else {
-    // Default enabled modules for all org types
-    useTemplateStore.setState({
-      enabledModules: [
-        "dashboard",
-        "inventory",
-        "sales",
-        "purchasing",
-        "finance",
-        "crm",
-        "reports",
-        "automation",
-        "settings",
-      ],
-    });
-  }
-}
 

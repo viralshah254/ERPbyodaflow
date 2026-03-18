@@ -4,6 +4,8 @@ export type PurchasingDocRow = {
   date: string;
   party?: string;
   total?: number;
+  currency?: string;
+  exchangeRate?: number;
   status: string;
   poRef?: string;
   warehouse?: string;

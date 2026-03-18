@@ -48,7 +48,15 @@ export default function SupplierInvoicesPage() {
       { id: "number", header: "Number", accessor: (row: APBillRow) => <span className="font-medium">{row.number}</span> },
       { id: "date", header: "Date", accessor: "date" as keyof APBillRow },
       { id: "supplier", header: "Supplier", accessor: "party" as keyof APBillRow },
-      { id: "total", header: "Total", accessor: (row: APBillRow) => formatMoney(row.total, "KES") },
+      { id: "docTotal", header: "Doc Total", accessor: (row: APBillRow) => formatMoney(row.total, row.currency ?? "KES") },
+      {
+        id: "baseTotal",
+        header: "Base (KES)",
+        accessor: (row: APBillRow) =>
+          (row.currency ?? "KES").toUpperCase() === "KES"
+            ? formatMoney(row.total, "KES")
+            : `${formatMoney(row.total, "KES")} (rate on posting)`,
+      },
       { id: "status", header: "Status", accessor: "status" as keyof APBillRow },
     ],
     []

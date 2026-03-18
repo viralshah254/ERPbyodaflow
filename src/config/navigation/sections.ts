@@ -102,6 +102,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     items: [
       { key: "purchasing-requests", label: "Purchase Requests", href: "/purchasing/requests", icon: "ClipboardList", moduleKey: "purchasing", requiresPermissions: ["purchasing.orders.read"] },
       { key: "purchasing-orders", label: "Purchase Orders", href: "/purchasing/orders", icon: "FileText", moduleKey: "purchasing", termKey: "purchaseOrder", requiresPermissions: ["purchasing.orders.read"] },
+      { key: "purchasing-guided-sourcing-flow", label: "Guided Sourcing Flow", href: "/purchasing/sourcing-flow", icon: "Workflow", moduleKey: "purchasing", requiresPermissions: ["purchasing.orders.read"] },
       { key: "purchasing-grn", label: "Goods Receipt (GRN)", href: "/inventory/receipts", icon: "PackageCheck", moduleKey: "purchasing", termKey: "goodsReceipt", requiresPermissions: ["purchasing.grn.read"] },
       { key: "purchasing-suppliers", label: "Suppliers", href: "/ap/suppliers", icon: "Building2", moduleKey: "purchasing", termKey: "supplier", requiresPermissions: ["purchasing.suppliers.read"] },
       { key: "purchasing-supplier-invoices", label: "Supplier Invoices (AP)", href: "/ap/bills", icon: "FileText", moduleKey: "purchasing", requiresPermissions: ["purchasing.bills.read"] },

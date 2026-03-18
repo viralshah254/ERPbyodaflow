@@ -12,7 +12,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { provisionPlatformCustomerApi, type PlatformOrgRow } from "@/lib/api/platform";
+import {
+  provisionPlatformCustomerApi,
+  fetchPlatformTemplatesApi,
+  type PlatformOrgRow,
+  type PlatformTemplate,
+} from "@/lib/api/platform";
 import { toast } from "sonner";
 
 type ProvisionFormState = {
@@ -100,16 +105,30 @@ function validateProvisionForm(form: ProvisionFormState, attempted: boolean): Pr
   return err;
 }
 
+const FALLBACK_TEMPLATES: PlatformTemplate[] = [
+  { id: "fmcg-distributor", name: "FMCG Distributor", description: "", orgType: "DISTRIBUTOR" },
+  { id: "fmcg-manufacturer", name: "FMCG Manufacturer", description: "", orgType: "MANUFACTURER" },
+  { id: "retail-multi-store", name: "Retail Multi-Store", description: "", orgType: "RETAIL" },
+  { id: "seafood-distributor", name: "Seafood / Cool Catch", description: "", orgType: "DISTRIBUTOR" },
+];
+
 export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: ProvisionCustomerSheetProps) {
   const [form, setForm] = React.useState<ProvisionFormState>(emptyForm);
   const [saving, setSaving] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = React.useState(false);
+  const [templates, setTemplates] = React.useState<PlatformTemplate[]>(FALLBACK_TEMPLATES);
 
   const errors = React.useMemo(() => validateProvisionForm(form, attemptedSubmit), [form, attemptedSubmit]);
 
   React.useEffect(() => {
-    if (!open) setAttemptedSubmit(false);
+    if (!open) {
+      setAttemptedSubmit(false);
+      return;
+    }
+    fetchPlatformTemplatesApi()
+      .then((data) => { if (data.length > 0) setTemplates(data); })
+      .catch(() => { /* keep fallback list */ });
   }, [open]);
 
   React.useEffect(() => {
@@ -350,10 +369,9 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
                 className={`w-full h-10 rounded-md border bg-background px-3 text-sm ${errors.templateId ? "border-destructive" : "border-input"}`}
                 aria-invalid={!!errors.templateId}
               >
-                <option value="fmcg-distributor">FMCG Distributor</option>
-                <option value="fmcg-manufacturer">FMCG Manufacturer</option>
-                <option value="retail-multi-store">Retail Multi-Store</option>
-                <option value="seafood-distributor">Seafood Distributor</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
               </select>
               {errors.templateId && (
                 <p className="text-xs text-destructive" role="alert">{errors.templateId}</p>

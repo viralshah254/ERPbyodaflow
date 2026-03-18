@@ -85,6 +85,13 @@ export async function fetchProductSkusApi(): Promise<string[]> {
   return data.skus ?? [];
 }
 
+/** Fetch all product codes in the org. Used by New Product form to suggest the next sequential code. */
+export async function fetchProductCodesApi(): Promise<string[]> {
+  requireLiveApi("Product codes");
+  const data = await apiRequest<{ codes: string[] }>("/api/products/codes");
+  return data.codes ?? [];
+}
+
 export async function fetchProductApi(id: string): Promise<ProductRow | null> {
   requireLiveApi("Product detail");
   const data = await apiRequest<BackendProduct>(`/api/products/${id}`);

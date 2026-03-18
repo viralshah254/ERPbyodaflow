@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
+import { RowActions } from "@/components/ui/row-actions";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,13 +29,14 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
-import { createProductApi, fetchProductSkusApi, fetchProductsApi } from "@/lib/api/products";
+import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsApi, deleteProductApi } from "@/lib/api/products";
 import { fetchProductCategoriesApi, createProductCategoryApi } from "@/lib/api/product-categories";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -49,6 +52,18 @@ function suggestNextSku(existing: string[]): string {
     .filter((n) => n > 0);
   const max = numbers.length > 0 ? Math.max(...numbers) : 0;
   return `SKU-${String(max + 1).padStart(3, "0")}`;
+}
+
+/** Derive next sequential 5-digit product code from existing codes (e.g. 00001, 00002). */
+function suggestNextCode(existing: string[]): string {
+  const numbers = existing
+    .map((s) => {
+      const m = s.match(/^(\d+)$/);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter((n) => n > 0);
+  const max = numbers.length > 0 ? Math.max(...numbers) : 0;
+  return String(max + 1).padStart(5, "0");
 }
 
 type ProductType = "RAW" | "FINISHED" | "BOTH" | undefined;
@@ -79,6 +94,8 @@ function ProductTypeBadge({ type }: { type: ProductType | string | undefined }) 
 export default function MasterProductsPage() {
   const router = useRouter();
   const terminology = useTerminology();
+  const permissions = useAuthStore((s) => s.permissions);
+  const canDeleteProduct = permissions.includes("admin.settings");
   const productLabel = t("product", terminology);
 
   const [search, setSearch] = React.useState("");
@@ -100,6 +117,7 @@ export default function MasterProductsPage() {
 
   const [categories, setCategories] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [addCategoryOpen, setAddCategoryOpen] = React.useState(false);
+  const [deleteConfirmProductId, setDeleteConfirmProductId] = React.useState<string | null>(null);
   const [newCategoryCode, setNewCategoryCode] = React.useState("");
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const [addingCategory, setAddingCategory] = React.useState(false);
@@ -147,6 +165,9 @@ export default function MasterProductsPage() {
       fetchProductSkusApi()
         .then((skus) => setSku(suggestNextSku(skus)))
         .catch(() => {});
+      fetchProductCodesApi()
+        .then((codes) => setCode(suggestNextCode(codes)))
+        .catch(() => setCode("00001"));
     }
   }, [drawerOpen]);
 
@@ -190,8 +211,36 @@ export default function MasterProductsPage() {
         header: "Status",
         accessor: (r: ProductRow) => <StatusBadge status={r.status} />,
       },
+      {
+        id: "actions",
+        header: "",
+        accessor: (r: ProductRow) => (
+          <div onClick={(e) => e.stopPropagation()}>
+            <RowActions
+              actions={[
+                {
+                  label: "View",
+                  icon: "Eye",
+                  onClick: () => router.push(`/master/products/${r.id}`),
+                },
+                ...(canDeleteProduct
+                  ? [
+                      {
+                        label: "Delete",
+                        icon: "Trash2" as const,
+                        onClick: () => setDeleteConfirmProductId(r.id),
+                        variant: "destructive" as const,
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </div>
+        ),
+        className: "w-[50px]",
+      },
     ],
-    [categoryNameById]
+    [categoryNameById, router, canDeleteProduct]
   );
 
   const resetForm = () => {
@@ -406,12 +455,15 @@ export default function MasterProductsPage() {
               </div>
               {/* Product code */}
               <div className="space-y-2">
-                <Label>Product code (optional)</Label>
+                <Label>Product code</Label>
                 <Input
-                  placeholder="e.g. PROD-001"
+                  placeholder="00001"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Auto-suggested. Edit if needed.
+                </p>
               </div>
               {/* Name */}
               <div className="space-y-2">
@@ -561,6 +613,27 @@ export default function MasterProductsPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={!!deleteConfirmProductId}
+        onOpenChange={(open) => { if (!open) setDeleteConfirmProductId(null); }}
+        title="Delete product?"
+        description="This will remove the product permanently. This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!deleteConfirmProductId) return;
+          try {
+            await deleteProductApi(deleteConfirmProductId);
+            toast.success("Product deleted.");
+            setDeleteConfirmProductId(null);
+            await refreshProducts();
+          } catch (err) {
+            toast.error((err as Error).message);
+          }
+        }}
+      />
     </PageShell>
   );
 }

@@ -70,7 +70,6 @@ import { validateProductPackaging } from "@/lib/products/validation";
 import { validateTiers } from "@/lib/pricing/validation";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import { formatMoney } from "@/lib/money";
-import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
 import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
@@ -137,8 +136,8 @@ export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const user = useAuthStore((s) => s.user);
-  const canDelete = canDeleteEntity(user);
+  const permissions = useAuthStore((s) => s.permissions);
+  const canDelete = permissions.includes("admin.settings");
   const terminology = useTerminology();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 

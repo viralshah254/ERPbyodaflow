@@ -7,6 +7,8 @@ type BackendPurchaseRequest = {
   date?: string;
   partyId?: string;
   total?: number;
+  currency?: string;
+  exchangeRate?: number;
   status?: string;
 };
 
@@ -19,6 +21,8 @@ export async function fetchPurchaseRequestsApi(): Promise<PurchasingDocRow[]> {
     date: item.date?.slice(0, 10) ?? "",
     party: item.partyId ?? "Requester pending",
     total: item.total ?? 0,
+    currency: item.currency ?? "KES",
+    exchangeRate: item.exchangeRate,
     status: (item.status as PurchasingDocRow["status"]) ?? "DRAFT",
   }));
 }

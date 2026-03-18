@@ -10,6 +10,7 @@ export function formatMoney(
   const decimals = options?.decimals ?? 2;
   const symbols: Record<string, string> = {
     KES: "KES ",
+    UGX: "UGX ",
     USD: "$",
     EUR: "€",
     GBP: "£",

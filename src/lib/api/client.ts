@@ -9,9 +9,9 @@
  */
 import { canUseDevHeaders } from "@/lib/runtime-flags";
 
-const API_BASE = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL ?? "") : "";
-const ENV_DEV_USER_ID = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_DEV_USER_ID ?? "") : "";
-const ENV_BRANCH_ID = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_CURRENT_BRANCH_ID ?? "") : "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+const ENV_DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
+const ENV_BRANCH_ID = process.env.NEXT_PUBLIC_CURRENT_BRANCH_ID ?? "";
 
 export function getApiBase(): string {
   return API_BASE.replace(/\/$/, "");

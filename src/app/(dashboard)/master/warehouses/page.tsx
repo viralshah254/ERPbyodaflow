@@ -23,6 +23,7 @@ import type { WarehouseRow } from "@/lib/types/masters";
 import { fetchBranchOptions } from "@/lib/api/lookups";
 import {
   createWarehouseApi,
+  fetchWarehouseCodesApi,
   fetchWarehousesApi,
   mapWarehouseRow,
   updateWarehouseApi,
@@ -31,6 +32,18 @@ import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+/** Derive next sequential warehouse code from existing codes (e.g. WH-001, WH-002). */
+function suggestNextWarehouseCode(existing: string[]): string {
+  const numbers = existing
+    .map((s) => {
+      const m = s.match(/WH-(\d+)$/i) ?? s.match(/(\d+)$/);
+      return m ? parseInt(m[1], 10) : 0;
+    })
+    .filter((n) => n > 0);
+  const max = numbers.length > 0 ? Math.max(...numbers) : 0;
+  return `WH-${String(max + 1).padStart(3, "0")}`;
+}
 
 export default function MasterWarehousesPage() {
   const terminology = useTerminology();
@@ -65,6 +78,14 @@ export default function MasterWarehousesPage() {
   React.useEffect(() => {
     void reload();
   }, [reload]);
+
+  React.useEffect(() => {
+    if (drawerOpen && !editingId) {
+      fetchWarehouseCodesApi()
+        .then((codes) => setForm((prev) => ({ ...prev, code: suggestNextWarehouseCode(codes) })))
+        .catch(() => setForm((prev) => ({ ...prev, code: "WH-001" })));
+    }
+  }, [drawerOpen, editingId]);
 
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
@@ -213,10 +234,13 @@ export default function MasterWarehousesPage() {
           <div className="space-y-2">
             <Label>Code</Label>
             <Input
-              placeholder="e.g. WH-Main"
+              placeholder="WH-001"
               value={form.code}
               onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
             />
+            {!editingId && (
+              <p className="text-xs text-muted-foreground">Auto-suggested. Edit if needed.</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Name</Label>
