@@ -799,7 +799,7 @@ export default function ProductDetailPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    Tiers — {pl?.name ?? selectedListId || "no list selected"}
+                    Tiers — {pl?.name ?? (selectedListId || "no list selected")}
                   </CardTitle>
                   <CardDescription>Min / max qty, UOM, price. Effective per base unit.</CardDescription>
                 </CardHeader>

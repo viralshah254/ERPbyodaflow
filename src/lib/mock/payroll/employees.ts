@@ -1,5 +1,5 @@
 /**
- * Mock payroll employees — Kenya-ready (KRA, NHIF, NSSF stubs).
+ * Mock payroll employees — Kenya-ready (KRA, NSSF, SHIF stubs).
  */
 
 import type { Employee } from "@/lib/payroll/types";
@@ -9,13 +9,14 @@ export const MOCK_EMPLOYEES: Employee[] = [
     id: "emp1",
     name: "Jane Wanjiku",
     idPassportMasked: "***7890",
-    kraPin: "A001234567X",
-    nhifNo: "NHIF-123456",
+    taxId: "A001234567X",
     nssfNo: "NSSF-789012",
+    shifNo: "SHIF-123456",
     department: "Finance",
     role: "Accountant",
     branch: "Head Office",
-    employmentType: "PERMANENT",
+    employmentType: "FULL_TIME",
+    taxCountry: "KE",
     salaryType: "MONTHLY",
     baseSalary: 85000,
     currency: "KES",
@@ -24,7 +25,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     ],
     deductions: [
       { id: "d1", code: "NSSF", name: "NSSF", type: "DEDUCTION", amount: 1080 },
-      { id: "d2", code: "NHIF", name: "NHIF", type: "DEDUCTION", amount: 1700 },
+      { id: "d2", code: "SHIF", name: "SHIF", type: "DEDUCTION", amount: 2337 },
       { id: "d3", code: "PAYE", name: "PAYE", type: "DEDUCTION", amount: 12000 },
     ],
     bankAccountMasked: "***4567",
@@ -34,18 +35,18 @@ export const MOCK_EMPLOYEES: Employee[] = [
     id: "emp2",
     name: "John Kamau",
     idPassportMasked: "***2345",
-    kraPin: "A009876543Y",
+    taxId: "A009876543Y",
     department: "Sales",
     role: "Sales Rep",
     branch: "East",
-    employmentType: "CONTRACT",
+    employmentType: "CONSULTANT",
+    taxCountry: "KE",
     salaryType: "MONTHLY",
     baseSalary: 55000,
     currency: "KES",
     allowances: [],
     deductions: [
-      { id: "d4", code: "NSSF", name: "NSSF", type: "DEDUCTION", amount: 720 },
-      { id: "d5", code: "NHIF", name: "NHIF", type: "DEDUCTION", amount: 500 },
+      { id: "d4", code: "WHT", name: "WHT", type: "DEDUCTION", amount: 2750 },
     ],
     bankAccountMasked: "***8901",
     paymentMethod: "M_PESA",

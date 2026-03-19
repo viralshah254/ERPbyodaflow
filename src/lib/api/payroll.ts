@@ -420,10 +420,19 @@ export async function updateLeavePolicyApi(id: string, patch: Partial<Omit<Leave
   });
 }
 
+function toQueryParams(p?: Record<string, string | number | undefined>): Record<string, string> | undefined {
+  if (!p || Object.keys(p).length === 0) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (v !== undefined && v !== null) out[k] = String(v);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export async function fetchLeaveBalancesApi(params?: { employeeId?: string; year?: number }): Promise<LeaveBalance[]> {
   requireLiveApi("Leave balances");
   const data = await apiRequest<{ items: LeaveBalance[] }>("/api/payroll/leave/balances", {
-    params: params as Record<string, string | number | undefined>,
+    params: toQueryParams(params),
   });
   return data.items ?? [];
 }
@@ -437,7 +446,7 @@ export async function fetchLeaveRequestsApi(params?: {
 }): Promise<LeaveRequest[]> {
   requireLiveApi("Leave requests");
   const data = await apiRequest<{ items: LeaveRequest[] }>("/api/payroll/leave/requests", {
-    params: params as Record<string, string | number | undefined>,
+    params: toQueryParams(params),
   });
   return data.items ?? [];
 }
@@ -496,5 +505,5 @@ export async function fetchLeaveCalendarApi(params: { year: number; month?: numb
       days: number;
       isPaid: boolean;
     }[];
-  }>("/api/payroll/leave/calendar", { params: params as Record<string, string | number | undefined> });
+  }>("/api/payroll/leave/calendar", { params: toQueryParams(params) });
 }

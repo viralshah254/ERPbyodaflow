@@ -50,7 +50,7 @@ function KenyaRates({ data }: { data: StatRef }) {
   const nssfTierII = nssf?.tierII as { rate: number; lower: number; upper: number; maxEmployee: number; label: string } | undefined;
   const shif = fullTime.shif as Record<string, unknown> | undefined;
   const ahl = fullTime.ahl as Record<string, unknown> | undefined;
-  const wht = (consultant?.wht as { rates: { type: string; rate: number; label: string }[]; threshold: number; thresholdLabel: string }) | undefined;
+  const wht = consultant?.wht as { rates: { type: string; rate: number; label: string }[]; threshold?: number; thresholdLabel?: string } | undefined;
 
   return (
     <div className="space-y-6">
@@ -109,7 +109,7 @@ function UgandaRates({ data }: { data: StatRef }) {
   const nssf = fullTime.nssf as Record<string, unknown> | undefined;
   const lst = fullTime.lst as Record<string, unknown> | undefined;
   const lstBands = (lst?.bands as { min: number; max: number; annual: number }[]) ?? [];
-  const wht = (consultant?.wht as { rates: { type: string; rate: number; label: string }[] }) | undefined;
+  const wht = consultant?.wht as ({ rates: { type: string; rate: number; label: string }[] } | undefined);
 
   return (
     <div className="space-y-6">

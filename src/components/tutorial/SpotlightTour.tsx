@@ -36,8 +36,8 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
     const driverObj = driver({
       showProgress: true,
       steps,
-      onHighlighted: (_element, _step, index) => {
-        if (index === steps.length - 1) lastStepReached = true;
+      onHighlighted: (_element, _step, opts) => {
+        if (opts.state.activeIndex === steps.length - 1) lastStepReached = true;
       },
       onDestroyStarted: () => {
         driverObj.destroy();

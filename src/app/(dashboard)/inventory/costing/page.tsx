@@ -427,7 +427,7 @@ export default function InventoryCostingPage() {
                       <SelectContent>
                         {templates.map((t) => (
                           <SelectItem key={t.id} value={t.id}>
-                            {LANDED_COST_TYPE_LABELS[(t as { type?: string }).type] ?? (t as { name?: string }).name}
+                            {LANDED_COST_TYPE_LABELS[(t as { type?: string }).type as keyof typeof LANDED_COST_TYPE_LABELS] ?? (t as { name?: string }).name}
                           </SelectItem>
                         ))}
                       </SelectContent>
