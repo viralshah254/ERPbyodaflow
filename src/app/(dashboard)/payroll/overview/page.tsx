@@ -13,11 +13,15 @@ import { formatMoney } from "@/lib/money";
 import * as Icons from "lucide-react";
 
 const LINKS = [
-  { href: "/payroll/employees", label: "Employees", desc: "Personal, job, pay, bank", icon: "Users" as const },
-  { href: "/payroll/pay-runs", label: "Pay runs", desc: "Create, preview, approve, post", icon: "CreditCard" as const },
+  { href: "/payroll/employees", label: "Employees", desc: "Full-time & consultants, KE & UG", icon: "Users" as const },
+  { href: "/payroll/pay-runs", label: "Pay runs", desc: "Auto-calculate taxes, approve, post", icon: "CreditCard" as const },
   { href: "/payroll/payslips", label: "Payslips", desc: "Preview, download PDF", icon: "FileText" as const },
-  { href: "/payroll/statutories", label: "Statutories", desc: "Kenya NSSF, NHIF, PAYE", icon: "ShieldCheck" as const },
-  { href: "/settings/payroll", label: "Payroll settings", desc: "Company-level config", icon: "Settings" as const },
+  { href: "/payroll/statutories", label: "Statutory rates", desc: "KE PAYE/NSSF/SHIF/AHL + UG", icon: "ShieldCheck" as const },
+  { href: "/payroll/leave/requests", label: "Leave requests", desc: "Approve, reject, manage", icon: "CalendarDays" as const },
+  { href: "/payroll/leave/balances", label: "Leave balances", desc: "Annual remaining per employee", icon: "BarChart2" as const },
+  { href: "/payroll/leave/calendar", label: "Leave calendar", desc: "Monthly approved leaves view", icon: "CalendarRange" as const },
+  { href: "/payroll/leave/policies", label: "Leave policies", desc: "Statutory + extra entitlements", icon: "ClipboardList" as const },
+  { href: "/settings/payroll", label: "Payroll settings", desc: "Jurisdiction, currency, pay period", icon: "Settings" as const },
 ];
 
 export default function PayrollOverviewPage() {
@@ -53,7 +57,7 @@ export default function PayrollOverviewPage() {
     <PageShell>
       <PageHeader
         title="Payroll"
-        description="Employees, pay runs, payslips, Kenya statutories"
+        description="Kenya & Uganda payroll — employees, auto-tax calculations, pay runs, leave management."
         breadcrumbs={[{ label: "Payroll" }]}
         sticky
         showCommandHint

@@ -1,8 +1,10 @@
 /**
- * Payroll types — Kenya-ready, UI-first.
+ * Payroll types — Kenya + Uganda, UI-first.
  */
 
-export type EmploymentType = "PERMANENT" | "CONTRACT";
+export type EmploymentType = "FULL_TIME" | "CONSULTANT";
+export type TaxCountry = "KE" | "UG";
+export type ConsultantResidency = "RESIDENT" | "EAC_NON_RESIDENT" | "NON_RESIDENT";
 export type SalaryType = "MONTHLY" | "HOURLY";
 export type PaymentMethodStub = "BANK" | "M_PESA";
 
@@ -14,45 +16,73 @@ export interface PayComponent {
   name: string;
   type: PayComponentType;
   amount: number;
-  /** Optional fixed vs % of base */
   isPercent?: boolean;
 }
 
 export interface Employee {
   id: string;
   name: string;
-  /** Masked display, e.g. "***1234" */
   idPassportMasked?: string;
-  kraPin?: string;
-  nhifNo?: string;
+  /** KRA PIN (Kenya) or URA TIN (Uganda) */
+  taxId?: string;
   nssfNo?: string;
+  shifNo?: string;
   department?: string;
   role?: string;
   branch?: string;
   employmentType: EmploymentType;
+  taxCountry: TaxCountry;
+  residency?: ConsultantResidency;
   salaryType: SalaryType;
   baseSalary: number;
   hourlyCostRate?: number;
+  contractDailyRate?: number;
   currency: string;
   allowances: PayComponent[];
   deductions: PayComponent[];
-  /** Masked, e.g. "***4567" */
   bankAccountMasked?: string;
   paymentMethod?: PaymentMethodStub;
 }
 
 export type PayRunStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "PROCESSED" | "CANCELLED";
 
+export interface StatBreakdown {
+  paye: number;
+  nssfEmployee: number;
+  nssfEmployer: number;
+  shif: number;
+  ahl: number;
+  lst: number;
+  wht: number;
+}
+
 export interface PayRunLine {
   id: string;
   employeeId: string;
   employeeName: string;
+  employmentType?: EmploymentType;
+  taxCountry?: TaxCountry;
   gross: number;
   statutoryTotal: number;
   net: number;
   currency: string;
-  /** Bonus, overtime, unpaid leave, loans */
+  statBreakdown?: StatBreakdown;
+  unpaidLeaveDays?: number;
   adjustments?: { label: string; amount: number }[];
+}
+
+export interface CalculatedLine {
+  employeeId: string;
+  employeeName: string;
+  employmentType: EmploymentType;
+  taxCountry: TaxCountry;
+  currency: string;
+  grossPay: number;
+  statBreakdown: StatBreakdown;
+  totalEmployeeDeductions: number;
+  totalEmployerCost: number;
+  netPay: number;
+  unpaidLeaveDays: number;
 }
 
 export interface PayRun {
@@ -65,6 +95,7 @@ export interface PayRun {
   lineCount: number;
   totalGross: number;
   totalNet: number;
+  totalEmployerNssf?: number;
   createdAt?: string;
 }
 
@@ -78,4 +109,56 @@ export interface Payslip {
   statutory: number;
   net: number;
   currency: string;
+}
+
+// Leave types
+export type LeaveType = "ANNUAL" | "SICK" | "MATERNITY" | "PATERNITY" | "PAID_EXTRA" | "UNPAID";
+export type LeaveRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export interface ExtraLeaveType {
+  label: string;
+  days: number;
+  isPaid: boolean;
+}
+
+export interface LeavePolicy {
+  id: string;
+  country: TaxCountry;
+  policyName: string;
+  annualLeaveDays: number;
+  sickLeaveDays: number;
+  maternityLeaveDays: number;
+  paternityLeaveDays: number;
+  extraLeaveTypes: ExtraLeaveType[];
+}
+
+export interface LeaveBalance {
+  id: string;
+  employeeId: string;
+  year: number;
+  annualEntitled: number;
+  annualUsed: number;
+  annualRemaining: number;
+  sickUsed: number;
+  maternityUsed: number;
+  paternityUsed: number;
+  unpaidUsed: number;
+  extraUsed: { label: string; used: number }[];
+}
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  type: LeaveType;
+  extraLabel?: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  isPaid: boolean;
+  status: LeaveRequestStatus;
+  notes?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
 }

@@ -1,4 +1,14 @@
-import type { Employee, PayRun, PayRunLine, Payslip } from "@/lib/payroll/types";
+import type {
+  Employee,
+  PayRun,
+  PayRunLine,
+  Payslip,
+  CalculatedLine,
+  LeavePolicy,
+  LeaveBalance,
+  LeaveRequest,
+  LeaveType,
+} from "@/lib/payroll/types";
 import { apiRequest, requireLiveApi } from "./client";
 import type { StatutoryConfig } from "@/lib/types/payroll";
 
@@ -12,15 +22,34 @@ type BackendEmployee = {
   jobTitle?: string;
   salary?: number;
   hourlyCostRate?: number;
+  contractDailyRate?: number;
   currency?: string;
+  employmentType?: string;
+  taxCountry?: string;
+  taxId?: string;
+  nssfNumber?: string;
+  shifNumber?: string;
+  residency?: string;
 };
 
 type BackendPayRunLine = {
   employeeId: string;
+  employmentType?: string;
+  taxCountry?: string;
   grossPay: number;
   deductions?: number;
   netPay: number;
   currency?: string;
+  statBreakdown?: {
+    paye?: number;
+    nssfEmployee?: number;
+    nssfEmployer?: number;
+    shif?: number;
+    ahl?: number;
+    lst?: number;
+    wht?: number;
+  };
+  unpaidLeaveDays?: number;
 };
 
 type BackendPayRun = {
@@ -33,6 +62,7 @@ type BackendPayRun = {
   totalGross: number;
   totalDeductions?: number;
   totalNet: number;
+  totalEmployerNssf?: number;
   currency?: string;
   lines?: BackendPayRunLine[];
   createdAt?: string;
@@ -67,10 +97,16 @@ function mapEmployee(item: BackendEmployee): Employee {
     department: item.department,
     role: item.jobTitle,
     branch: item.branchId,
-    employmentType: "PERMANENT",
+    employmentType: (item.employmentType === "CONSULTANT" ? "CONSULTANT" : "FULL_TIME") as Employee["employmentType"],
+    taxCountry: (item.taxCountry === "UG" ? "UG" : "KE") as Employee["taxCountry"],
+    taxId: item.taxId,
+    nssfNo: item.nssfNumber,
+    shifNo: item.shifNumber,
+    residency: item.residency as Employee["residency"],
     salaryType: "MONTHLY",
     baseSalary: item.salary ?? 0,
     hourlyCostRate: item.hourlyCostRate,
+    contractDailyRate: item.contractDailyRate,
     currency: item.currency ?? "KES",
     allowances: [],
     deductions: [],
@@ -88,6 +124,7 @@ function mapPayRun(item: BackendPayRun): PayRun {
     lineCount: item.lines?.length ?? 0,
     totalGross: item.totalGross,
     totalNet: item.totalNet,
+    totalEmployerNssf: item.totalEmployerNssf,
     createdAt: item.createdAt,
   };
 }
@@ -101,10 +138,22 @@ function mapPayRunLines(item: BackendPayRun, employees: Employee[]): PayRunLine[
       id: `${item.id}-${line.employeeId}-${index}`,
       employeeId: line.employeeId,
       employeeName: employee?.name ?? line.employeeId,
+      employmentType: line.employmentType as PayRunLine["employmentType"],
+      taxCountry: line.taxCountry as PayRunLine["taxCountry"],
       gross: line.grossPay,
       statutoryTotal,
       net: line.netPay,
       currency: line.currency ?? item.currency ?? "KES",
+      statBreakdown: line.statBreakdown ? {
+        paye: line.statBreakdown.paye ?? 0,
+        nssfEmployee: line.statBreakdown.nssfEmployee ?? 0,
+        nssfEmployer: line.statBreakdown.nssfEmployer ?? 0,
+        shif: line.statBreakdown.shif ?? 0,
+        ahl: line.statBreakdown.ahl ?? 0,
+        lst: line.statBreakdown.lst ?? 0,
+        wht: line.statBreakdown.wht ?? 0,
+      } : undefined,
+      unpaidLeaveDays: line.unpaidLeaveDays,
     };
   });
 }
@@ -126,30 +175,71 @@ export async function fetchEmployeeByIdApi(id: string): Promise<Employee | null>
 }
 
 export async function createEmployeeApi(payload: {
-  name: string;
+  firstName: string;
+  lastName: string;
   department?: string;
   branch?: string;
   baseSalary: number;
   hourlyCostRate?: number;
+  contractDailyRate?: number;
   currency?: string;
+  employmentType?: "FULL_TIME" | "CONSULTANT";
+  taxCountry?: "KE" | "UG";
+  taxId?: string;
+  nssfNumber?: string;
+  shifNumber?: string;
+  residency?: "RESIDENT" | "EAC_NON_RESIDENT" | "NON_RESIDENT";
+  jobTitle?: string;
 }): Promise<void> {
   requireLiveApi("Payroll employee creation");
-  const trimmed = payload.name.trim();
-  const [firstName, ...rest] = trimmed.split(/\s+/);
-  const lastName = rest.join(" ") || "-";
   await apiRequest("/api/payroll/employees", {
     method: "POST",
     body: {
       employeeNumber: `EMP-${Date.now()}`,
-      firstName: firstName || "Employee",
-      lastName,
+      firstName: payload.firstName || "Employee",
+      lastName: payload.lastName || "-",
       department: payload.department,
+      jobTitle: payload.jobTitle,
       startDate: new Date().toISOString(),
       salary: payload.baseSalary,
       hourlyCostRate: payload.hourlyCostRate,
+      contractDailyRate: payload.contractDailyRate,
       currency: payload.currency ?? "KES",
       branchId: payload.branch,
+      employmentType: payload.employmentType ?? "FULL_TIME",
+      taxCountry: payload.taxCountry ?? "KE",
+      taxId: payload.taxId,
+      nssfNumber: payload.nssfNumber,
+      shifNumber: payload.shifNumber,
+      residency: payload.residency,
     },
+  });
+}
+
+export async function updateEmployeeApi(
+  id: string,
+  patch: Partial<{
+    firstName: string;
+    lastName: string;
+    department: string;
+    jobTitle: string;
+    salary: number;
+    hourlyCostRate: number;
+    contractDailyRate: number;
+    currency: string;
+    employmentType: "FULL_TIME" | "CONSULTANT";
+    taxCountry: "KE" | "UG";
+    taxId: string;
+    nssfNumber: string;
+    shifNumber: string;
+    residency: "RESIDENT" | "EAC_NON_RESIDENT" | "NON_RESIDENT";
+    status: "ACTIVE" | "INACTIVE" | "TERMINATED";
+  }>
+): Promise<void> {
+  requireLiveApi("Payroll employee update");
+  await apiRequest(`/api/payroll/employees/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: patch,
   });
 }
 
@@ -173,12 +263,35 @@ export async function fetchPayRunDetailApi(
   };
 }
 
+export async function calculatePayRunLinesApi(payload: {
+  periodStart: string;
+  employees: { employeeId: string; grossPay?: number; adjustments?: number; unpaidLeaveDays?: number }[];
+}): Promise<CalculatedLine[]> {
+  requireLiveApi("Payroll tax calculation");
+  const data = await apiRequest<{ lines: CalculatedLine[] }>("/api/payroll/pay-runs/calculate", {
+    method: "POST",
+    body: payload,
+  });
+  return data.lines;
+}
+
 export async function createPayRunApi(payload: {
   periodStart: string;
   periodEnd: string;
   branchId?: string;
   currency: string;
-  lines: { employeeId: string; grossPay: number; deductions?: number }[];
+  lines: {
+    employeeId: string;
+    grossPay: number;
+    deductions?: number;
+    statBreakdown?: {
+      paye: number; nssfEmployee: number; nssfEmployer: number;
+      shif: number; ahl: number; lst: number; wht: number;
+    };
+    employmentType?: string;
+    taxCountry?: string;
+    unpaidLeaveDays?: number;
+  }[];
 }): Promise<{ id: string; number?: string }> {
   requireLiveApi("Payroll run creation");
   return apiRequest<{ id: string; number?: string }>("/api/payroll/pay-runs", {
@@ -233,15 +346,29 @@ export async function fetchPayslipsApi(payRunId?: string): Promise<Payslip[]> {
   }));
 }
 
-export async function fetchPayrollStatutoriesApi(): Promise<StatutoryConfig[]> {
+export async function fetchPayrollStatutoriesApi(country?: "KE" | "UG"): Promise<StatutoryConfig[]> {
   requireLiveApi("Payroll statutories");
-  const data = await apiRequest<{ items: StatutoryConfig[] }>("/api/payroll/statutories");
-  return data.items ?? [];
+  const params = country ? { country } : undefined;
+  const data = await apiRequest<{ items?: StatutoryConfig[] } | Record<string, unknown>>(
+    "/api/payroll/statutories",
+    { params }
+  );
+  // New endpoint returns rich object, not {items:[]}
+  if ("items" in data && Array.isArray(data.items)) return data.items as StatutoryConfig[];
+  return [];
+}
+
+export async function fetchPayrollStatutoriesRawApi(country: "KE" | "UG" = "KE") {
+  requireLiveApi("Payroll statutories reference");
+  return apiRequest<Record<string, unknown>>("/api/payroll/statutories", {
+    params: { country },
+  });
 }
 
 export type PayrollSettings = {
   currency: string;
   payFrequency: "MONTHLY" | "BIWEEKLY" | "WEEKLY";
+  defaultTaxCountry?: "KE" | "UG";
 };
 
 export async function fetchPayrollSettingsApi(): Promise<PayrollSettings> {
@@ -250,6 +377,7 @@ export async function fetchPayrollSettingsApi(): Promise<PayrollSettings> {
   return {
     currency: data.currency ?? "KES",
     payFrequency: (data.payFrequency as PayrollSettings["payFrequency"]) ?? "MONTHLY",
+    defaultTaxCountry: (data.defaultTaxCountry as "KE" | "UG") ?? "KE",
   };
 }
 
@@ -258,9 +386,115 @@ export async function savePayrollSettingsApi(patch: Partial<PayrollSettings>): P
   const body: Record<string, string> = {};
   if (patch.currency != null) body.currency = patch.currency;
   if (patch.payFrequency != null) body.payFrequency = patch.payFrequency;
+  if (patch.defaultTaxCountry != null) body.defaultTaxCountry = patch.defaultTaxCountry;
   const data = await apiRequest<PayrollSettings>("/api/settings/payroll", {
     method: "PATCH",
     body,
   });
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// Leave Management API
+// ---------------------------------------------------------------------------
+
+export async function fetchLeavePoliciesApi(): Promise<LeavePolicy[]> {
+  requireLiveApi("Leave policies");
+  const data = await apiRequest<{ items: LeavePolicy[] }>("/api/payroll/leave/policies");
+  return data.items ?? [];
+}
+
+export async function createLeavePolicyApi(payload: Omit<LeavePolicy, "id">): Promise<{ id: string }> {
+  requireLiveApi("Create leave policy");
+  return apiRequest<{ id: string }>("/api/payroll/leave/policies", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateLeavePolicyApi(id: string, patch: Partial<Omit<LeavePolicy, "id">>): Promise<void> {
+  requireLiveApi("Update leave policy");
+  await apiRequest(`/api/payroll/leave/policies/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+
+export async function fetchLeaveBalancesApi(params?: { employeeId?: string; year?: number }): Promise<LeaveBalance[]> {
+  requireLiveApi("Leave balances");
+  const data = await apiRequest<{ items: LeaveBalance[] }>("/api/payroll/leave/balances", {
+    params: params as Record<string, string | number | undefined>,
+  });
+  return data.items ?? [];
+}
+
+export async function fetchLeaveRequestsApi(params?: {
+  employeeId?: string;
+  status?: string;
+  type?: string;
+  year?: number;
+  month?: number;
+}): Promise<LeaveRequest[]> {
+  requireLiveApi("Leave requests");
+  const data = await apiRequest<{ items: LeaveRequest[] }>("/api/payroll/leave/requests", {
+    params: params as Record<string, string | number | undefined>,
+  });
+  return data.items ?? [];
+}
+
+export async function createLeaveRequestApi(payload: {
+  employeeId: string;
+  type: LeaveType;
+  extraLabel?: string;
+  startDate: string;
+  endDate: string;
+  days?: number;
+  notes?: string;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create leave request");
+  return apiRequest<{ id: string }>("/api/payroll/leave/requests", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function approveLeaveRequestApi(id: string): Promise<void> {
+  requireLiveApi("Approve leave request");
+  await apiRequest(`/api/payroll/leave/requests/${encodeURIComponent(id)}/approve`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function rejectLeaveRequestApi(id: string, reason?: string): Promise<void> {
+  requireLiveApi("Reject leave request");
+  await apiRequest(`/api/payroll/leave/requests/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+export async function cancelLeaveRequestApi(id: string): Promise<void> {
+  requireLiveApi("Cancel leave request");
+  await apiRequest(`/api/payroll/leave/requests/${encodeURIComponent(id)}/cancel`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function fetchLeaveCalendarApi(params: { year: number; month?: number }) {
+  requireLiveApi("Leave calendar");
+  return apiRequest<{
+    events: {
+      id: string;
+      employeeId: string;
+      employeeName: string;
+      type: LeaveType;
+      extraLabel?: string;
+      startDate: string;
+      endDate: string;
+      days: number;
+      isPaid: boolean;
+    }[];
+  }>("/api/payroll/leave/calendar", { params: params as Record<string, string | number | undefined> });
 }
