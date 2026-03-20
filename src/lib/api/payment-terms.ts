@@ -15,3 +15,28 @@ export async function fetchPaymentTermsApi(): Promise<PaymentTermRow[]> {
   const payload = await apiRequest<{ items: PaymentTermRow[] }>("/api/settings/payment-terms");
   return payload.items ?? [];
 }
+
+export async function createPaymentTermApi(input: {
+  code: string;
+  name: string;
+  method: PaymentTermRow["method"];
+  days?: number;
+  graceDays?: number;
+}): Promise<PaymentTermRow> {
+  requireLiveApi("Payment terms");
+  return apiRequest<PaymentTermRow>("/api/settings/payment-terms", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function updatePaymentTermApi(
+  id: string,
+  patch: Partial<{ code: string; name: string; method: PaymentTermRow["method"]; days: number; graceDays: number; isActive: boolean }>
+): Promise<PaymentTermRow> {
+  requireLiveApi("Payment terms");
+  return apiRequest<PaymentTermRow>(`/api/settings/payment-terms/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}

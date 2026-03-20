@@ -24,6 +24,8 @@ import { listProducts, fetchProductsForDocumentLines } from "@/lib/data/products
 import type { ProductRow } from "@/lib/types/masters";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
+import { fetchProductVariantsApi } from "@/lib/api/product-master";
+import type { ProductVariant } from "@/lib/products/types";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -39,6 +41,8 @@ export interface DocumentLine {
   price: number;
   priceReason: string;
   amount: number;
+  variantId?: string;
+  variantSku?: string;
 }
 
 interface DocumentLineEditorProps {
@@ -102,6 +106,15 @@ export function DocumentLineEditor({
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
   }, []);
   const priceListIdResolved = useCostPricing ? "" : (priceListId || priceLists[0]?.id || "pl-retail");
+
+  // Variants per product — loaded lazily when a product with variants is selected
+  const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
+  const ensureVariantsLoaded = React.useCallback((productId: string) => {
+    if (variantsByProductId[productId] !== undefined) return;
+    fetchProductVariantsApi(productId)
+      .then((items) => setVariantsByProductId((prev) => ({ ...prev, [productId]: items })))
+      .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })));
+  }, [variantsByProductId]);
 
   const addRow = () => {
     const p = products[0];
@@ -177,7 +190,36 @@ export function DocumentLineEditor({
       price,
       priceReason: reason,
       amount: qty * price,
+      variantId: undefined,
+      variantSku: undefined,
     });
+    ensureVariantsLoaded(productId);
+  };
+
+  const setVariant = (lineId: string, variantId: string) => {
+    const line = lines.find((l) => l.id === lineId);
+    if (!line) return;
+    const variants = variantsByProductId[line.productId] ?? [];
+    if (variantId === "_none_") {
+      updateLine(lineId, { variantId: undefined, variantSku: undefined });
+      return;
+    }
+    const variant = variants.find((v) => v.id === variantId);
+    if (!variant) return;
+    const patch: Partial<DocumentLine> = { variantId: variant.id, variantSku: variant.sku };
+    // Override UOM with variant's packagingUomCode if available
+    if (variant.packagingUomCode) {
+      const uom = variant.packagingUomCode;
+      patch.uom = uom;
+      patch.baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
+      if (!useCostPricing) {
+        const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, line.qty, uom, pricingByProductId?.[line.productId]);
+        patch.price = price;
+        patch.priceReason = reason;
+        patch.amount = line.qty * price;
+      }
+    }
+    updateLine(lineId, patch);
   };
 
   const setUom = (lineId: string, uom: string) => {
@@ -216,6 +258,12 @@ export function DocumentLineEditor({
 
   const total = lines.reduce((s, l) => s + l.amount, 0);
 
+  // Eagerly load variants for all products already on existing lines
+  React.useEffect(() => {
+    lines.forEach((l) => ensureVariantsLoaded(l.productId));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const lineItemsLabel = useCostPricing
     ? "Line items · Cost / unit (enter or from supplier)"
     : `Line items · Price list: ${priceLists.find((pl) => pl.id === priceListIdResolved)?.name ?? priceListIdResolved}`;
@@ -249,6 +297,7 @@ export function DocumentLineEditor({
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
+                  <TableHead>Variant</TableHead>
                   <TableHead>UOM</TableHead>
                   <TableHead className="w-24">Qty</TableHead>
                   <TableHead className="w-24">Base qty</TableHead>
@@ -259,7 +308,9 @@ export function DocumentLineEditor({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lines.map((l) => (
+                {lines.map((l) => {
+                  const lineVariants = variantsByProductId[l.productId];
+                  return (
                   <TableRow key={l.id}>
                     <TableCell>
                       <Select value={l.productId} onValueChange={(v) => setProduct(l.id, v)}>
@@ -272,6 +323,23 @@ export function DocumentLineEditor({
                           ))}
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell>
+                      {lineVariants && lineVariants.length > 0 ? (
+                        <Select value={l.variantId ?? "_none_"} onValueChange={(v) => setVariant(l.id, v)}>
+                          <SelectTrigger className="w-32">
+                            <SelectValue placeholder="No variant" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none_">—</SelectItem>
+                            {lineVariants.filter((v) => v.status === "ACTIVE").map((v) => (
+                              <SelectItem key={v.id} value={v.id}>{v.sku}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <UomSelect
@@ -315,7 +383,8 @@ export function DocumentLineEditor({
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

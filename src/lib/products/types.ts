@@ -68,10 +68,14 @@ export interface ProductVariant {
   attributes: VariantAttribute[];
   /** Convenience: size (e.g. 1kg, 5kg, 25kg). */
   size?: string;
-  /** Convenience: packaging type (bag, carton, etc.). */
+  /** Convenience: packaging type (bag, carton, etc.). References a ProductPackaging.uom code. */
   packagingType?: string;
+  /** The UOM code this variant is sold/purchased in (links to ProductPackaging). */
+  packagingUomCode?: string;
   /** Convenience: grade/spec. */
   grade?: string;
+  /** Optional barcode for this variant (auto-inherited from packaging UOM barcode). */
+  barcode?: string;
   status: "ACTIVE" | "INACTIVE";
 }
 

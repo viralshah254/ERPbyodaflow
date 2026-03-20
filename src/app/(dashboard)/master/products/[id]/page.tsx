@@ -1087,6 +1087,7 @@ export default function ProductDetailPage() {
                       <TableHead>SKU</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Attributes</TableHead>
+                      <TableHead>Barcode</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="w-32" />
                     </TableRow>
@@ -1094,7 +1095,7 @@ export default function ProductDetailPage() {
                   <TableBody>
                     {variants.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           No variants yet. {sortedDefs.length > 0 ? 'Click "Generate variants" to create combinations.' : 'Add option types above, then generate variants.'}
                         </TableCell>
                       </TableRow>
@@ -1119,6 +1120,7 @@ export default function ProductDetailPage() {
                               }
                             </div>
                           </TableCell>
+                          <TableCell className="text-muted-foreground font-mono text-xs">{v.barcode ?? "—"}</TableCell>
                           <TableCell>
                             <Badge variant={v.status === "ACTIVE" ? "secondary" : "outline"}>
                               {v.status}
@@ -1192,6 +1194,9 @@ export default function ProductDetailPage() {
           initial={editingVariant}
           attributeDefs={attributeDefs}
           baseSku={product.sku}
+          productName={product.name}
+          packaging={packaging}
+          existingVariants={variants}
           onSave={handleSaveVariant}
           onClose={() => { setVariantSheetOpen(false); setEditingVariant(null); }}
         />
@@ -1496,12 +1501,18 @@ function VariantSheet({
   initial,
   attributeDefs,
   baseSku,
+  productName,
+  packaging,
+  existingVariants,
   onSave,
   onClose,
 }: {
   initial: ProductVariant | null;
   attributeDefs: ProductAttributeDef[];
   baseSku: string;
+  productName: string;
+  packaging: ProductPackaging[];
+  existingVariants: ProductVariant[];
   onSave: (v: Omit<ProductVariant, "id" | "productId">) => void;
   onClose: () => void;
 }) {
@@ -1510,63 +1521,120 @@ function VariantSheet({
   const [size, setSize] = React.useState(initial?.size ?? "");
   const [packagingType, setPackagingType] = React.useState(initial?.packagingType ?? "");
   const [grade, setGrade] = React.useState(initial?.grade ?? "");
+  const [barcode, setBarcode] = React.useState(initial?.barcode ?? "");
   const [status, setStatus] = React.useState<"ACTIVE" | "INACTIVE">(initial?.status ?? "ACTIVE");
+  const [skuEdited, setSkuEdited] = React.useState(!!initial);
 
   const sizeOpts = attributeDefs.find((a) => a.kind === "size")?.options ?? [];
-  const packOpts = attributeDefs.find((a) => a.kind === "packagingType")?.options ?? [];
   const gradeOpts = attributeDefs.find((a) => a.kind === "grade")?.options ?? [];
 
-  // Auto-suggest SKU from size
+  // Merge UOM codes from packaging + attribute def options for packaging type
+  const uomAsPackaging = packaging.map((p) => p.uom);
+  const attrPackOpts = attributeDefs.find((a) => a.kind === "packagingType")?.options ?? [];
+  const packOpts = [...new Set([...uomAsPackaging, ...attrPackOpts])];
+
+  // Other variants for uniqueness checks (excluding current when editing)
+  const otherVariants = existingVariants.filter((v) => !initial || v.id !== initial.id);
+  const otherSkus = otherVariants.map((v) => v.sku);
+
+  // Auto-suggest SKU on mount (new only) and reactive to packagingType / size changes
   React.useEffect(() => {
-    if (!initial && size && !sku) {
+    if (skuEdited) return;
+    const n = existingVariants.length + 1;
+    if (packagingType && size) {
+      setSku(`${baseSku}-${packagingType.replace(/\s+/g, "").toUpperCase().slice(0, 6)}-${size.replace(/\s+/g, "").toUpperCase().slice(0, 6)}`);
+    } else if (packagingType) {
+      setSku(`${baseSku}-${packagingType.replace(/\s+/g, "").toUpperCase().slice(0, 8)}`);
+    } else if (size) {
       setSku(`${baseSku}-${size.replace(/\s+/g, "").toUpperCase().slice(0, 8)}`);
+    } else {
+      setSku(`${baseSku}-V${n}`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size]);
+  }, [packagingType, size]);
+
+  // Auto-fill barcode from packaging UOM when packagingType is selected
+  React.useEffect(() => {
+    if (initial?.barcode) return; // don't override when editing
+    const matchedPack = packaging.find((p) => p.uom === packagingType);
+    if (matchedPack?.barcode) setBarcode(matchedPack.barcode);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packagingType]);
+
+  // Auto-populate display name when name is empty and attributes are set
+  React.useEffect(() => {
+    if (name || initial?.name) return;
+    const parts = [productName, size, packagingType].filter(Boolean);
+    if (parts.length > 1) setName(parts.join(" "));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size, packagingType]);
+
+  // Duplicate SKU check (case-insensitive, exclude current when editing)
+  const skuConflict = !initial && sku.trim().length > 0
+    && otherSkus.some((s) => s.toLowerCase() === sku.trim().toLowerCase());
+
+  // Combination uniqueness fingerprint
+  const fingerprint = [size, packagingType, grade].filter(Boolean).join("|");
+  const comboDuplicate = fingerprint.length > 0 && otherVariants.some((v) => {
+    const fp = [v.size ?? "", v.packagingType ?? "", v.grade ?? ""].filter(Boolean).join("|");
+    return fp === fingerprint;
+  });
 
   const handleSave = () => {
     const attrs: VariantAttribute[] = [];
     if (size) attrs.push({ key: "size", value: size });
     if (packagingType) attrs.push({ key: "packagingType", value: packagingType });
     if (grade) attrs.push({ key: "grade", value: grade });
+    const packUom = packaging.find((p) => p.uom === packagingType);
     onSave({
       sku: sku.trim(),
       name: name.trim() || undefined,
       attributes: attrs,
       size: size || undefined,
       packagingType: packagingType || undefined,
+      packagingUomCode: packUom?.uom ?? (packagingType || undefined),
       grade: grade || undefined,
+      barcode: barcode.trim() || undefined,
       status,
     });
   };
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent>
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{initial ? "Edit variant" : "Add variant"}</SheetTitle>
-          <SheetDescription>SKU, size, packaging, grade.</SheetDescription>
+          <SheetDescription>SKU, size, packaging type, grade.</SheetDescription>
         </SheetHeader>
         <div className="space-y-4 py-6">
+          {/* SKU */}
           <div className="space-y-2">
             <Label>SKU</Label>
             <Input
               value={sku}
-              onChange={(e) => setSku(e.target.value)}
-              placeholder={`${baseSku}-1KG`}
+              onChange={(e) => { setSku(e.target.value); setSkuEdited(true); }}
+              placeholder={`${baseSku}-V1`}
               disabled={!!initial}
+              className={skuConflict ? "border-destructive" : ""}
             />
             {!!initial && <p className="text-xs text-muted-foreground">SKU cannot be changed after creation.</p>}
+            {skuConflict && (
+              <p className="text-xs text-destructive">This SKU already exists on another variant.</p>
+            )}
           </div>
+
+          {/* Name */}
           <div className="space-y-2">
             <Label>Name (optional)</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Display name" />
           </div>
+
+          {/* Size */}
           <div className="space-y-2">
             <Label>Size</Label>
             {sizeOpts.length > 0 ? (
               <Select value={size || "_"} onValueChange={(v) => setSize(v === "_" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select size" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_">—</SelectItem>
                   {sizeOpts.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
@@ -1576,25 +1644,42 @@ function VariantSheet({
               <Input value={size} onChange={(e) => setSize(e.target.value)} placeholder="e.g. 1kg" />
             )}
           </div>
+
+          {/* Packaging type — always a dropdown, driven by UOM conversions */}
           <div className="space-y-2">
             <Label>Packaging type</Label>
             {packOpts.length > 0 ? (
               <Select value={packagingType || "_"} onValueChange={(v) => setPackagingType(v === "_" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select packaging" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_">—</SelectItem>
                   {packOpts.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
                 </SelectContent>
               </Select>
             ) : (
-              <Input value={packagingType} onChange={(e) => setPackagingType(e.target.value)} placeholder="e.g. bag, carton" />
+              <div className="space-y-1">
+                <p className="text-xs text-amber-500 flex items-center gap-1">
+                  <Icons.AlertTriangle className="h-3 w-3 shrink-0" />
+                  No packaging configured.{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={onClose}
+                  >
+                    Add UOM conversions first →
+                  </button>
+                </p>
+                <Input value={packagingType} onChange={(e) => setPackagingType(e.target.value)} placeholder="e.g. bag, carton" />
+              </div>
             )}
           </div>
+
+          {/* Grade */}
           <div className="space-y-2">
             <Label>Grade</Label>
             {gradeOpts.length > 0 ? (
               <Select value={grade || "_"} onValueChange={(v) => setGrade(v === "_" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_">—</SelectItem>
                   {gradeOpts.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
@@ -1604,6 +1689,20 @@ function VariantSheet({
               <Input value={grade} onChange={(e) => setGrade(e.target.value)} placeholder="e.g. A, B, Premium" />
             )}
           </div>
+
+          {/* Barcode */}
+          <div className="space-y-2">
+            <Label>Barcode (optional)</Label>
+            <Input
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              placeholder="Auto-filled from packaging UOM"
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">Auto-filled when packaging type matches a configured UOM barcode.</p>
+          </div>
+
+          {/* Status */}
           <div className="space-y-2">
             <Label>Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as "ACTIVE" | "INACTIVE")}>
@@ -1614,10 +1713,18 @@ function VariantSheet({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Combination uniqueness warning (non-blocking) */}
+          {comboDuplicate && (
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 flex items-start gap-2">
+              <Icons.AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              Another variant has the same size + packaging type + grade combination. Consider adjusting to keep combinations distinct.
+            </div>
+          )}
         </div>
         <SheetFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={!sku.trim()}>Save</Button>
+          <Button onClick={handleSave} disabled={!sku.trim() || skuConflict}>Save</Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

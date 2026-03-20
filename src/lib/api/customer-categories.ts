@@ -26,3 +26,14 @@ export async function createCustomerCategoryApi(input: {
   });
 }
 
+export async function updateCustomerCategoryApi(
+  id: string,
+  patch: Partial<{ code: string; name: string; description: string; isActive: boolean }>
+): Promise<CustomerCategoryRow> {
+  requireLiveApi("Customer categories");
+  return apiRequest<CustomerCategoryRow>(`/api/settings/customer-categories/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+

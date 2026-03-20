@@ -4,6 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 
 export type AsyncSearchableSelectOption = {
@@ -47,6 +48,12 @@ export function AsyncSearchableSelect({
   recentStorageKey,
   recentItemsLabel = "Recent",
 }: AsyncSearchableSelectProps) {
+  const orgId = useAuthStore((s) => s.org?.id);
+  // Scope recent items per org so selections from one org never bleed into another
+  const scopedRecentKey = recentStorageKey && orgId
+    ? `${recentStorageKey}:${orgId}`
+    : recentStorageKey;
+
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [options, setOptions] = React.useState<AsyncSearchableSelectOption[]>([]);
@@ -59,12 +66,12 @@ export function AsyncSearchableSelect({
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
 
   React.useEffect(() => {
-    if (!recentStorageKey) {
+    if (!scopedRecentKey) {
       setRecentOptions([]);
       return;
     }
     try {
-      const raw = window.localStorage.getItem(recentStorageKey);
+      const raw = window.localStorage.getItem(scopedRecentKey);
       if (!raw) {
         setRecentOptions([]);
         return;
@@ -74,7 +81,7 @@ export function AsyncSearchableSelect({
     } catch {
       setRecentOptions([]);
     }
-  }, [recentStorageKey]);
+  }, [scopedRecentKey]);
 
   const effectiveSelected = React.useMemo(() => {
     if (selectedOption && selectedOption.id === value) return selectedOption;
@@ -95,16 +102,16 @@ export function AsyncSearchableSelect({
 
   const persistRecentOption = React.useCallback(
     (option: AsyncSearchableSelectOption | null) => {
-      if (!recentStorageKey || !option) return;
+      if (!scopedRecentKey || !option) return;
       const nextOptions = [option, ...recentOptions.filter((item) => item.id !== option.id)].slice(0, 6);
       setRecentOptions(nextOptions);
       try {
-        window.localStorage.setItem(recentStorageKey, JSON.stringify(nextOptions));
+        window.localStorage.setItem(scopedRecentKey, JSON.stringify(nextOptions));
       } catch {
         /* ignore */
       }
     },
-    [recentOptions, recentStorageKey]
+    [recentOptions, scopedRecentKey]
   );
 
   React.useEffect(() => {

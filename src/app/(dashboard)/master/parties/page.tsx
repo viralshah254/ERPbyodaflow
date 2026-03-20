@@ -19,11 +19,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Separator } from "@/components/ui/separator";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { PartyRow, CustomerType, SupplierType } from "@/lib/types/masters";
-import { createPartyApi, fetchPartiesApi, updatePartyApi } from "@/lib/api/parties";
+import { createPartyApi, fetchPartiesApi, updatePartyApi, fetchPartyByIdApi } from "@/lib/api/parties";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
+import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
@@ -44,6 +46,7 @@ export default function MasterPartiesPage() {
   const [supplierType, setSupplierType] = React.useState<SupplierType | "">("");
   const [parties, setParties] = React.useState<PartyRow[]>([]);
   const [customerCategories, setCustomerCategories] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [formName, setFormName] = React.useState("");
@@ -53,6 +56,12 @@ export default function MasterPartiesPage() {
   const [formCustomerType, setFormCustomerType] = React.useState<CustomerType>("RETAILER");
   const [formSupplierType, setFormSupplierType] = React.useState<SupplierType>("RAW_MATERIAL");
   const [formCustomerCategoryId, setFormCustomerCategoryId] = React.useState("");
+  const [formPaymentTermsId, setFormPaymentTermsId] = React.useState("");
+  const [formCreditControlMode, setFormCreditControlMode] = React.useState<"AMOUNT" | "DAYS" | "HYBRID" | "">("");
+  const [formCreditLimitAmount, setFormCreditLimitAmount] = React.useState("");
+  const [formMaxOutstandingAgeDays, setFormMaxOutstandingAgeDays] = React.useState("");
+  const [formPerInvoiceDaysToPayCap, setFormPerInvoiceDaysToPayCap] = React.useState("");
+  const [formCreditWarningThresholdPct, setFormCreditWarningThresholdPct] = React.useState("");
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -72,8 +81,12 @@ export default function MasterPartiesPage() {
           status: "ACTIVE",
         })
       );
-      const categories = await fetchCustomerCategoriesApi();
+      const [categories, terms] = await Promise.all([
+        fetchCustomerCategoriesApi(),
+        fetchPaymentTermsApi(),
+      ]);
       setCustomerCategories(categories.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
+      setPaymentTerms(terms.filter((t) => t.isActive));
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
@@ -165,6 +178,15 @@ export default function MasterPartiesPage() {
       ? franchiseeLabel
       : supplierLabel;
 
+  const resetCreditFields = () => {
+    setFormPaymentTermsId("");
+    setFormCreditControlMode("");
+    setFormCreditLimitAmount("");
+    setFormMaxOutstandingAgeDays("");
+    setFormPerInvoiceDaysToPayCap("");
+    setFormCreditWarningThresholdPct("");
+  };
+
   const openCreateDrawer = () => {
     setEditingId(null);
     setFormName("");
@@ -174,10 +196,11 @@ export default function MasterPartiesPage() {
     setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
     setFormSupplierType(supplierType || "RAW_MATERIAL");
     setFormCustomerCategoryId("");
+    resetCreditFields();
     setDrawerOpen(true);
   };
 
-  const openEditDrawer = (row: PartyRow) => {
+  const openEditDrawer = async (row: PartyRow) => {
     setEditingId(row.id);
     setFormName(row.name);
     setFormCode(row.code ?? "");
@@ -186,7 +209,22 @@ export default function MasterPartiesPage() {
     setFormCustomerType(row.customerType ?? "RETAILER");
     setFormSupplierType(row.supplierType ?? "RAW_MATERIAL");
     setFormCustomerCategoryId(row.customerCategoryId ?? "");
+    resetCreditFields();
     setDrawerOpen(true);
+    // Load full party details for credit fields (non-blocking — pre-fills after drawer opens)
+    try {
+      const detail = await fetchPartyByIdApi(row.id);
+      if (detail) {
+        setFormPaymentTermsId(detail.paymentTermsId ?? "");
+        setFormCreditControlMode(detail.creditControlMode ?? "");
+        setFormCreditLimitAmount(detail.creditLimitAmount != null ? String(detail.creditLimitAmount) : "");
+        setFormMaxOutstandingAgeDays(detail.maxOutstandingInvoiceAgeDays != null ? String(detail.maxOutstandingInvoiceAgeDays) : "");
+        setFormPerInvoiceDaysToPayCap(detail.perInvoiceDaysToPayCap != null ? String(detail.perInvoiceDaysToPayCap) : "");
+        setFormCreditWarningThresholdPct(detail.creditWarningThresholdPct != null ? String(detail.creditWarningThresholdPct) : "");
+      }
+    } catch {
+      // Non-critical — drawer is already open with basic fields
+    }
   };
 
   const handleSave = async () => {
@@ -202,15 +240,26 @@ export default function MasterPartiesPage() {
           : tab === "franchisees"
             ? (["customer", "franchisee"] as const)
             : (["customer"] as const);
+      const isCustomerTab = tab !== "suppliers";
+      const creditLimitAmountNum = formCreditLimitAmount ? parseFloat(formCreditLimitAmount) : undefined;
+      const maxAgeDaysNum = formMaxOutstandingAgeDays ? parseInt(formMaxOutstandingAgeDays, 10) : undefined;
+      const perInvoiceCapNum = formPerInvoiceDaysToPayCap ? parseInt(formPerInvoiceDaysToPayCap, 10) : undefined;
+      const warningPctNum = formCreditWarningThresholdPct ? parseFloat(formCreditWarningThresholdPct) : undefined;
       const payload = {
         name: formName.trim(),
         code: formCode.trim() || undefined,
         email: formEmail.trim() || undefined,
         phone: formPhone.trim() || undefined,
         roles: [...roles],
-        customerType: tab === "suppliers" ? undefined : formCustomerType,
-        customerCategoryId: tab === "suppliers" ? undefined : formCustomerCategoryId || undefined,
+        customerType: isCustomerTab ? formCustomerType : undefined,
+        customerCategoryId: isCustomerTab ? formCustomerCategoryId || undefined : undefined,
         supplierType: tab === "suppliers" ? formSupplierType : undefined,
+        paymentTermsId: formPaymentTermsId || undefined,
+        creditControlMode: isCustomerTab && formCreditControlMode ? formCreditControlMode : undefined,
+        creditLimitAmount: isCustomerTab && creditLimitAmountNum != null && !isNaN(creditLimitAmountNum) ? creditLimitAmountNum : undefined,
+        maxOutstandingInvoiceAgeDays: isCustomerTab && maxAgeDaysNum != null && !isNaN(maxAgeDaysNum) ? maxAgeDaysNum : undefined,
+        perInvoiceDaysToPayCap: isCustomerTab && perInvoiceCapNum != null && !isNaN(perInvoiceCapNum) ? perInvoiceCapNum : undefined,
+        creditWarningThresholdPct: isCustomerTab && warningPctNum != null && !isNaN(warningPctNum) ? warningPctNum : undefined,
         status: "ACTIVE" as const,
       };
       if (editingId) {
@@ -504,6 +553,102 @@ export default function MasterPartiesPage() {
                 </SelectContent>
               </Select>
             </div>
+          )}
+
+          {tab !== "suppliers" && (
+            <>
+              <Separator />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Credit &amp; Terms</p>
+                <p className="text-xs text-muted-foreground">Controls credit limits and payment terms applied to sales orders and invoices.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Payment terms</Label>
+                <Select
+                  value={formPaymentTermsId || "__none__"}
+                  onValueChange={(v) => setFormPaymentTermsId(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment terms" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {paymentTerms.map((term) => (
+                      <SelectItem key={term.id} value={term.id}>
+                        {term.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Credit control mode</Label>
+                <Select
+                  value={formCreditControlMode || "__none__"}
+                  onValueChange={(v) => setFormCreditControlMode(v === "__none__" ? "" : v as "AMOUNT" | "DAYS" | "HYBRID")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No credit control" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No credit control</SelectItem>
+                    <SelectItem value="AMOUNT">Amount limit</SelectItem>
+                    <SelectItem value="DAYS">Outstanding age limit (days)</SelectItem>
+                    <SelectItem value="HYBRID">Hybrid (amount + days)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(formCreditControlMode === "AMOUNT" || formCreditControlMode === "HYBRID") && (
+                <div className="space-y-2">
+                  <Label>Credit amount limit</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    placeholder="e.g. 500000"
+                    value={formCreditLimitAmount}
+                    onChange={(e) => setFormCreditLimitAmount(e.target.value)}
+                  />
+                </div>
+              )}
+              {(formCreditControlMode === "DAYS" || formCreditControlMode === "HYBRID") && (
+                <div className="space-y-2">
+                  <Label>Max outstanding invoice age (days)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 60"
+                    value={formMaxOutstandingAgeDays}
+                    onChange={(e) => setFormMaxOutstandingAgeDays(e.target.value)}
+                  />
+                </div>
+              )}
+              {formCreditControlMode && formCreditControlMode !== "__none__" && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Per-invoice days-to-pay cap</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="e.g. 30"
+                      value={formPerInvoiceDaysToPayCap}
+                      onChange={(e) => setFormPerInvoiceDaysToPayCap(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Warning threshold (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="e.g. 80"
+                      value={formCreditWarningThresholdPct}
+                      onChange={(e) => setFormCreditWarningThresholdPct(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </EntityDrawer>

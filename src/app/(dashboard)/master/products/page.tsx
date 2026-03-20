@@ -524,7 +524,7 @@ export default function MasterProductsPage() {
                   })}
                 </div>
               </div>
-              {/* Category */}
+              {/* Category — Add category available to any authenticated user (no role-specific permission) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label>Category (optional)</Label>

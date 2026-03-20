@@ -357,6 +357,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         { key: "settings-financial-coa", label: "Chart of Accounts", href: "/settings/financial/chart-of-accounts", icon: "ListTree", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
         { key: "settings-financial-taxes", label: "Taxes", href: "/settings/financial/taxes", icon: "Receipt", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
         { key: "settings-financial-fiscal", label: "Fiscal years", href: "/settings/financial/fiscal-years", icon: "Calendar", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
+        { key: "settings-payment-terms", label: "Payment terms", href: "/settings/payment-terms", icon: "CalendarClock", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
       ]},
       { key: "settings-inventory", label: "Inventory", href: "/settings/inventory/costing", icon: "Package", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"], children: [
         { key: "settings-inventory-costing", label: "Costing", href: "/settings/inventory/costing", icon: "Calculator", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"] },
@@ -364,6 +365,9 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       ]},
       { key: "settings-products", label: "Products", href: "/settings/products/pricing-rules", icon: "Package", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"], children: [
         { key: "settings-products-pricing-rules", label: "Pricing rules", href: "/settings/products/pricing-rules", icon: "Calculator", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"] },
+      ]},
+      { key: "settings-sales", label: "Sales & Customers", href: "/settings/customer-categories", icon: "Users", moduleKey: "settings", requiresPermissions: ["settings.org.read"], children: [
+        { key: "settings-customer-categories", label: "Customer categories", href: "/settings/customer-categories", icon: "Tag", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
       ]},
       { key: "settings-tax", label: "Tax (Kenya)", href: "/settings/tax/kenya", icon: "Receipt", moduleKey: "settings", requiresPermissions: ["settings.financial.read"], children: [
         { key: "settings-tax-kenya", label: "Kenya profile", href: "/settings/tax/kenya", icon: "Globe", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
