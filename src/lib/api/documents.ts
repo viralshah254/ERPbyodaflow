@@ -77,6 +77,25 @@ type BackendDocumentDetail = {
   comments?: BackendComment[];
   approvalHistory?: BackendTimelineEntry[];
   auditHistory?: BackendTimelineEntry[];
+  emailedAt?: string;
+  emailedTo?: string;
+  notes?: string;
+  dueDate?: string;
+  paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID";
+  paidAmount?: number;
+  openAmount?: number;
+  isOverdue?: boolean;
+  documentChain?: ChainNode[];
+};
+
+type ChainNode = {
+  id: string;
+  number: string;
+  typeKey: string;
+  status: string;
+  total?: number;
+  date?: string;
+  children: ChainNode[];
 };
 
 type BackendDocumentListItem = {
@@ -208,6 +227,15 @@ function mapDocumentDetail(
     })),
     approvalHistory: mapTimeline(payload.approvalHistory),
     auditHistory: mapTimeline(payload.auditHistory),
+    emailedAt: payload.emailedAt,
+    emailedTo: payload.emailedTo,
+    notes: payload.notes,
+    dueDate: payload.dueDate,
+    paymentStatus: payload.paymentStatus,
+    paidAmount: payload.paidAmount,
+    openAmount: payload.openAmount,
+    isOverdue: payload.isOverdue,
+    documentChain: payload.documentChain,
   };
 }
 

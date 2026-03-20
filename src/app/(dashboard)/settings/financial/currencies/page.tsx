@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { SearchableSelectOption } from "@/components/ui/searchable-select";
+import { Switch } from "@/components/ui/switch";
 import { CURRENCY_LIST, getCurrencyByCode } from "@/lib/data/currencies";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import type { CurrencyCode } from "@/lib/org/financial-settings";
@@ -235,6 +236,39 @@ export default function CurrenciesSettingsPage() {
               onToggle={handleToggle}
               onAddCurrency={handleAddCurrency}
             />
+          </CardContent>
+        </Card>
+
+        {/* Tax pricing preference */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Tax pricing</CardTitle>
+            <CardDescription>
+              Controls whether prices entered on document lines include tax or not.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Prices include tax (tax-inclusive)</p>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, unit prices on sales and purchase lines already include VAT.
+                  Tax is back-calculated from the price. When disabled (default), tax is
+                  added on top of the unit price.
+                </p>
+              </div>
+              <Switch
+                checked={settings.pricesAreTaxInclusive ?? false}
+                onCheckedChange={async (checked) => {
+                  try {
+                    await update({ pricesAreTaxInclusive: checked });
+                    toast.success(checked ? "Tax-inclusive pricing enabled." : "Tax-exclusive pricing enabled.");
+                  } catch (err) {
+                    toast.error((err as Error).message);
+                  }
+                }}
+              />
+            </div>
           </CardContent>
         </Card>
       </div>

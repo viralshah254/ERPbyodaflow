@@ -41,6 +41,7 @@ export interface DocumentLine {
   price: number;
   priceReason: string;
   amount: number;
+  taxCodeId?: string;
   variantId?: string;
   variantSku?: string;
 }
@@ -60,6 +61,8 @@ interface DocumentLineEditorProps {
   pricingByProductId?: Record<string, ProductPrice[]>;
   /** Filter products: purchasable (PO), sellable (SO), or all. */
   productFilter?: "purchasable" | "sellable" | "all";
+  /** Available tax codes for the tax column select. */
+  taxCodes?: Array<{ id: string; code: string; name: string; rate: number }>;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -74,6 +77,7 @@ export function DocumentLineEditor({
   packagingByProductId,
   pricingByProductId,
   productFilter,
+  taxCodes = [],
 }: DocumentLineEditorProps) {
   const [filteredProducts, setFilteredProducts] = React.useState<ProductRow[] | null>(null);
   const cachedProducts = React.useMemo(() => listProducts(), []);
@@ -141,6 +145,7 @@ export function DocumentLineEditor({
         price,
         priceReason: reason,
         amount: price,
+        taxCodeId: p.defaultTaxCodeId ?? undefined,
       },
     ]);
   };
@@ -190,6 +195,7 @@ export function DocumentLineEditor({
       price,
       priceReason: reason,
       amount: qty * price,
+      taxCodeId: p.defaultTaxCodeId ?? undefined,
       variantId: undefined,
       variantSku: undefined,
     });
@@ -303,6 +309,7 @@ export function DocumentLineEditor({
                   <TableHead className="w-24">Base qty</TableHead>
                   <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
                   <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
+                  {taxCodes.length > 0 && <TableHead className="w-36">Tax</TableHead>}
                   <TableHead className="w-28">Amount</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
@@ -376,6 +383,26 @@ export function DocumentLineEditor({
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{l.priceReason}</TableCell>
+                    {taxCodes.length > 0 && (
+                      <TableCell>
+                        <Select
+                          value={l.taxCodeId ?? "__none__"}
+                          onValueChange={(v) => updateLine(l.id, { taxCodeId: v === "__none__" ? undefined : v })}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue placeholder="None" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {taxCodes.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>
+                                {t.code} ({t.rate}%)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{formatMoney(l.amount, currency)}</TableCell>
                     <TableCell>
                       <Button type="button" variant="ghost" size="sm" onClick={() => removeLine(l.id)}>

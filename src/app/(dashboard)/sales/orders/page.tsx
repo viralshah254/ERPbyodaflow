@@ -22,8 +22,15 @@ import {
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
-import { bulkDocumentActionApi } from "@/lib/api/documents";
+import { bulkDocumentActionApi, documentActionApi, convertDocumentApi } from "@/lib/api/documents";
 import * as Icons from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { formatMoney } from "@/lib/money";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -46,6 +53,9 @@ export default function SalesOrdersPage() {
   );
 
   const [allRows, setAllRows] = React.useState<SalesDocRow[]>([]);
+  const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
+  const [convertConfirm, setConvertConfirm] = React.useState<{ id: string; number: string } | null>(null);
+  const [converting, setConverting] = React.useState(false);
 
   const refreshRows = React.useCallback(async () => {
     const items = await fetchSalesDocumentsApi("sales-order");
@@ -95,15 +105,61 @@ export default function SalesOrdersPage() {
         id: "total",
         header: "Total",
         accessor: (r: SalesDocRow) =>
-          r.total != null ? `KES ${r.total.toLocaleString()}` : "—",
+          r.total != null ? formatMoney(r.total, r.currency ?? "KES") : "—",
       },
       {
         id: "status",
         header: "Status",
         accessor: (r: SalesDocRow) => <StatusBadge status={r.status} />,
       },
+      {
+        id: "actions",
+        header: "",
+        accessor: (r: SalesDocRow) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                <Icons.MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuItem asChild>
+                <Link href={`/docs/sales-order/${r.id}`}>
+                  <Icons.Eye className="mr-2 h-4 w-4" />
+                  View
+                </Link>
+              </DropdownMenuItem>
+              {r.status === "PENDING_APPROVAL" && (
+                <DropdownMenuItem
+                  disabled={actionLoadingId === r.id}
+                  onClick={async () => {
+                    setActionLoadingId(r.id);
+                    try {
+                      await documentActionApi("sales-order", r.id, "approve");
+                      await refreshRows();
+                      toast.success(`${r.number} approved.`);
+                    } catch (e) { toast.error((e as Error).message); }
+                    finally { setActionLoadingId(null); }
+                  }}
+                >
+                  <Icons.Check className="mr-2 h-4 w-4 text-emerald-500" />
+                  Approve
+                </DropdownMenuItem>
+              )}
+              {r.status === "APPROVED" && (
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); setConvertConfirm({ id: r.id, number: r.number }); }}
+                >
+                  <Icons.FileText className="mr-2 h-4 w-4 text-blue-500" />
+                  Convert to Invoice
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+      },
     ],
-    []
+    [actionLoadingId, refreshRows]
   );
 
   const handleClearFilters = () => {
@@ -249,6 +305,46 @@ export default function SalesOrdersPage() {
           onSelectionChange={setSelectedIds}
         />
       </div>
+
+      {/* Quick Convert to Invoice confirmation dialog */}
+      {convertConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
+            <h3 className="text-base font-semibold mb-2">Convert to Invoice</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Convert <strong>{convertConfirm.number}</strong> to an invoice? This will create a new invoice document linked to this sales order.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setConvertConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={converting}
+                onClick={async () => {
+                  setConverting(true);
+                  try {
+                    const created = await convertDocumentApi("sales-order", convertConfirm.id, { targetType: "invoice" });
+                    toast.success(`Invoice ${created.number ?? "created"}.`);
+                    setConvertConfirm(null);
+                    if (created.id) {
+                      router.push(`/docs/invoice/${created.id}`);
+                    } else {
+                      await refreshRows();
+                    }
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setConverting(false);
+                  }
+                }}
+              >
+                <Icons.FileText className="mr-2 h-4 w-4" />
+                {converting ? "Converting..." : "Confirm"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

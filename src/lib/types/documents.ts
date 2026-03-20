@@ -84,4 +84,23 @@ export type DocumentDetailRecord = {
   comments: DocumentCommentRecord[];
   approvalHistory: DocumentTimelineEntry[];
   auditHistory: DocumentTimelineEntry[];
+  emailedAt?: string;
+  emailedTo?: string;
+  notes?: string;
+  dueDate?: string;
+  paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID";
+  paidAmount?: number;
+  openAmount?: number;
+  isOverdue?: boolean;
+  documentChain?: DocumentChainNode[];
+};
+
+export type DocumentChainNode = {
+  id: string;
+  number: string;
+  typeKey: string;
+  status: string;
+  total?: number;
+  date?: string;
+  children: DocumentChainNode[];
 };

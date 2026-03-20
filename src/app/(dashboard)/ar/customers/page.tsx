@@ -86,7 +86,7 @@ function ARCustomersContent() {
       fetchArCustomerSummariesApi(debouncedSearch),
       fetchPaymentTermsApi(),
       fetchCustomerCategoriesApi(),
-      fetchFinancialCurrenciesApi(),
+      fetchFinancialCurrenciesApi().catch(() => [] as Awaited<ReturnType<typeof fetchFinancialCurrenciesApi>>),
     ]);
     const termById = new Map(termsData.map((term) => [term.id, term.name]));
     const categoryById = new Map(categoriesData.map((category) => [category.id, category.name]));

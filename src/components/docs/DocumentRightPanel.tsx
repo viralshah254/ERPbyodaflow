@@ -14,15 +14,15 @@ interface DocumentRightPanelProps {
 
 /** Right panel for document view: validations, next steps, optional Copilot slot. */
 export function DocumentRightPanel({
-  validations = [],
+  validations,
   nextSteps = [],
   actions = [],
   children,
 }: DocumentRightPanelProps) {
   return (
     <RightPanel title="Summary">
-      <DocumentValidations items={validations} />
-      <NextStepsPanel items={nextSteps} actions={actions} />
+      {validations && <DocumentValidations items={validations} />}
+      {(nextSteps.length > 0 || actions.length > 0) && <NextStepsPanel items={nextSteps} actions={actions} />}
       {children}
     </RightPanel>
   );

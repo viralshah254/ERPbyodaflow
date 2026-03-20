@@ -8,6 +8,7 @@ type BackendSalesDoc = {
   party?: string;
   partyId?: string;
   total?: number;
+  currency?: string;
   status?: string;
 };
 
@@ -19,7 +20,9 @@ function mapSalesDoc(item: BackendSalesDoc): SalesDocRow {
     number: item.number,
     date: item.date?.slice(0, 10) ?? "",
     party: item.party ?? item.partyId,
+    partyId: item.partyId,
     total: item.total ?? 0,
+    currency: item.currency,
     status: item.status ?? "DRAFT",
   };
 }

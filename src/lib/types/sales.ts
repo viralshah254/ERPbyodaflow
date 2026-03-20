@@ -3,6 +3,8 @@ export type SalesDocRow = {
   number: string;
   date: string;
   party?: string;
+  partyId?: string;
   total?: number;
+  currency?: string;
   status: string;
 };

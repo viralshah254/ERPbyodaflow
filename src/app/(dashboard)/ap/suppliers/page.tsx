@@ -58,7 +58,7 @@ export default function APSuppliersPage() {
     const [suppliers, termsData, currenciesData] = await Promise.all([
       fetchApSupplierSummariesApi(),
       fetchPaymentTermsApi(),
-      fetchFinancialCurrenciesApi(),
+      fetchFinancialCurrenciesApi().catch(() => [] as Awaited<ReturnType<typeof fetchFinancialCurrenciesApi>>),
     ]);
     const termById = new Map(termsData.map((term) => [term.id, term.name]));
     setTerms(termsData.map((term) => ({ id: term.id, name: term.name })));

@@ -62,6 +62,7 @@ export default function MasterPartiesPage() {
   const [formMaxOutstandingAgeDays, setFormMaxOutstandingAgeDays] = React.useState("");
   const [formPerInvoiceDaysToPayCap, setFormPerInvoiceDaysToPayCap] = React.useState("");
   const [formCreditWarningThresholdPct, setFormCreditWarningThresholdPct] = React.useState("");
+  const [creditFieldsLoading, setCreditFieldsLoading] = React.useState(false);
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -210,20 +211,25 @@ export default function MasterPartiesPage() {
     setFormSupplierType(row.supplierType ?? "RAW_MATERIAL");
     setFormCustomerCategoryId(row.customerCategoryId ?? "");
     resetCreditFields();
+    setCreditFieldsLoading(true);
     setDrawerOpen(true);
-    // Load full party details for credit fields (non-blocking — pre-fills after drawer opens)
+    // Load full party details for credit fields — use a flag to avoid overwriting user edits
+    // The flag is cleared once we've fetched once; after that the user owns the fields.
     try {
       const detail = await fetchPartyByIdApi(row.id);
       if (detail) {
-        setFormPaymentTermsId(detail.paymentTermsId ?? "");
-        setFormCreditControlMode(detail.creditControlMode ?? "");
-        setFormCreditLimitAmount(detail.creditLimitAmount != null ? String(detail.creditLimitAmount) : "");
-        setFormMaxOutstandingAgeDays(detail.maxOutstandingInvoiceAgeDays != null ? String(detail.maxOutstandingInvoiceAgeDays) : "");
-        setFormPerInvoiceDaysToPayCap(detail.perInvoiceDaysToPayCap != null ? String(detail.perInvoiceDaysToPayCap) : "");
-        setFormCreditWarningThresholdPct(detail.creditWarningThresholdPct != null ? String(detail.creditWarningThresholdPct) : "");
+        // Only populate if the user hasn't already started typing (values are still empty/default)
+        setFormPaymentTermsId((prev) => prev || (detail.paymentTermsId ?? ""));
+        setFormCreditControlMode((prev) => prev || (detail.creditControlMode ?? ""));
+        setFormCreditLimitAmount((prev) => prev || (detail.creditLimitAmount != null ? String(detail.creditLimitAmount) : ""));
+        setFormMaxOutstandingAgeDays((prev) => prev || (detail.maxOutstandingInvoiceAgeDays != null ? String(detail.maxOutstandingInvoiceAgeDays) : ""));
+        setFormPerInvoiceDaysToPayCap((prev) => prev || (detail.perInvoiceDaysToPayCap != null ? String(detail.perInvoiceDaysToPayCap) : ""));
+        setFormCreditWarningThresholdPct((prev) => prev || (detail.creditWarningThresholdPct != null ? String(detail.creditWarningThresholdPct) : ""));
       }
     } catch {
       // Non-critical — drawer is already open with basic fields
+    } finally {
+      setCreditFieldsLoading(false);
     }
   };
 
@@ -558,9 +564,17 @@ export default function MasterPartiesPage() {
           {tab !== "suppliers" && (
             <>
               <Separator />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Credit &amp; Terms</p>
-                <p className="text-xs text-muted-foreground">Controls credit limits and payment terms applied to sales orders and invoices.</p>
+              <div className="space-y-1 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Credit &amp; Terms</p>
+                  <p className="text-xs text-muted-foreground">Controls credit limits and payment terms applied to sales orders and invoices.</p>
+                </div>
+                {creditFieldsLoading && editingId && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Icons.Loader2 className="h-3 w-3 animate-spin" />
+                    Loading...
+                  </span>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Payment terms</Label>
@@ -623,7 +637,7 @@ export default function MasterPartiesPage() {
                   />
                 </div>
               )}
-              {formCreditControlMode && formCreditControlMode !== "__none__" && (
+              {!!formCreditControlMode && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Per-invoice days-to-pay cap</Label>

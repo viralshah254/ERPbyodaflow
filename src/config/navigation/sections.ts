@@ -186,6 +186,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "treasury-overview", label: "Treasury Overview", href: "/treasury/overview", icon: "LayoutDashboard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "treasury-payment-runs", label: "Payment runs", href: "/treasury/payment-runs", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "treasury-collections", label: "Collections", href: "/treasury/collections", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
+      { key: "ar-aging", label: "AR Aging Report", href: "/ar/aging", icon: "BarChart2", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
       { key: "treasury-bank-accounts", label: "Bank accounts", href: "/treasury/bank-accounts", icon: "Landmark", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "treasury-cashflow", label: "Cashflow", href: "/treasury/cashflow", icon: "TrendingUp", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },

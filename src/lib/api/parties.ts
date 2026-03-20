@@ -262,6 +262,27 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
   };
 }
 
+export type PartyCreditSummary = {
+  outstandingBalance: number;
+  creditLimitAmount: number | null;
+  creditControlMode: "AMOUNT" | "DAYS" | "HYBRID" | null;
+  utilizationPct: number | null;
+  warningThresholdPct: number;
+  isOverCredit: boolean;
+  isNearLimit: boolean;
+  maxOutstandingInvoiceAgeDays: number | null;
+  paymentTermsId: string | null;
+};
+
+export async function fetchPartyCreditSummaryApi(id: string): Promise<PartyCreditSummary | null> {
+  requireLiveApi("Party credit summary");
+  try {
+    return await apiRequest<PartyCreditSummary>(`/api/parties/${id}/credit-summary`);
+  } catch {
+    return null;
+  }
+}
+
 export async function searchPartyLookupOptionsApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";

@@ -34,9 +34,11 @@ import { DocumentLineEditor, type DocumentLine } from "@/components/docs/Documen
 import { createDocumentApi, previewDocumentPostingApi, type DocumentPostingPreviewLine } from "@/lib/api/documents";
 import {
   fetchPartyByIdApi,
+  fetchPartyCreditSummaryApi,
   searchPartyLookupOptionsApi,
   toPartyLookupOption,
   type PartyDetail,
+  type PartyCreditSummary,
 } from "@/lib/api/parties";
 import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchBranchOptions, fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
@@ -303,6 +305,10 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [supplierDefaultCostLists, setSupplierDefaultCostLists] = React.useState<Record<string, string>>({});
   const [fallbackPriceListId, setFallbackPriceListId] = React.useState<string>("pl-retail");
   const [selectedPartyDetail, setSelectedPartyDetail] = React.useState<PartyDetail | null>(null);
+  const [creditSummary, setCreditSummary] = React.useState<PartyCreditSummary | null>(null);
+  const [creditOverrideOpen, setCreditOverrideOpen] = React.useState(false);
+  const [creditOverrideReason, setCreditOverrideReason] = React.useState("");
+  const [creditOverrideGranted, setCreditOverrideGranted] = React.useState(false);
   const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
   const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
   const [taxCodes, setTaxCodes] = React.useState<Array<{ id: string; code: string; name: string; rate: number }>>([]);
@@ -390,7 +396,8 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   }, [step]);
 
   React.useEffect(() => {
-    if (step !== 3 || !isApiConfigured()) return;
+    if ((step !== 2 && step !== 3) || !isApiConfigured()) return;
+    if (taxCodes.length > 0) return; // already loaded
     let cancelled = false;
     fetchFinancialTaxesApi()
       .then((items) => {
@@ -402,6 +409,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   React.useEffect(() => {
@@ -519,6 +527,20 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   );
 
   const onReview = async () => {
+    if (lines.length === 0) {
+      toast.error("Add at least one line item before reviewing.");
+      setStep(2);
+      return;
+    }
+    // Credit check: if over limit and no override granted, open override dialog
+    if (
+      creditSummary?.isOverCredit &&
+      !creditOverrideGranted &&
+      (creditSummary?.creditControlMode === "AMOUNT" || creditSummary?.creditControlMode === "HYBRID")
+    ) {
+      setCreditOverrideOpen(true);
+      return;
+    }
     setStep(4);
     try {
       setLoadingPostingPreview(true);
@@ -540,11 +562,18 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   };
 
   const onSubmit = async () => {
+    if (lines.length === 0) {
+      toast.error("Add at least one line item before submitting.");
+      setStep(2);
+      return;
+    }
     try {
       setSubmitting(true);
-      const result = await createDocumentApi(type as DocTypeKey, {
-        ...buildDraftPayload(),
-      });
+      const payload = buildDraftPayload();
+      if (creditOverrideGranted && creditOverrideReason) {
+        (payload as Record<string, unknown>).notes = `[Credit override: ${creditOverrideReason}]`;
+      }
+      const result = await createDocumentApi(type as DocTypeKey, payload);
       await deleteDocumentDraftApi(type);
       toast.success(`${label} draft created.`);
       router.push(`/docs/${type}/${result.id}`);
@@ -581,19 +610,27 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   React.useEffect(() => {
     if (!selectedPartyId) {
       setSelectedPartyDetail(null);
+      setCreditSummary(null);
+      setCreditOverrideGranted(false);
       return;
     }
     let cancelled = false;
-    fetchPartyByIdApi(selectedPartyId)
-      .then((party) => {
-        if (!cancelled) setSelectedPartyDetail(party);
-      })
-      .catch(() => {
-        if (!cancelled) setSelectedPartyDetail(null);
-      });
-    return () => {
-      cancelled = true;
-    };
+    Promise.all([
+      fetchPartyByIdApi(selectedPartyId),
+      fetchPartyCreditSummaryApi(selectedPartyId),
+    ]).then(([party, credit]) => {
+      if (!cancelled) {
+        setSelectedPartyDetail(party);
+        setCreditSummary(credit);
+        setCreditOverrideGranted(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setSelectedPartyDetail(null);
+        setCreditSummary(null);
+      }
+    });
+    return () => { cancelled = true; };
   }, [selectedPartyId]);
 
   React.useEffect(() => {
@@ -724,47 +761,15 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                 </div>
               </div>
               {selectedPartyDetail && (
-                <div className="border-t pt-4 mt-4">
-                  <h4 className="text-sm font-medium mb-3">Customer credit and terms review</h4>
-                  <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                    <p>
-                      <span className="text-muted-foreground">Category:</span>{" "}
-                      {selectedPartyDetail.customerCategoryId
-                        ? customerCategoryNameById[selectedPartyDetail.customerCategoryId] ??
-                          selectedPartyDetail.customerCategoryId
-                        : "—"}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Payment terms:</span>{" "}
-                      {selectedPartyDetail.paymentTermsId
-                        ? paymentTermsNameById[selectedPartyDetail.paymentTermsId] ??
-                          selectedPartyDetail.paymentTermsId
-                        : "—"}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Credit mode:</span>{" "}
-                      {selectedPartyDetail.creditControlMode ?? "AMOUNT"}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Credit amount limit:</span>{" "}
-                      {selectedPartyDetail.creditLimitAmount != null
-                        ? formatMoney(selectedPartyDetail.creditLimitAmount, selectedCurrency)
-                        : "—"}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Max outstanding age:</span>{" "}
-                      {selectedPartyDetail.maxOutstandingInvoiceAgeDays != null
-                        ? `${selectedPartyDetail.maxOutstandingInvoiceAgeDays} days`
-                        : "—"}
-                    </p>
-                    <p>
-                      <span className="text-muted-foreground">Per-invoice days-to-pay cap:</span>{" "}
-                      {selectedPartyDetail.perInvoiceDaysToPayCap != null
-                        ? `${selectedPartyDetail.perInvoiceDaysToPayCap} days`
-                        : "—"}
-                    </p>
-                  </div>
-                </div>
+                <CreditPanel
+                  partyDetail={selectedPartyDetail}
+                  creditSummary={creditSummary}
+                  orderTotal={form.watch("totalAmount") ?? 0}
+                  currency={selectedCurrency}
+                  categoryName={selectedPartyDetail.customerCategoryId ? (customerCategoryNameById[selectedPartyDetail.customerCategoryId] ?? selectedPartyDetail.customerCategoryId) : undefined}
+                  paymentTermsName={selectedPartyDetail.paymentTermsId ? (paymentTermsNameById[selectedPartyDetail.paymentTermsId] ?? selectedPartyDetail.paymentTermsId) : undefined}
+                  overrideGranted={creditOverrideGranted}
+                />
               )}
             </form>
           </CardContent>
@@ -791,6 +796,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
               productFilter={lineEditorMode === "purchasing" ? "purchasable" : "sellable"}
               packagingByProductId={packagingByProductId}
               pricingByProductId={lineEditorPricingByProductId}
+              taxCodes={taxCodes}
             />
           </CardContent>
         </Card>
@@ -854,11 +860,11 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                   <span className="text-muted-foreground">Date</span>
                   <p className="font-medium">{form.watch("date") || "—"}</p>
                 </div>
-                {(form.watch("party") || form.watch("reference")) && (
+                {(selectedPartyDetail?.name || form.watch("reference")) && (
                   <div className="space-y-1">
                     <span className="text-muted-foreground">Party / Reference</span>
                     <p className="font-medium">
-                      {form.watch("party") || form.watch("reference") || "—"}
+                      {selectedPartyDetail?.name || form.watch("reference") || "—"}
                     </p>
                   </div>
                 )}
@@ -869,9 +875,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-muted-foreground">Taxes</span>
+                  <span className="text-muted-foreground">Tax code</span>
                   <p className="font-medium">
-                    {form.watch("taxesNote") || "—"}
+                    {(() => {
+                      const selectedTax = taxCodes.find((t) => t.id === form.watch("defaultTaxCodeId"));
+                      if (selectedTax) return `${selectedTax.code} — ${selectedTax.name} (${selectedTax.rate}%)`;
+                      return form.watch("taxesNote") || "None";
+                    })()}
                   </p>
                 </div>
               </div>
@@ -974,6 +984,165 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           )}
         </div>
       </div>
+
+      {/* Credit override dialog */}
+      {creditOverrideOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Icons.AlertTriangle className="h-5 w-5 text-destructive" />
+              <h3 className="text-base font-semibold">Credit limit exceeded</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              This customer is over their credit limit. You can override and continue, but a reason is required for the audit trail.
+            </p>
+            <div className="mb-4">
+              <Label className="text-xs mb-1 block">Reason for override *</Label>
+              <Input
+                placeholder="e.g. Approved by sales manager, urgent order..."
+                value={creditOverrideReason}
+                onChange={(e) => setCreditOverrideReason(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setCreditOverrideOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!creditOverrideReason.trim()}
+                onClick={() => {
+                  setCreditOverrideGranted(true);
+                  setCreditOverrideOpen(false);
+                  void onReview();
+                }}
+              >
+                Override & Continue
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Credit Panel sub-component ───────────────────────────────────────────────
+
+function CreditPanel({
+  partyDetail,
+  creditSummary,
+  orderTotal,
+  currency,
+  categoryName,
+  paymentTermsName,
+  overrideGranted,
+}: {
+  partyDetail: PartyDetail;
+  creditSummary: PartyCreditSummary | null;
+  orderTotal: number;
+  currency: string;
+  categoryName?: string;
+  paymentTermsName?: string;
+  overrideGranted: boolean;
+}) {
+  const hasTerms =
+    creditSummary?.creditLimitAmount != null || partyDetail.paymentTermsId;
+
+  const projected =
+    creditSummary?.creditLimitAmount != null && creditSummary.creditLimitAmount > 0
+      ? Math.round(
+          ((creditSummary.outstandingBalance + orderTotal) / creditSummary.creditLimitAmount) * 100
+        )
+      : null;
+
+  const isOverAfterOrder =
+    creditSummary?.creditLimitAmount != null &&
+    creditSummary.creditLimitAmount > 0 &&
+    creditSummary.outstandingBalance + orderTotal > creditSummary.creditLimitAmount;
+
+  const panelColor = overrideGranted
+    ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20"
+    : isOverAfterOrder
+    ? "border-destructive/50 bg-destructive/5"
+    : creditSummary?.isNearLimit
+    ? "border-amber-400/50 bg-amber-50 dark:bg-amber-950/20"
+    : "border-border bg-muted/30";
+
+  return (
+    <div className={`border rounded-lg p-3 mt-4 text-sm ${panelColor}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Credit &amp; Terms</span>
+        {overrideGranted && (
+          <span className="text-xs bg-amber-200 text-amber-800 rounded px-2 py-0.5">Override granted</span>
+        )}
+        {!overrideGranted && isOverAfterOrder && (
+          <span className="text-xs bg-destructive/20 text-destructive rounded px-2 py-0.5 font-medium">Over limit</span>
+        )}
+        {!overrideGranted && !isOverAfterOrder && creditSummary?.isNearLimit && (
+          <span className="text-xs bg-amber-200 text-amber-800 rounded px-2 py-0.5">Near limit</span>
+        )}
+      </div>
+      {!hasTerms ? (
+        <p className="text-muted-foreground text-xs">
+          No credit terms configured.{" "}
+          <a href={`/master/parties`} className="underline text-primary">Edit party →</a>
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          {categoryName && (
+            <>
+              <span className="text-muted-foreground">Category</span>
+              <span>{categoryName}</span>
+            </>
+          )}
+          {paymentTermsName && (
+            <>
+              <span className="text-muted-foreground">Payment terms</span>
+              <span>{paymentTermsName}</span>
+            </>
+          )}
+          {creditSummary?.creditLimitAmount != null && (
+            <>
+              <span className="text-muted-foreground">Outstanding</span>
+              <span>
+                {formatMoney(creditSummary.outstandingBalance, currency)}{" "}
+                / {formatMoney(creditSummary.creditLimitAmount, currency)}
+                {creditSummary.utilizationPct != null && (
+                  <span className="text-muted-foreground ml-1">({creditSummary.utilizationPct}%)</span>
+                )}
+              </span>
+            </>
+          )}
+          {projected != null && orderTotal > 0 && (
+            <>
+              <span className="text-muted-foreground">After this order</span>
+              <span className={isOverAfterOrder ? "text-destructive font-medium" : ""}>
+                {formatMoney(creditSummary!.outstandingBalance + orderTotal, currency)}{" "}
+                ({projected}%)
+              </span>
+            </>
+          )}
+          {partyDetail.maxOutstandingInvoiceAgeDays != null && (
+            <>
+              <span className="text-muted-foreground">Max invoice age</span>
+              <span>{partyDetail.maxOutstandingInvoiceAgeDays} days</span>
+            </>
+          )}
+        </div>
+      )}
+      {creditSummary?.creditLimitAmount != null && (
+        <div className="mt-2">
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                isOverAfterOrder ? "bg-destructive" : creditSummary.isNearLimit ? "bg-amber-400" : "bg-emerald-500"
+              }`}
+              style={{ width: `${Math.min(100, projected ?? creditSummary.utilizationPct ?? 0)}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

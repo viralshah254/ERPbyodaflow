@@ -44,6 +44,8 @@ import {
   patchProductApi,
   applyProductPricingTemplateApi,
 } from "@/lib/api/products";
+import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
+import type { TaxRow } from "@/lib/types/taxes";
 import {
   fetchProductPackagingApi,
   saveProductPackagingApi,
@@ -144,6 +146,8 @@ export default function ProductDetailPage() {
   type ProductRow = Awaited<ReturnType<typeof fetchProductApi>>;
   const [product, setProduct] = React.useState<ProductRow | null | undefined>(undefined);
   const [vatCategory, setVatCategory] = React.useState<ProductVatCategory>("standard");
+  const [taxCodes, setTaxCodes] = React.useState<TaxRow[]>([]);
+  const [defaultTaxCodeId, setDefaultTaxCodeId] = React.useState<string>("");
   const [deleting, setDeleting] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
@@ -187,7 +191,8 @@ export default function ProductDetailPage() {
       fetchProductVariantsApi(id).catch(() => [] as ProductVariant[]),
       fetchProductAttributeDefsApi().catch(() => [] as ProductAttributeDef[]),
       fetchPriceListsForUi().catch(() => []),
-    ]).then(([prod, vat, pack, prices, vars, attrs, lists]) => {
+      fetchFinancialTaxesApi().catch(() => [] as TaxRow[]),
+    ]).then(([prod, vat, pack, prices, vars, attrs, lists, taxes]) => {
       if (cancelled) return;
       setProduct(prod);
       setVatCategory(vat);
@@ -196,6 +201,8 @@ export default function ProductDetailPage() {
       setVariants(vars);
       setAttributeDefs(attrs);
       setPriceLists(lists);
+      setTaxCodes(taxes);
+      setDefaultTaxCodeId((prod as (typeof prod & { defaultTaxCodeId?: string }) | null)?.defaultTaxCodeId ?? "");
     }).catch((err) => {
       if (!cancelled) {
         toast.error((err as Error).message);
@@ -249,6 +256,8 @@ export default function ProductDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attributeDefs]);
 
+  const existingVariantSkus = React.useMemo(() => variants.map((v) => v.sku), [variants]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const saveVatCategory = async (v: string) => {
@@ -257,6 +266,15 @@ export default function ProductDetailPage() {
     try {
       await updateProductVatCategoryApi(id, next);
       toast.success("VAT category updated.");
+    } catch (err) { toast.error((err as Error).message); }
+  };
+
+  const saveDefaultTaxCode = async (v: string) => {
+    const next = v === "__none__" ? "" : v;
+    setDefaultTaxCodeId(next);
+    try {
+      await patchProductApi(id, { defaultTaxCodeId: next || undefined });
+      toast.success("Default tax code updated.");
     } catch (err) { toast.error((err as Error).message); }
   };
 
@@ -599,22 +617,29 @@ export default function ProductDetailPage() {
                     </p>
                   </div>
 
-                  {/* VAT — only relevant for sellable/both */}
-                  {showSection("vat", productType) && (
-                    <div className="space-y-2">
-                      <Label>VAT category</Label>
-                      <Select value={vatCategory} onValueChange={saveVatCategory}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="standard">Standard (16%)</SelectItem>
-                          <SelectItem value="zero">Zero-rated</SelectItem>
-                          <SelectItem value="exempt">Exempt</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+                  {/* Default tax code — applies to all document lines when this product is selected */}
+                  <div className="space-y-2">
+                    <Label>Default tax code</Label>
+                    <Select
+                      value={defaultTaxCodeId || "__none__"}
+                      onValueChange={saveDefaultTaxCode}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {taxCodes.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.code} — {t.name} ({t.rate}%)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Auto-applied when this product is added to a sales or purchase document line.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -1217,7 +1242,7 @@ export default function ProductDetailPage() {
         <MatrixGeneratorSheet
           product={product}
           attributeDefs={sortedDefs}
-          existingVariantSkus={variants.map((v) => v.sku)}
+          existingVariantSkus={existingVariantSkus}
           onGenerated={async () => {
             setVariants(await fetchProductVariantsApi(product.id));
             setMatrixSheetOpen(false);
@@ -1564,10 +1589,10 @@ function VariantSheet({
   // Auto-populate display name when name is empty and attributes are set
   React.useEffect(() => {
     if (name || initial?.name) return;
-    const parts = [productName, size, packagingType].filter(Boolean);
+    const parts = [productName, size, grade, packagingType].filter(Boolean);
     if (parts.length > 1) setName(parts.join(" "));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size, packagingType]);
+  }, [size, grade, packagingType]);
 
   // Duplicate SKU check (case-insensitive, exclude current when editing)
   const skuConflict = !initial && sku.trim().length > 0
@@ -1827,8 +1852,9 @@ function MatrixGeneratorSheet({
   );
   const [generating, setGenerating] = React.useState(false);
 
-  const activeDefs = attributeDefs.filter(
-    (d) => selectedDefIds.has(d.id) && d.options.length > 0
+  const activeDefs = React.useMemo(
+    () => attributeDefs.filter((d) => selectedDefIds.has(d.id) && d.options.length > 0),
+    [attributeDefs, selectedDefIds]
   );
 
   // Build matrix combinations

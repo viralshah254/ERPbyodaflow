@@ -6,6 +6,7 @@ export type ProductRow = {
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  defaultTaxCodeId?: string;
   status: string;
   currentStock?: number;
 };

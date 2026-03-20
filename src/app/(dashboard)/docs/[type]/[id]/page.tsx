@@ -55,6 +55,7 @@ import {
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
 import type { PartyLookupOption } from "@/lib/api/parties";
+import type { DocumentChainNode, DocumentDetailRecord } from "@/lib/types/documents";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -68,6 +69,14 @@ export default function DocViewPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const [printOpen, setPrintOpen] = React.useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
+  const [emailTo, setEmailTo] = React.useState("");
+  const [emailSending, setEmailSending] = React.useState(false);
+  const [applyDialogOpen, setApplyDialogOpen] = React.useState(false);
+  const [openInvoices, setOpenInvoices] = React.useState<Array<{ id: string; number: string; openAmount: number; currency: string }>>([]);
+  const [selectedInvoiceId, setSelectedInvoiceId] = React.useState("");
+  const [applyAmount, setApplyAmount] = React.useState("");
+  const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
@@ -181,25 +190,24 @@ export default function DocViewPage() {
   );
 
   const rightSlot = (
-    <DocumentRightPanel
-      validations={[
-        { ok: true, message: "All validations passed" },
-      ]}
-      nextSteps={[
-        ...(convertTargets.length ? [`Convert to ${convertTargets.map((item) => item.replace(/-/g, " ")).join(" / ")}`] : []),
-        ...(document?.sourceDocument ? [`Linked from ${document.sourceDocument.number}`] : []),
-        ...(warehouseTaskLink ? [warehouseTaskLink.label] : []),
-      ]}
-      actions={[
-        ...(document?.sourceDocument ? [{ label: `Open ${document.sourceDocument.number}`, href: `/docs/${document.sourceDocument.typeKey}/${document.sourceDocument.id}` }] : []),
-        ...(warehouseTaskLink ? [warehouseTaskLink] : []),
-      ]}
-    >
-      <div>
-        <p className="font-medium text-sm mb-1">Copilot</p>
-        <p className="text-muted-foreground text-sm">Suggestions and actions appear here.</p>
-      </div>
-    </DocumentRightPanel>
+    <DynamicNextStepsPanel
+      type={type}
+      document={document}
+      convertTargets={convertTargets}
+      warehouseTaskLink={warehouseTaskLink}
+      actionLoading={actionLoading}
+      onAction={async (action) => {
+        setActionLoading(true);
+        try {
+          await documentActionApi(type as DocTypeKey, id, action as "approve" | "post" | "cancel");
+          await refreshDocument();
+          toast.success(`Document ${action}d.`);
+        } catch (e) { toast.error((e as Error).message); }
+        finally { setActionLoading(false); }
+      }}
+      onConvert={openConvertSheet}
+      onSendEmail={() => { setEmailTo(""); setEmailDialogOpen(true); }}
+    />
   );
 
   const selectedConvertParty = React.useMemo(() => {
@@ -352,6 +360,31 @@ export default function DocViewPage() {
               Reverse
             </Button>
           )}
+          {type === "credit-note" && document?.status === "POSTED" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                if (!document?.partyId) { toast.error("No party on this credit note."); return; }
+                setApplyLoading(true);
+                try {
+                  const resp = await fetch(`/api/ar/open-invoices?partyId=${document.partyId}`);
+                  if (resp.ok) {
+                    const data = await resp.json() as { items?: Array<{ id: string; number: string; outstanding: number; currency: string }> };
+                    setOpenInvoices((data.items ?? []).map((item) => ({ id: item.id, number: item.number, openAmount: item.outstanding, currency: item.currency ?? document.currency ?? "KES" })));
+                  }
+                } catch { /* ignore */ } finally {
+                  setApplyLoading(false);
+                }
+                setSelectedInvoiceId("");
+                setApplyAmount(String(document.total ?? ""));
+                setApplyDialogOpen(true);
+              }}
+            >
+              <Icons.Link className="mr-2 h-4 w-4" />
+              Apply to invoice
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -374,6 +407,22 @@ export default function DocViewPage() {
                 <Icons.Printer className="mr-2 h-4 w-4" />
                 Print
               </DropdownMenuItem>
+              {(type === "invoice" || type === "credit-note") && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setEmailTo("");
+                    setEmailDialogOpen(true);
+                  }}
+                >
+                  <Icons.Mail className="mr-2 h-4 w-4" />
+                  Send to customer
+                  {document?.emailedAt && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      (sent {new Date(document.emailedAt).toLocaleDateString()})
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link href={`/docs/${type}`}>
                   <Icons.ArrowLeft className="mr-2 h-4 w-4" />
@@ -394,76 +443,93 @@ export default function DocViewPage() {
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading document...</p>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Number</p>
-                  <p className="font-medium">{document?.number ?? "—"}</p>
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Number</p>
+                    <p className="font-medium">{document?.number ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date</p>
+                    <p className="font-medium">
+                      {document?.date
+                        ? new Date(document.date as string).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer / Supplier</p>
+                    <p className="font-medium">{document?.party ?? "Internal document"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total</p>
+                    <p className="font-medium">
+                      {formatMoney(document?.total ?? 0, document?.currency ?? "KES")}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date</p>
-                  <p className="font-medium">{document?.date ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer / Supplier</p>
-                  <p className="font-medium">{document?.party ?? "Internal document"}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total</p>
-                  <p className="font-medium">
-                    {formatMoney(document?.total ?? 0, document?.currency ?? "KES")}
-                  </p>
-                </div>
-              </div>
+                {/* Invoice payment status bar */}
+                {type === "invoice" && document?.paymentStatus && (
+                  <div className="mt-4 pt-3 border-t">
+                    <div className="flex items-center justify-between mb-1 text-sm">
+                      <span className="text-muted-foreground">Payment status</span>
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          document.paymentStatus === "PAID"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : document.paymentStatus === "PARTIALLY_PAID"
+                              ? "bg-amber-100 text-amber-700"
+                              : document.isOverdue
+                                ? "bg-red-100 text-red-700"
+                                : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {document.isOverdue && document.paymentStatus !== "PAID"
+                          ? "OVERDUE"
+                          : document.paymentStatus?.replace("_", " ")}
+                      </span>
+                    </div>
+                    {document.paymentStatus !== "PAID" && document.total != null && (
+                      <>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${document.isOverdue ? "bg-red-500" : "bg-emerald-500"}`}
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                document.total > 0
+                                  ? Math.round(((document.paidAmount ?? 0) / document.total) * 100)
+                                  : 0
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatMoney(document.paidAmount ?? 0, document.currency ?? "KES")} paid of{" "}
+                          {formatMoney(document.total, document.currency ?? "KES")}
+                          {document.dueDate && (
+                            <span className="ml-2">· Due {new Date(document.dueDate).toLocaleDateString()}</span>
+                          )}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
-        {(document?.sourceDocument || (document?.relatedDocuments?.length ?? 0) > 0) && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Document chain</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              {document?.sourceDocument && (
-                <div className="rounded border p-3">
-                  <p className="font-medium">Source</p>
-                  <Link
-                    href={`/docs/${document.sourceDocument.typeKey}/${document.sourceDocument.id}`}
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    {document.sourceDocument.number}
-                  </Link>
-                  <p className="text-muted-foreground">
-                    {document.sourceDocument.typeKey.replace(/-/g, " ")} · {document.sourceDocument.status}
-                  </p>
-                </div>
-              )}
-              {(document?.relatedDocuments?.length ?? 0) > 0 && (
-                <div className="rounded border p-3">
-                  <p className="font-medium">Derived documents</p>
-                  <div className="mt-2 space-y-2">
-                    {document?.relatedDocuments?.map((related) => (
-                      <div key={related.id} className="flex items-center justify-between gap-2 rounded border px-3 py-2">
-                        <div>
-                          <Link
-                            href={`/docs/${related.typeKey}/${related.id}`}
-                            className="text-primary underline-offset-4 hover:underline"
-                          >
-                            {related.number}
-                          </Link>
-                          <p className="text-xs text-muted-foreground">
-                            {related.typeKey.replace(/-/g, " ")} · {related.status}
-                          </p>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {related.total != null ? `${related.total.toLocaleString()} ${document?.currency ?? "KES"}` : "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {(document?.sourceDocument || (document?.relatedDocuments?.length ?? 0) > 0 || (document?.documentChain?.length ?? 0) > 0) && (
+          <DocumentChainCard
+            sourceDocument={document?.sourceDocument}
+            documentChain={document?.documentChain ?? []}
+            currency={document?.currency ?? "KES"}
+            currentId={id}
+          />
         )}
         <DocumentTabs
           lines={
@@ -668,6 +734,387 @@ export default function DocViewPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Apply credit note to invoice dialog */}
+      {applyDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Icons.Link className="h-5 w-5 text-primary" />
+              <h3 className="text-base font-semibold">Apply credit note to invoice</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Select an open invoice for this customer to net off against the credit note.
+            </p>
+            <div className="mb-4 space-y-3">
+              <div>
+                <Label className="text-xs mb-1 block">Invoice</Label>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                  value={selectedInvoiceId}
+                  onChange={(e) => {
+                    setSelectedInvoiceId(e.target.value);
+                    const inv = openInvoices.find((i) => i.id === e.target.value);
+                    if (inv) setApplyAmount(String(Math.min(inv.openAmount, document?.total ?? 0)));
+                  }}
+                >
+                  <option value="">Select invoice...</option>
+                  {openInvoices.map((inv) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.number} — {inv.currency} {inv.openAmount.toLocaleString()} outstanding
+                    </option>
+                  ))}
+                  {openInvoices.length === 0 && <option disabled>No open invoices found</option>}
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Amount to apply</Label>
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={applyAmount}
+                  onChange={(e) => setApplyAmount(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setApplyDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={applyLoading || !selectedInvoiceId || !applyAmount}
+                onClick={async () => {
+                  setApplyLoading(true);
+                  try {
+                    const resp = await fetch("/api/ar/credit-note-applications", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ creditNoteId: id, invoiceId: selectedInvoiceId, amount: parseFloat(applyAmount) }),
+                    });
+                    if (!resp.ok) {
+                      const err = await resp.json().catch(() => ({ error: "Failed" }));
+                      throw new Error((err as { error?: string }).error || "Failed to apply");
+                    }
+                    toast.success("Credit note applied to invoice.");
+                    setApplyDialogOpen(false);
+                    await refreshDocument();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setApplyLoading(false);
+                  }
+                }}
+              >
+                {applyLoading ? "Applying..." : "Apply"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email to customer dialog */}
+      {emailDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Icons.Mail className="h-5 w-5 text-primary" />
+              <h3 className="text-base font-semibold">Send to customer</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              The invoice PDF will be attached and sent to the customer email address.
+              {document?.emailedAt && (
+                <span className="block mt-1 text-xs">
+                  Last sent: {new Date(document.emailedAt).toLocaleString()}
+                  {document.emailedTo ? ` → ${document.emailedTo}` : ""}
+                </span>
+              )}
+            </p>
+            <div className="mb-4">
+              <Label className="text-xs mb-1 block">Override email (optional)</Label>
+              <Input
+                placeholder="Leave blank to use customer email on file"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                type="email"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={emailSending}
+                onClick={async () => {
+                  setEmailSending(true);
+                  try {
+                    const body: Record<string, string> = {};
+                    if (emailTo.trim()) body.overrideTo = emailTo.trim();
+                    const resp = await fetch(`/api/documents/invoice/${id}/email`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(body),
+                    });
+                    if (!resp.ok) {
+                      const err = await resp.json().catch(() => ({ error: "Failed to send" }));
+                      throw new Error((err as { error?: string }).error || "Failed to send");
+                    }
+                    const result = await resp.json() as { to?: string };
+                    toast.success(`Invoice sent to ${result.to ?? "customer"}`);
+                    setEmailDialogOpen(false);
+                    await refreshDocument();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setEmailSending(false);
+                  }
+                }}
+              >
+                <Icons.Send className="mr-2 h-4 w-4" />
+                {emailSending ? "Sending..." : "Send"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </DocumentPageShell>
+  );
+}
+
+// ─── Dynamic Next Steps Panel ────────────────────────────────────────────────
+
+function DynamicNextStepsPanel({
+  type,
+  document,
+  convertTargets,
+  warehouseTaskLink,
+  actionLoading,
+  onAction,
+  onConvert,
+  onSendEmail,
+}: {
+  type: string;
+  document: DocumentDetailRecord | null;
+  convertTargets: DocTypeKey[];
+  warehouseTaskLink: { label: string; href: string } | null;
+  actionLoading: boolean;
+  onAction: (action: string) => Promise<void>;
+  onConvert: (target: DocTypeKey) => void;
+  onSendEmail: () => void;
+}) {
+  const status = document?.status ?? "";
+  const paymentStatus = document?.paymentStatus;
+
+  type GuidanceStep = { icon: React.ReactNode; text: string; action?: () => void; actionLabel?: string; href?: string; variant?: "default" | "outline" | "destructive" };
+  const steps: GuidanceStep[] = [];
+
+  if (type === "sales-order") {
+    if (status === "DRAFT") {
+      steps.push({ icon: <Icons.ListPlus className="h-4 w-4" />, text: "Add line items to this order" });
+      steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4" />, text: "Submit for approval", action: () => void onAction("submit"), actionLabel: "Submit", variant: "default" });
+    } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
+      steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
+    } else if (status === "APPROVED") {
+      steps.push({ icon: <Icons.Truck className="h-4 w-4 text-blue-500" />, text: "Ready to fulfill — create a Delivery Note", action: () => onConvert("delivery-note"), actionLabel: "Create Delivery Note", variant: "default" });
+      steps.push({ icon: <Icons.FileText className="h-4 w-4" />, text: "Or convert directly to Invoice", action: () => onConvert("invoice"), actionLabel: "Convert to Invoice", variant: "outline" });
+    }
+  } else if (type === "delivery-note") {
+    if (status === "DRAFT") {
+      steps.push({ icon: <Icons.Package className="h-4 w-4" />, text: "Submit and complete pick & pack" });
+    } else if (status === "DELIVERED" || status === "POSTED") {
+      steps.push({ icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />, text: "Delivery complete — create invoice", action: () => onConvert("invoice"), actionLabel: "Create Invoice", variant: "default" });
+    }
+    if (warehouseTaskLink) {
+      steps.push({ icon: <Icons.Warehouse className="h-4 w-4" />, text: warehouseTaskLink.label, href: warehouseTaskLink.href });
+    }
+  } else if (type === "invoice") {
+    if (status === "DRAFT") {
+      steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Post invoice to finalize", action: () => void onAction("post"), actionLabel: "Post", variant: "default" });
+    } else if (status === "POSTED") {
+      if (paymentStatus === "PAID") {
+        steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4 text-emerald-500" />, text: "Invoice fully settled ✓" });
+      } else if (paymentStatus === "PARTIALLY_PAID") {
+        steps.push({ icon: <Icons.DollarSign className="h-4 w-4 text-amber-500" />, text: "Partially paid — record remaining payment", href: "/treasury/collections" });
+        steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Send reminder to customer", action: onSendEmail, actionLabel: "Send Invoice", variant: "outline" });
+      } else if (document?.isOverdue) {
+        steps.push({ icon: <Icons.AlertTriangle className="h-4 w-4 text-red-500" />, text: "OVERDUE — follow up immediately", href: "/ar/aging" });
+        steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email invoice to customer", action: onSendEmail, actionLabel: "Send Email", variant: "default" });
+      } else {
+        steps.push({ icon: <Icons.DollarSign className="h-4 w-4" />, text: "Outstanding — record payment", href: "/treasury/collections" });
+        steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email invoice to customer", action: onSendEmail, actionLabel: "Send Email", variant: "outline" });
+      }
+    }
+  } else if (type === "credit-note") {
+    if (status === "POSTED") {
+      steps.push({ icon: <Icons.Link className="h-4 w-4" />, text: "Apply to an open invoice directly from this page" });
+    }
+  } else if (type === "purchase-order") {
+    if (status === "APPROVED") {
+      steps.push({ icon: <Icons.Package className="h-4 w-4 text-blue-500" />, text: "Receive goods — create GRN", action: () => onConvert("grn"), actionLabel: "Create GRN", variant: "default" });
+    }
+  } else if (type === "grn") {
+    if (status === "POSTED" || status === "APPROVED") {
+      steps.push({ icon: <Icons.FileText className="h-4 w-4" />, text: "Create supplier bill", action: () => onConvert("bill"), actionLabel: "Create Bill", variant: "default" });
+    }
+  }
+
+  // Always add convert targets as fallback suggestions
+  for (const target of convertTargets) {
+    if (!steps.some((s) => s.actionLabel?.toLowerCase().includes(target.replace(/-/g, " ")))) {
+      steps.push({ icon: <Icons.GitBranchPlus className="h-4 w-4" />, text: `Convert to ${target.replace(/-/g, " ")}`, action: () => onConvert(target), actionLabel: `Convert to ${target.replace(/-/g, " ")}`, variant: "outline" });
+    }
+  }
+
+  return (
+    <DocumentRightPanel>
+      <div className="space-y-4">
+        <div>
+          <p className="font-medium text-sm mb-1 flex items-center gap-1">
+            <Icons.Compass className="h-3.5 w-3.5" />
+            What to do next
+          </p>
+          {steps.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              {status === "CANCELLED" ? "This document has been cancelled." :
+               status === "REVERSED" ? "This document has been reversed." :
+               "No further actions required."}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {steps.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="mt-0.5 text-muted-foreground shrink-0">{step.icon}</span>
+                  <div className="flex-1">
+                    <p className="text-muted-foreground">{step.text}</p>
+                    {step.action && step.actionLabel && (
+                      <Button
+                        size="sm"
+                        variant={step.variant ?? "outline"}
+                        className="mt-1 h-7 text-xs"
+                        disabled={actionLoading}
+                        onClick={step.action}
+                      >
+                        {step.actionLabel}
+                      </Button>
+                    )}
+                    {step.href && !step.action && (
+                      <Link href={step.href} className="text-primary text-xs underline-offset-4 hover:underline">
+                        Go →
+                      </Link>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {document?.notes && (
+          <div>
+            <p className="font-medium text-sm mb-1">Notes</p>
+            <p className="text-muted-foreground text-sm bg-muted/50 rounded p-2">{document.notes}</p>
+          </div>
+        )}
+      </div>
+    </DocumentRightPanel>
+  );
+}
+
+// ─── Document Chain Timeline ────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT: "border-gray-300 bg-gray-50 text-gray-600",
+  PENDING: "border-amber-400 bg-amber-50 text-amber-700",
+  PENDING_APPROVAL: "border-amber-400 bg-amber-50 text-amber-700",
+  APPROVED: "border-blue-400 bg-blue-50 text-blue-700",
+  POSTED: "border-emerald-400 bg-emerald-50 text-emerald-700",
+  PAID: "border-emerald-500 bg-emerald-100 text-emerald-800",
+  DELIVERED: "border-emerald-400 bg-emerald-50 text-emerald-700",
+  IN_TRANSIT: "border-blue-300 bg-blue-50 text-blue-600",
+  CANCELLED: "border-red-300 bg-red-50 text-red-500",
+  REVERSED: "border-red-400 bg-red-50 text-red-600",
+};
+
+function ChainNode({ node, currency }: { node: DocumentChainNode; currency: string }) {
+  const colorClass = STATUS_COLORS[node.status] ?? "border-gray-300 bg-gray-50 text-gray-600";
+  return (
+    <div className="flex items-start gap-1">
+      <div className={`flex flex-col items-center`}>
+        <Link
+          href={`/docs/${node.typeKey}/${node.id}`}
+          className={`inline-flex flex-col items-center border rounded-lg px-3 py-2 text-xs hover:opacity-80 transition-opacity cursor-pointer min-w-[90px] ${colorClass}`}
+        >
+          <span className="font-semibold truncate max-w-[80px]">{node.number}</span>
+          <span className="text-[10px] opacity-70 capitalize">{node.typeKey.replace(/-/g, " ")}</span>
+          <span className="text-[10px] font-medium mt-0.5">{node.status}</span>
+          {node.total != null && (
+            <span className="text-[10px] opacity-60">{currency} {node.total.toLocaleString()}</span>
+          )}
+        </Link>
+        {node.children.length > 0 && (
+          <div className="flex items-start gap-1 mt-2 pl-2 border-l-2 border-muted ml-6">
+            {node.children.map((child) => (
+              <ChainNode key={child.id} node={child} currency={currency} />
+            ))}
+          </div>
+        )}
+      </div>
+      {node.children.length > 0 && (
+        <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3 flex-shrink-0" />
+      )}
+    </div>
+  );
+}
+
+function DocumentChainCard({
+  sourceDocument,
+  documentChain,
+  currency,
+  currentId,
+}: {
+  sourceDocument?: { id: string; typeKey: string; number: string; status: string } | null;
+  documentChain: DocumentChainNode[];
+  currency: string;
+  currentId: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Icons.GitBranch className="h-4 w-4" />
+          Document chain
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-start gap-2 flex-wrap overflow-x-auto pb-2">
+          {sourceDocument && (
+            <>
+              <Link
+                href={`/docs/${sourceDocument.typeKey}/${sourceDocument.id}`}
+                className={`inline-flex flex-col items-center border rounded-lg px-3 py-2 text-xs hover:opacity-80 min-w-[90px] ${STATUS_COLORS[sourceDocument.status] ?? "border-gray-300 bg-gray-50 text-gray-600"}`}
+              >
+                <span className="font-semibold">{sourceDocument.number}</span>
+                <span className="text-[10px] opacity-70 capitalize">{sourceDocument.typeKey.replace(/-/g, " ")}</span>
+                <span className="text-[10px] font-medium">{sourceDocument.status}</span>
+              </Link>
+              <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3" />
+            </>
+          )}
+          {/* Current document marker */}
+          <div className="inline-flex flex-col items-center border-2 border-primary rounded-lg px-3 py-2 text-xs min-w-[90px] bg-primary/5">
+            <span className="font-bold text-primary">THIS DOC</span>
+            <span className="text-[10px] opacity-60">{currentId.slice(0, 8)}...</span>
+          </div>
+          {documentChain.length > 0 && (
+            <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3" />
+          )}
+          {documentChain.map((node, i) => (
+            <React.Fragment key={node.id}>
+              <ChainNode node={node} currency={currency} />
+              {i < documentChain.length - 1 && <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3" />}
+            </React.Fragment>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

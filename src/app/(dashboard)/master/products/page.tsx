@@ -32,6 +32,8 @@ import {
 import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsApi, deleteProductApi } from "@/lib/api/products";
 import { fetchProductCategoriesApi, createProductCategoryApi } from "@/lib/api/product-categories";
 import { fetchProductUomsApi } from "@/lib/api/uom";
+import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
+import type { TaxRow } from "@/lib/types/taxes";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
 import { t } from "@/lib/terminology";
@@ -115,6 +117,8 @@ export default function MasterProductsPage() {
   const [categoryId, setCategoryId] = React.useState("");
   const [unit, setUnit] = React.useState("");
 
+  const [taxCodes, setTaxCodes] = React.useState<TaxRow[]>([]);
+  const [defaultTaxCodeId, setDefaultTaxCodeId] = React.useState("");
   const [categories, setCategories] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [addCategoryOpen, setAddCategoryOpen] = React.useState(false);
   const [deleteConfirmProductId, setDeleteConfirmProductId] = React.useState<string | null>(null);
@@ -168,6 +172,9 @@ export default function MasterProductsPage() {
       fetchProductCodesApi()
         .then((codes) => setCode(suggestNextCode(codes)))
         .catch(() => setCode("00001"));
+      fetchFinancialTaxesApi()
+        .then((taxes) => setTaxCodes(taxes))
+        .catch(() => setTaxCodes([]));
     }
   }, [drawerOpen]);
 
@@ -251,6 +258,7 @@ export default function MasterProductsPage() {
     setCategoryId("");
     setProductType("");
     setUnit("");
+    setDefaultTaxCodeId("");
   };
 
   const handleCreate = async () => {
@@ -278,6 +286,7 @@ export default function MasterProductsPage() {
       name: name.trim(),
       category: categoryId.trim() || undefined,
       productType: productType || undefined,
+      defaultTaxCodeId: defaultTaxCodeId || undefined,
       unit: selectedUnit,
       baseUom: selectedUnit,
       status: "ACTIVE" as const,
@@ -555,6 +564,29 @@ export default function MasterProductsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              {/* Default tax code */}
+              <div className="space-y-2">
+                <Label>Default tax code (optional)</Label>
+                <Select
+                  value={defaultTaxCodeId || "__none__"}
+                  onValueChange={(v) => setDefaultTaxCodeId(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {taxCodes.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.code} — {t.name} ({t.rate}%)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Auto-applied when this product is added to a sales or purchase document.
+                </p>
               </div>
             </>
           )}

@@ -15,6 +15,8 @@ export interface FinancialSettings {
   roundingMode: RoundingMode;
   rateSource: RateSource;
   allowForeignCurrencyDocs: boolean;
+  /** When true, all document line prices are treated as tax-inclusive (VAT included in unit price). */
+  pricesAreTaxInclusive: boolean;
 }
 
 export const DEFAULT_FINANCIAL_SETTINGS: FinancialSettings = {
@@ -23,6 +25,7 @@ export const DEFAULT_FINANCIAL_SETTINGS: FinancialSettings = {
   roundingMode: "HALF_UP",
   rateSource: "EXCHANGERATE_API_FREE",
   allowForeignCurrencyDocs: true,
+  pricesAreTaxInclusive: false,
 };
 
 export function applyFinancialSettingsPatch(

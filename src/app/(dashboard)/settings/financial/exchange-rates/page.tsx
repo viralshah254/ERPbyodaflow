@@ -19,10 +19,13 @@ import {
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import {
   fetchFinancialExchangeRatesApi,
+  fetchFinancialCurrenciesApi,
   saveFinancialExchangeRateApi,
   syncFinancialExchangeRatesApi,
   type FinancialExchangeRateRow,
 } from "@/lib/api/financial-settings";
+import { CURRENCY_LIST } from "@/lib/data/currencies";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -44,6 +47,26 @@ export default function ExchangeRatesSettingsPage() {
     rate: 1,
   });
   const importInputRef = React.useRef<HTMLInputElement>(null);
+
+  const [currencies, setCurrencies] = React.useState<{ code: string; name: string }[]>([]);
+
+  React.useEffect(() => {
+    if (!isApiConfigured()) {
+      setCurrencies(CURRENCY_LIST);
+      return;
+    }
+    fetchFinancialCurrenciesApi()
+      .then((rows) => setCurrencies(rows.length ? rows : CURRENCY_LIST))
+      .catch(() => setCurrencies(CURRENCY_LIST));
+  }, []);
+
+  const currencyOptions = React.useMemo(
+    () => currencies.map((c) => ({
+      id: c.code,
+      label: c.name && c.name !== c.code ? `${c.code} — ${c.name}` : c.code,
+    })),
+    [currencies]
+  );
 
   React.useEffect(() => {
     setTo(settings.baseCurrency);
@@ -197,18 +220,26 @@ export default function ExchangeRatesSettingsPage() {
               </div>
               <div className="space-y-2">
                 <Label>From</Label>
-                <Input
+                <SearchableSelect
                   value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                  placeholder="USD"
+                  onValueChange={setFrom}
+                  options={currencyOptions}
+                  placeholder="Any"
+                  searchPlaceholder="Search currency..."
+                  emptyMessage="No currencies found."
+                  className="w-44"
                 />
               </div>
               <div className="space-y-2">
                 <Label>To</Label>
-                <Input
+                <SearchableSelect
                   value={to}
-                  onChange={(e) => setTo(e.target.value)}
+                  onValueChange={setTo}
+                  options={currencyOptions}
                   placeholder={settings.baseCurrency}
+                  searchPlaceholder="Search currency..."
+                  emptyMessage="No currencies found."
+                  className="w-44"
                 />
               </div>
             </div>
@@ -242,22 +273,24 @@ export default function ExchangeRatesSettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>From</Label>
-              <Input
+              <SearchableSelect
                 value={addForm.from}
-                onChange={(e) =>
-                  setAddForm((p) => ({ ...p, from: e.target.value }))
-                }
+                onValueChange={(v) => setAddForm((p) => ({ ...p, from: v }))}
+                options={currencyOptions}
                 placeholder="USD"
+                searchPlaceholder="Search currency..."
+                emptyMessage="No currencies found."
               />
             </div>
             <div className="space-y-2">
               <Label>To</Label>
-              <Input
+              <SearchableSelect
                 value={addForm.to}
-                onChange={(e) =>
-                  setAddForm((p) => ({ ...p, to: e.target.value }))
-                }
+                onValueChange={(v) => setAddForm((p) => ({ ...p, to: v }))}
+                options={currencyOptions}
                 placeholder={settings.baseCurrency}
+                searchPlaceholder="Search currency..."
+                emptyMessage="No currencies found."
               />
             </div>
             <div className="space-y-2">

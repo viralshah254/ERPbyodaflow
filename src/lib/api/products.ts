@@ -9,6 +9,7 @@ type BackendProduct = {
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  defaultTaxCodeId?: string;
   status?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -23,6 +24,7 @@ export type ProductPayload = {
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  defaultTaxCodeId?: string;
   status?: "ACTIVE" | "INACTIVE";
   description?: string;
 };
@@ -38,6 +40,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string }
     unit: uom,
     baseUom: uom,
     productType: item.productType,
+    defaultTaxCodeId: item.defaultTaxCodeId,
     status: item.status ?? "ACTIVE",
   };
 }
@@ -110,13 +113,14 @@ export async function createProductApi(payload: ProductPayload): Promise<{ id: s
       unit: payload.unit,
       baseUom: payload.baseUom,
       productType: payload.productType,
+      defaultTaxCodeId: payload.defaultTaxCodeId,
       status: payload.status,
       description: payload.description,
     },
   });
 }
 
-export type ProductPatchPayload = Partial<Pick<ProductPayload, "sku" | "code" | "name" | "category" | "unit" | "baseUom" | "productType" | "status" | "description">>;
+export type ProductPatchPayload = Partial<Pick<ProductPayload, "sku" | "code" | "name" | "category" | "unit" | "baseUom" | "productType" | "defaultTaxCodeId" | "status" | "description">>;
 
 export async function patchProductApi(id: string, payload: ProductPatchPayload): Promise<void> {
   requireLiveApi("Product patch");
@@ -130,6 +134,7 @@ export async function patchProductApi(id: string, payload: ProductPatchPayload):
       unit: payload.unit,
       baseUom: payload.baseUom,
       productType: payload.productType,
+      defaultTaxCodeId: payload.defaultTaxCodeId,
       status: payload.status,
       description: payload.description,
     },
