@@ -68,6 +68,7 @@ type BackendApBill = {
   supplierName?: string;
   total: number;
   currency?: string;
+  exchangeRate?: number;
   status: string;
 };
 
@@ -257,6 +258,7 @@ export async function fetchApBillsApi(search?: string): Promise<APBillRow[]> {
     party: item.supplierName ?? item.partyId ?? "",
     total: item.total ?? 0,
     currency: item.currency,
+    exchangeRate: item.exchangeRate,
     status: item.status ?? "DRAFT",
     dueDate: item.dueDate?.slice(0, 10),
   }));

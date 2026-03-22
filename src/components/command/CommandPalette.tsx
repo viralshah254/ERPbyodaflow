@@ -17,19 +17,14 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { searchErpApi, type ErpSearchHit } from "@/lib/api/erp-search";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import * as Icons from "lucide-react";
 
-const ALL_ITEMS: CommandItem[] = [
-  ...COMMAND_NAV_ITEMS,
-  ...COMMAND_CREATE_ITEMS,
-  ...COMMAND_COPILOT_ITEMS,
-];
-
-function filterItems(query: string): CommandItem[] {
+function filterItems(query: string, allItems: CommandItem[]): CommandItem[] {
   const q = query.trim().toLowerCase();
-  if (!q) return ALL_ITEMS;
+  if (!q) return allItems;
   const tokens = q.split(/\s+/).filter(Boolean);
-  return ALL_ITEMS.filter((item) => {
+  return allItems.filter((item) => {
     const label = item.label.toLowerCase();
     const keywords = (item.keywords ?? []).join(" ").toLowerCase();
     const searchable = `${label} ${keywords}`;
@@ -75,6 +70,7 @@ function getIntentPreview(query: string): string {
 export function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const open = useUIStore((s) => s.commandPaletteOpen);
   const setOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const openDrawer = useCopilotStore((s) => s.openDrawer);
@@ -85,18 +81,28 @@ export function CommandPalette() {
   const [selected, setSelected] = React.useState(0);
   const [searchResults, setSearchResults] = React.useState<SearchResultItem[]>([]);
 
-  const filtered = React.useMemo(() => filterItems(query), [query]);
+  const allItems = React.useMemo<CommandItem[]>(
+    () => [
+      ...COMMAND_NAV_ITEMS,
+      ...COMMAND_CREATE_ITEMS,
+      ...(copilotEnabled ? COMMAND_COPILOT_ITEMS : []),
+    ],
+    [copilotEnabled]
+  );
+
+  const filtered = React.useMemo(() => filterItems(query, allItems), [query, allItems]);
   const sorted = React.useMemo(() => sortByGroup(filtered), [filtered]);
 
-  const askAiItem: AskAiItem | null = query.trim()
-    ? {
-        id: "ask-ai",
-        group: "ask",
-        label: "Ask AI",
-        prompt: query.trim(),
-        intentPreview: getIntentPreview(query),
-      }
-    : null;
+  const askAiItem: AskAiItem | null =
+    copilotEnabled && query.trim()
+      ? {
+          id: "ask-ai",
+          group: "ask",
+          label: "Ask AI",
+          prompt: query.trim(),
+          intentPreview: getIntentPreview(query),
+        }
+      : null;
 
   React.useEffect(() => {
     let active = true;
@@ -233,7 +239,11 @@ export function CommandPalette() {
             <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3">
               <Icons.Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <Input
-                placeholder="Search pages, create documents, ask Copilot..."
+                placeholder={
+                  copilotEnabled
+                    ? "Search pages, create documents, ask Copilot..."
+                    : "Search pages, create documents..."
+                }
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}

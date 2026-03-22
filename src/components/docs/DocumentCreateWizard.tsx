@@ -17,6 +17,7 @@ import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { formatMoney, toBase } from "@/lib/money";
 import {
@@ -31,7 +32,14 @@ import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import * as Icons from "lucide-react";
 import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
-import { createDocumentApi, previewDocumentPostingApi, type DocumentPostingPreviewLine } from "@/lib/api/documents";
+import {
+  createDocumentApi,
+  previewDocumentPostingApi,
+  searchPurchaseOrderLookupApi,
+  fetchDocumentDetailApi,
+  type DocumentPostingPreviewLine,
+  type PurchaseOrderLookupOption,
+} from "@/lib/api/documents";
 import {
   fetchPartyByIdApi,
   fetchPartyCreditSummaryApi,
@@ -224,21 +232,13 @@ function RenderField({
             label={`Explain ${field.label}`}
           />
         </div>
-        <Select
+        <SearchableSelect
           value={(form.watch(key) as string | undefined) || ""}
           onValueChange={(value) => form.setValue(key, value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
-          </SelectTrigger>
-          <SelectContent>
-            {options?.map((option) => (
-              <SelectItem key={option.id} value={option.id}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={options?.map((option) => ({ id: option.id, label: option.label })) ?? []}
+          placeholder={`Select ${field.label.toLowerCase()}`}
+          searchPlaceholder={`Type to search ${field.label.toLowerCase()}`}
+        />
         {form.formState.errors[key] && (
           <p className="text-sm text-destructive">
             {form.formState.errors[key]?.message as string}
@@ -276,6 +276,8 @@ function RenderField({
 
 interface DocumentCreateWizardProps {
   type: string;
+  /** Pre-link a GRN to this PO id (hydrated from ?poId= URL param). */
+  initialPoId?: string;
 }
 
 const STEPS = [
@@ -285,9 +287,10 @@ const STEPS = [
   { id: "review", label: "Review & Submit" },
 ];
 
-export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
+export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizardProps) {
   const router = useRouter();
   const terminology = useTerminology();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const { settings: financialSettings } = useFinancialSettings();
   const baseCurrency = financialSettings.baseCurrency;
@@ -300,6 +303,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [loadingFxRate, setLoadingFxRate] = React.useState(false);
   const [postingPreview, setPostingPreview] = React.useState<DocumentPostingPreviewLine[]>([]);
   const [loadingPostingPreview, setLoadingPostingPreview] = React.useState(false);
+  const [postingPreviewError, setPostingPreviewError] = React.useState<string | null>(null);
   const [fieldOptions, setFieldOptions] = React.useState<Record<string, LookupOption[]>>({});
   const [customerDefaultPriceLists, setCustomerDefaultPriceLists] = React.useState<Record<string, string>>({});
   const [supplierDefaultCostLists, setSupplierDefaultCostLists] = React.useState<Record<string, string>>({});
@@ -315,6 +319,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
   const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>>>({});
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
   const [costPricingByProductId, setCostPricingByProductId] = React.useState<Record<string, ProductPrice[]>>({});
+  const [linkedPoId, setLinkedPoId] = React.useState<string | null>(() =>
+    type === "grn" && initialPoId ? initialPoId : null
+  );
+  const [linkedPoOption, setLinkedPoOption] = React.useState<PurchaseOrderLookupOption | null>(null);
+  const [loadingPo, setLoadingPo] = React.useState(false);
+  /** Resolve GRN warehouse after warehouse options load (PO may have branchId but no warehouseId). */
+  const pendingGrnWarehouseFromPoRef = React.useRef<{ warehouseId?: string; branchId?: string } | null>(null);
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
     [baseCurrency]
@@ -390,6 +401,34 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (type !== "grn") return;
+    const pending = pendingGrnWarehouseFromPoRef.current;
+    if (!pending) return;
+    const opts = fieldOptions["warehouse"] ?? [];
+    if (!opts.length) return;
+    if (form.getValues("warehouse")) {
+      pendingGrnWarehouseFromPoRef.current = null;
+      return;
+    }
+    if (pending.warehouseId) {
+      const ok = opts.some((o) => o.id === pending.warehouseId);
+      if (ok) {
+        form.setValue("warehouse", pending.warehouseId);
+      }
+      pendingGrnWarehouseFromPoRef.current = null;
+      return;
+    }
+    if (pending.branchId) {
+      const match = opts.find((o) => o.branchId === pending.branchId);
+      if (match) {
+        form.setValue("warehouse", match.id);
+        toast.success(`Warehouse set to ${match.label} (from PO branch).`);
+      }
+      pendingGrnWarehouseFromPoRef.current = null;
+    }
+  }, [type, fieldOptions, form]);
 
   React.useEffect(() => {
     if (step === 2) void hydrateProductsFromApi();
@@ -497,6 +536,90 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     [form]
   );
 
+  const handlePoSelect = React.useCallback(
+    async (poId: string, option: PurchaseOrderLookupOption | null) => {
+      setLinkedPoId(poId);
+      setLinkedPoOption(option);
+      if (!poId) {
+        form.setValue("poRef", "");
+        return;
+      }
+      setLoadingPo(true);
+      try {
+        const po = await fetchDocumentDetailApi("purchase-order", poId);
+        if (!po) return;
+        if (po.partyId) form.setValue("party", po.partyId);
+        if (po.branchId) form.setValue("branch", po.branchId);
+        pendingGrnWarehouseFromPoRef.current = {
+          warehouseId: po.warehouseId,
+          branchId: po.branchId,
+        };
+        if (po.warehouseId) {
+          form.setValue("warehouse", po.warehouseId);
+        } else {
+          form.setValue("warehouse", "");
+        }
+        if (po.currency) form.setValue("currency", po.currency);
+        form.setValue("poRef", po.number);
+        const receivable = (po.lines ?? []).filter(
+          (l) => l.productId && (l.remainingQuantity ?? l.qty ?? 0) > 0.01
+        );
+        if (receivable.length > 0) {
+          const prefilled: DocumentLine[] = receivable.map((l, i) => {
+            const qty = l.remainingQuantity ?? l.qty ?? 1;
+            const unitPrice = l.unitPrice ?? (l.qty && l.qty > 0 ? (l.amount ?? 0) / l.qty : 0);
+            const amount = Math.round(unitPrice * qty * 100) / 100;
+            return {
+              id: `po-${poId}-line-${i}`,
+              productId: l.productId!,
+              sku: l.productSku ?? "",
+              name: l.description ?? l.productName ?? "",
+              uom: l.unit ?? "EA",
+              qty,
+              baseQty: qty,
+              price: unitPrice,
+              priceReason: "From PO",
+              amount,
+              sourceLineId: l.id,
+            };
+          });
+          setLines(prefilled);
+          form.setValue("linesCount", prefilled.length);
+          form.setValue("totalAmount", prefilled.reduce((s, l) => s + l.amount, 0));
+          toast.success(`Linked to ${po.number} — ${prefilled.length} line(s) prefilled.`);
+        } else {
+          setLines([]);
+          form.setValue("linesCount", 0);
+          form.setValue("totalAmount", 0);
+          toast.info(`Linked to ${po.number}. All lines fully received — add lines manually if needed.`);
+        }
+      } catch {
+        toast.error("Could not load PO details.");
+      } finally {
+        setLoadingPo(false);
+      }
+    },
+    [form]
+  );
+
+  const handlePoClear = React.useCallback(() => {
+    pendingGrnWarehouseFromPoRef.current = null;
+    setLinkedPoId(null);
+    setLinkedPoOption(null);
+    form.setValue("poRef", "");
+    setLines([]);
+    form.setValue("linesCount", 0);
+    form.setValue("totalAmount", 0);
+  }, [form]);
+
+  // When arriving from a deep-link (?poId=…), auto-trigger PO load so lines, party, and warehouse are pre-filled.
+  React.useEffect(() => {
+    if (type !== "grn" || !initialPoId) return;
+    void handlePoSelect(initialPoId, null);
+  // Run once on mount only — initialPoId and type are stable props, handlePoSelect will be called once.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const buildDraftPayload = React.useCallback(
     () => {
       const selectedCurrency = form.getValues("currency") || baseCurrency;
@@ -509,6 +632,11 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
         poRef: form.getValues("poRef") || undefined,
         reference: form.getValues("reference") || undefined,
         dueDate: form.getValues("dueDate") || undefined,
+        ...(linkedPoId && {
+          sourceDocumentId: linkedPoId,
+          sourceDocumentType: "purchase-order" as const,
+          sourceDocumentNumber: form.getValues("poRef") || undefined,
+        }),
         lines: lines.map((line) => ({
           productId: line.productId,
           description: line.name,
@@ -516,6 +644,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
           unit: line.uom,
           unitPrice: line.price,
           amount: line.amount,
+          ...(line.sourceLineId && { sourceLineId: line.sourceLineId }),
         })),
         subtotal: form.getValues("totalAmount") ?? 0,
         total: form.getValues("totalAmount") ?? 0,
@@ -523,7 +652,7 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
         ...(selectedCurrency !== baseCurrency && { exchangeRate }),
       };
     },
-    [baseCurrency, form, lines]
+    [baseCurrency, form, lines, linkedPoId]
   );
 
   const onReview = async () => {
@@ -542,11 +671,13 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
       return;
     }
     setStep(4);
+    setPostingPreviewError(null);
     try {
       setLoadingPostingPreview(true);
       setPostingPreview(await previewDocumentPostingApi(type as DocTypeKey, buildDraftPayload()));
     } catch (error) {
-      toast.error((error as Error).message || "Failed to load posting preview.");
+      const msg = (error as Error).message || "Failed to load posting preview.";
+      setPostingPreviewError(msg);
       setPostingPreview([]);
     } finally {
       setLoadingPostingPreview(false);
@@ -557,6 +688,10 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
     if (step === 1) {
       const valid = await form.trigger(["date", "party", "branch", "warehouse", "dueDate", "poRef", "reference"]);
       if (!valid) return;
+      if (type === "grn" && !String(form.getValues("warehouse") ?? "").trim()) {
+        toast.error("Select a warehouse — stock must be received into a specific location.");
+        return;
+      }
     }
     setStep((s) => Math.min(4, s + 1));
   };
@@ -678,15 +813,73 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>1. Header</CardTitle>
-            <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Generate draft with Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Generate draft with Copilot
+              </Button>
+            ) : null}
           </CardHeader>
           <CardContent>
             <form className="space-y-4">
+              {type === "grn" && (
+                <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-start gap-2">
+                    <Icons.Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                    <p className="text-sm text-muted-foreground">
+                      Select a Purchase Order to auto-fill supplier, warehouse, and line items (remaining quantities). Skip if receiving goods without a PO.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Purchase Order</Label>
+                    <AsyncSearchableSelect
+                      value={linkedPoId ?? ""}
+                      onValueChange={(poId) => {
+                        if (!poId) {
+                          handlePoClear();
+                        } else {
+                          void handlePoSelect(poId, null);
+                        }
+                      }}
+                      onOptionSelect={(opt) => {
+                        if (opt && linkedPoId === opt.id) return;
+                        if (opt) void handlePoSelect(opt.id, opt as PurchaseOrderLookupOption);
+                      }}
+                      loadOptions={async (q) => {
+                        const items = await searchPurchaseOrderLookupApi(q);
+                        return items.map((item) => ({
+                          id: item.id,
+                          label: item.label,
+                          description: item.description,
+                          badges: [{ label: item.status, variant: item.status === "APPROVED" ? "default" : "secondary" as const }],
+                        }));
+                      }}
+                      selectedOption={linkedPoOption ? { id: linkedPoOption.id, label: linkedPoOption.label, description: linkedPoOption.description } : null}
+                      placeholder="Search by PO number..."
+                      searchPlaceholder="Type PO number or reference"
+                      emptyMessage="No purchase orders found."
+                      allowClear
+                      disabled={loadingPo}
+                      recentStorageKey="lookup:recent-pos"
+                    />
+                    {loadingPo && (
+                      <p className="text-xs text-muted-foreground">Loading PO details...</p>
+                    )}
+                    {linkedPoId && !loadingPo && !form.watch("warehouse") && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        This PO has no warehouse set — please select a warehouse below.
+                      </p>
+                    )}
+                    {linkedPoId && !loadingPo && form.watch("warehouse") && (
+                      <p className="text-xs text-green-600 dark:text-green-400">
+                        Supplier, warehouse, and lines have been prefilled from this PO. You can still edit them below.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
-                {headerFields.map((f) => (
+                {headerFields.filter((f) => f.type !== "po-search").map((f) => (
                     <RenderField
                       key={f.id}
                       field={f}
@@ -780,12 +973,20 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>2. Lines</CardTitle>
-            <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Generate draft with Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Generate draft with Copilot
+              </Button>
+            ) : null}
           </CardHeader>
           <CardContent>
+            {type === "grn" && linkedPoId && (
+              <div className="mb-4 flex items-center gap-2 rounded-md bg-blue-500/10 px-3 py-2 text-sm text-blue-700 dark:text-blue-300">
+                <Icons.Link className="h-3.5 w-3.5 shrink-0" />
+                Lines prefilled from PO <span className="font-medium">{form.watch("poRef")}</span> · Edit quantities to match actual goods received.
+              </div>
+            )}
             <DocumentLineEditor
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}
@@ -806,15 +1007,24 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>3. Taxes & charges</CardTitle>
-            <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Generate draft with Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Generate draft with Copilot
+              </Button>
+            ) : null}
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Taxes and pricing defaults now follow the selected customer/supplier setup where available. Review charges before posting.
-            </div>
+            {type === "grn" ? (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground">Goods receipts are typically tax-free at this stage.</p>
+                <p>Tax was set per product line in step 2. The supplier&apos;s VAT is handled when you post the related AP bill, not at goods receipt. You can leave the default below as <em>None</em> unless your tax authority requires it here.</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                Taxes and pricing defaults now follow the selected customer/supplier setup where available. Review charges before posting.
+              </div>
+            )}
             {taxCodes.length > 0 && (
               <div className="mt-4 space-y-2">
                 <Label className="text-muted-foreground">Default tax code</Label>
@@ -866,6 +1076,12 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                     <p className="font-medium">
                       {selectedPartyDetail?.name || form.watch("reference") || "—"}
                     </p>
+                  </div>
+                )}
+                {form.watch("poRef") && (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Purchase Order</span>
+                    <p className="font-medium">{form.watch("poRef")}</p>
                   </div>
                 )}
                 <div className="space-y-1">
@@ -927,7 +1143,11 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                   <span>Memo</span>
                 </div>
                 {loadingPostingPreview ? (
-                  <div className="p-3 text-sm text-muted-foreground">Loading live posting preview...</div>
+                  <div className="p-3 text-sm text-muted-foreground">Loading posting preview…</div>
+                ) : postingPreviewError ? (
+                  <div className="p-3 text-sm text-destructive">
+                    Preview failed: {postingPreviewError}. Check that posting accounts are configured in Financial Settings.
+                  </div>
                 ) : postingPreview.length > 0 ? (
                   postingPreview.map((row, i) => (
                     <div
@@ -941,10 +1161,10 @@ export function DocumentCreateWizard({ type }: DocumentCreateWizardProps) {
                     </div>
                   ))
                 ) : (
-                  <div
-                    className="p-3 text-sm text-muted-foreground"
-                  >
-                    No GL preview available for this draft type yet.
+                  <div className="p-3 text-sm text-muted-foreground">
+                    {type === "purchase-order"
+                      ? "Purchase orders are commitment documents — GL entries are created when the linked GRN or Bill is posted."
+                      : "No GL lines to preview — total is zero or this document type posts on a later action."}
                   </div>
                 )}
                 {selectedCurrency !== baseCurrency && (

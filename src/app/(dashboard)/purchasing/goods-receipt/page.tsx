@@ -10,14 +10,26 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchGRNs, postGRN } from "@/lib/api/grn";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+const GRN_STATUS_OPTIONS = [
+  { label: "All", value: "" },
+  { label: "Draft", value: "DRAFT" },
+  { label: "Pending Approval", value: "PENDING_APPROVAL" },
+  { label: "Approved", value: "APPROVED" },
+  { label: "Posted", value: "POSTED" },
+  { label: "Received", value: "RECEIVED" },
+  { label: "Cancelled", value: "CANCELLED" },
+];
+
 export default function GoodsReceiptPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("DRAFT");
   const [rows, setRows] = React.useState<PurchasingDocRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -35,10 +47,12 @@ export default function GoodsReceiptPage() {
   }, [refresh]);
 
   const filtered = React.useMemo(() => {
+    let out = rows;
+    if (statusFilter) out = out.filter((row) => row.status === statusFilter);
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) => [row.number, row.poRef ?? "", row.warehouse ?? "", row.status].join(" ").toLowerCase().includes(q));
-  }, [rows, search]);
+    if (q) out = out.filter((row) => [row.number, row.poRef ?? "", row.warehouse ?? "", row.status].join(" ").toLowerCase().includes(q));
+    return out;
+  }, [rows, search, statusFilter]);
 
   const columns = React.useMemo(
     () => [
@@ -46,27 +60,28 @@ export default function GoodsReceiptPage() {
       { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
       { id: "poRef", header: "PO reference", accessor: (row: PurchasingDocRow) => row.poRef || "—" },
       { id: "warehouse", header: "Warehouse", accessor: (row: PurchasingDocRow) => row.warehouse || "—" },
-      { id: "status", header: "Status", accessor: "status" as keyof PurchasingDocRow },
+      { id: "status", header: "Status", accessor: (row: PurchasingDocRow) => <StatusBadge status={row.status} /> },
       {
         id: "actions",
         header: "Actions",
-        accessor: (row: PurchasingDocRow) => (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={async () => {
-              try {
-                await postGRN(row.id);
-                toast.success(`GRN ${row.number} posted.`);
-                await refresh();
-              } catch (error) {
-                toast.error(error instanceof Error ? error.message : "Failed to post GRN.");
-              }
-            }}
-          >
-            Post
-          </Button>
-        ),
+        accessor: (row: PurchasingDocRow) =>
+          row.status === "DRAFT" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await postGRN(row.id);
+                  toast.success(`GRN ${row.number} posted.`);
+                  await refresh();
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Failed to post GRN.");
+                }
+              }}
+            >
+              Post
+            </Button>
+          ) : null,
       },
     ],
     [refresh]
@@ -93,7 +108,20 @@ export default function GoodsReceiptPage() {
         }
       />
       <div className="p-6 space-y-4">
-        <DataTableToolbar searchPlaceholder="Search GRNs..." searchValue={search} onSearchChange={setSearch} />
+        <DataTableToolbar
+          searchPlaceholder="Search GRNs..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          filters={[
+            {
+              id: "status",
+              label: "Status",
+              options: GRN_STATUS_OPTIONS,
+              value: statusFilter,
+              onChange: (v) => setStatusFilter(v),
+            },
+          ]}
+        />
         <Card>
           <CardHeader>
             <CardTitle>Goods Receipt Notes</CardTitle>

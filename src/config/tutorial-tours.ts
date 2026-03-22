@@ -25,17 +25,20 @@ export const TUTORIAL_TOURS: TourDef[] = [
       {
         element: "h1",
         title: "Dashboard",
-        description: "Your main command center. View KPIs, recent activity, and quick links to documents and modules.",
+        description:
+          "Your role-based home. Scan KPIs and widgets first, then use shortcuts to documents or lists. Numbers respect your org, branch, and permissions.",
       },
       {
         element: "[data-tour-step=dashboard-kpis]",
         title: "Key metrics",
-        description: "KPI cards show your most important numbers. Click a card to drill into detail.",
+        description:
+          "Each card summarises a metric (sales, stock risk, approvals, etc.). Click through when you need the underlying list or trend—not every card applies to every role.",
       },
       {
         element: "[data-tour-step=command-hint]",
         title: "Quick search",
-        description: "Press ⌘K to open the command palette. Search for any page or ask Copilot.",
+        description:
+          "⌘K / Ctrl+K opens the command palette: jump to any screen by name or start a Copilot prompt with page context. This is the fastest navigation once you know where you’re going.",
       },
     ],
   },
@@ -59,12 +62,14 @@ export const TUTORIAL_TOURS: TourDef[] = [
       {
         element: "h1",
         title: "Document Center",
-        description: "All transaction documents start here. Choose a type to list or create.",
+        description:
+          "Every operational posting flows through a document type here: order-to-cash, procure-to-pay, stock, and journals. Pick the type that matches your business action.",
       },
       {
         element: "[data-tour-step=doc-type-list]",
         title: "Document types",
-        description: "Sales orders, purchase orders, invoices, and more. Click to open the list or create new.",
+        description:
+          "Each tile opens that document’s list. From there you use Create / New to draft. Keeping PO → GRN → supplier invoice linked is what makes audit and three-way match possible.",
       },
     ],
   },
@@ -538,16 +543,410 @@ export const TUTORIAL_TOURS: TourDef[] = [
       { element: "h1", title: "Asset Register", description: "Fixed assets with cost, depreciation method, and book value." },
     ],
   },
+  {
+    tourId: "onboarding-setup-tour",
+    route: "/onboarding",
+    title: "Setup checklist tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Setup",
+        description:
+          "Complete company setup: profile, currencies, chart of accounts, taxes, bank accounts, users, and first document.",
+      },
+    ],
+  },
+  {
+    tourId: "inbox-tour",
+    route: "/inbox",
+    title: "Inbox tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Inbox",
+        description: "Approvals and notifications together. Open items to act or drill to the related record.",
+      },
+    ],
+  },
+  {
+    tourId: "approvals-hub-tour",
+    route: "/approvals",
+    title: "Approvals hub tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Approvals",
+        description: "Use Inbox for items assigned to you or My requests for what you submitted for approval.",
+      },
+    ],
+  },
+  {
+    tourId: "approvals-requests-tour",
+    route: "/approvals/requests",
+    title: "My approval requests tour",
+    steps: [
+      {
+        element: "h1",
+        title: "My requests",
+        description: "Track requests you submitted: pending, approved, or rejected, with comments.",
+      },
+    ],
+  },
+  {
+    tourId: "docs-credit-note-tour",
+    route: "/docs/credit-note",
+    title: "Sales credit notes tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Sales credit notes",
+        description: "Reverse or reduce revenue; link to the original invoice where applicable.",
+      },
+    ],
+  },
+  {
+    tourId: "docs-purchase-credit-note-tour",
+    route: "/docs/purchase-credit-note",
+    title: "Purchase credit notes tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Purchase credit notes",
+        description: "Record supplier credits against payables; link to the original bill when possible.",
+      },
+    ],
+  },
+  // Session 2 — Inventory B, Warehouse, Sales, Purchasing
+  {
+    tourId: "inventory-costing-tour",
+    route: "/inventory/costing",
+    title: "Costing tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Costing",
+        description: "Review costing method and run or inspect costing so inventory value matches your policy.",
+      },
+    ],
+  },
+  {
+    tourId: "inventory-stock-explorer-tour",
+    route: "/inventory/stock-explorer",
+    title: "Stock Explorer tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Stock Explorer",
+        description: "Drill into stock by product, warehouse, and time. Trace movements and balances.",
+      },
+    ],
+  },
+  {
+    tourId: "inventory-valuation-tour",
+    route: "/inventory/valuation",
+    title: "Valuation tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Valuation",
+        description: "Inventory value by product, category, or warehouse for reporting and period-end checks.",
+      },
+    ],
+  },
+  {
+    tourId: "inventory-receiving-tour",
+    route: "/inventory/receiving",
+    title: "Receiving queue tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Receiving queue",
+        description: "Process expected receipts against purchase orders and post to update stock.",
+      },
+    ],
+  },
+  {
+    tourId: "inventory-warehouses-tour",
+    route: "/inventory/warehouses",
+    title: "Warehouses & locations tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Warehouses & locations",
+        description: "Structure storage: warehouses, locations, and bins used for stock and operations.",
+      },
+    ],
+  },
+  {
+    tourId: "warehouse-bin-locations-tour",
+    route: "/warehouse/bin-locations",
+    title: "Bin locations tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Bin locations",
+        description: "View and manage bins; see stock per bin within your warehouse network.",
+      },
+    ],
+  },
+  {
+    tourId: "sales-quotes-tour",
+    route: "/sales/quotes",
+    title: "Sales quotes tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Quotes",
+        description: "Create and track quotes; convert to a sales order when the customer confirms.",
+      },
+    ],
+  },
+  {
+    tourId: "sales-orders-list-tour",
+    route: "/sales/orders",
+    title: "Sales orders tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Sales orders",
+        description: "List and manage customer orders. Open a row for lines, delivery, and invoicing.",
+      },
+    ],
+  },
+  {
+    tourId: "sales-customers-tour",
+    route: "/sales/customers",
+    title: "Customers tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Customers",
+        description: "Customer master data: balances, terms, and links to orders and invoices.",
+      },
+    ],
+  },
+  {
+    tourId: "sales-returns-tour",
+    route: "/sales/returns",
+    title: "Sales returns tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Returns / notes",
+        description: "Sales returns and credit notes: adjust stock and receivables when customers return goods.",
+      },
+    ],
+  },
+  {
+    tourId: "purchasing-requests-tour",
+    route: "/purchasing/requests",
+    title: "Purchase requests tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Purchase requests",
+        description: "Internal requisitions; submit for approval and convert to a purchase order when approved.",
+      },
+    ],
+  },
+  {
+    tourId: "purchasing-sourcing-flow-tour",
+    route: "/purchasing/sourcing-flow",
+    title: "Guided sourcing flow tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Procurement sourcing journey",
+        description:
+          "This journey tracks sourcing from demand through PO, receipt, variance, and landed cost. Use it when you want a single narrative instead of jumping between modules.",
+      },
+      {
+        element: "[data-tour-step=sourcing-flow-health]",
+        title: "Flow health",
+        description:
+          "Open POs, variance exceptions, and GRNs waiting for landed cost tell you where the pipeline is stuck. Clear exceptions before month-end close.",
+      },
+      {
+        element: "[data-tour-step=sourcing-step-cards]",
+        title: "Step cards",
+        description:
+          "Each card is a journey step with CTAs (e.g. open POs, receiving, landed cost, finance review). Work active steps first; use Finance review when procurement and treasury must align.",
+      },
+    ],
+  },
+  {
+    tourId: "purchasing-purchase-returns-tour",
+    route: "/purchasing/purchase-returns",
+    title: "Purchase returns tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Purchase returns",
+        description: "Returns to suppliers and debit notes: reduce payables and adjust inventory.",
+      },
+    ],
+  },
+  {
+    tourId: "purchasing-cash-weight-audit-tour",
+    route: "/purchasing/cash-weight-audit",
+    title: "Cash-to-weight audit tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Cash-to-weight audit",
+        description: "Reconcile weight-based procurement: ordered vs received weight and variance.",
+      },
+    ],
+  },
+  // Session 3 — Pricing, Manufacturing, Distribution
+  {
+    tourId: "pricing-rules-tour",
+    route: "/pricing/rules",
+    title: "Pricing rules tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Pricing rules",
+        description:
+          "Conditional pricing: quantity breaks, customer or product filters, and how rules layer on top of price lists. Test changes before campaigns go live.",
+      },
+    ],
+  },
+  {
+    tourId: "manufacturing-routing-tour",
+    route: "/manufacturing/routing",
+    title: "Routing tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Routing",
+        description:
+          "Operations, work centers, and sequence define how and where a product is made—inputs to capacity and standard cost.",
+      },
+    ],
+  },
+  {
+    tourId: "manufacturing-mrp-tour",
+    route: "/manufacturing/mrp",
+    title: "MRP tour",
+    steps: [
+      {
+        element: "h1",
+        title: "MRP",
+        description:
+          "Material requirements planning: explode BOMs, net demand, and review suggested POs and work orders. Master data quality drives result quality.",
+      },
+    ],
+  },
+  {
+    tourId: "manufacturing-subcontracting-tour",
+    route: "/manufacturing/subcontracting",
+    title: "Subcontracting tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Subcontracting",
+        description:
+          "External processing: issue materials, receive finished or semi-finished goods, and align costs with AP.",
+      },
+    ],
+  },
+  {
+    tourId: "manufacturing-yield-tour",
+    route: "/manufacturing/yield",
+    title: "Yield tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Yield / mass balance",
+        description:
+          "Compare input vs output and investigate variance—critical for process industries and commodity procurement.",
+      },
+    ],
+  },
+  {
+    tourId: "manufacturing-byproducts-tour",
+    route: "/manufacturing/byproducts",
+    title: "Byproducts tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Byproducts",
+        description:
+          "Secondary outputs from production: receive into stock with correct valuation alongside the main product.",
+      },
+    ],
+  },
+  {
+    tourId: "distribution-routes-tour",
+    route: "/distribution/routes",
+    title: "Routes tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Routes",
+        description:
+          "Territories and stop sequences for field delivery; foundation for trips and collections.",
+      },
+    ],
+  },
+  {
+    tourId: "distribution-deliveries-tour",
+    route: "/distribution/deliveries",
+    title: "Distribution deliveries tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Deliveries",
+        description:
+          "Outbound distribution runs: load, deliver, POD, and stock impact—often multi-stop.",
+      },
+    ],
+  },
+  {
+    tourId: "distribution-transfer-planning-tour",
+    route: "/distribution/transfer-planning",
+    title: "Transfer planning tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Transfer planning",
+        description:
+          "Plan stock moves between branches or depots to position inventory ahead of demand.",
+      },
+    ],
+  },
+  {
+    tourId: "distribution-collections-tour",
+    route: "/distribution/collections",
+    title: "Route collections tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Collections",
+        description:
+          "Cash or mobile collections on route against invoices—tight controls and AR posting matter here.",
+      },
+    ],
+  },
 ];
 
 /**
  * Get tour definition for a pathname.
+ * Prefers exact route match; otherwise longest prefix match so /docs/sales-order gets the SO tour, not the hub.
  */
 export function getTourForRoute(pathname: string): TourDef | null {
   const normalized = pathname.replace(/\/$/, "") || "/";
-  return TUTORIAL_TOURS.find((t) => {
-    if (normalized === t.route) return true;
-    if (normalized.startsWith(t.route + "/")) return true;
-    return false;
-  }) ?? null;
+  const exact = TUTORIAL_TOURS.find((t) => normalized === t.route);
+  if (exact) return exact;
+
+  let best: TourDef | null = null;
+  let bestLen = -1;
+  for (const t of TUTORIAL_TOURS) {
+    if (normalized.startsWith(t.route + "/") && t.route.length > bestLen) {
+      best = t;
+      bestLen = t.route.length;
+    }
+  }
+  return best;
 }

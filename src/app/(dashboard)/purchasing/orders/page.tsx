@@ -20,22 +20,26 @@ import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { formatMoney, toBase } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 
 const STATUS_OPTIONS = [
+  { label: "Open (Active)", value: "OPEN" },
   { label: "All", value: "" },
   { label: "Draft", value: "DRAFT" },
-  { label: "Pending", value: "PENDING_APPROVAL" },
+  { label: "Pending Approval", value: "PENDING_APPROVAL" },
   { label: "Approved", value: "APPROVED" },
   { label: "Received", value: "RECEIVED" },
+  { label: "Cancelled", value: "CANCELLED" },
 ];
+
+const OPEN_STATUSES = ["DRAFT", "PENDING_APPROVAL", "APPROVED"];
 
 const scope = "purchasing-orders";
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("OPEN");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
@@ -43,6 +47,16 @@ export default function PurchaseOrdersPage() {
   );
   const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [approvingId, setApprovingId] = React.useState<string | null>(null);
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setAllRows(await fetchPurchaseOrders());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -68,7 +82,11 @@ export default function PurchaseOrdersPage() {
           (r.party?.toLowerCase().includes(q))
       );
     }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
+    if (statusFilter === "OPEN") {
+      out = out.filter((r) => OPEN_STATUSES.includes(r.status));
+    } else if (statusFilter) {
+      out = out.filter((r) => r.status === statusFilter);
+    }
     return out;
   }, [allRows, search, statusFilter]);
 
@@ -93,36 +111,53 @@ export default function PurchaseOrdersPage() {
       { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
       { id: "party", header: "Supplier", accessor: "party" as keyof PurchasingDocRow },
       {
-        id: "docTotal",
-        header: "Doc Total",
+        id: "amount",
+        header: "Amount",
         accessor: (r: PurchasingDocRow) =>
-          r.total != null ? formatMoney(r.total, r.currency ?? "KES") : "—",
-      },
-      {
-        id: "baseTotal",
-        header: "Base (KES)",
-        accessor: (r: PurchasingDocRow) => {
-          if (r.total == null) return "—";
-          const rate = r.exchangeRate ?? 1;
-          const baseAmount = (r.currency ?? "KES").toUpperCase() === "KES" ? r.total : toBase(r.total, rate);
-          return formatMoney(baseAmount, "KES");
-        },
-      },
-      {
-        id: "fxMeta",
-        header: "FX",
-        accessor: (r: PurchasingDocRow) =>
-          (r.currency ?? "KES").toUpperCase() === "KES"
-            ? "Base"
-            : `${r.currency ?? "KES"} @ ${Number(r.exchangeRate ?? 0).toFixed(4)}`,
+          r.total != null ? (
+            <DualCurrencyAmount
+              amount={r.total}
+              currency={r.currency ?? "KES"}
+              exchangeRate={r.exchangeRate}
+              align="right"
+              size="sm"
+            />
+          ) : "—",
       },
       {
         id: "status",
         header: "Status",
         accessor: (r: PurchasingDocRow) => <StatusBadge status={r.status} />,
       },
+      {
+        id: "actions",
+        header: "",
+        accessor: (r: PurchasingDocRow) =>
+          r.status === "PENDING_APPROVAL" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              disabled={approvingId === r.id}
+              onClick={async (e) => {
+                e.stopPropagation();
+                setApprovingId(r.id);
+                try {
+                  await approvePurchaseOrders([r.id]);
+                  toast.success(`${r.number} approved.`);
+                  await reload();
+                } finally {
+                  setApprovingId(null);
+                }
+              }}
+            >
+              {approvingId === r.id ? <Icons.Loader2 className="h-3 w-3 animate-spin" /> : <Icons.CheckCircle className="h-3 w-3 mr-1" />}
+              Approve
+            </Button>
+          ) : null,
+      },
     ],
-    []
+    [approvingId, reload]
   );
 
   const handleClearFilters = () => {
@@ -225,13 +260,20 @@ export default function PurchaseOrdersPage() {
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    await approvePurchaseOrders(selectedIds);
-                    setAllRows(await fetchPurchaseOrders());
-                    toast.success(`${selectedIds.length} purchase order(s) approved.`);
+                    const pendingIds = selectedIds.filter(
+                      (sid) => allRows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL"
+                    );
+                    if (pendingIds.length === 0) {
+                      toast.info("No pending-approval POs in selection.");
+                      return;
+                    }
+                    await approvePurchaseOrders(pendingIds);
+                    toast.success(`${pendingIds.length} purchase order(s) approved.`);
                     setSelectedIds([]);
+                    await reload();
                   }}
                 >
-                  Approve
+                  Approve ({selectedIds.filter((sid) => allRows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL").length})
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => exportPurchaseOrdersCsv(filtered.filter((r) => selectedIds.includes(r.id)))}>
                   Export

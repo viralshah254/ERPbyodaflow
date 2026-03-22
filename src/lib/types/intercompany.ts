@@ -19,5 +19,6 @@ export interface ICTransactionRow {
   toEntityName: string;
   amount: number;
   currency: string;
+  exchangeRate?: number;
   status: "DRAFT" | "POSTED";
 }

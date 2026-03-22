@@ -17,7 +17,7 @@ import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { formatMoney, toBase } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -91,28 +91,18 @@ export default function PurchaseRequestsPage() {
       { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
       { id: "party", header: "Requester", accessor: "party" as keyof PurchasingDocRow },
       {
-        id: "docTotal",
-        header: "Doc Total",
+        id: "amount",
+        header: "Amount",
         accessor: (r: PurchasingDocRow) =>
-          r.total != null ? formatMoney(r.total, r.currency ?? "KES") : "—",
-      },
-      {
-        id: "baseTotal",
-        header: "Base (KES)",
-        accessor: (r: PurchasingDocRow) => {
-          if (r.total == null) return "—";
-          const rate = r.exchangeRate ?? 1;
-          const baseAmount = (r.currency ?? "KES").toUpperCase() === "KES" ? r.total : toBase(r.total, rate);
-          return formatMoney(baseAmount, "KES");
-        },
-      },
-      {
-        id: "fxMeta",
-        header: "FX",
-        accessor: (r: PurchasingDocRow) =>
-          (r.currency ?? "KES").toUpperCase() === "KES"
-            ? "Base"
-            : `${r.currency ?? "KES"} @ ${Number(r.exchangeRate ?? 0).toFixed(4)}`,
+          r.total != null ? (
+            <DualCurrencyAmount
+              amount={r.total}
+              currency={r.currency ?? "KES"}
+              exchangeRate={r.exchangeRate}
+              align="right"
+              size="sm"
+            />
+          ) : "—",
       },
       {
         id: "status",

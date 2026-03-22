@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { fetchApBillsApi } from "@/lib/api/payments";
 import type { APBillRow } from "@/lib/types/ap";
-import { formatMoney } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -48,14 +48,18 @@ export default function SupplierInvoicesPage() {
       { id: "number", header: "Number", accessor: (row: APBillRow) => <span className="font-medium">{row.number}</span> },
       { id: "date", header: "Date", accessor: "date" as keyof APBillRow },
       { id: "supplier", header: "Supplier", accessor: "party" as keyof APBillRow },
-      { id: "docTotal", header: "Doc Total", accessor: (row: APBillRow) => formatMoney(row.total, row.currency ?? "KES") },
       {
-        id: "baseTotal",
-        header: "Base (KES)",
-        accessor: (row: APBillRow) =>
-          (row.currency ?? "KES").toUpperCase() === "KES"
-            ? formatMoney(row.total, "KES")
-            : `${formatMoney(row.total, "KES")} (rate on posting)`,
+        id: "amount",
+        header: "Amount",
+        accessor: (row: APBillRow) => (
+          <DualCurrencyAmount
+            amount={row.total}
+            currency={row.currency ?? "KES"}
+            exchangeRate={row.exchangeRate}
+            align="right"
+            size="sm"
+          />
+        ),
       },
       { id: "status", header: "Status", accessor: "status" as keyof APBillRow },
     ],

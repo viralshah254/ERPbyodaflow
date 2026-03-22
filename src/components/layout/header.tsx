@@ -19,10 +19,12 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound, BookOpen } from "lucide-react";
 import { signOut as firebaseSignOut } from "@/lib/firebase";
 import { setApiAuth } from "@/lib/api/client";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 
 export function Header() {
   const router = useRouter();
   const { user, currentBranch, logout } = useAuthStore();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
 
@@ -33,9 +35,13 @@ export function Header() {
     router.push("/");
   };
 
-  const userInitials = user
-    ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
-    : "U";
+  const userInitials = (() => {
+    if (!user) return "U";
+    const first = user.firstName?.[0] ?? "";
+    const last = user.lastName?.[0] ?? "";
+    const initials = (first + last).toUpperCase();
+    return initials || user.email?.[0]?.toUpperCase() || "U";
+  })();
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background px-4">
@@ -65,10 +71,11 @@ export function Header() {
           <BookOpen className="h-5 w-5" />
         </Link>
       </Button>
-      {/* Copilot */}
-      <Button variant="ghost" size="icon" onClick={openDrawer} title="Open Copilot">
-        <Sparkles className="h-5 w-5" />
-      </Button>
+      {copilotEnabled ? (
+        <Button variant="ghost" size="icon" onClick={openDrawer} title="Open Copilot">
+          <Sparkles className="h-5 w-5" />
+        </Button>
+      ) : null}
 
       {/* Theme Toggle */}
       <ThemeToggle />

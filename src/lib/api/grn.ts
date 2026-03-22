@@ -33,11 +33,19 @@ export async function postGRN(id: string): Promise<void> {
   await apiRequest(`/api/purchasing/grn/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
 }
 
-/** Patch GRN line weight (receivedWeightKg, paidWeightKg, weightKg). lineId is 0-based index. */
+export async function confirmGRNProcessing(id: string): Promise<{ adjustedLines: number; processingConfirmed: boolean }> {
+  requireLiveApi("Confirm GRN processing");
+  return apiRequest<{ adjustedLines: number; processingConfirmed: boolean }>(
+    `/api/purchasing/grn/${encodeURIComponent(id)}/confirm-processing`,
+    { method: "POST", body: {} }
+  );
+}
+
+/** Patch GRN line weight (receivedWeightKg, paidWeightKg, weightKg, processedWeightKg). lineId is 0-based index. */
 export async function patchGRNLine(
   grnId: string,
   lineId: number,
-  body: { receivedWeightKg?: number; paidWeightKg?: number; weightKg?: number }
+  body: { receivedWeightKg?: number; paidWeightKg?: number; weightKg?: number; processedWeightKg?: number }
 ): Promise<GrnDetailRow> {
   requireLiveApi("Patch GRN line");
   return apiRequest<GrnDetailRow>(`/api/purchasing/grn/${encodeURIComponent(grnId)}/lines/${lineId}`, {
@@ -82,6 +90,7 @@ export function exportGRNDetailCsv(grn: GrnDetailRow): void {
       value: line.value,
       receivedWeightKg: line.receivedWeightKg ?? "",
       paidWeightKg: line.paidWeightKg ?? "",
+      processedWeightKg: line.processedWeightKg ?? "",
     }))
   );
   downloadTextFile(`${grn.number.toLowerCase()}.csv`, csv, "text/csv;charset=utf-8");
@@ -89,5 +98,5 @@ export function exportGRNDetailCsv(grn: GrnDetailRow): void {
 
 export function exportGRNPdf(id: string, onNotAvailable: (message: string) => void): void {
   requireLiveApi("Goods receipt PDF export");
-  void downloadFile(`/api/purchasing/grn/${encodeURIComponent(id)}/pdf`, `grn-${id}.pdf`, onNotAvailable);
+  void downloadFile(`/api/docs/grn/${encodeURIComponent(id)}/pdf`, `grn-${id}.pdf`, onNotAvailable);
 }

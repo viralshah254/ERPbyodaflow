@@ -9,6 +9,7 @@ export type PurchasingDocRow = {
   status: string;
   poRef?: string;
   warehouse?: string;
+  hasLandedCost?: boolean;
 };
 
 export type GrnLineRow = {
@@ -20,12 +21,14 @@ export type GrnLineRow = {
   value: number;
   receivedWeightKg?: number;
   paidWeightKg?: number;
+  processedWeightKg?: number;
 };
 
 export type GrnDetailRow = PurchasingDocRow & {
   supplier?: string;
   currency?: string;
   totalAmount?: number;
+  processingConfirmed?: boolean;
   lines: GrnLineRow[];
 };
 
@@ -38,6 +41,8 @@ export type PurchaseOrderDetailRow = PurchasingDocRow & {
   cashMode: "CASH" | "CREDIT";
   lines: Array<{
     id: string;
+    /** Present when line is product-backed; used for lookups. */
+    productId?: string;
     sku: string;
     productName: string;
     qty: number;

@@ -17,11 +17,12 @@ import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocati
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
-import { fetchGRNById, postGRN, patchGRNLine, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow } from "@/lib/api/grn";
+import { fetchGRNById, postGRN, patchGRNLine, confirmGRNProcessing, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow } from "@/lib/api/grn";
+import { Badge } from "@/components/ui/badge";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { formatMoney } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -33,7 +34,9 @@ export default function ReceiptDetailPage() {
   const [grn, setGrn] = React.useState<GrnDetailRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [posting, setPosting] = React.useState(false);
+  const [confirmingProcessing, setConfirmingProcessing] = React.useState(false);
   const [putawayLink, setPutawayLink] = React.useState<{ id: string; label: string } | null>(null);
+  const weightTableRef = React.useRef<HTMLDivElement>(null);
   const [editingWeight, setEditingWeight] = React.useState<Record<number, string>>({});
   const linesWithIndex = React.useMemo(
     () => (grn?.lines ?? []).map((line, idx) => ({ ...line, _lineIndex: idx })),
@@ -84,8 +87,36 @@ export default function ReceiptDetailPage() {
 
   const totalReceivedWeight = grn.lines.reduce((acc, line) => acc + (Number(line.receivedWeightKg) || 0), 0);
   const totalPaidWeight = grn.lines.reduce((acc, line) => acc + (Number(line.paidWeightKg) || 0), 0);
+  const totalProcessedWeight = grn.lines.reduce((acc, line) => acc + (Number(line.processedWeightKg) || 0), 0);
   const totalQty = grn.lines.reduce((acc, line) => acc + (Number(line.qty) || 0), 0);
+  const waterLossKg = totalReceivedWeight > 0 && totalProcessedWeight > 0
+    ? Math.max(0, totalReceivedWeight - totalProcessedWeight)
+    : null;
+  const waterLossPct = waterLossKg != null && totalReceivedWeight > 0
+    ? ((waterLossKg / totalReceivedWeight) * 100).toFixed(1)
+    : null;
   const canEditWeight = hasCashWeightAudit && grn.status === "DRAFT";
+  // Allow entering processed weight even after posting (processing happens post-receipt)
+  const canEditProcessedWeight = hasCashWeightAudit && (grn.status === "DRAFT" || grn.status === "POSTED") && !grn.processingConfirmed;
+  const hasAnyProcessedWeight = grn.lines.some((l) => l.processedWeightKg != null && l.processedWeightKg > 0);
+  const [editingProcessedWeight, setEditingProcessedWeight] = React.useState<Record<number, string>>({});
+  const handleConfirmProcessing = async () => {
+    setConfirmingProcessing(true);
+    try {
+      const result = await confirmGRNProcessing(grn.id);
+      const updated = await fetchGRNById(grn.id);
+      setGrn(updated ?? null);
+      toast.success(
+        result.adjustedLines > 0
+          ? `Processing confirmed. Stock adjusted for ${result.adjustedLines} line(s).`
+          : "Processing confirmed. No stock adjustment needed (no water loss)."
+      );
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to confirm processing");
+    } finally {
+      setConfirmingProcessing(false);
+    }
+  };
   const handleReceivedWeightBlur = async (lineIndex: number, value: string) => {
     const num = value ? parseFloat(value) : undefined;
     if (num == null || Number.isNaN(num) || num < 0) return;
@@ -102,11 +133,35 @@ export default function ReceiptDetailPage() {
       toast.error((e as Error)?.message ?? "Failed to update weight");
     }
   };
+  const handleProcessedWeightBlur = async (lineIndex: number, value: string) => {
+    const num = value ? parseFloat(value) : undefined;
+    if (num == null || Number.isNaN(num) || num < 0) return;
+    try {
+      const updated = await patchGRNLine(grn.id, lineIndex, { processedWeightKg: num });
+      setGrn(updated);
+      setEditingProcessedWeight((prev) => {
+        const next = { ...prev };
+        delete next[lineIndex];
+        return next;
+      });
+      toast.success("Processed weight updated");
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to update processed weight");
+    }
+  };
   const lineColumns = [
     { id: "sku", header: "SKU", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.sku ?? "—", sticky: true },
     { id: "product", header: "Product", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.productName ?? "—" },
     { id: "qty", header: "Qty", accessor: (line: GrnLineRow & { _lineIndex?: number }) => `${line.qty ?? 0} ${line.uom ?? ""}`.trim() },
-    { id: "value", header: "Value", accessor: (line: GrnLineRow & { _lineIndex?: number }) => formatMoney(line.value ?? 0, grn.currency ?? "KES") },
+    { id: "value", header: "Value", accessor: (line: GrnLineRow & { _lineIndex?: number }) => (
+      <DualCurrencyAmount
+        amount={line.value ?? 0}
+        currency={grn.currency ?? "KES"}
+        exchangeRate={grn.exchangeRate}
+        align="right"
+        size="sm"
+      />
+    ) },
     ...(hasCashWeightAudit
       ? [
           {
@@ -130,6 +185,26 @@ export default function ReceiptDetailPage() {
             },
           },
           { id: "paidWeightKg", header: "Paid kg", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.paidWeightKg ?? "—" },
+          {
+            id: "processedWeightKg",
+            header: "Processed kg",
+            accessor: (line: GrnLineRow & { _lineIndex?: number }) => {
+              const idx = line._lineIndex ?? 0;
+              return canEditProcessedWeight ? (
+                <Input
+                  type="number"
+                  step="0.01"
+                  className="w-24 h-8"
+                  placeholder="kg"
+                  value={editingProcessedWeight[idx] ?? line.processedWeightKg ?? ""}
+                  onChange={(e) => setEditingProcessedWeight((prev) => ({ ...prev, [idx]: e.target.value }))}
+                  onBlur={(e) => handleProcessedWeightBlur(idx, e.target.value)}
+                />
+              ) : (
+                (line.processedWeightKg ?? "—")
+              );
+            },
+          },
         ]
       : []),
   ];
@@ -205,6 +280,51 @@ export default function ReceiptDetailPage() {
           />
         ) : null}
 
+        {/* "What's next" contextual guidance — shown after GRN is posted */}
+        {grn.status === "POSTED" && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-primary">
+                  {grn.processingConfirmed ? "Processing confirmed — final steps:" : "GRN posted — what's next:"}
+                </span>
+                {!grn.processingConfirmed && hasCashWeightAudit && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => weightTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  >
+                    <Icons.Weight className="mr-1.5 h-3.5 w-3.5" />
+                    Enter processed weight
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/inventory/costing?sourceId=${grn.id}`}>
+                    <Icons.TrendingUp className="mr-1.5 h-3.5 w-3.5" />
+                    Apply landed costs
+                  </Link>
+                </Button>
+                {hasCashWeightAudit && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/purchasing/cash-weight-audit${grn.poRef ? `?poId=${grn.poRef}` : ""}`}>
+                      <Icons.BarChart2 className="mr-1.5 h-3.5 w-3.5" />
+                      Run audit
+                    </Link>
+                  </Button>
+                )}
+                {grn.processingConfirmed && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href="/inventory/stock-levels">
+                      <Icons.Package className="mr-1.5 h-3.5 w-3.5" />
+                      View stock
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
           <div className="space-y-6">
         <Card>
@@ -239,7 +359,14 @@ export default function ReceiptDetailPage() {
             </div>
             <div>
               <p className="text-muted-foreground">Total</p>
-              <p className="font-medium">{grn.totalAmount != null && grn.currency ? formatMoney(grn.totalAmount, grn.currency) : "—"}</p>
+              {grn.totalAmount != null && grn.currency ? (
+                <DualCurrencyAmount
+                  amount={grn.totalAmount}
+                  currency={grn.currency}
+                  exchangeRate={grn.exchangeRate}
+                  size="md"
+                />
+              ) : <p className="font-medium">—</p>}
             </div>
             <div>
               <p className="text-muted-foreground">Ownership / Location</p>
@@ -260,7 +387,7 @@ export default function ReceiptDetailPage() {
               />
             ) : null}
 
-            <Card>
+            <Card ref={weightTableRef}>
               <CardHeader>
                 <CardTitle>Receipt Lines</CardTitle>
                 <CardDescription>Received quantity and financial value per line.</CardDescription>
@@ -268,6 +395,69 @@ export default function ReceiptDetailPage() {
               <CardContent className="p-0">
                 <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={lineColumns} emptyMessage="No receipt lines." />
               </CardContent>
+              {hasCashWeightAudit && totalReceivedWeight > 0 && (
+                <div className="border-t px-4 py-3 space-y-3">
+                  <div className="flex flex-wrap gap-6 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Received: </span>
+                      <span className="font-semibold">{totalReceivedWeight.toFixed(2)} kg</span>
+                    </div>
+                    {totalProcessedWeight > 0 && (
+                      <>
+                        <div>
+                          <span className="text-muted-foreground">Processed: </span>
+                          <span className="font-semibold">{totalProcessedWeight.toFixed(2)} kg</span>
+                        </div>
+                        {waterLossKg !== null && (
+                          <div className={waterLossKg > 0 ? "text-amber-700" : "text-emerald-700"}>
+                            <span className="text-muted-foreground">Loss: </span>
+                            <span className="font-semibold">
+                              {waterLossKg.toFixed(2)} kg {waterLossPct ? `(${waterLossPct}%)` : ""}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {totalProcessedWeight === 0 && canEditProcessedWeight && (
+                      <span className="text-xs text-muted-foreground italic">
+                        Enter "Processed kg" above to calculate water loss.
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Confirm processing action or confirmed badge */}
+                  {grn.processingConfirmed ? (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-emerald-600 border-emerald-300 gap-1">
+                        <Icons.CheckCircle2 className="h-3 w-3" />
+                        Processing confirmed — stock adjusted
+                      </Badge>
+                      <Button size="sm" variant="ghost" asChild>
+                        <Link href="/inventory/stock-levels">
+                          <Icons.Package className="mr-1 h-3 w-3" />
+                          View stock
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : canEditProcessedWeight && hasAnyProcessedWeight ? (
+                    <div className="flex items-center gap-3">
+                      <Button
+                        size="sm"
+                        disabled={confirmingProcessing}
+                        onClick={handleConfirmProcessing}
+                      >
+                        {confirmingProcessing
+                          ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          : <Icons.CheckCircle2 className="mr-2 h-4 w-4" />}
+                        {confirmingProcessing ? "Confirming…" : "Confirm processing"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        This records the water loss as a stock adjustment and locks the processed weights.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </Card>
 
             <CostImpactPanel

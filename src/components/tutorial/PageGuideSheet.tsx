@@ -20,13 +20,17 @@ export interface PageGuideSheetProps {
   info: TutorialForRoute | null;
   /** Current pathname for analytics */
   route?: string;
+  /** When false, Copilot actions are hidden (org has not enabled the Copilot product). */
+  copilotAvailable?: boolean;
   onAskCopilot: () => void;
   /** Optional: start spotlight tour when available */
   onStartTour?: () => void;
   hasTour?: boolean;
 }
 
-const FALLBACK_SUMMARY =
+const FALLBACK_NO_COPILOT =
+  "No specific guide for this page. Use the Tutorial chapter links and navigation to find related screens.";
+const FALLBACK_WITH_COPILOT =
   "No specific guide for this page. Use Ask Copilot to get help and next steps.";
 
 export function PageGuideSheet({
@@ -34,6 +38,7 @@ export function PageGuideSheet({
   onOpenChange,
   info,
   route,
+  copilotAvailable = false,
   onAskCopilot,
   onStartTour,
   hasTour,
@@ -45,7 +50,8 @@ export function PageGuideSheet({
   }, [open, route]);
 
   const pageTitle = info?.itemLabel ?? info?.chapterTitle ?? "This page";
-  const guideSummary = info?.guideSummary ?? FALLBACK_SUMMARY;
+  const guideSummary =
+    info?.guideSummary ?? (copilotAvailable ? FALLBACK_WITH_COPILOT : FALLBACK_NO_COPILOT);
   const guideSteps = info?.guideSteps ?? [];
   const guideTips = info?.guideTips ?? [];
   const elementHints = info?.elementHints ?? [];
@@ -127,18 +133,20 @@ export function PageGuideSheet({
               Start tour
             </Button>
           )}
-          <Button
-            variant={hasTour ? "outline" : "default"}
-            size="sm"
-            className="w-full justify-center"
-            onClick={() => {
-              onAskCopilot();
-              onOpenChange(false);
-            }}
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Ask Copilot about this page
-          </Button>
+          {copilotAvailable ? (
+            <Button
+              variant={hasTour ? "outline" : "default"}
+              size="sm"
+              className="w-full justify-center"
+              onClick={() => {
+                onAskCopilot();
+                onOpenChange(false);
+              }}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Ask Copilot about this page
+            </Button>
+          ) : null}
           {hasChapterLink && (
             <Button variant="outline" size="sm" className="w-full" asChild>
               <Link href={info!.hrefToChapter} onClick={() => onOpenChange(false)}>

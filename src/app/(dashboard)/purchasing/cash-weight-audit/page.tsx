@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -42,10 +43,13 @@ import {
   approveCashWeightException,
   resolveCashWeightException,
 } from "@/lib/api/cool-catch";
-import { fetchPurchaseOrders, fetchPurchaseOrderById } from "@/lib/api/purchasing";
-import type { PurchasingDocRow } from "@/lib/types/purchasing";
+import { fetchPurchaseOrderById } from "@/lib/api/purchasing";
+import { searchPurchaseOrderLookupApi } from "@/lib/api/documents";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
+import type { AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import type { CashWeightAuditLineRow, CashDisbursementRow } from "@/lib/mock/purchasing/cash-weight-audit";
 import { formatMoney } from "@/lib/money";
+import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -60,6 +64,8 @@ const WORKFLOW_STEPS = [
 ];
 
 export default function CashWeightAuditPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [view, setView] = React.useState<"audit" | "disbursements">("audit");
   const [auditLines, setAuditLines] = React.useState<CashWeightAuditLineRow[]>([]);
@@ -71,6 +77,14 @@ export default function CashWeightAuditPage() {
   // Disbursement form state
   const [disbursementOpen, setDisbursementOpen] = React.useState(false);
   const [disbPoId, setDisbPoId] = React.useState("");
+  // Received weight at facility for the selected PO (from audit lines already loaded)
+  const receivedWeightForPo = React.useMemo(() => {
+    if (!disbPoId.trim()) return null;
+    const matching = auditLines.filter((l) => l.poId === disbPoId.trim());
+    if (!matching.length) return null;
+    const sum = matching.reduce((a, l) => a + (l.receivedWeightKg ?? 0), 0);
+    return sum;
+  }, [disbPoId, auditLines]);
   const [disbAmount, setDisbAmount] = React.useState("");
   const [disbCurrency, setDisbCurrency] = React.useState("KES");
   const [disbPaidAt, setDisbPaidAt] = React.useState("");
@@ -79,7 +93,8 @@ export default function CashWeightAuditPage() {
   const [disbLineWeights, setDisbLineWeights] = React.useState<Record<string, string>>({});
   const [poLines, setPoLines] = React.useState<Array<{ poLineId: string; sku: string; productName: string }>>([]);
   const [savingDisb, setSavingDisb] = React.useState(false);
-  const [purchaseOrders, setPurchaseOrders] = React.useState<PurchasingDocRow[]>([]);
+  const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
+  const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
 
   // Notes sheet state (replaces window.prompt)
   const [notesSheetOpen, setNotesSheetOpen] = React.useState(false);
@@ -105,12 +120,35 @@ export default function CashWeightAuditPage() {
     load();
   }, [load]);
 
-  // Load PO list for the picker
+  // Hydrate from query params: ?poId=xxx&openDisbursement=1
   React.useEffect(() => {
-    fetchPurchaseOrders()
-      .then(setPurchaseOrders)
-      .catch(() => setPurchaseOrders([]));
+    const poId = searchParams.get("poId");
+    const open = searchParams.get("openDisbursement");
+    if (!poId) return;
+    setDisbPoId(poId);
+    if (open === "1") {
+      setDisbursementOpen(true);
+    }
+    // Clean up URL so a page-refresh doesn't re-open the sheet unexpectedly
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("openDisbursement");
+    router.replace(`/purchasing/cash-weight-audit${next.toString() ? `?${next.toString()}` : ""}`, { scroll: false });
+  // Only run once on mount — searchParams and router are stable refs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadPoOptions = React.useCallback(
+    (query: string) =>
+      searchPurchaseOrderLookupApi(query, { status: "APPROVED" }).then((items) =>
+        items.map((item) => ({
+          id: item.id,
+          label: item.label,
+          description: item.description,
+          badges: [{ label: item.status, variant: "secondary" as const }],
+        }))
+      ),
+    []
+  );
 
   // When a PO is selected, fetch its lines for per-line weight entry
   React.useEffect(() => {
@@ -122,7 +160,10 @@ export default function CashWeightAuditPage() {
     let cancelled = false;
     fetchPurchaseOrderById(disbPoId.trim())
       .then((po) => {
-        if (cancelled || !po?.lines?.length) return;
+        if (cancelled || !po) return;
+        // Auto-populate currency from PO so UGX/USD POs immediately show KES preview
+        if (po.currency) setDisbCurrency(po.currency);
+        if (!po.lines?.length) return;
         const lines = po.lines.map((l, i) => ({
           poLineId: `${po.id}:${i}`,
           sku: l.sku ?? `LINE-${i + 1}`,
@@ -144,6 +185,21 @@ export default function CashWeightAuditPage() {
       cancelled = true;
     };
   }, [disbPoId]);
+
+  React.useEffect(() => {
+    const amount = Number(disbAmount);
+    if (disbCurrency === "KES" || !disbAmount || amount <= 0) {
+      setDisbKesPreview(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchLiveExchangeRate(disbCurrency, "KES").then((result) => {
+      if (!cancelled && result.rate) setDisbKesPreview(amount * result.rate);
+    }).catch(() => {
+      if (!cancelled) setDisbKesPreview(null);
+    });
+    return () => { cancelled = true; };
+  }, [disbAmount, disbCurrency]);
 
   const handleReconcile = async (line: CashWeightAuditLineRow) => {
     if (line.status === "MATCHED") return;
@@ -212,7 +268,10 @@ export default function CashWeightAuditPage() {
       }
       setDisbursementOpen(false);
       setDisbPoId("");
+      setSelectedPoOption(null);
       setDisbAmount("");
+      setDisbCurrency("KES");
+      setDisbKesPreview(null);
       setDisbPaidAt("");
       setDisbReference("");
       setDisbPaidWeightKg("");
@@ -255,7 +314,6 @@ export default function CashWeightAuditPage() {
     }
   };
 
-  const selectedPo = purchaseOrders.find((p) => p.id === disbPoId);
 
   const auditColumns = [
     { id: "po", header: "PO", accessor: (r: CashWeightAuditLineRow) => <span className="font-medium">{r.poNumber ?? "—"}</span>, sticky: true },
@@ -413,33 +471,44 @@ export default function CashWeightAuditPage() {
                   </SheetDescription>
                 </SheetHeader>
                 <div className="grid gap-4 py-6">
-                  {/* PO picker — shows PO number + supplier + total */}
+                  {/* PO picker — APPROVED orders only, searchable */}
                   <div className="grid gap-2">
                     <Label>Purchase order</Label>
-                    <Select value={disbPoId} onValueChange={setDisbPoId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a purchase order…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {purchaseOrders.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No purchase orders found.</div>
-                        ) : (
-                          purchaseOrders.map((po) => (
-                            <SelectItem key={po.id} value={po.id}>
-                              {po.number}
-                              {po.party ? ` — ${po.party}` : ""}
-                              {po.total ? ` — ${formatMoney(po.total, "KES")}` : ""}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {selectedPo && (
-                      <p className="text-xs text-muted-foreground">
-                        {selectedPo.date} · Status: {selectedPo.status}
-                      </p>
-                    )}
+                    <AsyncSearchableSelect
+                      value={disbPoId}
+                      onValueChange={setDisbPoId}
+                      onOptionSelect={(opt) => setSelectedPoOption(opt)}
+                      loadOptions={loadPoOptions}
+                      selectedOption={selectedPoOption}
+                      placeholder="Search approved purchase orders…"
+                      searchPlaceholder="Type PO number or supplier…"
+                      emptyMessage="No approved purchase orders found."
+                      allowClear
+                      recentStorageKey="disb-po-picker"
+                    />
+                    <p className="text-xs text-muted-foreground">Only approved POs are shown.</p>
                   </div>
+
+                  {receivedWeightForPo !== null && (
+                    <div className="rounded-md bg-muted px-3 py-2 text-sm flex items-center gap-2">
+                      <Icons.Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span>
+                        Received at facility:{" "}
+                        <span className="font-semibold">{receivedWeightForPo} kg</span>
+                        {disbPaidWeightKg && Number(disbPaidWeightKg) > 0 && (
+                          <span className="ml-2 text-muted-foreground text-xs">
+                            (paying for {disbPaidWeightKg} kg at farm gate)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {disbPoId.trim() && receivedWeightForPo === null && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Icons.Info className="h-3 w-3" />
+                      No GRN linked yet — received weight will show once goods are receipted.
+                    </p>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-2">
@@ -465,6 +534,14 @@ export default function CashWeightAuditPage() {
                       </Select>
                     </div>
                   </div>
+                  {disbKesPreview !== null && disbCurrency !== "KES" && (
+                    <p className="text-xs text-muted-foreground -mt-1 flex items-center gap-1">
+                      <Icons.ArrowRight className="h-3 w-3 text-primary" />
+                      ≈{" "}
+                      <span className="font-medium text-foreground">{formatMoney(disbKesPreview, "KES")}</span>
+                      {" "}at current rate
+                    </p>
+                  )}
 
                   <div className="grid gap-2">
                     <Label htmlFor="disbPaidAt">Date paid</Label>

@@ -39,9 +39,11 @@ export type DocumentDetailRecord = {
   date: string;
   partyId?: string;
   party?: string;
+  branchId?: string;
   warehouseId?: string;
   total?: number;
   currency: string;
+  exchangeRate?: number;
   status: string;
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
@@ -50,6 +52,8 @@ export type DocumentDetailRecord = {
     id?: string;
     description: string;
     qty?: number;
+    unit?: string;
+    unitPrice?: number;
     amount?: number;
     tax?: number;
     productId?: string;

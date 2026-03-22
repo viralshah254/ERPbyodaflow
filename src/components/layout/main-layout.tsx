@@ -13,6 +13,7 @@ import { automationInsightApply } from "@/lib/api/stub-endpoints";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import { useEffect } from "react";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setRightPanelOpen, setCompactMode } = useUIStore();
@@ -26,6 +27,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     if (compact !== null) setCompactMode(compact === "true");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const copilotEnabled = useCopilotFeatureEnabled();
   const {
     drawerOpen,
     setDrawerOpen,
@@ -35,6 +37,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     setPrefillPrompt,
   } = useCopilotStore();
   const { currentBranch } = useAuthStore();
+
+  useEffect(() => {
+    if (!copilotEnabled) setDrawerOpen(false);
+  }, [copilotEnabled, setDrawerOpen]);
 
   const handleApplyAction = () => {
     if (!pendingAction) {
@@ -76,16 +82,18 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <CommandPalette />
-      <CopilotDrawer
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        contextPills={contextPills}
-        pendingAction={pendingAction}
-        onApplyAction={handleApplyAction}
-        onRejectAction={() => setPendingAction(null)}
-        prefillPrompt={prefillPrompt}
-        onConsumePrefill={() => setPrefillPrompt(null)}
-      />
+      {copilotEnabled ? (
+        <CopilotDrawer
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          contextPills={contextPills}
+          pendingAction={pendingAction}
+          onApplyAction={handleApplyAction}
+          onRejectAction={() => setPendingAction(null)}
+          prefillPrompt={prefillPrompt}
+          onConsumePrefill={() => setPrefillPrompt(null)}
+        />
+      ) : null}
     </div>
   );
 }

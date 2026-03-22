@@ -43,6 +43,7 @@ import { validateProductPackaging } from "@/lib/products/validation";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
@@ -54,6 +55,7 @@ export default function ProductPackagingPage() {
   const params = useParams();
   const id = params.id as string;
   const terminology = useTerminology();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
@@ -181,10 +183,12 @@ export default function ProductPackagingPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain UOM conversions and default sales/purchase UOM." label="Explain" />
-            <Button size="sm" onClick={() => openWithPrompt(`Suggest carton/bundle conversions for ${product.sku}.`)}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button size="sm" onClick={() => openWithPrompt(`Suggest carton/bundle conversions for ${product.sku}.`)}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Copilot
+              </Button>
+            ) : null}
             <Button size="sm" onClick={() => { setEditingIndex(null); setSheetOpen(true); }}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add UOM

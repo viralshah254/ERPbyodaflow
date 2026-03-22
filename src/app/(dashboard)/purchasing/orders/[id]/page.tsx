@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,27 +15,33 @@ import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { LiveCurrencyConverterCard } from "@/components/operational/LiveCurrencyConverterCard";
 import { fetchPurchaseOrderById } from "@/lib/api/purchasing";
-import { fetchCashWeightAuditLines, fetchCashDisbursements } from "@/lib/api/cool-catch";
+import { fetchCashWeightAuditLines, fetchCashDisbursements, buildCashWeightAudit } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
+import { toast } from "sonner";
+import * as Icons from "lucide-react";
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = String(params?.id ?? "");
+  const [runningAudit, setRunningAudit] = React.useState(false);
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchPurchaseOrderById>>>(null);
   const [loading, setLoading] = React.useState(true);
   const [paidWeight, setPaidWeight] = React.useState(0);
   const [receivedWeight, setReceivedWeight] = React.useState(0);
+  const [disbursementCount, setDisbursementCount] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
     Promise.all([fetchPurchaseOrderById(id), fetchCashWeightAuditLines(), fetchCashDisbursements(id)])
-      .then(([po, audit]) => {
+      .then(([po, audit, disbursements]) => {
         if (cancelled) return;
         setOrder(po);
         const matchingAudit = audit.filter((line) => line.poId === id || line.poNumber === po?.number);
         setPaidWeight(matchingAudit.reduce((a, line) => a + (line.paidWeightKg ?? 0), 0));
         setReceivedWeight(matchingAudit.reduce((a, line) => a + (line.receivedWeightKg ?? 0), 0));
+        setDisbursementCount(Array.isArray(disbursements) ? disbursements.length : 0);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -44,6 +50,81 @@ export default function PurchaseOrderDetailPage() {
       cancelled = true;
     };
   }, [id]);
+
+  const poCreatedTimestamp = React.useMemo(() => {
+    if (!order?.date) return undefined;
+    const d = new Date(order.date);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  }, [order?.date]);
+
+  // Derive first-incomplete step to mark as "current"
+  const lifecycleSteps = React.useMemo(() => {
+    if (!order) return [];
+    const isApproved = order.status === "APPROVED" || order.status === "RECEIVED";
+    const isPendingApproval = order.status === "PENDING_APPROVAL";
+    const isPaid = disbursementCount > 0;
+    const isReceived = receivedWeight > 0;
+
+    type StepStatus = "completed" | "current" | "upcoming";
+
+    function deriveStatus(
+      isDone: boolean,
+      prevDone: boolean,
+      forceCurrentIfPending?: boolean,
+    ): StepStatus {
+      if (isDone) return "completed";
+      if (forceCurrentIfPending) return "current";
+      if (prevDone) return "current";
+      return "upcoming";
+    }
+
+    const approvedStatus: StepStatus = isApproved
+      ? "completed"
+      : isPendingApproval
+        ? "current"
+        : isApproved || isPendingApproval
+          ? "current"
+          : "upcoming";
+
+    const paidStatus = deriveStatus(isPaid, isApproved);
+    const receivedStatus = deriveStatus(isReceived, isPaid);
+
+    const approvalHref =
+      !isApproved ? `/docs/purchase-order/${id}` : undefined;
+
+    return [
+      {
+        id: "draft",
+        label: "PO created",
+        status: "completed" as StepStatus,
+        timestamp: poCreatedTimestamp,
+        href: `/docs/purchase-order/${id}`,
+      },
+      {
+        id: "approved",
+        label: "Approved / funded",
+        status: approvedStatus,
+        href: approvalHref,
+        actionLabel: isPendingApproval ? "Review approval" : !isApproved ? "Submit for approval" : undefined,
+      },
+      {
+        id: "paid",
+        label: "Cash disbursement",
+        status: paidStatus,
+        detail: isPaid ? `${disbursementCount} disbursement(s) recorded` : "Awaiting disbursement",
+        href: `/purchasing/cash-weight-audit?poId=${id}&openDisbursement=1`,
+        actionLabel: paidStatus === "current" ? "Record disbursement" : undefined,
+      },
+      {
+        id: "received",
+        label: "Receipt / GRN",
+        status: receivedStatus,
+        detail: isReceived ? `${receivedWeight} kg received` : "Awaiting receiving",
+        href: `/docs/grn/new?poId=${id}`,
+        actionLabel: receivedStatus === "current" ? "Create GRN" : undefined,
+      },
+    ];
+  }, [order, id, poCreatedTimestamp, disbursementCount, receivedWeight]);
 
   if (loading && !order) {
     return (
@@ -87,6 +168,29 @@ export default function PurchaseOrderDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            {(order.status === "APPROVED" || order.status === "RECEIVED") && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={runningAudit}
+                onClick={async () => {
+                  setRunningAudit(true);
+                  try {
+                    const result = await buildCashWeightAudit({ poId: id });
+                    toast.success(result.built > 0 ? `${result.built} audit line(s) built.` : "Audit lines already up to date.");
+                    router.push(`/purchasing/cash-weight-audit?poId=${id}`);
+                  } catch {
+                    toast.error("Failed to build audit. Navigate manually.");
+                    router.push(`/purchasing/cash-weight-audit?poId=${id}`);
+                  } finally {
+                    setRunningAudit(false);
+                  }
+                }}
+              >
+                {runningAudit ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.BarChart2 className="mr-2 h-4 w-4" />}
+                Run 3-way audit
+              </Button>
+            )}
             <Button variant="outline" asChild>
               <Link href="/purchasing/cash-weight-audit">Cash-to-Weight Audit</Link>
             </Button>
@@ -142,12 +246,7 @@ export default function PurchaseOrderDetailPage() {
           <div className="space-y-6">
             <BatchStatusTimeline
               title="Procurement Lifecycle"
-              steps={[
-                { id: "draft", label: "PO created", status: "completed", timestamp: `${order.date}T08:00:00Z` },
-                { id: "approved", label: "Approved / funded", status: order.status !== "PENDING_APPROVAL" ? "completed" : "current" },
-                { id: "paid", label: "Cash disbursement", status: paidWeight > 0 ? "completed" : "upcoming", detail: paidWeight > 0 ? `${paidWeight} kg paid` : "Awaiting disbursement" },
-                { id: "received", label: "Receipt / GRN", status: receivedWeight > 0 ? "completed" : "upcoming", detail: receivedWeight > 0 ? `${receivedWeight} kg received` : "Awaiting receiving" },
-              ]}
+              steps={lifecycleSteps}
             />
             <LiveCurrencyConverterCard />
             <Card className="overflow-hidden">

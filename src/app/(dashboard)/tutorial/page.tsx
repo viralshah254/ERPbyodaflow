@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { TUTORIAL_CHAPTERS } from "@/config/tutorial";
 import { useFilteredTutorialChapters } from "@/lib/tutorial/filter-by-access";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { useTutorialProgressStore } from "@/stores/tutorial-progress-store";
 import { Sparkles, ArrowRight, BookOpen, Zap, ChevronRight, Search, Clock } from "lucide-react";
 
@@ -39,6 +40,7 @@ const QUICK_START_WORKFLOWS = [
 ];
 
 export default function TutorialPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const setContext = useCopilotStore((s) => s.setContext);
   const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const visitedPages = useTutorialProgressStore((s) => s.visitedPages);
@@ -87,7 +89,11 @@ export default function TutorialPage() {
     <PageShell>
       <PageHeader
         title="Product Tutorial"
-        description="Learn the ERP by module. Open any screen or ask Copilot for help on a topic."
+        description={
+          copilotEnabled
+            ? "Learn the ERP by module. Open any screen or ask Copilot for help on a topic."
+            : "Learn the ERP by module. Open any screen from the links below."
+        }
         breadcrumbs={[{ label: "Tutorial" }]}
         sticky
         showCommandHint
@@ -95,7 +101,9 @@ export default function TutorialPage() {
       <div className="p-6 space-y-6 max-w-4xl">
         <div className="flex flex-wrap gap-4 items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Use the links below to jump to a screen, or click &quot;Ask Copilot&quot; to get an explanation and next steps. You can also use the help strip on any page to open the tutorial for that section.
+            {copilotEnabled
+              ? 'Use the links below to jump to a screen, or click "Ask Copilot" to get an explanation and next steps. You can also use the help strip on any page to open the tutorial for that section.'
+              : "Use the links below to jump to a screen. Use the help strip on any page to open the tutorial for that section."}
           </p>
           <div className="text-sm text-muted-foreground">
             You&apos;ve explored <span className="font-medium text-foreground">{exploredCount}</span> of{" "}
@@ -156,18 +164,20 @@ export default function TutorialPage() {
                         </Link>
                       </Button>
                     ))}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7"
-                      onClick={() => {
-                        setContext({ page: wf.title, route: "/tutorial" });
-                        openDrawerWithPrompt(wf.copilotPrompt);
-                      }}
-                    >
-                      <Sparkles className="h-3.5 w-3.5 mr-1" />
-                      Ask Copilot
-                    </Button>
+                    {copilotEnabled ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7"
+                        onClick={() => {
+                          setContext({ page: wf.title, route: "/tutorial" });
+                          openDrawerWithPrompt(wf.copilotPrompt);
+                        }}
+                      >
+                        <Sparkles className="h-3.5 w-3.5 mr-1" />
+                        Ask Copilot
+                      </Button>
+                    ) : null}
                   </div>
                 </CardHeader>
               </Card>
@@ -226,19 +236,21 @@ export default function TutorialPage() {
                         >
                           {item.label}
                         </Link>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 shrink-0"
-                          onClick={() =>
-                            handleAskCopilot(
-                              item.label,
-                              item.copilotPrompt ?? chapter.copilotPrompt
-                            )
-                          }
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                        </Button>
+                        {copilotEnabled ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 shrink-0"
+                            onClick={() =>
+                              handleAskCopilot(
+                                item.label,
+                                item.copilotPrompt ?? chapter.copilotPrompt
+                              )
+                            }
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
                       </div>
                       <Button variant="outline" size="sm" asChild>
                         <Link href={item.href}>Go to page</Link>

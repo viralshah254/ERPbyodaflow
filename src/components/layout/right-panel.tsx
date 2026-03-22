@@ -15,11 +15,11 @@ export function RightPanel({ title, children, className }: RightPanelProps) {
   return (
     <Card className={cn("shrink-0 w-full flex flex-col overflow-hidden border-0 rounded-none shadow-none", className)}>
       {title && (
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-medium">{title}</CardTitle>
+        <CardHeader className="py-2 pb-1 px-3">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
         </CardHeader>
       )}
-      <CardContent className={cn("flex-1 overflow-auto space-y-4 text-sm", !title && "pt-4")}>
+      <CardContent className={cn("flex-1 overflow-auto space-y-3 text-sm px-3 pb-3", !title && "pt-4")}>
         {children}
       </CardContent>
     </Card>

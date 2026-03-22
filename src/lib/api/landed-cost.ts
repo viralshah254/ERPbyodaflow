@@ -55,14 +55,61 @@ export async function fetchLandedCostSourceById(id: string): Promise<LandedCostS
   }
 }
 
-export interface LandedCostAllocationRequest {
-  sourceId: string;
-  lines: { templateId: string; amount: number; currency: string }[];
+export type LandedCostCostCentre = "currency_conversion" | "permits" | "inbound_logistics" | "other";
+
+export interface LandedCostAllocationLine {
+  templateId: string;
+  amount: number;
+  currency: string;
+  reference?: string;
+  costCentre?: LandedCostCostCentre;
 }
 
-export async function postLandedCostAllocation(body: LandedCostAllocationRequest): Promise<{ id?: string }> {
+export interface LandedCostAllocationRequest {
+  sourceId: string;
+  lines: LandedCostAllocationLine[];
+}
+
+export interface LandedCostAllocationResult {
+  id?: string;
+  allocationMethod?: string;
+  totalLandedCost?: number;
+  totalLandedCostBase?: number;
+  costCentreSummary?: Record<string, { originalAmount: number; currency: string }>;
+  posted?: boolean;
+  impactLines?: Array<{
+    productId: string;
+    basisValue: number;
+    allocatedAmount: number;
+    byCostCentre?: Record<string, number>;
+  }>;
+}
+
+export interface ExistingLandedCostAllocation {
+  id: string;
+  sourceId: string;
+  sourceType: string;
+  allocationMethod: string;
+  lines: (LandedCostAllocationLine & { fxSnapshot?: unknown })[];
+  impactLines: LandedCostAllocationResult["impactLines"];
+  fxSnapshot?: unknown;
+}
+
+export async function fetchLandedCostAllocation(sourceId: string): Promise<ExistingLandedCostAllocation | null> {
+  requireLiveApi("Landed cost allocation fetch");
+  try {
+    const res = await apiRequest<{ allocation: ExistingLandedCostAllocation | null }>(
+      `/api/inventory/landed-cost/allocation/${encodeURIComponent(sourceId)}`
+    );
+    return res?.allocation ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function postLandedCostAllocation(body: LandedCostAllocationRequest): Promise<LandedCostAllocationResult> {
   requireLiveApi("Landed cost allocation");
-  return apiRequest<{ id: string }>("/api/inventory/landed-cost/allocation", {
+  return apiRequest<LandedCostAllocationResult>("/api/inventory/landed-cost/allocation", {
     method: "POST",
     body,
   });

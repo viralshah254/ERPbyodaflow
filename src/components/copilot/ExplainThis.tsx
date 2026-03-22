@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +31,10 @@ export function ExplainThis({
   label = "Explain this",
   className,
 }: ExplainThisProps) {
+  const copilotOn = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
+
+  if (!copilotOn) return null;
 
   return (
     <TooltipProvider>

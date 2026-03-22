@@ -49,6 +49,9 @@ export interface LandedCostSourceRow {
   totalAmount: number;
   currency: string;
   lines: LandedCostSourceLine[];
+  /** True when a landed cost allocation has already been posted for this source. */
+  isAllocated?: boolean;
+  allocationId?: string;
 }
 
 export const MOCK_LANDED_COST_TEMPLATES: LandedCostTemplateRow[] = [

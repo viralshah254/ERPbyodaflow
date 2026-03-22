@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import * as Icons from "lucide-react";
 import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
 import type { SalesDocRow } from "@/lib/types/sales";
-import { formatMoney } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 
@@ -173,7 +173,12 @@ export default function SalesOverviewPage() {
                           <p className="text-xs text-muted-foreground">{order.party ?? "—"}</p>
                         </td>
                         <td className="px-4 py-2 text-right">
-                          <p className="text-xs">{formatMoney(order.total ?? 0, order.currency ?? "KES")}</p>
+                          <DualCurrencyAmount
+                            amount={order.total ?? 0}
+                            currency={order.currency ?? "KES"}
+                            exchangeRate={order.exchangeRate}
+                            size="sm"
+                          />
                           <StatusBadge status={order.status} />
                         </td>
                       </tr>

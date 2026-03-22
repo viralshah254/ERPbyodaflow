@@ -53,7 +53,9 @@ export type FeatureFlagKey =
   | "reverseBom"
   | "landedCostMultiCurrency"
   | "logisticsTrips"
-  | "massBalanceYield";
+  | "massBalanceYield"
+  /** AI assistant (org-level product; off until enabled in platform / org flags) */
+  | "copilot";
 
 export type NavSectionKey =
   | "core"

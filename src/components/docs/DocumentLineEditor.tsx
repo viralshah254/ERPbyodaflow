@@ -44,6 +44,8 @@ export interface DocumentLine {
   taxCodeId?: string;
   variantId?: string;
   variantSku?: string;
+  /** When this line originates from a PO line, the PO line id for consumption tracking. */
+  sourceLineId?: string;
 }
 
 interface DocumentLineEditorProps {

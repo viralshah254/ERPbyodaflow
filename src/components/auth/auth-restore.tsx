@@ -105,8 +105,12 @@ export function AuthRestore() {
                 bearerToken: token,
                 branchId: session.currentBranch?.branchId,
               });
-              const tid = DEFAULT_TEMPLATE_BY_ORG_TYPE[session.org.orgType];
-              if (tid) applyTemplate(tid);
+              // Only fall back to the org-type default if the backend didn't
+              // already specify a template (e.g. "seafood-distributor").
+              if (!session.orgContext.templateId) {
+                const tid = DEFAULT_TEMPLATE_BY_ORG_TYPE[session.org.orgType];
+                if (tid) applyTemplate(tid);
+              }
             } catch {
               if (!cancelled) logout();
             }

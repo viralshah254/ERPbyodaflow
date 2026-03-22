@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { getTutorialForRoute } from "@/config/tutorial";
 import { getTourForRoute } from "@/config/tutorial-tours";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { useTutorialProgressStore } from "@/stores/tutorial-progress-store";
 import { useSpotlightTour } from "@/components/tutorial/SpotlightTour";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ export function PageHelp() {
   const info = pathname ? getTutorialForRoute(pathname) : null;
   const tour = pathname ? getTourForRoute(pathname) : null;
   const [guideSheetOpen, setGuideSheetOpen] = React.useState(false);
+  const copilotEnabled = useCopilotFeatureEnabled();
   const setContext = useCopilotStore((s) => s.setContext);
   const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const isTourDismissed = useTutorialProgressStore((s) => s.isTourDismissed);
@@ -70,21 +72,24 @@ export function PageHelp() {
           <BookOpen className="h-3.5 w-3.5" />
           Tutorial
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={handleAskCopilot}
-        >
-          <Sparkles className="h-3.5 w-3.5 mr-1" />
-          {info ? "Ask Copilot about this page" : "Ask Copilot"}
-        </Button>
+        {copilotEnabled ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={handleAskCopilot}
+          >
+            <Sparkles className="h-3.5 w-3.5 mr-1" />
+            {info ? "Ask Copilot about this page" : "Ask Copilot"}
+          </Button>
+        ) : null}
       </div>
       <PageGuideSheet
         open={guideSheetOpen}
         onOpenChange={setGuideSheetOpen}
         info={info}
         route={pathname ?? undefined}
+        copilotAvailable={copilotEnabled}
         onAskCopilot={handleAskCopilot}
         onStartTour={showTour ? startTour : undefined}
         hasTour={!!showTour}

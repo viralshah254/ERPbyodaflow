@@ -13,6 +13,8 @@ type BackendDocumentLine = {
   accountCode?: string;
   qty?: number;
   quantity?: number;
+  unit?: string;
+  unitPrice?: number;
   tax?: number;
   amount?: number;
   sourceDocumentId?: string;
@@ -50,6 +52,7 @@ type BackendDocumentDetail = {
   date: string;
   partyId?: string;
   party?: string;
+  branchId?: string;
   warehouseId?: string;
   total?: number;
   currency?: string;
@@ -124,6 +127,9 @@ export type DocumentDraftPayload = {
   poRef?: string;
   reference?: string;
   dueDate?: string;
+  sourceDocumentId?: string;
+  sourceDocumentType?: DocTypeKey;
+  sourceDocumentNumber?: string;
   lines: Array<{
     productId?: string;
     description?: string;
@@ -133,6 +139,7 @@ export type DocumentDraftPayload = {
     amount?: number;
     debit?: number;
     credit?: number;
+    sourceLineId?: string;
   }>;
   subtotal?: number;
   discount?: number;
@@ -143,6 +150,53 @@ export type DocumentDraftPayload = {
   exchangeRate?: number;
   outputTemplateId?: string;
 };
+
+export type PurchaseOrderLookupOption = {
+  id: string;
+  label: string;
+  description?: string;
+  status: string;
+  partyId?: string;
+  date?: string;
+  currency?: string;
+  total?: number;
+};
+
+/** Search purchase orders for pickers. Pass `status` to filter (e.g. "APPROVED"). */
+export async function searchPurchaseOrderLookupApi(
+  query: string,
+  options?: { status?: string }
+): Promise<PurchaseOrderLookupOption[]> {
+  if (!isApiConfigured()) return [];
+  const params = new URLSearchParams({ limit: "20" });
+  if (query.trim()) params.set("search", query.trim());
+  if (options?.status) params.set("status", options.status);
+  const payload = await apiRequest<{
+    items: Array<{
+      id: string;
+      number: string;
+      label: string;
+      status: string;
+      partyId?: string;
+      date?: string;
+      currency?: string;
+      total?: number;
+      reference?: string;
+    }>;
+  }>(`/api/documents/purchase-order/lookup?${params.toString()}`);
+  return (payload.items ?? []).map((item) => ({
+    id: item.id,
+    label: item.label || item.number,
+    description: [item.date ? new Date(item.date).toLocaleDateString() : null, item.currency]
+      .filter(Boolean)
+      .join(" · ") || undefined,
+    status: item.status,
+    partyId: item.partyId,
+    date: item.date,
+    currency: item.currency,
+    total: item.total,
+  }));
+}
 
 export type DocumentConvertPayload = {
   targetType: DocTypeKey;
@@ -186,9 +240,11 @@ function mapDocumentDetail(
     date: payload.date,
     partyId: payload.partyId,
     party: payload.party,
+    branchId: payload.branchId,
     warehouseId: payload.warehouseId,
     total: payload.total,
     currency: payload.currency ?? "KES",
+    exchangeRate: payload.exchangeRate,
     status: payload.status,
     availableActions: payload.availableActions ?? [],
     availableConversionTargets: payload.availableConversionTargets ?? [],
@@ -203,6 +259,8 @@ function mapDocumentDetail(
       accountName: line.accountName,
       accountCode: line.accountCode,
       qty: line.qty ?? line.quantity,
+      unit: line.unit,
+      unitPrice: line.unitPrice,
       tax: line.tax,
       amount: line.amount,
       sourceDocumentId: line.sourceDocumentId,

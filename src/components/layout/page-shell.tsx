@@ -23,7 +23,7 @@ export function PageShell({ children, rightSlot, className }: PageShellProps) {
           <div
             className={cn(
               "shrink-0 border-l bg-card transition-all overflow-auto",
-              rightPanelOpen ? "w-80 lg:w-96" : "w-0 border-0 overflow-hidden"
+              rightPanelOpen ? "w-[min(100%,16rem)] lg:w-[18rem] max-w-[18rem]" : "w-0 border-0 overflow-hidden"
             )}
           >
             {rightPanelOpen ? rightSlot : null}

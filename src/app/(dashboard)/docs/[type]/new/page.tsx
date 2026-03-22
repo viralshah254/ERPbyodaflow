@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DocumentCreateWizard } from "@/components/docs/DocumentCreateWizard";
@@ -11,10 +11,14 @@ import { useTerminology } from "@/stores/orgContextStore";
 
 export default function DocTypeNewPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const type = params.type as string;
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
+
+  // ?poId= is used when arriving from the PO detail lifecycle timeline (GRN creation shortcut)
+  const initialPoId = type === "grn" ? (searchParams.get("poId") ?? undefined) : undefined;
 
   return (
     <PageShell>
@@ -30,7 +34,7 @@ export default function DocTypeNewPage() {
         showCommandHint
       />
       <div className="p-6">
-        <DocumentCreateWizard type={type} />
+        <DocumentCreateWizard type={type} initialPoId={initialPoId} />
       </div>
     </PageShell>
   );

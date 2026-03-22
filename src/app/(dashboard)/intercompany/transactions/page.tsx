@@ -30,6 +30,7 @@ import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
 import { CURRENCY_LIST } from "@/lib/data/currencies";
 import type { ICTransactionRow } from "@/lib/types/intercompany";
 import { formatMoney } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -97,7 +98,19 @@ export default function IntercompanyTransactionsPage() {
       { id: "date", header: "Date", accessor: "date" as keyof ICTransactionRow },
       { id: "from", header: "From", accessor: "fromEntityName" as keyof ICTransactionRow },
       { id: "to", header: "To", accessor: "toEntityName" as keyof ICTransactionRow },
-      { id: "amount", header: "Amount", accessor: (r: ICTransactionRow) => formatMoney(r.amount, r.currency) },
+      {
+        id: "amount",
+        header: "Amount",
+        accessor: (r: ICTransactionRow) => (
+          <DualCurrencyAmount
+            amount={r.amount}
+            currency={r.currency}
+            exchangeRate={r.exchangeRate}
+            align="right"
+            size="sm"
+          />
+        ),
+      },
       { id: "status", header: "Status", accessor: (r: ICTransactionRow) => <Badge variant={r.status === "POSTED" ? "secondary" : "outline"}>{r.status}</Badge> },
     ],
     []

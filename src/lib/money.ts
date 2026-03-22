@@ -27,3 +27,18 @@ export function formatMoney(
 export function toBase(amount: number, exchangeRate: number): number {
   return amount * exchangeRate;
 }
+
+/**
+ * Return the KES equivalent of an amount in any currency.
+ * Returns the amount unchanged if already KES.
+ * Returns null if a rate is needed but not provided.
+ */
+export function kesEquivalent(
+  amount: number,
+  currency: string,
+  exchangeRate?: number
+): number | null {
+  if (!currency || currency.toUpperCase() === "KES") return amount;
+  if (!exchangeRate || exchangeRate <= 0) return null;
+  return amount * exchangeRate;
+}

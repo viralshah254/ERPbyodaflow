@@ -49,7 +49,7 @@ export interface FormSectionConfig {
 export interface FormFieldConfig {
   id: string;
   label: string;
-  type: "text" | "number" | "date" | "select" | "entity";
+  type: "text" | "number" | "date" | "select" | "entity" | "po-search";
   required?: boolean;
   entityType?: "customer" | "supplier" | "product";
 }

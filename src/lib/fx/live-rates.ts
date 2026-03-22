@@ -23,17 +23,21 @@ export async function fetchLiveExchangeRate(from: string, to: string): Promise<L
   }
 
   if (isApiConfigured()) {
-    const saved = await fetchSavedExchangeRateApi({
-      fromCurrency: sourceCurrency,
-      toCurrency: targetCurrency,
-    });
-    return {
-      from: saved.from,
-      to: saved.to,
-      rate: saved.rate,
-      fetchedAt: saved.fetchedAt ?? new Date().toISOString(),
-      source: "exchangerate-api",
-    };
+    try {
+      const saved = await fetchSavedExchangeRateApi({
+        fromCurrency: sourceCurrency,
+        toCurrency: targetCurrency,
+      });
+      return {
+        from: saved.from,
+        to: saved.to,
+        rate: saved.rate,
+        fetchedAt: saved.fetchedAt ?? new Date().toISOString(),
+        source: "exchangerate-api",
+      };
+    } catch {
+      // Backend may be misconfigured or temporarily failing; fall back to public FX feed.
+    }
   }
 
   const response = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(sourceCurrency)}`);

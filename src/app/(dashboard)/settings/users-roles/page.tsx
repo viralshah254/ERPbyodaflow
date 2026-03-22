@@ -41,8 +41,10 @@ import {
 } from "@/lib/api/users-roles";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 
 export default function UsersRolesPage() {
+  const copilotProductEnabled = useCopilotFeatureEnabled();
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleDetailRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -178,7 +180,7 @@ export default function UsersRolesPage() {
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Copilot</TableHead>
+                      {copilotProductEnabled ? <TableHead>Copilot</TableHead> : null}
                       <TableHead>Roles</TableHead>
                       <TableHead className="w-24" />
                     </TableRow>
@@ -186,7 +188,7 @@ export default function UsersRolesPage() {
                   <TableBody>
                     {loading && users.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-muted-foreground">
+                        <TableCell colSpan={copilotProductEnabled ? 6 : 5} className="text-muted-foreground">
                           Loading users...
                         </TableCell>
                       </TableRow>
@@ -196,7 +198,9 @@ export default function UsersRolesPage() {
                         <TableCell className="font-medium">{u.firstName} {u.lastName}</TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell>{u.status ?? "ACTIVE"}</TableCell>
-                        <TableCell>{u.copilotEnabled ? "On" : "Off"}</TableCell>
+                        {copilotProductEnabled ? (
+                          <TableCell>{u.copilotEnabled ? "On" : "Off"}</TableCell>
+                        ) : null}
                         <TableCell className="text-muted-foreground">{u.roleNames.join(", ")}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
@@ -296,7 +300,7 @@ export default function UsersRolesPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className={copilotProductEnabled ? "grid grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
               <div className="space-y-2">
                 <Label>Status</Label>
                 <select
@@ -314,18 +318,20 @@ export default function UsersRolesPage() {
                   <option value="SUSPENDED">Suspended</option>
                 </select>
               </div>
-              <div className="space-y-2">
-                <Label>Billing add-ons</Label>
-                <label className="flex items-center gap-2 rounded-md border px-3 py-2">
-                  <Checkbox
-                    checked={userForm.copilotEnabled}
-                    onCheckedChange={(checked) =>
-                      setUserForm((p) => ({ ...p, copilotEnabled: checked === true }))
-                    }
-                  />
-                  <span className="text-sm">Enable Copilot for this user</span>
-                </label>
-              </div>
+              {copilotProductEnabled ? (
+                <div className="space-y-2">
+                  <Label>Billing add-ons</Label>
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2">
+                    <Checkbox
+                      checked={userForm.copilotEnabled}
+                      onCheckedChange={(checked) =>
+                        setUserForm((p) => ({ ...p, copilotEnabled: checked === true }))
+                      }
+                    />
+                    <span className="text-sm">Enable Copilot for this user</span>
+                  </label>
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Roles</Label>
@@ -358,7 +364,7 @@ export default function UsersRolesPage() {
                       firstName: userForm.firstName,
                       lastName: userForm.lastName,
                       status: userForm.status,
-                      copilotEnabled: userForm.copilotEnabled,
+                      copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
                     });
                     toast.success("User updated.");
@@ -375,7 +381,7 @@ export default function UsersRolesPage() {
                       firstName: userForm.firstName,
                       lastName: userForm.lastName,
                       status: userForm.status,
-                      copilotEnabled: userForm.copilotEnabled,
+                      copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
                     });
                     toast.success("User staged for checkout.");

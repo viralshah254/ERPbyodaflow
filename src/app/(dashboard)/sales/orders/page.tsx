@@ -30,7 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatMoney } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -105,7 +105,15 @@ export default function SalesOrdersPage() {
         id: "total",
         header: "Total",
         accessor: (r: SalesDocRow) =>
-          r.total != null ? formatMoney(r.total, r.currency ?? "KES") : "—",
+          r.total != null ? (
+            <DualCurrencyAmount
+              amount={r.total}
+              currency={r.currency ?? "KES"}
+              exchangeRate={r.exchangeRate}
+              align="right"
+              size="sm"
+            />
+          ) : "—",
       },
       {
         id: "status",

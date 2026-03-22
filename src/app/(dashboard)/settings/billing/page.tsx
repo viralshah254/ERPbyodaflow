@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/billing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 
 function formatCents(cents: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -36,6 +37,7 @@ function formatCents(cents: number): string {
 }
 
 export default function SettingsBillingPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const [checkout, setCheckout] = React.useState<BillingCheckout | null>(null);
   const [pricing, setPricing] = React.useState<BillingPricing | null>(null);
   const [invoices, setInvoices] = React.useState<BillingInvoiceRow[]>([]);
@@ -145,7 +147,9 @@ export default function SettingsBillingPage() {
                   <li>Standard user: ${pricing?.standardPerUserPerMonth ?? 0}/month</li>
                   <li>Franchise: ${pricing?.franchiseBasePerMonth ?? 0}/month with {pricing?.franchiseIncludedLicenses ?? 0} included users</li>
                   <li>Additional franchise user: ${pricing?.franchiseAdditionalUserPerMonth ?? 0}/month</li>
-                  <li>Copilot: ${pricing?.copilotPerUserPerMonth ?? 0}/user/month</li>
+                  {copilotEnabled ? (
+                    <li>Copilot: ${pricing?.copilotPerUserPerMonth ?? 0}/user/month</li>
+                  ) : null}
                 </ul>
               </div>
             </CardContent>

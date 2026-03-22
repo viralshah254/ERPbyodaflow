@@ -9,26 +9,42 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchApBillsApi } from "@/lib/api/payments";
+import { fetchDocumentListApi } from "@/lib/api/documents";
 import type { APBillRow } from "@/lib/types/ap";
+import type { DocListRow } from "@/lib/types/documents";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
-import { formatMoney } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-const STATUS_OPTIONS = [
+const AP_STATUS_OPTIONS = [
+  { label: "All", value: "" },
+  { label: "Open", value: "OPEN" },
+  { label: "Partially Paid", value: "PARTIALLY_APPLIED" },
+  { label: "Paid", value: "PAID" },
+];
+
+const ALL_BILLS_STATUS_OPTIONS = [
   { label: "All", value: "" },
   { label: "Draft", value: "DRAFT" },
+  { label: "Pending Approval", value: "PENDING_APPROVAL" },
+  { label: "Approved", value: "APPROVED" },
   { label: "Posted", value: "POSTED" },
+  { label: "Cancelled", value: "CANCELLED" },
 ];
 
 const scope = "ap-bills";
 
+type Tab = "open" | "all";
+
 export default function APBillsPage() {
   const router = useRouter();
+  const [tab, setTab] = React.useState<Tab>("all");
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -37,20 +53,48 @@ export default function APBillsPage() {
     getSavedViews(scope)
   );
 
-  const [allRows, setAllRows] = React.useState<APBillRow[]>([]);
+  const [apRows, setApRows] = React.useState<APBillRow[]>([]);
+  const [allDocRows, setAllDocRows] = React.useState<DocListRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
   const reload = React.useCallback(async () => {
-    const rows = await fetchApBillsApi(search);
-    setAllRows(rows);
+    setLoading(true);
+    try {
+      const [apBills, docBills] = await Promise.all([
+        fetchApBillsApi(search).catch(() => [] as APBillRow[]),
+        fetchDocumentListApi("bill").catch(() => [] as DocListRow[]),
+      ]);
+      setApRows(apBills);
+      setAllDocRows(docBills);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load bills.");
+    } finally {
+      setLoading(false);
+    }
   }, [search]);
 
   React.useEffect(() => {
-    void reload().catch((error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to load AP bills.");
-    });
+    void reload();
   }, [reload]);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
+  // "All Bills" tab — document-centre data mapped to the same shape for easy rendering
+  const allBillsRows: APBillRow[] = React.useMemo(
+    () =>
+      allDocRows.map((r) => ({
+        id: r.id,
+        number: r.number,
+        date: r.date,
+        party: r.party ?? "",
+        total: r.total ?? 0,
+        status: r.status,
+      })),
+    [allDocRows]
+  );
+
+  const statusOptions = tab === "open" ? AP_STATUS_OPTIONS : ALL_BILLS_STATUS_OPTIONS;
+
+  const filteredRows = React.useMemo(() => {
+    const source = tab === "open" ? apRows : allBillsRows;
+    let out = source;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       out = out.filter(
@@ -61,17 +105,17 @@ export default function APBillsPage() {
     }
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
     return out;
-  }, [allRows, search, statusFilter]);
+  }, [tab, apRows, allBillsRows, search, statusFilter]);
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
     if (statusFilter) {
-      const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
+      const opt = statusOptions.find((o) => o.value === statusFilter);
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
     if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
     return chips;
-  }, [statusFilter, search]);
+  }, [statusFilter, search, statusOptions]);
 
   const columns = React.useMemo(
     () => [
@@ -86,7 +130,15 @@ export default function APBillsPage() {
       {
         id: "total",
         header: "Total",
-        accessor: (r: APBillRow) => formatMoney(r.total, "KES"),
+        accessor: (r: APBillRow) => (
+          <DualCurrencyAmount
+            amount={r.total}
+            currency={r.currency ?? "KES"}
+            exchangeRate={r.exchangeRate}
+            align="right"
+            size="sm"
+          />
+        ),
       },
       {
         id: "status",
@@ -162,6 +214,27 @@ export default function APBillsPage() {
         }
       />
       <div className="p-6 space-y-4">
+        {tab === "open" && (
+          <ExceptionBanner
+            type="info"
+            title="Open AP balances"
+            description="Shows posted bills with outstanding balances from the AP subledger. Draft bills appear in the All Bills tab."
+          />
+        )}
+        <div className="flex gap-1 border-b pb-px">
+          <button
+            className={`px-4 py-2 text-sm font-medium rounded-t border-b-2 transition-colors ${tab === "all" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            onClick={() => { setTab("all"); setStatusFilter(""); }}
+          >
+            All Bills
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium rounded-t border-b-2 transition-colors ${tab === "open" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            onClick={() => { setTab("open"); setStatusFilter(""); }}
+          >
+            Open Balances
+          </button>
+        </div>
         <DataTableToolbar
           searchPlaceholder="Search by number, supplier..."
           searchValue={search}
@@ -170,7 +243,7 @@ export default function APBillsPage() {
             {
               id: "status",
               label: "Status",
-              options: STATUS_OPTIONS,
+              options: statusOptions,
               value: statusFilter,
               onChange: (v) => setStatusFilter(v),
             },
@@ -187,7 +260,7 @@ export default function APBillsPage() {
           onExport={() =>
             downloadCsv(
               `ap-bills-${new Date().toISOString().slice(0, 10)}.csv`,
-              filtered.map((row) => ({
+              filteredRows.map((row) => ({
                 number: row.number,
                 date: row.date,
                 supplier: row.party,
@@ -216,7 +289,7 @@ export default function APBillsPage() {
                   onClick={() =>
                     downloadCsv(
                       `ap-bills-selected-${new Date().toISOString().slice(0, 10)}.csv`,
-                      filtered
+                      filteredRows
                         .filter((row) => selectedIds.includes(row.id))
                         .map((row) => ({
                           number: row.number,
@@ -235,15 +308,19 @@ export default function APBillsPage() {
             ) : undefined
           }
         />
-        <DataTable<APBillRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/bill/${row.id}`)}
-          emptyMessage="No bills yet."
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading bills…</div>
+        ) : (
+          <DataTable<APBillRow>
+            data={filteredRows}
+            columns={columns}
+            onRowClick={(row) => router.push(`/docs/bill/${row.id}`)}
+            emptyMessage={tab === "open" ? "No open AP balances. Bills appear here once posted." : "No bills yet."}
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        )}
       </div>
     </PageShell>
   );

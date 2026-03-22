@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { fetchEmployeesApi, fetchPayRunsApi } from "@/lib/api/payroll";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
 import * as Icons from "lucide-react";
@@ -25,6 +26,7 @@ const LINKS = [
 ];
 
 export default function PayrollOverviewPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [employees, setEmployees] = React.useState<Awaited<ReturnType<typeof fetchEmployeesApi>>>([]);
   const [runs, setRuns] = React.useState<Awaited<ReturnType<typeof fetchPayRunsApi>>>([]);
@@ -62,10 +64,12 @@ export default function PayrollOverviewPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain payroll variance MoM. Summarize project burn vs budget.")}>
-            <Icons.Sparkles className="mr-2 h-4 w-4" />
-            Ask Copilot
-          </Button>
+          copilotEnabled ? (
+            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain payroll variance MoM. Summarize project burn vs budget.")}>
+              <Icons.Sparkles className="mr-2 h-4 w-4" />
+              Ask Copilot
+            </Button>
+          ) : null
         }
       />
       <div className="p-6 space-y-6">

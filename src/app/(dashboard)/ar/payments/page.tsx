@@ -32,12 +32,14 @@ import {
 import type { PartyLookupOption } from "@/lib/api/parties";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ARPaymentsPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [search, setSearch] = React.useState("");
   const [wizardOpen, setWizardOpen] = React.useState(false);
@@ -266,10 +268,12 @@ export default function ARPaymentsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleDraftReminder}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Draft payment reminder
-            </Button>
+            {copilotEnabled ? (
+              <Button variant="outline" size="sm" onClick={handleDraftReminder}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Draft payment reminder
+              </Button>
+            ) : null}
             <Button onClick={handleReceivePayment}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Receive Payment

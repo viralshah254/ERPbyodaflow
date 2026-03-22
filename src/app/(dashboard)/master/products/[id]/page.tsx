@@ -38,6 +38,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import {
   deleteProductApi,
   fetchProductApi,
@@ -141,6 +142,7 @@ export default function ProductDetailPage() {
   const permissions = useAuthStore((s) => s.permissions);
   const canDelete = permissions.includes("admin.settings");
   const terminology = useTerminology();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
   type ProductRow = Awaited<ReturnType<typeof fetchProductApi>>;
@@ -454,14 +456,16 @@ export default function ProductDetailPage() {
               prompt={`Explain product ${product.sku} (${product.name}): type, packaging, pricing.`}
               label="Explain"
             />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openWithPrompt(`Suggest pricing and variant strategy for ${product.sku} (${product.name}).`)}
-            >
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openWithPrompt(`Suggest pricing and variant strategy for ${product.sku} (${product.name}).`)}
+              >
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Copilot
+              </Button>
+            ) : null}
             {canDelete && (
               <>
                 <Button
@@ -727,14 +731,16 @@ export default function ProductDetailPage() {
               </p>
               <div className="ml-auto flex gap-2">
                 <ExplainThis prompt="Explain tiered pricing and effective unit price." label="Explain" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openWithPrompt(`Suggest pricing tiers for ${product.sku}. Detect margin issues.`)}
-                >
-                  <Icons.Sparkles className="mr-2 h-4 w-4" />
-                  Copilot
-                </Button>
+                {copilotEnabled ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openWithPrompt(`Suggest pricing tiers for ${product.sku}. Detect margin issues.`)}
+                  >
+                    <Icons.Sparkles className="mr-2 h-4 w-4" />
+                    Copilot
+                  </Button>
+                ) : null}
                 <Button variant="outline" size="sm" disabled={applyingTemplate} onClick={handleApplyTemplate}>
                   Apply template
                 </Button>
@@ -1088,14 +1094,16 @@ export default function ProductDetailPage() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => openWithPrompt(`Suggest variants for ${product.sku} (${product.name}).`)}
-                    variant="outline"
-                  >
-                    <Icons.Sparkles className="mr-2 h-4 w-4" />
-                    Copilot
-                  </Button>
+                  {copilotEnabled ? (
+                    <Button
+                      size="sm"
+                      onClick={() => openWithPrompt(`Suggest variants for ${product.sku} (${product.name}).`)}
+                      variant="outline"
+                    >
+                      <Icons.Sparkles className="mr-2 h-4 w-4" />
+                      Copilot
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     onClick={() => { setEditingVariant(null); setVariantSheetOpen(true); }}

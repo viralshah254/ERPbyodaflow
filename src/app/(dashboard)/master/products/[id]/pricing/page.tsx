@@ -47,6 +47,7 @@ import {
 import { toast } from "sonner";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
@@ -61,6 +62,7 @@ export default function ProductPricingPage() {
   const params = useParams();
   const id = params.id as string;
   const terminology = useTerminology();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
@@ -227,10 +229,12 @@ export default function ProductPricingPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain tiered pricing and effective unit price." label="Explain" />
-            <Button size="sm" onClick={() => openWithPrompt(`Suggest pricing tiers for ${product.sku}. Detect margin issues by price list.`)}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button size="sm" onClick={() => openWithPrompt(`Suggest pricing tiers for ${product.sku}. Detect margin issues by price list.`)}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Copilot
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" disabled={applyingTemplate} onClick={handleApplyTemplate}>
               Apply template
             </Button>

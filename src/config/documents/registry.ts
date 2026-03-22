@@ -256,7 +256,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
         label: "Header",
         fields: [
           { id: "date", label: "Date", type: "date", required: true },
-          { id: "poRef", label: "Purchase Order", type: "text" },
+          { id: "poRef", label: "Purchase Order", type: "po-search" },
           { id: "warehouse", label: "Warehouse", type: "select", required: true },
         ],
       },

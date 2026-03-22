@@ -18,6 +18,7 @@ type BackendTransaction = {
   toEntityName?: string;
   amount: number;
   currency?: string;
+  exchangeRate?: number;
   status?: string;
 };
 
@@ -64,6 +65,7 @@ export async function fetchIntercompanyTransactionsApi(): Promise<ICTransactionR
     toEntityName: item.toEntityName ?? item.toEntityId,
     amount: item.amount ?? 0,
     currency: item.currency ?? "USD",
+    exchangeRate: item.exchangeRate,
     status: item.status === "POSTED" ? "POSTED" : "DRAFT",
   }));
 }

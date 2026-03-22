@@ -11,6 +11,7 @@ import { type OverdueInvoiceRow } from "@/lib/types/treasury";
 import { fetchCollectionsApi } from "@/lib/api/treasury-ops";
 import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import Link from "next/link";
 import { downloadCsv } from "@/lib/export/csv";
@@ -18,6 +19,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CollectionsPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(true);
@@ -70,10 +72,12 @@ export default function CollectionsPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Suggest collection actions and prioritization." label="Explain collections" />
-            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Send reminder for overdue invoice. Draft email.")}>
-              <Icons.Mail className="mr-2 h-4 w-4" />
-              Send reminder (Copilot)
-            </Button>
+            {copilotEnabled ? (
+              <Button variant="outline" size="sm" onClick={() => openWithPrompt("Send reminder for overdue invoice. Draft email.")}>
+                <Icons.Mail className="mr-2 h-4 w-4" />
+                Send reminder (Copilot)
+              </Button>
+            ) : null}
             <Button size="sm" asChild>
               <Link href="/ar/payments">
                 <Icons.CreditCard className="mr-2 h-4 w-4" />
@@ -105,7 +109,11 @@ export default function CollectionsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Overdue invoices</CardTitle>
-            <CardDescription>Send reminder (Copilot prefill). Record receipt → AR payments.</CardDescription>
+            <CardDescription>
+              {copilotEnabled
+                ? "Send reminder (Copilot prefill). Record receipt → AR payments."
+                : "Record receipt → AR payments."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<OverdueInvoiceRow>

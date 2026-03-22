@@ -16,6 +16,7 @@ import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -88,6 +89,30 @@ export default function InventoryReceiptsPage() {
         id: "status",
         header: "Status",
         accessor: (r: PurchasingDocRow) => <StatusBadge status={r.status} />,
+      },
+      {
+        id: "landedCost",
+        header: "Landed Costs",
+        accessor: (r: PurchasingDocRow) =>
+          r.hasLandedCost ? (
+            <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs gap-1">
+              <Icons.CheckCircle2 className="h-3 w-3" />
+              Costed
+            </Badge>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              asChild
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Link href={`/inventory/costing?grnId=${r.id}`}>
+                <Icons.Plus className="h-3 w-3 mr-1" />
+                Apply costs
+              </Link>
+            </Button>
+          ),
       },
     ],
     []

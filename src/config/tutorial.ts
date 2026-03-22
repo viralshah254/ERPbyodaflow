@@ -5,7 +5,12 @@
 
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation/sections";
 import type { NavItemConfig } from "@/config/navigation/types";
-import { ITEM_GUIDES, type ElementHint } from "./tutorial-guides";
+import {
+  ITEM_GUIDES,
+  ORPHAN_ROUTE_GUIDES,
+  getMasterProductOrphanGuide,
+  type ElementHint,
+} from "./tutorial-guides";
 
 export interface TutorialItem {
   key: string;
@@ -32,8 +37,42 @@ export interface TutorialChapter {
   items: TutorialItem[];
 }
 
-/** Item-level prompts for key screens (override section default). */
+/** Item-level prompts for key screens (override section default). Sessions 1–2 use fuller prompts for Copilot defaults. */
 const ITEM_PROMPTS: Partial<Record<string, string>> = {
+  "control-tower":
+    "Act as a CFO/COO coach for the Control Tower: walk through each KPI area, what ‘good’ vs ‘bad’ looks like, which exceptions to clear first, and how this screen differs from the personal Dashboard. Suggest a 10-minute daily routine.",
+  dashboard:
+    "Explain this Dashboard as a daily driver for my role: which widgets to trust first, how branch/org context affects numbers, how to drill to lists, and how ⌘K/Ctrl+K and Copilot fit in. Mention what to configure in Setup if tiles are empty.",
+  approvals:
+    "Differentiate Approvals hub, Approvals Inbox, My requests, and the global Inbox. Explain when an item appears here, how approval policies work at a high level, and what I should verify before approving POs or journals.",
+  "approvals-inbox":
+    "Give a step-by-step approval discipline: open document, verify line amounts/tax/currency, check attachments, approve or reject with comments, and when to escalate. Include audit and segregation-of-duties considerations.",
+  "approvals-requests":
+    "Explain how to track my submitted approvals, read rejection comments, resubmit correctly, and avoid duplicate documents when something is rejected.",
+  tasks:
+    "Explain Tasks vs Approvals vs Inbox: how tasks are created, how to complete or reassign, and how to link work to the underlying ERP record.",
+  "docs-so":
+    "Give a full order-to-cash narrative for Sales Orders: create → lines → pricing/tax → approval → delivery → invoice. Call out credit, stock, and linkage best practices.",
+  "docs-po":
+    "Give a full procure-to-pay narrative for Purchase Orders: create → approval → GRN → supplier invoice → payment. Include three-way match and variance handling.",
+  "docs-grn":
+    "Explain GRN in depth: PO linkage, partial receipts, lot/batch, posting to stock, and what to do before the supplier invoice lands in AP.",
+  "docs-invoice":
+    "Explain sales vs purchase invoices: draft vs posted, AR/AP, tax, FX, and when to use credit/debit notes instead of editing posted invoices.",
+  "docs-credit-note":
+    "Explain sales credit notes: when to use them vs returns, link to original invoice, revenue/AR/tax impact, and inventory when applicable.",
+  "docs-debit-note":
+    "Explain sales debit notes: appropriate charges, tax, AR impact, and customer communication.",
+  "docs-purchase-credit-note":
+    "Explain supplier credit notes: linkage to bills, inventory returns, and AP impact.",
+  "docs-purchase-debit-note":
+    "Explain purchase debit notes: extra supplier charges, AP impact, and coordination with GRN.",
+  "docs-journal":
+    "Explain manual journals: period control, accruals vs cash, balancing, supporting narratives, and who should post.",
+  "masters-hub":
+    "Explain master data sequencing: parties, products, warehouses, tax, before transactions. Include duplicate prevention and governance.",
+  "inventory-products":
+    "Explain this inventory-by-product view: on-hand, reserved, available, value, and how to investigate anomalies via movements.",
   "treasury-payment-runs": "Explain payment runs, bank files, and approval flow.",
   "treasury-collections": "Suggest collection actions and prioritization.",
   "treasury-bank-accounts": "Explain bank account setup and GL mapping.",
@@ -53,14 +92,105 @@ const ITEM_PROMPTS: Partial<Record<string, string>> = {
   "reports-scheduled": "Explain scheduled reports and delivery.",
   "automation-rules": "Explain automation rules: triggers, conditions, and actions.",
   "franchise-manage-outlets": "Explain how to add franchisees and give them login access.",
-  "inventory-movements": "Guide me through this page: what it shows, how to filter and use the table, and how movements are created from documents.",
-  "docs-hub": "Explain the document center. How do I create a sales order, purchase order, or invoice? What document types are available?",
-  "masters-products": "Explain how to add and manage products. What fields are required? How do variants and pricing work?",
-  "masters-parties": "Explain how to add customers and suppliers. What information do I need for each?",
-  "inventory-stock-levels": "Explain stock levels and how to interpret on-hand, reserved, and available quantities.",
+  "inventory-movements":
+    "Deep-dive Stock Movements: column-by-column meaning, how to filter for investigations, how references tie to documents, export for audit, and common root causes of unexpected rows.",
+  "docs-hub":
+    "Explain the Document Center as a map of all document types: typical order-to-cash and procure-to-pay paths, what each tile opens, and how document linking supports traceability and month-end.",
+  "masters-products":
+    "Explain product master end-to-end: identifiers, UOM, tax, variants/packaging/pricing tabs, and validation before go-live.",
+  "masters-parties":
+    "Explain party master for customers and suppliers: legal, tax, credit, banking, duplicates, and handoff to AR/AP.",
+  "inventory-stock-levels":
+    "Explain how to read stock levels: on-hand vs reserved vs available, warehouse splits, reorder logic, and when to jump to movements or documents.",
   "finance-chart-of-accounts": "Explain the chart of accounts. How do I add or edit accounts? What account types exist?",
   "sales-orders": "Explain the sales order flow. How do I create an order, post delivery, and invoice?",
   "purchasing-orders": "Explain purchase orders. How do I create a PO, receive goods, and match the invoice?",
+  // Session 2 — Inventory B, Warehouse, Sales, Purchasing (full prompts)
+  "inventory-receipts":
+    "Explain the GRN list for receivers: statuses, creating from PO, posting, variance, and handoff to putaway and AP.",
+  "inventory-receiving":
+    "Explain the receiving queue: prioritisation, capturing quantities and lots, exceptions, and coordination with buyers.",
+  "inventory-costing":
+    "Explain costing methods, when to run costing, how inventory ties to GL, and what breaks margin if cost is wrong.",
+  "inventory-stock-explorer":
+    "Explain how to use Stock Explorer for investigations: filters, time ranges, drilling to movements, and when to escalate to finance.",
+  "inventory-valuation":
+    "Explain valuation for month-end: scopes, export, reconciliation to GL, and FX if applicable.",
+  "inventory-transfers":
+    "Explain inter-warehouse transfers: availability, reservations, in-transit, posting, and reconciliation.",
+  "inventory-stocktake":
+    "Explain physical counts: planning, blind counts, variance approval, posting adjustments, and root-cause analysis.",
+  "inventory-warehouses":
+    "Explain warehouse and location hierarchy: bins, capacity, and impact on picks and transfers.",
+  "warehouse-overview":
+    "Explain how a warehouse manager uses this overview: priorities across pick, putaway, transfer, and count backlogs.",
+  "warehouse-transfers":
+    "Explain execution of transfers: picking, shipping, receiving, losses in transit, and system posting order.",
+  "warehouse-pick-pack":
+    "Explain pick/pack best practices: accuracy, shorts, staging, and alignment with delivery documents.",
+  "warehouse-putaway":
+    "Explain putaway discipline: from dock to bin, system updates, and impact on available-to-promise.",
+  "warehouse-bin-locations":
+    "Explain bin master maintenance and how bin accuracy affects pick rates and cycle counts.",
+  "warehouse-cycle-counts":
+    "Explain running cycle counts from the warehouse lens: scheduling, recounts, and posting adjustments.",
+  "sales-overview":
+    "Interpret sales KPIs: revenue, margin, backlog, and which downstream screen to open for each problem pattern.",
+  "sales-quotes":
+    "Explain quote-to-order: validity, pricing authority, conversion, and pipeline hygiene.",
+  "sales-deliveries":
+    "Explain delivery posting: partials, backorders, stock impact, and alignment with invoicing policy.",
+  "sales-invoices":
+    "Explain billing operations: drafts, posting, AR, tax, integrations (e-invoice), and collections handoff.",
+  "sales-customers":
+    "Explain customer master for sales: credit, pricing, contacts, and dispute handling.",
+  "sales-returns":
+    "Explain returns and credit notes: RMA, stock disposition, AR, and analysis of return reasons.",
+  "purchasing-requests":
+    "Explain requisitions: intake, approval matrices, conversion to PO, and duplicate prevention.",
+  "purchasing-guided-sourcing-flow":
+    "Explain the procurement sourcing journey: flow health metrics, each step card, landed cost, variance, and finance review handoff.",
+  "purchasing-grn":
+    "Explain GRN from the buyer/receiver perspective: PO compliance, supplier performance, and AP readiness.",
+  "purchasing-suppliers":
+    "Explain supplier lifecycle: onboarding, compliance, performance, and payment terms.",
+  "purchasing-supplier-invoices":
+    "Explain AP bill processing: match, tax, approval, and payment timing.",
+  "purchasing-returns":
+    "Explain purchase returns and supplier debit notes: logistics, inventory, and AP.",
+  "purchasing-cash-weight-audit":
+    "Explain cash-to-weight audit for commodities: tolerance, landed cost, fraud/shrink signals, and month-end.",
+  // Session 3 — Pricing, Manufacturing, Distribution
+  "pricing-overview":
+    "Explain the pricing module end-to-end: list vs rules vs overrides, effective dates, margin guardrails, and how to roll out a price change safely.",
+  "pricing-price-lists":
+    "Explain designing and maintaining price lists: lines, currencies, customer assignment, bulk import, and reconciliation with quotes/orders.",
+  "pricing-rules":
+    "Explain pricing rules: conditions, effects, priority, stacking, testing edge cases, and governance to avoid margin leakage.",
+  "manufacturing-boms":
+    "Explain BOM structure, revisions, scrap, alternates, and impact on MRP, costing, and work orders.",
+  "manufacturing-routing":
+    "Explain routings: work centers, operations, times, capacity, and link to BOMs and costing.",
+  "manufacturing-work-orders":
+    "Explain work order lifecycle: release, issue, complete, receive FG, variances, and period-end WIP.",
+  "manufacturing-mrp":
+    "Explain MRP inputs/outputs, netting, exceptions, and how planners convert suggestions to firm orders.",
+  "manufacturing-subcontracting":
+    "Explain subcontracting: material issue, receipt, costing, and control of external processing.",
+  "manufacturing-yield":
+    "Explain yield and mass balance: standards, actuals, variance investigation, and tie-in to procurement audit.",
+  "manufacturing-byproducts":
+    "Explain byproduct receipt, valuation, and inventory impact alongside main output.",
+  "distribution-routes":
+    "Explain route design, customer assignment, sequencing, and maintenance for field operations.",
+  "distribution-deliveries":
+    "Explain distribution deliveries: load planning, POD, stock impact, and van stock reconciliation.",
+  "distribution-trips":
+    "Explain trip execution: stops, status, delays, completion, and KPIs.",
+  "distribution-transfer-planning":
+    "Explain network transfer planning: when to move stock between sites and how to measure effectiveness.",
+  "distribution-collections":
+    "Explain on-route collections: cash control, AR posting, reconciliation, and driver accountability.",
 };
 
 /** Section-level descriptions and default Copilot prompts. */
@@ -70,63 +200,63 @@ const CHAPTER_META: Record<
 > = {
   core: {
     description:
-      "Control Tower, Dashboard, Approvals, and Work Queue. Your command center for KPIs, pending approvals, and tasks.",
+      "Control Tower (org-wide KPIs and exceptions), Dashboard (your home), Approvals (Inbox & requests), Tasks, Setup, and global Inbox. Together they are how you see risk early and clear work queues before it compounds.",
     copilotPrompt:
-      "Explain the Control Tower and dashboard. How do approvals and the work queue work?",
+      "Explain how Control Tower, Dashboard, Approvals, Tasks, and Inbox fit together in a daily routine for an operations or finance user.",
   },
   docs: {
     description:
-      "Create and manage documents: Sales Orders, Purchase Orders, Goods Receipts, Invoices, and Journal Entries. All transactions start here.",
+      "Document Center: every transactional document type—sales and purchase cycles, goods receipt, invoicing, credit/debit notes, and manual journals. Documents are the audit trail that connects operations to the general ledger.",
     copilotPrompt:
-      "Explain the document center. How do I create a sales order, PO, or invoice?",
+      "Explain the document types in this ERP, typical flows (order-to-cash, procure-to-pay), and how documents link to each other for traceability.",
   },
   masters: {
     description:
-      "Master data: Products, Parties (customers and suppliers), and Warehouses. Set these up before creating documents.",
+      "Master data: Products, Parties (customers and suppliers), and Warehouses. Quality here determines whether documents, stock, and finance reconcile; invest before scaling transaction volume.",
     copilotPrompt:
-      "Explain products, parties, and warehouses. How do I add a new product or customer?",
+      "Explain how to design and maintain product, party, and warehouse masters: codes, tax, credit, and duplicate prevention.",
   },
   inventory: {
     description:
-      "Stock levels, movements, receipts, costing, and stock explorer. Track quantity and value across warehouses.",
+      "Inventory: stock by product and warehouse, movements, receipts, receiving queue, costing, explorer, valuation, transfers, cycle counts, and locations. Bridges operations (physical stock) and finance (inventory GL).",
     copilotPrompt:
-      "Explain inventory: stock levels, movements, and costing. How do I receive goods?",
+      "Explain how inventory quantity and value are tracked from GRN and deliveries through costing to the balance sheet.",
   },
   warehouse: {
     description:
       "Warehouse operations: overview, transfers, pick & pack, putaway, bin locations, and cycle counts.",
     copilotPrompt:
-      "Explain warehouse operations: transfers, pick and pack, and cycle counts.",
+      "Explain end-to-end warehouse execution: inbound putaway, outbound pick/pack/ship, transfers, bin accuracy, and cycle counting—how each affects available stock.",
   },
   sales: {
     description:
       "Sales overview, quotes, orders, deliveries, invoices, customers, and returns. Full order-to-cash flow.",
     copilotPrompt:
-      "Explain the sales flow: quotes, orders, deliveries, and invoices.",
+      "Explain order-to-cash: quote → order → delivery → invoice → AR/collections, including credit and returns.",
   },
   purchasing: {
     description:
       "Purchase requests, POs, GRN, suppliers, AP bills, returns, and cash-to-weight audit. Procure-to-pay flow.",
     copilotPrompt:
-      "Explain purchasing: requests, POs, receipts, and supplier invoices.",
+      "Explain procure-to-pay: requisition → PO → GRN → supplier invoice → payment, including sourcing journey and landed cost where used.",
   },
   pricing: {
     description:
-      "Pricing overview, price lists, and pricing rules. Manage list prices and discounts.",
+      "Pricing overview, price lists, and pricing rules—list prices, customer/channel assignment, promotional logic, and guardrails before margin erodes.",
     copilotPrompt:
-      "Explain pricing: price lists and pricing rules. How do tiered prices work?",
+      "Explain how list prices, price lists, and pricing rules interact; how to test a change and avoid conflicting effective dates.",
   },
   manufacturing: {
     description:
-      "BOMs, routing, work orders, MRP, subcontracting, yield, and byproducts. Production and planning.",
+      "BOMs, routing, work orders, MRP, subcontracting, yield, and byproducts. Connects engineering master data to shop floor execution and inventory cost.",
     copilotPrompt:
-      "Explain manufacturing: BOMs, work orders, and MRP. How do I run production?",
+      "Explain manufacturing planning and execution: BOM/routing → work order → issue/receive → MRP suggestions and variances.",
   },
   distribution: {
     description:
-      "Routes, deliveries, trips, transfer planning, and collections. For distributors and field operations.",
+      "Routes, deliveries, trips, transfer planning, and on-route collections for field sales and van delivery. Links logistics execution to stock and AR.",
     copilotPrompt:
-      "Explain distribution: routes, trips, and deliveries. How do I plan a trip?",
+      "Explain distribution operations: route planning, trip execution, delivery posting, transfers between sites, and route collections vs treasury collections.",
   },
   franchise: {
     description:
@@ -280,8 +410,45 @@ export interface TutorialForRoute {
  * Get tutorial chapter and prompt for a given pathname.
  * Matches exact href first; then prefix match for dynamic routes (e.g. /docs/sales-order/123).
  */
+function orphanPayloadToTutorial(o: {
+  chapterId: string;
+  chapterTitle: string;
+  copilotPrompt: string;
+  itemLabel: string;
+  guideSummary: string;
+  guideSteps: string[];
+  guideTips?: string[];
+  elementHints?: ElementHint[];
+  hrefToChapter: string;
+  recommendedNextStep?: { label: string; href: string };
+}): TutorialForRoute {
+  return {
+    chapterId: o.chapterId,
+    chapterTitle: o.chapterTitle,
+    copilotPrompt: o.copilotPrompt,
+    hrefToChapter: o.hrefToChapter,
+    itemLabel: o.itemLabel,
+    guideSummary: o.guideSummary,
+    guideSteps: o.guideSteps,
+    guideTips: o.guideTips ?? [],
+    elementHints: o.elementHints ?? [],
+    recommendedNextStep: o.recommendedNextStep,
+  };
+}
+
 export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
   const normalized = pathname.replace(/\/$/, "") || "/";
+
+  const exactOrphan = ORPHAN_ROUTE_GUIDES[normalized];
+  if (exactOrphan) {
+    return orphanPayloadToTutorial(exactOrphan);
+  }
+
+  const productOrphan = getMasterProductOrphanGuide(normalized);
+  if (productOrphan) {
+    return orphanPayloadToTutorial(productOrphan);
+  }
+
   let best: { chapter: TutorialChapter; item?: TutorialItem; score: number } | null =
     null;
 

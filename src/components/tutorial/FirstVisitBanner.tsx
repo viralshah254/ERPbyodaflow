@@ -10,6 +10,7 @@ import { getTourForRoute } from "@/config/tutorial-tours";
 import { PageGuideSheet } from "@/components/tutorial/PageGuideSheet";
 import { useSpotlightTour } from "@/components/tutorial/SpotlightTour";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { BookOpen, X, Sparkles, Play } from "lucide-react";
 
 const EXCLUDED_PATHS = ["/tutorial", "/login", "/signup", "/platform"];
@@ -31,6 +32,7 @@ export function FirstVisitBanner() {
 
   const showTour = tour && !dismissedTours[tour.tourId];
 
+  const copilotEnabled = useCopilotFeatureEnabled();
   const setContext = useCopilotStore((s) => s.setContext);
   const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
@@ -104,10 +106,12 @@ export function FirstVisitBanner() {
             <BookOpen className="h-3.5 w-3.5 mr-1.5" />
             Open guide
           </Button>
-          <Button size="sm" variant="outline" onClick={handleAskCopilot}>
-            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-            Ask Copilot
-          </Button>
+          {copilotEnabled ? (
+            <Button size="sm" variant="outline" onClick={handleAskCopilot}>
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              Ask Copilot
+            </Button>
+          ) : null}
           <Button size="sm" variant="ghost" onClick={handleSkip}>
             Skip
           </Button>
@@ -135,6 +139,7 @@ export function FirstVisitBanner() {
         onOpenChange={handleGuideSheetClose}
         info={info}
         route={pathname ?? undefined}
+        copilotAvailable={copilotEnabled}
         onAskCopilot={() => {
           handleAskCopilot();
           setGuideSheetOpen(false);

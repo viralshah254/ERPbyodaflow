@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import type { ApprovalItem, AlertItem, RecentDoc } from "@/lib/types/dashboard";
 import { fetchDashboardWidgets } from "@/lib/api/dashboard";
 import { DashboardKpiCard } from "./cards/DashboardKpiCard";
@@ -33,6 +34,7 @@ function getKpiIdsForRole(
 export function DashboardRenderer() {
   const user = useAuthStore((s) => s.user);
   const { template, defaultRoleDashboards } = useOrgContextStore();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const [widgets, setWidgets] = React.useState<{
     approvals: ApprovalItem[];
     alerts: AlertItem[];
@@ -70,7 +72,9 @@ export function DashboardRenderer() {
 
   const roleId = user?.roleIds?.[0] ?? "admin";
   const dashboards = template?.defaultRoleDashboards ?? defaultRoleDashboards ?? [];
-  const kpiIds = getKpiIdsForRole(roleId, dashboards);
+  const kpiIds = getKpiIdsForRole(roleId, dashboards).filter(
+    (id) => copilotEnabled || id !== "copilot-suggestions"
+  );
 
   const approvals = widgets.approvals;
   const alerts = widgets.alerts;
@@ -154,7 +158,7 @@ export function DashboardRenderer() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <CopilotSuggestionsCard items={suggestions} />
+        {copilotEnabled ? <CopilotSuggestionsCard items={suggestions} /> : null}
         <RecentDocumentsCard items={recentDocs} />
       </div>
     </div>

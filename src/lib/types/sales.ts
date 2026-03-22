@@ -6,5 +6,6 @@ export type SalesDocRow = {
   partyId?: string;
   total?: number;
   currency?: string;
+  exchangeRate?: number;
   status: string;
 };

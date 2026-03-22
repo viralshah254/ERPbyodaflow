@@ -20,10 +20,12 @@ import { Badge } from "@/components/ui/badge";
 import type { AutomationRule } from "@/lib/types/automation-rules";
 import { fetchAutomationRulesApi, createAutomationRuleApi, requireApprovalAutomationRuleApi } from "@/lib/api/automation-rules";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function AutomationRulesPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [search, setSearch] = React.useState("");
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -179,7 +181,7 @@ export default function AutomationRulesPage() {
             <DataTable<AutomationRule>
               data={filtered}
               columns={columns}
-              emptyMessage="No rules. Create one or generate with Copilot."
+              emptyMessage={copilotEnabled ? "No rules. Create one or generate with Copilot." : "No rules. Create one."}
             />
           </CardContent>
         </Card>
@@ -190,18 +192,22 @@ export default function AutomationRulesPage() {
           <SheetHeader>
             <SheetTitle>Create rule</SheetTitle>
             <SheetDescription>
-              Define trigger, conditions, and actions. Or generate with Copilot.
+              {copilotEnabled
+                ? "Define trigger, conditions, and actions. Or generate with Copilot."
+                : "Define trigger, conditions, and actions."}
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
-            <Button
-              variant="outline"
-              className="w-full justify-start gap-2"
-              onClick={handleGenerateWithCopilot}
-            >
-              <Icons.Sparkles className="h-4 w-4" />
-              Generate rule with Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2"
+                onClick={handleGenerateWithCopilot}
+              >
+                <Icons.Sparkles className="h-4 w-4" />
+                Generate rule with Copilot
+              </Button>
+            ) : null}
             <div className="border-t pt-4 space-y-4">
               <div className="space-y-2">
                 <Label>Trigger</Label>

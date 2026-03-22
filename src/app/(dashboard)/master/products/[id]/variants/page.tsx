@@ -48,6 +48,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -58,6 +59,7 @@ export default function ProductVariantsPage() {
   const user = useAuthStore((s) => s.user);
   const canDelete = canDeleteEntity(user);
   const terminology = useTerminology();
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
@@ -171,10 +173,12 @@ export default function ProductVariantsPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain product variants (size, packaging, grade) and SKU per variant." label="Explain" />
-            <Button size="sm" onClick={() => openWithPrompt(`Suggest variants for ${product.sku} (${product.name}).`)}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button size="sm" onClick={() => openWithPrompt(`Suggest variants for ${product.sku} (${product.name}).`)}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Copilot
+              </Button>
+            ) : null}
             <Button size="sm" onClick={() => { setEditing(null); setSheetOpen(true); }}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add variant

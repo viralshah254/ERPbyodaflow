@@ -29,17 +29,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { getDocTypeConfig } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, kesEquivalent } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import {
@@ -54,7 +49,7 @@ import {
 } from "@/lib/api/documents";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
-import type { PartyLookupOption } from "@/lib/api/parties";
+import { fetchPartyByIdApi, type PartyLookupOption } from "@/lib/api/parties";
 import type { DocumentChainNode, DocumentDetailRecord } from "@/lib/types/documents";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
@@ -88,7 +83,41 @@ export default function DocViewPage() {
   const [selectedConvertPartyOption, setSelectedConvertPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
-  const convertTargets = document?.availableConversionTargets ?? [];
+  const convertTargets = React.useMemo(() => {
+    const raw = document?.availableConversionTargets ?? [];
+    return [...new Set(raw)];
+  }, [document?.availableConversionTargets]);
+  const [resolvedPartyName, setResolvedPartyName] = React.useState<string | null>(null);
+  const isPurchaseDoc = [
+    "purchase-request",
+    "purchase-order",
+    "grn",
+    "bill",
+    "purchase-credit-note",
+    "purchase-debit-note",
+  ].includes(type);
+  const counterpartyLabel = isPurchaseDoc ? "Supplier" : "Customer / Supplier";
+  const displayPartyName = resolvedPartyName ?? document?.party ?? "—";
+
+  React.useEffect(() => {
+    setResolvedPartyName(null);
+    if (!document?.partyId) return;
+    const p = (document.party ?? "").trim();
+    const uuidLike =
+      !p ||
+      p === document.partyId ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p);
+    if (!uuidLike) return;
+    let cancelled = false;
+    void fetchPartyByIdApi(document.partyId)
+      .then((row) => {
+        if (!cancelled && row?.name?.trim()) setResolvedPartyName(row.name.trim());
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [document?.partyId, document?.party]);
   const availableActions = document?.availableActions ?? [];
   const canRequestApproval = availableActions.includes("submit");
   const canApprove = availableActions.includes("approve");
@@ -101,12 +130,12 @@ export default function DocViewPage() {
       id,
       title: `${label} ${document?.number ?? id}`,
       date: document?.date ?? "2025-01-28",
-      party: document?.party ?? "—",
+      party: displayPartyName,
       total: document?.total ?? 0,
       currency: document?.currency ?? "KES",
       lines: document?.lines,
     }),
-    [type, id, label, document]
+    [type, id, label, document, displayPartyName]
   );
 
   const refreshDocument = React.useCallback(async () => {
@@ -175,10 +204,10 @@ export default function DocViewPage() {
       setConvertType(targetType);
       setConvertPartyId(document?.partyId ?? "");
       setSelectedConvertPartyOption(
-        document?.partyId && document.party
+        document?.partyId && displayPartyName !== "—"
           ? {
               id: document.partyId,
-              label: document.party,
+              label: displayPartyName,
             }
           : null
       );
@@ -186,7 +215,7 @@ export default function DocViewPage() {
       setOutputTemplateId(document?.outputTemplateId ?? "");
       setConvertOpen(true);
     },
-    [document]
+    [document, displayPartyName]
   );
 
   const rightSlot = (
@@ -211,14 +240,16 @@ export default function DocViewPage() {
   );
 
   const selectedConvertParty = React.useMemo(() => {
-    if (!convertPartyId || !document?.party || document.partyId !== convertPartyId) {
+    if (!convertPartyId || document?.partyId !== convertPartyId) {
       return selectedConvertPartyOption;
     }
+    const label = displayPartyName !== "—" ? displayPartyName : document?.party;
+    if (!label) return selectedConvertPartyOption;
     return {
       id: convertPartyId,
-      label: document.party,
+      label,
     };
-  }, [convertPartyId, document?.party, document?.partyId, selectedConvertPartyOption]);
+  }, [convertPartyId, document?.party, document?.partyId, selectedConvertPartyOption, displayPartyName]);
 
   const displayTitle = document?.number ? `${document.number}` : `${label} ${id}`;
   const breadcrumbLabel = document?.number ?? id;
@@ -462,14 +493,17 @@ export default function DocViewPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer / Supplier</p>
-                    <p className="font-medium">{document?.party ?? "Internal document"}</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{counterpartyLabel}</p>
+                    <p className="font-medium">{displayPartyName !== "—" ? displayPartyName : "Internal document"}</p>
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total</p>
-                    <p className="font-medium">
-                      {formatMoney(document?.total ?? 0, document?.currency ?? "KES")}
-                    </p>
+                    <DualCurrencyAmount
+                      amount={document?.total ?? 0}
+                      currency={document?.currency ?? "KES"}
+                      exchangeRate={document?.exchangeRate}
+                      size="md"
+                    />
                   </div>
                 </div>
                 {/* Invoice payment status bar */}
@@ -509,8 +543,15 @@ export default function DocViewPage() {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {formatMoney(document.paidAmount ?? 0, document.currency ?? "KES")} paid of{" "}
-                          {formatMoney(document.total, document.currency ?? "KES")}
+                          {formatMoney(
+                            kesEquivalent(document.paidAmount ?? 0, document.currency ?? "KES", document.exchangeRate) ?? (document.paidAmount ?? 0),
+                            "KES"
+                          )}{" "}
+                          paid of{" "}
+                          {formatMoney(
+                            kesEquivalent(document.total, document.currency ?? "KES", document.exchangeRate) ?? document.total,
+                            "KES"
+                          )}
                           {document.dueDate && (
                             <span className="ml-2">· Due {new Date(document.dueDate).toLocaleDateString()}</span>
                           )}
@@ -528,6 +569,7 @@ export default function DocViewPage() {
             sourceDocument={document?.sourceDocument}
             documentChain={document?.documentChain ?? []}
             currency={document?.currency ?? "KES"}
+            exchangeRate={document?.exchangeRate}
             currentId={id}
           />
         )}
@@ -550,14 +592,14 @@ export default function DocViewPage() {
                   </div>
                 ) : (
                   <div className="rounded border">
-                    <div className="grid grid-cols-[1fr_90px_90px_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="grid grid-cols-[1fr_90px_90px_140px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       <span>Description</span>
                       <span className="text-right">Qty</span>
                       <span className="text-right">Remaining</span>
                       <span className="text-right">Amount</span>
                     </div>
                     {(document?.lines ?? []).map((line) => (
-                      <div key={line.id ?? line.description} className="grid grid-cols-[1fr_90px_90px_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0">
+                      <div key={line.id ?? line.description} className="grid grid-cols-[1fr_90px_90px_140px] gap-3 border-b px-4 py-3 text-sm last:border-b-0">
                         <div>
                           <span>{line.description}</span>
                           {line.sourceDocumentType && line.sourceDocumentId ? (
@@ -568,7 +610,19 @@ export default function DocViewPage() {
                         </div>
                         <span className="text-right">{line.qty ?? "—"}</span>
                         <span className="text-right">{line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}</span>
-                        <span className="text-right">{line.amount != null ? line.amount.toLocaleString() : "—"}</span>
+                        <div className="flex justify-end">
+                          {line.amount != null ? (
+                            <DualCurrencyAmount
+                              amount={line.amount}
+                              currency={document?.currency ?? "KES"}
+                              exchangeRate={document?.exchangeRate}
+                              align="right"
+                              size="sm"
+                            />
+                          ) : (
+                            <span>—</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -674,19 +728,13 @@ export default function DocViewPage() {
             {convertType && ["delivery-note", "grn"].includes(convertType) ? (
               <div className="space-y-2">
                 <Label htmlFor="convert-warehouse">Warehouse</Label>
-                <Select value={convertWarehouseId || "__none__"} onValueChange={(value) => setConvertWarehouseId(value === "__none__" ? "" : value)}>
-                  <SelectTrigger id="convert-warehouse">
-                    <SelectValue placeholder="Select warehouse" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Leave blank</SelectItem>
-                    {warehouseOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={convertWarehouseId || ""}
+                  onValueChange={(value) => setConvertWarehouseId(value)}
+                  options={[{ id: "", label: "Leave blank" }, ...warehouseOptions]}
+                  placeholder="Select warehouse"
+                  searchPlaceholder="Type to search warehouses"
+                />
               </div>
             ) : null}
             <div className="space-y-2">
@@ -958,10 +1006,19 @@ function DynamicNextStepsPanel({
     }
   }
 
-  // Always add convert targets as fallback suggestions
+  const seenConvertTargets = new Set<string>();
   for (const target of convertTargets) {
-    if (!steps.some((s) => s.actionLabel?.toLowerCase().includes(target.replace(/-/g, " ")))) {
-      steps.push({ icon: <Icons.GitBranchPlus className="h-4 w-4" />, text: `Convert to ${target.replace(/-/g, " ")}`, action: () => onConvert(target), actionLabel: `Convert to ${target.replace(/-/g, " ")}`, variant: "outline" });
+    if (seenConvertTargets.has(target)) continue;
+    seenConvertTargets.add(target);
+    const label = target.replace(/-/g, " ");
+    if (!steps.some((s) => s.actionLabel?.toLowerCase().includes(label))) {
+      steps.push({
+        icon: <Icons.GitBranchPlus className="h-4 w-4" />,
+        text: `Convert to ${label}`,
+        action: () => onConvert(target),
+        actionLabel: `Convert to ${label}`,
+        variant: "outline",
+      });
     }
   }
 
@@ -1034,8 +1091,18 @@ const STATUS_COLORS: Record<string, string> = {
   REVERSED: "border-red-400 bg-red-50 text-red-600",
 };
 
-function ChainNode({ node, currency }: { node: DocumentChainNode; currency: string }) {
+function ChainNode({
+  node,
+  currency,
+  exchangeRate,
+}: {
+  node: DocumentChainNode;
+  currency: string;
+  exchangeRate?: number;
+}) {
   const colorClass = STATUS_COLORS[node.status] ?? "border-gray-300 bg-gray-50 text-gray-600";
+  const isBase = !currency || currency.toUpperCase() === "KES";
+  const kes = node.total != null ? (isBase ? node.total : (exchangeRate ? node.total * exchangeRate : null)) : null;
   return (
     <div className="flex items-start gap-1">
       <div className={`flex flex-col items-center`}>
@@ -1047,13 +1114,18 @@ function ChainNode({ node, currency }: { node: DocumentChainNode; currency: stri
           <span className="text-[10px] opacity-70 capitalize">{node.typeKey.replace(/-/g, " ")}</span>
           <span className="text-[10px] font-medium mt-0.5">{node.status}</span>
           {node.total != null && (
-            <span className="text-[10px] opacity-60">{currency} {node.total.toLocaleString()}</span>
+            <span className="text-[10px] font-semibold mt-0.5">
+              {kes !== null ? `KES ${kes.toLocaleString()}` : `${currency} ${node.total.toLocaleString()}`}
+            </span>
+          )}
+          {node.total != null && !isBase && kes !== null && (
+            <span className="text-[10px] opacity-50">{currency} {node.total.toLocaleString()}</span>
           )}
         </Link>
         {node.children.length > 0 && (
           <div className="flex items-start gap-1 mt-2 pl-2 border-l-2 border-muted ml-6">
             {node.children.map((child) => (
-              <ChainNode key={child.id} node={child} currency={currency} />
+              <ChainNode key={child.id} node={child} currency={currency} exchangeRate={exchangeRate} />
             ))}
           </div>
         )}
@@ -1069,11 +1141,13 @@ function DocumentChainCard({
   sourceDocument,
   documentChain,
   currency,
+  exchangeRate,
   currentId,
 }: {
   sourceDocument?: { id: string; typeKey: string; number: string; status: string } | null;
   documentChain: DocumentChainNode[];
   currency: string;
+  exchangeRate?: number;
   currentId: string;
 }) {
   return (
@@ -1109,7 +1183,7 @@ function DocumentChainCard({
           )}
           {documentChain.map((node, i) => (
             <React.Fragment key={node.id}>
-              <ChainNode node={node} currency={currency} />
+              <ChainNode node={node} currency={currency} exchangeRate={exchangeRate} />
               {i < documentChain.length - 1 && <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3" />}
             </React.Fragment>
           ))}
