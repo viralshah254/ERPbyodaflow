@@ -8,8 +8,11 @@ export type DocListRow = {
   total?: number;
   currency?: string;
   exchangeRate?: number;
+  /** Linked GRN landed costs summed in KES (base). */
   landedAllocated?: number;
+  /** Per-template landed amounts in KES (base). */
   landedBreakdown?: Array<{ label: string; amount: number }>;
+  /** Invoice total + landed costs, in document currency (for dual-currency display). */
   economicTotal?: number;
   totalWeightKg?: number;
   status: string;

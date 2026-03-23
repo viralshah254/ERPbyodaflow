@@ -29,18 +29,63 @@ export default function FinanceDashboardPage() {
       description="Overview of your financial position and key metrics"
       actions={
         <>
-          <Button variant="outline">
-            <Icons.FileEdit className="mr-2 h-4 w-4" />
-            Create Journal
+          <Button variant="outline" asChild>
+            <Link href="/finance/journals">
+              <Icons.FileEdit className="mr-2 h-4 w-4" />
+              Create Journal
+            </Link>
           </Button>
-          <Button>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Record Receipt
+          <Button asChild>
+            <Link href="/ar/payments">
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Record Receipt
+            </Link>
           </Button>
         </>
       }
     >
       <div className="space-y-6">
+        {/* Module Quick Links */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { label: "AP Bills", href: "/ap/bills", icon: "Receipt", description: "Supplier invoices" },
+            { label: "AR & Collections", href: "/treasury/collections", icon: "ArrowDownCircle", description: "Customer receipts" },
+            { label: "Payment Runs", href: "/treasury/payment-runs", icon: "CreditCard", description: "Batch payments" },
+            { label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Landmark", description: "Match statements" },
+            { label: "Payroll", href: "/payroll/overview", icon: "Users", description: "Gross-to-net" },
+            { label: "Period Close", href: "/finance/period-close", icon: "Lock", description: "Close & lock" },
+          ].map((module) => {
+            const Icon = Icons[module.icon as keyof typeof Icons] as React.ElementType;
+            return (
+              <Link key={module.href} href={module.href}>
+                <Card className="hover:border-primary/50 hover:bg-accent/30 transition-colors cursor-pointer h-full">
+                  <CardContent className="p-4 flex flex-col gap-1.5">
+                    <Icon className="h-5 w-5 text-muted-foreground" />
+                    <p className="text-sm font-semibold leading-tight">{module.label}</p>
+                    <p className="text-xs text-muted-foreground">{module.description}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Statements quick links */}
+        <div className="flex flex-wrap gap-2">
+          <span className="text-xs text-muted-foreground self-center font-medium uppercase tracking-wide">Statements:</span>
+          {[
+            { label: "P&L", href: "/finance/statements/pnl" },
+            { label: "Balance Sheet", href: "/finance/statements/balance-sheet" },
+            { label: "Cash Flow", href: "/finance/statements/cash-flow" },
+            { label: "Trial Balance", href: "/finance/trial-balance" },
+            { label: "General Ledger", href: "/finance/gl" },
+          ].map((link) => (
+            <Button key={link.href} variant="outline" size="sm" asChild>
+              <Link href={link.href}>{link.label}</Link>
+            </Button>
+          ))}
+        </div>
+
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>

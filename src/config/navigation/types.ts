@@ -24,4 +24,6 @@ export interface NavSectionConfig {
   requiresOrgTypes?: TemplateOrgType[];
   order: number;
   items: NavItemConfig[];
+  /** Determines render group: primary sections appear first, secondary sections appear below the divider sorted A–Z */
+  tier?: "primary" | "secondary";
 }

@@ -155,6 +155,27 @@ export async function fetchFinancePeriodsApi(): Promise<FinancePeriod[]> {
   return payload.periods;
 }
 
+export type CloseChecklistItem = {
+  key: string;
+  label: string;
+  count: number;
+  severity: "error" | "warning";
+  action: string;
+};
+
+export type CloseChecklist = {
+  periodId: string | null;
+  periodLabel: string;
+  items: CloseChecklistItem[];
+};
+
+export async function fetchCloseChecklistApi(periodId?: string): Promise<CloseChecklist> {
+  requireLiveApi("Close checklist");
+  const params = new URLSearchParams();
+  if (periodId) params.set("periodId", periodId);
+  return apiRequest<CloseChecklist>("/api/finance/close-checklist", { params });
+}
+
 export async function closeFinancePeriodApi(periodId: string): Promise<void> {
   requireLiveApi("Close finance period");
   await apiRequest("/api/finance/period-close", {
@@ -282,4 +303,28 @@ export async function savePostingMappingsApi(
     method: "PATCH",
     body: mappings,
   });
+}
+
+export type TrialBalanceRow = {
+  accountId: string;
+  code: string;
+  name: string;
+  type: string;
+  debit: number;
+  credit: number;
+  balance: number;
+};
+
+export type TrialBalance = {
+  periodId: string | null;
+  periodLabel: string;
+  rows: TrialBalanceRow[];
+  totals: { debit: number; credit: number; isBalanced: boolean };
+};
+
+export async function fetchTrialBalanceApi(periodId?: string): Promise<TrialBalance> {
+  requireLiveApi("Trial balance");
+  const params = new URLSearchParams();
+  if (periodId) params.set("periodId", periodId);
+  return apiRequest<TrialBalance>("/api/finance/trial-balance", { params });
 }

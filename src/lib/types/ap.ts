@@ -12,6 +12,7 @@ export type APBillRow = {
   date: string;
   party: string;
   total: number;
+  /** Sum of linked GRN landed-cost lines in base currency (KES). */
   landedAllocated?: number;
   landedBreakdown?: Array<{ label: string; amount: number }>;
   economicTotal?: number;

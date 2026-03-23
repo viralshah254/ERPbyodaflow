@@ -277,9 +277,7 @@ function StepPermits({
   onBack: () => void;
   onSkip: () => void;
 }) {
-  const permitTemplates = templates.filter((t) =>
-    ["permit", "border", "duty", "insurance"].includes((t as { type?: string }).type ?? "")
-  );
+  const permitTemplates = templates; // all templates; the wizard step determines costCentre, not the template type
 
   return (
     <div className="space-y-5">
@@ -456,9 +454,7 @@ function StepLogistics({
   onBack: () => void;
   onSkip: () => void;
 }) {
-  const logisticsTemplates = templates.filter((t) =>
-    ["inbound_freight", "outbound_freight", "freight", "storage"].includes((t as { type?: string }).type ?? "")
-  );
+  const logisticsTemplates = templates; // all templates; the wizard step determines costCentre, not the template type
 
   return (
     <div className="space-y-5">

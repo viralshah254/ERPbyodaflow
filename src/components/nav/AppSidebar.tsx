@@ -89,6 +89,19 @@ export function AppSidebar({ className }: AppSidebarProps) {
     [visibleSections, navCounts]
   );
 
+  const primarySections = React.useMemo(
+    () => sectionsWithCounts.filter((s) => s.tier === "primary"),
+    [sectionsWithCounts]
+  );
+
+  const secondarySections = React.useMemo(
+    () =>
+      sectionsWithCounts
+        .filter((s) => s.tier !== "primary")
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [sectionsWithCounts]
+  );
+
   return (
     <div
       className={cn(
@@ -129,7 +142,25 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <nav className="p-2 space-y-4">
-          {sectionsWithCounts.map((section) => (
+          {primarySections.map((section) => (
+            <NavSection
+              key={section.id}
+              section={section}
+              isCollapsed={sidebarCollapsed}
+            />
+          ))}
+
+          {!sidebarCollapsed && secondarySections.length > 0 && (
+            <div className="px-3 pt-1 pb-1">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">More</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            </div>
+          )}
+
+          {secondarySections.map((section) => (
             <NavSection
               key={section.id}
               section={section}

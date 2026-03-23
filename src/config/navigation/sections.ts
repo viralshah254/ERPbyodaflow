@@ -5,6 +5,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "core",
     label: "Core",
     moduleKey: "dashboard",
+    tier: "primary",
     order: 0,
     items: [
       { key: "control-tower", label: "Control Tower", href: "/control-tower", icon: "Gauge", moduleKey: "dashboard" },
@@ -20,6 +21,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "docs",
     label: "Document Center",
     moduleKey: "docs",
+    tier: "secondary",
     order: 1,
     items: [
       { key: "docs-hub", label: "Documents", href: "/docs", icon: "FileText", moduleKey: "docs" },
@@ -38,6 +40,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "masters",
     label: "Masters",
     moduleKey: "masters",
+    tier: "secondary",
     order: 2,
     items: [
       { key: "masters-hub", label: "Masters", href: "/master", icon: "Database", moduleKey: "masters" },
@@ -50,6 +53,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "inventory",
     label: "Inventory",
     moduleKey: "inventory",
+    tier: "primary",
     order: 3,
     items: [
       { key: "inventory-products", label: "Products", href: "/inventory/products", icon: "Package", moduleKey: "inventory", termKey: "product", requiresPermissions: ["inventory.read"] },
@@ -69,6 +73,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "warehouse",
     label: "Warehouse",
     moduleKey: "inventory",
+    tier: "secondary",
     order: 4,
     items: [
       { key: "warehouse-overview", label: "Warehouse Overview", href: "/warehouse/overview", icon: "LayoutDashboard", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
@@ -83,6 +88,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "sales",
     label: "Sales",
     moduleKey: "sales",
+    tier: "primary",
     order: 5,
     items: [
       { key: "sales-overview", label: "Sales Overview", href: "/sales/overview", icon: "LayoutDashboard", moduleKey: "sales", requiresPermissions: ["sales.read"] },
@@ -98,6 +104,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "purchasing",
     label: "Purchasing / Procurement",
     moduleKey: "purchasing",
+    tier: "primary",
     order: 6,
     items: [
       { key: "purchasing-requests", label: "Purchase Requests", href: "/purchasing/requests", icon: "ClipboardList", moduleKey: "purchasing", requiresPermissions: ["purchasing.orders.read"] },
@@ -114,6 +121,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "pricing",
     label: "Pricing",
     moduleKey: "pricing",
+    tier: "secondary",
     order: 6.5,
     items: [
       { key: "pricing-overview", label: "Pricing Overview", href: "/pricing/overview", icon: "LayoutDashboard", moduleKey: "pricing" },
@@ -125,6 +133,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "manufacturing",
     label: "Manufacturing",
     moduleKey: "manufacturing",
+    tier: "secondary",
     requiresOrgTypes: ["MANUFACTURER", "DISTRIBUTOR"],
     order: 7,
     items: [
@@ -141,6 +150,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "distribution",
     label: "Distribution",
     moduleKey: "distribution",
+    tier: "secondary",
     requiresOrgTypes: ["DISTRIBUTOR"],
     order: 8,
     items: [
@@ -155,6 +165,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "franchise",
     label: "Franchise",
     moduleKey: "franchise",
+    tier: "secondary",
     order: 8.5,
     items: [
       { key: "franchise-outlet-workspace", label: "Outlet Workspace", href: "/franchise/outlet", icon: "Store", moduleKey: "franchise", requiresFlags: ["franchiseLightErp"], requiresPermissions: ["sales.read"] },
@@ -169,6 +180,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "retail",
     label: "Retail",
     moduleKey: "retail",
+    tier: "secondary",
     requiresOrgTypes: ["RETAIL"],
     order: 9,
     items: [
@@ -181,6 +193,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "treasury",
     label: "Treasury",
     moduleKey: "finance",
+    tier: "primary",
     order: 10,
     items: [
       { key: "treasury-overview", label: "Treasury Overview", href: "/treasury/overview", icon: "LayoutDashboard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
@@ -196,6 +209,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "assets",
     label: "Fixed Assets",
     moduleKey: "finance",
+    tier: "secondary",
     order: 11,
     items: [
       { key: "assets-overview", label: "Assets Overview", href: "/assets/overview", icon: "LayoutDashboard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
@@ -208,6 +222,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "projects",
     label: "Projects",
     moduleKey: "projects",
+    tier: "secondary",
     order: 12,
     items: [
       { key: "projects-overview", label: "Projects Overview", href: "/projects/overview", icon: "LayoutDashboard", moduleKey: "projects", requiresPermissions: ["projects.read"] },
@@ -219,6 +234,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "payroll",
     label: "Payroll",
     moduleKey: "finance",
+    tier: "primary",
     order: 13,
     items: [
       { key: "payroll-overview", label: "Payroll Overview", href: "/payroll/overview", icon: "LayoutDashboard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
@@ -232,6 +248,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "intercompany",
     label: "Intercompany",
     moduleKey: "finance",
+    tier: "secondary",
     order: 14,
     items: [
       { key: "intercompany-overview", label: "Intercompany Overview", href: "/intercompany/overview", icon: "LayoutDashboard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
@@ -242,6 +259,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "finance",
     label: "Finance & Accounting",
     moduleKey: "finance",
+    tier: "primary",
     order: 15,
     items: [
       { key: "finance-dashboard", label: "Finance Dashboard", href: "/finance", icon: "TrendingUp", moduleKey: "finance", requiresPermissions: ["finance.read"] },
@@ -266,6 +284,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         { key: "finance-statements-balance-sheet", label: "Balance Sheet", href: "/finance/statements/balance-sheet", icon: "Scale", moduleKey: "finance", requiresPermissions: ["finance.statements.read"] },
         { key: "finance-statements-cash-flow", label: "Cash Flow", href: "/finance/statements/cash-flow", icon: "ArrowLeftRight", moduleKey: "finance", requiresPermissions: ["finance.statements.read"] },
       ]},
+      { key: "finance-trial-balance", label: "Trial Balance", href: "/finance/trial-balance", icon: "Scale", moduleKey: "finance", requiresPermissions: ["finance.gl.read"] },
       { key: "finance-period-close", label: "Period Close", href: "/finance/period-close", icon: "Lock", moduleKey: "finance", requiresPermissions: ["finance.close.write"] },
       { key: "finance-budgets", label: "Budgets", href: "/finance/budgets", icon: "PiggyBank", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-ledger", label: "Ledger", href: "/finance/ledger", icon: "BookOpen", moduleKey: "finance", requiresPermissions: ["finance.gl.read"] },
@@ -276,6 +295,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "crm",
     label: "CRM",
     moduleKey: "crm",
+    tier: "secondary",
     order: 16,
     items: [
       { key: "crm-accounts", label: "Accounts / Parties", href: "/crm/accounts", icon: "Building2", moduleKey: "crm", requiresPermissions: ["crm.accounts.read"] },
@@ -288,6 +308,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "reports",
     label: "Reports",
     moduleKey: "reports",
+    tier: "secondary",
     order: 17,
     items: [
       { key: "reports-library", label: "Report Library", href: "/reports", icon: "FileText", moduleKey: "reports", requiresPermissions: ["reports.read"] },
@@ -302,6 +323,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "analytics",
     label: "Analytics",
     moduleKey: "analytics",
+    tier: "secondary",
     order: 18,
     items: [
       { key: "analytics-hub", label: "Analytics Studio", href: "/analytics", icon: "BarChart3", moduleKey: "analytics" },
@@ -321,6 +343,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "automation",
     label: "Automation Center",
     moduleKey: "automation",
+    tier: "secondary",
     order: 19,
     items: [
       { key: "automation-dashboard", label: "Automation Dashboard", href: "/automation", icon: "Zap", moduleKey: "automation", requiresPermissions: ["automation.read"] },
@@ -337,6 +360,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "settings",
     label: "Settings",
     moduleKey: "settings",
+    tier: "secondary",
     order: 20,
     items: [
       { key: "settings-org", label: "Organization Profile", href: "/settings/org", icon: "Building", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
@@ -388,6 +412,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "help",
     label: "Help & Tutorial",
     moduleKey: "dashboard",
+    tier: "secondary",
     order: 21,
     items: [
       { key: "tutorial", label: "Tutorial", href: "/tutorial", icon: "BookOpen", moduleKey: "dashboard" },

@@ -47,6 +47,8 @@ import {
   requestDocumentApprovalApi,
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
+import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
+import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchPartyByIdApi, type PartyLookupOption } from "@/lib/api/parties";
@@ -75,6 +77,7 @@ export default function DocViewPage() {
   const [actionLoading, setActionLoading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
+  const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
   const [convertPartyId, setConvertPartyId] = React.useState("");
@@ -152,6 +155,15 @@ export default function DocViewPage() {
   React.useEffect(() => {
     void refreshDocument();
   }, [refreshDocument]);
+
+  // For bills: fetch the GRN's landed cost allocation so we can show the breakdown card
+  React.useEffect(() => {
+    if (type !== "bill") return;
+    const grnId =
+      document?.sourceDocument?.typeKey === "grn" ? document.sourceDocument.id : undefined;
+    if (!grnId) { setLandedAllocation(null); return; }
+    fetchLandedCostAllocation(grnId).then(setLandedAllocation).catch(() => {});
+  }, [type, document?.sourceDocument?.id, document?.sourceDocument?.typeKey]);
 
   React.useEffect(() => {
     if (!convertOpen || !convertType) return;
@@ -581,6 +593,38 @@ export default function DocViewPage() {
             currentId={id}
           />
         )}
+        {type === "bill" && landedAllocation && (() => {
+          const centreLabels: Record<string, string> = {
+            currency_conversion: "FX conversion",
+            permits: "Permits & customs",
+            inbound_logistics: "Inbound logistics",
+            other: "Other charges",
+          };
+          const centreLines = Object.entries(landedAllocation.costCentreSummary ?? {}).map(
+            ([centre, data]) => ({
+              label: centreLabels[centre] ?? centre,
+              // costCentreSummary values are in original currency; use base KES total for display
+              amount: (data as { originalAmount: number }).originalAmount ?? 0,
+            })
+          );
+          const billKes =
+            (document?.currency ?? "KES").toUpperCase() === "KES"
+              ? (document?.total ?? 0)
+              : document?.exchangeRate
+              ? (document.total ?? 0) * document.exchangeRate
+              : (document?.total ?? 0);
+          return (
+            <CostImpactPanel
+              title="Landed cost breakdown"
+              currency="KES"
+              lines={[
+                { label: "Invoice value (KES)", amount: billKes },
+                ...centreLines,
+              ]}
+            />
+          );
+        })()}
+
         <DocumentTabs
           lines={
             <Card>

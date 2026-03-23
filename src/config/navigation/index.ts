@@ -22,6 +22,7 @@ export interface ResolvedNavSection {
   key: string;
   label: string;
   items: ResolvedNavItem[];
+  tier: "primary" | "secondary";
 }
 
 export interface BuildVisibleNavInput {
@@ -122,6 +123,7 @@ export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection
       key: section.key,
       label: section.label,
       items,
+      tier: section.tier ?? "secondary",
     });
   }
 
