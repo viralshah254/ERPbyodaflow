@@ -42,6 +42,7 @@ export type WarehousePutawayRow = {
     sku?: string;
     productName?: string;
     receivedQty: number;
+    receivedWeightKg?: number | null;
     putawayQty: number;
     allocatedBins?: Array<{ binCode: string; qty: number }>;
   }>;

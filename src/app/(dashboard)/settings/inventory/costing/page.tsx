@@ -33,7 +33,9 @@ import {
 import { fetchFinanceAccountsApi } from "@/lib/api/finance";
 import {
   createLandedCostTemplate,
+  deleteLandedCostTemplate,
   fetchLandedCostTemplates,
+  updateLandedCostTemplate,
   type LandedCostTemplateRow,
 } from "@/lib/api/landed-cost";
 import {
@@ -46,10 +48,26 @@ import * as Icons from "lucide-react";
 
 const COSTING_METHODS = ["FIFO", "WEIGHTED_AVERAGE", "STANDARD_COST"] as const;
 
+/** Matches backend `LandedCostTemplate` / PATCH enum (see erp_odaflow_backend landed-cost + model). */
+const LANDED_COST_TEMPLATE_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "freight", label: "Freight" },
+  { value: "duty", label: "Import duty" },
+  { value: "permit", label: "Permits / licences" },
+  { value: "border", label: "Border / customs" },
+  { value: "inbound_freight", label: "Inbound freight" },
+  { value: "outbound_freight", label: "Outbound freight" },
+  { value: "storage", label: "Cold storage" },
+];
+
+function slugFromName(name: string) {
+  return name.trim() ? name.toUpperCase().replace(/\s+/g, "-") : "";
+}
+
 export default function InventoryCostingSettingsPage() {
   const [method, setMethod] = React.useState<(typeof COSTING_METHODS)[number]>("FIFO");
   const [valuationAccount, setValuationAccount] = React.useState("");
   const [templateSheetOpen, setTemplateSheetOpen] = React.useState(false);
+  const [editingTemplateId, setEditingTemplateId] = React.useState<string | null>(null);
   const [templates, setTemplates] = React.useState<LandedCostTemplateRow[]>([]);
   const [accounts, setAccounts] = React.useState<Array<{ id: string; code: string; name: string; type: string }>>([]);
   const [savingSettings, setSavingSettings] = React.useState(false);
@@ -92,23 +110,74 @@ export default function InventoryCostingSettingsPage() {
     }
   };
 
-  const handleCreateTemplate = async () => {
+  const resetTemplateForm = () => {
+    setTemplateForm({ name: "", type: "freight", allocationBasis: "qty" });
+    setEditingTemplateId(null);
+  };
+
+  const openAddTemplateSheet = () => {
+    resetTemplateForm();
+    setTemplateSheetOpen(true);
+  };
+
+  const openEditTemplateSheet = (t: LandedCostTemplateRow) => {
+    const allowed = new Set(LANDED_COST_TEMPLATE_TYPE_OPTIONS.map((o) => o.value));
+    const type = allowed.has(t.type) ? t.type : "freight";
+    setTemplateForm({
+      name: t.name,
+      type: type as LandedCostTemplateRow["type"],
+      allocationBasis: (t.allocationBasis ?? "qty") as LandedCostTemplateRow["allocationBasis"],
+    });
+    setEditingTemplateId(t.id);
+    setTemplateSheetOpen(true);
+  };
+
+  const handleSaveTemplate = async () => {
     if (!templateForm.name.trim()) {
       toast.error("Template name is required.");
       return;
     }
     try {
-      await createLandedCostTemplate({
-        name: templateForm.name.trim(),
-        type: templateForm.type,
-        allocationBasis: templateForm.allocationBasis,
-      });
-      setTemplateForm({ name: "", type: "freight", allocationBasis: "qty" });
+      if (editingTemplateId) {
+        await updateLandedCostTemplate(editingTemplateId, {
+          name: templateForm.name.trim(),
+          type: templateForm.type,
+          allocationBasis: templateForm.allocationBasis,
+        });
+        toast.success("Landed cost template updated.");
+      } else {
+        await createLandedCostTemplate({
+          name: templateForm.name.trim(),
+          type: templateForm.type,
+          allocationBasis: templateForm.allocationBasis,
+        });
+        toast.success("Landed cost template created.");
+      }
+      resetTemplateForm();
       setTemplateSheetOpen(false);
       await reload();
-      toast.success("Landed cost template created.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create landed cost template.");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save landed cost template."
+      );
+    }
+  };
+
+  const handleDeleteTemplate = async (t: LandedCostTemplateRow) => {
+    const ok = window.confirm(
+      `Delete template “${t.name}”? This cannot be undone. Templates used on a saved landed cost allocation cannot be deleted.`
+    );
+    if (!ok) return;
+    try {
+      await deleteLandedCostTemplate(t.id);
+      toast.success("Template deleted.");
+      if (editingTemplateId === t.id) {
+        resetTemplateForm();
+        setTemplateSheetOpen(false);
+      }
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete template.");
     }
   };
 
@@ -187,7 +256,7 @@ export default function InventoryCostingSettingsPage() {
               <CardTitle>Landed cost templates</CardTitle>
               <CardDescription>Freight, insurance, duty. Allocation basis (qty/value/weight).</CardDescription>
             </div>
-            <Button size="sm" variant="outline" onClick={() => setTemplateSheetOpen(true)}>
+            <Button size="sm" variant="outline" onClick={() => openAddTemplateSheet()}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add template
             </Button>
@@ -200,15 +269,40 @@ export default function InventoryCostingSettingsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Allocation basis</TableHead>
+                  <TableHead className="w-[120px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {templates.map((t) => (
                   <TableRow key={t.id}>
-                    <TableCell className="font-medium">{t.code}</TableCell>
+                    <TableCell className="font-medium">{t.code || slugFromName(t.name)}</TableCell>
                     <TableCell>{t.name}</TableCell>
                     <TableCell>{t.type}</TableCell>
-                    <TableCell>{t.allocationBasis}</TableCell>
+                    <TableCell>{t.allocationBasis ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => openEditTemplateSheet(t)}
+                          aria-label={`Edit ${t.name}`}
+                        >
+                          <Icons.Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => void handleDeleteTemplate(t)}
+                          aria-label={`Delete ${t.name}`}
+                        >
+                          <Icons.Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -217,18 +311,28 @@ export default function InventoryCostingSettingsPage() {
         </Card>
       </div>
 
-      <Sheet open={templateSheetOpen} onOpenChange={setTemplateSheetOpen}>
+      <Sheet
+        open={templateSheetOpen}
+        onOpenChange={(open) => {
+          setTemplateSheetOpen(open);
+          if (!open) resetTemplateForm();
+        }}
+      >
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Add landed cost template</SheetTitle>
-            <SheetDescription>Create a live landed cost template.</SheetDescription>
+            <SheetTitle>{editingTemplateId ? "Edit landed cost template" : "Add landed cost template"}</SheetTitle>
+            <SheetDescription>
+              {editingTemplateId
+                ? "Update name, type, or allocation basis."
+                : "Create a landed cost template for the wizard and allocations."}
+            </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
               <Label>Code</Label>
               <Input
                 placeholder="Auto-generated from name"
-                value={templateForm.name ? templateForm.name.toUpperCase().replace(/\s+/g, "-") : ""}
+                value={slugFromName(templateForm.name)}
                 readOnly
               />
             </div>
@@ -245,10 +349,11 @@ export default function InventoryCostingSettingsPage() {
               <Select value={templateForm.type} onValueChange={(value) => setTemplateForm((current) => ({ ...current, type: value as LandedCostTemplateRow["type"] }))}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="freight">Freight</SelectItem>
-                  <SelectItem value="insurance">Insurance</SelectItem>
-                  <SelectItem value="duty">Duty</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  {LANDED_COST_TEMPLATE_TYPE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -266,7 +371,7 @@ export default function InventoryCostingSettingsPage() {
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setTemplateSheetOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreateTemplate()}>Save</Button>
+            <Button onClick={() => void handleSaveTemplate()}>{editingTemplateId ? "Save changes" : "Create"}</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

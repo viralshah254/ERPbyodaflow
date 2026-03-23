@@ -15,6 +15,13 @@ export type OpenBillRow = {
   outstanding: number;
   status: string;
   currency?: string;
+  exchangeRate?: number;
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
+  economicTotal?: number;
+  grnId?: string;
+  grnNumber?: string;
+  poRef?: string;
 };
 
 type BackendPayment = {
@@ -57,6 +64,13 @@ type BackendOpenBill = {
   outstanding: number;
   status: string;
   currency?: string;
+  exchangeRate?: number;
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
+  economicTotal?: number;
+  grnId?: string;
+  grnNumber?: string;
+  poRef?: string;
 };
 
 type BackendApBill = {
@@ -67,6 +81,9 @@ type BackendApBill = {
   partyId?: string;
   supplierName?: string;
   total: number;
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
+  economicTotal?: number;
   currency?: string;
   exchangeRate?: number;
   status: string;
@@ -257,6 +274,9 @@ export async function fetchApBillsApi(search?: string): Promise<APBillRow[]> {
     date: item.date?.slice(0, 10) ?? "",
     party: item.supplierName ?? item.partyId ?? "",
     total: item.total ?? 0,
+    landedAllocated: item.landedAllocated ?? 0,
+    landedBreakdown: item.landedBreakdown ?? [],
+    economicTotal: item.economicTotal ?? (item.total ?? 0),
     currency: item.currency,
     exchangeRate: item.exchangeRate,
     status: item.status ?? "DRAFT",
@@ -305,6 +325,13 @@ export async function fetchOpenBillsApi(supplierId?: string): Promise<OpenBillRo
     outstanding: item.outstanding,
     status: item.status,
     currency: item.currency,
+    exchangeRate: item.exchangeRate,
+    landedAllocated: item.landedAllocated ?? 0,
+    landedBreakdown: item.landedBreakdown ?? [],
+    economicTotal: item.economicTotal ?? item.total,
+    grnId: item.grnId,
+    grnNumber: item.grnNumber,
+    poRef: item.poRef,
   }));
 }
 

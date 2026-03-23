@@ -20,6 +20,7 @@ import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound, BookOpen } fr
 import { signOut as firebaseSignOut } from "@/lib/firebase";
 import { setApiAuth } from "@/lib/api/client";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
+import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
 
 export function Header() {
   const router = useRouter();
@@ -28,20 +29,15 @@ export function Header() {
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
 
+  const displayName = getUserDisplayName(user);
+  const userInitials = getUserInitials(user);
+
   const handleLogout = async () => {
     await firebaseSignOut();
     setApiAuth({});
     logout();
     router.push("/");
   };
-
-  const userInitials = (() => {
-    if (!user) return "U";
-    const first = user.firstName?.[0] ?? "";
-    const last = user.lastName?.[0] ?? "";
-    const initials = (first + last).toUpperCase();
-    return initials || user.email?.[0]?.toUpperCase() || "U";
-  })();
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background px-4">
@@ -94,7 +90,7 @@ export function Header() {
             aria-label="Account menu — profile, settings, log out"
           >
             <Avatar className="h-10 w-10">
-              <AvatarImage src={user?.avatarUrl} alt={user?.email} />
+              <AvatarImage src={user?.avatarUrl} alt={displayName || user?.email} />
               <AvatarFallback>{userInitials}</AvatarFallback>
             </Avatar>
           </Button>
@@ -103,11 +99,13 @@ export function Header() {
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">
-                {user?.firstName} {user?.lastName}
+                {displayName}
               </p>
-              <p className="text-xs leading-none text-muted-foreground">
-                {user?.email}
-              </p>
+              {user?.email ? (
+                <p className="text-xs leading-none text-muted-foreground">
+                  {user.email}
+                </p>
+              ) : null}
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

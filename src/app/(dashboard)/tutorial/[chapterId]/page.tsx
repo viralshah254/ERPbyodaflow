@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { TUTORIAL_CHAPTERS } from "@/config/tutorial";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { Sparkles, ArrowRight, BookOpen, ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -18,6 +19,7 @@ export default function TutorialChapterPage() {
 
   const setContext = useCopilotStore((s) => s.setContext);
   const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
+  const copilotEnabled = useCopilotFeatureEnabled();
 
   if (!chapter) notFound();
 
@@ -52,15 +54,17 @@ export default function TutorialChapterPage() {
               {chapter.title}
             </CardTitle>
             <CardDescription>{chapter.description}</CardDescription>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-fit"
-              onClick={() => handleAskCopilot(chapter.title, chapter.copilotPrompt)}
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              Ask Copilot about this section
-            </Button>
+            {copilotEnabled ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={() => handleAskCopilot(chapter.title, chapter.copilotPrompt)}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Ask Copilot about this section
+              </Button>
+            ) : null}
           </CardHeader>
           <CardContent className="pt-0">
             <ul className="space-y-3">
@@ -76,20 +80,22 @@ export default function TutorialChapterPage() {
                     >
                       {item.label}
                     </Link>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 shrink-0"
-                      onClick={() =>
-                        handleAskCopilot(
-                          item.label,
-                          item.copilotPrompt ?? chapter.copilotPrompt
-                        )
-                      }
-                      title="Ask Copilot"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                    </Button>
+                    {copilotEnabled ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 shrink-0"
+                        onClick={() =>
+                          handleAskCopilot(
+                            item.label,
+                            item.copilotPrompt ?? chapter.copilotPrompt
+                          )
+                        }
+                        title="Ask Copilot"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
                   </div>
                   <Button variant="outline" size="sm" asChild>
                     <Link href={item.href}>

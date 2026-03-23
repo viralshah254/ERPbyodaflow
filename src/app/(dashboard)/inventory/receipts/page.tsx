@@ -10,6 +10,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { fetchGRNs, postGRN, exportGRNsCsv } from "@/lib/api/grn";
+import { fetchSubcontractOrders } from "@/lib/api/cool-catch";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
@@ -39,9 +40,16 @@ export default function InventoryReceiptsPage() {
   );
 
   const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>([]);
+  const [subcontractedGrnIds, setSubcontractedGrnIds] = React.useState<Set<string>>(new Set());
   const [loading, setLoading] = React.useState(true);
   React.useEffect(() => {
-    fetchGRNs().then(setAllRows).finally(() => setLoading(false));
+    Promise.all([fetchGRNs(), fetchSubcontractOrders({}).catch(() => [])])
+      .then(([grns, scos]) => {
+        setAllRows(grns);
+        const grnIds = new Set(scos.filter((s: any) => s.grnId).map((s: any) => s.grnId as string));
+        setSubcontractedGrnIds(grnIds);
+      })
+      .finally(() => setLoading(false));
   }, []);
   const warehouses = React.useMemo(
     () => Array.from(new Set(allRows.map((r) => r.warehouse).filter(Boolean))) as string[],
@@ -55,7 +63,8 @@ export default function InventoryReceiptsPage() {
         (r) =>
           r.number.toLowerCase().includes(q) ||
           (r.poRef?.toLowerCase().includes(q)) ||
-          (r.warehouse?.toLowerCase().includes(q))
+          (r.warehouse?.toLowerCase().includes(q)) ||
+          (r.party?.toLowerCase().includes(q))
       );
     }
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
@@ -83,12 +92,24 @@ export default function InventoryReceiptsPage() {
         sticky: true,
       },
       { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
+      { id: "party", header: "Supplier", accessor: (r: PurchasingDocRow) => r.party || "—" },
       { id: "poRef", header: "PO Reference", accessor: "poRef" as keyof PurchasingDocRow },
       { id: "warehouse", header: "Warehouse", accessor: "warehouse" as keyof PurchasingDocRow },
       {
         id: "status",
         header: "Status",
         accessor: (r: PurchasingDocRow) => <StatusBadge status={r.status} />,
+      },
+      {
+        id: "subcontracted",
+        header: "VAS",
+        accessor: (r: PurchasingDocRow) =>
+          subcontractedGrnIds.has(r.id) ? (
+            <Badge variant="secondary" className="text-xs gap-1 whitespace-nowrap">
+              <Icons.Factory className="h-3 w-3" />
+              Subcontracted
+            </Badge>
+          ) : null,
       },
       {
         id: "landedCost",
@@ -115,7 +136,7 @@ export default function InventoryReceiptsPage() {
           ),
       },
     ],
-    []
+    [subcontractedGrnIds]
   );
 
   const handleClearFilters = () => {
@@ -155,7 +176,7 @@ export default function InventoryReceiptsPage() {
     <PageShell>
       <PageHeader
         title="Goods Receipt (GRN)"
-        description="Record goods received from suppliers"
+        description="Canonical GRN operations queue: post receipts, complete landed costs, and move to putaway."
         breadcrumbs={[
           { label: "Inventory", href: "/inventory/products" },
           { label: "Receipts" },
@@ -163,12 +184,17 @@ export default function InventoryReceiptsPage() {
         sticky
         showCommandHint
         actions={
-          <Button asChild>
-            <Link href="/docs/grn/new" data-tour-step="create-button">
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Create GRN
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/purchasing/goods-receipt">Purchasing View</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/docs/grn/new" data-tour-step="create-button">
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Create GRN
+              </Link>
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-4">

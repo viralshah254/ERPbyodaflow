@@ -56,6 +56,7 @@ type BackendDocumentDetail = {
   warehouseId?: string;
   total?: number;
   currency?: string;
+  exchangeRate?: number;
   status: string;
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
@@ -68,6 +69,7 @@ type BackendDocumentDetail = {
     status: string;
     date: string;
   } | null;
+  linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{
     id: string;
     typeKey: DocTypeKey;
@@ -108,11 +110,18 @@ type BackendDocumentListItem = {
   party?: string;
   partyId?: string;
   total?: number;
+  currency?: string;
+  exchangeRate?: number;
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
+  economicTotal?: number;
+  totalWeightKg?: number;
   status: string;
   warehouse?: string;
   warehouseId?: string;
   poRef?: string;
   reference?: string;
+  pendingApprovalReason?: string;
 };
 
 type BackendDocumentListResponse = {
@@ -136,6 +145,8 @@ export type DocumentDraftPayload = {
     quantity?: number;
     unit?: string;
     unitPrice?: number;
+    taxCodeId?: string;
+    tax?: number;
     amount?: number;
     debit?: number;
     credit?: number;
@@ -148,6 +159,7 @@ export type DocumentDraftPayload = {
   currency?: string;
   /** Document currency → base currency. From exchange rate API or user override. */
   exchangeRate?: number;
+  linesAreTaxInclusive?: boolean;
   outputTemplateId?: string;
 };
 
@@ -271,6 +283,7 @@ function mapDocumentDetail(
       remainingQuantity: line.remainingQuantity,
     })),
     sourceDocument: payload.sourceDocument ?? null,
+    linkedDeliveries: payload.linkedDeliveries ?? [],
     relatedDocuments: payload.relatedDocuments ?? [],
     attachments: (payload.attachments ?? []).map((item) => ({
       id: item.id,
@@ -301,13 +314,20 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
   return {
     id: item.id,
     number: item.number,
-    date: item.date,
+    date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
     party: item.party ?? item.partyId,
     total: item.total,
+    currency: item.currency,
+    exchangeRate: item.exchangeRate,
+    landedAllocated: item.landedAllocated,
+    landedBreakdown: item.landedBreakdown,
+    economicTotal: item.economicTotal,
+    totalWeightKg: item.totalWeightKg,
     status: item.status,
     warehouse: item.warehouse ?? item.warehouseId,
     poRef: item.poRef,
     reference: item.reference,
+    pendingApprovalReason: item.pendingApprovalReason,
   };
 }
 
@@ -347,13 +367,13 @@ export async function bulkDocumentActionApi(
   type: DocTypeKey,
   action: "submit" | "approve" | "post" | "cancel",
   ids: string[]
-): Promise<void> {
-  if (!ids.length) return;
+): Promise<{ results: { id: string; status?: string; error?: string }[] }> {
+  if (!ids.length) return { results: [] };
   requireLiveApi("Document actions");
-  await apiRequest(`/api/documents/${type}/bulk-action`, {
-    method: "POST",
-    body: { action, ids },
-  });
+  return apiRequest<{ action: string; results: { id: string; status?: string; error?: string }[] }>(
+    `/api/documents/${type}/bulk-action`,
+    { method: "POST", body: { action, ids } }
+  );
 }
 
 export async function createDocumentApi(

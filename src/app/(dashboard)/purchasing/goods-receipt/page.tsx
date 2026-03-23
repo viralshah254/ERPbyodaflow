@@ -29,7 +29,7 @@ const GRN_STATUS_OPTIONS = [
 export default function GoodsReceiptPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("DRAFT");
+  const [statusFilter, setStatusFilter] = React.useState("");
   const [rows, setRows] = React.useState<PurchasingDocRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -50,7 +50,7 @@ export default function GoodsReceiptPage() {
     let out = rows;
     if (statusFilter) out = out.filter((row) => row.status === statusFilter);
     const q = search.trim().toLowerCase();
-    if (q) out = out.filter((row) => [row.number, row.poRef ?? "", row.warehouse ?? "", row.status].join(" ").toLowerCase().includes(q));
+    if (q) out = out.filter((row) => [row.number, row.poRef ?? "", row.warehouse ?? "", row.party ?? "", row.status].join(" ").toLowerCase().includes(q));
     return out;
   }, [rows, search, statusFilter]);
 
@@ -58,6 +58,7 @@ export default function GoodsReceiptPage() {
     () => [
       { id: "number", header: "Number", accessor: (row: PurchasingDocRow) => <span className="font-medium">{row.number}</span> },
       { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
+      { id: "party", header: "Supplier", accessor: (row: PurchasingDocRow) => row.party || "—" },
       { id: "poRef", header: "PO reference", accessor: (row: PurchasingDocRow) => row.poRef || "—" },
       { id: "warehouse", header: "Warehouse", accessor: (row: PurchasingDocRow) => row.warehouse || "—" },
       { id: "status", header: "Status", accessor: (row: PurchasingDocRow) => <StatusBadge status={row.status} /> },
@@ -91,7 +92,7 @@ export default function GoodsReceiptPage() {
     <PageShell>
       <PageHeader
         title="Goods Receipt (GRN)"
-        description="Record and post goods receipts for inventory updates and AP matching."
+        description="Purchasing view of GRNs. Use Inventory Receipts as the canonical operations queue."
         breadcrumbs={[{ label: "Purchasing", href: "/purchasing/orders" }, { label: "Goods Receipt" }]}
         actions={
           <div className="flex gap-2">

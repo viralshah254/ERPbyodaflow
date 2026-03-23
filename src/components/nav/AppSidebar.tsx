@@ -6,11 +6,27 @@ import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { buildVisibleNav, type ResolvedNavSection } from "@/config/navigation";
+import { buildVisibleNav, type ResolvedNavSection, type ResolvedNavItem } from "@/config/navigation";
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation";
 import type { TemplateOrgType } from "@/config/industryTemplates/index";
 import { NavSection } from "./NavSection";
+import { useNavCounts } from "@/lib/use-nav-counts";
+import type { NavCounts } from "@/lib/api/nav-counts";
 import * as Icons from "lucide-react";
+
+function applyCountsToItems(items: ResolvedNavItem[], counts: NavCounts): ResolvedNavItem[] {
+  return items.map((item) => {
+    const count = counts[item.key] ?? 0;
+    const children = item.children ? applyCountsToItems(item.children, counts) : undefined;
+    const badge =
+      count > 0
+        ? { type: "count" as const, value: String(count) }
+        : item.badge?.type === "text"
+          ? item.badge
+          : undefined;
+    return { ...item, badge, children };
+  });
+}
 
 /** Map legacy orgType SHOP to RETAIL for template-driven nav */
 function toTemplateOrgType(orgType: string | undefined): TemplateOrgType | null {
@@ -40,6 +56,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     orgRole,
     franchisePersona,
   } = useOrgContextStore();
+  const navCounts = useNavCounts();
 
   const visibleSections = React.useMemo((): ResolvedNavSection[] => {
     const orgType = toTemplateOrgType(ctxOrgType ?? org?.orgType ?? undefined);
@@ -63,6 +80,14 @@ export function AppSidebar({ className }: AppSidebarProps) {
     };
     return buildVisibleNav(input);
   }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]);
+
+  const sectionsWithCounts = React.useMemo(
+    () => visibleSections.map((section) => ({
+      ...section,
+      items: applyCountsToItems(section.items, navCounts),
+    })),
+    [visibleSections, navCounts]
+  );
 
   return (
     <div
@@ -104,7 +129,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <nav className="p-2 space-y-4">
-          {visibleSections.map((section) => (
+          {sectionsWithCounts.map((section) => (
             <NavSection
               key={section.id}
               section={section}

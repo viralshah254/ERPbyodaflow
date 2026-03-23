@@ -14,7 +14,9 @@ import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimelin
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocationBadge";
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
-import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, receiveSubcontractOrder } from "@/lib/api/cool-catch";
+import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, receiveSubcontractOrder, dispatchSubcontractOrder } from "@/lib/api/cool-catch";
+import { fetchAuditLogs } from "@/lib/api/audit-log";
+import { fetchYieldRecords } from "@/lib/api/yield";
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -25,19 +27,53 @@ export default function SubcontractOrderDetailPage() {
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchSubcontractOrderById>>>(null);
   const [loading, setLoading] = React.useState(true);
   const [receiving, setReceiving] = React.useState(false);
+  const [dispatching, setDispatching] = React.useState(false);
   const [drilldown, setDrilldown] = React.useState<Awaited<ReturnType<typeof fetchSubcontractCostingDrilldown>>>(null);
+  const [auditEntries, setAuditEntries] = React.useState<Array<{ id: string; action: string; user: string; timestamp: string; detail?: string }>>([]);
+  const [yieldRecords, setYieldRecords] = React.useState<Awaited<ReturnType<typeof fetchYieldRecords>>>([]);
+
+  const reload = React.useCallback(async () => {
+    const [r, logs, yields] = await Promise.allSettled([
+      fetchSubcontractOrderById(id),
+      fetchAuditLogs({ sourceType: "subcontract-order", sourceId: id }),
+      fetchYieldRecords({ subcontractOrderId: id }),
+    ]);
+    if (r.status === "fulfilled") setOrder(r.value);
+    if (logs.status === "fulfilled") {
+      setAuditEntries((logs.value ?? []).map((e: any) => ({
+        id: e.id ?? e._id ?? String(Math.random()),
+        action: e.what ?? e.action ?? e.event ?? "Action",
+        user: e.who ?? e.actorName ?? e.actor ?? "System",
+        timestamp: e.when ? new Date(e.when).toLocaleString() : (e.createdAt ? new Date(e.createdAt).toLocaleString() : ""),
+        detail: e.detail ?? e.description ?? "",
+      })));
+    }
+    if (yields.status === "fulfilled") setYieldRecords(yields.value);
+  }, [id]);
 
   React.useEffect(() => {
     let cancelled = false;
-    fetchSubcontractOrderById(id)
-      .then((r) => { if (!cancelled) setOrder(r); })
-      .catch(() => { if (!cancelled) setOrder(null); })
+    setLoading(true);
+    reload()
+      .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
-    fetchSubcontractCostingDrilldown(id).then((r) => {
-      if (!cancelled) setDrilldown(r);
-    });
+    fetchSubcontractCostingDrilldown(id).then((r) => { setDrilldown(r); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, reload]);
+
+  const handleDispatch = async () => {
+    if (!order || order.status !== "SENT") return;
+    setDispatching(true);
+    try {
+      await dispatchSubcontractOrder(order.id);
+      toast.success("Order marked as In Processing (WIP).");
+      await reload();
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Dispatch failed");
+    } finally {
+      setDispatching(false);
+    }
+  };
 
   const handleReceive = async () => {
     if (!order || order.status !== "WIP") return;
@@ -45,8 +81,7 @@ export default function SubcontractOrderDetailPage() {
     try {
       await receiveSubcontractOrder(order.id);
       toast.success("Order marked received.");
-      const updated = await fetchSubcontractOrderById(id);
-      setOrder(updated);
+      await reload();
     } catch (e) {
       toast.error((e as Error)?.message ?? "Receive failed");
     } finally {
@@ -106,6 +141,11 @@ export default function SubcontractOrderDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            {order.status === "SENT" && (
+              <Button size="sm" variant="secondary" disabled={dispatching} onClick={handleDispatch}>
+                {dispatching ? "Dispatching…" : "Mark as In Processing"}
+              </Button>
+            )}
             {order.status === "WIP" && (
               <Button size="sm" disabled={receiving} onClick={handleReceive}>
                 {receiving ? "Receiving…" : "Receive"}
@@ -125,10 +165,17 @@ export default function SubcontractOrderDetailPage() {
                 <CardTitle className="text-base">Subcontract Order Summary</CardTitle>
                 <Badge>{order.status}</Badge>
               </CardHeader>
-              <CardContent className="grid gap-4 text-sm md:grid-cols-4">
+              <CardContent className="grid gap-4 text-sm md:grid-cols-3 lg:grid-cols-6">
                 <div>
                   <p className="text-muted-foreground">Work center</p>
                   <p className="font-medium">{order.workCenterName}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Species / Process</p>
+                  <p className="font-medium">
+                    {order.species ? (order.species === "TILAPIA" ? "Tilapia" : "Nile Perch") : "—"}
+                    {order.processType ? ` · ${order.processType}` : ""}
+                  </p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">BOM</p>
@@ -139,8 +186,20 @@ export default function SubcontractOrderDetailPage() {
                   <p className="font-medium">{order.sentAt ?? "—"} / {order.receivedAt ?? "—"}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Ownership / Location</p>
-                  <OwnershipLocationBadge owner="CoolCatch" location={order.workCenterName} />
+                  <p className="text-muted-foreground">Linked PO</p>
+                  {order.purchaseOrderId ? (
+                    <Link href={`/purchasing/orders/${order.purchaseOrderId}`} className="font-medium font-mono text-xs text-primary underline-offset-2 hover:underline">
+                      {order.purchaseOrderId.slice(-12)}
+                    </Link>
+                  ) : <p className="font-medium">—</p>}
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Linked GRN</p>
+                  {order.grnId ? (
+                    <Link href={`/inventory/receipts/${order.grnId}`} className="font-medium font-mono text-xs text-primary underline-offset-2 hover:underline">
+                      {order.grnId.slice(-12)}
+                    </Link>
+                  ) : <p className="font-medium">—</p>}
                 </div>
               </CardContent>
             </Card>
@@ -194,6 +253,51 @@ export default function SubcontractOrderDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Yield Batches</CardTitle>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/manufacturing/yield?subcontractOrderId=${id}`}>Record yield</Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                {yieldRecords.length === 0 ? (
+                  <p className="text-muted-foreground text-sm p-4">No yield batches recorded yet.</p>
+                ) : (
+                  <div className="divide-y text-sm">
+                    {yieldRecords.map((yr: any) => (
+                      <div key={yr.id ?? yr._id} className="grid grid-cols-6 gap-2 px-4 py-3">
+                        <div>
+                          <p className="text-muted-foreground text-xs">Date</p>
+                          <p>{yr.recordedAt ? new Date(yr.recordedAt).toLocaleDateString() : "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Input kg</p>
+                          <p>{yr.inputKg ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Primary kg</p>
+                          <p>{yr.primaryOutputKg ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Secondary kg</p>
+                          <p>{yr.secondaryOutputKg ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Loss kg</p>
+                          <p>{yr.processLossKg ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Yield %</p>
+                          <p>{yr.primaryYieldPct != null ? `${(yr.primaryYieldPct * 100).toFixed(1)}%` : "—"}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           <div className="space-y-6">
@@ -212,13 +316,12 @@ export default function SubcontractOrderDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <ActivityPanel
-                  auditEntries={[
-                    { id: "1", action: "Subcontract order created", user: "Processing Coordinator", timestamp: new Date(order.createdAt).toLocaleString(), detail: order.number },
-                    { id: "2", action: order.status === "RECEIVED" ? "Outputs received" : "Awaiting receipt", user: "Warehouse", timestamp: new Date().toLocaleString(), detail: order.workCenterName },
-                  ]}
-                  comments={[
-                    { id: "c1", user: "Ops", text: "Confirm actual return yield and byproduct quantities before closing batch.", timestamp: new Date().toLocaleString() },
-                  ]}
+                  auditEntries={
+                    auditEntries.length > 0
+                      ? auditEntries
+                      : [{ id: "init", action: "Subcontract order created", user: "System", timestamp: new Date(order.createdAt).toLocaleString(), detail: order.number }]
+                  }
+                  comments={[]}
                 />
               </CardContent>
             </Card>

@@ -39,6 +39,7 @@ interface Stats {
   landedCostSourceCount: number;
   disbursementCount: number;
   postedGrnCount: number;
+  receivedGrnCount: number;
 }
 
 function HealthMetric({
@@ -140,6 +141,7 @@ export default function SourcingFlowPage() {
     landedCostSourceCount: 0,
     disbursementCount: 0,
     postedGrnCount: 0,
+    receivedGrnCount: 0,
   });
 
   React.useEffect(() => {
@@ -162,6 +164,7 @@ export default function SourcingFlowPage() {
           landedCostSourceCount: landedCostSources.length,
           disbursementCount: disbursements.length,
           postedGrnCount: grns.filter((g) => g.status === "POSTED").length,
+          receivedGrnCount: grns.filter((g) => g.status === "RECEIVED").length,
         });
       } catch (error) {
         if (!cancelled) toast.error(error instanceof Error ? error.message : "Failed to load sourcing flow.");
@@ -174,7 +177,7 @@ export default function SourcingFlowPage() {
   }, []);
 
   const steps = React.useMemo((): JourneyStep[] => {
-    const { openPoCount, unresolvedVarianceCount, landedCostSourceCount, disbursementCount, postedGrnCount } = stats;
+    const { openPoCount, unresolvedVarianceCount, landedCostSourceCount, disbursementCount, postedGrnCount, receivedGrnCount } = stats;
 
     const poComplete = openPoCount === 0;
     const disbComplete = disbursementCount > 0;
@@ -273,6 +276,24 @@ export default function SourcingFlowPage() {
         statBadge:
           unresolvedVarianceCount > 0
             ? `${unresolvedVarianceCount} variance exception${unresolvedVarianceCount !== 1 ? "s" : ""} open`
+            : undefined,
+      },
+      {
+        id: "processing",
+        number: 6,
+        title: "Process fish & capture yield",
+        subtitle: "Convert received stock into outputs and track losses",
+        whatYouDo:
+          "After receipt and landed cost are complete, move into processing. Capture output yields, by-products, and losses so stock and cost per kg stay tied to actual plant performance.",
+        tip: "Use Yield first for quick mass-balance capture, then use Subcontracting orders when external processors are involved.",
+        tipIcon: Icons.Factory,
+        ctaLabel: "Open yield capture",
+        ctaHref: "/manufacturing/yield",
+        secondaryCta: { label: "Open subcontracting", href: "/manufacturing/subcontracting/orders" },
+        status: resolveStatus(receivedGrnCount > 0, clearComplete),
+        statBadge:
+          receivedGrnCount > 0
+            ? `${receivedGrnCount} GRN${receivedGrnCount !== 1 ? "s" : ""} ready for processing`
             : undefined,
       },
     ];

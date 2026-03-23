@@ -347,9 +347,9 @@ export async function createCashDisbursement(body: {
   paidWeightKg?: number;
   /** Per-line paid weight for multi-line POs. poLineId format: `${poId}:${lineIndex}` */
   lines?: { poLineId: string; paidWeightKg: number }[];
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; reference: string }> {
   requireLiveApi("Create cash disbursement");
-  return apiRequest<{ id: string }>("/api/purchasing/cash-weight-audit/disbursements", {
+  return apiRequest<{ id: string; reference: string }>("/api/purchasing/cash-weight-audit/disbursements", {
     method: "POST",
     body,
   });
@@ -430,6 +430,10 @@ export async function createExternalWorkCenter(body: {
 export async function fetchSubcontractOrders(params?: {
   workCenterId?: string;
   status?: string;
+  species?: string;
+  processType?: string;
+  purchaseOrderId?: string;
+  grnId?: string;
 }): Promise<SubcontractOrderRow[]> {
   requireLiveApi("Subcontract orders");
   const res = await apiRequest<{ items: SubcontractOrderRow[] }>("/api/manufacturing/subcontract-orders", {
@@ -438,20 +442,25 @@ export async function fetchSubcontractOrders(params?: {
   return res.items ?? [];
 }
 
-/** Create subcontract order (send stock to processor). */
+/** Create subcontract order (send stock to processor).
+ *  Pass either `lines` (explicit) or `bomId + inputWeightKg` (auto-generate from BOM + rate card).
+ *  If `grnId` is provided, the input weight is resolved from the GRN's processedWeightKg automatically.
+ */
 export async function createSubcontractOrder(body: {
   workCenterId: string;
   bomId?: string | null;
   reference?: string;
-  /** Expected receive date. */
-  expectedAt?: string;
-  /** Input and output lines, including processing fees. */
-  lines: {
-    sku: string;
-    productName?: string;
+  species?: "TILAPIA" | "NILE_PERCH";
+  processType?: "FILLETING" | "GUTTING";
+  purchaseOrderId?: string | null;
+  grnId?: string | null;
+  /** Override input weight (kg) — used when BOM-driven without a GRN link */
+  inputWeightKg?: number;
+  /** Explicit lines (optional — if omitted and bomId provided, lines are auto-generated) */
+  lines?: {
+    skuId: string;
     type: SubcontractOrderLineRow["type"];
     quantity: number;
-    uom: string;
     processingFeePerUnit?: number | null;
   }[];
 }): Promise<SubcontractOrderRow> {
@@ -461,6 +470,15 @@ export async function createSubcontractOrder(body: {
     body,
   });
   return res;
+}
+
+/** Fetch all reverse BOMs for the dropdown in subcontract order creation */
+export async function fetchReverseBoms(): Promise<Array<{ id: string; name: string; code: string; productId: string; direction: string; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>> {
+  requireLiveApi("Reverse BOMs");
+  const res = await apiRequest<{ items: Array<Record<string, any>> }>("/api/manufacturing/boms", {
+    params: { direction: "REVERSE" },
+  });
+  return (res.items ?? []) as any[];
 }
 
 export async function fetchSubcontractOrderById(id: string): Promise<SubcontractOrderRow | null> {
@@ -510,7 +528,20 @@ export async function fetchWIPBalances(workCenterId?: string): Promise<WIPBalanc
   return res.items ?? [];
 }
 
-export async function receiveSubcontractOrder(id: string): Promise<void> {
+export async function dispatchSubcontractOrder(id: string): Promise<SubcontractOrderRow> {
+  requireLiveApi("Dispatch subcontract order");
+  const res = await apiRequest<SubcontractOrderRow>(
+    `/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}/dispatch`,
+    { method: "POST", body: {} }
+  );
+  return res;
+}
+
+export async function receiveSubcontractOrder(id: string, warehouseId?: string): Promise<SubcontractOrderRow> {
   requireLiveApi("Receive subcontract order");
-  await apiRequest(`/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}/receive`, { method: "POST" });
+  const res = await apiRequest<SubcontractOrderRow>(
+    `/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}/receive`,
+    { method: "POST", body: warehouseId ? { warehouseId } : {} }
+  );
+  return res;
 }

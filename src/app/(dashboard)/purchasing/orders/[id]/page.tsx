@@ -14,8 +14,11 @@ import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimelin
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { LiveCurrencyConverterCard } from "@/components/operational/LiveCurrencyConverterCard";
-import { fetchPurchaseOrderById } from "@/lib/api/purchasing";
-import { fetchCashWeightAuditLines, fetchCashDisbursements, buildCashWeightAudit } from "@/lib/api/cool-catch";
+import { fetchPurchaseOrderById, approvePurchaseOrders } from "@/lib/api/purchasing";
+import { requestDocumentApprovalApi } from "@/lib/api/documents";
+import { fetchCashWeightAuditLines, fetchCashDisbursements, buildCashWeightAudit, fetchSubcontractOrders } from "@/lib/api/cool-catch";
+import type { SubcontractOrderRow } from "@/lib/api/cool-catch";
+import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -25,23 +28,26 @@ export default function PurchaseOrderDetailPage() {
   const router = useRouter();
   const id = String(params?.id ?? "");
   const [runningAudit, setRunningAudit] = React.useState(false);
+  const [actionLoading, setActionLoading] = React.useState(false);
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchPurchaseOrderById>>>(null);
   const [loading, setLoading] = React.useState(true);
   const [paidWeight, setPaidWeight] = React.useState(0);
   const [receivedWeight, setReceivedWeight] = React.useState(0);
   const [disbursementCount, setDisbursementCount] = React.useState(0);
+  const [relatedScos, setRelatedScos] = React.useState<SubcontractOrderRow[]>([]);
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchPurchaseOrderById(id), fetchCashWeightAuditLines(), fetchCashDisbursements(id)])
-      .then(([po, audit, disbursements]) => {
+    Promise.all([fetchPurchaseOrderById(id), fetchCashWeightAuditLines(), fetchCashDisbursements(id), fetchSubcontractOrders({ purchaseOrderId: id }).catch(() => [])])
+      .then(([po, audit, disbursements, scos]) => {
         if (cancelled) return;
         setOrder(po);
         const matchingAudit = audit.filter((line) => line.poId === id || line.poNumber === po?.number);
         setPaidWeight(matchingAudit.reduce((a, line) => a + (line.paidWeightKg ?? 0), 0));
         setReceivedWeight(matchingAudit.reduce((a, line) => a + (line.receivedWeightKg ?? 0), 0));
         setDisbursementCount(Array.isArray(disbursements) ? disbursements.length : 0);
+        setRelatedScos(Array.isArray(scos) ? scos : []);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -167,7 +173,59 @@ export default function PurchaseOrderDetailPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {order.status === "DRAFT" && (
+              <Button
+                size="sm"
+                disabled={actionLoading}
+                onClick={async () => {
+                  setActionLoading(true);
+                  try {
+                    await requestDocumentApprovalApi("purchase-order", id);
+                    toast.success("Submitted for approval.");
+                    const refreshed = await fetchPurchaseOrderById(id);
+                    setOrder(refreshed);
+                  } catch {
+                    toast.error("Failed to submit for approval.");
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+              >
+                {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
+                Submit for approval
+              </Button>
+            )}
+            {order.status === "PENDING_APPROVAL" && (
+              <Button
+                size="sm"
+                disabled={actionLoading}
+                onClick={async () => {
+                  setActionLoading(true);
+                  try {
+                    await approvePurchaseOrders([id]);
+                    toast.success("Purchase order approved.");
+                    const refreshed = await fetchPurchaseOrderById(id);
+                    setOrder(refreshed);
+                  } catch {
+                    toast.error("Failed to approve.");
+                  } finally {
+                    setActionLoading(false);
+                  }
+                }}
+              >
+                {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.CheckCircle className="mr-2 h-4 w-4" />}
+                Approve
+              </Button>
+            )}
+            {order.status === "APPROVED" && (
+              <Button size="sm" asChild>
+                <Link href={`/docs/grn/new?poId=${id}`}>
+                  <Icons.PackagePlus className="mr-2 h-4 w-4" />
+                  Create GRN
+                </Link>
+              </Button>
+            )}
             {(order.status === "APPROVED" || order.status === "RECEIVED") && (
               <Button
                 variant="outline"
@@ -188,14 +246,11 @@ export default function PurchaseOrderDetailPage() {
                 }}
               >
                 {runningAudit ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.BarChart2 className="mr-2 h-4 w-4" />}
-                Run 3-way audit
+                3-way audit
               </Button>
             )}
-            <Button variant="outline" asChild>
-              <Link href="/purchasing/cash-weight-audit">Cash-to-Weight Audit</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/inventory/receipts">Open GRNs</Link>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/inventory/receipts">GRN queue</Link>
             </Button>
           </div>
         }
@@ -241,6 +296,36 @@ export default function PurchaseOrderDetailPage() {
                 { label: "Inbound logistics estimate", amount: (order.total ?? 0) * 0.06 },
               ]}
             />
+
+            {relatedScos.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Related Subcontract Orders</CardTitle>
+                  <CardDescription>{relatedScos.length} subcontract order{relatedScos.length !== 1 ? "s" : ""} linked to this PO</CardDescription>
+                </CardHeader>
+                <CardContent className="divide-y p-0 text-sm">
+                  {relatedScos.map((sco) => (
+                    <Link
+                      key={sco.id}
+                      href={`/manufacturing/subcontracting/orders/${sco.id}`}
+                      className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors"
+                    >
+                      <div>
+                        <p className="font-medium">{sco.number}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {sco.workCenterName}
+                          {sco.species ? ` · ${sco.species === "TILAPIA" ? "Tilapia" : "Nile Perch"}` : ""}
+                          {sco.processType ? ` · ${sco.processType}` : ""}
+                        </p>
+                      </div>
+                      <Badge variant={sco.status === "RECEIVED" ? "default" : sco.status === "WIP" ? "secondary" : "outline"}>
+                        {sco.status}
+                      </Badge>
+                    </Link>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="space-y-6">

@@ -35,6 +35,7 @@ import {
 import type { ProjectRow } from "@/lib/types/projects";
 import { formatMoney } from "@/lib/money";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -60,6 +61,7 @@ export default function ProjectDetailPage() {
   const [linkSheetOpen, setLinkSheetOpen] = React.useState(false);
   const [linking, setLinking] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
   const reload = React.useCallback(async () => {
@@ -131,10 +133,12 @@ export default function ProjectDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => openWithPrompt(`Summarize project ${project.code} burn vs budget.`)}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Ask Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button variant="outline" size="sm" onClick={() => openWithPrompt(`Summarize project ${project.code} burn vs budget.`)}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Ask Copilot
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               size="sm"

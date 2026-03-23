@@ -48,7 +48,7 @@ export function AsyncSearchableSelect({
   recentStorageKey,
   recentItemsLabel = "Recent",
 }: AsyncSearchableSelectProps) {
-  const orgId = useAuthStore((s) => s.org?.id);
+  const orgId = useAuthStore((s) => s.org?.orgId);
   // Scope recent items per org so selections from one org never bleed into another
   const scopedRecentKey = recentStorageKey && orgId
     ? `${recentStorageKey}:${orgId}`

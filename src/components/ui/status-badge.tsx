@@ -14,10 +14,15 @@ const statusVariants: Record<string, "default" | "success" | "warning" | "danger
   DRAFT: "default",
   PENDING_APPROVAL: "warning",
   APPROVED: "success",
+  POSTED: "info",
+  RECEIVED: "success",
   PROCESSING: "info",
   FULFILLED: "success",
   CANCELLED: "danger",
   REJECTED: "danger",
+  PARTIALLY_APPLIED: "warning",
+  PAID: "success",
+  OPEN: "warning",
   
   // Stock statuses
   "In Stock": "success",

@@ -212,15 +212,17 @@ export default function TutorialPage() {
                   </Button>
                 </div>
                 <CardDescription>{chapter.description}</CardDescription>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-fit mt-1"
-                  onClick={() => handleAskCopilot(chapter.title, chapter.copilotPrompt)}
-                >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Ask Copilot about this section
-                </Button>
+                {copilotEnabled ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit mt-1"
+                    onClick={() => handleAskCopilot(chapter.title, chapter.copilotPrompt)}
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Ask Copilot about this section
+                  </Button>
+                ) : null}
               </CardHeader>
               <CardContent className="pt-0">
                 <ul className="space-y-2">

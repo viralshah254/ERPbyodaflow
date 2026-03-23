@@ -41,6 +41,8 @@ export interface DocumentLine {
   price: number;
   priceReason: string;
   amount: number;
+  /** Computed tax amount for this line (0 when no tax code or rate is 0). */
+  tax?: number;
   taxCodeId?: string;
   variantId?: string;
   variantSku?: string;
@@ -65,9 +67,28 @@ interface DocumentLineEditorProps {
   productFilter?: "purchasable" | "sellable" | "all";
   /** Available tax codes for the tax column select. */
   taxCodes?: Array<{ id: string; code: string; name: string; rate: number }>;
+  /** When true, unit prices already include VAT — tax is back-calculated. Default: false (tax-exclusive). */
+  linesAreTaxInclusive?: boolean;
 }
 
 const defaultPriceListId = "pl-retail";
+
+function applyLineTax(
+  line: DocumentLine,
+  taxCodes: Array<{ id: string; code: string; name: string; rate: number }>,
+  linesAreTaxInclusive: boolean
+): { tax: number; amount: number } {
+  const subtotal = line.qty * line.price;
+  const taxCode = taxCodes.find((t) => t.id === line.taxCodeId);
+  const rate = taxCode?.rate ?? 0;
+  if (rate === 0) return { tax: 0, amount: subtotal };
+  if (linesAreTaxInclusive) {
+    const tax = Math.round((subtotal - subtotal / (1 + rate / 100)) * 100) / 100;
+    return { tax, amount: subtotal };
+  }
+  const tax = Math.round(subtotal * (rate / 100) * 100) / 100;
+  return { tax, amount: Math.round((subtotal + tax) * 100) / 100 };
+}
 
 export function DocumentLineEditor({
   priceListId = defaultPriceListId,
@@ -80,6 +101,7 @@ export function DocumentLineEditor({
   pricingByProductId,
   productFilter,
   taxCodes = [],
+  linesAreTaxInclusive = false,
 }: DocumentLineEditorProps) {
   const [filteredProducts, setFilteredProducts] = React.useState<ProductRow[] | null>(null);
   const cachedProducts = React.useMemo(() => listProducts(), []);
@@ -134,22 +156,21 @@ export function DocumentLineEditor({
     const { price, reason } = useCostPricing
       ? { price: 0, reason: "Manual" }
       : getPriceForLine(p.id, priceListIdResolved, 1, uom, pricingByProductId?.[p.id]);
-    onLinesChange([
-      ...lines,
-      {
-        id: `line-${Date.now()}`,
-        productId: p.id,
-        sku: p.sku,
-        name: p.name,
-        uom,
-        qty: 1,
-        baseQty,
-        price,
-        priceReason: reason,
-        amount: price,
-        taxCodeId: p.defaultTaxCodeId ?? undefined,
-      },
-    ]);
+    const newLine: DocumentLine = {
+      id: `line-${Date.now()}`,
+      productId: p.id,
+      sku: p.sku,
+      name: p.name,
+      uom,
+      qty: 1,
+      baseQty,
+      price,
+      priceReason: reason,
+      amount: price,
+      taxCodeId: p.defaultTaxCodeId ?? undefined,
+    };
+    const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
+    onLinesChange([...lines, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
   };
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
@@ -172,6 +193,10 @@ export function DocumentLineEditor({
       }
       next.amount = next.qty * next.price;
     }
+    // Always recompute tax so that changes to qty, price, or taxCodeId are reflected
+    const taxed = applyLineTax(next, taxCodes, linesAreTaxInclusive);
+    next.tax = taxed.tax;
+    next.amount = taxed.amount;
     const arr = [...lines];
     arr[idx] = next;
     onLinesChange(arr);
@@ -264,6 +289,8 @@ export function DocumentLineEditor({
     onLinesChange(lines.filter((l) => l.id !== id));
   };
 
+  const subtotalSum = lines.reduce((s, l) => s + l.qty * l.price, 0);
+  const totalTax = lines.reduce((s, l) => s + (l.tax ?? 0), 0);
   const total = lines.reduce((s, l) => s + l.amount, 0);
 
   // Eagerly load variants for all products already on existing lines
@@ -312,7 +339,8 @@ export function DocumentLineEditor({
                   <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
                   <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
                   {taxCodes.length > 0 && <TableHead className="w-36">Tax</TableHead>}
-                  <TableHead className="w-28">Amount</TableHead>
+                  {taxCodes.length > 0 && <TableHead className="w-28">Tax amount</TableHead>}
+                  <TableHead className="w-28">Total</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -405,6 +433,13 @@ export function DocumentLineEditor({
                         </Select>
                       </TableCell>
                     )}
+                    {taxCodes.length > 0 && (
+                      <TableCell className="tabular-nums text-sm text-muted-foreground">
+                        {l.tax && l.tax > 0
+                          ? (linesAreTaxInclusive ? `incl. ${formatMoney(l.tax, currency)}` : `+${formatMoney(l.tax, currency)}`)
+                          : "—"}
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{formatMoney(l.amount, currency)}</TableCell>
                     <TableCell>
                       <Button type="button" variant="ghost" size="sm" onClick={() => removeLine(l.id)}>
@@ -417,9 +452,23 @@ export function DocumentLineEditor({
               </TableBody>
             </Table>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Total: {formatMoney(total, currency)}
-          </p>
+          <div className="text-sm text-muted-foreground space-y-0.5">
+            {totalTax > 0 && !linesAreTaxInclusive && (
+              <p>
+                Subtotal: {formatMoney(subtotalSum, currency)}
+                <span className="mx-1.5">+</span>
+                Tax: {formatMoney(totalTax, currency)}
+              </p>
+            )}
+            <p className="font-medium text-foreground">
+              Total: {formatMoney(total, currency)}
+              {totalTax > 0 && linesAreTaxInclusive && (
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                  (incl. {formatMoney(totalTax, currency)} tax)
+                </span>
+              )}
+            </p>
+          </div>
         </>
       )}
     </div>

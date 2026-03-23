@@ -6,10 +6,17 @@ export type DocListRow = {
   date: string;
   party?: string;
   total?: number;
+  currency?: string;
+  exchangeRate?: number;
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
+  economicTotal?: number;
+  totalWeightKg?: number;
   status: string;
   poRef?: string;
   warehouse?: string;
   reference?: string;
+  pendingApprovalReason?: string;
 };
 
 export type DocumentAttachmentRecord = {
@@ -76,6 +83,7 @@ export type DocumentDetailRecord = {
     status: string;
     date: string;
   } | null;
+  linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{
     id: string;
     typeKey: DocTypeKey;

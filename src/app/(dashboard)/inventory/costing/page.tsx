@@ -36,6 +36,7 @@ import {
   fetchLandedCostSources,
   fetchLandedCostTemplates,
   postLandedCostAllocation,
+  uploadLandedCostAttachment,
   type LandedCostSourceRow,
   type LandedCostTemplateRow,
   type LandedCostCostCentre,
@@ -61,6 +62,8 @@ interface CostLine {
   currency: string;
   reference: string;
   costCentre: LandedCostCostCentre;
+  /** Locally-staged evidence files — uploaded after allocation is saved. */
+  files?: File[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -155,7 +158,7 @@ function StepFxConversion({
       <div>
         <h3 className="font-semibold text-base">Step 1: Currency conversion</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Confirm the exchange rate used to convert this document's value to KES (your base currency).
+          Confirm the exchange rate used to convert this document&apos;s value to KES (your base currency).
         </p>
       </div>
 
@@ -256,6 +259,7 @@ function StepPermits({
   lines,
   templates,
   onChange,
+  onFilesChange,
   onAdd,
   onRemove,
   onNext,
@@ -265,6 +269,7 @@ function StepPermits({
   lines: CostLine[];
   templates: LandedCostTemplateRow[];
   onChange: (idx: number, field: keyof CostLine, value: string) => void;
+  onFilesChange: (idx: number, files: File[]) => void;
   onAdd: () => void;
   onRemove: (idx: number) => void;
   onNext: () => void;
@@ -321,17 +326,9 @@ function StepPermits({
                   <SelectContent>
                     {permitTemplates.map((t) => (
                       <SelectItem key={t.id} value={t.id}>
-                        {LANDED_COST_TYPE_LABELS[(t as { type?: string }).type as keyof typeof LANDED_COST_TYPE_LABELS] ??
-                          (t as { name?: string }).name}
+                        {(t as { name?: string }).name ?? LANDED_COST_TYPE_LABELS[(t as { type?: string }).type as keyof typeof LANDED_COST_TYPE_LABELS]}
                       </SelectItem>
                     ))}
-                    {templates
-                      .filter((t) => !["permit", "border", "duty", "insurance"].includes((t as { type?: string }).type ?? ""))
-                      .map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {(t as { name?: string }).name}
-                        </SelectItem>
-                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -372,6 +369,45 @@ function StepPermits({
                   onChange={(e) => onChange(idx, "reference", e.target.value)}
                 />
               </div>
+              <div className="col-span-2">
+                <Label className="text-xs mb-1 block flex items-center gap-1">
+                  <Icons.Paperclip className="h-3 w-3" />
+                  Evidence{" "}
+                  <span className="text-muted-foreground font-normal">(invoice / receipt — optional)</span>
+                </Label>
+                <label className="flex items-center gap-2 cursor-pointer rounded border border-dashed px-3 py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                  <Icons.Upload className="h-3.5 w-3.5 shrink-0" />
+                  {(line.files?.length ?? 0) > 0
+                    ? (line.files ?? []).map((f) => f.name).join(", ")
+                    : "Upload invoice or receipt"}
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    multiple
+                    className="sr-only"
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.files ?? []);
+                      onFilesChange(idx, [...(line.files ?? []), ...selected]);
+                    }}
+                  />
+                </label>
+                {(line.files?.length ?? 0) > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {(line.files ?? []).map((f, fi) => (
+                      <span key={fi} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs">
+                        {f.name}
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => onFilesChange(idx, (line.files ?? []).filter((_, i) => i !== fi))}
+                        >
+                          <Icons.X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -402,6 +438,7 @@ function StepLogistics({
   lines,
   templates,
   onChange,
+  onFilesChange,
   onAdd,
   onRemove,
   onNext,
@@ -411,6 +448,7 @@ function StepLogistics({
   lines: CostLine[];
   templates: LandedCostTemplateRow[];
   onChange: (idx: number, field: keyof CostLine, value: string) => void;
+  onFilesChange: (idx: number, files: File[]) => void;
   onAdd: () => void;
   onRemove: (idx: number) => void;
   onNext: () => void;
@@ -467,22 +505,9 @@ function StepLogistics({
                   <SelectContent>
                     {logisticsTemplates.map((t) => (
                       <SelectItem key={t.id} value={t.id}>
-                        {LANDED_COST_TYPE_LABELS[(t as { type?: string }).type as keyof typeof LANDED_COST_TYPE_LABELS] ??
-                          (t as { name?: string }).name}
+                        {(t as { name?: string }).name ?? LANDED_COST_TYPE_LABELS[(t as { type?: string }).type as keyof typeof LANDED_COST_TYPE_LABELS]}
                       </SelectItem>
                     ))}
-                    {templates
-                      .filter(
-                        (t) =>
-                          !["inbound_freight", "outbound_freight", "freight", "storage"].includes(
-                            (t as { type?: string }).type ?? ""
-                          )
-                      )
-                      .map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {(t as { name?: string }).name}
-                        </SelectItem>
-                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -523,6 +548,45 @@ function StepLogistics({
                   onChange={(e) => onChange(idx, "reference", e.target.value)}
                 />
               </div>
+              <div className="col-span-2">
+                <Label className="text-xs mb-1 block flex items-center gap-1">
+                  <Icons.Paperclip className="h-3 w-3" />
+                  Evidence{" "}
+                  <span className="text-muted-foreground font-normal">(invoice / receipt — optional)</span>
+                </Label>
+                <label className="flex items-center gap-2 cursor-pointer rounded border border-dashed px-3 py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                  <Icons.Upload className="h-3.5 w-3.5 shrink-0" />
+                  {(line.files?.length ?? 0) > 0
+                    ? (line.files ?? []).map((f) => f.name).join(", ")
+                    : "Upload invoice or receipt"}
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    multiple
+                    className="sr-only"
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.files ?? []);
+                      onFilesChange(idx, [...(line.files ?? []), ...selected]);
+                    }}
+                  />
+                </label>
+                {(line.files?.length ?? 0) > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {(line.files ?? []).map((f, fi) => (
+                      <span key={fi} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs">
+                        {f.name}
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => onFilesChange(idx, (line.files ?? []).filter((_, i) => i !== fi))}
+                        >
+                          <Icons.X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -558,6 +622,8 @@ function StepSummary({
   onJumpToStep,
   onSave,
   saving,
+  canEdit,
+  hasExistingAllocation,
 }: {
   source: LandedCostSourceRow;
   permitLines: CostLine[];
@@ -567,6 +633,8 @@ function StepSummary({
   onJumpToStep: (step: WizardStep) => void;
   onSave: () => void;
   saving: boolean;
+  canEdit: boolean;
+  hasExistingAllocation: boolean;
 }) {
   const currency = source.currency ?? "KES";
   const docTotal = (source as { totalAmount?: number; total?: number }).totalAmount ?? (source as { total?: number }).total ?? 0;
@@ -588,11 +656,14 @@ function StepSummary({
 
   const totalLanded = docInKes + permitTotal + logisticsTotal;
 
-  const totalWeightKg = ((source as { lines?: Array<{ weightKg?: number }> }).lines ?? []).reduce(
-    (s, l) => s + (l.weightKg ?? 0),
+  const totalWeightKg = ((source as { lines?: Array<{ weightKg?: number; receivedWeightKg?: number; quantity?: number }> }).lines ?? []).reduce(
+    (s, l) => s + (l.receivedWeightKg ?? l.weightKg ?? 0),
     0
   );
   const costPerKg = totalWeightKg > 0 ? totalLanded / totalWeightKg : null;
+  const goodsPerKg = totalWeightKg > 0 ? docInKes / totalWeightKg : null;
+  const permitsPerKg = totalWeightKg > 0 ? permitTotal / totalWeightKg : null;
+  const logisticsPerKg = totalWeightKg > 0 ? logisticsTotal / totalWeightKg : null;
 
   const hasValidLines =
     permitLines.some((l) => l.templateId && Number(l.amount) > 0) ||
@@ -736,6 +807,108 @@ function StepSummary({
         </table>
       </div>
 
+      {/* Per-kg cost breakdown — only shown when weight data is available */}
+      {totalWeightKg > 0 && costPerKg !== null && (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="bg-muted/50 px-4 py-2.5 flex items-center gap-2">
+            <Icons.Scale className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              New cost per kg — {totalWeightKg.toLocaleString()} kg total
+            </span>
+          </div>
+          <table className="w-full text-sm">
+            <tbody className="divide-y">
+              <tr>
+                <td className="px-4 py-2.5 text-muted-foreground">Goods value</td>
+                <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                  {formatMoney(docInKes, "KES")}
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums font-mono">
+                  {goodsPerKg !== null ? `KES ${goodsPerKg.toFixed(2)} / kg` : "—"}
+                </td>
+              </tr>
+              {permitTotal > 0 && (
+                <tr>
+                  <td className="px-4 py-2.5 text-muted-foreground">Permits &amp; customs</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                    {formatMoney(permitTotal, "KES")}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono">
+                    {permitsPerKg !== null ? `KES ${permitsPerKg.toFixed(2)} / kg` : "—"}
+                  </td>
+                </tr>
+              )}
+              {logisticsTotal > 0 && (
+                <tr>
+                  <td className="px-4 py-2.5 text-muted-foreground">Inbound logistics</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                    {formatMoney(logisticsTotal, "KES")}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono">
+                    {logisticsPerKg !== null ? `KES ${logisticsPerKg.toFixed(2)} / kg` : "—"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot className="border-t bg-emerald-50 dark:bg-emerald-950/30">
+              <tr>
+                <td className="px-4 py-3 font-bold text-emerald-700 dark:text-emerald-400">
+                  Landed cost per kg
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-mono text-muted-foreground">
+                  {formatMoney(totalLanded, "KES")}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700 dark:text-emerald-400 text-base">
+                  KES {costPerKg.toFixed(2)} / kg
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
+      {/* Per-product cost/kg allocation — shown when there are multiple lines with weight data */}
+      {totalWeightKg > 0 && ((source as { lines?: Array<{ productId?: string; weightKg?: number; quantity?: number; amount?: number }> }).lines?.length ?? 0) > 1 && (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="bg-muted/50 px-4 py-2.5 flex items-center gap-2">
+            <Icons.Layers className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Per-product landed cost allocation
+            </span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-xs text-muted-foreground">
+                <th className="text-left px-4 py-2 font-medium">Product</th>
+                <th className="text-right px-4 py-2 font-medium">Weight (kg)</th>
+                <th className="text-right px-4 py-2 font-medium">Goods</th>
+                <th className="text-right px-4 py-2 font-medium">Landed share</th>
+                <th className="text-right px-4 py-2 font-medium">Cost / kg</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {((source as { lines?: Array<{ productId?: string; weightKg?: number; quantity?: number; amount?: number }> }).lines ?? []).map((line, idx) => {
+                const lineWeight = (line as { receivedWeightKg?: number; weightKg?: number }).receivedWeightKg ?? line.weightKg ?? line.quantity ?? 0;
+                const lineGoods = line.amount ?? 0;
+                const landedShare = totalWeightKg > 0 ? ((permitTotal + logisticsTotal) * lineWeight) / totalWeightKg : 0;
+                const fxShare = totalWeightKg > 0 ? ((docInKes - (currency.toUpperCase() === "KES" ? docTotal : 0)) * lineWeight) / totalWeightKg : 0;
+                const totalForLine = lineGoods * (currency.toUpperCase() === "KES" ? 1 : rate) + landedShare + (currency.toUpperCase() !== "KES" ? fxShare : 0);
+                const linePerKg = lineWeight > 0 ? totalForLine / lineWeight : null;
+                return (
+                  <tr key={idx}>
+                    <td className="px-4 py-2 text-muted-foreground">{line.productId ?? `Line ${idx + 1}`}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{lineWeight > 0 ? lineWeight.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-mono">{formatMoney(lineGoods, currency)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-mono text-amber-700">{landedShare > 0 ? `+${formatMoney(landedShare, "KES")}` : "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-semibold">{linePerKg !== null ? `KES ${linePerKg.toFixed(2)}` : "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {!hasValidLines && (
         <div className="flex items-start gap-2 rounded-md border bg-amber-50 border-amber-100 px-3 py-2">
           <Icons.AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
@@ -754,7 +927,8 @@ function StepSummary({
           size="sm"
           className="ml-auto"
           onClick={onSave}
-          disabled={saving}
+          disabled={saving || (hasExistingAllocation && !canEdit)}
+          title={hasExistingAllocation && !canEdit ? "Only an administrator can modify an existing allocation" : undefined}
         >
           {saving ? (
             <><Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> Posting…</>
@@ -772,11 +946,14 @@ function StepSummary({
 function LandedCostWizard({
   source,
   templates,
+  canEdit,
   onDone,
   onCancel,
 }: {
   source: LandedCostSourceRow;
   templates: LandedCostTemplateRow[];
+  /** True if the current user is an admin who may overwrite an existing allocation. */
+  canEdit: boolean;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -787,29 +964,77 @@ function LandedCostWizard({
   const [fxLoading, setFxLoading] = React.useState(false);
   const [fxError, setFxError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [hydrating, setHydrating] = React.useState(source.isAllocated ?? false);
+  const [hasExistingAllocation, setHasExistingAllocation] = React.useState(false);
 
   const defaultPermitCurrency = currency.toUpperCase() !== "KES" ? currency : "KES";
   const defaultLogisticsCurrency = "KES";
 
-  const [permitLines, setPermitLines] = React.useState<CostLine[]>([
-    {
-      templateId: templates.find((t) => (t as { type?: string }).type === "permit")?.id ?? "",
-      amount: "",
-      currency: defaultPermitCurrency,
-      reference: "",
-      costCentre: "permits",
-    },
-  ]);
+  const emptyPermitLine = (): CostLine => ({
+    templateId: templates.find((t) => (t as { type?: string }).type === "permit")?.id ?? "",
+    amount: "",
+    currency: defaultPermitCurrency,
+    reference: "",
+    costCentre: "permits",
+  });
 
-  const [logisticsLines, setLogisticsLines] = React.useState<CostLine[]>([
-    {
-      templateId: templates.find((t) => (t as { type?: string }).type === "inbound_freight")?.id ?? "",
-      amount: "",
-      currency: defaultLogisticsCurrency,
-      reference: "",
-      costCentre: "inbound_logistics",
-    },
-  ]);
+  const emptyLogisticsLine = (): CostLine => ({
+    templateId: templates.find((t) => (t as { type?: string }).type === "inbound_freight")?.id ?? "",
+    amount: "",
+    currency: defaultLogisticsCurrency,
+    reference: "",
+    costCentre: "inbound_logistics",
+  });
+
+  const [permitLines, setPermitLines] = React.useState<CostLine[]>([emptyPermitLine()]);
+  const [logisticsLines, setLogisticsLines] = React.useState<CostLine[]>([emptyLogisticsLine()]);
+
+  // Hydrate from existing allocation when document is already allocated
+  React.useEffect(() => {
+    if (!source.isAllocated) return;
+    setHydrating(true);
+    fetchLandedCostAllocation(source.id)
+      .then((allocation) => {
+        if (!allocation) return;
+        setHasExistingAllocation(true);
+
+        const savedPermitLines = (allocation.lines ?? []).filter(
+          (l) => l.costCentre === "permits"
+        );
+        const savedLogisticsLines = (allocation.lines ?? []).filter(
+          (l) => l.costCentre === "inbound_logistics"
+        );
+
+        if (savedPermitLines.length > 0) {
+          setPermitLines(
+            savedPermitLines.map((l) => ({
+              templateId: l.templateId,
+              amount: String(l.amount ?? ""),
+              currency: l.currency ?? defaultPermitCurrency,
+              reference: l.reference ?? "",
+              costCentre: "permits" as const,
+            }))
+          );
+        }
+
+        if (savedLogisticsLines.length > 0) {
+          setLogisticsLines(
+            savedLogisticsLines.map((l) => ({
+              templateId: l.templateId,
+              amount: String(l.amount ?? ""),
+              currency: l.currency ?? defaultLogisticsCurrency,
+              reference: l.reference ?? "",
+              costCentre: "inbound_logistics" as const,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Non-fatal — wizard opens with empty lines
+      })
+      .finally(() => setHydrating(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source.id, source.isAllocated]);
 
   // Fetch FX rate on mount if needed
   React.useEffect(() => {
@@ -831,6 +1056,11 @@ function LandedCostWizard({
       setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
     };
 
+  const updateLineFiles = (setLines: React.Dispatch<React.SetStateAction<CostLine[]>>) =>
+    (idx: number, files: File[]) => {
+      setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, files } : l)));
+    };
+
   const addLine = (setLines: React.Dispatch<React.SetStateAction<CostLine[]>>, costCentre: LandedCostCostCentre, defaultCurrency: string) =>
     () => setLines((prev) => [...prev, { templateId: "", amount: "", currency: defaultCurrency, reference: "", costCentre }]);
 
@@ -838,6 +1068,11 @@ function LandedCostWizard({
     (idx: number) => setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
 
   const handleSave = async () => {
+    if (hasExistingAllocation && !canEdit) {
+      toast.error("Only an administrator can modify an existing allocation.");
+      return;
+    }
+
     const allLines = [
       ...permitLines.filter((l) => l.templateId && Number(l.amount) > 0),
       ...logisticsLines.filter((l) => l.templateId && Number(l.amount) > 0),
@@ -861,6 +1096,21 @@ function LandedCostWizard({
         })),
       });
 
+      // Upload any evidence files queued per cost line
+      if (result.id) {
+        const fileTasks: Array<Promise<unknown>> = [];
+        allLines.forEach((line, lineIndex) => {
+          for (const file of line.files ?? []) {
+            fileTasks.push(
+              uploadLandedCostAttachment(result.id!, lineIndex, file).catch((err: unknown) => {
+                console.warn("[landed-cost] attachment upload failed:", err);
+              })
+            );
+          }
+        });
+        if (fileTasks.length > 0) await Promise.all(fileTasks);
+      }
+
       const perKgMsg =
         result.totalLandedCostBase && result.impactLines
           ? ` · KES ${((result.totalLandedCostBase ?? 0) / Math.max((result.impactLines ?? []).reduce((s, il) => s + il.basisValue, 0), 1)).toFixed(2)} / kg`
@@ -877,6 +1127,15 @@ function LandedCostWizard({
       setSaving(false);
     }
   };
+
+  if (hydrating) {
+    return (
+      <div className="flex flex-col items-center justify-center h-40 gap-3">
+        <Icons.Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading existing allocation…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -901,6 +1160,16 @@ function LandedCostWizard({
         )}
       </div>
 
+      {/* Non-admin gate: show read-only warning when allocation exists and user cannot edit */}
+      {hasExistingAllocation && !canEdit && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 mb-4 text-xs text-amber-800">
+          <Icons.Lock className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+          <span>
+            This allocation has already been saved. Only an administrator can modify it. You can review the lines below but cannot save changes.
+          </span>
+        </div>
+      )}
+
       <WizardStepIndicator current={wizardStep} />
 
       <div className="flex-1">
@@ -918,6 +1187,7 @@ function LandedCostWizard({
             lines={permitLines}
             templates={templates}
             onChange={updateLine(permitLines, setPermitLines)}
+            onFilesChange={updateLineFiles(setPermitLines)}
             onAdd={addLine(setPermitLines, "permits", defaultPermitCurrency)}
             onRemove={removeLine(setPermitLines)}
             onNext={() => setWizardStep(2)}
@@ -930,6 +1200,7 @@ function LandedCostWizard({
             lines={logisticsLines}
             templates={templates}
             onChange={updateLine(logisticsLines, setLogisticsLines)}
+            onFilesChange={updateLineFiles(setLogisticsLines)}
             onAdd={addLine(setLogisticsLines, "inbound_logistics", defaultLogisticsCurrency)}
             onRemove={removeLine(setLogisticsLines)}
             onNext={() => setWizardStep(3)}
@@ -947,6 +1218,8 @@ function LandedCostWizard({
             onJumpToStep={(s) => setWizardStep(s)}
             onSave={handleSave}
             saving={saving}
+            canEdit={canEdit}
+            hasExistingAllocation={hasExistingAllocation}
           />
         )}
       </div>
@@ -1002,7 +1275,7 @@ export default function InventoryCostingPage() {
   const loadSources = React.useCallback(() => {
     let cancelled = false;
     setSourcesLoading(true);
-    Promise.all([fetchLandedCostSources(), fetchLandedCostTemplates()])
+    Promise.all([fetchLandedCostSources({ type: "grn" }), fetchLandedCostTemplates()])
       .then(([srcList, tplList]) => {
         if (!cancelled) {
           setSources(srcList);
@@ -1230,21 +1503,17 @@ export default function InventoryCostingPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Number</TableHead>
+                  <TableHead>Receipt (GRN)</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead>Currency</TableHead>
-                  <TableHead>Total</TableHead>
+                  <TableHead>Goods value</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sources.map((s) => (
                   <TableRow key={s.id} className={s.isAllocated ? "opacity-80" : undefined}>
-                    <TableCell>
-                      <Badge variant="outline" className="uppercase text-xs">{s.type}</Badge>
-                    </TableCell>
                     <TableCell className="font-medium">{s.number}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {s.date ? new Date(String(s.date)).toLocaleDateString() : "—"}
@@ -1312,7 +1581,7 @@ export default function InventoryCostingPage() {
               <div className="py-10 text-center space-y-2">
                 <Icons.Package className="h-8 w-8 mx-auto text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  No GRNs or bills pending cost allocation.
+                  No goods receipts pending landed cost allocation.
                 </p>
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/inventory/receipts">View all GRNs</Link>
@@ -1392,6 +1661,7 @@ export default function InventoryCostingPage() {
               <LandedCostWizard
                 source={selectedSource}
                 templates={templates}
+                canEdit={canEditAllocated}
                 onDone={handleWizardDone}
                 onCancel={() => { setAllocationOpen(false); setSelectedSource(null); }}
               />

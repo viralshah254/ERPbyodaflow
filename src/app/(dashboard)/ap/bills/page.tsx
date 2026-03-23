@@ -11,13 +11,15 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchApBillsApi } from "@/lib/api/payments";
-import { fetchDocumentListApi } from "@/lib/api/documents";
+import { fetchDocumentListApi, bulkDocumentActionApi } from "@/lib/api/documents";
 import type { APBillRow } from "@/lib/types/ap";
 import type { DocListRow } from "@/lib/types/documents";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -48,6 +50,7 @@ export default function APBillsPage() {
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [posting, setPosting] = React.useState(false);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
@@ -85,6 +88,11 @@ export default function APBillsPage() {
         date: r.date,
         party: r.party ?? "",
         total: r.total ?? 0,
+        currency: r.currency,
+        exchangeRate: r.exchangeRate,
+        landedAllocated: r.landedAllocated,
+        landedBreakdown: r.landedBreakdown,
+        economicTotal: r.economicTotal,
         status: r.status,
       })),
     [allDocRows]
@@ -129,10 +137,61 @@ export default function APBillsPage() {
       { id: "party", header: "Supplier", accessor: "party" as keyof APBillRow },
       {
         id: "total",
-        header: "Total",
+        header: "Invoice total",
         accessor: (r: APBillRow) => (
           <DualCurrencyAmount
             amount={r.total}
+            currency={r.currency ?? "KES"}
+            exchangeRate={r.exchangeRate}
+            align="right"
+            size="sm"
+          />
+        ),
+      },
+      {
+        id: "landedAllocated",
+        header: "Landed costs",
+        accessor: (r: APBillRow) => {
+          const breakdown = r.landedBreakdown ?? [];
+          const amount = r.landedAllocated ?? 0;
+          const cell = (
+            <DualCurrencyAmount
+              amount={amount}
+              currency="KES"
+              align="right"
+              size="sm"
+            />
+          );
+          if (breakdown.length === 0) return cell;
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help inline-flex items-center gap-1">
+                    {cell}
+                    <Icons.Info className="h-3 w-3 text-muted-foreground shrink-0" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="w-48 p-3 space-y-1.5">
+                  <p className="text-xs font-semibold text-foreground mb-2">Cost breakdown</p>
+                  {breakdown.map((b) => (
+                    <div key={b.label} className="flex justify-between text-xs gap-4">
+                      <span className="text-muted-foreground capitalize">{b.label}</span>
+                      <span className="font-medium tabular-nums">{formatMoney(b.amount, "KES")}</span>
+                    </div>
+                  ))}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
+      },
+      {
+        id: "economicTotal",
+        header: "Economic total",
+        accessor: (r: APBillRow) => (
+          <DualCurrencyAmount
+            amount={r.economicTotal ?? r.total}
             currency={r.currency ?? "KES"}
             exchangeRate={r.exchangeRate}
             align="right"
@@ -277,10 +336,35 @@ export default function APBillsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    toast.info("Posting from this list is not yet wired. Open each bill to post.");
+                  disabled={posting}
+                  onClick={async () => {
+                    const postableIds = selectedIds.filter(
+                      (sid) => {
+                        const row = filteredRows.find((r) => r.id === sid);
+                        return row && (row.status === "DRAFT" || row.status === "APPROVED");
+                      }
+                    );
+                    if (!postableIds.length) {
+                      toast.info("No draft or approved bills selected to post.");
+                      return;
+                    }
+                    setPosting(true);
+                    try {
+                      const { results } = await bulkDocumentActionApi("bill", "post", postableIds);
+                      const failed = results.filter((r) => r.error);
+                      const succeeded = results.filter((r) => !r.error);
+                      if (succeeded.length) toast.success(`${succeeded.length} bill(s) posted.`);
+                      if (failed.length) toast.error(`${failed.length} bill(s) failed: ${failed.map((f) => f.error).join("; ")}`);
+                      setSelectedIds([]);
+                      await reload();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Bulk post failed.");
+                    } finally {
+                      setPosting(false);
+                    }
                   }}
                 >
+                  {posting ? <Icons.Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
                   Post
                 </Button>
                 <Button

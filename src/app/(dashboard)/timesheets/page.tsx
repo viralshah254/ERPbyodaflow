@@ -28,6 +28,7 @@ import { fetchProjectsApi } from "@/lib/api/projects";
 import { fetchTimesheetsApi } from "@/lib/api/timesheets";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -75,6 +76,7 @@ type WeeklyRow = {
 type DayKey = (typeof DAYS)[number];
 
 export default function TimesheetsPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [weekStarts, setWeekStarts] = React.useState<string[]>([]);
   const [weekStart, setWeekStart] = React.useState("");
@@ -157,10 +159,12 @@ export default function TimesheetsPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain timesheets and approval flow." label="Explain timesheets" />
-            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Help me fill my timesheet for this week.")}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
-              Ask Copilot
-            </Button>
+            {copilotEnabled ? (
+              <Button variant="outline" size="sm" onClick={() => openWithPrompt("Help me fill my timesheet for this week.")}>
+                <Icons.Sparkles className="mr-2 h-4 w-4" />
+                Ask Copilot
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" asChild>
               <Link href="/approvals/requests">My requests</Link>
             </Button>

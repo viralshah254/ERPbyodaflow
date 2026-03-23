@@ -10,6 +10,7 @@ import { fetchTransfers } from "@/lib/api/warehouse-transfers";
 import { fetchCycleCountTasks, fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -22,6 +23,7 @@ const LINKS = [
 ];
 
 export default function WarehouseOverviewPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [inTransit, setInTransit] = React.useState(0);
   const [pendingPick, setPendingPick] = React.useState(0);
@@ -65,10 +67,12 @@ export default function WarehouseOverviewPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain pick/pack/putaway and suggest cycle count schedule.")}>
-            <Icons.Sparkles className="mr-2 h-4 w-4" />
-            Ask Copilot
-          </Button>
+          copilotEnabled ? (
+            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain pick/pack/putaway and suggest cycle count schedule.")}>
+              <Icons.Sparkles className="mr-2 h-4 w-4" />
+              Ask Copilot
+            </Button>
+          ) : undefined
         }
       />
       <div className="p-6 space-y-6">

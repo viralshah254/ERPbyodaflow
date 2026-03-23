@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { getDocTypeConfig } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
@@ -83,8 +84,7 @@ const schema = z.object({
   poRef: z.string().optional(),
   warehouse: z.string().optional(),
   linesCount: z.number().optional(),
-  taxesNote: z.string().optional(),
-  defaultTaxCodeId: z.string().optional(),
+  linesAreTaxInclusive: z.boolean().optional(),
   currency: z.string().optional(),
   exchangeRate: z.number().optional(),
   fxDate: z.string().optional(),
@@ -104,8 +104,7 @@ function getDefaultValues(baseCurrency: string): FormValues {
     poRef: "",
     warehouse: "",
     linesCount: 0,
-    taxesNote: "—",
-    defaultTaxCodeId: "",
+    linesAreTaxInclusive: false,
     currency: baseCurrency,
     exchangeRate: 1,
     fxDate: today,
@@ -283,7 +282,6 @@ interface DocumentCreateWizardProps {
 const STEPS = [
   { id: "header", label: "Header" },
   { id: "lines", label: "Lines" },
-  { id: "taxes", label: "Taxes & charges" },
   { id: "review", label: "Review & Submit" },
 ];
 
@@ -548,6 +546,20 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
       try {
         const po = await fetchDocumentDetailApi("purchase-order", poId);
         if (!po) return;
+        // When arriving from a deep-link (?poId=) the option is null — build it from fetched PO data
+        // so the AsyncSearchableSelect renders the PO number instead of the placeholder.
+        if (!option) {
+          setLinkedPoOption({
+            id: poId,
+            label: po.number ?? poId,
+            description: po.party ?? po.partyId ?? undefined,
+            status: po.status ?? "APPROVED",
+            partyId: po.partyId,
+            date: po.date,
+            currency: po.currency,
+            total: po.total,
+          });
+        }
         if (po.partyId) form.setValue("party", po.partyId);
         if (po.branchId) form.setValue("branch", po.branchId);
         pendingGrnWarehouseFromPoRef.current = {
@@ -643,13 +655,17 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
           quantity: line.qty,
           unit: line.uom,
           unitPrice: line.price,
+          ...(line.taxCodeId && { taxCodeId: line.taxCodeId }),
+          ...(line.tax != null && line.tax > 0 && { tax: line.tax }),
           amount: line.amount,
           ...(line.sourceLineId && { sourceLineId: line.sourceLineId }),
         })),
-        subtotal: form.getValues("totalAmount") ?? 0,
+        subtotal: lines.reduce((s, l) => s + l.qty * l.price, 0),
+        tax: lines.reduce((s, l) => s + (l.tax ?? 0), 0) || undefined,
         total: form.getValues("totalAmount") ?? 0,
         currency: selectedCurrency,
         ...(selectedCurrency !== baseCurrency && { exchangeRate }),
+        linesAreTaxInclusive: form.getValues("linesAreTaxInclusive") ?? false,
       };
     },
     [baseCurrency, form, lines, linkedPoId]
@@ -670,7 +686,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
       setCreditOverrideOpen(true);
       return;
     }
-    setStep(4);
+    setStep(3);
     setPostingPreviewError(null);
     try {
       setLoadingPostingPreview(true);
@@ -693,7 +709,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
         return;
       }
     }
-    setStep((s) => Math.min(4, s + 1));
+    setStep((s) => Math.min(3, s + 1));
   };
 
   const onSubmit = async () => {
@@ -803,9 +819,9 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <Progress value={(step / 4) * 100} className="max-w-xs" />
+        <Progress value={(step / 3) * 100} className="max-w-xs" />
         <span className="text-sm text-muted-foreground">
-          Step {step} of 4 · {STEPS[step - 1]?.label}
+          Step {step} of 3 · {STEPS[step - 1]?.label}
         </span>
       </div>
 
@@ -998,71 +1014,29 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
               packagingByProductId={packagingByProductId}
               pricingByProductId={lineEditorPricingByProductId}
               taxCodes={taxCodes}
+              linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
             />
-          </CardContent>
-        </Card>
-      )}
-
-      {step === 3 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>3. Taxes & charges</CardTitle>
-            {copilotEnabled ? (
-              <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
-                <Icons.Sparkles className="mr-2 h-4 w-4" />
-                Generate draft with Copilot
-              </Button>
-            ) : null}
-          </CardHeader>
-          <CardContent>
-            {type === "grn" ? (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">Goods receipts are typically tax-free at this stage.</p>
-                <p>Tax was set per product line in step 2. The supplier&apos;s VAT is handled when you post the related AP bill, not at goods receipt. You can leave the default below as <em>None</em> unless your tax authority requires it here.</p>
+            <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Prices are tax-inclusive</Label>
+                <p className="text-xs text-muted-foreground">
+                  Enable if unit prices already include VAT. Tax will be back-calculated.
+                </p>
               </div>
-            ) : (
-              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                Taxes and pricing defaults now follow the selected customer/supplier setup where available. Review charges before posting.
-              </div>
-            )}
-            {taxCodes.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <Label className="text-muted-foreground">Default tax code</Label>
-                <Select
-                  value={form.watch("defaultTaxCodeId") || "__none__"}
-                  onValueChange={(v) => form.setValue("defaultTaxCodeId", v === "__none__" ? "" : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select tax code" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {taxCodes.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.code} {t.rate ? `(${t.rate}%)` : ""} — {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="mt-4">
-              <Label className="text-muted-foreground">Tax / charge notes</Label>
-              <Input
-                placeholder="—"
-                className="mt-1"
-                {...form.register("taxesNote")}
+              <Switch
+                checked={form.watch("linesAreTaxInclusive") ?? false}
+                onCheckedChange={(v) => form.setValue("linesAreTaxInclusive", v)}
               />
             </div>
           </CardContent>
         </Card>
       )}
 
-      {step === 4 && (
+      {step === 3 && (
         <>
           <Card>
             <CardHeader>
-              <CardTitle>4. Review & Submit</CardTitle>
+              <CardTitle>3. Review & Submit</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2 text-sm">
@@ -1091,13 +1065,9 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-muted-foreground">Tax code</span>
+                  <span className="text-muted-foreground">Tax pricing</span>
                   <p className="font-medium">
-                    {(() => {
-                      const selectedTax = taxCodes.find((t) => t.id === form.watch("defaultTaxCodeId"));
-                      if (selectedTax) return `${selectedTax.code} — ${selectedTax.name} (${selectedTax.rate}%)`;
-                      return form.watch("taxesNote") || "None";
-                    })()}
+                    {form.watch("linesAreTaxInclusive") ? "Tax-inclusive (VAT in price)" : "Tax-exclusive (VAT added on top)"}
                   </p>
                 </div>
               </div>
@@ -1190,14 +1160,14 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
           </Button>
         </div>
         <div className="flex gap-2">
-          {step < 4 ? (
+          {step < 3 ? (
             <Button onClick={validateAndNext}>Next</Button>
           ) : (
             <Button onClick={() => void onSubmit()} disabled={submitting}>
               {submitting ? "Creating..." : "Create draft"}
             </Button>
           )}
-          {step < 4 && (
+          {step < 3 && (
             <Button variant="outline" onClick={onReview}>
               Review & Submit
             </Button>

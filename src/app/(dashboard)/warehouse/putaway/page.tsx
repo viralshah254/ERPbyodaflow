@@ -53,7 +53,16 @@ export default function PutawayPage() {
       {
         id: "progress",
         header: "Putaway",
-        accessor: (r: WarehousePutawayRow) => `${r.lines.reduce((sum, line) => sum + (line.putawayQty ?? 0), 0)}/${r.lines.reduce((sum, line) => sum + line.receivedQty, 0)}`,
+        accessor: (r: WarehousePutawayRow) => {
+          const totalKg = r.lines.reduce((s, l) => s + (l.receivedWeightKg ?? 0), 0);
+          if (totalKg > 0) {
+            const putawayKg = r.lines.reduce((s, l) => s + (l.receivedWeightKg ?? 0) * ((l.putawayQty ?? 0) / (l.receivedQty || 1)), 0);
+            return `${putawayKg.toFixed(1)} / ${totalKg.toFixed(1)} kg`;
+          }
+          const totalQty = r.lines.reduce((s, l) => s + l.receivedQty, 0);
+          const doneQty = r.lines.reduce((s, l) => s + (l.putawayQty ?? 0), 0);
+          return `${doneQty}/${totalQty}`;
+        },
       },
     ],
     []

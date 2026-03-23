@@ -1,4 +1,5 @@
 import * as React from "react";
+import Link from "next/link";
 import { formatMoney, kesEquivalent } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -53,15 +54,19 @@ export function DualCurrencyAmount({
   }
 
   if (kes === null) {
-    // Rate not available — show foreign amount + subtle indicator
+    // Rate not available — show foreign amount + actionable link to set exchange rate
     return (
       <div className={cn("inline-flex flex-col gap-0.5", alignClass, className)}>
         <span className={cn("tabular-nums", primarySize)}>
           {formatMoney(amount, normalised)}
         </span>
-        <span className={cn("tabular-nums text-amber-500", secondarySize)}>
-          rate pending
-        </span>
+        <Link
+          href="/settings/financial/exchange-rates"
+          className={cn("tabular-nums text-amber-500 underline-offset-2 hover:underline", secondarySize)}
+          title="Set exchange rate in Settings → Financial → Exchange Rates"
+        >
+          set rate →
+        </Link>
       </div>
     );
   }

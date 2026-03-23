@@ -23,6 +23,8 @@ import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
+import { convertDocumentApi } from "@/lib/api/documents";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -35,9 +37,12 @@ export default function ReceiptDetailPage() {
   const [loading, setLoading] = React.useState(true);
   const [posting, setPosting] = React.useState(false);
   const [confirmingProcessing, setConfirmingProcessing] = React.useState(false);
+  const [creatingBill, setCreatingBill] = React.useState(false);
   const [putawayLink, setPutawayLink] = React.useState<{ id: string; label: string } | null>(null);
+  const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const weightTableRef = React.useRef<HTMLDivElement>(null);
   const [editingWeight, setEditingWeight] = React.useState<Record<number, string>>({});
+  const [editingProcessedWeight, setEditingProcessedWeight] = React.useState<Record<number, string>>({});
   const linesWithIndex = React.useMemo(
     () => (grn?.lines ?? []).map((line, idx) => ({ ...line, _lineIndex: idx })),
     [grn?.lines]
@@ -46,6 +51,10 @@ export default function ReceiptDetailPage() {
   React.useEffect(() => {
     setLoading(true);
     fetchGRNById(id).then((g) => { setGrn(g ?? null); setLoading(false); });
+  }, [id]);
+
+  React.useEffect(() => {
+    fetchLandedCostAllocation(id).then((a) => setLandedAllocation(a)).catch(() => {});
   }, [id]);
 
   React.useEffect(() => {
@@ -99,7 +108,6 @@ export default function ReceiptDetailPage() {
   // Allow entering processed weight even after posting (processing happens post-receipt)
   const canEditProcessedWeight = hasCashWeightAudit && (grn.status === "DRAFT" || grn.status === "POSTED") && !grn.processingConfirmed;
   const hasAnyProcessedWeight = grn.lines.some((l) => l.processedWeightKg != null && l.processedWeightKg > 0);
-  const [editingProcessedWeight, setEditingProcessedWeight] = React.useState<Record<number, string>>({});
   const handleConfirmProcessing = async () => {
     setConfirmingProcessing(true);
     try {
@@ -229,16 +237,50 @@ export default function ReceiptDetailPage() {
                 disabled={posting}
                 onClick={async () => {
                   setPosting(true);
-                  await postGRN(grn.id);
-                  setGrn(await fetchGRNById(grn.id));
-                  setPosting(false);
-                  toast.success("GRN posted.");
+                  try {
+                    await postGRN(grn.id);
+                    setGrn(await fetchGRNById(grn.id));
+                    toast.success("GRN posted.");
+                  } catch (e) {
+                    toast.error((e as Error)?.message ?? "Failed to post GRN.");
+                  } finally {
+                    setPosting(false);
+                  }
                 }}
               >
                 <Icons.Send className="mr-2 h-4 w-4" />
                 {posting ? "Posting…" : "Post"}
               </Button>
             )}
+            {grn.linkedBill ? (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/docs/bill/${grn.linkedBill.id}`}>
+                  <Icons.FileText className="mr-2 h-4 w-4" />
+                  View Bill ({grn.linkedBill.number})
+                </Link>
+              </Button>
+            ) : (grn.status === "POSTED" || grn.status === "RECEIVED") ? (
+              <Button
+                size="sm"
+                variant="default"
+                disabled={creatingBill}
+                onClick={async () => {
+                  setCreatingBill(true);
+                  try {
+                    const result = await convertDocumentApi("grn", grn.id, { targetType: "bill" });
+                    toast.success(`Bill ${result.number ?? ""} created.`);
+                    window.location.href = `/docs/bill/${result.id}`;
+                  } catch (e) {
+                    toast.error((e as Error)?.message ?? "Failed to create bill.");
+                  } finally {
+                    setCreatingBill(false);
+                  }
+                }}
+              >
+                {creatingBill ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.FileText className="mr-2 h-4 w-4" />}
+                Create Bill
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" onClick={() => exportGRNDetailCsv(grn)}>
               <Icons.FileSpreadsheet className="mr-2 h-4 w-4" />
               Export CSV
@@ -420,7 +462,7 @@ export default function ReceiptDetailPage() {
                     )}
                     {totalProcessedWeight === 0 && canEditProcessedWeight && (
                       <span className="text-xs text-muted-foreground italic">
-                        Enter "Processed kg" above to calculate water loss.
+                        Enter &quot;Processed kg&quot; above to calculate water loss.
                       </span>
                     )}
                   </div>
@@ -460,16 +502,57 @@ export default function ReceiptDetailPage() {
               )}
             </Card>
 
-            <CostImpactPanel
-              title="Receipt Cost Impact"
-              currency={grn.currency ?? "KES"}
-              quantityKg={totalReceivedWeight || totalQty}
-              lines={[
-                { label: "Receipt value", amount: grn.totalAmount ?? 0 },
-                { label: "Inbound handling", amount: (grn.totalAmount ?? 0) * 0.015 },
-                { label: "Cold-chain storage estimate", amount: (grn.totalAmount ?? 0) * 0.01 },
-              ]}
-            />
+            {(() => {
+              if (landedAllocation) {
+                const costCentreLabels: Record<string, string> = {
+                  currency_conversion: "FX conversion",
+                  permits: "Permits & customs",
+                  inbound_logistics: "Inbound logistics",
+                  other: "Other charges",
+                };
+                const centreLines = Object.entries(landedAllocation.costCentreSummary ?? {}).map(
+                  ([centre, data]) => ({
+                    label: costCentreLabels[centre] ?? centre,
+                    amount: (data as { originalAmount: number }).originalAmount ?? 0,
+                  })
+                );
+                const weightBasis = (landedAllocation.impactLines ?? []).reduce(
+                  (s, l) => s + (l.basisValue ?? 0),
+                  0
+                );
+                return (
+                  <CostImpactPanel
+                    title="Receipt Cost Impact"
+                    currency="KES"
+                    quantityKg={weightBasis || totalReceivedWeight || totalQty}
+                    lines={[
+                      { label: "Goods value", amount: grn.totalAmount ?? 0 },
+                      ...centreLines,
+                    ]}
+                  />
+                );
+              }
+              return (
+                <div className="space-y-2">
+                  <CostImpactPanel
+                    title="Receipt Cost Impact"
+                    currency={grn.currency ?? "KES"}
+                    quantityKg={totalReceivedWeight || totalQty}
+                    lines={[
+                      { label: "Goods value", amount: grn.totalAmount ?? 0 },
+                      { label: "Landed costs (not yet allocated)", amount: 0 },
+                    ]}
+                  />
+                  <p className="text-xs text-muted-foreground px-1">
+                    Cost per kg above excludes landed costs.{" "}
+                    <Link href={`/inventory/costing?sourceId=${id}`} className="underline underline-offset-2 text-primary">
+                      Allocate landed costs
+                    </Link>{" "}
+                    to get the true cost per kg.
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="space-y-6">
@@ -477,9 +560,17 @@ export default function ReceiptDetailPage() {
               title="Receipt Timeline"
               steps={[
                 { id: "po", label: "Purchase order approved", status: "completed", detail: grn.poRef ?? "PO linked" },
-                { id: "arrive", label: "Stock arrived at facility", status: "completed", timestamp: `${grn.date}T08:00:00Z` },
+                { id: "arrive", label: "Stock arrived at facility", status: "completed", timestamp: grn.date ? `${grn.date.slice(0, 10)}T08:00:00Z` : undefined },
                 { id: "verify", label: "Weight / QA verification", status: hasCashWeightAudit ? "current" : "completed", detail: hasCashWeightAudit ? "Compare paid vs received weight" : "Verification complete" },
                 { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED"].includes(grn.status) ? "completed" : "upcoming" },
+                {
+                  id: "landed",
+                  label: "Landed costs allocated",
+                  status: landedAllocation ? "completed" : ["POSTED", "RECEIVED"].includes(grn.status) ? "current" : "upcoming",
+                  detail: landedAllocation
+                    ? `KES ${(landedAllocation.totalLandedCostBase ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} total landed`
+                    : "Allocate freight, duty, and other charges",
+                },
                 { id: "putaway", label: "Putaway completed", status: grn.status === "RECEIVED" ? "completed" : "upcoming", detail: putawayLink ? "Warehouse execution closed" : "Awaiting putaway" },
               ]}
             />
@@ -491,7 +582,7 @@ export default function ReceiptDetailPage() {
               <CardContent className="p-0">
                 <ActivityPanel
                   auditEntries={[
-                    { id: "a1", action: "GRN created", user: "Warehouse Clerk", timestamp: grn.date, detail: `${grn.number} for ${grn.supplier ?? grn.party}` },
+                    { id: "a1", action: "GRN created", user: "Warehouse Clerk", timestamp: grn.date, detail: `${grn.number} for ${grn.supplier ?? grn.party ?? "—"}` },
                     { id: "a2", action: ["POSTED", "RECEIVED"].includes(grn.status) ? "GRN posted" : "Awaiting posting", user: "System", timestamp: new Date().toISOString(), detail: `Warehouse ${grn.warehouse ?? "—"}` },
                     ...(grn.status === "RECEIVED"
                       ? [{ id: "a3", action: "Putaway confirmed", user: "Warehouse", timestamp: new Date().toISOString(), detail: "Receipt operationally closed" }]

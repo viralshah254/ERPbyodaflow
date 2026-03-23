@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import type { ApprovalItem } from "@/lib/types/approvals";
 import { formatMoney } from "@/lib/money";
 import { ApprovalSheet } from "@/components/approvals/ApprovalSheet";
-import { fetchApprovalRequests } from "@/lib/api/approvals";
+import { approveApprovalApi, fetchApprovalRequests, rejectApprovalApi } from "@/lib/api/approvals";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -35,6 +35,28 @@ export default function ApprovalsRequestsPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleApprove = async (id: string, comment?: string) => {
+    try {
+      await approveApprovalApi(id, comment);
+      await refreshItems();
+      if (selected?.id === id) setSheetOpen(false);
+      toast.success("Credit override approved.");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
+  const handleReject = async (id: string, comment?: string) => {
+    try {
+      await rejectApprovalApi(id, comment);
+      await refreshItems();
+      if (selected?.id === id) setSheetOpen(false);
+      toast.success("Rejected — document reverted to draft.");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
 
   React.useEffect(() => {
     void refreshItems();
@@ -139,6 +161,8 @@ export default function ApprovalsRequestsPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         item={selected}
+        onApprove={selected?.creditBreachReason && selected.status === "pending" ? handleApprove : undefined}
+        onReject={selected?.creditBreachReason && selected.status === "pending" ? handleReject : undefined}
       />
     </PageShell>
   );

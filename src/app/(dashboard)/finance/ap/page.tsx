@@ -46,7 +46,13 @@ export default function AccountsPayablePage() {
           <Card>
             <CardHeader><CardTitle className="text-sm">Outstanding</CardTitle></CardHeader>
             <CardContent className="text-2xl font-semibold">
-              {formatMoney(bills.reduce((sum, item) => sum + item.outstanding, 0), "KES")}
+              {formatMoney(
+                bills.reduce((sum, item) => {
+                  const rate = item.currency && item.currency !== "KES" ? (item.exchangeRate ?? 1) : 1;
+                  return sum + item.outstanding * rate;
+                }, 0),
+                "KES"
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -69,14 +75,29 @@ export default function AccountsPayablePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bills.map((item) => (
+                {bills.map((item) => {
+                  const isFx = item.currency && item.currency !== "KES" && item.exchangeRate;
+                  return (
                   <TableRow key={item.id}>
-                    <TableCell>{item.number}</TableCell>
+                    <TableCell>
+                      <Link href={`/docs/bill/${item.id}`} className="hover:underline font-medium">
+                        {item.number}
+                      </Link>
+                    </TableCell>
                     <TableCell>{item.supplierName}</TableCell>
                     <TableCell>{item.dueDate ?? "—"}</TableCell>
-                    <TableCell className="text-right">{formatMoney(item.outstanding, item.currency ?? "KES")}</TableCell>
+                    <TableCell className="text-right">
+                      <div>{formatMoney(item.outstanding, item.currency ?? "KES")}</div>
+                      {isFx && (
+                        <div className="text-xs text-muted-foreground">
+                          {formatMoney(item.outstanding * item.exchangeRate!, "KES")}
+                          <span className="ml-1 opacity-70">@ {item.exchangeRate}</span>
+                        </div>
+                      )}
+                    </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>

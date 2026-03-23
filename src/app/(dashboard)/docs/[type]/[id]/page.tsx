@@ -199,16 +199,18 @@ export default function DocViewPage() {
     };
   }, [document, id, type]);
 
+  const isUuidLike = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
   const openConvertSheet = React.useCallback(
     (targetType: DocTypeKey) => {
       setConvertType(targetType);
       setConvertPartyId(document?.partyId ?? "");
+      const resolvedLabel =
+        displayPartyName !== "—" && !isUuidLike(displayPartyName) ? displayPartyName : null;
       setSelectedConvertPartyOption(
-        document?.partyId && displayPartyName !== "—"
-          ? {
-              id: document.partyId,
-              label: displayPartyName,
-            }
+        document?.partyId && resolvedLabel
+          ? { id: document.partyId, label: resolvedLabel }
           : null
       );
       setConvertWarehouseId(document?.warehouseId ?? "");
@@ -243,7 +245,8 @@ export default function DocViewPage() {
     if (!convertPartyId || document?.partyId !== convertPartyId) {
       return selectedConvertPartyOption;
     }
-    const label = displayPartyName !== "—" ? displayPartyName : document?.party;
+    const raw = displayPartyName !== "—" ? displayPartyName : document?.party;
+    const label = raw && !isUuidLike(raw) ? raw : null;
     if (!label) return selectedConvertPartyOption;
     return {
       id: convertPartyId,
@@ -299,6 +302,12 @@ export default function DocViewPage() {
               Request approval
             </Button>
           )}
+          {document?.status === "POSTED" && (
+            <Button variant="outline" size="sm" disabled className="opacity-70 cursor-default">
+              <Icons.CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
+              Posted
+            </Button>
+          )}
           {(canApprove || canPost) && (
             <>
               {canApprove && (
@@ -325,7 +334,6 @@ export default function DocViewPage() {
               )}
               {canPost && (
               <Button
-                variant="outline"
                 size="sm"
                 disabled={actionLoading}
                 onClick={async () => {
@@ -341,7 +349,7 @@ export default function DocViewPage() {
                   }
                 }}
               >
-                <Icons.Send className="mr-2 h-4 w-4" />
+                {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
                 Post
               </Button>
               )}
@@ -977,7 +985,25 @@ function DynamicNextStepsPanel({
     }
   } else if (type === "invoice") {
     if (status === "DRAFT") {
-      steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Post invoice to finalize", action: () => void onAction("post"), actionLabel: "Post", variant: "default" });
+      const undelivered = (document?.linkedDeliveries ?? []).filter((d) => d.status !== "DELIVERED" && d.status !== "POSTED");
+      if (undelivered.length > 0) {
+        for (const dn of undelivered) {
+          steps.push({
+            icon: <Icons.Truck className="h-4 w-4 text-amber-500" />,
+            text: `${dn.number} must be marked Delivered before posting`,
+            href: `/docs/delivery-note/${dn.id}`,
+            actionLabel: `Go to ${dn.number}`,
+            variant: "default",
+          });
+        }
+      } else {
+        steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Post invoice to finalize", action: () => void onAction("post"), actionLabel: "Post", variant: "default" });
+      }
+    } else if (status === "PENDING_APPROVAL") {
+      steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting credit approval — held due to credit policy breach" });
+      steps.push({ icon: <Icons.CheckSquare className="h-4 w-4 text-blue-500" />, text: "Approve in Approvals Inbox", href: "/approvals/inbox", actionLabel: "Go to Inbox", variant: "default" });
+    } else if (status === "APPROVED") {
+      steps.push({ icon: <Icons.Send className="h-4 w-4 text-emerald-500" />, text: "Credit override approved — post invoice to finalize", action: () => void onAction("post"), actionLabel: "Post", variant: "default" });
     } else if (status === "POSTED") {
       if (paymentStatus === "PAID") {
         steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4 text-emerald-500" />, text: "Invoice fully settled ✓" });
@@ -1003,6 +1029,34 @@ function DynamicNextStepsPanel({
   } else if (type === "grn") {
     if (status === "POSTED" || status === "APPROVED") {
       steps.push({ icon: <Icons.FileText className="h-4 w-4" />, text: "Create supplier bill", action: () => onConvert("bill"), actionLabel: "Create Bill", variant: "default" });
+    }
+  } else if (type === "bill") {
+    if (status === "DRAFT" || status === "APPROVED") {
+      const srcDoc = document?.sourceDocument;
+      const grnBlocked = srcDoc?.typeKey === "grn" && srcDoc.status !== "RECEIVED";
+      if (grnBlocked) {
+        steps.push({
+          icon: <Icons.AlertTriangle className="h-4 w-4 text-amber-500" />,
+          text: `GRN ${srcDoc!.number} must be received before this bill can be posted`,
+          href: `/docs/grn/${srcDoc!.id}`,
+          actionLabel: `Go to ${srcDoc!.number}`,
+          variant: "default",
+        });
+      } else {
+        steps.push({
+          icon: <Icons.Send className="h-4 w-4" />,
+          text: "Post bill to record the liability",
+          action: () => void onAction("post"),
+          actionLabel: "Post",
+          variant: "default",
+        });
+      }
+    } else if (status === "POSTED") {
+      steps.push({
+        icon: <Icons.DollarSign className="h-4 w-4" />,
+        text: "Outstanding — record payment to supplier",
+        href: "/ap/payments",
+      });
     }
   }
 
@@ -1056,7 +1110,7 @@ function DynamicNextStepsPanel({
                     )}
                     {step.href && !step.action && (
                       <Link href={step.href} className="text-primary text-xs underline-offset-4 hover:underline">
-                        Go →
+                        {step.actionLabel ?? "Go →"}
                       </Link>
                     )}
                   </div>

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { fetchCashflowApi } from "@/lib/api/treasury";
 import { fetchBankAccountsApi, fetchCollectionsApi, fetchPaymentRunsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ const LINKS = [
 ];
 
 export default function TreasuryOverviewPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [runs, setRuns] = React.useState<any[]>([]);
   const [overdue, setOverdue] = React.useState<any[]>([]);
@@ -58,10 +60,12 @@ export default function TreasuryOverviewPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" onClick={() => openWithPrompt("Summarize cashflow and suggest payment prioritization.")}>
-            <Icons.Sparkles className="mr-2 h-4 w-4" />
-            Ask Copilot
-          </Button>
+          copilotEnabled ? (
+            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Summarize cashflow and suggest payment prioritization.")}>
+              <Icons.Sparkles className="mr-2 h-4 w-4" />
+              Ask Copilot
+            </Button>
+          ) : undefined
         }
       />
       <div className="p-6 space-y-6">

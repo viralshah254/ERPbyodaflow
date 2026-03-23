@@ -12,6 +12,9 @@ export type APBillRow = {
   date: string;
   party: string;
   total: number;
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
+  economicTotal?: number;
   currency?: string;
   exchangeRate?: number;
   status: string;

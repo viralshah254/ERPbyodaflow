@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { fetchIntercompanyEntitiesApi, fetchIntercompanyTransactionsApi } from "@/lib/api/intercompany";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -18,6 +19,7 @@ const LINKS = [
 ];
 
 export default function IntercompanyOverviewPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [entitiesCount, setEntitiesCount] = React.useState(0);
   const [transactionsCount, setTransactionsCount] = React.useState(0);
@@ -50,10 +52,12 @@ export default function IntercompanyOverviewPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain intercompany transactions and elimination journals.")}>
-            <Icons.Sparkles className="mr-2 h-4 w-4" />
-            Ask Copilot
-          </Button>
+          copilotEnabled ? (
+            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain intercompany transactions and elimination journals.")}>
+              <Icons.Sparkles className="mr-2 h-4 w-4" />
+              Ask Copilot
+            </Button>
+          ) : undefined
         }
       />
       <div className="p-6 space-y-6">

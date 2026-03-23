@@ -19,6 +19,7 @@ interface SearchableSelectProps {
   emptyMessage?: string;
   disabled?: boolean;
   allowClear?: boolean;
+  className?: string;
 }
 
 export function SearchableSelect({
@@ -30,6 +31,7 @@ export function SearchableSelect({
   emptyMessage = "No options found.",
   disabled = false,
   allowClear = false,
+  className,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -62,7 +64,7 @@ export function SearchableSelect({
   }, [open]);
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className={`relative${className ? ` ${className}` : ""}`} ref={containerRef}>
       <Button
         type="button"
         variant="outline"

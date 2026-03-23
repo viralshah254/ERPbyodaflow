@@ -50,6 +50,7 @@ import type { AsyncSearchableSelectOption } from "@/components/ui/async-searchab
 import type { CashWeightAuditLineRow, CashDisbursementRow } from "@/lib/mock/purchasing/cash-weight-audit";
 import { formatMoney } from "@/lib/money";
 import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
+import { fetchLandedCostAllocation } from "@/lib/api/landed-cost";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -72,6 +73,7 @@ export default function CashWeightAuditPage() {
   const [exceptions, setExceptions] = React.useState<CashWeightAuditLineRow[]>([]);
   const [disbursements, setDisbursements] = React.useState<CashDisbursementRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [landedCostPerGrn, setLandedCostPerGrn] = React.useState<Map<string, number>>(new Map());
   const [reconcilingId, setReconcilingId] = React.useState<string | null>(null);
 
   // Disbursement form state
@@ -91,7 +93,8 @@ export default function CashWeightAuditPage() {
   const [disbReference, setDisbReference] = React.useState("");
   const [disbPaidWeightKg, setDisbPaidWeightKg] = React.useState("");
   const [disbLineWeights, setDisbLineWeights] = React.useState<Record<string, string>>({});
-  const [poLines, setPoLines] = React.useState<Array<{ poLineId: string; sku: string; productName: string }>>([]);
+  const [poLines, setPoLines] = React.useState<Array<{ poLineId: string; sku: string; productName: string; qty: number; uom: string; rate: number; total: number }>>([]);
+  const [poDetail, setPoDetail] = React.useState<{ number: string; supplier: string; total: number; currency: string; fxRate: number } | null>(null);
   const [savingDisb, setSavingDisb] = React.useState(false);
   const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
@@ -119,6 +122,29 @@ export default function CashWeightAuditPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  // Batch-load landed cost allocations for all unique GRN IDs in the audit lines
+  React.useEffect(() => {
+    const grnIds = [...new Set(auditLines.map((l) => l.grnId).filter(Boolean))] as string[];
+    if (!grnIds.length) return;
+    void Promise.all(
+      grnIds.map((gid) =>
+        fetchLandedCostAllocation(gid).then((alloc) => {
+          if (!alloc) return null;
+          const totalBase = alloc.totalLandedCostBase ?? 0;
+          const totalWeight = (alloc.impactLines ?? []).reduce((s, l) => s + (l.basisValue ?? 0), 0);
+          const cpk = totalBase > 0 && totalWeight > 0 ? totalBase / totalWeight : null;
+          return { gid, cpk };
+        })
+      )
+    ).then((results) => {
+      const m = new Map<string, number>();
+      for (const r of results) {
+        if (r?.cpk != null) m.set(r.gid, r.cpk);
+      }
+      setLandedCostPerGrn(m);
+    });
+  }, [auditLines]);
 
   // Hydrate from query params: ?poId=xxx&openDisbursement=1
   React.useEffect(() => {
@@ -150,10 +176,11 @@ export default function CashWeightAuditPage() {
     []
   );
 
-  // When a PO is selected, fetch its lines for per-line weight entry
+  // When a PO is selected, fetch its lines for per-line weight entry and PO summary display
   React.useEffect(() => {
     if (!disbPoId.trim()) {
       setPoLines([]);
+      setPoDetail(null);
       setDisbLineWeights({});
       return;
     }
@@ -163,11 +190,22 @@ export default function CashWeightAuditPage() {
         if (cancelled || !po) return;
         // Auto-populate currency from PO so UGX/USD POs immediately show KES preview
         if (po.currency) setDisbCurrency(po.currency);
+        setPoDetail({
+          number: po.number,
+          supplier: po.supplier,
+          total: po.total ?? 0,
+          currency: po.currency,
+          fxRate: po.fxRate,
+        });
         if (!po.lines?.length) return;
         const lines = po.lines.map((l, i) => ({
           poLineId: `${po.id}:${i}`,
           sku: l.sku ?? `LINE-${i + 1}`,
           productName: l.productName ?? `Line ${i + 1}`,
+          qty: l.qty,
+          uom: l.uom,
+          rate: l.rate,
+          total: l.total,
         }));
         setPoLines(lines);
         setDisbLineWeights((prev) => {
@@ -179,7 +217,7 @@ export default function CashWeightAuditPage() {
         });
       })
       .catch(() => {
-        if (!cancelled) setPoLines([]);
+        if (!cancelled) { setPoLines([]); setPoDetail(null); }
       });
     return () => {
       cancelled = true;
@@ -246,7 +284,7 @@ export default function CashWeightAuditPage() {
     }
     setSavingDisb(true);
     try {
-      await createCashDisbursement({
+      const disbResult = await createCashDisbursement({
         poId: disbPoId.trim(),
         amount,
         currency: disbCurrency,
@@ -255,16 +293,17 @@ export default function CashWeightAuditPage() {
         paidWeightKg,
         lines,
       });
+      const receiptLabel = disbResult.reference ? ` Receipt: ${disbResult.reference}.` : "";
       // Auto-build audit lines for this PO so the user never has to do it manually
       try {
         const built = await buildCashWeightAudit({ poId: disbPoId.trim() });
         if (built.built > 0) {
-          toast.success(`Disbursement recorded. ${built.built} audit line(s) created automatically.`);
+          toast.success(`Disbursement recorded.${receiptLabel} ${built.built} audit line(s) created automatically.`);
         } else {
-          toast.success("Disbursement recorded. Audit lines will appear once a GRN is linked.");
+          toast.success(`Disbursement recorded.${receiptLabel} Audit lines will appear once a GRN is linked.`);
         }
       } catch {
-        toast.success("Disbursement recorded.");
+        toast.success(`Disbursement recorded.${receiptLabel}`);
       }
       setDisbursementOpen(false);
       setDisbPoId("");
@@ -322,6 +361,16 @@ export default function CashWeightAuditPage() {
     { id: "ordered", header: "Ordered qty", accessor: (r: CashWeightAuditLineRow) => r.orderedQty ?? "—" },
     { id: "paidKg", header: "Paid weight (kg)", accessor: (r: CashWeightAuditLineRow) => r.paidWeightKg ?? "—" },
     { id: "receivedKg", header: "Received weight (kg)", accessor: (r: CashWeightAuditLineRow) => r.receivedWeightKg ?? "—" },
+    {
+      id: "landedCostPerKg",
+      header: "Landed KES/kg",
+      accessor: (r: CashWeightAuditLineRow) => {
+        if (!r.grnId) return <span className="text-muted-foreground">—</span>;
+        const cpk = landedCostPerGrn.get(r.grnId);
+        if (cpk == null) return <span className="text-muted-foreground text-xs">Pending</span>;
+        return <span className="font-medium tabular-nums">{formatMoney(cpk, "KES")}</span>;
+      },
+    },
     {
       id: "variance",
       header: "Variance (kg)",
@@ -488,6 +537,66 @@ export default function CashWeightAuditPage() {
                     />
                     <p className="text-xs text-muted-foreground">Only approved POs are shown.</p>
                   </div>
+
+                  {/* PO summary card — shown once a PO is selected */}
+                  {poDetail && (
+                    <div className="rounded-md border bg-muted/40 text-sm overflow-hidden">
+                      <div className="px-3 py-2 flex items-center justify-between gap-2 border-b bg-muted/60">
+                        <div className="flex items-center gap-2 font-medium">
+                          <Icons.FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span>{poDetail.number}</span>
+                          {poDetail.supplier && (
+                            <span className="text-muted-foreground font-normal">· {poDetail.supplier}</span>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-semibold">{formatMoney(poDetail.total, poDetail.currency)}</p>
+                          {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              ≈ {formatMoney(poDetail.total * poDetail.fxRate, "KES")}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {poLines.length > 0 && (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b text-muted-foreground">
+                              <th className="px-3 py-1.5 text-left font-medium">Product</th>
+                              <th className="px-2 py-1.5 text-right font-medium">Qty</th>
+                              <th className="px-2 py-1.5 text-left font-medium">UOM</th>
+                              <th className="px-2 py-1.5 text-right font-medium">Rate</th>
+                              <th className="px-3 py-1.5 text-right font-medium">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {poLines.map((l) => (
+                              <tr key={l.poLineId} className="border-b last:border-0">
+                                <td className="px-3 py-1.5">
+                                  <p className="truncate max-w-[120px]">{l.productName}</p>
+                                  <p className="text-muted-foreground">{l.sku}</p>
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums">{l.qty}</td>
+                                <td className="px-2 py-1.5 text-muted-foreground">{l.uom}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums">
+                                  <p>{formatMoney(l.rate, poDetail.currency)}</p>
+                                  {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
+                                    <p className="text-muted-foreground">≈ {formatMoney(l.rate * poDetail.fxRate, "KES")}</p>
+                                  )}
+                                </td>
+                                <td className="px-3 py-1.5 text-right tabular-nums">
+                                  <p className="font-medium">{formatMoney(l.total, poDetail.currency)}</p>
+                                  {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
+                                    <p className="text-muted-foreground">≈ {formatMoney(l.total * poDetail.fxRate, "KES")}</p>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
 
                   {receivedWeightForPo !== null && (
                     <div className="rounded-md bg-muted px-3 py-2 text-sm flex items-center gap-2">

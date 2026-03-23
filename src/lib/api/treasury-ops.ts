@@ -38,6 +38,12 @@ type BackendPaymentRunDetail = BackendPaymentRun & {
     billNumber?: string;
     amount: number;
     currency: string;
+    landedAllocated?: number;
+    landedBreakdown?: Array<{ label: string; amount: number }>;
+    economicTotal?: number;
+    grnId?: string;
+    grnNumber?: string;
+    poRef?: string;
   }>;
 };
 

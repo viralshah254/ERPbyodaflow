@@ -37,6 +37,8 @@ import { downloadCsv } from "@/lib/export/csv";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import Link from "next/link";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function APPaymentsPage() {
   const [search, setSearch] = React.useState("");
@@ -222,29 +224,71 @@ export default function APPaymentsPage() {
             </div>
             <div className="space-y-2">
               <Label>Open bills</Label>
-              <div className="rounded border divide-y max-h-64 overflow-auto">
+              <div className="rounded border divide-y max-h-80 overflow-auto">
                 {openBills.length === 0 ? (
                   <div className="p-3 text-sm text-muted-foreground">No open bills for this supplier.</div>
                 ) : (
-                  openBills.map((bill) => (
-                    <div key={bill.id} className="flex items-center justify-between gap-2 p-2 text-sm">
-                      <span className="truncate">
-                        {bill.number} · {formatMoney(bill.outstanding, bill.currency ?? "KES")}
-                      </span>
-                      <Input
-                        type="number"
-                        className="w-28 h-8 shrink-0"
-                        placeholder="Amount"
-                        value={allocations[bill.id] ?? ""}
-                        onChange={(e) =>
-                          setAllocations((current) => ({
-                            ...current,
-                            [bill.id]: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))
+                  openBills.map((bill) => {
+                    const hasLanded = (bill.landedAllocated ?? 0) > 0;
+                    return (
+                      <div key={bill.id} className="flex flex-col gap-1 p-2 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-medium truncate">{bill.number}</span>
+                            <span className="text-xs text-muted-foreground">
+                              Outstanding: {formatMoney(bill.outstanding, bill.currency ?? "KES")}
+                            </span>
+                            {(bill.grnNumber || bill.poRef) && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                {bill.grnNumber && (
+                                  <Link
+                                    href={`/inventory/receipts`}
+                                    className="text-primary underline-offset-2 hover:underline"
+                                    target="_blank"
+                                  >
+                                    GRN: {bill.grnNumber}
+                                  </Link>
+                                )}
+                                {bill.poRef && <span>· PO: {bill.poRef}</span>}
+                              </span>
+                            )}
+                          </div>
+                          <Input
+                            type="number"
+                            className="w-28 h-8 shrink-0"
+                            placeholder="Amount"
+                            value={allocations[bill.id] ?? ""}
+                            onChange={(e) =>
+                              setAllocations((current) => ({
+                                ...current,
+                                [bill.id]: parseFloat(e.target.value) || 0,
+                              }))
+                            }
+                          />
+                        </div>
+                        {hasLanded && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1.5 rounded bg-amber-50 border border-amber-200 px-2 py-1 text-xs text-amber-800 cursor-default w-fit">
+                                  <Icons.Package className="h-3 w-3" />
+                                  +{formatMoney(bill.landedAllocated ?? 0, bill.currency ?? "KES")} landed
+                                  <span className="text-amber-600">→ Economic: {formatMoney(bill.economicTotal ?? bill.total, bill.currency ?? "KES")}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p className="font-medium mb-1">Landed cost breakdown (on linked GRN)</p>
+                                {(bill.landedBreakdown ?? []).map((b) => (
+                                  <p key={b.label}>{b.label}: {formatMoney(b.amount, bill.currency ?? "KES")}</p>
+                                ))}
+                                <p className="mt-1 text-muted-foreground">This amount is already posted to inventory. Payment covers only the bill outstanding above.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

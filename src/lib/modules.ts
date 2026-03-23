@@ -327,7 +327,7 @@ export const STANDARD_MODULES: Module[] = [
         name: "production",
         label: "Production Runs",
         icon: "Cog",
-        path: "/manufacturing/production",
+        path: "/manufacturing/work-orders",
         enabled: true,
         orgTypes: ["MANUFACTURER"],
         order: 2,

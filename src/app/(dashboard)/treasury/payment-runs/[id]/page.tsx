@@ -13,6 +13,7 @@ import { fetchPaymentRunApi, approvePaymentRunApi, exportPaymentRunApi } from "@
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const METHOD_LABELS: Record<string, string> = {
   BANK_TRANSFER: "Bank transfer",
@@ -128,26 +129,62 @@ export default function PaymentRunDetailPage() {
             <CardDescription>Suppliers and bills included in this payment run.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Bill</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Currency</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(run.lines ?? []).map((line: any) => (
-                  <TableRow key={line.id}>
-                    <TableCell>{line.supplierName ?? line.supplierId}</TableCell>
-                    <TableCell>{line.billNumber ?? line.billId ?? "Manual line"}</TableCell>
-                    <TableCell className="text-right">{formatMoney(line.amount, line.currency)}</TableCell>
-                    <TableCell>{line.currency}</TableCell>
+            <TooltipProvider>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Bill / GRN / PO</TableHead>
+                    <TableHead className="text-right">Bill amount</TableHead>
+                    <TableHead className="text-right">Landed costs</TableHead>
+                    <TableHead className="text-right">Economic total</TableHead>
+                    <TableHead>Currency</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {(run.lines ?? []).map((line: any) => {
+                    const hasLanded = (line.landedAllocated ?? 0) > 0;
+                    return (
+                      <TableRow key={line.id}>
+                        <TableCell>{line.supplierName ?? line.supplierId}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5 text-xs">
+                            <span className="font-medium text-sm">{line.billNumber ?? line.billId ?? "Manual line"}</span>
+                            {line.grnNumber && <span className="text-muted-foreground">GRN: {line.grnNumber}</span>}
+                            {line.poRef && <span className="text-muted-foreground">PO: {line.poRef}</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">{formatMoney(line.amount, line.currency)}</TableCell>
+                        <TableCell className="text-right">
+                          {hasLanded ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-amber-700 font-medium cursor-default underline decoration-dotted">
+                                  +{formatMoney(line.landedAllocated, line.currency)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p className="font-medium mb-1">Landed cost breakdown</p>
+                                {(line.landedBreakdown ?? []).map((b: { label: string; amount: number }) => (
+                                  <p key={b.label}>{b.label}: {formatMoney(b.amount, line.currency)}</p>
+                                ))}
+                                <p className="mt-1 text-muted-foreground">Already posted to inventory. Not part of this payment.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatMoney(line.economicTotal ?? line.amount, line.currency)}
+                        </TableCell>
+                        <TableCell>{line.currency}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
           </CardContent>
         </Card>
       </div>

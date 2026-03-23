@@ -3,7 +3,7 @@
  * See BACKEND_SPEC_COOL_CATCH.md §3.6.
  */
 
-import { apiRequest, requireLiveApi } from "@/lib/api/client";
+import { apiRequest, getApiBase, requireLiveApi } from "@/lib/api/client";
 import {
   type LandedCostTemplateRow,
   type LandedCostSourceRow,
@@ -27,6 +27,30 @@ export async function createLandedCostTemplate(body: {
   return apiRequest<{ id: string }>("/api/inventory/landed-cost/templates", {
     method: "POST",
     body,
+  });
+}
+
+export async function updateLandedCostTemplate(
+  id: string,
+  body: Partial<{
+    name: string;
+    type: LandedCostTemplateRow["type"];
+    allocationBasis: LandedCostTemplateRow["allocationBasis"];
+    currency: string;
+    isActive: boolean;
+  }>
+): Promise<void> {
+  requireLiveApi("Update landed cost template");
+  await apiRequest(`/api/inventory/landed-cost/templates/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export async function deleteLandedCostTemplate(id: string): Promise<void> {
+  requireLiveApi("Delete landed cost template");
+  await apiRequest(`/api/inventory/landed-cost/templates/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }
 
@@ -92,6 +116,8 @@ export interface ExistingLandedCostAllocation {
   allocationMethod: string;
   lines: (LandedCostAllocationLine & { fxSnapshot?: unknown })[];
   impactLines: LandedCostAllocationResult["impactLines"];
+  costCentreSummary?: LandedCostAllocationResult["costCentreSummary"];
+  totalLandedCostBase?: LandedCostAllocationResult["totalLandedCostBase"];
   fxSnapshot?: unknown;
 }
 
@@ -113,4 +139,67 @@ export async function postLandedCostAllocation(body: LandedCostAllocationRequest
     method: "POST",
     body,
   });
+}
+
+// ─── Evidence attachment helpers ─────────────────────────────────────────────
+
+export interface LandedCostAttachmentRow {
+  id: string;
+  allocationId: string;
+  lineIndex: number;
+  fileName: string;
+  contentType?: string;
+  sizeBytes?: number;
+  createdAt?: string;
+}
+
+export async function fetchLandedCostAttachments(
+  allocationId: string,
+  lineIndex?: number
+): Promise<LandedCostAttachmentRow[]> {
+  requireLiveApi("Landed cost attachments");
+  const params = new URLSearchParams();
+  if (lineIndex !== undefined) params.set("lineIndex", String(lineIndex));
+  const res = await apiRequest<{ items: LandedCostAttachmentRow[] }>(
+    `/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments`,
+    params.size > 0 ? { params } : undefined
+  );
+  return res?.items ?? [];
+}
+
+export async function uploadLandedCostAttachment(
+  allocationId: string,
+  lineIndex: number,
+  file: File
+): Promise<LandedCostAttachmentRow> {
+  requireLiveApi("Upload landed cost attachment");
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("lineIndex", String(lineIndex));
+  const url = `${getApiBase()}/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments`;
+  const resp = await fetch(url, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: resp.statusText }));
+    throw new Error((err as { error?: string }).error ?? "Upload failed");
+  }
+  return resp.json() as Promise<LandedCostAttachmentRow>;
+}
+
+export async function deleteLandedCostAttachment(
+  allocationId: string,
+  fileId: string
+): Promise<void> {
+  requireLiveApi("Delete landed cost attachment");
+  await apiRequest(
+    `/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments/${encodeURIComponent(fileId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export function getLandedCostAttachmentUrl(allocationId: string, fileId: string): string {
+  return `/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments/${encodeURIComponent(fileId)}`;
 }

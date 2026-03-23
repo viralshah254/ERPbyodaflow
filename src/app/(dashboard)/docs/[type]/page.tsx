@@ -68,8 +68,18 @@ function buildColumns(
     if (accessor === "total") {
       acc = (r) =>
         r.total != null ? `KES ${Number(r.total).toLocaleString()}` : "—";
-    } else if (accessor === "status") {
-      acc = (r) => <StatusBadge status={r.status} />;
+    } else     if (accessor === "status") {
+      acc = (r) => (
+        <div className="flex flex-col gap-1">
+          <StatusBadge status={r.status} />
+          {r.pendingApprovalReason && r.status === "PENDING_APPROVAL" && (
+            <span className="inline-flex items-center gap-1 text-xs rounded bg-amber-500/10 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 font-medium">
+              <Icons.AlertTriangle className="h-3 w-3 shrink-0" />
+              Credit limit exceeded
+            </span>
+          )}
+        </div>
+      );
     } else if (accessor === "number") {
       acc = (r) => <span className="font-medium">{r.number}</span>;
     }

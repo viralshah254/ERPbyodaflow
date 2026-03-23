@@ -2,6 +2,13 @@
  * Mock data for /manufacturing/subcontracting — external work centers, subcontract orders, WIP.
  */
 
+export interface ProcessingFeeRate {
+  serviceType: "FILLETING" | "GUTTING";
+  species?: "TILAPIA" | "NILE_PERCH";
+  ratePerKg: number;
+  currency: string;
+}
+
 export interface ExternalWorkCenterRow {
   id: string;
   code: string;
@@ -9,12 +16,14 @@ export interface ExternalWorkCenterRow {
   type: "FACTORY" | "GROUP";
   address?: string;
   isActive: boolean;
+  feeRates?: ProcessingFeeRate[];
 }
 
 export interface SubcontractOrderLineRow {
   id: string;
   orderId: string;
   sku: string;
+  productId?: string;
   productName: string;
   type: "INPUT" | "OUTPUT_PRIMARY" | "OUTPUT_SECONDARY" | "WASTE";
   quantity: number;
@@ -28,8 +37,17 @@ export interface SubcontractOrderRow {
   number: string;
   workCenterId: string;
   workCenterName: string;
+  workCenterType?: "FACTORY" | "GROUP" | null;
   bomId: string | null;
   bomName: string | null;
+  /** Linked Purchase Order */
+  purchaseOrderId?: string | null;
+  /** Linked GRN (Goods Receipt Note) */
+  grnId?: string | null;
+  /** Fish species being processed */
+  species?: "TILAPIA" | "NILE_PERCH" | null;
+  /** Processing operation type */
+  processType?: "FILLETING" | "GUTTING" | null;
   status: "SENT" | "WIP" | "RECEIVED";
   sentAt: string | null;
   receivedAt: string | null;

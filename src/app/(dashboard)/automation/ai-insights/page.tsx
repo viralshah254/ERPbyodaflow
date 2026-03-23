@@ -4,10 +4,12 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { CopilotActionCards } from "@/components/copilot/CopilotActionCards";
 import { AnomalyDetection } from "@/components/ai/anomaly-detection";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export default function AIInsightsPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   return (
     <PageShell>
       <PageHeader
@@ -23,7 +25,7 @@ export default function AIInsightsPage() {
         }
       />
       <div className="p-6 space-y-6">
-        <CopilotActionCards />
+        {copilotEnabled ? <CopilotActionCards /> : null}
         <AnomalyDetection />
       </div>
     </PageShell>

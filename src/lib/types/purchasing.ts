@@ -10,6 +10,7 @@ export type PurchasingDocRow = {
   poRef?: string;
   warehouse?: string;
   hasLandedCost?: boolean;
+  processedWeightKg?: number;
 };
 
 export type GrnLineRow = {
@@ -30,6 +31,7 @@ export type GrnDetailRow = PurchasingDocRow & {
   totalAmount?: number;
   processingConfirmed?: boolean;
   lines: GrnLineRow[];
+  linkedBill?: { id: string; number: string; status: string } | null;
 };
 
 export type PurchaseOrderDetailRow = PurchasingDocRow & {

@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { fetchProjectCostingLinksApi, fetchProjectsApi } from "@/lib/api/projects";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -19,6 +20,7 @@ const LINKS = [
 ];
 
 export default function ProjectsOverviewPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [projects, setProjects] = React.useState<Awaited<ReturnType<typeof fetchProjectsApi>>>([]);
   const [totalCost, setTotalCost] = React.useState(0);
@@ -65,10 +67,12 @@ export default function ProjectsOverviewPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" onClick={() => openWithPrompt("Summarize project burn vs budget. Explain cost centers vs projects.")}>
-            <Icons.Sparkles className="mr-2 h-4 w-4" />
-            Ask Copilot
-          </Button>
+          copilotEnabled ? (
+            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Summarize project burn vs budget. Explain cost centers vs projects.")}>
+              <Icons.Sparkles className="mr-2 h-4 w-4" />
+              Ask Copilot
+            </Button>
+          ) : undefined
         }
       />
       <div className="p-6 space-y-6">

@@ -19,7 +19,13 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { exportTransfersCsv, fetchTransfers, updateTransferStatus, type TransferRow, type TransferStatus } from "@/lib/api/warehouse-transfers";
+import { fetchWarehouseOptions } from "@/lib/api/lookups";
+import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductUomsApi } from "@/lib/api/uom";
+import type { ProductRow } from "@/lib/types/masters";
+import type { UomDefinition } from "@/lib/products/types";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -49,15 +55,25 @@ export default function WarehouseTransfersPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [savingTransfer, setSavingTransfer] = React.useState(false);
 
-  // Create transfer form state (simple header + single line)
+  // Lookup data for dropdowns
+  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; label: string }>>([]);
+  const [products, setProducts] = React.useState<ProductRow[]>([]);
+  const [uoms, setUoms] = React.useState<UomDefinition[]>([]);
+
+  // Create transfer form state
   const [date, setDate] = React.useState("");
-  const [fromWarehouse, setFromWarehouse] = React.useState("");
-  const [toWarehouse, setToWarehouse] = React.useState("");
+  const [fromWarehouseId, setFromWarehouseId] = React.useState("");
+  const [toWarehouseId, setToWarehouseId] = React.useState("");
   const [reference, setReference] = React.useState("");
-  const [lineSku, setLineSku] = React.useState("");
-  const [lineProductName, setLineProductName] = React.useState("");
+  const [lineProductId, setLineProductId] = React.useState("");
   const [lineQty, setLineQty] = React.useState("");
-  const [lineUnit, setLineUnit] = React.useState("pcs");
+  const [lineUnit, setLineUnit] = React.useState("");
+
+  // Derived from selected product
+  const selectedProduct = React.useMemo(
+    () => products.find((p) => p.id === lineProductId) ?? null,
+    [products, lineProductId]
+  );
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -77,7 +93,20 @@ export default function WarehouseTransfersPage() {
     load();
   }, [load]);
 
-  const filtered = allRows; // filtering handled in fetchTransfers for now
+  React.useEffect(() => {
+    void fetchWarehouseOptions().then(setWarehouses).catch(() => setWarehouses([]));
+    void fetchProductsApi({ status: "ACTIVE" }).then(setProducts).catch(() => setProducts([]));
+    void fetchProductUomsApi().then(setUoms).catch(() => setUoms([]));
+  }, []);
+
+  // When product changes, auto-fill unit from product's base UOM
+  React.useEffect(() => {
+    if (selectedProduct?.baseUom) {
+      setLineUnit(selectedProduct.baseUom);
+    }
+  }, [selectedProduct]);
+
+  const filtered = allRows;
 
   const columns = React.useMemo(
     () => [
@@ -128,9 +157,23 @@ export default function WarehouseTransfersPage() {
     }
   };
 
+  const resetForm = () => {
+    setDate("");
+    setFromWarehouseId("");
+    setToWarehouseId("");
+    setReference("");
+    setLineProductId("");
+    setLineQty("");
+    setLineUnit("");
+  };
+
   const handleCreateTransfer = async () => {
-    if (!date || !fromWarehouse.trim() || !toWarehouse.trim() || !lineSku.trim() || !lineQty) {
-      toast.error("Date, from, to, SKU and quantity are required.");
+    if (!date || !fromWarehouseId || !toWarehouseId || !lineProductId || !lineQty) {
+      toast.error("Date, from, to, product and quantity are required.");
+      return;
+    }
+    if (fromWarehouseId === toWarehouseId) {
+      toast.error("From and To warehouse must be different.");
       return;
     }
     const qty = Number(lineQty);
@@ -143,29 +186,22 @@ export default function WarehouseTransfersPage() {
       const res = await import("@/lib/api/warehouse-transfers").then((m) =>
         m.createTransfer({
           date,
-          fromWarehouseId: fromWarehouse.trim(),
-          toWarehouseId: toWarehouse.trim(),
+          fromWarehouseId,
+          toWarehouseId,
           reference: reference.trim() || undefined,
           lines: [
             {
-              sku: lineSku.trim(),
-              productName: lineProductName.trim() || undefined,
+              sku: selectedProduct?.sku ?? lineProductId,
+              productName: selectedProduct?.name,
               quantity: qty,
-              unit: lineUnit,
+              unit: lineUnit || selectedProduct?.unit || "pcs",
             },
           ],
         })
       );
       toast.success("Transfer created.");
       setCreateOpen(false);
-      setDate("");
-      setFromWarehouse("");
-      setToWarehouse("");
-      setReference("");
-      setLineSku("");
-      setLineProductName("");
-      setLineQty("");
-      setLineUnit("pcs");
+      resetForm();
       await load();
       router.push(`/warehouse/transfers/${res.id}`);
     } catch (e) {
@@ -189,7 +225,7 @@ export default function WarehouseTransfersPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain inter-warehouse transfers and status lifecycle." label="Explain transfers" />
-            <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+            <Sheet open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
               <SheetTrigger asChild>
                 <Button size="sm" data-tour-step="create-button">
                   <Icons.Plus className="mr-2 h-4 w-4" />
@@ -199,7 +235,7 @@ export default function WarehouseTransfersPage() {
               <SheetContent side="right" className="w-full sm:max-w-md">
                 <SheetHeader>
                   <SheetTitle>Create transfer</SheetTitle>
-                  <SheetDescription>Move stock between warehouses — WH-Main, WH-East, etc.</SheetDescription>
+                  <SheetDescription>Move stock between two warehouses.</SheetDescription>
                 </SheetHeader>
                 <div className="mt-6 space-y-4">
                   <div className="space-y-2">
@@ -212,22 +248,36 @@ export default function WarehouseTransfersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="fromWarehouse">From warehouse</Label>
-                    <Input
-                      id="fromWarehouse"
-                      placeholder="e.g. WH-Main"
-                      value={fromWarehouse}
-                      onChange={(e) => setFromWarehouse(e.target.value)}
-                    />
+                    <Label>From warehouse</Label>
+                    <Select value={fromWarehouseId} onValueChange={setFromWarehouseId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select warehouse" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehouses.map((wh) => (
+                          <SelectItem key={wh.id} value={wh.id}>
+                            {wh.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="toWarehouse">To warehouse</Label>
-                    <Input
-                      id="toWarehouse"
-                      placeholder="e.g. WH-East"
-                      value={toWarehouse}
-                      onChange={(e) => setToWarehouse(e.target.value)}
-                    />
+                    <Label>To warehouse</Label>
+                    <Select value={toWarehouseId} onValueChange={setToWarehouseId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select warehouse" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehouses
+                          .filter((wh) => wh.id !== fromWarehouseId)
+                          .map((wh) => (
+                            <SelectItem key={wh.id} value={wh.id}>
+                              {wh.label}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="reference">Reference (optional)</Label>
@@ -239,20 +289,22 @@ export default function WarehouseTransfersPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Line — SKU</Label>
-                    <Input
-                      placeholder="SKU-001"
-                      value={lineSku}
-                      onChange={(e) => setLineSku(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Product name (optional)</Label>
-                    <Input
-                      placeholder="Product name"
-                      value={lineProductName}
-                      onChange={(e) => setLineProductName(e.target.value)}
-                    />
+                    <Label>Product / SKU</Label>
+                    <Select value={lineProductId} onValueChange={setLineProductId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select product" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.sku ? `${p.sku} — ${p.name}` : p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedProduct && (
+                      <p className="text-xs text-muted-foreground">{selectedProduct.name}</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -267,13 +319,24 @@ export default function WarehouseTransfersPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Unit</Label>
-                      <Input
-                        value={lineUnit}
-                        onChange={(e) => setLineUnit(e.target.value)}
-                      />
+                      <Select value={lineUnit} onValueChange={setLineUnit}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {uoms.map((u) => (
+                            <SelectItem key={u.id} value={u.code}>
+                              {u.code}
+                            </SelectItem>
+                          ))}
+                          {uoms.length === 0 && (
+                            <SelectItem value="pcs">pcs</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                  <Button onClick={handleCreateTransfer} disabled={savingTransfer}>
+                  <Button onClick={handleCreateTransfer} disabled={savingTransfer} className="w-full">
                     {savingTransfer ? "Creating…" : "Create transfer"}
                   </Button>
                 </div>

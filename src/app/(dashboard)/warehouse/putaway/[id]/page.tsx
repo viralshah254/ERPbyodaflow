@@ -27,19 +27,31 @@ export default function PutawayDetailPage() {
     try {
       const payload = await fetchPutawayTask(id);
       setTask(payload);
+      let resolvedLocations: Array<{ id: string; code?: string; name: string }> = [];
       if (payload?.warehouseId) {
         const nextLocations = await fetchWarehouseLocations(payload.warehouseId);
-        setLocations(nextLocations.map((location) => ({ id: location.id, code: location.code, name: location.name })));
+        resolvedLocations = nextLocations.map((location) => ({
+          id: location.id,
+          code: location.code,
+          name: location.name,
+        }));
+        setLocations(resolvedLocations);
       }
+      // Build a map from binCode → location.id so pre-existing bin assignments show correctly in the Select
+      const codeToId = new Map(resolvedLocations.map((loc) => [loc.code ?? "", loc.id]));
       setAllocations(
         Object.fromEntries(
-          (payload?.lines ?? []).map((line) => [
-            line.id,
-            {
-              putawayQty: String(line.putawayQty ?? 0),
-              locationId: line.allocatedBins?.[0]?.binCode ?? "",
-            },
-          ])
+          (payload?.lines ?? []).map((line) => {
+            const binCode = line.allocatedBins?.[0]?.binCode ?? "";
+            const resolvedId = codeToId.get(binCode) ?? binCode;
+            return [
+              line.id,
+              {
+                putawayQty: String(line.putawayQty ?? 0),
+                locationId: resolvedId,
+              },
+            ];
+          })
         )
       );
     } catch (error) {
@@ -55,8 +67,6 @@ export default function PutawayDetailPage() {
 
   if (!task && loading) return <PageShell><PageHeader title="Loading putaway..." /></PageShell>;
   if (!task) return <PageShell><PageHeader title="Putaway task not found" /></PageShell>;
-
-  const locationIdByCode = new Map(locations.map((location) => [location.code ?? location.id, location.id]));
 
   return (
     <PageShell>
@@ -153,9 +163,7 @@ export default function PutawayDetailPage() {
                 task.lines.map((line) => ({
                   lineId: line.id,
                   putawayQty: Number(allocations[line.id]?.putawayQty ?? line.putawayQty ?? 0),
-                  toLocationId:
-                    allocations[line.id]?.locationId ||
-                    locationIdByCode.get(line.allocatedBins?.[0]?.binCode ?? ""),
+                  toLocationId: allocations[line.id]?.locationId || undefined,
                 }))
               );
               toast.success("Putaway allocation saved.");

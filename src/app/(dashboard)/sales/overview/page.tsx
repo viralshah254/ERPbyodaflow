@@ -12,6 +12,7 @@ import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
 import type { SalesDocRow } from "@/lib/types/sales";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { isApiConfigured } from "@/lib/api/client";
+import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 
 const NAV_LINKS = [

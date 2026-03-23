@@ -46,6 +46,20 @@ export async function fetchAuditLogApi(limit = 200): Promise<AuditLogEntry[]> {
   return (payload.entries ?? []).map(mapAuditEntry);
 }
 
+export async function fetchAuditLogs(params: { sourceType: string; sourceId: string; limit?: number }): Promise<AuditLogEntry[]> {
+  requireLiveApi("Audit logs by entity");
+  const query = new URLSearchParams();
+  query.set("entityType", params.sourceType);
+  query.set("entityId", params.sourceId);
+  if (params.limit) query.set("limit", String(params.limit));
+  try {
+    const payload = await apiRequest<{ entries: BackendAuditLogEntry[] }>(`/api/audit/entity`, { params: Object.fromEntries(query) });
+    return (payload.entries ?? []).map(mapAuditEntry);
+  } catch {
+    return [];
+  }
+}
+
 export async function exportAuditLogApi(): Promise<void> {
   requireLiveApi("Audit log export");
   await downloadFile("/api/audit/export?format=csv", "audit-export.csv", () => undefined);

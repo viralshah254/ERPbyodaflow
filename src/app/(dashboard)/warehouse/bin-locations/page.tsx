@@ -25,7 +25,13 @@ export default function BinLocationsPage() {
   const [stock, setStock] = React.useState<WarehouseLocationStockRow[]>([]);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<WarehouseLocationRow | null>(null);
-  const [form, setForm] = React.useState({ code: "", name: "", type: "BIN" as "BIN" | "ZONE" | "RACK" });
+  const [form, setForm] = React.useState({
+    code: "",
+    name: "",
+    type: "BIN" as "BIN" | "ZONE" | "RACK",
+    status: "ACTIVE" as "ACTIVE" | "INACTIVE",
+    parentId: "",
+  });
 
   const refresh = React.useCallback(async () => {
     if (!warehouseId) return;
@@ -95,7 +101,7 @@ export default function BinLocationsPage() {
         actions={
           <Button size="sm" onClick={() => {
             setEditing(null);
-            setForm({ code: "", name: "", type: "BIN" });
+            setForm({ code: "", name: "", type: "BIN", status: "ACTIVE", parentId: "" });
             setDrawerOpen(true);
           }}>
             <Icons.Plus className="mr-2 h-4 w-4" />
@@ -129,7 +135,13 @@ export default function BinLocationsPage() {
               columns={columns}
               onRowClick={(row) => {
                 setEditing(row);
-                setForm({ code: row.code ?? "", name: row.name, type: row.type });
+                setForm({
+                  code: row.code ?? "",
+                  name: row.name,
+                  type: row.type,
+                  status: (row.status as "ACTIVE" | "INACTIVE") ?? "ACTIVE",
+                  parentId: row.parentId ?? "",
+                });
                 setDrawerOpen(true);
               }}
               emptyMessage={!warehouseId ? "Select a warehouse." : "No locations found."}
@@ -142,27 +154,80 @@ export default function BinLocationsPage() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>{editing ? "Edit location" : "Add location"}</SheetTitle>
-            <SheetDescription>Persist warehouse bin and zone metadata to the backend.</SheetDescription>
+            <SheetDescription>Persist warehouse bin, rack, and zone metadata to the backend.</SheetDescription>
           </SheetHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))} />
+              <Input value={form.code} onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))} placeholder="e.g. A1-01" />
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} />
+              <Input value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} placeholder="e.g. Aisle 1 Bin 01" />
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={form.type} onValueChange={(value) => setForm((current) => ({ ...current, type: value as "BIN" | "ZONE" | "RACK" }))}>
+              <Select
+                value={form.type}
+                onValueChange={(value) =>
+                  setForm((current) => ({ ...current, type: value as "BIN" | "ZONE" | "RACK", parentId: "" }))
+                }
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="BIN">BIN</SelectItem>
-                  <SelectItem value="ZONE">ZONE</SelectItem>
-                  <SelectItem value="RACK">RACK</SelectItem>
+                  <SelectItem value="ZONE">Zone</SelectItem>
+                  <SelectItem value="RACK">Rack</SelectItem>
+                  <SelectItem value="BIN">Bin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.type !== "ZONE" && (
+              <div className="space-y-2">
+                <Label>Parent location (optional)</Label>
+                <Select
+                  value={form.parentId || "__none__"}
+                  onValueChange={(value) =>
+                    setForm((current) => ({ ...current, parentId: value === "__none__" ? "" : value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None —</SelectItem>
+                    {rows
+                      .filter((row) => {
+                        if (editing && row.id === editing.id) return false;
+                        if (form.type === "RACK") return row.type === "ZONE";
+                        if (form.type === "BIN") return row.type === "ZONE" || row.type === "RACK";
+                        return false;
+                      })
+                      .map((row) => (
+                        <SelectItem key={row.id} value={row.id}>
+                          {row.code ? `${row.code} — ${row.name}` : row.name}
+                          <span className="ml-1 text-muted-foreground text-xs">({row.type})</span>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={form.status}
+                onValueChange={(value) =>
+                  setForm((current) => ({ ...current, status: value as "ACTIVE" | "INACTIVE" }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -178,15 +243,18 @@ export default function BinLocationsPage() {
                 try {
                   if (editing) {
                     await updateWarehouseLocation(warehouseId, editing.id, {
-                      code: form.code,
+                      code: form.code || undefined,
                       name: form.name,
                       type: form.type,
+                      status: form.status,
+                      parentId: form.parentId || undefined,
                     });
                   } else {
                     await createWarehouseLocation(warehouseId, {
-                      code: form.code,
+                      code: form.code || undefined,
                       name: form.name,
                       type: form.type,
+                      parentId: form.parentId || undefined,
                     });
                   }
                   toast.success(`Location ${editing ? "updated" : "created"}.`);

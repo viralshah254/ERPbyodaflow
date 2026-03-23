@@ -10,6 +10,7 @@ import { fetchAssetsApi } from "@/lib/api/assets";
 import { fetchAssetDisposalsApi } from "@/lib/api/asset-disposals";
 import { fetchDepreciationRunsApi } from "@/lib/api/assets-lifecycle";
 import { useCopilotStore } from "@/stores/copilot-store";
+import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ const LINKS = [
 ];
 
 export default function AssetsOverviewPage() {
+  const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [activeAssets, setActiveAssets] = React.useState(0);
   const [totalCost, setTotalCost] = React.useState(0);
@@ -65,10 +67,12 @@ export default function AssetsOverviewPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain fixed assets, depreciation methods, and disposal accounting.")}>
-            <Icons.Sparkles className="mr-2 h-4 w-4" />
-            Ask Copilot
-          </Button>
+          copilotEnabled ? (
+            <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain fixed assets, depreciation methods, and disposal accounting.")}>
+              <Icons.Sparkles className="mr-2 h-4 w-4" />
+              Ask Copilot
+            </Button>
+          ) : undefined
         }
       />
       <div className="p-6 space-y-6">

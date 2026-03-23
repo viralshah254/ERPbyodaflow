@@ -770,7 +770,7 @@ export const TUTORIAL_TOURS: TourDef[] = [
         element: "[data-tour-step=sourcing-step-cards]",
         title: "Step cards",
         description:
-          "Each card is a journey step with CTAs (e.g. open POs, receiving, landed cost, finance review). Work active steps first; use Finance review when procurement and treasury must align.",
+          "Each card is a journey step with CTAs (e.g. open POs, receiving, landed cost, processing yield, finance review). Work active steps first and use these links as the single operational flow.",
       },
     ],
   },

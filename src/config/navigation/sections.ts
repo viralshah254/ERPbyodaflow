@@ -329,7 +329,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "automation-schedules", label: "Scheduled Jobs", href: "/automation/schedules", icon: "Calendar", moduleKey: "automation", requiresPermissions: ["automation.schedules.read"] },
       { key: "automation-workflows", label: "Approvals Workflows", href: "/automation/workflows", icon: "CheckCircle2", moduleKey: "automation", requiresPermissions: ["automation.workflows.read"] },
       { key: "automation-integrations", label: "Integrations", href: "/automation/integrations", icon: "Plug", moduleKey: "automation", requiresPermissions: ["automation.integrations.read"] },
-      { key: "automation-ai-insights", label: "AI Insights", href: "/automation/ai-insights", icon: "Brain", moduleKey: "automation", requiresPermissions: ["automation.ai.read"], badge: { type: "text", value: "NEW" } },
+      { key: "automation-ai-insights", label: "AI Insights", href: "/automation/ai-insights", icon: "Brain", moduleKey: "automation", requiresPermissions: ["automation.ai.read"], requiresFlags: ["copilot"], badge: { type: "text", value: "NEW" } },
       { key: "work-queue", label: "Work queue", href: "/work/queue", icon: "ListTodo", moduleKey: "automation", requiresPermissions: ["automation.read"] },
     ],
   },
