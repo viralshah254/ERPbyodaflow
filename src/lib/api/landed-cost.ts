@@ -54,6 +54,17 @@ export async function deleteLandedCostTemplate(id: string): Promise<void> {
   });
 }
 
+export async function reassignLandedCostTemplate(
+  fromTemplateId: string,
+  toTemplateId: string
+): Promise<{ fromTemplateId: string; toTemplateId: string; allocationsUpdated: number }> {
+  requireLiveApi("Reassign landed cost template");
+  return apiRequest<{ fromTemplateId: string; toTemplateId: string; allocationsUpdated: number }>(
+    `/api/inventory/landed-cost/templates/${encodeURIComponent(fromTemplateId)}/reassign`,
+    { method: "POST", body: { toTemplateId } }
+  );
+}
+
 export async function fetchLandedCostSources(params?: {
   type?: "grn" | "bill";
   dateFrom?: string;
