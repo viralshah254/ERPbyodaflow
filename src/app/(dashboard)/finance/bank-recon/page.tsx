@@ -40,8 +40,10 @@ import type { PartyLookupOption } from "@/lib/api/parties";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
 export default function BankReconPage() {
+  const baseCurrency = useBaseCurrency();
   const router = useRouter();
   const [selectedStmt, setSelectedStmt] = React.useState<string | null>(null);
   const [selectedSys, setSelectedSys] = React.useState<string | null>(null);
@@ -299,6 +301,7 @@ export default function BankReconPage() {
                   <StatementRow
                     key={line.id}
                     line={line}
+                    baseCurrency={baseCurrency}
                     selected={selectedStmt === line.id}
                     onSelect={() =>
                       setSelectedStmt((prev) =>
@@ -391,7 +394,7 @@ export default function BankReconPage() {
               <div className="rounded border p-3 text-sm">
                 <p className="font-medium">{pendingLine.description}</p>
                 <p className="text-muted-foreground">
-                  {pendingLine.date} · {pendingLine.amount.toLocaleString()} {pendingLine.currency ?? "KES"}
+                  {pendingLine.date} · {pendingLine.amount.toLocaleString()} {pendingLine.currency ?? baseCurrency}
                 </p>
               </div>
             ) : null}
@@ -431,7 +434,7 @@ export default function BankReconPage() {
                   openItems.map((item) => (
                     <div key={item.id} className="flex items-center justify-between gap-2 p-2 text-sm">
                       <span className="truncate">
-                        {item.number} · {item.outstanding.toLocaleString()} {item.currency ?? "KES"}
+                        {item.number} · {item.outstanding.toLocaleString()} {item.currency ?? baseCurrency}
                       </span>
                       <Input
                         type="number"
@@ -465,11 +468,13 @@ export default function BankReconPage() {
 
 function StatementRow({
   line,
+  baseCurrency,
   selected,
   onSelect,
   onCreatePayment,
 }: {
   line: BankStatementLine;
+  baseCurrency: string;
   selected: boolean;
   onSelect: () => void;
   onCreatePayment: () => void;
@@ -489,7 +494,7 @@ function StatementRow({
             <p className="font-medium text-sm">{line.description}</p>
             <p className="text-xs text-muted-foreground">
               {line.date}
-              {line.currency && line.currency !== "KES" && (
+              {line.currency && line.currency !== baseCurrency && (
                 <span className="ml-1">· {line.currency}</span>
               )}
             </p>

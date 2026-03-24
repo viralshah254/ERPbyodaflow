@@ -7,11 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchApPaymentsApi, fetchOpenBillsApi } from "@/lib/api/payments";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function AccountsPayablePage() {
+  const baseCurrency = useBaseCurrency();
   const [bills, setBills] = React.useState<Awaited<ReturnType<typeof fetchOpenBillsApi>>>([]);
   const [payments, setPayments] = React.useState<Awaited<ReturnType<typeof fetchApPaymentsApi>>>([]);
 
@@ -48,10 +51,10 @@ export default function AccountsPayablePage() {
             <CardContent className="text-2xl font-semibold">
               {formatMoney(
                 bills.reduce((sum, item) => {
-                  const rate = item.currency && item.currency !== "KES" ? (item.exchangeRate ?? 1) : 1;
+                  const rate = item.currency && item.currency !== baseCurrency ? (item.exchangeRate ?? 1) : 1;
                   return sum + item.outstanding * rate;
                 }, 0),
-                "KES"
+                baseCurrency
               )}
             </CardContent>
           </Card>
@@ -59,6 +62,29 @@ export default function AccountsPayablePage() {
             <CardHeader><CardTitle className="text-sm">Payments</CardTitle></CardHeader>
             <CardContent className="text-2xl font-semibold">{payments.length}</CardContent>
           </Card>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "AP Bills", description: "View and manage supplier bills", href: "/ap/bills", icon: Icons.FileText },
+            { label: "3-way Match", description: "Reconcile PO, GRN, and Bill", href: "/ap/three-way-match", icon: Icons.GitCompare },
+            { label: "AP Payments", description: "Record and track payments", href: "/ap/payments", icon: Icons.CreditCard },
+            { label: "Suppliers", description: "Manage supplier master data", href: "/ap/suppliers", icon: Icons.Users },
+          ].map((item) => (
+            <Link key={item.href} href={item.href} className="group">
+              <Card className="h-full transition-colors hover:border-primary/50 hover:bg-muted/40">
+                <CardContent className="flex items-start gap-3 pt-4 pb-4">
+                  <div className="rounded-md bg-muted p-2 group-hover:bg-primary/10 transition-colors">
+                    <item.icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium leading-tight">{item.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
         </div>
         <Card>
           <CardHeader>
@@ -75,9 +101,7 @@ export default function AccountsPayablePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bills.map((item) => {
-                  const isFx = item.currency && item.currency !== "KES" && item.exchangeRate;
-                  return (
+                {bills.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
                       <Link href={`/docs/bill/${item.id}`} className="hover:underline font-medium">
@@ -87,17 +111,16 @@ export default function AccountsPayablePage() {
                     <TableCell>{item.supplierName}</TableCell>
                     <TableCell>{item.dueDate ?? "—"}</TableCell>
                     <TableCell className="text-right">
-                      <div>{formatMoney(item.outstanding, item.currency ?? "KES")}</div>
-                      {isFx && (
-                        <div className="text-xs text-muted-foreground">
-                          {formatMoney(item.outstanding * item.exchangeRate!, "KES")}
-                          <span className="ml-1 opacity-70">@ {item.exchangeRate}</span>
-                        </div>
-                      )}
+                      <DualCurrencyAmount
+                        amount={item.outstanding}
+                        currency={item.currency ?? baseCurrency}
+                        exchangeRate={item.exchangeRate}
+                        baseCurrency={baseCurrency}
+                        align="right"
+                      />
                     </TableCell>
                   </TableRow>
-                  );
-                })}
+                ))}
               </TableBody>
             </Table>
           </CardContent>

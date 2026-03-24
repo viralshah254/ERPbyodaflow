@@ -50,6 +50,7 @@ type BackendOpenInvoice = {
   dueDate?: string;
   status: string;
   currency?: string;
+  exchangeRate?: number;
 };
 
 type BackendOpenBill = {
@@ -208,6 +209,7 @@ export async function fetchOpenInvoicesApi(customerId?: string): Promise<OpenInv
     dueDate: item.dueDate ?? item.date,
     status: item.status,
     currency: item.currency,
+    exchangeRate: item.exchangeRate,
   }));
 }
 

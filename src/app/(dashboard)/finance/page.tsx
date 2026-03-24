@@ -6,12 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageLayout } from "@/components/layout/page-layout";
 import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { fetchFinanceOverviewApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function FinanceDashboardPage() {
+  const baseCurrency = useBaseCurrency();
   const [overview, setOverview] = React.useState<Awaited<ReturnType<typeof fetchFinanceOverviewApi>> | null>(null);
   const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
 
@@ -94,7 +97,7 @@ export default function FinanceDashboardPage() {
               <Icons.Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(summary?.cashBalance ?? 0, "KES")}</div>
+              <div className="text-2xl font-bold">{formatMoney(summary?.cashBalance ?? 0, baseCurrency)}</div>
               <p className="text-xs text-muted-foreground">Across {summary?.bankAccountCount ?? 0} bank account(s)</p>
             </CardContent>
           </Card>
@@ -105,7 +108,7 @@ export default function FinanceDashboardPage() {
               <Icons.ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(summary?.arOutstanding ?? 0, "KES")}</div>
+              <div className="text-2xl font-bold">{formatMoney(summary?.arOutstanding ?? 0, baseCurrency)}</div>
               <p className="text-xs text-muted-foreground">{overview?.arOutstandingItems.length ?? 0} open item(s)</p>
             </CardContent>
           </Card>
@@ -116,7 +119,7 @@ export default function FinanceDashboardPage() {
               <Icons.ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(summary?.apOutstanding ?? 0, "KES")}</div>
+              <div className="text-2xl font-bold">{formatMoney(summary?.apOutstanding ?? 0, baseCurrency)}</div>
               <p className="text-xs text-muted-foreground">{overview?.apOutstandingItems.length ?? 0} supplier item(s)</p>
             </CardContent>
           </Card>
@@ -127,7 +130,7 @@ export default function FinanceDashboardPage() {
               <Icons.TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(summary?.netRevenue ?? 0, "KES")}</div>
+              <div className="text-2xl font-bold">{formatMoney(summary?.netRevenue ?? 0, baseCurrency)}</div>
               <p className="text-xs text-muted-foreground">Posted invoice revenue</p>
             </CardContent>
           </Card>
@@ -148,7 +151,14 @@ export default function FinanceDashboardPage() {
                       <p className="text-sm text-muted-foreground">Due {item.dueDate ?? "—"}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">{formatMoney(item.outstanding, "KES")}</p>
+                      <DualCurrencyAmount
+                        amount={item.outstanding}
+                        currency={item.currency ?? baseCurrency}
+                        exchangeRate={item.exchangeRate}
+                        baseCurrency={baseCurrency}
+                        align="right"
+                        size="md"
+                      />
                     </div>
                   </div>
                 ))}
@@ -174,7 +184,14 @@ export default function FinanceDashboardPage() {
                       <p className="text-sm text-muted-foreground">Due {item.dueDate ?? "—"}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">{formatMoney(item.outstanding, "KES")}</p>
+                      <DualCurrencyAmount
+                        amount={item.outstanding}
+                        currency={item.currency ?? baseCurrency}
+                        exchangeRate={item.exchangeRate}
+                        baseCurrency={baseCurrency}
+                        align="right"
+                        size="md"
+                      />
                     </div>
                   </div>
                 ))}
@@ -202,7 +219,7 @@ export default function FinanceDashboardPage() {
                     <p className="text-sm text-muted-foreground">{item.date}</p>
                   </div>
                   <div className="text-right">
-                      <p className="font-semibold">{formatMoney(item.total, "KES")}</p>
+                      <p className="font-semibold">{formatMoney(item.total, baseCurrency)}</p>
                       <p className="text-xs text-muted-foreground">{item.status}</p>
                       <Button
                         variant="ghost"

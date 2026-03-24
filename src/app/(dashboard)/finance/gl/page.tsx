@@ -23,10 +23,12 @@ import {
 import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { fetchFinanceAccountsApi, fetchFinancePeriodsApi, fetchLedgerEntriesApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function GeneralLedgerPage() {
+  const baseCurrency = useBaseCurrency();
   const [search, setSearch] = React.useState("");
   const [accountId, setAccountId] = React.useState("");
   const [periodId, setPeriodId] = React.useState("");
@@ -130,9 +132,9 @@ export default function GeneralLedgerPage() {
                       {entry.documentNumber}
                     </Button>
                   </TableCell>
-                  <TableCell className="text-right">{entry.debit ? formatMoney(entry.debit, "KES") : "—"}</TableCell>
-                  <TableCell className="text-right">{entry.credit ? formatMoney(entry.credit, "KES") : "—"}</TableCell>
-                  <TableCell className="text-right">{formatMoney(entry.balance, "KES")}</TableCell>
+                  <TableCell className="text-right">{entry.debit ? formatMoney(entry.debit, baseCurrency) : "—"}</TableCell>
+                  <TableCell className="text-right">{entry.credit ? formatMoney(entry.credit, baseCurrency) : "—"}</TableCell>
+                  <TableCell className="text-right">{formatMoney(entry.balance, baseCurrency)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

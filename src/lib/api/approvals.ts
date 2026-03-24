@@ -71,3 +71,9 @@ export async function rejectApprovalApi(id: string, comment?: string): Promise<v
     body: comment != null ? { comment } : {},
   });
 }
+
+export async function fetchApprovalById(id: string): Promise<ApprovalItem> {
+  requireLiveApi("Fetch approval by ID");
+  const item = await apiRequest<BackendApprovalItem>(`/api/approvals/${encodeURIComponent(id)}`);
+  return mapApprovalItem(item);
+}

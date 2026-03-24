@@ -17,7 +17,7 @@ import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocati
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
-import { fetchGRNById, postGRN, patchGRNLine, confirmGRNProcessing, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow } from "@/lib/api/grn";
+import { fetchGRNById, postGRN, patchGRNLine, confirmGRNProcessing, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow, type GrnPostError } from "@/lib/api/grn";
 import { Badge } from "@/components/ui/badge";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
@@ -241,8 +241,36 @@ export default function ReceiptDetailPage() {
                     await postGRN(grn.id);
                     setGrn(await fetchGRNById(grn.id));
                     toast.success("GRN posted.");
-                  } catch (e) {
-                    toast.error((e as Error)?.message ?? "Failed to post GRN.");
+                  } catch (raw) {
+                    const e = raw as GrnPostError;
+                    const msg = e.message ?? "Failed to post GRN.";
+                    if (e.code === "GRN_CONVERTED_TO_BILL" && e.billId) {
+                      toast.error(msg, {
+                        action: {
+                          label: `View bill ${e.billNumber ?? ""}`.trim(),
+                          onClick: () => { window.location.href = `/docs/bill/${e.billId}`; },
+                        },
+                        duration: 8000,
+                      });
+                    } else if (e.code === "GRN_MISSING_WEIGHT") {
+                      toast.error(msg, {
+                        description: "Enter received weight (kg) for each line below before posting.",
+                        duration: 8000,
+                      });
+                    } else if (e.code === "GRN_OPEN_VARIANCE") {
+                      const auditUrl = e.poId
+                        ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}`
+                        : "/purchasing/cash-weight-audit";
+                      toast.error(msg, {
+                        action: {
+                          label: "Go to cash-weight audit",
+                          onClick: () => { window.location.href = auditUrl; },
+                        },
+                        duration: 8000,
+                      });
+                    } else {
+                      toast.error(msg);
+                    }
                   } finally {
                     setPosting(false);
                   }
@@ -322,7 +350,48 @@ export default function ReceiptDetailPage() {
           />
         ) : null}
 
-        {/* "What's next" contextual guidance — shown after GRN is posted */}
+        {/* Contextual "what's next" guidance — visible for every status */}
+        {grn.status === "DRAFT" && (
+          <Card className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                  This GRN is a draft — post it to update inventory.
+                </span>
+                <Button
+                  size="sm"
+                  variant="default"
+                  disabled={posting}
+                  onClick={async () => {
+                    setPosting(true);
+                    try {
+                      await postGRN(id);
+                      toast.success("GRN posted.");
+                      setGrn(await fetchGRNById(id));
+                    } catch (raw) {
+                      const e = raw as GrnPostError;
+                      const msg = e.message ?? "Failed to post GRN.";
+                      if (e.code === "GRN_MISSING_WEIGHT") {
+                        toast.error(msg, { description: "Enter received weight (kg) for each line below before posting.", duration: 8000 });
+                      } else if (e.code === "GRN_OPEN_VARIANCE") {
+                        const auditUrl = e.poId ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}` : "/purchasing/cash-weight-audit";
+                        toast.error(msg, { action: { label: "Go to cash-weight audit", onClick: () => { window.location.href = auditUrl; } }, duration: 8000 });
+                      } else {
+                        toast.error(msg);
+                      }
+                    } finally {
+                      setPosting(false);
+                    }
+                  }}
+                >
+                  <Icons.Send className="mr-1.5 h-3.5 w-3.5" />
+                  {posting ? "Posting…" : "Post GRN"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {grn.status === "POSTED" && (
           <Card className="border-primary/30 bg-primary/5">
             <CardContent className="py-4">
@@ -348,9 +417,17 @@ export default function ReceiptDetailPage() {
                 </Button>
                 {hasCashWeightAudit && (
                   <Button size="sm" variant="outline" asChild>
-                    <Link href={`/purchasing/cash-weight-audit${grn.poRef ? `?poId=${grn.poRef}` : ""}`}>
+                    <Link href={`/purchasing/cash-weight-audit${grn.sourceDocumentId ? `?poId=${grn.sourceDocumentId}` : grn.poRef ? `?poId=${grn.poRef}` : ""}`}>
                       <Icons.BarChart2 className="mr-1.5 h-3.5 w-3.5" />
                       Run audit
+                    </Link>
+                  </Button>
+                )}
+                {!grn.linkedBill && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/docs/bill/new?grnId=${grn.id}`}>
+                      <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
+                      Create bill
                     </Link>
                   </Button>
                 )}
@@ -362,6 +439,58 @@ export default function ReceiptDetailPage() {
                     </Link>
                   </Button>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {grn.status === "RECEIVED" && (
+          <Card className="border-emerald-300/60 bg-emerald-50/60 dark:bg-emerald-950/20">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                  Goods fully received — create supplier bill and run 3-way match.
+                </span>
+                {!grn.linkedBill && (
+                  <Button size="sm" variant="default" asChild>
+                    <Link href={`/docs/bill/new?grnId=${grn.id}`}>
+                      <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
+                      Create bill
+                    </Link>
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/ap/three-way-match">
+                    <Icons.GitCompare className="mr-1.5 h-3.5 w-3.5" />
+                    3-way match
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {(grn.status === "CONVERTED" || grn.linkedBill) && grn.status !== "POSTED" && grn.status !== "RECEIVED" && (
+          <Card className="border-muted bg-muted/20">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold">
+                  Supplier bill has been created from this GRN.
+                </span>
+                {grn.linkedBill && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/docs/bill/${grn.linkedBill.id}`}>
+                      <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
+                      View bill {grn.linkedBill.number}
+                    </Link>
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/ap/payments">
+                    <Icons.CreditCard className="mr-1.5 h-3.5 w-3.5" />
+                    Record payment
+                  </Link>
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -562,11 +691,11 @@ export default function ReceiptDetailPage() {
                 { id: "po", label: "Purchase order approved", status: "completed", detail: grn.poRef ?? "PO linked" },
                 { id: "arrive", label: "Stock arrived at facility", status: "completed", timestamp: grn.date ? `${grn.date.slice(0, 10)}T08:00:00Z` : undefined },
                 { id: "verify", label: "Weight / QA verification", status: hasCashWeightAudit ? "current" : "completed", detail: hasCashWeightAudit ? "Compare paid vs received weight" : "Verification complete" },
-                { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED"].includes(grn.status) ? "completed" : "upcoming" },
+                { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "completed" : "upcoming" },
                 {
                   id: "landed",
                   label: "Landed costs allocated",
-                  status: landedAllocation ? "completed" : ["POSTED", "RECEIVED"].includes(grn.status) ? "current" : "upcoming",
+                  status: landedAllocation ? "completed" : ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "current" : "upcoming",
                   detail: landedAllocation
                     ? `KES ${(landedAllocation.totalLandedCostBase ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} total landed`
                     : "Allocate freight, duty, and other charges",
@@ -583,7 +712,7 @@ export default function ReceiptDetailPage() {
                 <ActivityPanel
                   auditEntries={[
                     { id: "a1", action: "GRN created", user: "Warehouse Clerk", timestamp: grn.date, detail: `${grn.number} for ${grn.supplier ?? grn.party ?? "—"}` },
-                    { id: "a2", action: ["POSTED", "RECEIVED"].includes(grn.status) ? "GRN posted" : "Awaiting posting", user: "System", timestamp: new Date().toISOString(), detail: `Warehouse ${grn.warehouse ?? "—"}` },
+                    { id: "a2", action: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "GRN posted" : "Awaiting posting", user: "System", timestamp: new Date().toISOString(), detail: `Warehouse ${grn.warehouse ?? "—"}` },
                     ...(grn.status === "RECEIVED"
                       ? [{ id: "a3", action: "Putaway confirmed", user: "Warehouse", timestamp: new Date().toISOString(), detail: "Receipt operationally closed" }]
                       : []),

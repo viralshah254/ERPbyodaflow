@@ -5,19 +5,26 @@ type BackendUom = {
   id: string;
   code: string;
   name: string;
+  category?: string;
+  decimals?: number;
+  isBase?: boolean;
+  baseUomCode?: string | null;
+  factorToBase?: number | null;
+  /** @deprecated kept for old backend compat */
   baseRatio?: number;
 };
 
 function mapUom(item: BackendUom): UomDefinition {
-  const baseRatio = item.baseRatio ?? 1;
+  const isBase = item.isBase ?? (!item.baseUomCode);
   return {
     id: item.id,
     code: item.code,
     name: item.name,
-    category: "count",
-    isBase: baseRatio === 1,
-    decimals: 0,
-    ...(baseRatio !== 1 && { factorToBase: baseRatio, baseUom: "EA" }),
+    category: (item.category as UomDefinition["category"]) ?? "count",
+    decimals: item.decimals ?? 0,
+    isBase: isBase || undefined,
+    baseUom: item.baseUomCode ?? undefined,
+    factorToBase: item.factorToBase ?? undefined,
   };
 }
 
@@ -34,29 +41,51 @@ export async function fetchProductUomsApi(): Promise<UomDefinition[]> {
   return (payload.items ?? []).map(mapUom);
 }
 
-export async function createUomApi(body: { code: string; name?: string; baseRatio?: number }): Promise<{ id: string }> {
+export async function createUomApi(body: {
+  code: string;
+  name?: string;
+  category?: string;
+  decimals?: number;
+  isBase?: boolean;
+  baseUomCode?: string;
+  factorToBase?: number;
+}): Promise<{ id: string }> {
   requireLiveApi("Create UOM");
   return apiRequest<{ id: string }>("/api/settings/uom", {
     method: "POST",
     body: {
       code: body.code.toUpperCase(),
       name: body.name ?? body.code,
-      baseRatio: body.baseRatio ?? 1,
+      category: body.category ?? "count",
+      decimals: body.decimals ?? 0,
+      isBase: body.isBase ?? true,
+      baseUomCode: body.baseUomCode,
+      factorToBase: body.factorToBase,
     },
   });
 }
 
 export async function updateUomApi(
   id: string,
-  body: Partial<{ code: string; name: string; baseRatio: number }>
+  body: Partial<{
+    name: string;
+    category: string;
+    decimals: number;
+    isBase: boolean;
+    baseUomCode: string;
+    factorToBase: number;
+  }>
 ): Promise<void> {
   requireLiveApi("Update UOM");
-  const patch: Record<string, unknown> = {};
-  if (body.code !== undefined) patch.code = body.code.toUpperCase();
-  if (body.name !== undefined) patch.name = body.name;
-  if (body.baseRatio !== undefined) patch.baseRatio = body.baseRatio;
   await apiRequest(`/api/settings/uom/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: patch,
+    body,
+  });
+}
+
+export async function deleteUomApi(id: string): Promise<void> {
+  requireLiveApi("Delete UOM");
+  await apiRequest(`/api/settings/uom/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }

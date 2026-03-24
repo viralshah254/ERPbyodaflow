@@ -19,6 +19,7 @@ export type OverdueInvoiceRow = {
   total: number;
   outstanding: number;
   currency: string;
+  exchangeRate?: number;
   dueDate: string;
   daysOverdue: number;
 };

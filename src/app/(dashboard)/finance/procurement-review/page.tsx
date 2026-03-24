@@ -12,7 +12,7 @@ import { LiveCurrencyConverterCard } from "@/components/operational/LiveCurrency
 import { ThreeWayMatchComparisonTable, type ThreeWayMatchRow } from "@/components/operational/ThreeWayMatchComparisonTable";
 
 export default function FinanceProcurementReviewPage() {
-  const [rows, setRows] = React.useState<Array<{ id: string; poNumber: string; sku: string; paidKg: number | null; receivedKg: number | null; varianceKg: number | null; status: string }>>([]);
+  const [rows, setRows] = React.useState<Array<{ id: string; poNumber: string; sku: string; orderedQty: number; paidKg: number | null; receivedKg: number | null; varianceKg: number | null; status: string }>>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -26,6 +26,7 @@ export default function FinanceProcurementReviewPage() {
             id: d.id,
             poNumber: d.poNumber,
             sku: d.sku,
+            orderedQty: d.orderedQty ?? 0,
             paidKg: d.paidWeightKg,
             receivedKg: d.receivedWeightKg,
             varianceKg: d.varianceKg,
@@ -69,7 +70,7 @@ export default function FinanceProcurementReviewPage() {
       <div className="p-6">
         <div className="mb-6 grid gap-6 xl:grid-cols-2">
           <ProcurementVariancePanel
-            poWeightKg={rows.reduce((a, r) => a + (r.paidKg ?? 0), 0)}
+            poWeightKg={rows.reduce((a, r) => a + r.orderedQty, 0)}
             paidWeightKg={rows.reduce((a, r) => a + (r.paidKg ?? 0), 0)}
             receivedWeightKg={rows.reduce((a, r) => a + (r.receivedKg ?? 0), 0)}
           />

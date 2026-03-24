@@ -9,6 +9,8 @@ export type ProductRow = {
   defaultTaxCodeId?: string;
   status: string;
   currentStock?: number;
+  /** Internal notes / long description (not printed on docs unless configured). */
+  description?: string;
 };
 
 export type PartyRole = "customer" | "supplier" | "franchisee";

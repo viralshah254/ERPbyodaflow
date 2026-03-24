@@ -20,6 +20,7 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -46,6 +47,7 @@ type Tab = "open" | "all";
 
 export default function APBillsPage() {
   const router = useRouter();
+  const baseCurrency = useBaseCurrency();
   const [tab, setTab] = React.useState<Tab>("all");
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -141,8 +143,9 @@ export default function APBillsPage() {
         accessor: (r: APBillRow) => (
           <DualCurrencyAmount
             amount={r.total}
-            currency={r.currency ?? "KES"}
+            currency={r.currency ?? baseCurrency}
             exchangeRate={r.exchangeRate}
+            baseCurrency={baseCurrency}
             align="right"
             size="sm"
           />
@@ -158,7 +161,8 @@ export default function APBillsPage() {
           const cell = (
             <DualCurrencyAmount
               amount={amount}
-              currency="KES"
+              currency={baseCurrency}
+              baseCurrency={baseCurrency}
               align="right"
               size="sm"
             />
@@ -178,7 +182,7 @@ export default function APBillsPage() {
                   {breakdown.map((b) => (
                     <div key={b.label} className="flex justify-between text-xs gap-4">
                       <span className="text-muted-foreground capitalize">{b.label}</span>
-                      <span className="font-medium tabular-nums">{formatMoney(b.amount, "KES")}</span>
+                      <span className="font-medium tabular-nums">{formatMoney(b.amount, baseCurrency)}</span>
                     </div>
                   ))}
                 </TooltipContent>
@@ -193,8 +197,9 @@ export default function APBillsPage() {
         accessor: (r: APBillRow) => (
           <DualCurrencyAmount
             amount={r.economicTotal ?? r.total}
-            currency={r.currency ?? "KES"}
+            currency={r.currency ?? baseCurrency}
             exchangeRate={r.exchangeRate}
+            baseCurrency={baseCurrency}
             align="right"
             size="sm"
           />
@@ -206,7 +211,7 @@ export default function APBillsPage() {
         accessor: (r: APBillRow) => <StatusBadge status={r.status} />,
       },
     ],
-    []
+    [baseCurrency]
   );
 
   const handleClearFilters = () => {
@@ -251,7 +256,19 @@ export default function APBillsPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/ap/three-way-match">
+                <Icons.GitCompare className="mr-2 h-4 w-4" />
+                3-way match
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/ap/payments">
+                <Icons.CreditCard className="mr-2 h-4 w-4" />
+                AP Payments
+              </Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link href="/docs/purchase-credit-note/new">
                 <Icons.RotateCcw className="mr-2 h-4 w-4" />
@@ -339,14 +356,12 @@ export default function APBillsPage() {
                   size="sm"
                   disabled={posting}
                   onClick={async () => {
-                    const postableIds = selectedIds.filter(
-                      (sid) => {
-                        const row = filteredRows.find((r) => r.id === sid);
-                        return row && (row.status === "DRAFT" || row.status === "APPROVED");
-                      }
-                    );
+                    const postableIds = selectedIds.filter((sid) => {
+                      const row = filteredRows.find((r) => r.id === sid);
+                      return row && row.status === "APPROVED";
+                    });
                     if (!postableIds.length) {
-                      toast.info("No draft or approved bills selected to post.");
+                      toast.info("Select approved bills only. Draft bills must be submitted and approved before posting.");
                       return;
                     }
                     setPosting(true);

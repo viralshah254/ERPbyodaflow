@@ -7,11 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchArPaymentsApi, fetchOpenInvoicesApi } from "@/lib/api/payments";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function AccountsReceivablePage() {
+  const baseCurrency = useBaseCurrency();
   const [invoices, setInvoices] = React.useState<Awaited<ReturnType<typeof fetchOpenInvoicesApi>>>([]);
   const [payments, setPayments] = React.useState<Awaited<ReturnType<typeof fetchArPaymentsApi>>>([]);
 
@@ -46,7 +49,14 @@ export default function AccountsReceivablePage() {
           <Card>
             <CardHeader><CardTitle className="text-sm">Outstanding</CardTitle></CardHeader>
             <CardContent className="text-2xl font-semibold">
-              {formatMoney(invoices.reduce((sum, item) => sum + item.outstanding, 0), "KES")}
+              {formatMoney(
+                invoices.reduce((sum, item) => {
+                  const isBase = (item.currency ?? baseCurrency).toUpperCase() === baseCurrency.toUpperCase();
+                  const kes = isBase ? item.outstanding : item.outstanding * (item.exchangeRate ?? 1);
+                  return sum + kes;
+                }, 0),
+                baseCurrency
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -80,7 +90,15 @@ export default function AccountsReceivablePage() {
                     <TableCell>{item.number}</TableCell>
                     <TableCell>{item.customerName}</TableCell>
                     <TableCell>{item.dueDate}</TableCell>
-                    <TableCell className="text-right">{formatMoney(item.outstanding, "KES")}</TableCell>
+                    <TableCell className="text-right">
+                      <DualCurrencyAmount
+                        amount={item.outstanding}
+                        currency={item.currency ?? baseCurrency}
+                        exchangeRate={item.exchangeRate}
+                        baseCurrency={baseCurrency}
+                        align="right"
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

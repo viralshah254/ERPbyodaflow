@@ -42,11 +42,26 @@ export type DocumentTimelineEntry = {
   at: string;
 };
 
+/** Who performed the action reflected in the current status (from API). */
+export type DocumentStatusActor = {
+  role:
+    | "drafted"
+    | "submitted"
+    | "approved"
+    | "posted"
+    | "cancelled"
+    | "reversed"
+    | "updated";
+  name: string;
+};
+
 export type DocumentDetailRecord = {
   id: string;
   type: DocTypeKey;
   number: string;
   date: string;
+  /** Present when the API could resolve a user for the current status. */
+  statusActor?: DocumentStatusActor | null;
   partyId?: string;
   party?: string;
   branchId?: string;
@@ -78,6 +93,12 @@ export type DocumentDetailRecord = {
     sourceQuantity?: number;
     convertedQuantity?: number;
     remainingQuantity?: number;
+    taxCodeId?: string;
+    /** Resolved line tax or product default when line has no explicit code. */
+    effectiveTaxCodeId?: string;
+    taxCodeCode?: string;
+    taxCodeName?: string;
+    taxRate?: number;
   }>;
   sourceDocument?: {
     id: string;

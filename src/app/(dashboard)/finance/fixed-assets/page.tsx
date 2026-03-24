@@ -12,10 +12,12 @@ import { fetchDepreciationRunsApi } from "@/lib/api/assets-lifecycle";
 import { fetchAssetDisposalsApi } from "@/lib/api/asset-disposals";
 import type { AssetRow } from "@/lib/types/assets";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function FixedAssetsPage() {
+  const baseCurrency = useBaseCurrency();
   const [assets, setAssets] = React.useState<AssetRow[]>([]);
   const [depreciationCount, setDepreciationCount] = React.useState(0);
   const [disposalCount, setDisposalCount] = React.useState(0);
@@ -82,7 +84,7 @@ export default function FixedAssetsPage() {
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm">Total Cost</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">{loading ? "..." : formatMoney(totalCost, "KES")}</CardContent>
+          <CardContent className="text-2xl font-semibold">{loading ? "..." : formatMoney(totalCost, baseCurrency)}</CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="text-sm">Depreciation Runs</CardTitle></CardHeader>

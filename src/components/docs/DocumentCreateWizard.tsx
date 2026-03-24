@@ -66,6 +66,7 @@ import {
   fetchProductPackagingApi,
   fetchProductPricingApi,
 } from "@/lib/api/product-master";
+import { fetchProductUomsApi } from "@/lib/api/uom";
 import type { ProductPrice } from "@/lib/products/pricing-types";
 import {
   deleteDocumentDraftApi,
@@ -92,6 +93,16 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+
+/**
+ * Stored `exchangeRate` on documents is always **base per 1 unit of document currency**
+ * (e.g. KES per 1 UGX) so `baseAmount = foreignAmount * exchangeRate`.
+ * Users often think in **document per 1 base** (e.g. UGX per 1 KES); that is the inverse.
+ */
+function storedRateFromDocPerBase(docPerBase: number): number {
+  if (!Number.isFinite(docPerBase) || docPerBase <= 0) return 1;
+  return 1 / docPerBase;
+}
 
 function getDefaultValues(baseCurrency: string): FormValues {
   const today = new Date().toISOString().slice(0, 10);
@@ -315,6 +326,8 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
   const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
   const [taxCodes, setTaxCodes] = React.useState<Array<{ id: string; code: string; name: string; rate: number }>>([]);
   const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>>>({});
+  /** Org catalog UOM codes (same source as Settings → UOM) for line dropdown merge. */
+  const [catalogUomCodes, setCatalogUomCodes] = React.useState<string[]>([]);
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
   const [costPricingByProductId, setCostPricingByProductId] = React.useState<Record<string, ProductPrice[]>>({});
   const [linkedPoId, setLinkedPoId] = React.useState<string | null>(() =>
@@ -451,6 +464,25 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
 
   React.useEffect(() => {
     if (step !== 2) return;
+    if (!isApiConfigured()) {
+      setCatalogUomCodes([]);
+      return;
+    }
+    let cancelled = false;
+    fetchProductUomsApi()
+      .then((list) => {
+        if (!cancelled) setCatalogUomCodes(list.map((u) => u.code).sort((a, b) => a.localeCompare(b)));
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogUomCodes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
+
+  React.useEffect(() => {
+    if (step !== 2) return;
     const products = listProducts();
     if (!products.length) {
       setPackagingByProductId({});
@@ -525,11 +557,14 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
   }, [supplierCostListId, step]);
 
   const handleLinesChange = React.useCallback(
-    (next: DocumentLine[]) => {
-      setLines(next);
-      const total = next.reduce((s, l) => s + l.amount, 0);
-      form.setValue("linesCount", next.length);
-      form.setValue("totalAmount", total);
+    (next: DocumentLine[] | ((prev: DocumentLine[]) => DocumentLine[])) => {
+      setLines((prev) => {
+        const resolved = typeof next === "function" ? next(prev) : next;
+        const total = resolved.reduce((s, l) => s + l.amount, 0);
+        form.setValue("linesCount", resolved.length);
+        form.setValue("totalAmount", total);
+        return resolved;
+      });
     },
     [form]
   );
@@ -592,6 +627,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
               price: unitPrice,
               priceReason: "From PO",
               amount,
+              taxCodeId: l.taxCodeId ?? l.effectiveTaxCodeId ?? undefined,
               sourceLineId: l.id,
             };
           });
@@ -744,6 +780,14 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
     [selectedPartyDetail]
   );
   const selectedFxDate = form.watch("fxDate") || form.watch("date") || new Date().toISOString().slice(0, 10);
+  /** Stored: base per 1 doc unit. Shown in UI: doc per 1 base (inverse). */
+  const storedExchangeRate = form.watch("exchangeRate") ?? 1;
+  const displayDocPerBaseRate =
+    selectedCurrency !== baseCurrency &&
+    storedExchangeRate > 0 &&
+    Number.isFinite(storedExchangeRate)
+      ? 1 / storedExchangeRate
+      : "";
   const resolvedPriceListId =
     (selectedPartyId ? customerDefaultPriceLists[selectedPartyId] : undefined) ?? fallbackPriceListId;
   const lineEditorMode =
@@ -942,23 +986,33 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
                     <>
                       <div className="space-y-2">
                         <div className="flex items-center gap-1">
-                          <Label>Exchange rate</Label>
+                          <Label>
+                            Exchange rate ({selectedCurrency} per 1 {baseCurrency})
+                          </Label>
                           <ExplainThis
-                            prompt="Explain: Exchange rate and how base equivalents work."
+                            prompt="Explain: This field is how many units of the document currency equal one unit of base currency (e.g. how many UGX per 1 KES). The system stores the inverse internally so totals in base stay correct: base total = document amount ÷ this value."
                             label="Explain exchange rate"
                           />
                         </div>
                         <Input
                           type="number"
                           step="any"
-                          {...form.register("exchangeRate", {
-                            valueAsNumber: true,
-                          })}
+                          value={displayDocPerBaseRate === "" ? "" : displayDocPerBaseRate}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "" || raw === "-") return;
+                            const v = parseFloat(raw);
+                            if (!Number.isFinite(v) || v <= 0) return;
+                            form.setValue("exchangeRate", storedRateFromDocPerBase(v), {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            });
+                          }}
                         />
                         <p className="text-xs text-muted-foreground">
                           {loadingFxRate
-                            ? `Loading saved ${selectedCurrency}/${baseCurrency} rate...`
-                            : `Saved ${selectedCurrency}/${baseCurrency} rate for ${selectedFxDate}. You can still override it.`}
+                            ? `Loading saved ${selectedCurrency} per 1 ${baseCurrency}…`
+                            : `Saved ${selectedCurrency} per 1 ${baseCurrency} for ${selectedFxDate}. You can still override it.`}
                         </p>
                       </div>
                       <div className="space-y-2">
@@ -1012,6 +1066,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
               mode={lineEditorMode}
               productFilter={lineEditorMode === "purchasing" ? "purchasable" : "sellable"}
               packagingByProductId={packagingByProductId}
+              catalogUomCodes={catalogUomCodes}
               pricingByProductId={lineEditorPricingByProductId}
               taxCodes={taxCodes}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}

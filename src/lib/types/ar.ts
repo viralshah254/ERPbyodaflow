@@ -10,6 +10,7 @@ export type OpenInvoiceRow = {
   dueDate: string;
   status: string;
   currency?: string;
+  exchangeRate?: number;
 };
 
 export type PaymentRow = {

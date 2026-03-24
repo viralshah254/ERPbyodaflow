@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { fetchGRNs, postGRN } from "@/lib/api/grn";
+import { fetchGRNs, postGRN, type GrnPostError } from "@/lib/api/grn";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -19,10 +19,9 @@ import * as Icons from "lucide-react";
 const GRN_STATUS_OPTIONS = [
   { label: "All", value: "" },
   { label: "Draft", value: "DRAFT" },
-  { label: "Pending Approval", value: "PENDING_APPROVAL" },
-  { label: "Approved", value: "APPROVED" },
   { label: "Posted", value: "POSTED" },
   { label: "Received", value: "RECEIVED" },
+  { label: "Bill linked (Converted)", value: "CONVERTED" },
   { label: "Cancelled", value: "CANCELLED" },
 ];
 
@@ -61,7 +60,21 @@ export default function GoodsReceiptPage() {
       { id: "party", header: "Supplier", accessor: (row: PurchasingDocRow) => row.party || "—" },
       { id: "poRef", header: "PO reference", accessor: (row: PurchasingDocRow) => row.poRef || "—" },
       { id: "warehouse", header: "Warehouse", accessor: (row: PurchasingDocRow) => row.warehouse || "—" },
-      { id: "status", header: "Status", accessor: (row: PurchasingDocRow) => <StatusBadge status={row.status} /> },
+      {
+        id: "status",
+        header: "Status",
+        accessor: (row: PurchasingDocRow) => {
+          if (row.status === "CONVERTED") {
+            return (
+              <div className="flex flex-col gap-0.5">
+                <StatusBadge status="POSTED" />
+                <span className="text-[10px] text-muted-foreground leading-tight">Bill linked</span>
+              </div>
+            );
+          }
+          return <StatusBadge status={row.status} />;
+        },
+      },
       {
         id: "actions",
         header: "Actions",
@@ -75,8 +88,22 @@ export default function GoodsReceiptPage() {
                   await postGRN(row.id);
                   toast.success(`GRN ${row.number} posted.`);
                   await refresh();
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Failed to post GRN.");
+                } catch (raw) {
+                  const e = raw as GrnPostError;
+                  const msg = e.message ?? "Failed to post GRN.";
+                  if (e.code === "GRN_MISSING_WEIGHT") {
+                    toast.error(msg, { description: "Enter received weight (kg) on the GRN lines before posting." });
+                  } else if (e.code === "GRN_OPEN_VARIANCE") {
+                    const url = e.poId
+                      ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}`
+                      : "/purchasing/cash-weight-audit";
+                    toast.error(msg, {
+                      action: { label: "Go to audit", onClick: () => { window.location.href = url; } },
+                      duration: 8000,
+                    });
+                  } else {
+                    toast.error(msg);
+                  }
                 }
               }}
             >

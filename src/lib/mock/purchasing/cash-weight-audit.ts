@@ -25,6 +25,7 @@ export interface CashWeightAuditLineRow {
   receivedWeightKg: number | null;
   varianceKg: number | null;
   disbursementId: string | null;
+  disbursementReference: string | null;
   grnId: string | null;
   status: "MATCHED" | "VARIANCE" | "PENDING";
   exceptionStatus?: "OPEN" | "INVESTIGATING" | "APPROVED" | "RESOLVED" | null;
@@ -47,9 +48,9 @@ export const MOCK_CASH_DISBURSEMENTS: CashDisbursementRow[] = [
 ];
 
 export const MOCK_CASH_WEIGHT_AUDIT_LINES: CashWeightAuditLineRow[] = [
-  { id: "al1", poId: "po1", poNumber: "PO-2025-001", poLineId: "pol1", sku: "ROUND-001", productName: "Round Fish", orderedQty: 500, paidWeightKg: 480, receivedWeightKg: 472, varianceKg: -8, disbursementId: "cd1", grnId: "grn1", status: "VARIANCE", exceptionStatus: "OPEN", dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), slaAgeHours: 6, slaOverdue: false },
-  { id: "al2", poId: "po1", poNumber: "PO-2025-001", poLineId: "pol2", sku: "ROUND-002", productName: "Round Fish (small)", orderedQty: 200, paidWeightKg: 195, receivedWeightKg: 195, varianceKg: 0, disbursementId: "cd1", grnId: "grn1", status: "MATCHED" },
-  { id: "al3", poId: "po2", poNumber: "PO-2025-002", poLineId: "pol3", sku: "ROUND-001", productName: "Round Fish", orderedQty: 300, paidWeightKg: null, receivedWeightKg: null, varianceKg: null, disbursementId: "cd2", grnId: null, status: "PENDING" },
+  { id: "al1", poId: "po1", poNumber: "PO-2025-001", poLineId: "pol1", sku: "ROUND-001", productName: "Round Fish", orderedQty: 500, paidWeightKg: 480, receivedWeightKg: 472, varianceKg: -8, disbursementId: "cd1", disbursementReference: "CD-2025-001", grnId: "grn1", status: "VARIANCE", exceptionStatus: "OPEN", dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), slaAgeHours: 6, slaOverdue: false },
+  { id: "al2", poId: "po1", poNumber: "PO-2025-001", poLineId: "pol2", sku: "ROUND-002", productName: "Round Fish (small)", orderedQty: 200, paidWeightKg: 195, receivedWeightKg: 195, varianceKg: 0, disbursementId: "cd1", disbursementReference: "CD-2025-001", grnId: "grn1", status: "MATCHED" },
+  { id: "al3", poId: "po2", poNumber: "PO-2025-002", poLineId: "pol3", sku: "ROUND-001", productName: "Round Fish", orderedQty: 300, paidWeightKg: null, receivedWeightKg: null, varianceKg: null, disbursementId: "cd2", disbursementReference: "CD-2025-002", grnId: null, status: "PENDING" },
 ];
 
 export function getMockCashDisbursements(poId?: string): CashDisbursementRow[] {

@@ -23,9 +23,11 @@ import {
 import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { fetchFinanceAccountsApi, fetchFinancePeriodsApi, fetchLedgerEntriesApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 
 export default function LedgerPage() {
+  const baseCurrency = useBaseCurrency();
   const [search, setSearch] = React.useState("");
   const [accountId, setAccountId] = React.useState("");
   const [periodId, setPeriodId] = React.useState("");
@@ -156,13 +158,13 @@ export default function LedgerPage() {
                     </Button>
                   </TableCell>
                   <TableCell className="text-right">
-                    {entry.debit > 0 ? formatMoney(entry.debit, "KES") : "-"}
+                    {entry.debit > 0 ? formatMoney(entry.debit, baseCurrency) : "-"}
                   </TableCell>
                   <TableCell className="text-right">
-                    {entry.credit > 0 ? formatMoney(entry.credit, "KES") : "-"}
+                    {entry.credit > 0 ? formatMoney(entry.credit, baseCurrency) : "-"}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatMoney(entry.balance, "KES")}
+                    {formatMoney(entry.balance, baseCurrency)}
                   </TableCell>
                 </TableRow>
               ))}

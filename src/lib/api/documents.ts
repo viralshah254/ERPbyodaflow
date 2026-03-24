@@ -1,5 +1,10 @@
 import type { DocTypeKey } from "@/config/documents/types";
-import type { DocListRow, DocumentDetailRecord, DocumentTimelineEntry } from "@/lib/types/documents";
+import type {
+  DocListRow,
+  DocumentDetailRecord,
+  DocumentStatusActor,
+  DocumentTimelineEntry,
+} from "@/lib/types/documents";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
 
 type BackendDocumentLine = {
@@ -23,6 +28,11 @@ type BackendDocumentLine = {
   sourceQuantity?: number;
   convertedQuantity?: number;
   remainingQuantity?: number;
+  taxCodeId?: string;
+  effectiveTaxCodeId?: string;
+  taxCodeCode?: string;
+  taxCodeName?: string;
+  taxRate?: number;
 };
 
 type BackendAttachment = {
@@ -58,6 +68,7 @@ type BackendDocumentDetail = {
   currency?: string;
   exchangeRate?: number;
   status: string;
+  statusActor?: DocumentStatusActor | null;
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
@@ -174,15 +185,16 @@ export type PurchaseOrderLookupOption = {
   total?: number;
 };
 
-/** Search purchase orders for pickers. Pass `status` to filter (e.g. "APPROVED"). */
+/** Search purchase orders for pickers. Pass `status` to filter (e.g. "APPROVED" or comma-separated "APPROVED,RECEIVED"). Pass `excludeWithCashDisbursement: true` to hide POs that already have a cash disbursement. */
 export async function searchPurchaseOrderLookupApi(
   query: string,
-  options?: { status?: string }
+  options?: { status?: string; excludeWithCashDisbursement?: boolean }
 ): Promise<PurchaseOrderLookupOption[]> {
   if (!isApiConfigured()) return [];
   const params = new URLSearchParams({ limit: "20" });
   if (query.trim()) params.set("search", query.trim());
   if (options?.status) params.set("status", options.status);
+  if (options?.excludeWithCashDisbursement) params.set("excludeWithCashDisbursement", "1");
   const payload = await apiRequest<{
     items: Array<{
       id: string;
@@ -258,6 +270,7 @@ function mapDocumentDetail(
     currency: payload.currency ?? "KES",
     exchangeRate: payload.exchangeRate,
     status: payload.status,
+    statusActor: payload.statusActor ?? null,
     availableActions: payload.availableActions ?? [],
     availableConversionTargets: payload.availableConversionTargets ?? [],
     outputTemplateId: payload.outputTemplateId,
@@ -456,6 +469,18 @@ export function exportDocumentListApi(
 ): void {
   requireLiveApi("Document list export");
   downloadFile(`/api/documents/${type}/export`, fileName, onNotAvailable);
+}
+
+export async function patchDocumentApi(
+  type: DocTypeKey,
+  id: string,
+  payload: { notes?: string }
+): Promise<void> {
+  requireLiveApi("Document update");
+  await apiRequest(`/api/documents/${type}/${id}`, {
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export async function addDocumentCommentApi(

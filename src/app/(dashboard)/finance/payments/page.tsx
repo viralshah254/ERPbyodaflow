@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchApPaymentsApi, fetchArPaymentsApi } from "@/lib/api/payments";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function PaymentsPage() {
+  const baseCurrency = useBaseCurrency();
   const [receipts, setReceipts] = React.useState<Awaited<ReturnType<typeof fetchArPaymentsApi>>>([]);
   const [payments, setPayments] = React.useState<Awaited<ReturnType<typeof fetchApPaymentsApi>>>([]);
 
@@ -66,7 +68,7 @@ export default function PaymentsPage() {
                     <TableCell>{item.number}</TableCell>
                     <TableCell>{item.customerName}</TableCell>
                     <TableCell>{item.date}</TableCell>
-                    <TableCell className="text-right">{formatMoney(item.amount, "KES")}</TableCell>
+                    <TableCell className="text-right">{formatMoney(item.amount, baseCurrency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -93,7 +95,7 @@ export default function PaymentsPage() {
                     <TableCell>{item.number}</TableCell>
                     <TableCell>{item.party}</TableCell>
                     <TableCell>{item.date}</TableCell>
-                    <TableCell className="text-right">{formatMoney(item.amount, "KES")}</TableCell>
+                    <TableCell className="text-right">{formatMoney(item.amount, baseCurrency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

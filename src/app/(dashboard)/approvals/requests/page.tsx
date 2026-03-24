@@ -161,8 +161,8 @@ export default function ApprovalsRequestsPage() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         item={selected}
-        onApprove={selected?.creditBreachReason && selected.status === "pending" ? handleApprove : undefined}
-        onReject={selected?.creditBreachReason && selected.status === "pending" ? handleReject : undefined}
+        onApprove={selected?.status === "pending" ? handleApprove : undefined}
+        onReject={selected?.status === "pending" ? handleReject : undefined}
       />
     </PageShell>
   );

@@ -42,6 +42,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string }
     productType: item.productType,
     defaultTaxCodeId: item.defaultTaxCodeId,
     status: item.status ?? "ACTIVE",
+    description: item.description,
   };
 }
 
@@ -51,6 +52,8 @@ export type FetchProductsOptions = {
   purchasable?: boolean;
   sellable?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  /** Server caps at 100; use for document line pickers. */
+  limit?: number;
 };
 
 export async function fetchProductsApi(
@@ -63,12 +66,14 @@ export async function fetchProductsApi(
   let purchasable: boolean | undefined;
   let sellable: boolean | undefined;
   let productType: "RAW" | "FINISHED" | "BOTH" | undefined;
+  let limit: number | undefined;
   if (typeof searchOrOptions === "object" && searchOrOptions != null) {
     search = searchOrOptions.search;
     status = searchOrOptions.status ?? status;
     purchasable = searchOrOptions.purchasable;
     sellable = searchOrOptions.sellable;
     productType = searchOrOptions.productType;
+    limit = searchOrOptions.limit;
   } else {
     search = searchOrOptions;
   }
@@ -77,6 +82,7 @@ export async function fetchProductsApi(
   if (purchasable) params.set("purchasable", "true");
   if (sellable) params.set("sellable", "true");
   if (productType) params.set("productType", productType);
+  if (limit != null && limit > 0) params.set("limit", String(Math.min(limit, 100)));
   const data = await apiRequest<{ items: BackendProduct[] }>("/api/products", { params });
   return data.items.map(mapProduct);
 }

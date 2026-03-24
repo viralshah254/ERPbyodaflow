@@ -298,6 +298,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     ],
     statusWorkflow: [
       { id: "DRAFT", label: "Draft" },
+      { id: "PENDING_APPROVAL", label: "Pending Approval" },
+      { id: "APPROVED", label: "Approved" },
       { id: "POSTED", label: "Posted" },
     ],
     validations: [
@@ -305,7 +307,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
       { id: "supplier-required", message: "Supplier is required" },
     ],
     totals: { subtotal: true, tax: true, total: true },
-    actions: ["submit", "post", "cancel", "reverse"],
+    actions: ["submit", "approve", "post", "cancel", "reverse"],
   },
   "purchase-credit-note": {
     typeKey: "purchase-credit-note",

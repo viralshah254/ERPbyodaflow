@@ -13,12 +13,18 @@ export type FinanceOverview = {
     id: string;
     number: string;
     outstanding: number;
+    outstandingKes?: number;
+    currency?: string;
+    exchangeRate?: number;
     dueDate?: string;
   }>;
   apOutstandingItems: Array<{
     id: string;
     number: string;
     outstanding: number;
+    outstandingKes?: number;
+    currency?: string;
+    exchangeRate?: number;
     dueDate?: string;
   }>;
   recentJournals: Array<{

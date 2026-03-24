@@ -202,7 +202,13 @@ export default function ThreeWayMatchPage() {
                             )}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {row.number}
+                            <Link
+                              href={`/purchasing/orders/${row.id}`}
+                              className="hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {row.number}
+                            </Link>
                             {isMatched && <Badge variant="secondary" className="ml-2 text-xs">Matched</Badge>}
                           </TableCell>
                           <TableCell>{row.date?.slice(0, 10)}</TableCell>
@@ -260,7 +266,13 @@ export default function ThreeWayMatchPage() {
                             )}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {row.number}
+                            <Link
+                              href={`/inventory/receipts/${row.id}`}
+                              className="hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {row.number}
+                            </Link>
                             {isMatched && <Badge variant="secondary" className="ml-2 text-xs">Matched</Badge>}
                           </TableCell>
                           <TableCell>{row.date?.slice(0, 10)}</TableCell>
@@ -320,7 +332,13 @@ export default function ThreeWayMatchPage() {
                             )}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {row.number}
+                            <Link
+                              href={`/docs/bill/${row.id}`}
+                              className="hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {row.number}
+                            </Link>
                             {isMatched && <Badge variant="secondary" className="ml-2 text-xs">Matched</Badge>}
                           </TableCell>
                           <TableCell>{row.date?.slice(0, 10)}</TableCell>
@@ -386,7 +404,11 @@ export default function ThreeWayMatchPage() {
                       <div className="flex items-center gap-2">
                         <Icons.CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
                         <span className="font-medium">
-                          {decision.poNumber ?? decision.poId} · {decision.grnNumber ?? decision.grnId} · {decision.billNumber ?? decision.billId}
+                          <Link href={`/purchasing/orders/${decision.poId}`} className="hover:underline">{decision.poNumber ?? decision.poId}</Link>
+                          {" · "}
+                          <Link href={`/inventory/receipts/${decision.grnId}`} className="hover:underline">{decision.grnNumber ?? decision.grnId}</Link>
+                          {" · "}
+                          <Link href={`/docs/bill/${decision.billId}`} className="hover:underline">{decision.billNumber ?? decision.billId}</Link>
                         </span>
                         <Badge variant="secondary" className="text-xs">MATCHED</Badge>
                       </div>

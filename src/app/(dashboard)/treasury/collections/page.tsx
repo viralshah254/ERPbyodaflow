@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { type OverdueInvoiceRow } from "@/lib/types/treasury";
 import { fetchCollectionsApi } from "@/lib/api/treasury-ops";
-import { formatMoney } from "@/lib/money";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CollectionsPage() {
+  const baseCurrency = useBaseCurrency();
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [search, setSearch] = React.useState("");
@@ -50,12 +52,19 @@ export default function CollectionsPage() {
       {
         id: "outstanding",
         header: "Outstanding",
-        accessor: (r: OverdueInvoiceRow) => formatMoney(r.outstanding, r.currency),
+        accessor: (r: OverdueInvoiceRow) => (
+          <DualCurrencyAmount
+            amount={r.outstanding}
+            currency={r.currency}
+            exchangeRate={r.exchangeRate}
+            baseCurrency={baseCurrency}
+          />
+        ),
       },
       { id: "dueDate", header: "Due date", accessor: "dueDate" as keyof OverdueInvoiceRow },
       { id: "daysOverdue", header: "Days overdue", accessor: (r: OverdueInvoiceRow) => r.daysOverdue },
     ],
-    []
+    [baseCurrency]
   );
 
   return (

@@ -21,6 +21,7 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
 const STATUS_OPTIONS = [
   { label: "Open (Active)", value: "OPEN" },
@@ -38,6 +39,7 @@ const scope = "purchasing-orders";
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
+  const baseCurrency = useBaseCurrency();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("OPEN");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -117,8 +119,9 @@ export default function PurchaseOrdersPage() {
           r.total != null ? (
             <DualCurrencyAmount
               amount={r.total}
-              currency={r.currency ?? "KES"}
+              currency={r.currency ?? baseCurrency}
               exchangeRate={r.exchangeRate}
+              baseCurrency={baseCurrency}
               align="right"
               size="sm"
             />
@@ -157,7 +160,7 @@ export default function PurchaseOrdersPage() {
           ) : null,
       },
     ],
-    [approvingId, reload]
+    [approvingId, reload, baseCurrency]
   );
 
   const handleClearFilters = () => {

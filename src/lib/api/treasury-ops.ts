@@ -203,6 +203,8 @@ export async function fetchCollectionsApi(): Promise<OverdueInvoiceRow[]> {
       outstanding: number;
       dueDate?: string;
       date: string;
+      currency?: string;
+      exchangeRate?: number;
     }>;
   }>("/api/ar/open-invoices");
   const today = new Date().toISOString().slice(0, 10);
@@ -221,7 +223,8 @@ export async function fetchCollectionsApi(): Promise<OverdueInvoiceRow[]> {
         customerName: item.customerName ?? item.customerId ?? "Customer",
         total: item.total,
         outstanding: item.outstanding,
-        currency: "KES",
+        currency: item.currency ?? "KES",
+        exchangeRate: item.exchangeRate,
         dueDate,
         daysOverdue,
       };

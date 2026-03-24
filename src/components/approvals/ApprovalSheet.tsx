@@ -45,7 +45,22 @@ export function ApprovalSheet({
   if (!item) return null;
 
   const isCreditBreach = Boolean(item.creditBreachReason);
+  const isOverrideRequest = item.documentType === "procurement-audit-override";
   const isActionable = Boolean(onApprove || onReject);
+
+  // Parse the JSON payload stored in the comment field for override requests
+  let overridePayload: { paidWeightKg?: number; receivedWeightKg?: number; reason?: string } | null = null;
+  if (isOverrideRequest && item.comment) {
+    try {
+      overridePayload = JSON.parse(item.comment);
+    } catch {
+      // comment is plain text, not a payload
+    }
+  }
+
+  const viewHref = isOverrideRequest
+    ? `/purchasing/cash-weight-audit/override/${item.id}`
+    : drillToDocument(item.documentType, item.documentId).href;
 
   const handleApprove = () => {
     if (isCreditBreach && !comment.trim()) {
@@ -79,10 +94,14 @@ export function ApprovalSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{isCreditBreach ? "Credit override approval" : "Approval"}</SheetTitle>
+          <SheetTitle>
+            {isCreditBreach ? "Credit override approval" : isOverrideRequest ? "Weight correction request" : "Approval"}
+          </SheetTitle>
           <SheetDescription>
             {isCreditBreach
               ? "This invoice exceeded the customer's credit limit. Review the breach details and decide whether to override."
+              : isOverrideRequest
+              ? "A user has requested to correct weight values on a procurement audit line. Review the proposed changes below."
               : "Review the document context, add comments, and complete the approval decision."}
           </SheetDescription>
         </SheetHeader>
@@ -101,21 +120,48 @@ export function ApprovalSheet({
             </div>
           )}
 
+          {isOverrideRequest && overridePayload && (
+            <div className="rounded-lg border border-blue-500/40 bg-blue-500/10 p-4 text-sm space-y-3">
+              <p className="font-semibold text-blue-800 dark:text-blue-200">Proposed weight corrections</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                {overridePayload.paidWeightKg != null && (
+                  <>
+                    <span className="text-muted-foreground">Paid weight (kg)</span>
+                    <span className="font-medium tabular-nums">{overridePayload.paidWeightKg.toFixed(2)}</span>
+                  </>
+                )}
+                {overridePayload.receivedWeightKg != null && (
+                  <>
+                    <span className="text-muted-foreground">Received weight (kg)</span>
+                    <span className="font-medium tabular-nums">{overridePayload.receivedWeightKg.toFixed(2)}</span>
+                  </>
+                )}
+              </div>
+              {overridePayload.reason && (
+                <div className="pt-2 border-t border-blue-500/20">
+                  <p className="text-xs text-muted-foreground mb-1">Reason given</p>
+                  <p className="text-xs">{overridePayload.reason}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="rounded-lg border p-4 space-y-2 text-sm">
             <p>
-              <span className="text-muted-foreground">Document</span>{" "}
-              <span className="font-medium">{item.documentNumber}</span>{" "}
-              <span className="text-muted-foreground">({item.documentType})</span>
+              <span className="text-muted-foreground">Reference</span>{" "}
+              <span className="font-medium">{item.documentNumber}</span>
             </p>
-            <p>
-              <span className="text-muted-foreground">Amount</span>{" "}
-              <span className="font-medium">{formatMoney(item.amount, item.currency)}</span>
-              {item.baseEquivalent != null && item.currency !== "KES" && (
-                <span className="text-muted-foreground ml-1">
-                  (base: {formatMoney(item.baseEquivalent, "KES")})
-                </span>
-              )}
-            </p>
+            {!isOverrideRequest && (
+              <p>
+                <span className="text-muted-foreground">Amount</span>{" "}
+                <span className="font-medium">{formatMoney(item.amount, item.currency)}</span>
+                {item.baseEquivalent != null && item.currency !== "KES" && (
+                  <span className="text-muted-foreground ml-1">
+                    (base: {formatMoney(item.baseEquivalent, "KES")})
+                  </span>
+                )}
+              </p>
+            )}
             <p>
               <span className="text-muted-foreground">Requester</span>{" "}
               {item.requester}
@@ -130,7 +176,7 @@ export function ApprovalSheet({
             <Label>
               {isCreditBreach
                 ? "Override reason (required to approve)"
-                : "Comment (required to reject)"}
+                : "Rejection note (required to reject)"}
             </Label>
             <textarea
               placeholder={
@@ -176,9 +222,7 @@ export function ApprovalSheet({
                 Reject — revert to draft
               </Button>
               <Button variant="ghost" className="w-full" asChild>
-                <Link href={drillToDocument(item.documentType, item.documentId).href}>
-                  View document
-                </Link>
+                <Link href={viewHref}>View document</Link>
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => onOpenChange(false)}>
                 Cancel
@@ -187,7 +231,7 @@ export function ApprovalSheet({
           ) : (
             <div className="flex flex-wrap gap-2 justify-end w-full">
               <Button variant="outline" asChild>
-                <Link href={drillToDocument(item.documentType, item.documentId).href}>View document</Link>
+                <Link href={viewHref}>View details</Link>
               </Button>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 {isActionable ? "Cancel" : "Close"}

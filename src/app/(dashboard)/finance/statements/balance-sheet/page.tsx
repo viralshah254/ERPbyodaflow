@@ -13,10 +13,12 @@ import {
 } from "@/components/ui/select";
 import { fetchFinancePeriodsApi, fetchFinancialStatementApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function BalanceSheetPage() {
+  const baseCurrency = useBaseCurrency();
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
   const [periodId, setPeriodId] = React.useState("");
   const [statement, setStatement] = React.useState<Awaited<ReturnType<typeof fetchFinancialStatementApi>> | null>(null);
@@ -71,7 +73,7 @@ export default function BalanceSheetPage() {
             {(statement?.sections ?? []).map((section) => (
               <div key={section.key} className="flex items-center justify-between rounded border p-3">
                 <span className="font-medium">{section.label}</span>
-                <span>{formatMoney(section.amount, "KES")}</span>
+                <span>{formatMoney(section.amount, baseCurrency)}</span>
               </div>
             ))}
             {!statement || statement.sections.length === 0 ? (

@@ -15,6 +15,8 @@ import { fetchCashWeightAuditLines } from "@/lib/api/cool-catch";
 type ReceivingQueueRow = {
   id: string;
   poNumber: string;
+  poId: string | null;
+  grnId: string | null;
   sku: string;
   productName: string;
   expectedWeightKg: number;
@@ -38,6 +40,8 @@ export default function InventoryReceivingQueuePage() {
           data.map((d) => ({
             id: d.id,
             poNumber: d.poNumber,
+            poId: d.poId ?? null,
+            grnId: d.grnId ?? null,
             sku: d.sku,
             productName: d.productName,
             expectedWeightKg: d.orderedQty,
@@ -77,6 +81,24 @@ export default function InventoryReceivingQueuePage() {
         <Badge variant={r.status === "VARIANCE" ? "destructive" : r.status === "MATCHED" ? "default" : "secondary"}>
           {r.status}
         </Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      accessor: (r: ReceivingQueueRow) => (
+        <div className="flex gap-1.5 justify-end" onClick={(e) => e.stopPropagation()}>
+          {r.grnId && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/inventory/receipts/${r.grnId}`}>Open GRN</Link>
+            </Button>
+          )}
+          {r.poId && (
+            <Button size="sm" variant="ghost" asChild>
+              <Link href={`/purchasing/cash-weight-audit?poId=${r.poId}`}>Audit</Link>
+            </Button>
+          )}
+        </div>
       ),
     },
   ];
@@ -120,7 +142,11 @@ export default function InventoryReceivingQueuePage() {
               <DataTable
                 data={rows}
                 columns={columns}
-                onRowClick={() => router.push("/inventory/receipts")}
+                onRowClick={(row) =>
+                  row.grnId
+                    ? router.push(`/inventory/receipts/${row.grnId}`)
+                    : router.push("/inventory/receipts")
+                }
                 emptyMessage="No receiving queue rows."
               />
             )}

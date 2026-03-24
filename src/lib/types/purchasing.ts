@@ -30,6 +30,7 @@ export type GrnDetailRow = PurchasingDocRow & {
   currency?: string;
   totalAmount?: number;
   processingConfirmed?: boolean;
+  sourceDocumentId?: string | null;
   lines: GrnLineRow[];
   linkedBill?: { id: string; number: string; status: string } | null;
 };

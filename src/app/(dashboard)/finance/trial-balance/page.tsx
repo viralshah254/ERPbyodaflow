@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { fetchTrialBalanceApi, fetchFinancePeriodsApi, type TrialBalanceRow } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -35,6 +36,7 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
 };
 
 export default function TrialBalancePage() {
+  const baseCurrency = useBaseCurrency();
   const [periodId, setPeriodId] = React.useState<string | undefined>(undefined);
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number; status: string }>>([]);
   const [trialBalance, setTrialBalance] = React.useState<Awaited<ReturnType<typeof fetchTrialBalanceApi>> | null>(null);
@@ -151,20 +153,20 @@ export default function TrialBalancePage() {
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Debits</p>
-                <p className="text-lg font-bold">{formatMoney(trialBalance.totals.debit, "KES")}</p>
+                <p className="text-lg font-bold">{formatMoney(trialBalance.totals.debit, baseCurrency)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Credits</p>
-                <p className="text-lg font-bold">{formatMoney(trialBalance.totals.credit, "KES")}</p>
+                <p className="text-lg font-bold">{formatMoney(trialBalance.totals.credit, baseCurrency)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Difference</p>
                 <p className={cn("text-lg font-bold", !trialBalance.totals.isBalanced && "text-red-600")}>
-                  {formatMoney(Math.abs(trialBalance.totals.debit - trialBalance.totals.credit), "KES")}
+                  {formatMoney(Math.abs(trialBalance.totals.debit - trialBalance.totals.credit), baseCurrency)}
                 </p>
               </CardContent>
             </Card>
@@ -221,10 +223,10 @@ export default function TrialBalancePage() {
                           <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{row.code}</td>
                           <td className="px-4 py-2">{row.name}</td>
                           <td className="px-4 py-2 text-right tabular-nums">
-                            {row.debit > 0 ? formatMoney(row.debit, "KES") : "—"}
+                            {row.debit > 0 ? formatMoney(row.debit, baseCurrency) : "—"}
                           </td>
                           <td className="px-4 py-2 text-right tabular-nums">
-                            {row.credit > 0 ? formatMoney(row.credit, "KES") : "—"}
+                            {row.credit > 0 ? formatMoney(row.credit, baseCurrency) : "—"}
                           </td>
                           <td
                             className={cn(
@@ -232,7 +234,7 @@ export default function TrialBalancePage() {
                               row.balance < 0 && "text-red-600"
                             )}
                           >
-                            {formatMoney(Math.abs(row.balance), "KES")}
+                            {formatMoney(Math.abs(row.balance), baseCurrency)}
                             {row.balance < 0 ? " Cr" : " Dr"}
                           </td>
                         </tr>
@@ -244,13 +246,13 @@ export default function TrialBalancePage() {
                           Subtotal
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums">
-                          {formatMoney(rows.reduce((s, r) => s + r.debit, 0), "KES")}
+                          {formatMoney(rows.reduce((s, r) => s + r.debit, 0), baseCurrency)}
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums">
-                          {formatMoney(rows.reduce((s, r) => s + r.credit, 0), "KES")}
+                          {formatMoney(rows.reduce((s, r) => s + r.credit, 0), baseCurrency)}
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums">
-                          {formatMoney(Math.abs(rows.reduce((s, r) => s + r.balance, 0)), "KES")}
+                          {formatMoney(Math.abs(rows.reduce((s, r) => s + r.balance, 0)), baseCurrency)}
                         </td>
                       </tr>
                     </tfoot>

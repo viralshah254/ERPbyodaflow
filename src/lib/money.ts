@@ -42,3 +42,23 @@ export function kesEquivalent(
   if (!exchangeRate || exchangeRate <= 0) return null;
   return amount * exchangeRate;
 }
+
+/**
+ * Convert an amount in any document currency to the org base currency
+ * using a stored exchange rate snapshot (doc currency → base).
+ * Returns null when conversion is impossible (rate missing or zero).
+ *
+ * This is the same formula as kesEquivalent but uses configurable base.
+ */
+export function toBaseEquivalent(
+  amount: number,
+  currency: string,
+  baseCurrency: string,
+  exchangeRate?: number
+): number | null {
+  const norm = (currency ?? "").toUpperCase();
+  const base = (baseCurrency ?? "KES").toUpperCase();
+  if (!norm || norm === base) return amount;
+  if (!exchangeRate || exchangeRate <= 0) return null;
+  return amount * exchangeRate;
+}

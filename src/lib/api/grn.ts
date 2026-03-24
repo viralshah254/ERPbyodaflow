@@ -28,9 +28,38 @@ export async function fetchGRNById(id: string): Promise<GrnDetailRow | null> {
   }
 }
 
+export type GrnPostErrorCode =
+  | "GRN_ALREADY_POSTED"
+  | "GRN_CONVERTED_TO_BILL"
+  | "GRN_CANCELLED"
+  | "GRN_MISSING_WEIGHT"
+  | "GRN_OPEN_VARIANCE"
+  | "GRN_POST_FAILED"
+  | "GRN_NOT_FOUND";
+
+export type GrnPostError = Error & {
+  code?: GrnPostErrorCode;
+  grnId?: string;
+  poId?: string | null;
+  billId?: string | null;
+  billNumber?: string | null;
+};
+
 export async function postGRN(id: string): Promise<void> {
   requireLiveApi("Post goods receipt");
-  await apiRequest(`/api/purchasing/grn/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
+  try {
+    await apiRequest(`/api/purchasing/grn/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
+  } catch (raw) {
+    const base = raw as Error & { body?: Record<string, unknown> };
+    const body = base.body ?? {};
+    const typed = base as GrnPostError;
+    typed.code = (body.code as GrnPostErrorCode | undefined) ?? "GRN_POST_FAILED";
+    typed.grnId = (body.grnId as string | undefined) ?? id;
+    typed.poId = (body.poId as string | null | undefined) ?? null;
+    typed.billId = (body.billId as string | null | undefined) ?? null;
+    typed.billNumber = (body.billNumber as string | null | undefined) ?? null;
+    throw typed;
+  }
 }
 
 export async function confirmGRNProcessing(id: string): Promise<{ adjustedLines: number; processingConfirmed: boolean }> {

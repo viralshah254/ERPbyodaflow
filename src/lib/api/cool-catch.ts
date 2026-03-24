@@ -347,9 +347,9 @@ export async function createCashDisbursement(body: {
   paidWeightKg?: number;
   /** Per-line paid weight for multi-line POs. poLineId format: `${poId}:${lineIndex}` */
   lines?: { poLineId: string; paidWeightKg: number }[];
-}): Promise<{ id: string; reference: string }> {
+}): Promise<{ id: string; reference: string; warnings?: string[] }> {
   requireLiveApi("Create cash disbursement");
-  return apiRequest<{ id: string; reference: string }>("/api/purchasing/cash-weight-audit/disbursements", {
+  return apiRequest<{ id: string; reference: string; warnings?: string[] }>("/api/purchasing/cash-weight-audit/disbursements", {
     method: "POST",
     body,
   });
@@ -361,9 +361,28 @@ export async function reconcileCashWeightAudit(body: {
   grnLineId?: string;
   paidWeightKg?: number;
   receivedWeightKg?: number;
+  /** Approved override-request approval ID; required when changing weights without the override permission. */
+  overrideApprovalId?: string;
 }): Promise<void> {
   requireLiveApi("Reconcile cash-weight audit");
   await apiRequest("/api/purchasing/cash-weight-audit/reconcile", { method: "POST", body });
+}
+
+/**
+ * Submit a weight correction override request for admin approval.
+ * Required when the current user lacks `purchasing.audit.override`.
+ */
+export async function requestAuditWeightOverride(body: {
+  auditLineId: string;
+  paidWeightKg?: number;
+  receivedWeightKg?: number;
+  reason: string;
+}): Promise<{ id: string; documentNumber: string; status: string }> {
+  requireLiveApi("Request audit weight override");
+  return apiRequest<{ id: string; documentNumber: string; status: string }>(
+    "/api/purchasing/cash-weight-audit/override-request",
+    { method: "POST", body }
+  );
 }
 
 /** Build audit lines from PO + Cash disbursements + GRN. Body: { poId?, dateFrom?, dateTo? }. */

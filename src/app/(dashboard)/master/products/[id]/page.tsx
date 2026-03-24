@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -179,8 +180,19 @@ export default function ProductDetailPage() {
   const [matrixSheetOpen, setMatrixSheetOpen] = React.useState(false);
   const [uomOptions, setUomOptions] = React.useState<string[]>(["EA", "KG", "L", "M", "PCS"]);
   const [mounted, setMounted] = React.useState(false);
+  const [descriptionDraft, setDescriptionDraft] = React.useState("");
+  const [savingNotes, setSavingNotes] = React.useState(false);
 
   React.useEffect(() => setMounted(true), []);
+
+  React.useEffect(() => {
+    if (product === undefined) return;
+    if (product === null) {
+      setDescriptionDraft("");
+      return;
+    }
+    setDescriptionDraft(product.description ?? "");
+  }, [product?.id, product?.description]);
 
   // Load all data in parallel
   React.useEffect(() => {
@@ -287,6 +299,21 @@ export default function ProductDetailPage() {
       setProduct((p) => (p ? { ...p, productType: next } : p));
       toast.success("Product type updated.");
     } catch (err) { toast.error((err as Error).message); }
+  };
+
+  const saveProductNotes = async () => {
+    if (!product) return;
+    setSavingNotes(true);
+    try {
+      const next = descriptionDraft.trim() || undefined;
+      await patchProductApi(id, { description: next });
+      setProduct((p) => (p ? { ...p, description: next } : p));
+      toast.success("Notes saved.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingNotes(false);
+    }
   };
 
   const handleSaveTiers = () => {
@@ -564,6 +591,26 @@ export default function ProductDetailPage() {
                       </>
                     )}
                   </div>
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <Label htmlFor="product-notes">Notes</Label>
+                    <Textarea
+                      id="product-notes"
+                      value={descriptionDraft}
+                      onChange={(e) => setDescriptionDraft(e.target.value)}
+                      placeholder="Internal notes about this product…"
+                      rows={3}
+                      className="resize-y min-h-[72px]"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void saveProductNotes()}
+                      disabled={savingNotes || descriptionDraft === (product.description ?? "")}
+                    >
+                      {savingNotes ? "Saving…" : "Save notes"}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -670,13 +717,38 @@ export default function ProductDetailPage() {
                   {packaging.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No UOM conversions yet.</p>
                   ) : (
-                    <ul className="text-sm space-y-1">
-                      {packaging.map((p) => (
-                        <li key={p.uom} className="flex items-center gap-2">
-                          <span className="font-mono font-medium">{p.uom}</span>
-                          <span className="text-muted-foreground">= {p.unitsPer} {p.baseUom}</span>
-                          {p.isDefaultSalesUom && <Badge variant="outline" className="text-[10px] px-1 py-0">default sales</Badge>}
-                          {p.isDefaultPurchaseUom && <Badge variant="outline" className="text-[10px] px-1 py-0">default purchase</Badge>}
+                    <ul className="text-sm space-y-2">
+                      {packaging.map((p, i) => (
+                        <li key={p.uom} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5">
+                          <div className="flex flex-wrap items-center gap-2 min-w-0">
+                            <span className="font-mono font-medium">{p.uom}</span>
+                            <span className="text-muted-foreground">= {p.unitsPer} {p.baseUom}</span>
+                            {p.isDefaultSalesUom && <Badge variant="outline" className="text-[10px] px-1 py-0">default sales</Badge>}
+                            {p.isDefaultPurchaseUom && <Badge variant="outline" className="text-[10px] px-1 py-0">default purchase</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                setEditingPackIdx(i);
+                                setPackSheetOpen(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive"
+                              onClick={() => void handleRemovePackaging(i)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
                         </li>
                       ))}
                     </ul>

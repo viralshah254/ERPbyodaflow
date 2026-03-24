@@ -13,10 +13,12 @@ import {
 } from "@/components/ui/select";
 import { fetchFinancePeriodsApi, fetchFinancialStatementApi, fetchFinancialStatementDrilldownApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ProfitAndLossPage() {
+  const baseCurrency = useBaseCurrency();
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
   const [periodId, setPeriodId] = React.useState("");
   const [statement, setStatement] = React.useState<Awaited<ReturnType<typeof fetchFinancialStatementApi>> | null>(null);
@@ -85,7 +87,7 @@ export default function ProfitAndLossPage() {
                 className="flex w-full items-center justify-between rounded border p-3 text-left hover:bg-muted/40"
               >
                 <span className="font-medium">{section.label}</span>
-                <span>{formatMoney(section.amount, "KES")}</span>
+                <span>{formatMoney(section.amount, baseCurrency)}</span>
               </button>
             ))}
             {!statement || statement.sections.length === 0 ? (
@@ -99,7 +101,7 @@ export default function ProfitAndLossPage() {
                 {drilldown.map((item) => (
                   <div key={item.postingLineId} className="flex items-center justify-between rounded border p-2 text-xs">
                     <span>{item.documentNumber ?? item.sourceNumber} · {item.accountCode ?? "NA"}</span>
-                    <span>{formatMoney(item.amount, "KES")}</span>
+                    <span>{formatMoney(item.amount, baseCurrency)}</span>
                   </div>
                 ))}
                 {drilldown.length === 0 ? <p className="text-xs text-muted-foreground">No source lines for this section.</p> : null}

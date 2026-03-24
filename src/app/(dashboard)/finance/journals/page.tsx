@@ -12,6 +12,8 @@ import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { format } from "date-fns";
 import { downloadCsv } from "@/lib/export/csv";
+import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { fetchDocumentListApi } from "@/lib/api/documents";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -29,6 +31,7 @@ interface JournalEntry {
 }
 
 export default function JournalEntriesPage() {
+  const baseCurrency = useBaseCurrency();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -100,7 +103,7 @@ export default function JournalEntriesPage() {
         header: "Debit",
         accessor: (row: JournalEntry) => (
           <span className="font-medium">
-            KES {row.totalDebit.toLocaleString()}
+            {formatMoney(row.totalDebit, baseCurrency)}
           </span>
         ),
       },
@@ -109,7 +112,7 @@ export default function JournalEntriesPage() {
         header: "Credit",
         accessor: (row: JournalEntry) => (
           <span className="font-medium">
-            KES {row.totalCredit.toLocaleString()}
+            {formatMoney(row.totalCredit, baseCurrency)}
           </span>
         ),
       },
@@ -131,7 +134,7 @@ export default function JournalEntriesPage() {
         ),
       },
     ],
-    []
+    [baseCurrency]
   );
 
   return (

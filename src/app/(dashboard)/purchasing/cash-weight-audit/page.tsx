@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { LiveCurrencyConverterCard } from "@/components/operational/LiveCurrencyConverterCard";
 import { Input } from "@/components/ui/input";
+import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -36,6 +37,7 @@ import {
   fetchCashDisbursements,
   createCashDisbursement,
   reconcileCashWeightAudit,
+  requestAuditWeightOverride,
   buildCashWeightAudit,
   exportCashWeightAuditCsv,
   assignCashWeightException,
@@ -49,10 +51,13 @@ import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import type { AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import type { CashWeightAuditLineRow, CashDisbursementRow } from "@/lib/mock/purchasing/cash-weight-audit";
 import { formatMoney } from "@/lib/money";
+import { parseDecimalString } from "@/lib/decimal-input";
 import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
 import { fetchLandedCostAllocation } from "@/lib/api/landed-cost";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useAuthStore } from "@/stores/auth-store";
+import { Permissions } from "@/lib/permissions";
 
 type NotesMode = "investigate" | "resolve";
 
@@ -67,6 +72,10 @@ const WORKFLOW_STEPS = [
 export default function CashWeightAuditPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const permissions = useAuthStore((s) => s.permissions);
+  const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
+  const canOverride = isPlatformOperator || permissions.includes(Permissions.PURCHASING_AUDIT_OVERRIDE) || permissions.includes("*");
+
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [view, setView] = React.useState<"audit" | "disbursements">("audit");
   const [auditLines, setAuditLines] = React.useState<CashWeightAuditLineRow[]>([]);
@@ -75,6 +84,13 @@ export default function CashWeightAuditPage() {
   const [loading, setLoading] = React.useState(true);
   const [landedCostPerGrn, setLandedCostPerGrn] = React.useState<Map<string, number>>(new Map());
   const [reconcilingId, setReconcilingId] = React.useState<string | null>(null);
+
+  // Correct-weights dialog state
+  const [correctLine, setCorrectLine] = React.useState<CashWeightAuditLineRow | null>(null);
+  const [correctPaid, setCorrectPaid] = React.useState("");
+  const [correctReceived, setCorrectReceived] = React.useState("");
+  const [correctReason, setCorrectReason] = React.useState("");
+  const [savingCorrection, setSavingCorrection] = React.useState(false);
 
   // Disbursement form state
   const [disbursementOpen, setDisbursementOpen] = React.useState(false);
@@ -90,11 +106,17 @@ export default function CashWeightAuditPage() {
   const [disbAmount, setDisbAmount] = React.useState("");
   const [disbCurrency, setDisbCurrency] = React.useState("KES");
   const [disbPaidAt, setDisbPaidAt] = React.useState("");
-  const [disbReference, setDisbReference] = React.useState("");
   const [disbPaidWeightKg, setDisbPaidWeightKg] = React.useState("");
   const [disbLineWeights, setDisbLineWeights] = React.useState<Record<string, string>>({});
   const [poLines, setPoLines] = React.useState<Array<{ poLineId: string; sku: string; productName: string; qty: number; uom: string; rate: number; total: number }>>([]);
-  const [poDetail, setPoDetail] = React.useState<{ number: string; supplier: string; total: number; currency: string; fxRate: number } | null>(null);
+  const [poDetail, setPoDetail] = React.useState<{
+    number: string;
+    supplier: string;
+    total: number;
+    currency: string;
+    fxRate: number;
+    status?: string;
+  } | null>(null);
   const [savingDisb, setSavingDisb] = React.useState(false);
   const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
@@ -165,7 +187,7 @@ export default function CashWeightAuditPage() {
 
   const loadPoOptions = React.useCallback(
     (query: string) =>
-      searchPurchaseOrderLookupApi(query, { status: "APPROVED" }).then((items) =>
+      searchPurchaseOrderLookupApi(query, { status: "APPROVED,RECEIVED", excludeWithCashDisbursement: true }).then((items) =>
         items.map((item) => ({
           id: item.id,
           label: item.label,
@@ -196,6 +218,7 @@ export default function CashWeightAuditPage() {
           total: po.total ?? 0,
           currency: po.currency,
           fxRate: po.fxRate,
+          status: po.status,
         });
         if (!po.lines?.length) return;
         const lines = po.lines.map((l, i) => ({
@@ -225,8 +248,8 @@ export default function CashWeightAuditPage() {
   }, [disbPoId]);
 
   React.useEffect(() => {
-    const amount = Number(disbAmount);
-    if (disbCurrency === "KES" || !disbAmount || amount <= 0) {
+    const amount = parseDecimalString(disbAmount);
+    if (disbCurrency === "KES" || !disbAmount.trim() || Number.isNaN(amount) || amount <= 0) {
       setDisbKesPreview(null);
       return;
     }
@@ -257,12 +280,59 @@ export default function CashWeightAuditPage() {
     }
   };
 
+  const openCorrectDialog = (line: CashWeightAuditLineRow) => {
+    setCorrectLine(line);
+    setCorrectPaid(line.paidWeightKg != null ? String(line.paidWeightKg) : "");
+    setCorrectReceived(line.receivedWeightKg != null ? String(line.receivedWeightKg) : "");
+    setCorrectReason("");
+  };
+
+  const handleCorrectWeights = async () => {
+    if (!correctLine) return;
+    const newPaid = correctPaid ? parseFloat(correctPaid) : undefined;
+    const newReceived = correctReceived ? parseFloat(correctReceived) : undefined;
+    if (newPaid != null && Number.isNaN(newPaid)) { toast.error("Invalid paid weight."); return; }
+    if (newReceived != null && Number.isNaN(newReceived)) { toast.error("Invalid received weight."); return; }
+    if (newPaid == null && newReceived == null) { toast.error("Enter at least one weight to correct."); return; }
+    setSavingCorrection(true);
+    try {
+      if (canOverride) {
+        await reconcileCashWeightAudit({
+          auditLineId: correctLine.id,
+          paidWeightKg: newPaid,
+          receivedWeightKg: newReceived,
+        });
+        toast.success("Weights corrected.");
+      } else {
+        if (!correctReason.trim()) { toast.error("A reason is required to request an override."); setSavingCorrection(false); return; }
+        await requestAuditWeightOverride({
+          auditLineId: correctLine.id,
+          paidWeightKg: newPaid,
+          receivedWeightKg: newReceived,
+          reason: correctReason.trim(),
+        });
+        toast.success("Override request submitted — pending admin approval.");
+      }
+      setCorrectLine(null);
+      await load();
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Correction failed");
+    } finally {
+      setSavingCorrection(false);
+    }
+  };
+
+  const canSaveDisbursement = React.useMemo(() => {
+    if (!poDetail?.status) return true;
+    return ["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase());
+  }, [poDetail?.status]);
+
   const handleRecordDisbursement = async () => {
-    if (!disbPoId.trim() || !disbAmount || !disbPaidAt) {
+    if (!disbPoId.trim() || !disbAmount.trim() || !disbPaidAt) {
       toast.error("Purchase order, amount and paid date are required.");
       return;
     }
-    const amount = parseFloat(disbAmount);
+    const amount = parseDecimalString(disbAmount);
     if (Number.isNaN(amount) || amount <= 0) {
       toast.error("Enter a valid amount.");
       return;
@@ -272,12 +342,20 @@ export default function CashWeightAuditPage() {
         ? poLines
             .map((l) => {
               const w = disbLineWeights[l.poLineId];
-              const kg = w ? parseFloat(w) : undefined;
+              const kg = w?.trim() ? parseDecimalString(w) : undefined;
               return kg != null && !Number.isNaN(kg) && kg > 0 ? { poLineId: l.poLineId, paidWeightKg: kg } : null;
             })
             .filter((x): x is { poLineId: string; paidWeightKg: number } => x != null)
         : undefined;
-    const paidWeightKg = poLines.length <= 1 && disbPaidWeightKg ? parseFloat(disbPaidWeightKg) : undefined;
+    let paidWeightKg: number | undefined;
+    if (poLines.length <= 1) {
+      const w = disbPaidWeightKg.trim() ? parseDecimalString(disbPaidWeightKg) : NaN;
+      if (Number.isNaN(w) || w <= 0) {
+        toast.error("Enter a valid paid weight (kg).");
+        return;
+      }
+      paidWeightKg = w;
+    }
     if (poLines.length > 1 && (!lines?.length || lines.length < poLines.length)) {
       toast.error("Enter paid weight (kg) for each product line.");
       return;
@@ -289,11 +367,13 @@ export default function CashWeightAuditPage() {
         amount,
         currency: disbCurrency,
         paidAt: disbPaidAt,
-        reference: disbReference.trim() || undefined,
         paidWeightKg,
         lines,
       });
       const receiptLabel = disbResult.reference ? ` Receipt: ${disbResult.reference}.` : "";
+      if (disbResult.warnings?.length) {
+        toast.warning(`Weight data check: ${disbResult.warnings.join("; ")}. Audit lines will still be created.`);
+      }
       // Auto-build audit lines for this PO so the user never has to do it manually
       try {
         const built = await buildCashWeightAudit({ poId: disbPoId.trim() });
@@ -312,7 +392,6 @@ export default function CashWeightAuditPage() {
       setDisbCurrency("KES");
       setDisbKesPreview(null);
       setDisbPaidAt("");
-      setDisbReference("");
       setDisbPaidWeightKg("");
       setDisbLineWeights({});
       setPoLines([]);
@@ -356,6 +435,16 @@ export default function CashWeightAuditPage() {
 
   const auditColumns = [
     { id: "po", header: "PO", accessor: (r: CashWeightAuditLineRow) => <span className="font-medium">{r.poNumber ?? "—"}</span>, sticky: true },
+    {
+      id: "receipt",
+      header: "Receipt",
+      accessor: (r: CashWeightAuditLineRow) =>
+        r.disbursementReference ? (
+          <span className="font-mono text-xs">{r.disbursementReference}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
     { id: "sku", header: "SKU", accessor: (r: CashWeightAuditLineRow) => r.sku ?? "—" },
     { id: "product", header: "Product", accessor: (r: CashWeightAuditLineRow) => r.productName ?? "—" },
     { id: "ordered", header: "Ordered qty", accessor: (r: CashWeightAuditLineRow) => r.orderedQty ?? "—" },
@@ -389,12 +478,27 @@ export default function CashWeightAuditPage() {
     {
       id: "actions",
       header: "",
-      accessor: (r: CashWeightAuditLineRow) =>
-        r.status !== "MATCHED" ? (
-          <Button size="sm" variant="ghost" disabled={reconcilingId === r.id} onClick={() => handleReconcile(r)}>
-            {reconcilingId === r.id ? "Reconciling…" : "Reconcile"}
+      accessor: (r: CashWeightAuditLineRow) => (
+        <div className="flex items-center gap-1">
+          {r.grnId && (
+            <Button size="sm" variant="ghost" asChild>
+              <Link href={`/inventory/receipts/${r.grnId}`}>
+                <Icons.ExternalLink className="h-3 w-3 mr-1" />
+                GRN
+              </Link>
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => openCorrectDialog(r)}>
+            <Icons.Pencil className="h-3 w-3 mr-1" />
+            Correct
           </Button>
-        ) : null,
+          {r.status !== "MATCHED" && (
+            <Button size="sm" variant="ghost" disabled={reconcilingId === r.id} onClick={() => handleReconcile(r)}>
+              {reconcilingId === r.id ? "…" : "Reconcile"}
+            </Button>
+          )}
+        </div>
+      ),
     },
   ];
 
@@ -529,22 +633,29 @@ export default function CashWeightAuditPage() {
                       onOptionSelect={(opt) => setSelectedPoOption(opt)}
                       loadOptions={loadPoOptions}
                       selectedOption={selectedPoOption}
-                      placeholder="Search approved purchase orders…"
+                      placeholder="Search approved or received purchase orders…"
                       searchPlaceholder="Type PO number or supplier…"
-                      emptyMessage="No approved purchase orders found."
+                      emptyMessage="No approved or received purchase orders found."
                       allowClear
                       recentStorageKey="disb-po-picker"
                     />
-                    <p className="text-xs text-muted-foreground">Only approved POs are shown.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Approved or received POs are shown (you can record farm-gate payment while the order is open or after receipt).
+                    </p>
                   </div>
 
                   {/* PO summary card — shown once a PO is selected */}
                   {poDetail && (
                     <div className="rounded-md border bg-muted/40 text-sm overflow-hidden">
                       <div className="px-3 py-2 flex items-center justify-between gap-2 border-b bg-muted/60">
-                        <div className="flex items-center gap-2 font-medium">
+                        <div className="flex items-center gap-2 font-medium flex-wrap">
                           <Icons.FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span>{poDetail.number}</span>
+                          {poDetail.status && (
+                            <Badge variant="outline" className="text-[10px] font-normal uppercase">
+                              {poDetail.status}
+                            </Badge>
+                          )}
                           {poDetail.supplier && (
                             <span className="text-muted-foreground font-normal">· {poDetail.supplier}</span>
                           )}
@@ -598,6 +709,15 @@ export default function CashWeightAuditPage() {
                     </div>
                   )}
 
+                  {poDetail?.status &&
+                    !["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase()) && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      This PO is <strong>{poDetail.status}</strong>. Cash disbursements can only be saved when the purchase
+                      order is <strong>APPROVED</strong> or <strong>RECEIVED</strong>. Submit or approve the PO first, or
+                      open a PO that is already approved.
+                    </div>
+                  )}
+
                   {receivedWeightForPo !== null && (
                     <div className="rounded-md bg-muted px-3 py-2 text-sm flex items-center gap-2">
                       <Icons.Package className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -622,12 +742,10 @@ export default function CashWeightAuditPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-2">
                       <Label htmlFor="disbAmount">Amount paid</Label>
-                      <Input
+                      <FormattedDecimalInput
                         id="disbAmount"
-                        type="number"
-                        step="0.01"
                         value={disbAmount}
-                        onChange={(e) => setDisbAmount(e.target.value)}
+                        onValueChange={setDisbAmount}
                         placeholder="0.00"
                       />
                     </div>
@@ -662,14 +780,9 @@ export default function CashWeightAuditPage() {
                     />
                   </div>
 
-                  <div className="grid gap-2">
-                    <Label htmlFor="disbReference">Reference / receipt no. (optional)</Label>
-                    <Input
-                      id="disbReference"
-                      value={disbReference}
-                      onChange={(e) => setDisbReference(e.target.value)}
-                      placeholder="e.g. RCT-001"
-                    />
+                  <div className="flex items-center gap-2 rounded-md bg-muted/50 border px-3 py-2 text-xs text-muted-foreground">
+                    <Icons.Hash className="h-3.5 w-3.5 shrink-0" />
+                    <span>A receipt number is assigned automatically when you save.</span>
                   </div>
 
                   {/* Weight entry: single field for single-line POs, per-line for multi-line */}
@@ -679,13 +792,11 @@ export default function CashWeightAuditPage() {
                         Paid weight (kg){" "}
                         <span className="font-normal text-muted-foreground">— what you weighed at farm gate</span>
                       </Label>
-                      <Input
+                      <FormattedDecimalInput
                         id="disbPaidWeightKg"
-                        type="number"
-                        step="0.01"
                         value={disbPaidWeightKg}
-                        onChange={(e) => setDisbPaidWeightKg(e.target.value)}
-                        placeholder="e.g. 120.5"
+                        onValueChange={setDisbPaidWeightKg}
+                        placeholder="e.g. 1,200.5"
                       />
                     </div>
                   ) : (
@@ -698,14 +809,12 @@ export default function CashWeightAuditPage() {
                             <p className="text-sm font-medium truncate">{l.productName}</p>
                             <p className="text-xs text-muted-foreground">{l.sku}</p>
                           </div>
-                          <Input
-                            type="number"
-                            step="0.01"
+                          <FormattedDecimalInput
                             placeholder="kg"
                             className="w-28"
                             value={disbLineWeights[l.poLineId] ?? ""}
-                            onChange={(e) =>
-                              setDisbLineWeights((prev) => ({ ...prev, [l.poLineId]: e.target.value }))
+                            onValueChange={(value) =>
+                              setDisbLineWeights((prev) => ({ ...prev, [l.poLineId]: value }))
                             }
                           />
                         </div>
@@ -717,7 +826,7 @@ export default function CashWeightAuditPage() {
                   <Button variant="outline" onClick={() => setDisbursementOpen(false)} disabled={savingDisb}>
                     Cancel
                   </Button>
-                  <Button onClick={handleRecordDisbursement} disabled={savingDisb}>
+                  <Button onClick={handleRecordDisbursement} disabled={savingDisb || !canSaveDisbursement}>
                     {savingDisb ? "Saving…" : "Save disbursement"}
                   </Button>
                 </SheetFooter>
@@ -812,6 +921,13 @@ export default function CashWeightAuditPage() {
                     <CardDescription>
                       PO line → Cash disbursement → GRN received weight. Variances indicate transit shrinkage or grading differences.
                     </CardDescription>
+                    {/* Info callout: where each field comes from */}
+                    <div className="mt-3 rounded-md border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground space-y-1 max-w-xl">
+                      <p className="font-medium text-foreground">Where do these numbers come from?</p>
+                      <p><span className="font-medium text-foreground">Received weight</span> — entered on the GRN (Inventory → Goods Receipts). Click <span className="font-medium">GRN</span> on any row to open it.</p>
+                      <p><span className="font-medium text-foreground">Landed KES/kg</span> — calculated from landed cost allocations tied to the GRN (Inventory → Costing).</p>
+                      <p><span className="font-medium text-foreground">Variance</span> — computed automatically as received − paid. Corrections require admin override or an approved request.</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -891,6 +1007,100 @@ export default function CashWeightAuditPage() {
             </Button>
             <Button onClick={handleSubmitNotes} disabled={savingNotes || !notesValue.trim()}>
               {savingNotes ? "Saving…" : notesTarget?.mode === "investigate" ? "Save notes" : "Mark resolved"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Correct weights dialog */}
+      <Sheet open={!!correctLine} onOpenChange={(open) => { if (!open) setCorrectLine(null); }}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Correct weights</SheetTitle>
+            <SheetDescription>
+              {canOverride
+                ? "Admin override: weights will be updated immediately."
+                : "Corrections require admin approval. Your request will appear in the approvals inbox."}
+            </SheetDescription>
+          </SheetHeader>
+          {correctLine && (
+            <div className="grid gap-4 py-6">
+              {/* Context — current values */}
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs space-y-0.5">
+                <p className="font-medium text-foreground">{correctLine.poNumber} · {correctLine.sku}</p>
+                <p className="text-muted-foreground">
+                  Current: paid {correctLine.paidWeightKg ?? "—"} kg · received {correctLine.receivedWeightKg ?? "—"} kg
+                </p>
+                {correctLine.grnId && (
+                  <Link
+                    href={`/inventory/receipts/${correctLine.grnId}`}
+                    className="inline-flex items-center gap-1 text-primary hover:underline mt-0.5"
+                  >
+                    <Icons.ExternalLink className="h-3 w-3" />
+                    Open source GRN to update received weight
+                  </Link>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="correctPaid">Paid weight (kg)</Label>
+                <Input
+                  id="correctPaid"
+                  type="number"
+                  step="0.01"
+                  value={correctPaid}
+                  onChange={(e) => setCorrectPaid(e.target.value)}
+                  placeholder={correctLine.paidWeightKg != null ? String(correctLine.paidWeightKg) : "No change"}
+                />
+                <p className="text-xs text-muted-foreground">Leave blank to keep the current value.</p>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="correctReceived">Received weight (kg)</Label>
+                <Input
+                  id="correctReceived"
+                  type="number"
+                  step="0.01"
+                  value={correctReceived}
+                  onChange={(e) => setCorrectReceived(e.target.value)}
+                  placeholder={correctLine.receivedWeightKg != null ? String(correctLine.receivedWeightKg) : "No change"}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Primary source: enter received weight on the GRN. Use this only for manual corrections.
+                </p>
+              </div>
+
+              {!canOverride && (
+                <div className="grid gap-2">
+                  <Label htmlFor="correctReason">Reason for correction <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    id="correctReason"
+                    value={correctReason}
+                    onChange={(e) => setCorrectReason(e.target.value)}
+                    placeholder="e.g. Typo on original farm-gate entry — driver confirmed actual weight was 480 kg."
+                    rows={3}
+                  />
+                </div>
+              )}
+
+              {!canOverride && (
+                <div className="flex items-start gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+                  <Icons.Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>Your request will be sent to an admin for approval before weights change.</span>
+                </div>
+              )}
+            </div>
+          )}
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setCorrectLine(null)} disabled={savingCorrection}>
+              Cancel
+            </Button>
+            <Button onClick={handleCorrectWeights} disabled={savingCorrection}>
+              {savingCorrection
+                ? "Saving…"
+                : canOverride
+                ? "Apply correction"
+                : "Submit override request"}
             </Button>
           </SheetFooter>
         </SheetContent>

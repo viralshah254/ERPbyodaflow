@@ -3,6 +3,8 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
+import { formatDecimalDisplay, parseDecimalString } from "@/lib/decimal-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -20,8 +22,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
-import { listProducts, fetchProductsForDocumentLines } from "@/lib/data/products.repo";
+import {
+  listProducts,
+  fetchProductsForDocumentLines,
+  subscribeProductsCache,
+} from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
+import { fetchProductApi } from "@/lib/api/products";
+import { isApiConfigured } from "@/lib/api/client";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
@@ -56,7 +64,9 @@ interface DocumentLineEditorProps {
   useCostPricing?: boolean;
   currency: string;
   lines: DocumentLine[];
-  onLinesChange: (lines: DocumentLine[]) => void;
+  onLinesChange: (
+    next: DocumentLine[] | ((prev: DocumentLine[]) => DocumentLine[])
+  ) => void;
   /** Sales vs purchasing: optional supplier price list stub */
   mode?: "sales" | "purchasing";
   /** Preloaded packaging per product (from API); when provided, used instead of localStorage */
@@ -69,11 +79,44 @@ interface DocumentLineEditorProps {
   taxCodes?: Array<{ id: string; code: string; name: string; rate: number }>;
   /** When true, unit prices already include VAT — tax is back-calculated. Default: false (tax-exclusive). */
   linesAreTaxInclusive?: boolean;
+  /**
+   * Org UOM catalog (Settings → UOM). Merged into each line’s UOM dropdown with product packaging UOMs.
+   * Packaging defines units-per-base; the catalog ensures codes like KG appear even if packaging fetch failed.
+   */
+  catalogUomCodes?: string[];
 }
 
 const defaultPriceListId = "pl-retail";
 
-function applyLineTax(
+/** Default UOM from product packaging (purchase vs sales). */
+function pickDefaultUomFromPackaging(
+  packaging: ProductPackaging[],
+  mode: "sales" | "purchasing"
+): string | undefined {
+  if (!packaging.length) return undefined;
+  if (mode === "purchasing") {
+    const p = packaging.find((x) => x.isDefaultPurchaseUom);
+    if (p) return p.uom;
+  }
+  const s = packaging.find((x) => x.isDefaultSalesUom);
+  if (s) return s.uom;
+  return packaging[0]?.uom;
+}
+
+function mergeLineUomOptions(
+  packagingForProduct: ProductPackaging[] | undefined,
+  catalogUomCodes: string[],
+  currentValue?: string
+): string[] {
+  const fromPack = (packagingForProduct ?? []).map((p) => p.uom);
+  const merged = new Set<string>([...fromPack, ...catalogUomCodes]);
+  if (currentValue) merged.add(currentValue);
+  const arr = [...merged].filter(Boolean);
+  arr.sort((a, b) => a.localeCompare(b));
+  return arr.length ? arr : ["EA"];
+}
+
+export function applyLineTax(
   line: DocumentLine,
   taxCodes: Array<{ id: string; code: string; name: string; rate: number }>,
   linesAreTaxInclusive: boolean
@@ -102,9 +145,18 @@ export function DocumentLineEditor({
   productFilter,
   taxCodes = [],
   linesAreTaxInclusive = false,
+  catalogUomCodes = [],
 }: DocumentLineEditorProps) {
+  const linesRef = React.useRef(lines);
+  linesRef.current = lines;
+
   const [filteredProducts, setFilteredProducts] = React.useState<ProductRow[] | null>(null);
-  const cachedProducts = React.useMemo(() => listProducts(), []);
+  /** Re-subscribe when global product cache updates (hydrate) so defaultTaxCodeId etc. are fresh. */
+  const cachedProducts = React.useSyncExternalStore(
+    subscribeProductsCache,
+    listProducts,
+    () => []
+  );
   const products = React.useMemo(() => {
     if (productFilter && productFilter !== "all") {
       return filteredProducts ?? cachedProducts;
@@ -150,83 +202,113 @@ export function DocumentLineEditor({
       toast.error("No products found. Add products in Masters > Finished Good / SKU first.");
       return;
     }
-    const packaging = packagingByProductId?.[p.id] ?? [];
-    const uom = packaging.find((x) => x.isDefaultSalesUom)?.uom ?? packaging[0]?.uom ?? "EA";
-    const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
-    const { price, reason } = useCostPricing
-      ? { price: 0, reason: "Manual" }
-      : getPriceForLine(p.id, priceListIdResolved, 1, uom, pricingByProductId?.[p.id]);
-    const newLine: DocumentLine = {
-      id: `line-${Date.now()}`,
-      productId: p.id,
-      sku: p.sku,
-      name: p.name,
-      uom,
-      qty: 1,
-      baseQty,
-      price,
-      priceReason: reason,
-      amount: price,
-      taxCodeId: p.defaultTaxCodeId ?? undefined,
+    const build = (row: ProductRow) => {
+      const packaging = packagingByProductId?.[row.id] ?? [];
+      const uom = pickDefaultUomFromPackaging(packaging, mode) ?? "EA";
+      const baseQty = getBaseQty(row.id, uom, 1, packagingByProductId?.[row.id]);
+      const { price, reason } = useCostPricing
+        ? { price: 0, reason: "Manual" }
+        : getPriceForLine(row.id, priceListIdResolved, 1, uom, pricingByProductId?.[row.id]);
+      const newLine: DocumentLine = {
+        id: `line-${Date.now()}`,
+        productId: row.id,
+        sku: row.sku,
+        name: row.name,
+        uom,
+        qty: 1,
+        baseQty,
+        price,
+        priceReason: reason,
+        amount: price,
+        taxCodeId: row.defaultTaxCodeId ?? undefined,
+      };
+      const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
+      onLinesChange((prev) => [...prev, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
     };
-    const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
-    onLinesChange([...lines, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
+    if (isApiConfigured()) {
+      void fetchProductApi(p.id).then((full) => build(full ?? p)).catch(() => build(p));
+    } else {
+      build(p);
+    }
   };
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
-    const idx = lines.findIndex((l) => l.id === id);
-    if (idx < 0) return;
-    const prev = lines[idx];
-    let next = { ...prev, ...patch };
-    if (patch.productId != null || patch.uom != null || patch.qty != null) {
-      const productId = patch.productId ?? prev.productId;
-      const uom = patch.uom ?? prev.uom;
-      const qty = patch.qty ?? prev.qty;
-      next.baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
-      if (useCostPricing && patch.productId != null) {
-        next.price = 0;
-        next.priceReason = "Manual";
-      } else if (!useCostPricing) {
-        const { price, reason } = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
-        next.price = price;
-        next.priceReason = reason;
+    onLinesChange((prevLines) => {
+      const idx = prevLines.findIndex((l) => l.id === id);
+      if (idx < 0) return prevLines;
+      const prev = prevLines[idx];
+      let next = { ...prev, ...patch };
+      if (patch.productId != null || patch.uom != null || patch.qty != null) {
+        const productId = patch.productId ?? prev.productId;
+        const uom = patch.uom ?? prev.uom;
+        const qty = patch.qty ?? prev.qty;
+        next.baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
+        if (useCostPricing && patch.productId != null) {
+          next.price = 0;
+          next.priceReason = "Manual";
+        } else if (!useCostPricing) {
+          const { price, reason } = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+          next.price = price;
+          next.priceReason = reason;
+        }
+        next.amount = next.qty * next.price;
       }
-      next.amount = next.qty * next.price;
-    }
-    // Always recompute tax so that changes to qty, price, or taxCodeId are reflected
-    const taxed = applyLineTax(next, taxCodes, linesAreTaxInclusive);
-    next.tax = taxed.tax;
-    next.amount = taxed.amount;
-    const arr = [...lines];
-    arr[idx] = next;
-    onLinesChange(arr);
+      const taxed = applyLineTax(next, taxCodes, linesAreTaxInclusive);
+      next.tax = taxed.tax;
+      next.amount = taxed.amount;
+      const arr = [...prevLines];
+      arr[idx] = next;
+      return arr;
+    });
   };
+
+  /** When tax codes load after lines exist (or tax-inclusive toggles), recompute tax/amount from line.taxCodeId. */
+  const taxCodesKey = taxCodes.map((t) => `${t.id}:${t.rate}`).join("|");
+  const onLinesChangeRef = React.useRef(onLinesChange);
+  onLinesChangeRef.current = onLinesChange;
+  React.useEffect(() => {
+    if (taxCodes.length === 0) return;
+    onLinesChangeRef.current((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((l) => {
+        const taxed = applyLineTax(l, taxCodes, linesAreTaxInclusive);
+        return { ...l, tax: taxed.tax, amount: taxed.amount };
+      });
+    });
+  }, [taxCodesKey, linesAreTaxInclusive, taxCodes.length]);
 
   const setProduct = (lineId: string, productId: string) => {
     const p = products.find((x) => x.id === productId);
     if (!p) return;
-    const packaging = packagingByProductId?.[productId] ?? [];
-    const uom = packaging.find((x) => x.isDefaultSalesUom)?.uom ?? packaging[0]?.uom ?? "EA";
-    const line = lines.find((l) => l.id === lineId);
-    const qty = line?.qty ?? 1;
-    const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
-    const { price, reason } = useCostPricing
-      ? { price: 0, reason: "Manual" }
-      : getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
-    updateLine(lineId, {
-      productId: p.id,
-      sku: p.sku,
-      name: p.name,
-      uom,
-      baseQty,
-      price,
-      priceReason: reason,
-      amount: qty * price,
-      taxCodeId: p.defaultTaxCodeId ?? undefined,
-      variantId: undefined,
-      variantSku: undefined,
-    });
-    ensureVariantsLoaded(productId);
+    const applyRow = (row: ProductRow) => {
+      const packaging = packagingByProductId?.[productId] ?? [];
+      const uom = pickDefaultUomFromPackaging(packaging, mode) ?? "EA";
+      const line = linesRef.current.find((l) => l.id === lineId);
+      const qty = line?.qty ?? 1;
+      const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
+      const { price, reason } = useCostPricing
+        ? { price: 0, reason: "Manual" }
+        : getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+      updateLine(lineId, {
+        productId: row.id,
+        sku: row.sku,
+        name: row.name,
+        uom,
+        baseQty,
+        price,
+        priceReason: reason,
+        amount: qty * price,
+        taxCodeId: row.defaultTaxCodeId ?? undefined,
+        variantId: undefined,
+        variantSku: undefined,
+      });
+      ensureVariantsLoaded(productId);
+    };
+    if (isApiConfigured()) {
+      void fetchProductApi(productId).then((full) => applyRow(full ?? p)).catch(() => applyRow(p));
+    } else {
+      applyRow(p);
+    }
   };
 
   const setVariant = (lineId: string, variantId: string) => {
@@ -286,7 +368,7 @@ export function DocumentLineEditor({
   };
 
   const removeLine = (id: string) => {
-    onLinesChange(lines.filter((l) => l.id !== id));
+    onLinesChange((prev) => prev.filter((l) => l.id !== id));
   };
 
   const subtotalSum = lines.reduce((s, l) => s + l.qty * l.price, 0);
@@ -385,28 +467,31 @@ export function DocumentLineEditor({
                         value={l.uom}
                         onChange={setUom}
                         packagingForProduct={packagingByProductId?.[l.productId]}
+                        catalogUomCodes={catalogUomCodes}
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={1}
-                        className="w-20"
-                        value={l.qty}
-                        onChange={(e) => setQty(l.id, Number((e.target as HTMLInputElement).value) || 0)}
+                      <FormattedDecimalInput
+                        className="w-24"
+                        value={String(l.qty)}
+                        onValueChange={(raw) => {
+                          const n = parseDecimalString(raw);
+                          setQty(l.id, Number.isFinite(n) && n >= 0 ? n : 0);
+                        }}
                       />
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{l.baseQty}</TableCell>
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      {formatDecimalDisplay(String(l.baseQty))}
+                    </TableCell>
                     <TableCell>
                       {useCostPricing ? (
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          className="w-24"
-                          value={l.price}
-                          onChange={(e) => setPrice(l.id, Number((e.target as HTMLInputElement).value) || 0)}
+                        <FormattedDecimalInput
+                          className="w-32 min-w-[7rem]"
+                          value={String(l.price)}
+                          onValueChange={(raw) => {
+                            const n = parseDecimalString(raw);
+                            setPrice(l.id, Number.isFinite(n) && n >= 0 ? n : 0);
+                          }}
                         />
                       ) : (
                         formatMoney(l.price, currency)
@@ -481,18 +566,20 @@ function UomSelect({
   value,
   onChange,
   packagingForProduct = [],
+  catalogUomCodes = [],
 }: {
   lineId: string;
   productId: string;
   value: string;
   onChange: (lineId: string, uom: string) => void;
   packagingForProduct?: ProductPackaging[];
+  catalogUomCodes?: string[];
 }) {
-  const options = packagingForProduct.length ? packagingForProduct.map((p) => p.uom) : ["EA"];
+  const options = mergeLineUomOptions(packagingForProduct, catalogUomCodes, value);
 
   return (
     <Select value={value} onValueChange={(v) => onChange(lineId, v)}>
-      <SelectTrigger className="w-20">
+      <SelectTrigger className="w-24 min-w-[5.5rem]">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

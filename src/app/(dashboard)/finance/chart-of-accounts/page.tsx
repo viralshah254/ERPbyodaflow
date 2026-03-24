@@ -31,8 +31,10 @@ import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
 export default function ChartOfAccountsPage() {
+  const baseCurrency = useBaseCurrency();
   const [rows, setRows] = React.useState<FinanceAccount[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
@@ -53,7 +55,7 @@ export default function ChartOfAccountsPage() {
     code: "",
     name: "",
     type: "ASSET",
-    currency: "KES",
+    currency: baseCurrency,
     parentId: "",
     description: "",
   });
@@ -145,7 +147,7 @@ export default function ChartOfAccountsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ code: "", name: "", type: "ASSET", currency: "KES", parentId: "", description: "" });
+    setForm({ code: "", name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "" });
     setCreateOpen(true);
   };
 
@@ -155,7 +157,7 @@ export default function ChartOfAccountsPage() {
       code: row.code,
       name: row.name,
       type: (["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"].includes(row.type) ? row.type : "ASSET") as "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE",
-      currency: row.currency || "KES",
+      currency: row.currency || baseCurrency,
       parentId: row.parentId || "",
       description: row.description || "",
     });
@@ -373,7 +375,7 @@ export default function ChartOfAccountsPage() {
                   await refresh();
                   setCreateOpen(false);
                   setEditing(null);
-                  setForm({ code: "", name: "", type: "ASSET", currency: "KES", parentId: "", description: "" });
+                  setForm({ code: "", name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "" });
                 } catch (error) {
                   toast.error((error as Error).message || "Failed to save account.");
                 } finally {

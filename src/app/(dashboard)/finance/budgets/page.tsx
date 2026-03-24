@@ -23,10 +23,12 @@ import {
 import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
 import { CURRENCY_LIST } from "@/lib/data/currencies";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function BudgetsPage() {
+  const baseCurrency = useBaseCurrency();
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<BudgetRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -39,7 +41,7 @@ export default function BudgetsPage() {
     fiscalYear: String(new Date().getFullYear()),
     costCenter: "",
     branchId: "",
-    currency: "KES",
+    currency: baseCurrency,
     linesText: "6000,2026-01,100000\n6100,2026-01,50000",
   });
   const [currencies, setCurrencies] = React.useState<{ code: string; name: string }[]>(
@@ -97,7 +99,7 @@ export default function BudgetsPage() {
       fiscalYear: String(new Date().getFullYear()),
       costCenter: "",
       branchId: "",
-      currency: "KES",
+      currency: baseCurrency,
       linesText: "6000,2026-01,100000\n6100,2026-01,50000",
     });
     setDrawerOpen(true);
@@ -109,7 +111,7 @@ export default function BudgetsPage() {
       { id: "fiscalYear", header: "Year", accessor: "fiscalYear" as keyof BudgetRow },
       { id: "costCenter", header: "Cost Center", accessor: (row: BudgetRow) => row.costCenter || "—" },
       { id: "status", header: "Status", accessor: "status" as keyof BudgetRow },
-      { id: "totalBudget", header: "Total", accessor: (row: BudgetRow) => formatMoney(row.totalBudget ?? 0, row.currency || "KES") },
+      { id: "totalBudget", header: "Total", accessor: (row: BudgetRow) => formatMoney(row.totalBudget ?? 0, row.currency || baseCurrency) },
       {
         id: "actions",
         header: "Actions",
@@ -175,7 +177,7 @@ export default function BudgetsPage() {
                   fiscalYear: row.fiscalYear,
                   costCenter: row.costCenter || "",
                   branchId: row.branchId || "",
-                  currency: row.currency || "KES",
+                  currency: row.currency || baseCurrency,
                 }));
                 setDrawerOpen(true);
               }}
@@ -186,7 +188,7 @@ export default function BudgetsPage() {
         ),
       },
     ],
-    [refresh]
+    [refresh, baseCurrency]
   );
 
   return (
@@ -281,7 +283,7 @@ export default function BudgetsPage() {
                       fiscalYear: form.fiscalYear.trim(),
                       costCenter: form.costCenter.trim() || undefined,
                       branchId: form.branchId.trim() || undefined,
-                      currency: form.currency.trim() || "KES",
+                      currency: form.currency.trim() || baseCurrency,
                       lines: parseLines(form.linesText),
                     };
                     try {
@@ -313,16 +315,16 @@ export default function BudgetsPage() {
             <h2 className="text-lg font-semibold">Budget variance - {variance.name}</h2>
             <p className="text-sm text-muted-foreground">Status: {variance.status}</p>
             <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-              <div className="rounded border p-3">Budget: {formatMoney(variance.totals.budgetAmount, "KES")}</div>
-              <div className="rounded border p-3">Actual: {formatMoney(variance.totals.actualAmount, "KES")}</div>
-              <div className="rounded border p-3">Variance: {formatMoney(variance.totals.variance, "KES")}</div>
+              <div className="rounded border p-3">Budget: {formatMoney(variance.totals.budgetAmount, baseCurrency)}</div>
+              <div className="rounded border p-3">Actual: {formatMoney(variance.totals.actualAmount, baseCurrency)}</div>
+              <div className="rounded border p-3">Variance: {formatMoney(variance.totals.variance, baseCurrency)}</div>
             </div>
             <div className="mt-4 max-h-[50vh] space-y-2 overflow-auto">
               {variance.lines.map((line, index) => (
                 <div key={`${line.accountCode}-${line.period}-${index}`} className="rounded border p-3 text-sm">
                   <p className="font-medium">{line.accountCode} - {line.period}</p>
                   <p className="text-muted-foreground">
-                    Budget {formatMoney(line.budgetAmount, "KES")} / Actual {formatMoney(line.actualAmount, "KES")} / Var {formatMoney(line.variance, "KES")}
+                    Budget {formatMoney(line.budgetAmount, baseCurrency)} / Actual {formatMoney(line.actualAmount, baseCurrency)} / Var {formatMoney(line.variance, baseCurrency)}
                   </p>
                 </div>
               ))}

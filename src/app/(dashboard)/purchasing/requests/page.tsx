@@ -109,6 +109,25 @@ export default function PurchaseRequestsPage() {
         header: "Status",
         accessor: (r: PurchasingDocRow) => <StatusBadge status={r.status} />,
       },
+      {
+        id: "rowActions",
+        header: "",
+        accessor: (r: PurchasingDocRow) =>
+          r.status === "APPROVED" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs whitespace-nowrap"
+              asChild
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Link href={`/docs/purchase-order/new?requestId=${r.id}`}>
+                <Icons.ShoppingCart className="h-3 w-3 mr-1" />
+                Create PO
+              </Link>
+            </Button>
+          ) : null,
+      },
     ],
     []
   );
@@ -200,8 +219,13 @@ export default function PurchaseRequestsPage() {
           onDeleteView={handleDeleteView}
           bulkActions={
             selectedIds.length > 0 ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
+                {filtered.some((r) => selectedIds.includes(r.id) && r.status === "APPROVED") && (
+                  <span className="text-xs text-muted-foreground">
+                    Approved requests can be converted to POs individually using the "Create PO" button on each row.
+                  </span>
+                )}
                 <Button variant="outline" size="sm" onClick={() => router.push("/purchasing/orders")}>
                   Open orders
                 </Button>

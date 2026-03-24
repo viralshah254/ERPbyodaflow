@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -44,6 +45,7 @@ import {
   downloadDocumentPdfApi,
   downloadDocumentAttachmentApi,
   fetchDocumentDetailApi,
+  patchDocumentApi,
   requestDocumentApprovalApi,
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
@@ -77,11 +79,16 @@ export default function DocViewPage() {
   const [actionLoading, setActionLoading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
+  const [notesDraft, setNotesDraft] = React.useState("");
+  const [notesSaving, setNotesSaving] = React.useState(false);
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
   const [convertPartyId, setConvertPartyId] = React.useState("");
   const [convertWarehouseId, setConvertWarehouseId] = React.useState("");
+  const [quickConvertOpen, setQuickConvertOpen] = React.useState(false);
+  const [quickConvertTarget, setQuickConvertTarget] = React.useState<DocTypeKey | null>(null);
+  const [quickConverting, setQuickConverting] = React.useState(false);
   const [outputTemplateId, setOutputTemplateId] = React.useState("");
   const [selectedConvertPartyOption, setSelectedConvertPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
@@ -156,6 +163,10 @@ export default function DocViewPage() {
     void refreshDocument();
   }, [refreshDocument]);
 
+  React.useEffect(() => {
+    if (!loading && document) setNotesDraft(document.notes ?? "");
+  }, [loading, document?.id, document?.notes]);
+
   // For bills: fetch the GRN's landed cost allocation so we can show the breakdown card
   React.useEffect(() => {
     if (type !== "bill") return;
@@ -216,6 +227,18 @@ export default function DocViewPage() {
 
   const openConvertSheet = React.useCallback(
     (targetType: DocTypeKey) => {
+      // PO → GRN: use the dedicated new-GRN wizard (lines, qty, UOM, tax). It already prefills from ?poId=.
+      // A sidebar cannot replace that flow without cramming the whole Lines step into a drawer.
+      if (type === "purchase-order" && targetType === "grn") {
+        router.push(`/docs/grn/new?poId=${encodeURIComponent(id)}`);
+        return;
+      }
+      // For sales-order → invoice: use a compact quick-confirm dialog (no warehouse/party change needed)
+      if (type === "sales-order" && targetType === "invoice") {
+        setQuickConvertTarget(targetType);
+        setQuickConvertOpen(true);
+        return;
+      }
       setConvertType(targetType);
       setConvertPartyId(document?.partyId ?? "");
       const resolvedLabel =
@@ -229,7 +252,7 @@ export default function DocViewPage() {
       setOutputTemplateId(document?.outputTemplateId ?? "");
       setConvertOpen(true);
     },
-    [document, displayPartyName]
+    [document, displayPartyName, type, id, router]
   );
 
   const rightSlot = (
@@ -278,6 +301,7 @@ export default function DocViewPage() {
         { label: breadcrumbLabel },
       ]}
       status={document?.status ?? "APPROVED"}
+      statusActor={document?.statusActor ?? null}
       rightSlot={rightSlot}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -332,7 +356,7 @@ export default function DocViewPage() {
                   try {
                     await documentActionApi(type as DocTypeKey, id, "approve");
                     await refreshDocument();
-                    toast.success("Document approved.");
+                    toast.success(type === "bill" ? "Bill approved." : "Document approved.");
                   } catch (e) {
                     toast.error((e as Error).message);
                   } finally {
@@ -341,7 +365,7 @@ export default function DocViewPage() {
                 }}
               >
                 <Icons.Check className="mr-2 h-4 w-4" />
-                Approve
+                {type === "bill" ? "Approve bill" : "Approve"}
               </Button>
               )}
               {canPost && (
@@ -527,6 +551,44 @@ export default function DocViewPage() {
                   </div>
                 </div>
                 {/* Invoice payment status bar */}
+                {document?.status === "DRAFT" && (
+                  <div className="mt-4 pt-4 border-t space-y-2">
+                    <Label htmlFor="document-notes">Notes</Label>
+                    <Textarea
+                      id="document-notes"
+                      value={notesDraft}
+                      onChange={(e) => setNotesDraft(e.target.value)}
+                      placeholder="Notes for this document (internal / print as configured)…"
+                      rows={3}
+                      className="resize-y min-h-[72px] max-w-3xl"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={
+                        notesSaving || notesDraft === (document.notes ?? "")
+                      }
+                      onClick={async () => {
+                        if (!document) return;
+                        setNotesSaving(true);
+                        try {
+                          await patchDocumentApi(type as DocTypeKey, id, {
+                            notes: notesDraft.trim() || undefined,
+                          });
+                          await refreshDocument();
+                          toast.success("Notes saved.");
+                        } catch (e) {
+                          toast.error((e as Error).message);
+                        } finally {
+                          setNotesSaving(false);
+                        }
+                      }}
+                    >
+                      {notesSaving ? "Saving…" : "Save notes"}
+                    </Button>
+                  </div>
+                )}
                 {type === "invoice" && document?.paymentStatus && (
                   <div className="mt-4 pt-3 border-t">
                     <div className="flex items-center justify-between mb-1 text-sm">
@@ -643,40 +705,68 @@ export default function DocViewPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="rounded border">
-                    <div className="grid grid-cols-[1fr_90px_90px_140px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="rounded border overflow-x-auto">
+                    <div className="min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       <span>Description</span>
+                      <span className="text-right">UOM</span>
                       <span className="text-right">Qty</span>
                       <span className="text-right">Remaining</span>
+                      <span>Tax</span>
                       <span className="text-right">Amount</span>
                     </div>
-                    {(document?.lines ?? []).map((line) => (
-                      <div key={line.id ?? line.description} className="grid grid-cols-[1fr_90px_90px_140px] gap-3 border-b px-4 py-3 text-sm last:border-b-0">
-                        <div>
-                          <span>{line.description}</span>
-                          {line.sourceDocumentType && line.sourceDocumentId ? (
-                            <p className="text-xs text-muted-foreground">
-                              From {line.sourceDocumentType.replace(/-/g, " ")}
-                            </p>
-                          ) : null}
+                    {(document?.lines ?? []).map((line) => {
+                      const taxLabel =
+                        line.taxCodeCode != null || line.taxRate != null
+                          ? [line.taxCodeCode, line.taxRate != null ? `${line.taxRate}%` : null]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : "—";
+                      const taxTitle = line.taxCodeName
+                        ? `${line.taxCodeName}${line.taxCodeCode ? ` (${line.taxCodeCode})` : ""}`
+                        : undefined;
+                      return (
+                        <div
+                          key={line.id ?? line.description}
+                          className="min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                        >
+                          <div className="min-w-0">
+                            <span>{line.description}</span>
+                            {line.productSku ? (
+                              <p className="text-xs text-muted-foreground font-mono truncate">
+                                {line.productSku}
+                                {line.productName ? ` · ${line.productName}` : ""}
+                              </p>
+                            ) : null}
+                            {line.sourceDocumentType && line.sourceDocumentId ? (
+                              <p className="text-xs text-muted-foreground">
+                                From {line.sourceDocumentType.replace(/-/g, " ")}
+                              </p>
+                            ) : null}
+                          </div>
+                          <span className="text-right font-mono text-xs">{line.unit ?? "—"}</span>
+                          <span className="text-right">{line.qty ?? "—"}</span>
+                          <span className="text-right">
+                            {line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate" title={taxTitle}>
+                            {taxLabel}
+                          </span>
+                          <div className="flex justify-end">
+                            {line.amount != null ? (
+                              <DualCurrencyAmount
+                                amount={line.amount}
+                                currency={document?.currency ?? "KES"}
+                                exchangeRate={document?.exchangeRate}
+                                align="right"
+                                size="sm"
+                              />
+                            ) : (
+                              <span>—</span>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-right">{line.qty ?? "—"}</span>
-                        <span className="text-right">{line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}</span>
-                        <div className="flex justify-end">
-                          {line.amount != null ? (
-                            <DualCurrencyAmount
-                              amount={line.amount}
-                              currency={document?.currency ?? "KES"}
-                              exchangeRate={document?.exchangeRate}
-                              align="right"
-                              size="sm"
-                            />
-                          ) : (
-                            <span>—</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -834,6 +924,54 @@ export default function DocViewPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Quick confirm dialog for sales-order → invoice (no warehouse/party change needed) */}
+      {quickConvertOpen && quickConvertTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Icons.FileText className="h-5 w-5 text-primary" />
+              <h3 className="text-base font-semibold">Convert to Invoice</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-1">
+              Convert <strong>{document?.number ?? id}</strong> to an invoice?
+            </p>
+            {document?.lines?.length ? (
+              <p className="text-xs text-muted-foreground mb-4">
+                All {document.lines.length} line item{document.lines.length !== 1 ? "s" : ""} will be included.
+              </p>
+            ) : (
+              <div className="mb-4" />
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setQuickConvertOpen(false)}>Cancel</Button>
+              <Button
+                disabled={quickConverting}
+                onClick={async () => {
+                  setQuickConverting(true);
+                  try {
+                    const created = await convertDocumentApi(type as DocTypeKey, id, { targetType: quickConvertTarget });
+                    toast.success(`Invoice ${created.number ?? "created"}.`);
+                    setQuickConvertOpen(false);
+                    if (created.id) {
+                      router.push(`/docs/${quickConvertTarget}/${created.id}`);
+                    } else {
+                      await refreshDocument();
+                    }
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setQuickConverting(false);
+                  }
+                }}
+              >
+                {quickConverting ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.FileText className="mr-2 h-4 w-4" />}
+                {quickConverting ? "Creating…" : "Create Invoice"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Apply credit note to invoice dialog */}
       {applyDialogOpen && (
@@ -1066,8 +1204,20 @@ function DynamicNextStepsPanel({
     if (status === "POSTED") {
       steps.push({ icon: <Icons.Link className="h-4 w-4" />, text: "Apply to an open invoice directly from this page" });
     }
+  } else if (type === "purchase-request") {
+    if (status === "DRAFT") {
+      steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Add lines and submit for approval", action: () => void onAction("submit"), actionLabel: "Submit for approval", variant: "default" });
+    } else if (status === "PENDING_APPROVAL") {
+      steps.push({ icon: <Icons.Inbox className="h-4 w-4" />, text: "Awaiting approval — check your inbox", href: "/approvals/inbox", actionLabel: "Go to inbox" });
+    } else if (status === "APPROVED") {
+      steps.push({ icon: <Icons.ShoppingCart className="h-4 w-4 text-blue-500" />, text: "Approved — convert to a Purchase Order", action: () => onConvert("purchase-order"), actionLabel: "Create PO", variant: "default" });
+    }
   } else if (type === "purchase-order") {
-    if (status === "APPROVED") {
+    if (status === "DRAFT") {
+      steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Submit this PO for approval before creating a GRN", action: () => void onAction("submit"), actionLabel: "Submit for approval", variant: "default" });
+    } else if (status === "PENDING_APPROVAL") {
+      steps.push({ icon: <Icons.Inbox className="h-4 w-4" />, text: "Awaiting approval — check your inbox", href: "/approvals/inbox", actionLabel: "Go to inbox" });
+    } else if (status === "APPROVED") {
       steps.push({ icon: <Icons.Package className="h-4 w-4 text-blue-500" />, text: "Receive goods — create GRN", action: () => onConvert("grn"), actionLabel: "Create GRN", variant: "default" });
     }
   } else if (type === "grn") {
@@ -1075,21 +1225,41 @@ function DynamicNextStepsPanel({
       steps.push({ icon: <Icons.FileText className="h-4 w-4" />, text: "Create supplier bill", action: () => onConvert("bill"), actionLabel: "Create Bill", variant: "default" });
     }
   } else if (type === "bill") {
-    if (status === "DRAFT" || status === "APPROVED") {
+    if (status === "DRAFT") {
+      steps.push({
+        icon: <Icons.Send className="h-4 w-4" />,
+        text: "Submit this bill for finance approval before posting",
+        action: () => void onAction("submit"),
+        actionLabel: "Request approval",
+        variant: "default",
+      });
+    } else if (status === "PENDING_APPROVAL") {
+      steps.push({
+        icon: <Icons.Clock className="h-4 w-4 text-amber-500" />,
+        text: "Awaiting finance approval — a user with finance approval rights must approve this bill",
+      });
+      steps.push({
+        icon: <Icons.Inbox className="h-4 w-4" />,
+        text: "You can also approve from the approvals inbox",
+        href: "/approvals/inbox",
+        actionLabel: "Go to inbox",
+        variant: "outline",
+      });
+    } else if (status === "APPROVED") {
       const srcDoc = document?.sourceDocument;
-      const grnBlocked = srcDoc?.typeKey === "grn" && srcDoc.status !== "RECEIVED";
+      const grnBlocked = srcDoc?.typeKey === "grn" && !["POSTED", "RECEIVED", "CONVERTED"].includes(srcDoc.status ?? "");
       if (grnBlocked) {
         steps.push({
           icon: <Icons.AlertTriangle className="h-4 w-4 text-amber-500" />,
-          text: `GRN ${srcDoc!.number} must be received before this bill can be posted`,
-          href: `/docs/grn/${srcDoc!.id}`,
+          text: `GRN ${srcDoc!.number} must be posted before this bill can be posted`,
+          href: `/inventory/receipts/${srcDoc!.id}`,
           actionLabel: `Go to ${srcDoc!.number}`,
           variant: "default",
         });
       } else {
         steps.push({
           icon: <Icons.Send className="h-4 w-4" />,
-          text: "Post bill to record the liability",
+          text: "Post bill to record the liability in the GL and AP subledger",
           action: () => void onAction("post"),
           actionLabel: "Post",
           variant: "default",

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/money";
 import { fetchDocumentDetailApi } from "@/lib/api/documents";
+import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
   fetchLandedCostAllocation,
   type ExistingLandedCostAllocation,
@@ -168,6 +169,15 @@ export function DocumentTaxesPanel({
 }: DocumentTaxesPanelProps) {
   const [vat, setVat] = React.useState<VatLine[]>([]);
   const [wht, setWht] = React.useState<WhtLine[]>([]);
+  const [lineTaxRows, setLineTaxRows] = React.useState<
+    Array<{
+      key: string;
+      description: string;
+      code: string;
+      name?: string;
+      rate?: number;
+    }>
+  >([]);
   const [docTotal, setDocTotal] = React.useState(0);
   const [docCurrency, setDocCurrency] = React.useState(currency);
 
@@ -183,11 +193,27 @@ export function DocumentTaxesPanel({
   React.useEffect(() => {
     fetchDocumentDetailApi(docType as never, docId)
       .then((document) => {
-        const lines = document?.lines ?? [];
+        const lines = (document?.lines ?? []) as DocumentDetailRecord["lines"];
         const total = document?.total ?? lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
         const curr = document?.currency ?? currency;
         setDocTotal(total);
         setDocCurrency(curr);
+
+        const taxLines = lines.filter(
+          (l) =>
+            l.effectiveTaxCodeId != null ||
+            l.taxCodeCode != null ||
+            typeof l.taxRate === "number"
+        );
+        setLineTaxRows(
+          taxLines.map((line, i) => ({
+            key: line.id ?? `line-${i}`,
+            description: (line.productName ?? line.description ?? "Line").trim() || "Line",
+            code: line.taxCodeCode ?? "—",
+            name: line.taxCodeName,
+            rate: line.taxRate,
+          }))
+        );
 
         const totalTax = lines.reduce((sum, line) => sum + (line.tax ?? 0), 0);
         const totalBase = lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
@@ -226,6 +252,7 @@ export function DocumentTaxesPanel({
       .catch(() => {
         setVat([]);
         setWht([]);
+        setLineTaxRows([]);
       });
   }, [docId, docType, currency, isGrn, isBill]);
 
@@ -246,6 +273,44 @@ export function DocumentTaxesPanel({
 
   return (
     <div className="space-y-4">
+      {lineTaxRows.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Line tax codes</CardTitle>
+            <p className="text-xs text-muted-foreground font-normal mt-1">
+              Tax bracket applied per line (from the line or the product default). VAT amounts appear when calculated on
+              posted tax documents.
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Line</TableHead>
+                  <TableHead>Code</TableHead>
+                  <TableHead className="text-right">Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lineTaxRows.map((row) => (
+                  <TableRow key={row.key}>
+                    <TableCell className="max-w-[220px]">
+                      <span className="font-medium line-clamp-2">{row.description}</span>
+                      {row.name && row.name !== row.description ? (
+                        <p className="text-xs text-muted-foreground mt-0.5">{row.name}</p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{row.code}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {typeof row.rate === "number" ? `${row.rate}%` : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
       {/* VAT breakdown */}
       {vat.length > 0 && (
         <Card>
@@ -350,7 +415,7 @@ export function DocumentTaxesPanel({
       )}
 
       {/* Fallback for non-GRN/Bill types with no tax */}
-      {!isGrn && !isBill && vat.length === 0 && wht.length === 0 && (
+      {!isGrn && !isBill && vat.length === 0 && wht.length === 0 && lineTaxRows.length === 0 && (
         <Card>
           <CardContent className="pt-6 pb-6 text-center text-sm text-muted-foreground">
             No VAT or WHT lines for this document. Configure tax codes and mappings in Settings → Tax.

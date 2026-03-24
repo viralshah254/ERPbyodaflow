@@ -256,6 +256,81 @@ export default function PurchaseOrderDetailPage() {
         }
       />
       <div className="p-6 space-y-6">
+        {order.status === "DRAFT" && (
+          <Card className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                  This PO is a draft — submit it for approval before creating a GRN.
+                </span>
+                <Button
+                  size="sm"
+                  variant="default"
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    setActionLoading(true);
+                    try {
+                      await requestDocumentApprovalApi("purchase-order", id);
+                      toast.success("Submitted for approval.");
+                      const refreshed = await fetchPurchaseOrderById(id);
+                      setOrder(refreshed);
+                    } catch {
+                      toast.error("Failed to submit for approval.");
+                    } finally {
+                      setActionLoading(false);
+                    }
+                  }}
+                >
+                  {actionLoading ? <Icons.Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Icons.Send className="mr-1.5 h-3.5 w-3.5" />}
+                  Submit for approval
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {order.status === "PENDING_APPROVAL" && (
+          <Card className="border-blue-300/60 bg-blue-50/60 dark:bg-blue-950/20">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                  This PO is awaiting approval.
+                </span>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/approvals/inbox">
+                    <Icons.Inbox className="mr-1.5 h-3.5 w-3.5" />
+                    Check approvals inbox
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {order.status === "RECEIVED" && (
+          <Card className="border-emerald-300/60 bg-emerald-50/60 dark:bg-emerald-950/20">
+            <CardContent className="py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                  All goods received for this PO — next: create and post the supplier bill.
+                </span>
+                <Button size="sm" variant="default" asChild>
+                  <Link href={`/docs/bill/new?poId=${id}`}>
+                    <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
+                    Create bill from PO
+                  </Link>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/ap/three-way-match">
+                    <Icons.GitCompare className="mr-1.5 h-3.5 w-3.5" />
+                    View 3-way match
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
           <div className="space-y-6">
             <Card>

@@ -11,6 +11,7 @@ import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -24,6 +25,7 @@ const LINKS = [
 ];
 
 export default function TreasuryOverviewPage() {
+  const baseCurrency = useBaseCurrency();
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [runs, setRuns] = React.useState<any[]>([]);
@@ -80,7 +82,7 @@ export default function TreasuryOverviewPage() {
               <Icons.TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(latestBalance, "KES")}</div>
+              <div className="text-2xl font-bold">{formatMoney(latestBalance, baseCurrency)}</div>
               <p className="text-xs text-muted-foreground">From forecast</p>
             </CardContent>
           </Card>
@@ -100,7 +102,7 @@ export default function TreasuryOverviewPage() {
               <Icons.Receipt className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(overdueTotal, "KES")}</div>
+              <div className="text-2xl font-bold">{formatMoney(overdueTotal, baseCurrency)}</div>
               <p className="text-xs text-muted-foreground">{overdue.length} invoice(s)</p>
             </CardContent>
           </Card>

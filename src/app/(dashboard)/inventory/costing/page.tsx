@@ -30,7 +30,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
 import { Label } from "@/components/ui/label";
+import { parseDecimalString } from "@/lib/decimal-input";
 import { Badge } from "@/components/ui/badge";
 import {
   fetchLandedCostSources,
@@ -65,6 +67,11 @@ interface CostLine {
   costCentre: LandedCostCostCentre;
   /** Locally-staged evidence files — uploaded after allocation is saved. */
   files?: File[];
+}
+
+function parseCostLineAmount(raw: string): number {
+  const n = parseDecimalString(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -333,14 +340,11 @@ function StepPermits({
               </div>
               <div>
                 <Label className="text-xs mb-1 block">Amount</Label>
-                <Input
-                  type="number"
+                <FormattedDecimalInput
                   placeholder="0.00"
                   className="h-9"
                   value={line.amount}
-                  onChange={(e) => onChange(idx, "amount", e.target.value)}
-                  min={0}
-                  step={0.01}
+                  onValueChange={(raw) => onChange(idx, "amount", raw)}
                 />
               </div>
               <div>
@@ -510,14 +514,11 @@ function StepLogistics({
               </div>
               <div>
                 <Label className="text-xs mb-1 block">Amount</Label>
-                <Input
-                  type="number"
+                <FormattedDecimalInput
                   placeholder="0.00"
                   className="h-9"
                   value={line.amount}
-                  onChange={(e) => onChange(idx, "amount", e.target.value)}
-                  min={0}
-                  step={0.01}
+                  onValueChange={(raw) => onChange(idx, "amount", raw)}
                 />
               </div>
               <div>
@@ -644,12 +645,12 @@ function StepSummary({
   };
 
   const permitTotal = permitLines
-    .filter((l) => l.templateId && Number(l.amount) > 0)
-    .reduce((s, l) => s + toKes(Number(l.amount), l.currency), 0);
+    .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
+    .reduce((s, l) => s + toKes(parseCostLineAmount(l.amount), l.currency), 0);
 
   const logisticsTotal = logisticsLines
-    .filter((l) => l.templateId && Number(l.amount) > 0)
-    .reduce((s, l) => s + toKes(Number(l.amount), l.currency), 0);
+    .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
+    .reduce((s, l) => s + toKes(parseCostLineAmount(l.amount), l.currency), 0);
 
   const totalLanded = docInKes + permitTotal + logisticsTotal;
 
@@ -663,8 +664,8 @@ function StepSummary({
   const logisticsPerKg = totalWeightKg > 0 ? logisticsTotal / totalWeightKg : null;
 
   const hasValidLines =
-    permitLines.some((l) => l.templateId && Number(l.amount) > 0) ||
-    logisticsLines.some((l) => l.templateId && Number(l.amount) > 0);
+    permitLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0) ||
+    logisticsLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0);
 
   return (
     <div className="space-y-5">
@@ -728,11 +729,11 @@ function StepSummary({
               </td>
               <td className="px-4 py-3 text-right font-mono">
                 {permitLines
-                  .filter((l) => l.templateId && Number(l.amount) > 0)
+                  .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
                   .map((l, i) => (
-                    <span key={i} className="block">{formatMoney(Number(l.amount), l.currency)}</span>
+                    <span key={i} className="block">{formatMoney(parseCostLineAmount(l.amount), l.currency)}</span>
                   ))}
-                {permitLines.filter((l) => l.templateId && Number(l.amount) > 0).length === 0 && (
+                {permitLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0).length === 0 && (
                   <span className="text-muted-foreground">—</span>
                 )}
               </td>
@@ -761,11 +762,11 @@ function StepSummary({
               </td>
               <td className="px-4 py-3 text-right font-mono">
                 {logisticsLines
-                  .filter((l) => l.templateId && Number(l.amount) > 0)
+                  .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
                   .map((l, i) => (
-                    <span key={i} className="block">{formatMoney(Number(l.amount), l.currency)}</span>
+                    <span key={i} className="block">{formatMoney(parseCostLineAmount(l.amount), l.currency)}</span>
                   ))}
-                {logisticsLines.filter((l) => l.templateId && Number(l.amount) > 0).length === 0 && (
+                {logisticsLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0).length === 0 && (
                   <span className="text-muted-foreground">—</span>
                 )}
               </td>
@@ -1071,8 +1072,8 @@ function LandedCostWizard({
     }
 
     const allLines = [
-      ...permitLines.filter((l) => l.templateId && Number(l.amount) > 0),
-      ...logisticsLines.filter((l) => l.templateId && Number(l.amount) > 0),
+      ...permitLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0),
+      ...logisticsLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0),
     ];
 
     if (!allLines.length) {
@@ -1086,7 +1087,7 @@ function LandedCostWizard({
         sourceId: source.id,
         lines: allLines.map((l) => ({
           templateId: l.templateId,
-          amount: Number(l.amount),
+          amount: parseCostLineAmount(l.amount),
           currency: l.currency,
           reference: l.reference || undefined,
           costCentre: l.costCentre,
@@ -1267,7 +1268,8 @@ export default function InventoryCostingPage() {
   );
 
   const searchParams = useSearchParams();
-  const sourceIdFromUrl = searchParams.get("sourceId");
+  // Accept either ?sourceId= or ?grnId= (GRN list uses grnId, detail uses sourceId)
+  const sourceIdFromUrl = searchParams.get("sourceId") ?? searchParams.get("grnId");
 
   const loadSources = React.useCallback(() => {
     let cancelled = false;

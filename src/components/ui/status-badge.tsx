@@ -16,6 +16,7 @@ const statusVariants: Record<string, "default" | "success" | "warning" | "danger
   APPROVED: "success",
   POSTED: "info",
   RECEIVED: "success",
+  CONVERTED: "success",
   PROCESSING: "info",
   FULFILLED: "success",
   CANCELLED: "danger",

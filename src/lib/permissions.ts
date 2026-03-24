@@ -61,6 +61,7 @@ export const Permissions = {
   PURCHASE_READ: "purchase.read",
   PURCHASE_WRITE: "purchase.write",
   PURCHASE_APPROVE: "purchase.approve",
+  PURCHASING_AUDIT_OVERRIDE: "purchasing.audit.override",
   
   // Finance
   FINANCE_READ: "finance.read",

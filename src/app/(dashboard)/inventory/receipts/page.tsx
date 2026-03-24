@@ -9,7 +9,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { fetchGRNs, postGRN, exportGRNsCsv } from "@/lib/api/grn";
+import { fetchGRNs, postGRN, exportGRNsCsv, type GrnPostError } from "@/lib/api/grn";
 import { fetchSubcontractOrders } from "@/lib/api/cool-catch";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
@@ -24,7 +24,24 @@ const STATUS_OPTIONS = [
   { label: "Draft", value: "DRAFT" },
   { label: "Posted", value: "POSTED" },
   { label: "Received", value: "RECEIVED" },
+  { label: "Bill linked (Converted)", value: "CONVERTED" },
+  { label: "Cancelled", value: "CANCELLED" },
 ];
+
+/** Friendly label + badge for the GRN status column.
+ * CONVERTED means the GRN was posted AND a supplier bill has been created from it.
+ */
+function GrnStatusCell({ status }: { status: string }) {
+  if (status === "CONVERTED") {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <StatusBadge status="POSTED" />
+        <span className="text-[10px] text-muted-foreground leading-tight">Bill linked</span>
+      </div>
+    );
+  }
+  return <StatusBadge status={status} />;
+}
 
 const scope = "inventory-receipts";
 
@@ -42,6 +59,7 @@ export default function InventoryReceiptsPage() {
   const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>([]);
   const [subcontractedGrnIds, setSubcontractedGrnIds] = React.useState<Set<string>>(new Set());
   const [loading, setLoading] = React.useState(true);
+  const [postingId, setPostingId] = React.useState<string | null>(null);
   React.useEffect(() => {
     Promise.all([fetchGRNs(), fetchSubcontractOrders({}).catch(() => [])])
       .then(([grns, scos]) => {
@@ -83,6 +101,37 @@ export default function InventoryReceiptsPage() {
     return chips;
   }, [statusFilter, warehouseFilter, search]);
 
+  const handlePostRow = React.useCallback(async (row: PurchasingDocRow, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPostingId(row.id);
+    try {
+      await postGRN(row.id);
+      toast.success(`${row.number} posted.`);
+      setAllRows(await fetchGRNs());
+    } catch (raw) {
+      const err = raw as GrnPostError;
+      const msg = err.message ?? "Failed to post GRN.";
+      if (err.code === "GRN_OPEN_VARIANCE") {
+        const auditUrl = err.poId
+          ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(err.poId)}`
+          : "/purchasing/cash-weight-audit";
+        toast.error(msg, {
+          action: { label: "Go to audit", onClick: () => { window.location.href = auditUrl; } },
+          duration: 8000,
+        });
+      } else if (err.code === "GRN_MISSING_WEIGHT") {
+        toast.error(msg, {
+          action: { label: "Open GRN", onClick: () => { window.location.href = `/inventory/receipts/${row.id}`; } },
+          duration: 8000,
+        });
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setPostingId(null);
+    }
+  }, []);
+
   const columns = React.useMemo(
     () => [
       {
@@ -98,7 +147,7 @@ export default function InventoryReceiptsPage() {
       {
         id: "status",
         header: "Status",
-        accessor: (r: PurchasingDocRow) => <StatusBadge status={r.status} />,
+        accessor: (r: PurchasingDocRow) => <GrnStatusCell status={r.status} />,
       },
       {
         id: "subcontracted",
@@ -135,8 +184,28 @@ export default function InventoryReceiptsPage() {
             </Button>
           ),
       },
+      {
+        id: "rowActions",
+        header: "",
+        accessor: (r: PurchasingDocRow) =>
+          (r.status === "DRAFT" || r.status === "APPROVED") ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs"
+              disabled={postingId === r.id}
+              onClick={(e) => handlePostRow(r, e)}
+            >
+              {postingId === r.id ? (
+                <Icons.Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                "Post"
+              )}
+            </Button>
+          ) : null,
+      },
     ],
-    [subcontractedGrnIds]
+    [subcontractedGrnIds, postingId, handlePostRow]
   );
 
   const handleClearFilters = () => {
@@ -239,10 +308,53 @@ export default function InventoryReceiptsPage() {
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    await Promise.all(selectedIds.map((selectedId) => postGRN(selectedId)));
+                    const selectedRows = allRows.filter((r) => selectedIds.includes(r.id));
+                    const postable = selectedRows.filter((r) => r.status === "DRAFT" || r.status === "APPROVED");
+                    const skipped = selectedRows.length - postable.length;
+                    if (!postable.length) {
+                      toast.warning("No selected GRNs are eligible to post. Only draft GRNs can be posted.");
+                      return;
+                    }
+                    const results = await Promise.allSettled(postable.map((r) => postGRN(r.id)));
+                    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+                    const failedResults = results
+                      .map((r, i) => r.status === "rejected" ? { row: postable[i], reason: r.reason as GrnPostError } : null)
+                      .filter((x): x is { row: typeof postable[number]; reason: GrnPostError } => x !== null);
                     setAllRows(await fetchGRNs());
-                    toast.success(`${selectedIds.length} GRN(s) posted.`);
                     setSelectedIds([]);
+                    const parts: string[] = [];
+                    if (succeeded) parts.push(`${succeeded} GRN(s) posted.`);
+                    if (skipped) parts.push(`${skipped} skipped (already posted or bill linked).`);
+                    if (failedResults.length) parts.push(`${failedResults.length} failed.`);
+                    // For a single failure surface a targeted shortcut
+                    if (failedResults.length === 1) {
+                      const { row, reason } = failedResults[0];
+                      if (reason.code === "GRN_OPEN_VARIANCE") {
+                        const auditUrl = reason.poId
+                          ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(reason.poId)}`
+                          : "/purchasing/cash-weight-audit";
+                        toast.error(parts.join(" "), {
+                          action: { label: "Go to cash-weight audit", onClick: () => { window.location.href = auditUrl; } },
+                          duration: 8000,
+                        });
+                      } else if (reason.code === "GRN_MISSING_WEIGHT") {
+                        toast.error(parts.join(" "), {
+                          action: { label: `Open ${row.number}`, onClick: () => { window.location.href = `/inventory/receipts/${row.id}`; } },
+                          duration: 8000,
+                        });
+                      } else {
+                        toast.error(parts.join(" "), {
+                          action: { label: `Open ${row.number}`, onClick: () => { window.location.href = `/inventory/receipts/${row.id}`; } },
+                          duration: 8000,
+                        });
+                      }
+                    } else if (failedResults.length > 1) {
+                      toast.error(parts.join(" ") + " Open each GRN for details.");
+                    } else if (skipped && !succeeded) {
+                      toast.warning(parts.join(" "));
+                    } else {
+                      toast.success(parts.join(" "));
+                    }
                   }}
                 >
                   Post

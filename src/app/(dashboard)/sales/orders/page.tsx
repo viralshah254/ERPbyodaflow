@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -44,6 +45,7 @@ const scope = "sales-orders";
 
 export default function SalesOrdersPage() {
   const router = useRouter();
+  const baseCurrency = useBaseCurrency();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -108,8 +110,9 @@ export default function SalesOrdersPage() {
           r.total != null ? (
             <DualCurrencyAmount
               amount={r.total}
-              currency={r.currency ?? "KES"}
+              currency={r.currency ?? baseCurrency}
               exchangeRate={r.exchangeRate}
+              baseCurrency={baseCurrency}
               align="right"
               size="sm"
             />
@@ -167,7 +170,7 @@ export default function SalesOrdersPage() {
         ),
       },
     ],
-    [actionLoadingId, refreshRows]
+    [actionLoadingId, refreshRows, baseCurrency]
   );
 
   const handleClearFilters = () => {

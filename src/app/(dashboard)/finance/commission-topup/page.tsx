@@ -10,8 +10,10 @@ import { CommissionSummaryCard } from "@/components/operational/CommissionSummar
 import { fetchTopUps } from "@/lib/api/cool-catch";
 import * as React from "react";
 import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
 export default function FinanceCommissionTopUpPage() {
+  const baseCurrency = useBaseCurrency();
   const [rows, setRows] = React.useState<Array<{ franchiseeName: string; runNumber: string; amount: number; status: string; reason: string }>>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -42,7 +44,7 @@ export default function FinanceCommissionTopUpPage() {
   const columns = [
     { id: "franchisee", header: "Franchisee", accessor: (r: (typeof rows)[number]) => r.franchiseeName, sticky: true },
     { id: "run", header: "Run", accessor: (r: (typeof rows)[number]) => r.runNumber },
-    { id: "amount", header: "Top-up amount", accessor: (r: (typeof rows)[number]) => formatMoney(r.amount, "KES") },
+    { id: "amount", header: "Top-up amount", accessor: (r: (typeof rows)[number]) => formatMoney(r.amount, baseCurrency) },
     { id: "status", header: "Status", accessor: (r: (typeof rows)[number]) => r.status },
     { id: "reason", header: "Reason", accessor: (r: (typeof rows)[number]) => r.reason },
   ];
