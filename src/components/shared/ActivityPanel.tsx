@@ -21,6 +21,7 @@ export interface Comment {
   user: string;
   text: string;
   timestamp: string;
+  isOwn?: boolean;
 }
 
 export interface Attachment {
@@ -37,7 +38,10 @@ export interface ActivityPanelProps {
   comments?: Comment[];
   attachments?: Attachment[];
   onAddComment?: (text: string) => void;
+  onEditComment?: (id: string, newText: string) => void;
+  onDeleteComment?: (id: string) => void;
   onAddAttachment?: () => void;
+  currentUserId?: string;
   className?: string;
 }
 
@@ -46,16 +50,38 @@ export function ActivityPanel({
   comments = [],
   attachments = [],
   onAddComment,
+  onEditComment,
+  onDeleteComment,
   onAddAttachment,
   className,
 }: ActivityPanelProps) {
   const [commentText, setCommentText] = React.useState("");
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editingText, setEditingText] = React.useState("");
 
   const handleAddComment = () => {
     if (commentText.trim() && onAddComment) {
       onAddComment(commentText);
       setCommentText("");
     }
+  };
+
+  const startEdit = (comment: Comment) => {
+    setEditingId(comment.id);
+    setEditingText(comment.text);
+  };
+
+  const saveEdit = (id: string) => {
+    if (editingText.trim() && onEditComment) {
+      onEditComment(id, editingText.trim());
+    }
+    setEditingId(null);
+    setEditingText("");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingText("");
   };
 
   return (
@@ -131,10 +157,60 @@ export function ActivityPanel({
               ) : (
                 comments.map((c) => (
                   <div key={c.id} className="rounded border p-3">
-                    <p className="text-sm">{c.text}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {c.user} · {c.timestamp}
-                    </p>
+                    {editingId === c.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          className="w-full text-sm rounded border p-2 resize-none focus:outline-none focus:ring-1 focus:ring-ring bg-background"
+                          rows={2}
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(c.id); }
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                          autoFocus
+                        />
+                        <div className="flex gap-1.5">
+                          <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => saveEdit(c.id)}>Save</Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit}>Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm">{c.text}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className="text-xs text-muted-foreground">
+                            {c.user} · {c.timestamp}
+                          </p>
+                          {c.isOwn && (onEditComment || onDeleteComment) && (
+                            <div className="flex gap-1">
+                              {onEditComment && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                  onClick={() => startEdit(c)}
+                                  title="Edit comment"
+                                >
+                                  <Icons.Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                              {onDeleteComment && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() => onDeleteComment(c.id)}
+                                  title="Delete comment"
+                                >
+                                  <Icons.Trash2 className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))
               )}

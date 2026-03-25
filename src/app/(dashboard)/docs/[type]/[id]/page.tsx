@@ -93,6 +93,13 @@ export default function DocViewPage() {
   const [selectedConvertPartyOption, setSelectedConvertPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
+  /** Portals AsyncSearchableSelect panel inside the sheet so Radix does not treat option clicks as “outside”. */
+  const convertSheetContentRef = React.useRef<HTMLDivElement | null>(null);
+  const [convertSelectPortalHost, setConvertSelectPortalHost] = React.useState<HTMLElement | null>(null);
+  const setConvertSheetHostRef = React.useCallback((node: HTMLDivElement | null) => {
+    convertSheetContentRef.current = node;
+    setConvertSelectPortalHost(node);
+  }, []);
   const convertTargets = React.useMemo(() => {
     const raw = document?.availableConversionTargets ?? [];
     return [...new Set(raw)];
@@ -822,8 +829,21 @@ export default function DocViewPage() {
         onOpenChange={setPrintOpen}
         doc={printDoc}
       />
-      <Sheet open={convertOpen} onOpenChange={setConvertOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+      {/* modal={false} avoids focus/pointer guards that block interactions with portaled dropdown panels */}
+      <Sheet open={convertOpen} onOpenChange={setConvertOpen} modal={false}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-md"
+          onPointerDownOutside={(e) => {
+            const t = e.target as HTMLElement;
+            if (t.closest?.("[data-async-searchable-panel]")) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            const t = e.target as HTMLElement;
+            if (t.closest?.("[data-async-searchable-panel]")) e.preventDefault();
+          }}
+        >
+          <div ref={setConvertSheetHostRef} className="flex min-h-0 flex-col">
           <SheetHeader>
             <SheetTitle>Convert document</SheetTitle>
             <SheetDescription>
@@ -843,6 +863,7 @@ export default function DocViewPage() {
                   {["purchase-order", "bill"].includes(convertType) ? "Supplier" : "Customer"}
                 </Label>
                 <AsyncSearchableSelect
+                  portalContainer={convertSelectPortalHost}
                   value={convertPartyId}
                   onValueChange={(value) => {
                     setConvertPartyId(value);
@@ -922,6 +943,7 @@ export default function DocViewPage() {
               Create linked document
             </Button>
           </SheetFooter>
+          </div>
         </SheetContent>
       </Sheet>
 

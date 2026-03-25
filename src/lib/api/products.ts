@@ -54,37 +54,46 @@ export type FetchProductsOptions = {
   productType?: "RAW" | "FINISHED" | "BOTH";
   /** Server caps at 100; use for document line pickers. */
   limit?: number;
+  /** Pagination offset (server skip). Omit for first page. */
+  cursor?: string;
 };
+
+export type FetchProductsPageResult = {
+  items: ProductRow[];
+  nextCursor: string | null;
+};
+
+export async function fetchProductsPageApi(opts: FetchProductsOptions): Promise<FetchProductsPageResult> {
+  requireLiveApi("Products");
+  const params = new URLSearchParams();
+  if (opts.search?.trim()) params.set("search", opts.search.trim());
+  if (opts.status) params.set("status", opts.status);
+  if (opts.purchasable) params.set("purchasable", "true");
+  if (opts.sellable) params.set("sellable", "true");
+  if (opts.productType) params.set("productType", opts.productType);
+  const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 100;
+  params.set("limit", String(lim));
+  if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);
+  const data = await apiRequest<{ items: BackendProduct[]; nextCursor?: string | null }>("/api/products", { params });
+  return {
+    items: data.items.map(mapProduct),
+    nextCursor: data.nextCursor ?? null,
+  };
+}
 
 export async function fetchProductsApi(
   searchOrOptions?: string | FetchProductsOptions,
   status?: string
 ): Promise<ProductRow[]> {
-  requireLiveApi("Products");
-  const params = new URLSearchParams();
-  let search: string | undefined;
-  let purchasable: boolean | undefined;
-  let sellable: boolean | undefined;
-  let productType: "RAW" | "FINISHED" | "BOTH" | undefined;
-  let limit: number | undefined;
   if (typeof searchOrOptions === "object" && searchOrOptions != null) {
-    search = searchOrOptions.search;
-    status = searchOrOptions.status ?? status;
-    purchasable = searchOrOptions.purchasable;
-    sellable = searchOrOptions.sellable;
-    productType = searchOrOptions.productType;
-    limit = searchOrOptions.limit;
-  } else {
-    search = searchOrOptions;
+    const page = await fetchProductsPageApi(searchOrOptions);
+    return page.items;
   }
-  if (search?.trim()) params.set("search", search.trim());
-  if (status) params.set("status", status);
-  if (purchasable) params.set("purchasable", "true");
-  if (sellable) params.set("sellable", "true");
-  if (productType) params.set("productType", productType);
-  if (limit != null && limit > 0) params.set("limit", String(Math.min(limit, 100)));
-  const data = await apiRequest<{ items: BackendProduct[] }>("/api/products", { params });
-  return data.items.map(mapProduct);
+  const page = await fetchProductsPageApi({
+    search: searchOrOptions,
+    status,
+  } as FetchProductsOptions);
+  return page.items;
 }
 
 /** Fetch all SKUs in the org (no pagination). Use for Existing SKUs list when creating products. */

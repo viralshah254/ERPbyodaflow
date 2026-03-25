@@ -31,6 +31,7 @@ export type GrnDetailRow = PurchasingDocRow & {
   totalAmount?: number;
   processingConfirmed?: boolean;
   sourceDocumentId?: string | null;
+  warehouseId?: string;
   lines: GrnLineRow[];
   linkedBill?: { id: string; number: string; status: string } | null;
 };
@@ -41,6 +42,8 @@ export type LinkedGrnSummary = {
   status: string;
   date: string;
   total: number;
+  /** Sum of receivedWeightKg across all GRN lines (populated by PO detail endpoint). */
+  receivedWeightKg?: number;
 };
 
 export type LinkedBillSummary = {

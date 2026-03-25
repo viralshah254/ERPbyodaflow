@@ -201,6 +201,7 @@ export function DocumentTaxesPanel({
 
         const taxLines = lines.filter(
           (l) =>
+            l.taxCodeId != null ||
             l.effectiveTaxCodeId != null ||
             l.taxCodeCode != null ||
             typeof l.taxRate === "number"

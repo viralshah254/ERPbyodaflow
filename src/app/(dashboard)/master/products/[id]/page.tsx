@@ -180,6 +180,8 @@ export default function ProductDetailPage() {
   const [matrixSheetOpen, setMatrixSheetOpen] = React.useState(false);
   const [uomOptions, setUomOptions] = React.useState<string[]>(["EA", "KG", "L", "M", "PCS"]);
   const [mounted, setMounted] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState("");
+  const [savingName, setSavingName] = React.useState(false);
   const [descriptionDraft, setDescriptionDraft] = React.useState("");
   const [savingNotes, setSavingNotes] = React.useState(false);
 
@@ -188,11 +190,13 @@ export default function ProductDetailPage() {
   React.useEffect(() => {
     if (product === undefined) return;
     if (product === null) {
+      setNameDraft("");
       setDescriptionDraft("");
       return;
     }
+    setNameDraft(product.name ?? "");
     setDescriptionDraft(product.description ?? "");
-  }, [product?.id, product?.description]);
+  }, [product?.id, product?.name, product?.description]);
 
   // Load all data in parallel
   React.useEffect(() => {
@@ -299,6 +303,26 @@ export default function ProductDetailPage() {
       setProduct((p) => (p ? { ...p, productType: next } : p));
       toast.success("Product type updated.");
     } catch (err) { toast.error((err as Error).message); }
+  };
+
+  const saveProductName = async () => {
+    if (!product) return;
+    const next = nameDraft.trim();
+    if (!next) {
+      toast.error("Name cannot be empty.");
+      return;
+    }
+    if (next === product.name) return;
+    setSavingName(true);
+    try {
+      await patchProductApi(id, { name: next });
+      setProduct((p) => (p ? { ...p, name: next } : p));
+      toast.success("Name updated.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingName(false);
+    }
   };
 
   const saveProductNotes = async () => {
@@ -572,8 +596,35 @@ export default function ProductDetailPage() {
                   <div className="grid grid-cols-[120px_1fr] gap-y-2">
                     <span className="text-muted-foreground">SKU</span>
                     <span className="font-mono font-medium">{product.sku}</span>
-                    <span className="text-muted-foreground">Name</span>
-                    <span className="font-medium">{product.name}</span>
+                    <span className="text-muted-foreground align-top pt-1.5">Name</span>
+                    <div className="space-y-2 min-w-0">
+                      <Input
+                        id="product-name"
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        placeholder="Product display name"
+                        className="font-medium"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void saveProductName();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void saveProductName()}
+                        disabled={
+                          savingName ||
+                          !nameDraft.trim() ||
+                          nameDraft.trim() === product.name
+                        }
+                      >
+                        {savingName ? "Saving…" : "Save name"}
+                      </Button>
+                    </div>
                     <span className="text-muted-foreground">Category</span>
                     <span>{product.category ?? "—"}</span>
                     <span className="text-muted-foreground">Base UOM</span>

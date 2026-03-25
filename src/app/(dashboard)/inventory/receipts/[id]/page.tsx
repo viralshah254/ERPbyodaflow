@@ -8,23 +8,31 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { ActivityPanel } from "@/components/shared/ActivityPanel";
+import { ActivityPanel, type AuditEntry, type Comment } from "@/components/shared/ActivityPanel";
 import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimeline";
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocationBadge";
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
-import { fetchGRNById, postGRN, patchGRNLine, confirmGRNProcessing, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow, type GrnPostError } from "@/lib/api/grn";
+import { fetchGRNById, postGRN, patchGRNLine, patchGrnHeaderApi, confirmGRNProcessing, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow, type GrnPostError } from "@/lib/api/grn";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { useAuthStore } from "@/stores/auth-store";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
-import { convertDocumentApi } from "@/lib/api/documents";
+import { fetchProcessingCostAllocation, type ProcessingCostAllocationRecord } from "@/lib/api/processing-cost";
+import { addDocumentCommentApi, editDocumentCommentApi, deleteDocumentCommentApi, convertDocumentApi } from "@/lib/api/documents";
+import { fetchAuditLogs } from "@/lib/api/audit-log";
+import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -33,6 +41,10 @@ export default function ReceiptDetailPage() {
   const id = params.id as string;
   const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
   const hasLandedCostMultiCurrency = useOrgContextStore((s) => s.hasFlag?.("landedCostMultiCurrency") ?? false);
+  const currentUser = useAuthStore((s) => s.user);
+  const currentUserId = currentUser?.userId;
+  const permissions = useAuthStore((s) => s.permissions);
+  const isAdmin = permissions.includes("admin.users") || permissions.includes("*");
   const [grn, setGrn] = React.useState<GrnDetailRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [posting, setPosting] = React.useState(false);
@@ -40,9 +52,79 @@ export default function ReceiptDetailPage() {
   const [creatingBill, setCreatingBill] = React.useState(false);
   const [putawayLink, setPutawayLink] = React.useState<{ id: string; label: string } | null>(null);
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
+  const [processingAllocation, setProcessingAllocation] = React.useState<ProcessingCostAllocationRecord | null>(null);
+  const [costsChecked, setCostsChecked] = React.useState(false);
   const weightTableRef = React.useRef<HTMLDivElement>(null);
   const [editingWeight, setEditingWeight] = React.useState<Record<number, string>>({});
   const [editingProcessedWeight, setEditingProcessedWeight] = React.useState<Record<number, string>>({});
+
+  // GRN header edit dialog
+  const [editHeaderOpen, setEditHeaderOpen] = React.useState(false);
+  const [editHeaderDate, setEditHeaderDate] = React.useState("");
+  const [editHeaderNotes, setEditHeaderNotes] = React.useState("");
+  const [editHeaderRef, setEditHeaderRef] = React.useState("");
+  const [editHeaderWarehouse, setEditHeaderWarehouse] = React.useState("");
+  const [savingHeader, setSavingHeader] = React.useState(false);
+
+  // Activity & Audit — live data
+  const [auditEntries, setAuditEntries] = React.useState<AuditEntry[]>([]);
+  const [comments, setComments] = React.useState<Comment[]>([]);
+
+  const loadAuditAndComments = React.useCallback(async (grnId: string) => {
+    if (!isApiConfigured()) return;
+    try {
+      const entries = await fetchAuditLogs({ sourceType: "GRN", sourceId: grnId });
+      setAuditEntries(entries.map((e) => ({
+        id: e.id ?? e.when,
+        action: e.what ?? e.action ?? "Event",
+        user: e.who ?? "System",
+        timestamp: e.when,
+        detail: e.after ? JSON.stringify(e.after) : undefined,
+      })));
+    } catch { /* non-fatal */ }
+    try {
+      const res = await apiRequest<{ items: Array<{ id: string; text: string; createdAt: string; createdBy?: string }> }>(
+        `/api/docs/grn/${encodeURIComponent(grnId)}/comments`
+      );
+      setComments((res.items ?? []).map((c) => ({
+        id: c.id,
+        user: c.createdBy ?? "User",
+        text: c.text,
+        timestamp: c.createdAt,
+        isOwn: !!currentUserId && c.createdBy === currentUserId,
+      })));
+    } catch { /* non-fatal */ }
+  }, [currentUserId]);
+
+  const handleAddComment = React.useCallback(async (text: string) => {
+    if (!grn) return;
+    try {
+      await addDocumentCommentApi("grn", grn.id, text);
+      await loadAuditAndComments(grn.id);
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to add comment");
+    }
+  }, [grn, loadAuditAndComments]);
+
+  const handleEditComment = React.useCallback(async (commentId: string, newText: string) => {
+    if (!grn) return;
+    try {
+      await editDocumentCommentApi("grn", grn.id, commentId, newText);
+      await loadAuditAndComments(grn.id);
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to edit comment");
+    }
+  }, [grn, loadAuditAndComments]);
+
+  const handleDeleteComment = React.useCallback(async (commentId: string) => {
+    if (!grn) return;
+    try {
+      await deleteDocumentCommentApi("grn", grn.id, commentId);
+      await loadAuditAndComments(grn.id);
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to delete comment");
+    }
+  }, [grn, loadAuditAndComments]);
   const linesWithIndex = React.useMemo(
     () => (grn?.lines ?? []).map((line, idx) => ({ ...line, _lineIndex: idx })),
     [grn?.lines]
@@ -50,11 +132,23 @@ export default function ReceiptDetailPage() {
 
   React.useEffect(() => {
     setLoading(true);
-    fetchGRNById(id).then((g) => { setGrn(g ?? null); setLoading(false); });
-  }, [id]);
+    fetchGRNById(id).then((g) => {
+      setGrn(g ?? null);
+      setLoading(false);
+      if (g) loadAuditAndComments(g.id);
+    });
+  }, [id, loadAuditAndComments]);
 
   React.useEffect(() => {
-    fetchLandedCostAllocation(id).then((a) => setLandedAllocation(a)).catch(() => {});
+    setCostsChecked(false);
+    Promise.all([
+      fetchLandedCostAllocation(id).catch(() => null),
+      fetchProcessingCostAllocation(id).catch(() => null),
+    ]).then(([a, p]) => {
+      setLandedAllocation(a);
+      setProcessingAllocation(p);
+      setCostsChecked(true);
+    });
   }, [id]);
 
   React.useEffect(() => {
@@ -93,6 +187,9 @@ export default function ReceiptDetailPage() {
       </PageShell>
     );
   }
+
+  // Costs are applied if the backend flag is set OR if we've fetched an allocation (handles processing-only case)
+  const hasAnyCosts = grn.hasLandedCost || (costsChecked && (landedAllocation !== null || processingAllocation !== null));
 
   const totalReceivedWeight = grn.lines.reduce((acc, line) => acc + (Number(line.receivedWeightKg) || 0), 0);
   const totalPaidWeight = grn.lines.reduce((acc, line) => acc + (Number(line.paidWeightKg) || 0), 0);
@@ -160,7 +257,7 @@ export default function ReceiptDetailPage() {
   const lineColumns = [
     { id: "sku", header: "SKU", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.sku ?? "—", sticky: true },
     { id: "product", header: "Product", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.productName ?? "—" },
-    { id: "qty", header: "Qty", accessor: (line: GrnLineRow & { _lineIndex?: number }) => `${line.qty ?? 0} ${line.uom ?? ""}`.trim() },
+    { id: "qty", header: "Qty", accessor: (line: GrnLineRow & { _lineIndex?: number }) => `${(line.qty ?? 0).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${line.uom ?? ""}`.trim() },
     { id: "value", header: "Value", accessor: (line: GrnLineRow & { _lineIndex?: number }) => (
       <DualCurrencyAmount
         amount={line.value ?? 0}
@@ -231,54 +328,84 @@ export default function ReceiptDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            {grn.status === "DRAFT" && (
+            {(["DRAFT", "POSTED"].includes(grn.status) &&
+              (String((grn as unknown as Record<string, unknown>).createdBy ?? "") === (currentUserId ?? "") || isAdmin)) && (
               <Button
                 size="sm"
-                disabled={posting}
-                onClick={async () => {
-                  setPosting(true);
-                  try {
-                    await postGRN(grn.id);
-                    setGrn(await fetchGRNById(grn.id));
-                    toast.success("GRN posted.");
-                  } catch (raw) {
-                    const e = raw as GrnPostError;
-                    const msg = e.message ?? "Failed to post GRN.";
-                    if (e.code === "GRN_CONVERTED_TO_BILL" && e.billId) {
-                      toast.error(msg, {
-                        action: {
-                          label: `View bill ${e.billNumber ?? ""}`.trim(),
-                          onClick: () => { window.location.href = `/docs/bill/${e.billId}`; },
-                        },
-                        duration: 8000,
-                      });
-                    } else if (e.code === "GRN_MISSING_WEIGHT") {
-                      toast.error(msg, {
-                        description: "Enter received weight (kg) for each line below before posting.",
-                        duration: 8000,
-                      });
-                    } else if (e.code === "GRN_OPEN_VARIANCE") {
-                      const auditUrl = e.poId
-                        ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}`
-                        : "/purchasing/cash-weight-audit";
-                      toast.error(msg, {
-                        action: {
-                          label: "Go to cash-weight audit",
-                          onClick: () => { window.location.href = auditUrl; },
-                        },
-                        duration: 8000,
-                      });
-                    } else {
-                      toast.error(msg);
-                    }
-                  } finally {
-                    setPosting(false);
-                  }
+                variant="outline"
+                onClick={() => {
+                  setEditHeaderDate(grn.date ?? "");
+                  setEditHeaderNotes(String((grn as unknown as Record<string, unknown>).notes ?? ""));
+                  setEditHeaderRef(String((grn as unknown as Record<string, unknown>).reference ?? ""));
+                  setEditHeaderWarehouse(grn.warehouseId ?? "");
+                  setEditHeaderOpen(true);
                 }}
               >
-                <Icons.Send className="mr-2 h-4 w-4" />
-                {posting ? "Posting…" : "Post"}
+                <Icons.Pencil className="mr-2 h-4 w-4" />
+                Edit
               </Button>
+            )}
+            {grn.status === "DRAFT" && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        size="sm"
+                        disabled={posting || !hasAnyCosts}
+                        onClick={async () => {
+                          setPosting(true);
+                          try {
+                            await postGRN(grn.id);
+                            setGrn(await fetchGRNById(grn.id));
+                            toast.success("GRN posted.");
+                          } catch (raw) {
+                            const e = raw as GrnPostError;
+                            const msg = e.message ?? "Failed to post GRN.";
+                            if (e.code === "GRN_CONVERTED_TO_BILL" && e.billId) {
+                              toast.error(msg, {
+                                action: {
+                                  label: `View bill ${e.billNumber ?? ""}`.trim(),
+                                  onClick: () => { window.location.href = `/docs/bill/${e.billId}`; },
+                                },
+                                duration: 8000,
+                              });
+                            } else if (e.code === "GRN_MISSING_WEIGHT") {
+                              toast.error(msg, {
+                                description: "Enter received weight (kg) for each line below before posting.",
+                                duration: 8000,
+                              });
+                            } else if (e.code === "GRN_OPEN_VARIANCE") {
+                              const auditUrl = e.poId
+                                ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}`
+                                : "/purchasing/cash-weight-audit";
+                              toast.error(msg, {
+                                action: {
+                                  label: "Go to cash-weight audit",
+                                  onClick: () => { window.location.href = auditUrl; },
+                                },
+                                duration: 8000,
+                              });
+                            } else {
+                              toast.error(msg);
+                            }
+                          } finally {
+                            setPosting(false);
+                          }
+                        }}
+                      >
+                        <Icons.Send className="mr-2 h-4 w-4" />
+                        {posting ? "Posting…" : "Post"}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!hasAnyCosts && (
+                    <TooltipContent>
+                      Apply other costs before posting
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
             )}
             {grn.linkedBill ? (
               <Button size="sm" variant="outline" asChild>
@@ -356,37 +483,48 @@ export default function ReceiptDetailPage() {
             <CardContent className="py-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  This GRN is a draft — post it to update inventory.
+                  {hasAnyCosts
+                    ? "This GRN is a draft — post it to update inventory."
+                    : "Apply other costs before posting this GRN."}
                 </span>
-                <Button
-                  size="sm"
-                  variant="default"
-                  disabled={posting}
-                  onClick={async () => {
-                    setPosting(true);
-                    try {
-                      await postGRN(id);
-                      toast.success("GRN posted.");
-                      setGrn(await fetchGRNById(id));
-                    } catch (raw) {
-                      const e = raw as GrnPostError;
-                      const msg = e.message ?? "Failed to post GRN.";
-                      if (e.code === "GRN_MISSING_WEIGHT") {
-                        toast.error(msg, { description: "Enter received weight (kg) for each line below before posting.", duration: 8000 });
-                      } else if (e.code === "GRN_OPEN_VARIANCE") {
-                        const auditUrl = e.poId ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}` : "/purchasing/cash-weight-audit";
-                        toast.error(msg, { action: { label: "Go to cash-weight audit", onClick: () => { window.location.href = auditUrl; } }, duration: 8000 });
-                      } else {
-                        toast.error(msg);
+                {hasAnyCosts ? (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    disabled={posting}
+                    onClick={async () => {
+                      setPosting(true);
+                      try {
+                        await postGRN(id);
+                        toast.success("GRN posted.");
+                        setGrn(await fetchGRNById(id));
+                      } catch (raw) {
+                        const e = raw as GrnPostError;
+                        const msg = e.message ?? "Failed to post GRN.";
+                        if (e.code === "GRN_MISSING_WEIGHT") {
+                          toast.error(msg, { description: "Enter received weight (kg) for each line below before posting.", duration: 8000 });
+                        } else if (e.code === "GRN_OPEN_VARIANCE") {
+                          const auditUrl = e.poId ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}` : "/purchasing/cash-weight-audit";
+                          toast.error(msg, { action: { label: "Go to cash-weight audit", onClick: () => { window.location.href = auditUrl; } }, duration: 8000 });
+                        } else {
+                          toast.error(msg);
+                        }
+                      } finally {
+                        setPosting(false);
                       }
-                    } finally {
-                      setPosting(false);
-                    }
-                  }}
-                >
-                  <Icons.Send className="mr-1.5 h-3.5 w-3.5" />
-                  {posting ? "Posting…" : "Post GRN"}
-                </Button>
+                    }}
+                  >
+                    <Icons.Send className="mr-1.5 h-3.5 w-3.5" />
+                    {posting ? "Posting…" : "Post GRN"}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/inventory/costing?grnId=${grn.id}`}>
+                      <Icons.Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Apply costs
+                    </Link>
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -632,20 +770,32 @@ export default function ReceiptDetailPage() {
             </Card>
 
             {(() => {
-              if (landedAllocation) {
-                const costCentreLabels: Record<string, string> = {
-                  currency_conversion: "FX conversion",
-                  permits: "Permits & customs",
-                  inbound_logistics: "Inbound logistics",
-                  other: "Other charges",
-                };
-                const centreLines = Object.entries(landedAllocation.costCentreSummary ?? {}).map(
+              const costCentreLabels: Record<string, string> = {
+                currency_conversion: "FX conversion",
+                permits: "Permits & customs",
+                inbound_logistics: "Inbound logistics",
+                other: "Other charges",
+              };
+              const processingCategoryLabels: Record<string, string> = {
+                processing_fee: "Processing fee",
+                packaging: "Packaging",
+                outbound_logistics: "Outbound logistics",
+              };
+
+              if (landedAllocation || processingAllocation) {
+                const centreLines = Object.entries(landedAllocation?.costCentreSummary ?? {}).map(
                   ([centre, data]) => ({
                     label: costCentreLabels[centre] ?? centre,
                     amount: (data as { originalAmount: number }).originalAmount ?? 0,
                   })
                 );
-                const weightBasis = (landedAllocation.impactLines ?? []).reduce(
+                const processingLines = (processingAllocation?.lines ?? [])
+                  .filter((l) => l.amount > 0)
+                  .map((l) => ({
+                    label: processingCategoryLabels[l.category] ?? l.label,
+                    amount: l.amount,
+                  }));
+                const weightBasis = (landedAllocation?.impactLines ?? processingAllocation?.impactLines ?? []).reduce(
                   (s, l) => s + (l.basisValue ?? 0),
                   0
                 );
@@ -657,6 +807,7 @@ export default function ReceiptDetailPage() {
                     lines={[
                       { label: "Goods value", amount: grn.totalAmount ?? 0 },
                       ...centreLines,
+                      ...processingLines,
                     ]}
                   />
                 );
@@ -695,10 +846,13 @@ export default function ReceiptDetailPage() {
                 {
                   id: "landed",
                   label: "Other costs allocated",
-                  status: landedAllocation ? "completed" : ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "current" : "upcoming",
-                  detail: landedAllocation
-                    ? `KES ${(landedAllocation.totalLandedCostBase ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} total other costs`
-                    : "Allocate freight, duty, and other charges",
+                  status: (landedAllocation || processingAllocation) ? "completed" : ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "current" : "upcoming",
+                  detail: (landedAllocation || processingAllocation)
+                    ? [
+                        landedAllocation ? `KES ${(landedAllocation.totalLandedCostBase ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} inbound` : null,
+                        processingAllocation ? `KES ${(processingAllocation.totalAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} processing` : null,
+                      ].filter(Boolean).join(" · ")
+                    : "Allocate freight, duty, and processing charges",
                 },
                 { id: "putaway", label: "Putaway completed", status: grn.status === "RECEIVED" ? "completed" : "upcoming", detail: putawayLink ? "Warehouse execution closed" : "Awaiting putaway" },
               ]}
@@ -710,25 +864,97 @@ export default function ReceiptDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <ActivityPanel
-                  auditEntries={[
-                    { id: "a1", action: "GRN created", user: "Warehouse Clerk", timestamp: grn.date, detail: `${grn.number} for ${grn.supplier ?? grn.party ?? "—"}` },
-                    { id: "a2", action: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "GRN posted" : "Awaiting posting", user: "System", timestamp: new Date().toISOString(), detail: `Warehouse ${grn.warehouse ?? "—"}` },
-                    ...(grn.status === "RECEIVED"
-                      ? [{ id: "a3", action: "Putaway confirmed", user: "Warehouse", timestamp: new Date().toISOString(), detail: "Receipt operationally closed" }]
-                      : []),
-                  ]}
-                  comments={[
-                    { id: "c1", user: "QA", text: "Verify weights against farm-gate payment before closure.", timestamp: new Date().toLocaleString() },
-                  ]}
-                  attachments={[
-                    { id: "f1", name: "weighbridge-slip.jpg", type: "image", size: "1.2 MB", uploadedBy: "Receiving", uploadedAt: grn.date },
-                  ]}
+                  auditEntries={auditEntries}
+                  comments={comments}
+                  attachments={[]}
+                  onAddComment={handleAddComment}
+                  onEditComment={handleEditComment}
+                  onDeleteComment={handleDeleteComment}
+                  currentUserId={currentUserId}
                 />
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
+
+      {/* Edit GRN Header Sheet */}
+      <Sheet open={editHeaderOpen} onOpenChange={setEditHeaderOpen}>
+        <SheetContent side="right" className="w-full max-w-md">
+          <SheetHeader>
+            <SheetTitle>Edit GRN Header</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="editDate">Date</Label>
+              <Input
+                id="editDate"
+                type="date"
+                value={editHeaderDate}
+                onChange={(e) => setEditHeaderDate(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="editRef">Reference</Label>
+              <Input
+                id="editRef"
+                placeholder="External reference…"
+                value={editHeaderRef}
+                onChange={(e) => setEditHeaderRef(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="editWarehouse">Warehouse ID</Label>
+              <Input
+                id="editWarehouse"
+                placeholder="Warehouse ID…"
+                value={editHeaderWarehouse}
+                onChange={(e) => setEditHeaderWarehouse(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="editNotes">Notes</Label>
+              <Textarea
+                id="editNotes"
+                placeholder="Notes…"
+                rows={3}
+                value={editHeaderNotes}
+                onChange={(e) => setEditHeaderNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <SheetFooter className="mt-6 flex gap-2">
+            <Button variant="outline" onClick={() => setEditHeaderOpen(false)} disabled={savingHeader}>
+              Cancel
+            </Button>
+            <Button
+              disabled={savingHeader}
+              onClick={async () => {
+                setSavingHeader(true);
+                try {
+                  const updated = await patchGrnHeaderApi(grn.id, {
+                    date: editHeaderDate || undefined,
+                    notes: editHeaderNotes || undefined,
+                    reference: editHeaderRef || undefined,
+                    warehouseId: editHeaderWarehouse || undefined,
+                  });
+                  setGrn(updated);
+                  await loadAuditAndComments(updated.id);
+                  setEditHeaderOpen(false);
+                  toast.success("GRN header updated.");
+                } catch (e) {
+                  toast.error((e as Error)?.message ?? "Failed to update GRN header.");
+                } finally {
+                  setSavingHeader(false);
+                }
+              }}
+            >
+              {savingHeader ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save changes
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

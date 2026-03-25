@@ -44,6 +44,16 @@ import {
   type LandedCostTemplateRow,
   type LandedCostCostCentre,
 } from "@/lib/api/landed-cost";
+import {
+  fetchProcessingCostDraft,
+  fetchProcessingCostAllocation,
+  saveProcessingCostAllocation,
+  PROCESSING_TYPE_LABELS,
+  PROCESSING_COST_CATEGORY_LABELS,
+  type ProcessingType,
+  type ProcessingCostDraftResult,
+  type ProcessingCostDraftLine,
+} from "@/lib/api/processing-cost";
 import { fetchInventoryValuation, fetchLatestInventoryCosting, runInventoryCostingApi } from "@/lib/api/inventory-costing";
 import { listLandedCostAllocations } from "@/lib/data/inventory-costing.repo";
 import { fetchSavedExchangeRateApi, type FinancialExchangeRateRow } from "@/lib/api/financial-settings";
@@ -57,7 +67,7 @@ import * as Icons from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type WizardStep = 0 | 1 | 2 | 3; // 0=FX, 1=Permits, 2=Logistics, 3=Summary
+type WizardStep = 0 | 1 | 2 | 3 | 4; // 0=FX, 1=Permits, 2=Logistics, 3=Processing costs, 4=Summary
 
 interface CostLine {
   templateId: string;
@@ -92,7 +102,8 @@ const WIZARD_STEPS = [
   { id: 0, label: "FX conversion", icon: Icons.TrendingUp },
   { id: 1, label: "Permits & customs", icon: Icons.FileCheck },
   { id: 2, label: "Inbound logistics", icon: Icons.Truck },
-  { id: 3, label: "Summary & confirm", icon: Icons.CheckCircle2 },
+  { id: 3, label: "Processing costs", icon: Icons.Factory },
+  { id: 4, label: "Summary & confirm", icon: Icons.CheckCircle2 },
 ] as const;
 
 // ─── Wizard step indicator ────────────────────────────────────────────────────
@@ -602,6 +613,151 @@ function StepLogistics({
           Skip (no logistics costs)
         </Button>
         <Button size="sm" className="ml-auto" onClick={onNext}>
+          Next: Processing costs <Icons.ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 3: Processing Costs ────────────────────────────────────────────────
+
+function StepProcessingCosts({
+  sourceId,
+  processingType,
+  onProcessingTypeChange,
+  draftLines,
+  onLoadDraft,
+  loadingDraft,
+  onLineAmountChange,
+  onNext,
+  onBack,
+  onSkip,
+}: {
+  sourceId: string;
+  processingType: ProcessingType;
+  onProcessingTypeChange: (t: ProcessingType) => void;
+  draftLines: ProcessingCostDraftLine[];
+  onLoadDraft: () => void;
+  loadingDraft: boolean;
+  onLineAmountChange: (idx: number, amount: string) => void;
+  onNext: () => void;
+  onBack: () => void;
+  onSkip: () => void;
+}) {
+  const total = draftLines.reduce((s, l) => s + l.amount, 0);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="font-semibold text-base">Step 4: Processing &amp; packing costs</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Auto-calculate processing fee, packaging materials, and outbound logistics from your org&apos;s
+          cost profile. Review and override any line before saving.
+        </p>
+      </div>
+
+      <div className="flex items-start gap-2 rounded-md border bg-blue-50 border-blue-100 px-3 py-2">
+        <Icons.Sparkles className="h-4 w-4 mt-0.5 text-blue-600 shrink-0" />
+        <p className="text-xs text-blue-700">
+          Amounts are computed from your org profile constants (from the Filleting Model workbook). You
+          can adjust any line — overrides are tracked separately from formula values.
+        </p>
+      </div>
+
+      {/* Processing type selector */}
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block mb-1.5">
+          Processing type
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {(Object.entries(PROCESSING_TYPE_LABELS) as [ProcessingType, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onProcessingTypeChange(key)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                processingType === key
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background hover:bg-muted border-border"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={onLoadDraft} disabled={loadingDraft}>
+          {loadingDraft ? (
+            <Icons.Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Icons.Wand2 className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {draftLines.length > 0 ? "Recalculate from profile" : "Auto-calculate from profile"}
+        </Button>
+        {draftLines.length > 0 && (
+          <span className="text-xs text-muted-foreground">
+            Total: KES {total.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+          </span>
+        )}
+      </div>
+
+      {draftLines.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">
+            Cost lines — edit to override
+          </label>
+          {draftLines.map((line, idx) => (
+            <div key={idx} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-medium">
+                    {PROCESSING_COST_CATEGORY_LABELS[line.category]}
+                  </span>
+                  <p className="text-xs text-muted-foreground">{line.label}</p>
+                </div>
+                {line.isOverride && (
+                  <span className="text-[10px] rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 font-medium">
+                    Override
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs mb-1 block text-muted-foreground">
+                    Amount (KES)
+                    {line.ratePerUnit != null && line.basisQty != null && (
+                      <span className="ml-1 opacity-70">
+                        — {line.ratePerUnit.toLocaleString()} × {line.basisQty.toLocaleString(undefined, { maximumFractionDigits: 0 })} {line.rateUnit?.replace("per_", "")}
+                      </span>
+                    )}
+                  </label>
+                  <FormattedDecimalInput
+                    className="h-9"
+                    value={String(line.amount)}
+                    onValueChange={(raw) => onLineAmountChange(idx, raw)}
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <p className="text-xs text-muted-foreground pb-2">Currency: KES</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={onBack}>
+          <Icons.ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onSkip} className="text-muted-foreground">
+          Skip (no processing costs)
+        </Button>
+        <Button size="sm" className="ml-auto" onClick={onNext} disabled={draftLines.length === 0 && processingType !== "manual"}>
           Next: Review summary <Icons.ArrowRight className="ml-1.5 h-3.5 w-3.5" />
         </Button>
       </div>
@@ -609,12 +765,13 @@ function StepLogistics({
   );
 }
 
-// ─── Step 3: Summary & Confirm ────────────────────────────────────────────────
+// ─── Step 4: Summary & Confirm ────────────────────────────────────────────────
 
 function StepSummary({
   source,
   permitLines,
   logisticsLines,
+  processingCostLines,
   fxRate,
   onBack,
   onJumpToStep,
@@ -626,6 +783,7 @@ function StepSummary({
   source: LandedCostSourceRow;
   permitLines: CostLine[];
   logisticsLines: CostLine[];
+  processingCostLines: ProcessingCostDraftLine[];
   fxRate: FinancialExchangeRateRow | null;
   onBack: () => void;
   onJumpToStep: (step: WizardStep) => void;
@@ -652,7 +810,9 @@ function StepSummary({
     .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
     .reduce((s, l) => s + toKes(parseCostLineAmount(l.amount), l.currency), 0);
 
-  const totalLanded = docInKes + permitTotal + logisticsTotal;
+  const processingCostTotal = processingCostLines.reduce((s, l) => s + l.amount, 0);
+
+  const totalLanded = docInKes + permitTotal + logisticsTotal + processingCostTotal;
 
   const totalWeightKg = ((source as { lines?: Array<{ weightKg?: number; receivedWeightKg?: number; quantity?: number }> }).lines ?? []).reduce(
     (s, l) => s + (l.receivedWeightKg ?? l.weightKg ?? 0),
@@ -662,15 +822,17 @@ function StepSummary({
   const goodsPerKg = totalWeightKg > 0 ? docInKes / totalWeightKg : null;
   const permitsPerKg = totalWeightKg > 0 ? permitTotal / totalWeightKg : null;
   const logisticsPerKg = totalWeightKg > 0 ? logisticsTotal / totalWeightKg : null;
+  const processingPerKg = totalWeightKg > 0 ? processingCostTotal / totalWeightKg : null;
 
   const hasValidLines =
     permitLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0) ||
-    logisticsLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0);
+    logisticsLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0) ||
+    processingCostLines.some((l) => l.amount > 0);
 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="font-semibold text-base">Step 4: Summary &amp; confirm</h3>
+        <h3 className="font-semibold text-base">Step 5: Summary &amp; confirm</h3>
         <p className="text-sm text-muted-foreground mt-1">
           Review the complete other costs breakdown before posting to inventory.
         </p>
@@ -779,6 +941,40 @@ function StepSummary({
                 </Button>
               </td>
             </tr>
+
+            {/* Processing costs */}
+            <tr className={cn(processingCostTotal === 0 && "opacity-50")}>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Icons.Factory className="h-4 w-4 text-violet-500" />
+                  <div>
+                    <p className="font-medium">Processing &amp; packing</p>
+                    {processingCostLines.map((l, i) => (
+                      <p key={i} className="text-xs text-muted-foreground">{l.label}</p>
+                    ))}
+                    {processingCostLines.length === 0 && (
+                      <p className="text-xs text-muted-foreground">Not set</p>
+                    )}
+                  </div>
+                </div>
+              </td>
+              <td className="px-4 py-3 text-right font-mono">
+                {processingCostLines.filter((l) => l.amount > 0).map((l, i) => (
+                  <span key={i} className="block">{formatMoney(l.amount, l.currency)}</span>
+                ))}
+                {processingCostLines.filter((l) => l.amount > 0).length === 0 && (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-right font-mono font-medium">
+                {formatMoney(processingCostTotal, "KES")}
+              </td>
+              <td className="px-3 py-3">
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onJumpToStep(3)}>
+                  <Icons.Pencil className="h-3 w-3" />
+                </Button>
+              </td>
+            </tr>
           </tbody>
           <tfoot className="border-t bg-muted/30">
             <tr>
@@ -844,6 +1040,17 @@ function StepSummary({
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
                     {logisticsPerKg !== null ? `KES ${logisticsPerKg.toFixed(2)} / kg` : "—"}
+                  </td>
+                </tr>
+              )}
+              {processingCostTotal > 0 && (
+                <tr>
+                  <td className="px-4 py-2.5 text-muted-foreground">Processing &amp; packing</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                    {formatMoney(processingCostTotal, "KES")}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono">
+                    {processingPerKg !== null ? `KES ${processingPerKg.toFixed(2)} / kg` : "—"}
                   </td>
                 </tr>
               )}
@@ -987,49 +1194,88 @@ function LandedCostWizard({
   const [permitLines, setPermitLines] = React.useState<CostLine[]>([emptyPermitLine()]);
   const [logisticsLines, setLogisticsLines] = React.useState<CostLine[]>([emptyLogisticsLine()]);
 
+  // Processing cost state
+  const [processingType, setProcessingType] = React.useState<ProcessingType>("filleting");
+  const [processingDraftResult, setProcessingDraftResult] = React.useState<ProcessingCostDraftResult | null>(null);
+  const [processingLines, setProcessingLines] = React.useState<ProcessingCostDraftLine[]>([]);
+  const [loadingDraft, setLoadingDraft] = React.useState(false);
+
+  const handleLoadProcessingDraft = React.useCallback(async () => {
+    setLoadingDraft(true);
+    try {
+      const result = await fetchProcessingCostDraft(source.id, processingType);
+      if (result?.draft) {
+        setProcessingDraftResult(result.draft);
+        setProcessingLines(result.draft.lines.map((l) => ({ ...l })));
+      }
+    } catch {
+      toast.error("Failed to calculate processing costs.");
+    } finally {
+      setLoadingDraft(false);
+    }
+  }, [source.id, processingType]);
+
+  const handleProcessingLineAmountChange = React.useCallback((idx: number, raw: string) => {
+    const n = parseDecimalString(raw);
+    const amount = Number.isFinite(n) ? n : 0;
+    setProcessingLines((prev) =>
+      prev.map((l, i) => i === idx ? { ...l, amount, isOverride: true } : l)
+    );
+  }, []);
+
   // Hydrate from existing allocation when document is already allocated
   React.useEffect(() => {
     if (!source.isAllocated) return;
     setHydrating(true);
-    fetchLandedCostAllocation(source.id)
-      .then((allocation) => {
-        if (!allocation) return;
-        setHasExistingAllocation(true);
-
-        const savedPermitLines = (allocation.lines ?? []).filter(
-          (l) => l.costCentre === "permits"
-        );
-        const savedLogisticsLines = (allocation.lines ?? []).filter(
-          (l) => l.costCentre === "inbound_logistics"
-        );
-
-        if (savedPermitLines.length > 0) {
-          setPermitLines(
-            savedPermitLines.map((l) => ({
-              templateId: l.templateId,
-              amount: String(l.amount ?? ""),
-              currency: l.currency ?? defaultPermitCurrency,
-              reference: l.reference ?? "",
-              costCentre: "permits" as const,
-            }))
-          );
+    Promise.all([
+      fetchLandedCostAllocation(source.id),
+      fetchProcessingCostAllocation(source.id),
+    ])
+      .then(([allocation, processingAlloc]) => {
+        if (allocation) {
+          setHasExistingAllocation(true);
+          const savedPermitLines = (allocation.lines ?? []).filter((l) => l.costCentre === "permits");
+          const savedLogisticsLines = (allocation.lines ?? []).filter((l) => l.costCentre === "inbound_logistics");
+          if (savedPermitLines.length > 0) {
+            setPermitLines(
+              savedPermitLines.map((l) => ({
+                templateId: l.templateId,
+                amount: String(l.amount ?? ""),
+                currency: l.currency ?? defaultPermitCurrency,
+                reference: l.reference ?? "",
+                costCentre: "permits" as const,
+              }))
+            );
+          }
+          if (savedLogisticsLines.length > 0) {
+            setLogisticsLines(
+              savedLogisticsLines.map((l) => ({
+                templateId: l.templateId,
+                amount: String(l.amount ?? ""),
+                currency: l.currency ?? defaultLogisticsCurrency,
+                reference: l.reference ?? "",
+                costCentre: "inbound_logistics" as const,
+              }))
+            );
+          }
         }
-
-        if (savedLogisticsLines.length > 0) {
-          setLogisticsLines(
-            savedLogisticsLines.map((l) => ({
-              templateId: l.templateId,
-              amount: String(l.amount ?? ""),
-              currency: l.currency ?? defaultLogisticsCurrency,
-              reference: l.reference ?? "",
-              costCentre: "inbound_logistics" as const,
+        if (processingAlloc) {
+          setProcessingType(processingAlloc.processingType);
+          setProcessingLines(
+            processingAlloc.lines.map((l) => ({
+              category: l.category,
+              label: l.label,
+              amount: l.amount,
+              currency: l.currency,
+              ratePerUnit: l.ratePerUnit,
+              rateUnit: l.rateUnit,
+              basisQty: l.basisQty,
+              isOverride: l.isOverride,
             }))
           );
         }
       })
-      .catch(() => {
-        // Non-fatal — wizard opens with empty lines
-      })
+      .catch(() => { /* Non-fatal */ })
       .finally(() => setHydrating(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source.id, source.isAllocated]);
@@ -1071,51 +1317,71 @@ function LandedCostWizard({
       return;
     }
 
-    const allLines = [
+    const landedLines = [
       ...permitLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0),
       ...logisticsLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0),
     ];
+    const processingLinesValid = processingLines.filter((l) => l.amount > 0);
 
-    if (!allLines.length) {
+    if (!landedLines.length && !processingLinesValid.length) {
       toast.info("No cost lines with amounts entered. Add at least one cost to save.");
       return;
     }
 
     setSaving(true);
     try {
-      const result = await postLandedCostAllocation({
-        sourceId: source.id,
-        lines: allLines.map((l) => ({
-          templateId: l.templateId,
-          amount: parseCostLineAmount(l.amount),
-          currency: l.currency,
-          reference: l.reference || undefined,
-          costCentre: l.costCentre,
-        })),
-      });
-
-      // Upload any evidence files queued per cost line
-      if (result.id) {
-        const fileTasks: Array<Promise<unknown>> = [];
-        allLines.forEach((line, lineIndex) => {
-          for (const file of line.files ?? []) {
-            fileTasks.push(
-              uploadLandedCostAttachment(result.id!, lineIndex, file).catch((err: unknown) => {
-                console.warn("[landed-cost] attachment upload failed:", err);
-              })
-            );
-          }
+      // Save landed costs (permits + inbound logistics)
+      if (landedLines.length > 0) {
+        const result = await postLandedCostAllocation({
+          sourceId: source.id,
+          lines: landedLines.map((l) => ({
+            templateId: l.templateId,
+            amount: parseCostLineAmount(l.amount),
+            currency: l.currency,
+            reference: l.reference || undefined,
+            costCentre: l.costCentre,
+          })),
         });
-        if (fileTasks.length > 0) await Promise.all(fileTasks);
+        // Upload evidence files
+        if (result.id) {
+          const fileTasks: Array<Promise<unknown>> = [];
+          landedLines.forEach((line, lineIndex) => {
+            for (const file of line.files ?? []) {
+              fileTasks.push(
+                uploadLandedCostAttachment(result.id!, lineIndex, file).catch((err: unknown) => {
+                  console.warn("[landed-cost] attachment upload failed:", err);
+                })
+              );
+            }
+          });
+          if (fileTasks.length > 0) await Promise.all(fileTasks);
+        }
       }
 
-      const perKgMsg =
-        result.totalLandedCostBase && result.impactLines
-          ? ` · KES ${((result.totalLandedCostBase ?? 0) / Math.max((result.impactLines ?? []).reduce((s, il) => s + il.basisValue, 0), 1)).toFixed(2)} / kg`
-          : "";
+      // Save processing costs
+      if (processingLinesValid.length > 0) {
+        await saveProcessingCostAllocation({
+          sourceId: source.id,
+          processingType,
+          lines: processingLinesValid.map((l) => ({
+            category: l.category,
+            label: l.label,
+            amount: l.amount,
+            currency: l.currency,
+            ratePerUnit: l.ratePerUnit,
+            rateUnit: l.rateUnit,
+            basisQty: l.basisQty,
+            isOverride: l.isOverride,
+          })),
+          formulaSnapshot: processingDraftResult ?? undefined,
+        });
+      }
 
+      const totalOtherCosts =
+        landedLines.reduce((s, l) => s + parseCostLineAmount(l.amount), 0) +
+        processingLinesValid.reduce((s, l) => s + l.amount, 0);
       toast.success(
-        `Other costs posted for ${source.number}${perKgMsg}. Run costing to update valuations.`,
+        `Other costs saved for ${source.number} — KES ${totalOtherCosts.toLocaleString("en-US", { maximumFractionDigits: 2 })} total. Run costing to update valuations.`,
         { duration: 6000 }
       );
       onDone();
@@ -1207,12 +1473,31 @@ function LandedCostWizard({
           />
         )}
         {wizardStep === 3 && (
+          <StepProcessingCosts
+            sourceId={source.id}
+            processingType={processingType}
+            onProcessingTypeChange={(t) => {
+              setProcessingType(t);
+              setProcessingLines([]);
+              setProcessingDraftResult(null);
+            }}
+            draftLines={processingLines}
+            onLoadDraft={handleLoadProcessingDraft}
+            loadingDraft={loadingDraft}
+            onLineAmountChange={handleProcessingLineAmountChange}
+            onNext={() => setWizardStep(4)}
+            onBack={() => setWizardStep(2)}
+            onSkip={() => setWizardStep(4)}
+          />
+        )}
+        {wizardStep === 4 && (
           <StepSummary
             source={source}
             permitLines={permitLines}
             logisticsLines={logisticsLines}
+            processingCostLines={processingLines}
             fxRate={fxRate}
-            onBack={() => setWizardStep(2)}
+            onBack={() => setWizardStep(3)}
             onJumpToStep={(s) => setWizardStep(s)}
             onSave={handleSave}
             saving={saving}

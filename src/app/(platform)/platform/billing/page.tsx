@@ -21,6 +21,8 @@ import {
   cancelPlatformProvisioningCheckoutApi,
   confirmPlatformProvisioningCheckoutApi,
   removePlatformProvisioningCheckoutItemApi,
+  confirmPlatformBillingCheckoutApi,
+  updatePlatformInvoiceApi,
   type PlatformBillingCheckoutRow,
   type PlatformInvoiceRow,
   type PlatformBillingSummary,
@@ -69,6 +71,7 @@ function copyAdminCredentials(customer: {
 export default function PlatformBillingPage() {
   const searchParams = useSearchParams();
   const tenantIdFilter = searchParams.get("tenantId") || undefined;
+  const orgIdFilter = searchParams.get("orgId") || undefined;
   const [invoices, setInvoices] = React.useState<PlatformInvoiceRow[]>([]);
   const [checkouts, setCheckouts] = React.useState<PlatformBillingCheckoutRow[]>([]);
   const [provisioningCheckout, setProvisioningCheckout] = React.useState<PlatformProvisioningCheckout | null>(null);
@@ -77,11 +80,13 @@ export default function PlatformBillingPage() {
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [checkoutBusy, setCheckoutBusy] = React.useState(false);
+  const [tenantCheckoutConfirmingId, setTenantCheckoutConfirmingId] = React.useState<string | null>(null);
+  const [invoiceBusyId, setInvoiceBusyId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     Promise.all([
-      fetchPlatformBillingCheckoutsApi(tenantIdFilter),
-      fetchPlatformInvoicesApi(tenantIdFilter, statusFilter || undefined),
+      fetchPlatformBillingCheckoutsApi(tenantIdFilter, orgIdFilter),
+      fetchPlatformInvoicesApi(tenantIdFilter, statusFilter || undefined, orgIdFilter),
       fetchPlatformBillingSummaryApi(),
       fetchPlatformProvisioningCheckoutApi(),
     ])
@@ -97,7 +102,7 @@ export default function PlatformBillingPage() {
       .finally(() => {
         setLoading(false);
       });
-  }, [statusFilter, tenantIdFilter]);
+  }, [statusFilter, tenantIdFilter, orgIdFilter]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -115,6 +120,27 @@ export default function PlatformBillingPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Billing</h1>
         <p className="text-muted-foreground">Invoices and revenue.</p>
+        {(tenantIdFilter || orgIdFilter) && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Filtered
+            {tenantIdFilter ? (
+              <>
+                {" "}
+                · tenant <span className="font-mono">{tenantIdFilter.slice(0, 8)}…</span>
+              </>
+            ) : null}
+            {orgIdFilter ? (
+              <>
+                {" "}
+                · org <span className="font-mono">{orgIdFilter}</span>
+              </>
+            ) : null}
+            .{" "}
+            <Link href="/platform/billing" className="underline">
+              Clear filters
+            </Link>
+          </p>
+        )}
       </div>
 
       {summary && (
@@ -406,7 +432,11 @@ export default function PlatformBillingPage() {
       <Card>
         <CardHeader>
           <CardTitle>Open checkouts</CardTitle>
-          <CardDescription>Draft batched additions waiting for tenant checkout confirmation.</CardDescription>
+          <CardDescription>
+            Staged users or franchise outlets per organization. Tenant admins can confirm in{" "}
+            <span className="font-medium text-foreground">Settings → Billing</span> (same org). Platform billing can
+            confirm here after payment or agreement—this finalizes provisioning and creates the prorated invoice.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
@@ -417,19 +447,50 @@ export default function PlatformBillingPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Tenant</TableHead>
                   <TableHead>Org</TableHead>
                   <TableHead>Items</TableHead>
                   <TableHead>Projected monthly</TableHead>
                   <TableHead className="text-right">Checkout total</TableHead>
+                  <TableHead className="w-[200px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {checkouts.map((checkout) => (
                   <TableRow key={checkout.id}>
-                    <TableCell className="font-mono text-sm">{checkout.orgId.slice(0, 8)}…</TableCell>
+                    <TableCell>
+                      <Link href={`/platform/customers/${checkout.tenantId}`} className="font-mono text-sm hover:underline">
+                        {checkout.tenantId.slice(0, 8)}…
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs" title={checkout.orgId}>
+                      {checkout.orgId.slice(0, 8)}…
+                    </TableCell>
                     <TableCell>{checkout.itemCount}</TableCell>
                     <TableCell>{formatCents(checkout.projectedMonthlyCents)}</TableCell>
                     <TableCell className="text-right font-medium">{formatCents(checkout.quoteTotalCents)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        disabled={tenantCheckoutConfirmingId !== null || checkout.itemCount === 0}
+                        onClick={async () => {
+                          try {
+                            setTenantCheckoutConfirmingId(checkout.id);
+                            const result = await confirmPlatformBillingCheckoutApi(checkout.id);
+                            toast.success(
+                              `Checkout confirmed. Invoice ${result.invoiceId.slice(0, 8)}… · ${formatCents(result.quoteTotalCents)}`
+                            );
+                            await load();
+                          } catch (error) {
+                            toast.error(error instanceof Error ? error.message : "Failed to confirm checkout.");
+                          } finally {
+                            setTenantCheckoutConfirmingId(null);
+                          }
+                        }}
+                      >
+                        {tenantCheckoutConfirmingId === checkout.id ? "Confirming…" : "Confirm checkout"}
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -470,8 +531,10 @@ export default function PlatformBillingPage() {
                   <TableHead>Period</TableHead>
                   <TableHead>Breakdown</TableHead>
                   <TableHead>Due</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Payment</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="w-[120px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -498,8 +561,34 @@ export default function PlatformBillingPage() {
                         </div>
                       </TableCell>
                     <TableCell className="text-sm">{inv.dueDate}</TableCell>
-                    <TableCell>{inv.billingKind ?? inv.status}</TableCell>
+                    <TableCell>{inv.status}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {(inv.billingKind ?? "MONTH_END").replaceAll("_", " ")}
+                    </TableCell>
                     <TableCell className="text-right font-medium">{formatCents(inv.totalCents)}</TableCell>
+                    <TableCell className="text-right">
+                      {inv.status === "OPEN" || inv.status === "DRAFT" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={invoiceBusyId !== null}
+                          onClick={async () => {
+                            try {
+                              setInvoiceBusyId(inv.id);
+                              await updatePlatformInvoiceApi(inv.id, { status: "PAID" });
+                              toast.success("Invoice marked paid.");
+                              await load();
+                            } catch (error) {
+                              toast.error(error instanceof Error ? error.message : "Could not update invoice.");
+                            } finally {
+                              setInvoiceBusyId(null);
+                            }
+                          }}
+                        >
+                          {invoiceBusyId === inv.id ? "…" : "Mark paid"}
+                        </Button>
+                      ) : null}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

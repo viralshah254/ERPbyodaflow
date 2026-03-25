@@ -4,7 +4,7 @@
  */
 
 import type { ProductRow } from "@/lib/types/masters";
-import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductsApi, fetchProductsPageApi } from "@/lib/api/products";
 
 let productsCache: ProductRow[] = [];
 const cacheListeners = new Set<() => void>();
@@ -32,18 +32,27 @@ export function listProducts(): ProductRow[] {
   return productsCache;
 }
 
-/** Fetch products filtered by purchasable (for purchase orders) or sellable (for sales orders). */
+/** Fetch products filtered by purchasable (for purchase orders) or sellable (for sales orders). Paginates until all rows are loaded (100 per page). */
 export async function fetchProductsForDocumentLines(
   filter: "purchasable" | "sellable" | "all"
 ): Promise<ProductRow[]> {
-  if (filter === "all") {
-    return fetchProductsApi({ limit: 100 });
+  const base =
+    filter === "all"
+      ? { limit: 100 as const }
+      : {
+          purchasable: filter === "purchasable",
+          sellable: filter === "sellable",
+          limit: 100 as const,
+        };
+  const acc: ProductRow[] = [];
+  let cursor: string | undefined = "0";
+  for (let page = 0; page < 200; page++) {
+    const { items, nextCursor } = await fetchProductsPageApi({ ...base, cursor });
+    acc.push(...items);
+    if (!nextCursor || items.length === 0) break;
+    cursor = nextCursor;
   }
-  return fetchProductsApi({
-    purchasable: filter === "purchasable",
-    sellable: filter === "sellable",
-    limit: 100,
-  });
+  return acc;
 }
 
 /** Hydrate products cache from API; call from pages that need listProducts() to reflect live data. */

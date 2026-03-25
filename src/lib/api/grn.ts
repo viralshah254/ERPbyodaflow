@@ -70,6 +70,18 @@ export async function confirmGRNProcessing(id: string): Promise<{ adjustedLines:
   );
 }
 
+/** Patch GRN header fields (date, notes, reference, warehouseId). Only creator or ADMIN. */
+export async function patchGrnHeaderApi(
+  id: string,
+  patch: { date?: string; notes?: string; reference?: string; warehouseId?: string }
+): Promise<GrnDetailRow> {
+  requireLiveApi("Patch GRN header");
+  return apiRequest<GrnDetailRow>(`/api/purchasing/grn/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+
 /** Patch GRN line weight (receivedWeightKg, paidWeightKg, weightKg, processedWeightKg). lineId is 0-based index. */
 export async function patchGRNLine(
   grnId: string,

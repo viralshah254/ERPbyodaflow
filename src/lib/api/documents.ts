@@ -294,6 +294,11 @@ function mapDocumentDetail(
       sourceQuantity: line.sourceQuantity,
       convertedQuantity: line.convertedQuantity,
       remainingQuantity: line.remainingQuantity,
+      taxCodeId: line.taxCodeId,
+      effectiveTaxCodeId: line.effectiveTaxCodeId,
+      taxCodeCode: line.taxCodeCode,
+      taxCodeName: line.taxCodeName,
+      taxRate: line.taxRate,
     })),
     sourceDocument: payload.sourceDocument ?? null,
     linkedDeliveries: payload.linkedDeliveries ?? [],
@@ -489,9 +494,33 @@ export async function addDocumentCommentApi(
   body: string
 ): Promise<void> {
   requireLiveApi("Document comments");
-  await apiRequest(`/api/documents/${type}/${id}/comments`, {
+  await apiRequest(`/api/docs/${type}/${id}/comments`, {
     method: "POST",
     body: { text: body },
+  });
+}
+
+export async function editDocumentCommentApi(
+  type: DocTypeKey,
+  id: string,
+  commentId: string,
+  text: string
+): Promise<void> {
+  requireLiveApi("Edit document comment");
+  await apiRequest(`/api/docs/${type}/${id}/comments/${encodeURIComponent(commentId)}`, {
+    method: "PATCH",
+    body: { text },
+  });
+}
+
+export async function deleteDocumentCommentApi(
+  type: DocTypeKey,
+  id: string,
+  commentId: string
+): Promise<void> {
+  requireLiveApi("Delete document comment");
+  await apiRequest(`/api/docs/${type}/${id}/comments/${encodeURIComponent(commentId)}`, {
+    method: "DELETE",
   });
 }
 

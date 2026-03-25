@@ -268,18 +268,42 @@ export async function updatePlatformSubscriptionApi(
   await apiRequest(`/api/platform/subscriptions/${id}`, { method: "PATCH", body: payload });
 }
 
-export async function fetchPlatformInvoicesApi(tenantId?: string, status?: string): Promise<PlatformInvoiceRow[]> {
+export async function fetchPlatformInvoicesApi(tenantId?: string, status?: string, orgId?: string): Promise<PlatformInvoiceRow[]> {
   const params: Record<string, string> = {};
   if (tenantId) params.tenantId = tenantId;
   if (status) params.status = status;
+  if (orgId) params.orgId = orgId;
   const payload = await apiRequest<{ items: PlatformInvoiceRow[] }>("/api/platform/invoices", { params: Object.keys(params).length ? params : undefined });
   return payload.items ?? [];
 }
 
-export async function fetchPlatformBillingCheckoutsApi(tenantId?: string): Promise<PlatformBillingCheckoutRow[]> {
-  const params = tenantId ? { tenantId } : undefined;
-  const payload = await apiRequest<{ items: PlatformBillingCheckoutRow[] }>("/api/platform/billing/checkouts", { params });
+export async function fetchPlatformBillingCheckoutsApi(tenantId?: string, orgId?: string): Promise<PlatformBillingCheckoutRow[]> {
+  const params: Record<string, string> = {};
+  if (tenantId) params.tenantId = tenantId;
+  if (orgId) params.orgId = orgId;
+  const payload = await apiRequest<{ items: PlatformBillingCheckoutRow[] }>(
+    "/api/platform/billing/checkouts",
+    { params: Object.keys(params).length ? params : undefined }
+  );
   return payload.items ?? [];
+}
+
+export type PlatformBillingCheckoutConfirmResult = {
+  checkoutId: string;
+  invoiceId: string;
+  createdUsers: unknown[];
+  createdFranchises: unknown[];
+  quoteTotalCents: number;
+  lineItems: PlatformBillingCheckoutRow["quoteLineItems"];
+};
+
+export async function confirmPlatformBillingCheckoutApi(
+  checkoutId: string
+): Promise<PlatformBillingCheckoutConfirmResult> {
+  return apiRequest<PlatformBillingCheckoutConfirmResult>(
+    `/api/platform/billing/checkouts/${encodeURIComponent(checkoutId)}/confirm`,
+    { method: "POST" }
+  );
 }
 
 export async function fetchPlatformProvisioningCheckoutApi(): Promise<PlatformProvisioningCheckout> {

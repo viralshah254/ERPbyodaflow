@@ -16,6 +16,7 @@ type BackendUser = {
   branchIds?: string[];
   roleIds?: string[];
   roleNames?: string[];
+  hasSignIn?: boolean;
   stagedForCheckout?: boolean;
   checkout?: {
     id: string | null;
@@ -50,6 +51,7 @@ function mapUser(user: BackendUser): UserRow {
     copilotEnabled: user.copilotEnabled ?? false,
     roleIds: user.roleIds ?? [],
     roleNames: user.roleNames ?? [],
+    hasSignIn: user.hasSignIn,
     stagedForCheckout: user.stagedForCheckout ?? false,
     checkout: user.checkout,
     billingImpact: user.billingImpact,
@@ -133,4 +135,25 @@ export async function updateRoleApi(
     body,
   });
   return mapRole(payload);
+}
+
+export async function seedStandardRolesApi(): Promise<{
+  ok: boolean;
+  count: number;
+  templateId: string;
+  roles: Array<{ key: string; id: string; created: boolean }>;
+}> {
+  requireLiveApi("Provision standard roles");
+  return apiRequest("/api/settings/roles/seed-standard", { method: "POST" });
+}
+
+export async function setUserPasswordApi(
+  userId: string,
+  body: { newPassword: string; mustChangePassword?: boolean }
+): Promise<void> {
+  requireLiveApi("Set password");
+  await apiRequest(`/api/settings/users/${encodeURIComponent(userId)}/password`, {
+    method: "POST",
+    body,
+  });
 }

@@ -19,25 +19,32 @@ interface DocumentCommentsProps {
   className?: string;
 }
 
-const MOCK_COMMENTS: DocumentComment[] = [
-  { id: "1", author: "Jane Doe", at: "2025-01-28T10:30:00Z", body: "Please double-check the delivery address before posting." },
-  { id: "2", author: "John Smith", at: "2025-01-28T11:00:00Z", body: "Address confirmed. Ready to ship." },
-];
-
 /** Comments panel for document detail: timeline of comments + add form. */
 export function DocumentComments({
-  comments = MOCK_COMMENTS,
+  comments = [],
   onAddComment,
   className,
 }: DocumentCommentsProps) {
   const [draft, setDraft] = React.useState("");
+  const [posting, setPosting] = React.useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const t = draft.trim();
     if (!t) return;
-    onAddComment?.(t);
-    setDraft("");
-    if (!onAddComment) toast.success("Comment captured in demo mode.");
+    if (!onAddComment) {
+      toast.success("Comment captured in demo mode.");
+      setDraft("");
+      return;
+    }
+    setPosting(true);
+    try {
+      await onAddComment(t);
+      setDraft("");
+    } catch (e) {
+      toast.error((e as Error).message || "Could not post comment.");
+    } finally {
+      setPosting(false);
+    }
   };
 
   return (
@@ -54,8 +61,8 @@ export function DocumentComments({
             "disabled:cursor-not-allowed disabled:opacity-50 resize-none"
           )}
         />
-        <Button size="sm" onClick={handleSubmit} disabled={!draft.trim()}>
-          Post
+        <Button size="sm" onClick={() => void handleSubmit()} disabled={!draft.trim() || posting}>
+          {posting ? "Posting…" : "Post"}
         </Button>
       </div>
       {comments.length === 0 ? (

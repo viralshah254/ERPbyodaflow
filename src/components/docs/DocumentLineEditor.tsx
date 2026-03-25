@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import {
   Table,
   TableBody,
@@ -28,12 +29,18 @@ import {
   subscribeProductsCache,
 } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
-import { fetchProductApi } from "@/lib/api/products";
+import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
 import { isApiConfigured } from "@/lib/api/client";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -56,6 +63,11 @@ export interface DocumentLine {
   variantSku?: string;
   /** When this line originates from a PO line, the PO line id for consumption tracking. */
   sourceLineId?: string;
+  /**
+   * Original quantity from the purchase order line (frozen at prefill time).
+   * Used on GRN to show the user what was ordered, independent of received qty or UOM changes.
+   */
+  poQty?: number;
 }
 
 interface DocumentLineEditorProps {
@@ -84,9 +96,31 @@ interface DocumentLineEditorProps {
    * Packaging defines units-per-base; the catalog ensures codes like KG appear even if packaging fetch failed.
    */
   catalogUomCodes?: string[];
+  /**
+   * Override the Qty and Base qty column labels + help tooltips. Pass when the doc type gives these
+   * columns specific meaning — e.g. for GRN: received quantity and the original PO quantity.
+   */
+  lineColumnLabels?: {
+    qtyHeader: string;
+    qtyTooltip: string;
+    baseQtyHeader: string;
+    baseQtyTooltip: string;
+  };
 }
 
 const defaultPriceListId = "pl-retail";
+
+/** Multi-word search: every token must appear somewhere in sku, name, category, or description (case-insensitive). */
+function productMatchesLineSearch(p: ProductRow, query: string): boolean {
+  const tokens = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return true;
+  const hay = [p.sku, p.name, p.category ?? "", p.description ?? ""].join(" ").toLowerCase();
+  return tokens.every((t) => hay.includes(t));
+}
 
 /** Default UOM from product packaging (purchase vs sales). */
 function pickDefaultUomFromPackaging(
@@ -146,6 +180,7 @@ export function DocumentLineEditor({
   taxCodes = [],
   linesAreTaxInclusive = false,
   catalogUomCodes = [],
+  lineColumnLabels,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
@@ -157,9 +192,11 @@ export function DocumentLineEditor({
     listProducts,
     () => []
   );
+  /** When filtering by purchasable/sellable, never fall back to the global cache (would mix in wrong product types). */
   const products = React.useMemo(() => {
     if (productFilter && productFilter !== "all") {
-      return filteredProducts ?? cachedProducts;
+      if (filteredProducts === null) return [];
+      return filteredProducts;
     }
     return cachedProducts;
   }, [productFilter, filteredProducts, cachedProducts]);
@@ -181,6 +218,38 @@ export function DocumentLineEditor({
       cancelled = true;
     };
   }, [productFilter]);
+  const loadProductOptions = React.useCallback(
+    async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+      const q = query.trim();
+      const mapRows = (rows: ProductRow[]) => {
+        const filtered = rows.filter((p) => productMatchesLineSearch(p, query));
+        const sorted =
+          q.length === 0
+            ? [...filtered].sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 400)
+            : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
+        return sorted.map((p) => ({
+          id: p.id,
+          label: `${p.sku} — ${p.name}`,
+          description: p.category?.trim() || undefined,
+        }));
+      };
+      if (isApiConfigured() && productFilter && productFilter !== "all" && q) {
+        try {
+          const rows = await fetchProductsApi({
+            purchasable: productFilter === "purchasable",
+            sellable: productFilter === "sellable",
+            search: q,
+            limit: 100,
+          });
+          return mapRows(rows);
+        } catch {
+          return mapRows(products);
+        }
+      }
+      return mapRows(products);
+    },
+    [products, productFilter]
+  );
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
@@ -202,33 +271,46 @@ export function DocumentLineEditor({
       toast.error("No products found. Add products in Masters > Finished Good / SKU first.");
       return;
     }
-    const build = (row: ProductRow) => {
-      const packaging = packagingByProductId?.[row.id] ?? [];
-      const uom = pickDefaultUomFromPackaging(packaging, mode) ?? "EA";
-      const baseQty = getBaseQty(row.id, uom, 1, packagingByProductId?.[row.id]);
-      const { price, reason } = useCostPricing
-        ? { price: 0, reason: "Manual" }
-        : getPriceForLine(row.id, priceListIdResolved, 1, uom, pricingByProductId?.[row.id]);
-      const newLine: DocumentLine = {
-        id: `line-${Date.now()}`,
-        productId: row.id,
-        sku: row.sku,
-        name: row.name,
-        uom,
-        qty: 1,
-        baseQty,
-        price,
-        priceReason: reason,
-        amount: price,
-        taxCodeId: row.defaultTaxCodeId ?? undefined,
-      };
-      const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
-      onLinesChange((prev) => [...prev, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
+    // Prefetch variants so the Variant column is ready without an extra beat after paint.
+    ensureVariantsLoaded(p.id);
+    const packaging = packagingByProductId?.[p.id] ?? [];
+    const uom = pickDefaultUomFromPackaging(packaging, mode) ?? p.unit ?? p.baseUom ?? "EA";
+    const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
+    const { price, reason } = useCostPricing
+      ? { price: 0, reason: "Manual" }
+      : getPriceForLine(p.id, priceListIdResolved, 1, uom, pricingByProductId?.[p.id]);
+    const newLine: DocumentLine = {
+      id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      productId: p.id,
+      sku: p.sku,
+      name: p.name,
+      uom,
+      qty: 1,
+      baseQty,
+      price,
+      priceReason: reason,
+      amount: price,
+      taxCodeId: p.defaultTaxCodeId ?? undefined,
     };
+    const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
+    onLinesChange((prev) => [...prev, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
+    // Enrich from API in the background if default tax differs (no blocking the UI).
     if (isApiConfigured()) {
-      void fetchProductApi(p.id).then((full) => build(full ?? p)).catch(() => build(p));
-    } else {
-      build(p);
+      void fetchProductApi(p.id).then((full) => {
+        if (!full?.id || full.defaultTaxCodeId === (p.defaultTaxCodeId ?? undefined)) return;
+        onLinesChange((prev) => {
+          const idx = prev.findIndex((l) => l.id === newLine.id);
+          if (idx < 0) return prev;
+          const line = prev[idx];
+          if (line.productId !== full.id) return prev;
+          const merged = { ...line, taxCodeId: full.defaultTaxCodeId ?? line.taxCodeId };
+          const t = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
+          const next = { ...merged, tax: t.tax, amount: t.amount };
+          const copy = [...prev];
+          copy[idx] = next;
+          return copy;
+        });
+      }).catch(() => {});
     }
   };
 
@@ -282,7 +364,7 @@ export function DocumentLineEditor({
     if (!p) return;
     const applyRow = (row: ProductRow) => {
       const packaging = packagingByProductId?.[productId] ?? [];
-      const uom = pickDefaultUomFromPackaging(packaging, mode) ?? "EA";
+      const uom = pickDefaultUomFromPackaging(packaging, mode) ?? row.unit ?? row.baseUom ?? "EA";
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
       const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
@@ -385,6 +467,10 @@ export function DocumentLineEditor({
     ? "Line items · Cost / unit (enter or from supplier)"
     : `Line items · Price list: ${priceLists.find((pl) => pl.id === priceListIdResolved)?.name ?? priceListIdResolved}`;
 
+  const productListLoading = Boolean(
+    productFilter && productFilter !== "all" && filteredProducts === null
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -394,8 +480,14 @@ export function DocumentLineEditor({
           variant="outline"
           size="sm"
           onClick={addRow}
-          disabled={products.length === 0}
-          title={products.length === 0 ? "Add products in Masters first" : undefined}
+          disabled={products.length === 0 || productListLoading}
+          title={
+            productListLoading
+              ? "Loading product list…"
+              : products.length === 0
+                ? "Add products in Masters first"
+                : undefined
+          }
         >
           <Icons.Plus className="mr-2 h-4 w-4" />
           Add line
@@ -404,8 +496,8 @@ export function DocumentLineEditor({
       {lines.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {useCostPricing
-            ? "No lines. Add a line above. Product, UOM, qty, base qty, cost per unit (enter manually)."
-            : "No lines. Add a line above. Product, UOM, qty, base qty, price (from price list), price reason."}
+            ? `No lines. Add a line above. Product, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, cost per unit (enter manually).`
+            : `No lines. Add a line above. Product, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, price (from price list), price reason.`}
         </div>
       ) : (
         <>
@@ -413,11 +505,47 @@ export function DocumentLineEditor({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product</TableHead>
+                  <TableHead className="min-w-[min(100%,24rem)] w-[36%]">Product</TableHead>
                   <TableHead>Variant</TableHead>
                   <TableHead>UOM</TableHead>
-                  <TableHead className="w-24">Qty</TableHead>
-                  <TableHead className="w-24">Base qty</TableHead>
+                  <TableHead className="w-28">
+                    {lineColumnLabels ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-default">
+                              {lineColumnLabels.qtyHeader}
+                              <Icons.HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+                            {lineColumnLabels.qtyTooltip}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      "Qty"
+                    )}
+                  </TableHead>
+                  <TableHead className="w-28">
+                    {lineColumnLabels ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-default">
+                              {lineColumnLabels.baseQtyHeader}
+                              <Icons.HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+                            {lineColumnLabels.baseQtyTooltip}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      "Base qty"
+                    )}
+                  </TableHead>
                   <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
                   <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
                   {taxCodes.length > 0 && <TableHead className="w-36">Tax</TableHead>}
@@ -432,16 +560,35 @@ export function DocumentLineEditor({
                   return (
                   <TableRow key={l.id}>
                     <TableCell>
-                      <Select value={l.productId} onValueChange={(v) => setProduct(l.id, v)}>
-                        <SelectTrigger className="w-44">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {products.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>{p.sku} — {p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="min-w-[min(100%,18rem)] w-full max-w-[min(100%,42rem)]">
+                        <AsyncSearchableSelect
+                          value={l.productId}
+                          onValueChange={(v) => setProduct(l.id, v)}
+                          loadOptions={loadProductOptions}
+                          selectedOption={{
+                            id: l.productId,
+                            label: `${l.sku} — ${l.name}`,
+                          }}
+                          placeholder={
+                            productListLoading ? "Loading products…" : "Search product…"
+                          }
+                          searchPlaceholder="Type SKU, name, or any words…"
+                          emptyMessage={
+                            productListLoading
+                              ? "Loading products…"
+                              : productFilter === "purchasable"
+                                ? "No purchasable products match. Try another search."
+                                : productFilter === "sellable"
+                                  ? "No sellable products match. Try another search."
+                                  : "No products match. Try different words."
+                          }
+                          minSearchLength={0}
+                          searchDebounceMs={150}
+                          wrapLabels
+                          disabled={productListLoading}
+                          listMaxHeightClassName="max-h-[min(28rem,55vh)]"
+                        />
+                      </div>
                     </TableCell>
                     <TableCell>
                       {lineVariants && lineVariants.length > 0 ? (
@@ -481,7 +628,9 @@ export function DocumentLineEditor({
                       />
                     </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
-                      {formatDecimalDisplay(String(l.baseQty))}
+                      {l.poQty != null
+                        ? formatDecimalDisplay(String(l.poQty))
+                        : formatDecimalDisplay(String(l.baseQty))}
                     </TableCell>
                     <TableCell>
                       {useCostPricing ? (

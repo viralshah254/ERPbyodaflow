@@ -624,6 +624,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
               uom: l.unit ?? "EA",
               qty,
               baseQty: qty,
+              poQty: l.qty ?? qty,
               price: unitPrice,
               priceReason: "From PO",
               amount,
@@ -1070,6 +1071,18 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
               pricingByProductId={lineEditorPricingByProductId}
               taxCodes={taxCodes}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
+              lineColumnLabels={
+                type === "grn"
+                  ? {
+                      qtyHeader: "Received qty",
+                      qtyTooltip:
+                        "The quantity physically received — enter the actual amount from your weigh slip, count sheet, or delivery note.",
+                      baseQtyHeader: "PO qty",
+                      baseQtyTooltip:
+                        "The open quantity on the purchase order line when this row was loaded. Use this as your reference; adjust Received qty to reflect what actually arrived.",
+                    }
+                  : undefined
+              }
             />
             <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border p-3">
               <div className="space-y-0.5">

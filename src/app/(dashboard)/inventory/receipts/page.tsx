@@ -18,6 +18,7 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -189,19 +190,32 @@ export default function InventoryReceiptsPage() {
         header: "",
         accessor: (r: PurchasingDocRow) =>
           (r.status === "DRAFT" || r.status === "APPROVED") ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2.5 text-xs"
-              disabled={postingId === r.id}
-              onClick={(e) => handlePostRow(r, e)}
-            >
-              {postingId === r.id ? (
-                <Icons.Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                "Post"
-              )}
-            </Button>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2.5 text-xs"
+                      disabled={postingId === r.id || !r.hasLandedCost}
+                      onClick={(e) => handlePostRow(r, e)}
+                    >
+                      {postingId === r.id ? (
+                        <Icons.Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Post"
+                      )}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!r.hasLandedCost && (
+                  <TooltipContent side="left">
+                    Apply other costs before posting
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           ) : null,
       },
     ],

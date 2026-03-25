@@ -38,6 +38,8 @@ import {
   type RoleDetailRow,
   updateRoleApi,
   updateUserApi,
+  seedStandardRolesApi,
+  setUserPasswordApi,
 } from "@/lib/api/users-roles";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -50,6 +52,16 @@ export default function UsersRolesPage() {
   const [loading, setLoading] = React.useState(true);
   const [savingUser, setSavingUser] = React.useState(false);
   const [savingRole, setSavingRole] = React.useState(false);
+  const [seedingRoles, setSeedingRoles] = React.useState(false);
+  const [passwordNew, setPasswordNew] = React.useState("");
+  const [passwordConfirm, setPasswordConfirm] = React.useState("");
+  const [passwordMustChange, setPasswordMustChange] = React.useState(true);
+  const [settingPassword, setSettingPassword] = React.useState(false);
+
+  const sortedRoles = React.useMemo(
+    () => [...roles].sort((a, b) => a.name.localeCompare(b.name)),
+    [roles]
+  );
   const refreshUsers = React.useCallback(async () => {
     setUsers(await fetchUsersApi());
   }, []);
@@ -90,6 +102,9 @@ export default function UsersRolesPage() {
   const openCreateUser = () => {
     setEditingUser(null);
     setUserForm({ email: "", firstName: "", lastName: "", status: "ACTIVE", copilotEnabled: false, roleIds: [] });
+    setPasswordNew("");
+    setPasswordConfirm("");
+    setPasswordMustChange(true);
     setUserSheetOpen(true);
   };
 
@@ -103,6 +118,9 @@ export default function UsersRolesPage() {
       copilotEnabled: u.copilotEnabled === true,
       roleIds: [...u.roleIds],
     });
+    setPasswordNew("");
+    setPasswordConfirm("");
+    setPasswordMustChange(true);
     setUserSheetOpen(true);
   };
 
@@ -217,17 +235,42 @@ export default function UsersRolesPage() {
 
           <TabsContent value="roles" className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
                 <div>
                   <CardTitle>Roles</CardTitle>
                   <CardDescription>
-                    {roles.length} role(s). Configure permissions per role.
+                    {roles.length} role(s). Includes standard catalogue: Procurement Officer/Manager, Finance Officer,
+                    Accounts (AP/AR), Sales, Warehouse, and more—use &quot;Provision standard roles&quot; if you only see
+                    Owner.
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={openCreateRole}>
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Add Role
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={seedingRoles}
+                    onClick={async () => {
+                      try {
+                        setSeedingRoles(true);
+                        const result = await seedStandardRolesApi();
+                        toast.success(
+                          `Standard roles ready (${result.count} roles, template ${result.templateId}).`
+                        );
+                        await refreshRoles();
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Failed to provision roles.");
+                      } finally {
+                        setSeedingRoles(false);
+                      }
+                    }}
+                  >
+                    {seedingRoles ? "Provisioning…" : "Provision standard roles"}
+                  </Button>
+                  <Button size="sm" onClick={openCreateRole}>
+                    <Icons.Plus className="mr-2 h-4 w-4" />
+                    Add Role
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -268,7 +311,7 @@ export default function UsersRolesPage() {
       </div>
 
       <Sheet open={userSheetOpen} onOpenChange={setUserSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editingUser ? "Edit user" : "Add user"}</SheetTitle>
             <SheetDescription>
@@ -335,21 +378,103 @@ export default function UsersRolesPage() {
             </div>
             <div className="space-y-2">
               <Label>Roles</Label>
-              <div className="flex flex-wrap gap-2">
-                {roles.map((r) => (
-                  <label key={r.id} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={userForm.roleIds.includes(r.id)}
-                      onCheckedChange={() => toggleUserRole(r.id)}
-                    />
-                    <span className="text-sm">{r.name}</span>
-                  </label>
-                ))}
+              <div className="max-h-52 overflow-y-auto rounded-md border p-3 flex flex-wrap gap-x-4 gap-y-2">
+                {sortedRoles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No roles yet. Open the Roles tab and run &quot;Provision standard roles&quot;.
+                  </p>
+                ) : (
+                  sortedRoles.map((r) => (
+                    <label key={r.id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={userForm.roleIds.includes(r.id)}
+                        onCheckedChange={() => toggleUserRole(r.id)}
+                      />
+                      <span className="text-sm">{r.name}</span>
+                    </label>
+                  ))
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 New users are staged for checkout first. Nothing is activated or billed until you confirm the pending checkout from Billing.
               </p>
             </div>
+
+            {editingUser ? (
+              <div className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <p className="text-sm font-medium">Sign-in password</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Sets the user&apos;s Firebase password. They sign in with email + this password.
+                    {editingUser.hasSignIn === false ? (
+                      <span className="block mt-1 text-amber-700 dark:text-amber-500">
+                        No sign-in account yet—complete billing checkout for this user first, then set a password.
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="user-new-password">New password</Label>
+                  <Input
+                    id="user-new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordNew}
+                    onChange={(e) => setPasswordNew(e.target.value)}
+                    placeholder="Min 8 characters"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="user-confirm-password">Confirm password</Label>
+                  <Input
+                    id="user-confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordConfirm}
+                    onChange={(e) => setPasswordConfirm(e.target.value)}
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={passwordMustChange}
+                    onCheckedChange={(c) => setPasswordMustChange(c === true)}
+                  />
+                  <span className="text-sm">Require password change on next sign-in</span>
+                </label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={settingPassword || !passwordNew || passwordNew !== passwordConfirm}
+                  onClick={async () => {
+                    if (passwordNew.length < 8) {
+                      toast.error("Password must be at least 8 characters.");
+                      return;
+                    }
+                    if (passwordNew !== passwordConfirm) {
+                      toast.error("Passwords do not match.");
+                      return;
+                    }
+                    try {
+                      setSettingPassword(true);
+                      await setUserPasswordApi(editingUser.id, {
+                        newPassword: passwordNew,
+                        mustChangePassword: passwordMustChange,
+                      });
+                      toast.success("Password updated.");
+                      setPasswordNew("");
+                      setPasswordConfirm("");
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Failed to set password.");
+                    } finally {
+                      setSettingPassword(false);
+                    }
+                  }}
+                >
+                  {settingPassword ? "Updating…" : "Set password"}
+                </Button>
+              </div>
+            ) : null}
           </div>
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setUserSheetOpen(false)}>Cancel</Button>

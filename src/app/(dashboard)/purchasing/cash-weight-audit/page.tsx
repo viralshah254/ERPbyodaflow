@@ -190,7 +190,7 @@ export default function CashWeightAuditPage() {
     fxRate: number;
     status?: string;
   } | null>(null);
-  const [poLinkedGrns, setPoLinkedGrns] = React.useState<Array<{ id: string; number: string; status: string }>>([]);
+  const [poLinkedGrns, setPoLinkedGrns] = React.useState<Array<{ id: string; number: string; status: string; receivedWeightKg?: number }>>([]);
   const [savingDisb, setSavingDisb] = React.useState(false);
   const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
@@ -307,9 +307,14 @@ export default function CashWeightAuditPage() {
           fxRate: po.fxRate,
           status: po.status,
         });
-        setPoLinkedGrns(
-          (po.linkedGrns ?? []).map((g) => ({ id: g.id, number: g.number, status: g.status }))
-        );
+        const grns = (po.linkedGrns ?? []).map((g) => ({
+          id: g.id,
+          number: g.number,
+          status: g.status,
+          receivedWeightKg: g.receivedWeightKg,
+        }));
+        setPoLinkedGrns(grns);
+        if (grns.length > 0) setDisbGrnId(grns[0].id);
         if (!po.lines?.length) return;
         const lines = po.lines.map((l, i) => ({
           poLineId: `${po.id}:${i}`,
@@ -435,8 +440,11 @@ export default function CashWeightAuditPage() {
 
   const canSaveDisbursement = React.useMemo(() => {
     if (!poDetail?.status) return true;
-    return ["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase());
-  }, [poDetail?.status]);
+    if (!["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase())) return false;
+    // When GRNs exist, a GRN must be selected
+    if (poLinkedGrns.length > 0 && (!disbGrnId || disbGrnId === DISB_GRN_NONE)) return false;
+    return true;
+  }, [poDetail?.status, poLinkedGrns.length, disbGrnId]);
 
   const handleRecordDisbursement = async () => {
     if (!disbPoId.trim() || !disbAmount.trim() || !disbPaidAt) {
@@ -1016,21 +1024,23 @@ export default function CashWeightAuditPage() {
 
                   {poLinkedGrns.length > 0 && (
                     <div className="grid gap-2">
-                      <Label>GRN (optional)</Label>
+                      <Label>GRN <span className="text-destructive">*</span></Label>
                       <Select
                         value={disbGrnId || DISB_GRN_NONE}
                         onValueChange={setDisbGrnId}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Leave blank — pay before receipt" />
+                          <SelectValue placeholder="Select a GRN…" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={DISB_GRN_NONE}>
-                            Leave blank — pay before receipt
-                          </SelectItem>
                           {poLinkedGrns.map((g) => (
                             <SelectItem key={g.id} value={g.id}>
-                              {g.number}{" "}
+                              {g.number}
+                              {g.receivedWeightKg != null && (
+                                <span className="text-muted-foreground ml-1 text-xs">
+                                  · {g.receivedWeightKg.toFixed(2)} kg received
+                                </span>
+                              )}
                               <span className="text-muted-foreground ml-1 uppercase text-xs">
                                 ({g.status})
                               </span>
@@ -1038,9 +1048,16 @@ export default function CashWeightAuditPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Link this payment to a specific receipt (useful when paying after delivery).
-                      </p>
+                      {(!disbGrnId || disbGrnId === DISB_GRN_NONE) ? (
+                        <p className="text-xs text-amber-600 flex items-center gap-1">
+                          <Icons.AlertTriangle className="h-3 w-3 shrink-0" />
+                          Select the GRN to determine the received weight for payment.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Payment will be based on the received weight of the selected GRN.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -1053,26 +1070,37 @@ export default function CashWeightAuditPage() {
                       </div>
                     )}
 
-                  {receivedWeightForPo !== null && (
-                    <div className="rounded-md bg-muted px-3 py-2 text-sm flex items-center gap-2">
-                      <Icons.Package className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span>
-                        Received at facility:{" "}
-                        <span className="font-semibold">{receivedWeightForPo} kg</span>
-                        {disbPaidWeightKg && Number(disbPaidWeightKg) > 0 && (
-                          <span className="ml-2 text-muted-foreground text-xs">
-                            (paying for {disbPaidWeightKg} kg at farm gate)
+                  {(() => {
+                    const selectedGrn = disbGrnId && disbGrnId !== DISB_GRN_NONE
+                      ? poLinkedGrns.find((g) => g.id === disbGrnId)
+                      : null;
+                    const displayWeight = selectedGrn?.receivedWeightKg ?? receivedWeightForPo;
+                    if (displayWeight !== null && displayWeight !== undefined) {
+                      return (
+                        <div className="rounded-md bg-muted px-3 py-2 text-sm flex items-center gap-2">
+                          <Icons.Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span>
+                            Received at facility:{" "}
+                            <span className="font-semibold">{displayWeight.toFixed ? displayWeight.toFixed(2) : displayWeight} kg</span>
+                            {disbPaidWeightKg && Number(disbPaidWeightKg) > 0 && (
+                              <span className="ml-2 text-muted-foreground text-xs">
+                                (paying for {disbPaidWeightKg} kg at farm gate)
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
-                    </div>
-                  )}
-                  {disbPoId.trim() && receivedWeightForPo === null && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Icons.Info className="h-3 w-3" />
-                      No GRN linked yet — received weight will show once goods are receipted.
-                    </p>
-                  )}
+                        </div>
+                      );
+                    }
+                    if (disbPoId.trim() && poLinkedGrns.length === 0) {
+                      return (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Icons.Info className="h-3 w-3" />
+                          No GRN linked yet — received weight will show once goods are receipted.
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="grid gap-2">
