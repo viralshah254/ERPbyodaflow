@@ -324,7 +324,7 @@ export default function ReceiptDetailPage() {
             )}
             {hasLandedCostMultiCurrency && (
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/inventory/costing?sourceId=${id}`}>Add landed costs</Link>
+                <Link href={`/inventory/costing?sourceId=${id}`}>Add other costs</Link>
               </Button>
             )}
             {putawayLink ? (
@@ -412,7 +412,7 @@ export default function ReceiptDetailPage() {
                 <Button size="sm" variant="outline" asChild>
                   <Link href={`/inventory/costing?sourceId=${grn.id}`}>
                     <Icons.TrendingUp className="mr-1.5 h-3.5 w-3.5" />
-                    Apply landed costs
+                    Apply other costs
                   </Link>
                 </Button>
                 {hasCashWeightAudit && (
@@ -669,13 +669,13 @@ export default function ReceiptDetailPage() {
                     quantityKg={totalReceivedWeight || totalQty}
                     lines={[
                       { label: "Goods value", amount: grn.totalAmount ?? 0 },
-                      { label: "Landed costs (not yet allocated)", amount: 0 },
+                      { label: "Other costs (not yet allocated)", amount: 0 },
                     ]}
                   />
                   <p className="text-xs text-muted-foreground px-1">
-                    Cost per kg above excludes landed costs.{" "}
+                    Cost per kg above excludes other costs.{" "}
                     <Link href={`/inventory/costing?sourceId=${id}`} className="underline underline-offset-2 text-primary">
-                      Allocate landed costs
+                      Allocate other costs
                     </Link>{" "}
                     to get the true cost per kg.
                   </p>
@@ -694,10 +694,10 @@ export default function ReceiptDetailPage() {
                 { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "completed" : "upcoming" },
                 {
                   id: "landed",
-                  label: "Landed costs allocated",
+                  label: "Other costs allocated",
                   status: landedAllocation ? "completed" : ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "current" : "upcoming",
                   detail: landedAllocation
-                    ? `KES ${(landedAllocation.totalLandedCostBase ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} total landed`
+                    ? `KES ${(landedAllocation.totalLandedCostBase ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} total other costs`
                     : "Allocate freight, duty, and other charges",
                 },
                 { id: "putaway", label: "Putaway completed", status: grn.status === "RECEIVED" ? "completed" : "upcoming", detail: putawayLink ? "Warehouse execution closed" : "Awaiting putaway" },

@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
-import { LiveCurrencyConverterCard } from "@/components/operational/LiveCurrencyConverterCard";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
 import { Label } from "@/components/ui/label";
@@ -61,23 +60,99 @@ import { Permissions } from "@/lib/permissions";
 
 type NotesMode = "investigate" | "resolve";
 
-const WORKFLOW_STEPS = [
-  { step: "1", label: "Create Purchase Order", detail: "Purchasing → Purchase Order → New", href: "/purchasing/orders" },
-  { step: "2", label: "Pay at farm gate", detail: "Record disbursement → select PO → enter amount & paid weight (kg)", action: true },
-  { step: "3", label: "Receive stock → create GRN", detail: "Inventory → Goods Receipts → create from PO, enter received weight (kg)", href: "/inventory/receipts" },
-  { step: "4", label: "Audit lines auto-built", detail: "PO quantity vs paid weight vs received weight compared automatically" },
-  { step: "5", label: "Reconcile any variances", detail: "Exception queue below → Assign → Investigate → Approve → Resolve" },
-];
+const DISB_GRN_NONE = "__none__";
+
+// ── Per-PO aggregated audit row ──────────────────────────────────────────────
+interface PoAuditRow {
+  poId: string;
+  poNumber: string;
+  totalPaidKg: number;
+  totalReceivedKg: number;
+  totalVarianceKg: number | null;
+  totalOrderedQty: number;
+  status: "MATCHED" | "VARIANCE" | "PENDING";
+  openExceptionCount: number;
+  lines: CashWeightAuditLineRow[];
+  disbursements: CashDisbursementRow[];
+  exceptions: CashWeightAuditLineRow[];
+}
+
+function groupAuditLinesByPo(
+  lines: CashWeightAuditLineRow[],
+  disbursements: CashDisbursementRow[],
+  exceptions: CashWeightAuditLineRow[]
+): PoAuditRow[] {
+  const map = new Map<string, PoAuditRow>();
+
+  for (const line of lines) {
+    if (!map.has(line.poId)) {
+      map.set(line.poId, {
+        poId: line.poId,
+        poNumber: line.poNumber ?? line.poId,
+        totalPaidKg: 0,
+        totalReceivedKg: 0,
+        totalVarianceKg: null,
+        totalOrderedQty: 0,
+        status: "PENDING",
+        openExceptionCount: 0,
+        lines: [],
+        disbursements: [],
+        exceptions: [],
+      });
+    }
+    const row = map.get(line.poId)!;
+    row.lines.push(line);
+    row.totalOrderedQty += Number(line.orderedQty) || 0;
+    if (line.paidWeightKg != null) row.totalPaidKg += line.paidWeightKg;
+    if (line.receivedWeightKg != null) row.totalReceivedKg += line.receivedWeightKg;
+  }
+
+  for (const d of disbursements) {
+    if (map.has(d.poId)) map.get(d.poId)!.disbursements.push(d);
+  }
+
+  for (const ex of exceptions) {
+    if (map.has(ex.poId)) {
+      const row = map.get(ex.poId)!;
+      // Only add if not already present via audit lines
+      if (!row.exceptions.find((e) => e.id === ex.id)) {
+        row.exceptions.push(ex);
+      }
+      if (ex.exceptionStatus === "OPEN" || ex.exceptionStatus === "INVESTIGATING") {
+        row.openExceptionCount++;
+      }
+    }
+  }
+
+  for (const row of map.values()) {
+    const hasVariance = row.lines.some((l) => l.status === "VARIANCE");
+    const allMatched = row.lines.length > 0 && row.lines.every((l) => l.status === "MATCHED");
+    row.status = hasVariance ? "VARIANCE" : allMatched ? "MATCHED" : "PENDING";
+    if (row.totalPaidKg > 0 || row.totalReceivedKg > 0) {
+      row.totalVarianceKg = row.totalReceivedKg - row.totalPaidKg;
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    // Sort: VARIANCE first, then PENDING, then MATCHED
+    const order = { VARIANCE: 0, PENDING: 1, MATCHED: 2 };
+    return order[a.status] - order[b.status];
+  });
+}
 
 export default function CashWeightAuditPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
-  const canOverride = isPlatformOperator || permissions.includes(Permissions.PURCHASING_AUDIT_OVERRIDE) || permissions.includes("*");
+  const canOverride =
+    isPlatformOperator ||
+    permissions.includes(Permissions.PURCHASING_AUDIT_OVERRIDE) ||
+    permissions.includes("*");
 
   const [statusFilter, setStatusFilter] = React.useState<string>("");
-  const [view, setView] = React.useState<"audit" | "disbursements">("audit");
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [helpOpen, setHelpOpen] = React.useState(false);
   const [auditLines, setAuditLines] = React.useState<CashWeightAuditLineRow[]>([]);
   const [exceptions, setExceptions] = React.useState<CashWeightAuditLineRow[]>([]);
   const [disbursements, setDisbursements] = React.useState<CashDisbursementRow[]>([]);
@@ -85,7 +160,10 @@ export default function CashWeightAuditPage() {
   const [landedCostPerGrn, setLandedCostPerGrn] = React.useState<Map<string, number>>(new Map());
   const [reconcilingId, setReconcilingId] = React.useState<string | null>(null);
 
-  // Correct-weights dialog state
+  // Per-PO detail sheet
+  const [selectedPoRow, setSelectedPoRow] = React.useState<PoAuditRow | null>(null);
+
+  // Correct-weights sheet state
   const [correctLine, setCorrectLine] = React.useState<CashWeightAuditLineRow | null>(null);
   const [correctPaid, setCorrectPaid] = React.useState("");
   const [correctReceived, setCorrectReceived] = React.useState("");
@@ -95,20 +173,15 @@ export default function CashWeightAuditPage() {
   // Disbursement form state
   const [disbursementOpen, setDisbursementOpen] = React.useState(false);
   const [disbPoId, setDisbPoId] = React.useState("");
-  // Received weight at facility for the selected PO (from audit lines already loaded)
-  const receivedWeightForPo = React.useMemo(() => {
-    if (!disbPoId.trim()) return null;
-    const matching = auditLines.filter((l) => l.poId === disbPoId.trim());
-    if (!matching.length) return null;
-    const sum = matching.reduce((a, l) => a + (l.receivedWeightKg ?? 0), 0);
-    return sum;
-  }, [disbPoId, auditLines]);
+  const [disbGrnId, setDisbGrnId] = React.useState<string>(DISB_GRN_NONE);
   const [disbAmount, setDisbAmount] = React.useState("");
   const [disbCurrency, setDisbCurrency] = React.useState("KES");
   const [disbPaidAt, setDisbPaidAt] = React.useState("");
   const [disbPaidWeightKg, setDisbPaidWeightKg] = React.useState("");
   const [disbLineWeights, setDisbLineWeights] = React.useState<Record<string, string>>({});
-  const [poLines, setPoLines] = React.useState<Array<{ poLineId: string; sku: string; productName: string; qty: number; uom: string; rate: number; total: number }>>([]);
+  const [poLines, setPoLines] = React.useState<
+    Array<{ poLineId: string; sku: string; productName: string; qty: number; uom: string; rate: number; total: number }>
+  >([]);
   const [poDetail, setPoDetail] = React.useState<{
     number: string;
     supplier: string;
@@ -117,13 +190,25 @@ export default function CashWeightAuditPage() {
     fxRate: number;
     status?: string;
   } | null>(null);
+  const [poLinkedGrns, setPoLinkedGrns] = React.useState<Array<{ id: string; number: string; status: string }>>([]);
   const [savingDisb, setSavingDisb] = React.useState(false);
   const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
 
-  // Notes sheet state (replaces window.prompt)
+  const receivedWeightForPo = React.useMemo(() => {
+    if (!disbPoId.trim()) return null;
+    const matching = auditLines.filter((l) => l.poId === disbPoId.trim());
+    if (!matching.length) return null;
+    return matching.reduce((a, l) => a + (l.receivedWeightKg ?? 0), 0);
+  }, [disbPoId, auditLines]);
+
+  // Notes sheet state
   const [notesSheetOpen, setNotesSheetOpen] = React.useState(false);
-  const [notesTarget, setNotesTarget] = React.useState<{ lineId: string; mode: NotesMode; current: string } | null>(null);
+  const [notesTarget, setNotesTarget] = React.useState<{
+    lineId: string;
+    mode: NotesMode;
+    current: string;
+  } | null>(null);
   const [notesValue, setNotesValue] = React.useState("");
   const [savingNotes, setSavingNotes] = React.useState(false);
 
@@ -145,7 +230,7 @@ export default function CashWeightAuditPage() {
     load();
   }, [load]);
 
-  // Batch-load landed cost allocations for all unique GRN IDs in the audit lines
+  // Batch-load landed cost allocations for all GRN IDs
   React.useEffect(() => {
     const grnIds = [...new Set(auditLines.map((l) => l.grnId).filter(Boolean))] as string[];
     if (!grnIds.length) return;
@@ -174,20 +259,22 @@ export default function CashWeightAuditPage() {
     const open = searchParams.get("openDisbursement");
     if (!poId) return;
     setDisbPoId(poId);
-    if (open === "1") {
-      setDisbursementOpen(true);
-    }
-    // Clean up URL so a page-refresh doesn't re-open the sheet unexpectedly
+    if (open === "1") setDisbursementOpen(true);
     const next = new URLSearchParams(searchParams.toString());
     next.delete("openDisbursement");
-    router.replace(`/purchasing/cash-weight-audit${next.toString() ? `?${next.toString()}` : ""}`, { scroll: false });
-  // Only run once on mount — searchParams and router are stable refs
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    router.replace(
+      `/purchasing/cash-weight-audit${next.toString() ? `?${next.toString()}` : ""}`,
+      { scroll: false }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPoOptions = React.useCallback(
     (query: string) =>
-      searchPurchaseOrderLookupApi(query, { status: "APPROVED,RECEIVED", excludeWithCashDisbursement: true }).then((items) =>
+      searchPurchaseOrderLookupApi(query, {
+        status: "APPROVED,RECEIVED",
+        excludeWithCashDisbursement: true,
+      }).then((items) =>
         items.map((item) => ({
           id: item.id,
           label: item.label,
@@ -198,19 +285,19 @@ export default function CashWeightAuditPage() {
     []
   );
 
-  // When a PO is selected, fetch its lines for per-line weight entry and PO summary display
   React.useEffect(() => {
     if (!disbPoId.trim()) {
       setPoLines([]);
       setPoDetail(null);
       setDisbLineWeights({});
+      setPoLinkedGrns([]);
+      setDisbGrnId(DISB_GRN_NONE);
       return;
     }
     let cancelled = false;
     fetchPurchaseOrderById(disbPoId.trim())
       .then((po) => {
         if (cancelled || !po) return;
-        // Auto-populate currency from PO so UGX/USD POs immediately show KES preview
         if (po.currency) setDisbCurrency(po.currency);
         setPoDetail({
           number: po.number,
@@ -220,6 +307,9 @@ export default function CashWeightAuditPage() {
           fxRate: po.fxRate,
           status: po.status,
         });
+        setPoLinkedGrns(
+          (po.linkedGrns ?? []).map((g) => ({ id: g.id, number: g.number, status: g.status }))
+        );
         if (!po.lines?.length) return;
         const lines = po.lines.map((l, i) => ({
           poLineId: `${po.id}:${i}`,
@@ -240,7 +330,11 @@ export default function CashWeightAuditPage() {
         });
       })
       .catch(() => {
-        if (!cancelled) { setPoLines([]); setPoDetail(null); }
+        if (!cancelled) {
+          setPoLines([]);
+          setPoDetail(null);
+          setPoLinkedGrns([]);
+        }
       });
     return () => {
       cancelled = true;
@@ -254,12 +348,16 @@ export default function CashWeightAuditPage() {
       return;
     }
     let cancelled = false;
-    void fetchLiveExchangeRate(disbCurrency, "KES").then((result) => {
-      if (!cancelled && result.rate) setDisbKesPreview(amount * result.rate);
-    }).catch(() => {
-      if (!cancelled) setDisbKesPreview(null);
-    });
-    return () => { cancelled = true; };
+    void fetchLiveExchangeRate(disbCurrency, "KES")
+      .then((result) => {
+        if (!cancelled && result.rate) setDisbKesPreview(amount * result.rate);
+      })
+      .catch(() => {
+        if (!cancelled) setDisbKesPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [disbAmount, disbCurrency]);
 
   const handleReconcile = async (line: CashWeightAuditLineRow) => {
@@ -291,9 +389,18 @@ export default function CashWeightAuditPage() {
     if (!correctLine) return;
     const newPaid = correctPaid ? parseFloat(correctPaid) : undefined;
     const newReceived = correctReceived ? parseFloat(correctReceived) : undefined;
-    if (newPaid != null && Number.isNaN(newPaid)) { toast.error("Invalid paid weight."); return; }
-    if (newReceived != null && Number.isNaN(newReceived)) { toast.error("Invalid received weight."); return; }
-    if (newPaid == null && newReceived == null) { toast.error("Enter at least one weight to correct."); return; }
+    if (newPaid != null && Number.isNaN(newPaid)) {
+      toast.error("Invalid paid weight.");
+      return;
+    }
+    if (newReceived != null && Number.isNaN(newReceived)) {
+      toast.error("Invalid received weight.");
+      return;
+    }
+    if (newPaid == null && newReceived == null) {
+      toast.error("Enter at least one weight to correct.");
+      return;
+    }
     setSavingCorrection(true);
     try {
       if (canOverride) {
@@ -304,7 +411,11 @@ export default function CashWeightAuditPage() {
         });
         toast.success("Weights corrected.");
       } else {
-        if (!correctReason.trim()) { toast.error("A reason is required to request an override."); setSavingCorrection(false); return; }
+        if (!correctReason.trim()) {
+          toast.error("A reason is required to request an override.");
+          setSavingCorrection(false);
+          return;
+        }
         await requestAuditWeightOverride({
           auditLineId: correctLine.id,
           paidWeightKg: newPaid,
@@ -343,7 +454,9 @@ export default function CashWeightAuditPage() {
             .map((l) => {
               const w = disbLineWeights[l.poLineId];
               const kg = w?.trim() ? parseDecimalString(w) : undefined;
-              return kg != null && !Number.isNaN(kg) && kg > 0 ? { poLineId: l.poLineId, paidWeightKg: kg } : null;
+              return kg != null && !Number.isNaN(kg) && kg > 0
+                ? { poLineId: l.poLineId, paidWeightKg: kg }
+                : null;
             })
             .filter((x): x is { poLineId: string; paidWeightKg: number } => x != null)
         : undefined;
@@ -364,6 +477,7 @@ export default function CashWeightAuditPage() {
     try {
       const disbResult = await createCashDisbursement({
         poId: disbPoId.trim(),
+        ...(disbGrnId && disbGrnId !== DISB_GRN_NONE ? { grnId: disbGrnId } : {}),
         amount,
         currency: disbCurrency,
         paidAt: disbPaidAt,
@@ -372,15 +486,20 @@ export default function CashWeightAuditPage() {
       });
       const receiptLabel = disbResult.reference ? ` Receipt: ${disbResult.reference}.` : "";
       if (disbResult.warnings?.length) {
-        toast.warning(`Weight data check: ${disbResult.warnings.join("; ")}. Audit lines will still be created.`);
+        toast.warning(
+          `Weight data check: ${disbResult.warnings.join("; ")}. Audit lines will still be created.`
+        );
       }
-      // Auto-build audit lines for this PO so the user never has to do it manually
       try {
         const built = await buildCashWeightAudit({ poId: disbPoId.trim() });
         if (built.built > 0) {
-          toast.success(`Disbursement recorded.${receiptLabel} ${built.built} audit line(s) created automatically.`);
+          toast.success(
+            `Disbursement recorded.${receiptLabel} ${built.built} audit line(s) created automatically.`
+          );
         } else {
-          toast.success(`Disbursement recorded.${receiptLabel} Audit lines will appear once a GRN is linked.`);
+          toast.success(
+            `Disbursement recorded.${receiptLabel} Audit lines will appear once a GRN is linked.`
+          );
         }
       } catch {
         toast.success(`Disbursement recorded.${receiptLabel}`);
@@ -395,6 +514,8 @@ export default function CashWeightAuditPage() {
       setDisbPaidWeightKg("");
       setDisbLineWeights({});
       setPoLines([]);
+      setPoLinkedGrns([]);
+      setDisbGrnId(DISB_GRN_NONE);
       await load();
     } catch (e) {
       const msg = (e as Error)?.message ?? "Record failed";
@@ -432,45 +553,215 @@ export default function CashWeightAuditPage() {
     }
   };
 
+  // ── Derived data ─────────────────────────────────────────────────────────────
+  const poRows = React.useMemo(
+    () => groupAuditLinesByPo(auditLines, disbursements, exceptions),
+    [auditLines, disbursements, exceptions]
+  );
 
-  const auditColumns = [
-    { id: "po", header: "PO", accessor: (r: CashWeightAuditLineRow) => <span className="font-medium">{r.poNumber ?? "—"}</span>, sticky: true },
+  const filteredPoRows = React.useMemo(() => {
+    let rows = poRows;
+    if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      rows = rows.filter((r) => r.poNumber.toLowerCase().includes(q));
+    }
+    return rows;
+  }, [poRows, statusFilter, searchQuery]);
+
+  const totalVariancePOs = poRows.filter((r) => r.status === "VARIANCE").length;
+  const totalMatchedPOs = poRows.filter((r) => r.status === "MATCHED").length;
+  const totalPendingPOs = poRows.filter((r) => r.status === "PENDING").length;
+
+  // ── PO master table columns ──────────────────────────────────────────────────
+  const poColumns = [
     {
-      id: "receipt",
-      header: "Receipt",
-      accessor: (r: CashWeightAuditLineRow) =>
-        r.disbursementReference ? (
-          <span className="font-mono text-xs">{r.disbursementReference}</span>
+      id: "po",
+      header: "Purchase Order",
+      accessor: (r: PoAuditRow) => (
+        <div>
+          <p className="font-medium">{r.poNumber}</p>
+          <p className="text-xs text-muted-foreground">
+            {r.lines.length} product{r.lines.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: "disbursements",
+      header: "Disbursements",
+      accessor: (r: PoAuditRow) =>
+        r.disbursements.length > 0 ? (
+          <div className="space-y-0.5">
+            {r.disbursements.map((d) => (
+              <p key={d.id} className="font-mono text-xs text-muted-foreground">
+                {d.reference ?? d.id}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-sm">—</span>
+        ),
+    },
+    {
+      id: "paid",
+      header: "Paid (kg)",
+      accessor: (r: PoAuditRow) =>
+        r.totalPaidKg > 0 ? (
+          <span className="tabular-nums font-medium">{r.totalPaidKg.toLocaleString()}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
     },
-    { id: "sku", header: "SKU", accessor: (r: CashWeightAuditLineRow) => r.sku ?? "—" },
-    { id: "product", header: "Product", accessor: (r: CashWeightAuditLineRow) => r.productName ?? "—" },
-    { id: "ordered", header: "Ordered qty", accessor: (r: CashWeightAuditLineRow) => r.orderedQty ?? "—" },
-    { id: "paidKg", header: "Paid weight (kg)", accessor: (r: CashWeightAuditLineRow) => r.paidWeightKg ?? "—" },
-    { id: "receivedKg", header: "Received weight (kg)", accessor: (r: CashWeightAuditLineRow) => r.receivedWeightKg ?? "—" },
+    {
+      id: "received",
+      header: "Received (kg)",
+      accessor: (r: PoAuditRow) =>
+        r.totalReceivedKg > 0 ? (
+          <span className="tabular-nums font-medium">{r.totalReceivedKg.toLocaleString()}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "variance",
+      header: "Variance (kg)",
+      accessor: (r: PoAuditRow) => {
+        if (r.totalVarianceKg == null)
+          return <span className="text-muted-foreground">—</span>;
+        const isNeg = r.totalVarianceKg < 0;
+        const isPos = r.totalVarianceKg > 0;
+        return (
+          <span
+            className={`tabular-nums font-medium ${
+              isNeg
+                ? "text-destructive"
+                : isPos
+                ? "text-green-600 dark:text-green-400"
+                : "text-muted-foreground"
+            }`}
+          >
+            {r.totalVarianceKg >= 0 ? "+" : ""}
+            {r.totalVarianceKg.toFixed(2)}
+          </span>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "Status",
+      accessor: (r: PoAuditRow) => (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge
+            variant={
+              r.status === "MATCHED"
+                ? "default"
+                : r.status === "VARIANCE"
+                ? "destructive"
+                : "secondary"
+            }
+          >
+            {r.status === "MATCHED" ? "Matched" : r.status === "VARIANCE" ? "Variance" : "Pending"}
+          </Badge>
+          {r.openExceptionCount > 0 && (
+            <Badge
+              variant="outline"
+              className="border-orange-500/50 text-orange-600 dark:text-orange-400 text-[10px]"
+            >
+              {r.openExceptionCount} exception{r.openExceptionCount !== 1 ? "s" : ""}
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      accessor: (r: PoAuditRow) => (
+        <Button size="sm" variant="outline" onClick={() => setSelectedPoRow(r)}>
+          <Icons.ArrowRight className="h-3.5 w-3.5 mr-1.5" />
+          View audit
+        </Button>
+      ),
+    },
+  ];
+
+  // ── Per-line columns (inside detail sheet) ───────────────────────────────────
+  const detailLineColumns = [
+    {
+      id: "sku",
+      header: "SKU",
+      accessor: (r: CashWeightAuditLineRow) => (
+        <span className="font-mono text-xs">{r.sku ?? "—"}</span>
+      ),
+    },
+    {
+      id: "product",
+      header: "Product",
+      accessor: (r: CashWeightAuditLineRow) => (
+        <span className="text-sm">{r.productName ?? "—"}</span>
+      ),
+    },
+    {
+      id: "paidKg",
+      header: "Paid (kg)",
+      accessor: (r: CashWeightAuditLineRow) =>
+        r.paidWeightKg != null ? (
+          <span className="tabular-nums">{r.paidWeightKg}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "receivedKg",
+      header: "Received (kg)",
+      accessor: (r: CashWeightAuditLineRow) =>
+        r.receivedWeightKg != null ? (
+          <span className="tabular-nums">{r.receivedWeightKg}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
     {
       id: "landedCostPerKg",
       header: "Landed KES/kg",
       accessor: (r: CashWeightAuditLineRow) => {
         if (!r.grnId) return <span className="text-muted-foreground">—</span>;
         const cpk = landedCostPerGrn.get(r.grnId);
-        if (cpk == null) return <span className="text-muted-foreground text-xs">Pending</span>;
-        return <span className="font-medium tabular-nums">{formatMoney(cpk, "KES")}</span>;
+        if (cpk == null)
+          return <span className="text-muted-foreground text-xs">Pending</span>;
+        return <span className="tabular-nums">{formatMoney(cpk, "KES")}</span>;
       },
     },
     {
       id: "variance",
       header: "Variance (kg)",
       accessor: (r: CashWeightAuditLineRow) =>
-        r.varianceKg != null ? (r.varianceKg >= 0 ? `+${r.varianceKg}` : r.varianceKg) : "—",
+        r.varianceKg != null ? (
+          <span
+            className={`tabular-nums ${
+              r.varianceKg < 0 ? "text-destructive" : r.varianceKg > 0 ? "text-green-600 dark:text-green-400" : ""
+            }`}
+          >
+            {r.varianceKg >= 0 ? `+${r.varianceKg}` : r.varianceKg}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
     },
     {
       id: "status",
       header: "Status",
       accessor: (r: CashWeightAuditLineRow) => (
-        <Badge variant={r.status === "MATCHED" ? "default" : r.status === "VARIANCE" ? "destructive" : "secondary"}>
+        <Badge
+          variant={
+            r.status === "MATCHED"
+              ? "default"
+              : r.status === "VARIANCE"
+              ? "destructive"
+              : "secondary"
+          }
+        >
           {r.status}
         </Badge>
       ),
@@ -481,19 +772,22 @@ export default function CashWeightAuditPage() {
       accessor: (r: CashWeightAuditLineRow) => (
         <div className="flex items-center gap-1">
           {r.grnId && (
-            <Button size="sm" variant="ghost" asChild>
+            <Button size="sm" variant="ghost" asChild title="Open GRN">
               <Link href={`/inventory/receipts/${r.grnId}`}>
-                <Icons.ExternalLink className="h-3 w-3 mr-1" />
-                GRN
+                <Icons.ExternalLink className="h-3 w-3" />
               </Link>
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => openCorrectDialog(r)}>
-            <Icons.Pencil className="h-3 w-3 mr-1" />
-            Correct
+          <Button size="sm" variant="ghost" onClick={() => openCorrectDialog(r)} title="Correct weights">
+            <Icons.Pencil className="h-3 w-3" />
           </Button>
           {r.status !== "MATCHED" && (
-            <Button size="sm" variant="ghost" disabled={reconcilingId === r.id} onClick={() => handleReconcile(r)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={reconcilingId === r.id}
+              onClick={() => handleReconcile(r)}
+            >
               {reconcilingId === r.id ? "…" : "Reconcile"}
             </Button>
           )}
@@ -502,11 +796,22 @@ export default function CashWeightAuditPage() {
     },
   ];
 
-  const exceptionColumns = [
-    { id: "po", header: "PO", accessor: (r: CashWeightAuditLineRow) => r.poNumber ?? "—", sticky: true },
-    { id: "sku", header: "SKU", accessor: (r: CashWeightAuditLineRow) => r.sku ?? "—" },
-    { id: "variance", header: "Variance (kg)", accessor: (r: CashWeightAuditLineRow) => r.varianceKg ?? "—" },
-    { id: "assignee", header: "Assigned to", accessor: (r: CashWeightAuditLineRow) => r.assignedToUserId ?? "Unassigned" },
+  // ── Exception columns (inside detail sheet) ──────────────────────────────────
+  const detailExceptionColumns = [
+    {
+      id: "sku",
+      header: "SKU",
+      accessor: (r: CashWeightAuditLineRow) => (
+        <span className="font-mono text-xs">{r.sku ?? "—"}</span>
+      ),
+    },
+    {
+      id: "variance",
+      header: "Variance (kg)",
+      accessor: (r: CashWeightAuditLineRow) => (
+        <span className="tabular-nums">{r.varianceKg ?? "—"}</span>
+      ),
+    },
     {
       id: "status",
       header: "Status",
@@ -526,10 +831,16 @@ export default function CashWeightAuditPage() {
     },
     {
       id: "sla",
-      header: "SLA age",
+      header: "SLA",
       accessor: (r: CashWeightAuditLineRow) => (
-        <span className={r.slaOverdue ? "text-red-600 font-medium" : ""}>
-          {r.slaAgeHours ?? 0}h{r.slaOverdue ? " (overdue)" : ""}
+        <span
+          className={
+            r.slaOverdue
+              ? "text-destructive font-medium text-xs"
+              : "text-muted-foreground text-xs"
+          }
+        >
+          {r.slaAgeHours ?? 0}h{r.slaOverdue ? " overdue" : ""}
         </span>
       ),
     },
@@ -577,30 +888,11 @@ export default function CashWeightAuditPage() {
     },
   ];
 
-  const disbursementColumns = [
-    {
-      id: "reference",
-      header: "Reference",
-      accessor: (r: CashDisbursementRow) => <span className="font-medium">{r.reference ?? "—"}</span>,
-      sticky: true,
-    },
-    { id: "po", header: "PO", accessor: (r: CashDisbursementRow) => r.poNumber ?? "—" },
-    { id: "amount", header: "Amount", accessor: (r: CashDisbursementRow) => formatMoney(r.amount, r.currency) },
-    { id: "paidAt", header: "Paid at", accessor: (r: CashDisbursementRow) => r.paidAt ?? "—" },
-    {
-      id: "status",
-      header: "Status",
-      accessor: (r: CashDisbursementRow) => (
-        <Badge variant={r.status === "RECONCILED" ? "default" : "secondary"}>{r.status}</Badge>
-      ),
-    },
-  ];
-
   return (
     <PageShell>
       <PageHeader
         title="Cash-to-Weight Audit"
-        description="Three-way match: Purchase Order → Cash disbursement → Actual weight received"
+        description="Track every farm-gate procurement — compare what was paid vs what was received."
         breadcrumbs={[
           { label: "Purchasing", href: "/purchasing/orders" },
           { label: "Cash-to-Weight Audit" },
@@ -620,11 +912,11 @@ export default function CashWeightAuditPage() {
                 <SheetHeader>
                   <SheetTitle>Record cash disbursement</SheetTitle>
                   <SheetDescription>
-                    Farm-gate CoD payment. Select the PO, enter what you paid and the weight paid for. Audit lines are created automatically.
+                    Farm-gate CoD payment. Select the PO, enter what you paid and the weight paid
+                    for. Audit lines are created automatically.
                   </SheetDescription>
                 </SheetHeader>
                 <div className="grid gap-4 py-6">
-                  {/* PO picker — APPROVED orders only, searchable */}
                   <div className="grid gap-2">
                     <Label>Purchase order</Label>
                     <AsyncSearchableSelect
@@ -640,11 +932,11 @@ export default function CashWeightAuditPage() {
                       recentStorageKey="disb-po-picker"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Approved or received POs are shown (you can record farm-gate payment while the order is open or after receipt).
+                      Approved or received POs are shown (you can record farm-gate payment while the
+                      order is open or after receipt).
                     </p>
                   </div>
 
-                  {/* PO summary card — shown once a PO is selected */}
                   {poDetail && (
                     <div className="rounded-md border bg-muted/40 text-sm overflow-hidden">
                       <div className="px-3 py-2 flex items-center justify-between gap-2 border-b bg-muted/60">
@@ -652,16 +944,23 @@ export default function CashWeightAuditPage() {
                           <Icons.FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span>{poDetail.number}</span>
                           {poDetail.status && (
-                            <Badge variant="outline" className="text-[10px] font-normal uppercase">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-normal uppercase"
+                            >
                               {poDetail.status}
                             </Badge>
                           )}
                           {poDetail.supplier && (
-                            <span className="text-muted-foreground font-normal">· {poDetail.supplier}</span>
+                            <span className="text-muted-foreground font-normal">
+                              · {poDetail.supplier}
+                            </span>
                           )}
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="font-semibold">{formatMoney(poDetail.total, poDetail.currency)}</p>
+                          <p className="font-semibold">
+                            {formatMoney(poDetail.total, poDetail.currency)}
+                          </p>
                           {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
                             <p className="text-xs text-muted-foreground">
                               ≈ {formatMoney(poDetail.total * poDetail.fxRate, "KES")}
@@ -692,13 +991,19 @@ export default function CashWeightAuditPage() {
                                 <td className="px-2 py-1.5 text-right tabular-nums">
                                   <p>{formatMoney(l.rate, poDetail.currency)}</p>
                                   {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
-                                    <p className="text-muted-foreground">≈ {formatMoney(l.rate * poDetail.fxRate, "KES")}</p>
+                                    <p className="text-muted-foreground">
+                                      ≈ {formatMoney(l.rate * poDetail.fxRate, "KES")}
+                                    </p>
                                   )}
                                 </td>
                                 <td className="px-3 py-1.5 text-right tabular-nums">
-                                  <p className="font-medium">{formatMoney(l.total, poDetail.currency)}</p>
+                                  <p className="font-medium">
+                                    {formatMoney(l.total, poDetail.currency)}
+                                  </p>
                                   {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
-                                    <p className="text-muted-foreground">≈ {formatMoney(l.total * poDetail.fxRate, "KES")}</p>
+                                    <p className="text-muted-foreground">
+                                      ≈ {formatMoney(l.total * poDetail.fxRate, "KES")}
+                                    </p>
                                   )}
                                 </td>
                               </tr>
@@ -709,14 +1014,44 @@ export default function CashWeightAuditPage() {
                     </div>
                   )}
 
-                  {poDetail?.status &&
-                    !["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase()) && (
-                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                      This PO is <strong>{poDetail.status}</strong>. Cash disbursements can only be saved when the purchase
-                      order is <strong>APPROVED</strong> or <strong>RECEIVED</strong>. Submit or approve the PO first, or
-                      open a PO that is already approved.
+                  {poLinkedGrns.length > 0 && (
+                    <div className="grid gap-2">
+                      <Label>GRN (optional)</Label>
+                      <Select
+                        value={disbGrnId || DISB_GRN_NONE}
+                        onValueChange={setDisbGrnId}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Leave blank — pay before receipt" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={DISB_GRN_NONE}>
+                            Leave blank — pay before receipt
+                          </SelectItem>
+                          {poLinkedGrns.map((g) => (
+                            <SelectItem key={g.id} value={g.id}>
+                              {g.number}{" "}
+                              <span className="text-muted-foreground ml-1 uppercase text-xs">
+                                ({g.status})
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Link this payment to a specific receipt (useful when paying after delivery).
+                      </p>
                     </div>
                   )}
+
+                  {poDetail?.status &&
+                    !["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase()) && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        This PO is <strong>{poDetail.status}</strong>. Cash disbursements can only
+                        be saved when the purchase order is <strong>APPROVED</strong> or{" "}
+                        <strong>RECEIVED</strong>. Submit or approve the PO first.
+                      </div>
+                    )}
 
                   {receivedWeightForPo !== null && (
                     <div className="rounded-md bg-muted px-3 py-2 text-sm flex items-center gap-2">
@@ -752,7 +1087,9 @@ export default function CashWeightAuditPage() {
                     <div className="grid gap-2">
                       <Label htmlFor="disbCurrency">Currency</Label>
                       <Select value={disbCurrency} onValueChange={setDisbCurrency}>
-                        <SelectTrigger id="disbCurrency"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="disbCurrency">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="KES">KES</SelectItem>
                           <SelectItem value="UGX">UGX</SelectItem>
@@ -763,10 +1100,11 @@ export default function CashWeightAuditPage() {
                   </div>
                   {disbKesPreview !== null && disbCurrency !== "KES" && (
                     <p className="text-xs text-muted-foreground -mt-1 flex items-center gap-1">
-                      <Icons.ArrowRight className="h-3 w-3 text-primary" />
-                      ≈{" "}
-                      <span className="font-medium text-foreground">{formatMoney(disbKesPreview, "KES")}</span>
-                      {" "}at current rate
+                      <Icons.ArrowRight className="h-3 w-3 text-primary" />≈{" "}
+                      <span className="font-medium text-foreground">
+                        {formatMoney(disbKesPreview, "KES")}
+                      </span>{" "}
+                      at current rate
                     </p>
                   )}
 
@@ -785,12 +1123,13 @@ export default function CashWeightAuditPage() {
                     <span>A receipt number is assigned automatically when you save.</span>
                   </div>
 
-                  {/* Weight entry: single field for single-line POs, per-line for multi-line */}
                   {poLines.length <= 1 ? (
                     <div className="grid gap-2">
                       <Label htmlFor="disbPaidWeightKg">
                         Paid weight (kg){" "}
-                        <span className="font-normal text-muted-foreground">— what you weighed at farm gate</span>
+                        <span className="font-normal text-muted-foreground">
+                          — what you weighed at farm gate
+                        </span>
                       </Label>
                       <FormattedDecimalInput
                         id="disbPaidWeightKg"
@@ -802,7 +1141,9 @@ export default function CashWeightAuditPage() {
                   ) : (
                     <div className="grid gap-2">
                       <Label>Paid weight per product (kg)</Label>
-                      <p className="text-xs text-muted-foreground">Enter the weight you paid for at farm gate for each line.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Enter the weight you paid for at farm gate for each line.
+                      </p>
                       {poLines.map((l) => (
                         <div key={l.poLineId} className="flex items-center gap-2">
                           <div className="min-w-0 flex-1">
@@ -823,10 +1164,17 @@ export default function CashWeightAuditPage() {
                   )}
                 </div>
                 <SheetFooter>
-                  <Button variant="outline" onClick={() => setDisbursementOpen(false)} disabled={savingDisb}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDisbursementOpen(false)}
+                    disabled={savingDisb}
+                  >
                     Cancel
                   </Button>
-                  <Button onClick={handleRecordDisbursement} disabled={savingDisb || !canSaveDisbursement}>
+                  <Button
+                    onClick={handleRecordDisbursement}
+                    disabled={savingDisb || !canSaveDisbursement}
+                  >
                     {savingDisb ? "Saving…" : "Save disbursement"}
                   </Button>
                 </SheetFooter>
@@ -839,140 +1187,337 @@ export default function CashWeightAuditPage() {
         }
       />
 
-      <div className="p-6 space-y-6">
-
-        {/* Workflow guide — replaces vague banner */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">How it works — CoD procurement flow</CardTitle>
-            <CardDescription>Follow these 5 steps every time you source from a farm gate supplier.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ol className="grid gap-3 sm:grid-cols-5">
-              {WORKFLOW_STEPS.map(({ step, label, detail, href, action }) => (
-                <li key={step} className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                      {step}
-                    </span>
-                    {href ? (
-                      <Link href={href} className="text-sm font-medium hover:underline">
-                        {label}
-                      </Link>
-                    ) : action ? (
-                      <button
-                        className="text-sm font-medium hover:underline text-left"
-                        onClick={() => setDisbursementOpen(true)}
-                      >
-                        {label}
-                      </button>
-                    ) : (
-                      <span className="text-sm font-medium">{label}</span>
-                    )}
-                  </div>
-                  <p className="pl-8 text-xs text-muted-foreground">{detail}</p>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          <ProcurementVariancePanel
-            poWeightKg={auditLines.reduce((a, r) => a + (Number(r.orderedQty) || 0), 0)}
-            paidWeightKg={auditLines.reduce((a, r) => a + (r.paidWeightKg ?? 0), 0)}
-            receivedWeightKg={auditLines.reduce((a, r) => a + (r.receivedWeightKg ?? 0), 0)}
-          />
-          <LiveCurrencyConverterCard />
+      <div className="p-6 space-y-5">
+        {/* ── Stat chips ─────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              Total procurements
+            </p>
+            <p className="text-2xl font-bold mt-1">{loading ? "—" : poRows.length}</p>
+          </Card>
+          <Card className={`p-4 ${totalVariancePOs > 0 ? "border-destructive/50" : ""}`}>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Have variance</p>
+            <p
+              className={`text-2xl font-bold mt-1 ${
+                totalVariancePOs > 0 ? "text-destructive" : ""
+              }`}
+            >
+              {loading ? "—" : totalVariancePOs}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Fully matched</p>
+            <p className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">
+              {loading ? "—" : totalMatchedPOs}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending GRN</p>
+            <p className="text-2xl font-bold mt-1 text-muted-foreground">
+              {loading ? "—" : totalPendingPOs}
+            </p>
+          </Card>
         </div>
 
-        {/* Exception queue */}
+        {/* ── How it works (collapsible toggle) ──────────────────────────────── */}
+        <div>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setHelpOpen((o) => !o)}
+          >
+            <Icons.HelpCircle className="h-3.5 w-3.5" />
+            How does the CoD procurement flow work?
+            <Icons.ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${helpOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {helpOpen && (
+            <Card className="mt-2">
+              <CardContent className="pt-4 pb-4">
+                <ol className="grid gap-3 sm:grid-cols-5">
+                  {[
+                    {
+                      step: "1",
+                      label: "Create Purchase Order",
+                      detail: "Purchasing → Purchase Order → New",
+                      href: "/purchasing/orders",
+                    },
+                    {
+                      step: "2",
+                      label: "Pay at farm gate",
+                      detail: "Record disbursement → select PO → enter amount & paid weight (kg)",
+                      action: true,
+                    },
+                    {
+                      step: "3",
+                      label: "Receive stock → create GRN",
+                      detail:
+                        "Inventory → Goods Receipts → create from PO, enter received weight (kg)",
+                      href: "/inventory/receipts",
+                    },
+                    {
+                      step: "4",
+                      label: "Audit lines auto-built",
+                      detail:
+                        "PO quantity vs paid weight vs received weight compared automatically",
+                    },
+                    {
+                      step: "5",
+                      label: "Reconcile variances",
+                      detail:
+                        "Click View audit on any PO row below → exceptions → assign → investigate → resolve",
+                    },
+                  ].map(({ step, label, detail, href, action }) => (
+                    <li key={step} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                          {step}
+                        </span>
+                        {href ? (
+                          <Link href={href} className="text-sm font-medium hover:underline">
+                            {label}
+                          </Link>
+                        ) : action ? (
+                          <button
+                            type="button"
+                            className="text-sm font-medium hover:underline text-left"
+                            onClick={() => setDisbursementOpen(true)}
+                          >
+                            {label}
+                          </button>
+                        ) : (
+                          <span className="text-sm font-medium">{label}</span>
+                        )}
+                      </div>
+                      <p className="pl-8 text-xs text-muted-foreground">{detail}</p>
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* ── Master PO table ─────────────────────────────────────────────────── */}
         <Card>
-          <CardHeader>
-            <CardTitle>Exception queue — step 5</CardTitle>
-            <CardDescription>
-              Variances flagged here. Assign to an investigator, add notes, approve, then resolve.
-              Each step is tracked with SLA aging.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
+            <div>
+              <CardTitle>Procurement Audits</CardTitle>
+              <CardDescription>
+                One row per purchase order. Click &ldquo;View audit&rdquo; to inspect weight
+                details and resolve exceptions.
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => exportCashWeightAuditCsv(undefined, (msg) => toast.error(msg))}
+            >
+              <Icons.Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
           </CardHeader>
+
+          <div className="px-6 pb-3 flex items-center gap-2">
+            <div className="relative flex-1 max-w-xs">
+              <Icons.Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search by PO number…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+            <Select
+              value={statusFilter || "ALL"}
+              onValueChange={(v) => setStatusFilter(v === "ALL" ? "" : v)}
+            >
+              <SelectTrigger className="w-36 h-8 text-sm">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All statuses</SelectItem>
+                <SelectItem value="MATCHED">Matched</SelectItem>
+                <SelectItem value="VARIANCE">Variance</SelectItem>
+                <SelectItem value="PENDING">Pending</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <CardContent className="p-0">
-            <DataTable data={exceptions} columns={exceptionColumns} emptyMessage="No open exceptions — all matched." />
+            {loading ? (
+              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                Loading procurement audits…
+              </div>
+            ) : (
+              <DataTable
+                data={filteredPoRows}
+                columns={poColumns}
+                emptyMessage="No procurements found. Record a disbursement and create a GRN to start auditing."
+              />
+            )}
           </CardContent>
         </Card>
-
-        <div className="flex gap-2 border-b">
-          <Button variant={view === "audit" ? "secondary" : "ghost"} size="sm" onClick={() => setView("audit")}>
-            Audit lines
-          </Button>
-          <Button variant={view === "disbursements" ? "secondary" : "ghost"} size="sm" onClick={() => setView("disbursements")}>
-            Cash disbursements
-          </Button>
-        </div>
-
-        {loading ? (
-          <p className="text-muted-foreground text-sm">Loading…</p>
-        ) : (
-          <>
-            {view === "audit" && (
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Procurement audit trail</CardTitle>
-                    <CardDescription>
-                      PO line → Cash disbursement → GRN received weight. Variances indicate transit shrinkage or grading differences.
-                    </CardDescription>
-                    {/* Info callout: where each field comes from */}
-                    <div className="mt-3 rounded-md border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground space-y-1 max-w-xl">
-                      <p className="font-medium text-foreground">Where do these numbers come from?</p>
-                      <p><span className="font-medium text-foreground">Received weight</span> — entered on the GRN (Inventory → Goods Receipts). Click <span className="font-medium">GRN</span> on any row to open it.</p>
-                      <p><span className="font-medium text-foreground">Landed KES/kg</span> — calculated from landed cost allocations tied to the GRN (Inventory → Costing).</p>
-                      <p><span className="font-medium text-foreground">Variance</span> — computed automatically as received − paid. Corrections require admin override or an approved request.</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => exportCashWeightAuditCsv(undefined, (msg) => toast.error(msg))}
-                    >
-                      <Icons.Download className="mr-2 h-4 w-4" />
-                      Export CSV
-                    </Button>
-                    <Select value={statusFilter || "ALL"} onValueChange={(v) => setStatusFilter(v === "ALL" ? "" : v)}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All</SelectItem>
-                        <SelectItem value="MATCHED">Matched</SelectItem>
-                        <SelectItem value="VARIANCE">Variance</SelectItem>
-                        <SelectItem value="PENDING">Pending</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable data={auditLines} columns={auditColumns} emptyMessage="No audit lines yet. Record a disbursement and create a GRN to start." />
-                </CardContent>
-              </Card>
-            )}
-
-            {view === "disbursements" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cash disbursements</CardTitle>
-                  <CardDescription>Farm-gate CoD payments linked to POs. Audit lines are created automatically when a GRN is linked.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable data={disbursements} columns={disbursementColumns} emptyMessage="No disbursements yet." />
-                </CardContent>
-              </Card>
-            )}
-          </>
-        )}
       </div>
 
-      {/* Notes sheet — used for both Investigate and Resolve actions */}
+      {/* ── Per-PO detail sheet ───────────────────────────────────────────────── */}
+      <Sheet
+        open={!!selectedPoRow}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPoRow(null);
+        }}
+      >
+        <SheetContent className="overflow-y-auto sm:max-w-2xl w-full">
+          {selectedPoRow && (
+            <>
+              <SheetHeader className="pb-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <SheetTitle>{selectedPoRow.poNumber}</SheetTitle>
+                  <Badge
+                    variant={
+                      selectedPoRow.status === "MATCHED"
+                        ? "default"
+                        : selectedPoRow.status === "VARIANCE"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                  >
+                    {selectedPoRow.status}
+                  </Badge>
+                  {selectedPoRow.openExceptionCount > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="border-orange-500/50 text-orange-600 dark:text-orange-400"
+                    >
+                      {selectedPoRow.openExceptionCount} open exception
+                      {selectedPoRow.openExceptionCount !== 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                </div>
+                <SheetDescription>
+                  Weight audit detail: paid vs received for each product, disbursements, and
+                  exception workflow.
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-5 pt-2">
+                {/* Variance panel scoped to this PO */}
+                <ProcurementVariancePanel
+                  poWeightKg={selectedPoRow.totalOrderedQty}
+                  paidWeightKg={selectedPoRow.totalPaidKg}
+                  receivedWeightKg={selectedPoRow.totalReceivedKg}
+                />
+
+                {/* Disbursements */}
+                {selectedPoRow.disbursements.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <Icons.Banknote className="h-3.5 w-3.5 text-muted-foreground" />
+                      Cash disbursements
+                    </h3>
+                    <div className="rounded-md border divide-y text-sm">
+                      {selectedPoRow.disbursements.map((d) => (
+                        <div
+                          key={d.id}
+                          className="px-3 py-2.5 flex items-center justify-between gap-3"
+                        >
+                          <div>
+                            <p className="font-medium font-mono text-xs">
+                              {d.reference ?? d.id}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{d.paidAt}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">{formatMoney(d.amount, d.currency)}</p>
+                            <Badge
+                              variant={d.status === "RECONCILED" ? "default" : "secondary"}
+                              className="text-[10px] mt-0.5"
+                            >
+                              {d.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPoRow.disbursements.length === 0 && (
+                  <div className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2.5 text-sm text-muted-foreground">
+                    <Icons.Info className="h-4 w-4 shrink-0" />
+                    No disbursement recorded yet.{" "}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline"
+                      onClick={() => {
+                        setSelectedPoRow(null);
+                        setDisbPoId(selectedPoRow.poId);
+                        setDisbursementOpen(true);
+                      }}
+                    >
+                      Record one now
+                    </button>
+                  </div>
+                )}
+
+                {/* Product audit lines */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Icons.Scale className="h-3.5 w-3.5 text-muted-foreground" />
+                    Product lines — weight audit
+                  </h3>
+                  <div className="rounded-md border overflow-hidden">
+                    <DataTable
+                      data={selectedPoRow.lines}
+                      columns={detailLineColumns}
+                      emptyMessage="No audit lines yet. Link a GRN to this PO to generate them."
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Received weight comes from the GRN. Variance = received − paid. Use{" "}
+                    <Icons.Pencil className="h-3 w-3 inline" /> to correct weights or{" "}
+                    <Icons.ExternalLink className="h-3 w-3 inline" /> to open the source GRN.
+                  </p>
+                </div>
+
+                {/* Exceptions */}
+                {selectedPoRow.exceptions.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <Icons.AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                      Exceptions
+                      <span className="text-xs font-normal text-muted-foreground">
+                        — assign an investigator, add notes, then approve and resolve
+                      </span>
+                    </h3>
+                    <div className="rounded-md border overflow-hidden">
+                      <DataTable
+                        data={selectedPoRow.exceptions}
+                        columns={detailExceptionColumns}
+                        emptyMessage="No exceptions."
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* All good */}
+                {selectedPoRow.status === "MATCHED" &&
+                  selectedPoRow.exceptions.length === 0 && (
+                    <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2.5 text-sm text-green-700 dark:text-green-400">
+                      <Icons.CheckCircle2 className="h-4 w-4 shrink-0" />
+                      All product lines match. No exceptions outstanding.
+                    </div>
+                  )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Notes sheet */}
       <Sheet open={notesSheetOpen} onOpenChange={setNotesSheetOpen}>
         <SheetContent>
           <SheetHeader>
@@ -1005,15 +1550,27 @@ export default function CashWeightAuditPage() {
             >
               Cancel
             </Button>
-            <Button onClick={handleSubmitNotes} disabled={savingNotes || !notesValue.trim()}>
-              {savingNotes ? "Saving…" : notesTarget?.mode === "investigate" ? "Save notes" : "Mark resolved"}
+            <Button
+              onClick={handleSubmitNotes}
+              disabled={savingNotes || !notesValue.trim()}
+            >
+              {savingNotes
+                ? "Saving…"
+                : notesTarget?.mode === "investigate"
+                ? "Save notes"
+                : "Mark resolved"}
             </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
 
-      {/* Correct weights dialog */}
-      <Sheet open={!!correctLine} onOpenChange={(open) => { if (!open) setCorrectLine(null); }}>
+      {/* Correct weights sheet */}
+      <Sheet
+        open={!!correctLine}
+        onOpenChange={(open) => {
+          if (!open) setCorrectLine(null);
+        }}
+      >
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Correct weights</SheetTitle>
@@ -1025,11 +1582,13 @@ export default function CashWeightAuditPage() {
           </SheetHeader>
           {correctLine && (
             <div className="grid gap-4 py-6">
-              {/* Context — current values */}
               <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs space-y-0.5">
-                <p className="font-medium text-foreground">{correctLine.poNumber} · {correctLine.sku}</p>
+                <p className="font-medium text-foreground">
+                  {correctLine.poNumber} · {correctLine.sku}
+                </p>
                 <p className="text-muted-foreground">
-                  Current: paid {correctLine.paidWeightKg ?? "—"} kg · received {correctLine.receivedWeightKg ?? "—"} kg
+                  Current: paid {correctLine.paidWeightKg ?? "—"} kg · received{" "}
+                  {correctLine.receivedWeightKg ?? "—"} kg
                 </p>
                 {correctLine.grnId && (
                   <Link
@@ -1050,9 +1609,15 @@ export default function CashWeightAuditPage() {
                   step="0.01"
                   value={correctPaid}
                   onChange={(e) => setCorrectPaid(e.target.value)}
-                  placeholder={correctLine.paidWeightKg != null ? String(correctLine.paidWeightKg) : "No change"}
+                  placeholder={
+                    correctLine.paidWeightKg != null
+                      ? String(correctLine.paidWeightKg)
+                      : "No change"
+                  }
                 />
-                <p className="text-xs text-muted-foreground">Leave blank to keep the current value.</p>
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to keep the current value.
+                </p>
               </div>
 
               <div className="grid gap-2">
@@ -1063,16 +1628,23 @@ export default function CashWeightAuditPage() {
                   step="0.01"
                   value={correctReceived}
                   onChange={(e) => setCorrectReceived(e.target.value)}
-                  placeholder={correctLine.receivedWeightKg != null ? String(correctLine.receivedWeightKg) : "No change"}
+                  placeholder={
+                    correctLine.receivedWeightKg != null
+                      ? String(correctLine.receivedWeightKg)
+                      : "No change"
+                  }
                 />
                 <p className="text-xs text-muted-foreground">
-                  Primary source: enter received weight on the GRN. Use this only for manual corrections.
+                  Primary source: enter received weight on the GRN. Use this only for manual
+                  corrections.
                 </p>
               </div>
 
               {!canOverride && (
                 <div className="grid gap-2">
-                  <Label htmlFor="correctReason">Reason for correction <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="correctReason">
+                    Reason for correction <span className="text-destructive">*</span>
+                  </Label>
                   <Textarea
                     id="correctReason"
                     value={correctReason}
@@ -1086,13 +1658,19 @@ export default function CashWeightAuditPage() {
               {!canOverride && (
                 <div className="flex items-start gap-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
                   <Icons.Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <span>Your request will be sent to an admin for approval before weights change.</span>
+                  <span>
+                    Your request will be sent to an admin for approval before weights change.
+                  </span>
                 </div>
               )}
             </div>
           )}
           <SheetFooter>
-            <Button variant="outline" onClick={() => setCorrectLine(null)} disabled={savingCorrection}>
+            <Button
+              variant="outline"
+              onClick={() => setCorrectLine(null)}
+              disabled={savingCorrection}
+            >
               Cancel
             </Button>
             <Button onClick={handleCorrectWeights} disabled={savingCorrection}>

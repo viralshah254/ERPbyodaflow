@@ -10,6 +10,8 @@ export interface CostImpactLine {
 
 export interface CostImpactPanelProps {
   title?: string;
+  /** Overrides default subtitle under the title. */
+  cardDescription?: string;
   currency?: string;
   lines: CostImpactLine[];
   quantityKg?: number;
@@ -17,6 +19,7 @@ export interface CostImpactPanelProps {
 
 export function CostImpactPanel({
   title = "Cost Impact",
+  cardDescription = "Operational cost buckets and valuation effect.",
   currency = "KES",
   lines,
   quantityKg,
@@ -28,7 +31,7 @@ export function CostImpactPanel({
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>Operational cost buckets and valuation effect.</CardDescription>
+        <CardDescription>{cardDescription}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-2">

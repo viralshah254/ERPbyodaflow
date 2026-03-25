@@ -677,7 +677,7 @@ export default function DocViewPage() {
               : (document?.total ?? 0);
           return (
             <CostImpactPanel
-              title="Landed cost breakdown"
+              title="Other costs breakdown"
               currency="KES"
               lines={[
                 { label: "Invoice value (KES)", amount: billKes },

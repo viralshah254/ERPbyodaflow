@@ -244,7 +244,7 @@ function StepFxConversion({
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            This rate will be locked as an FX snapshot on each landed cost line when you save.
+            This rate will be locked as an FX snapshot on each other cost line when you save.
           </p>
         </div>
       ) : null}
@@ -672,7 +672,7 @@ function StepSummary({
       <div>
         <h3 className="font-semibold text-base">Step 4: Summary &amp; confirm</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Review the complete landed cost breakdown before posting to inventory.
+          Review the complete other costs breakdown before posting to inventory.
         </p>
       </div>
 
@@ -782,7 +782,7 @@ function StepSummary({
           </tbody>
           <tfoot className="border-t bg-muted/30">
             <tr>
-              <td className="px-4 py-3 font-bold">Total landed cost</td>
+              <td className="px-4 py-3 font-bold">Total cost</td>
               <td className="px-4 py-3" />
               <td className="px-4 py-3 text-right font-bold text-primary text-base">
                 {formatMoney(totalLanded, "KES")}
@@ -851,7 +851,7 @@ function StepSummary({
             <tfoot className="border-t bg-emerald-50 dark:bg-emerald-950/30">
               <tr>
                 <td className="px-4 py-3 font-bold text-emerald-700 dark:text-emerald-400">
-                  Landed cost per kg
+                  Cost per kg (incl. other costs)
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-mono text-muted-foreground">
                   {formatMoney(totalLanded, "KES")}
@@ -871,7 +871,7 @@ function StepSummary({
           <div className="bg-muted/50 px-4 py-2.5 flex items-center gap-2">
             <Icons.Layers className="h-4 w-4 text-muted-foreground" />
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Per-product landed cost allocation
+              Per-product other cost allocation
             </span>
           </div>
           <table className="w-full text-sm">
@@ -880,7 +880,7 @@ function StepSummary({
                 <th className="text-left px-4 py-2 font-medium">Product</th>
                 <th className="text-right px-4 py-2 font-medium">Weight (kg)</th>
                 <th className="text-right px-4 py-2 font-medium">Goods</th>
-                <th className="text-right px-4 py-2 font-medium">Landed share</th>
+                <th className="text-right px-4 py-2 font-medium">Other cost share</th>
                 <th className="text-right px-4 py-2 font-medium">Cost / kg</th>
               </tr>
             </thead>
@@ -931,7 +931,7 @@ function StepSummary({
           {saving ? (
             <><Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> Posting…</>
           ) : (
-            <><Icons.Check className="mr-2 h-4 w-4" /> Post landed costs</>
+            <><Icons.Check className="mr-2 h-4 w-4" /> Post other costs</>
           )}
         </Button>
       </div>
@@ -1115,12 +1115,12 @@ function LandedCostWizard({
           : "";
 
       toast.success(
-        `Landed costs posted for ${source.number}${perKgMsg}. Run costing to update valuations.`,
+        `Other costs posted for ${source.number}${perKgMsg}. Run costing to update valuations.`,
         { duration: 6000 }
       );
       onDone();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save landed costs.");
+      toast.error(e instanceof Error ? e.message : "Failed to save other costs.");
     } finally {
       setSaving(false);
     }
@@ -1334,7 +1334,7 @@ export default function InventoryCostingPage() {
     <PageShell>
       <PageHeader
         title="Inventory costing"
-        description="Apply landed costs and run inventory valuation"
+        description="Apply other costs and run inventory valuation"
         breadcrumbs={[
           { label: "Inventory", href: "/inventory/products" },
           { label: "Costing" },
@@ -1384,7 +1384,7 @@ export default function InventoryCostingPage() {
               </Link>
             </Button>
             <ExplainThis
-              prompt="Explain inventory costing, FIFO vs weighted average, and landed cost allocation including multi-currency."
+              prompt="Explain inventory costing, FIFO vs weighted average, and other cost allocation including multi-currency."
               label="Explain costing"
             />
             <Button variant="outline" size="sm" asChild>
@@ -1405,7 +1405,7 @@ export default function InventoryCostingPage() {
                 <Icons.CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-emerald-800">
-                    All {allocatedCount} document{allocatedCount !== 1 ? "s" : ""} have landed costs allocated
+                    All {allocatedCount} document{allocatedCount !== 1 ? "s" : ""} have other costs allocated
                   </p>
                   <p className="text-xs text-emerald-700 mt-0.5">
                     {canEditAllocated
@@ -1421,7 +1421,7 @@ export default function InventoryCostingPage() {
               <Icons.Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold">
-                  {pendingCount} document{pendingCount !== 1 ? "s" : ""} pending landed cost allocation
+                  {pendingCount} document{pendingCount !== 1 ? "s" : ""} pending other cost allocation
                   {allocatedCount > 0 && <span className="ml-2 font-normal text-muted-foreground">({allocatedCount} already allocated)</span>}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -1438,7 +1438,7 @@ export default function InventoryCostingPage() {
             <div>
               <CardTitle>Stock valuation summary</CardTitle>
               <CardDescription>
-                By warehouse — values include all posted landed cost allocations.
+                By warehouse — values include all posted other cost allocations.
                 {costingSnapshot.ranAt && (
                   <span className="ml-1 text-muted-foreground">
                     Last run: {new Date(costingSnapshot.ranAt).toLocaleString()} · {costingSnapshot.method}
@@ -1492,7 +1492,7 @@ export default function InventoryCostingPage() {
         {/* Landed cost allocation sources */}
         <Card>
           <CardHeader>
-            <CardTitle>Landed cost allocation</CardTitle>
+            <CardTitle>Other costs allocation</CardTitle>
             <CardDescription>
               Select a GRN or Bill and use the guided wizard to allocate currency conversion, permits, and inbound
               logistics. Costs are distributed by weight and posted to GL automatically.
@@ -1580,7 +1580,7 @@ export default function InventoryCostingPage() {
               <div className="py-10 text-center space-y-2">
                 <Icons.Package className="h-8 w-8 mx-auto text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  No goods receipts pending landed cost allocation.
+                  No goods receipts pending other cost allocation.
                 </p>
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/inventory/receipts">View all GRNs</Link>
@@ -1594,7 +1594,7 @@ export default function InventoryCostingPage() {
         <Card>
           <CardHeader>
             <CardTitle>Costing activity</CardTitle>
-            <CardDescription>Recent landed cost allocations and costing runs.</CardDescription>
+            <CardDescription>Recent other cost allocations and costing runs.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             <div>
@@ -1637,7 +1637,7 @@ export default function InventoryCostingPage() {
           <SheetHeader className="mb-2">
             <SheetTitle className="flex items-center gap-2">
               <Icons.Sparkles className="h-5 w-5 text-primary" />
-              {selectedSource?.isAllocated ? "Edit landed cost allocation" : "Landed cost wizard"}
+              {selectedSource?.isAllocated ? "Edit other cost allocation" : "Other costs wizard"}
             </SheetTitle>
             <SheetDescription>
               {selectedSource?.isAllocated
@@ -1650,7 +1650,7 @@ export default function InventoryCostingPage() {
             <div className="flex items-start gap-2 rounded-md border bg-amber-50 border-amber-200 px-3 py-2 mb-2 mx-0">
               <Icons.AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-800">
-                <strong>Admin edit:</strong> This document already has landed costs allocated. Saving will replace the existing allocation and re-post the GL entries.
+                <strong>Admin edit:</strong> This document already has other costs allocated. Saving will replace the existing allocation and re-post the GL entries.
               </p>
             </div>
           )}

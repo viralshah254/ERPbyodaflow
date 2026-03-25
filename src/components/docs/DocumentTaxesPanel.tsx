@@ -72,7 +72,7 @@ function LandedCostCard({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base">Landed costs</CardTitle>
+        <CardTitle className="text-base">Other costs</CardTitle>
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="text-xs">
             {allocation.allocationMethod ?? "allocated"}
@@ -81,7 +81,7 @@ function LandedCostCard({
             <Button variant="ghost" size="sm" asChild>
               <Link href={editHref}>
                 <Icons.ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                View GRN landed costs
+                View GRN other costs
               </Link>
             </Button>
           ) : (
@@ -127,7 +127,7 @@ function LandedCostCard({
             <span className="tabular-nums">{formatMoney(docTotal, currency)}</span>
           </div>
           <div className="flex justify-between text-muted-foreground">
-            <span>Landed costs</span>
+            <span>Other costs</span>
             <span className="tabular-nums">+ {formatMoney(totalLanded, currency)}</span>
           </div>
           <div className="flex justify-between font-semibold border-t pt-1 mt-1">
@@ -146,7 +146,7 @@ function NoLandedCostCard({ editHref }: { editHref: string }) {
       <CardContent className="flex flex-col items-center justify-center py-8 gap-3 text-center">
         <Icons.Package className="h-8 w-8 text-muted-foreground/40" />
         <div>
-          <p className="text-sm font-medium">No landed costs recorded</p>
+          <p className="text-sm font-medium">No other costs recorded</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Add freight, duty, customs or other charges to calculate actual total cost.
           </p>
@@ -154,7 +154,7 @@ function NoLandedCostCard({ editHref }: { editHref: string }) {
         <Button variant="outline" size="sm" asChild>
           <Link href={editHref}>
             <Icons.Plus className="mr-1.5 h-3.5 w-3.5" />
-            Add landed costs
+            Add other costs
           </Link>
         </Button>
       </CardContent>
@@ -379,14 +379,14 @@ export function DocumentTaxesPanel({
         </Card>
       )}
 
-      {/* Landed costs — GRN (editable) or Bill (read-only from source GRN) */}
+      {/* Other costs — GRN (editable) or Bill (read-only from source GRN) */}
       {(isGrn || isBill) && (
         <>
           {loadingLanded ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8 text-sm text-muted-foreground gap-2">
                 <Icons.Loader2 className="h-4 w-4 animate-spin" />
-                Loading landed costs…
+                Loading other costs…
               </CardContent>
             </Card>
           ) : landedAllocation ? (
@@ -406,8 +406,8 @@ export function DocumentTaxesPanel({
             <Card>
               <CardContent className="pt-6 pb-6 text-center text-sm text-muted-foreground">
                 {landedSourceId
-                  ? "No landed costs have been recorded on the linked GRN."
-                  : "This bill has no linked GRN. Landed costs are recorded at GRN level."}
+                  ? "No other costs have been recorded on the linked GRN."
+                  : "This bill has no linked GRN. Other costs are recorded at GRN level."}
               </CardContent>
             </Card>
           )}

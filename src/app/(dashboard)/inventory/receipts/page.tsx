@@ -162,7 +162,7 @@ export default function InventoryReceiptsPage() {
       },
       {
         id: "landedCost",
-        header: "Landed Costs",
+        header: "Other costs",
         accessor: (r: PurchasingDocRow) =>
           r.hasLandedCost ? (
             <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs gap-1">

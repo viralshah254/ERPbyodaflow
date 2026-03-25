@@ -340,6 +340,10 @@ export async function fetchCashDisbursements(poId?: string): Promise<CashDisburs
 
 export async function createCashDisbursement(body: {
   poId: string;
+  /** Optional: single GRN this payment is associated with (legacy; prefer grnIds). */
+  grnId?: string;
+  /** All GRN IDs covered by this disbursement when paying on GRN basis. */
+  grnIds?: string[];
   amount: number;
   currency: string;
   paidAt: string;

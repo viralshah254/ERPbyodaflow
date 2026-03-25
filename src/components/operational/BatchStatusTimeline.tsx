@@ -5,12 +5,21 @@ import { CheckCircle2, Circle, Clock3, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
+export interface BatchTimelineStepLink {
+  label: string;
+  href: string;
+  /** Short badge text shown after the label, e.g. a status string. */
+  badge?: string;
+}
+
 export interface BatchTimelineStep {
   id: string;
   label: string;
   status: "completed" | "current" | "upcoming";
   timestamp?: string;
   detail?: string;
+  /** Clickable document chips rendered below the detail line. */
+  links?: BatchTimelineStepLink[];
   /** Deep-link to the relevant screen for this step. */
   href?: string;
   /** Label for an inline shortcut button (only rendered when status is "current"). */
@@ -94,6 +103,22 @@ export function BatchStatusTimeline({
 
                 {step.detail ? (
                   <div className="text-xs text-muted-foreground">{step.detail}</div>
+                ) : null}
+
+                {step.links?.length ? (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {step.links.map((lk) => (
+                      <Link
+                        key={lk.href}
+                        href={lk.href}
+                        className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium text-primary hover:bg-muted/60 transition-colors"
+                      >
+                        {lk.label}
+                        {lk.badge ? <span className="opacity-60 uppercase">{lk.badge}</span> : null}
+                        <ArrowRight className="h-2.5 w-2.5 opacity-50 shrink-0" />
+                      </Link>
+                    ))}
+                  </div>
                 ) : null}
 
                 {step.status === "current" && step.href && step.actionLabel ? (

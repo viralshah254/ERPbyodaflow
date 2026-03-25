@@ -16,6 +16,7 @@ import { ProcurementVariancePanel } from "@/components/operational/ProcurementVa
 import { LiveCurrencyConverterCard } from "@/components/operational/LiveCurrencyConverterCard";
 import { fetchPurchaseOrderById, approvePurchaseOrders } from "@/lib/api/purchasing";
 import { requestDocumentApprovalApi } from "@/lib/api/documents";
+import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
 import { fetchCashWeightAuditLines, fetchCashDisbursements, buildCashWeightAudit, fetchSubcontractOrders } from "@/lib/api/cool-catch";
 import type { SubcontractOrderRow } from "@/lib/api/cool-catch";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,8 @@ export default function PurchaseOrderDetailPage() {
   const [receivedWeight, setReceivedWeight] = React.useState(0);
   const [disbursementCount, setDisbursementCount] = React.useState(0);
   const [relatedScos, setRelatedScos] = React.useState<SubcontractOrderRow[]>([]);
+  const [otherCostsAlloc, setOtherCostsAlloc] = React.useState<ExistingLandedCostAllocation | null>(null);
+  const [otherCostsLoading, setOtherCostsLoading] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -57,6 +60,101 @@ export default function PurchaseOrderDetailPage() {
     };
   }, [id]);
 
+  const linkedGrnIdsKey = order?.linkedGrns?.map((g) => g.id).join(",") ?? "";
+
+  React.useEffect(() => {
+    if (!order?.linkedGrns?.length) {
+      setOtherCostsAlloc(null);
+      setOtherCostsLoading(false);
+      return;
+    }
+    const grns = order.linkedGrns;
+    const preferred =
+      grns.find((g) => ["POSTED", "RECEIVED", "CONVERTED"].includes(String(g.status).toUpperCase())) ?? grns[0];
+    let cancelled = false;
+    setOtherCostsLoading(true);
+    fetchLandedCostAllocation(preferred.id)
+      .then((alloc) => {
+        if (!cancelled) setOtherCostsAlloc(alloc);
+      })
+      .catch(() => {
+        if (!cancelled) setOtherCostsAlloc(null);
+      })
+      .finally(() => {
+        if (!cancelled) setOtherCostsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedGrnIdsKey]);
+
+  const receiptMap = React.useMemo(() => {
+    const m = new Map<string, { receivedQty: number; receivedWeightKg: number; receivedValue: number }>();
+    for (const r of order?.lineReceipts ?? []) {
+      m.set(r.poLineId, {
+        receivedQty: r.receivedQty,
+        receivedWeightKg: r.receivedWeightKg,
+        receivedValue: r.receivedValue,
+      });
+    }
+    return m;
+  }, [order?.lineReceipts]);
+
+  const hasOpenReceiptQty = React.useMemo(() => {
+    if (!order) return true;
+    // When lineReceipts are populated (GRN lines had sourceLineId), use per-line comparison.
+    if ((order.lineReceipts?.length ?? 0) > 0) {
+      return order.lines.some((line) => {
+        const rec = receiptMap.get(line.id);
+        return line.qty > (rec?.receivedQty ?? 0) + 1e-9;
+      });
+    }
+    // Fallback: if all linked GRNs are in a terminal state AND received value >= PO total, treat as fully received.
+    const grns = order.linkedGrns ?? [];
+    if (grns.length === 0) return true;
+    const allTerminal = grns.every((g) =>
+      ["POSTED", "RECEIVED", "CONVERTED"].includes(String(g.status).toUpperCase())
+    );
+    const receivedValue = order.receivedTotals?.value ?? 0;
+    if (allTerminal && receivedValue >= (order.total ?? 0) - 1) return false;
+    return true;
+  }, [order, receiptMap]);
+
+  const totalReceivedWeightFromGrns = React.useMemo(() => {
+    // Prefer the broader aggregate (all GRN lines, no sourceLineId requirement).
+    if ((order?.receivedTotals?.weightKg ?? 0) > 0) return order!.receivedTotals!.weightKg;
+    if ((order?.receivedTotals?.qty ?? 0) > 0) return order!.receivedTotals!.qty;
+    return (order?.lineReceipts ?? []).reduce((a, r) => a + (r.receivedWeightKg ?? 0), 0);
+  }, [order?.receivedTotals, order?.lineReceipts]);
+
+  const otherCostsPanelLines = React.useMemo(() => {
+    if (!order) return [];
+    const estimate = [
+      { label: "Purchase value", amount: order.total ?? 0 },
+      { label: "Border / permit estimate", amount: (order.total ?? 0) * 0.04 },
+      { label: "Inbound logistics estimate", amount: (order.total ?? 0) * 0.06 },
+    ];
+    if (otherCostsAlloc?.lines?.length) {
+      return otherCostsAlloc.lines.map((l, i) => ({
+        label: [l.costCentre, l.reference].filter(Boolean).join(" · ") || `Charge ${i + 1}`,
+        amount: typeof l.amount === "number" ? l.amount : 0,
+      }));
+    }
+    if (otherCostsAlloc?.costCentreSummary && Object.keys(otherCostsAlloc.costCentreSummary).length > 0) {
+      const CC: Record<string, string> = {
+        currency_conversion: "Currency conversion",
+        permits: "Permits and customs",
+        inbound_logistics: "Inbound logistics",
+        other: "Other",
+      };
+      return Object.entries(otherCostsAlloc.costCentreSummary).map(([k, v]) => ({
+        label: CC[k] ?? k,
+        amount: v.originalAmount ?? 0,
+      }));
+    }
+    return estimate;
+  }, [order, otherCostsAlloc]);
+
   const poCreatedTimestamp = React.useMemo(() => {
     if (!order?.date) return undefined;
     const d = new Date(order.date);
@@ -69,7 +167,10 @@ export default function PurchaseOrderDetailPage() {
     const isApproved = order.status === "APPROVED" || order.status === "RECEIVED";
     const isPendingApproval = order.status === "PENDING_APPROVAL";
     const isPaid = disbursementCount > 0;
-    const isReceived = receivedWeight > 0;
+    const hasReceiptFromGrn =
+      totalReceivedWeightFromGrns > 0 ||
+      (order.lineReceipts?.some((r) => r.receivedQty > 0 || r.receivedValue > 0) ?? false);
+    const isReceived = receivedWeight > 0 || hasReceiptFromGrn;
 
     type StepStatus = "completed" | "current" | "upcoming";
 
@@ -125,12 +226,56 @@ export default function PurchaseOrderDetailPage() {
         id: "received",
         label: "Receipt / GRN",
         status: receivedStatus,
-        detail: isReceived ? `${receivedWeight} kg received` : "Awaiting receiving",
-        href: `/docs/grn/new?poId=${id}`,
-        actionLabel: receivedStatus === "current" ? "Create GRN" : undefined,
+        detail: isReceived
+          ? (() => {
+              const kg = Math.max(receivedWeight, totalReceivedWeightFromGrns);
+              const val = order.receivedTotals?.value;
+              if (kg > 0) return `${kg.toLocaleString()} kg received`;
+              if (val && val > 0) return `${formatMoney(val, order.currency)} received`;
+              return `${order.linkedGrns?.length ?? 0} GRN(s) recorded`;
+            })()
+          : "Awaiting receiving",
+        links: (order.linkedGrns ?? []).map((g) => ({
+          label: g.number,
+          href: `/docs/grn/${g.id}`,
+          badge: g.status,
+        })),
+        href: order.linkedGrns?.[0]?.id ? `/docs/grn/${order.linkedGrns[0].id}` : `/docs/grn/new?poId=${id}`,
+        actionLabel:
+          receivedStatus === "current" && !order.linkedGrns?.length ? "Create GRN" : undefined,
+      },
+      {
+        id: "bill",
+        label: "Supplier bill",
+        status: (() => {
+          const bills = order.linkedBills ?? [];
+          if (bills.some((b) => ["POSTED", "APPROVED", "CONVERTED"].includes(String(b.status).toUpperCase()))) return "completed" as const;
+          if (bills.length > 0) return "current" as const;
+          if (isReceived) return "current" as const;
+          return "upcoming" as const;
+        })(),
+        detail: (() => {
+          const bills = order.linkedBills ?? [];
+          if (bills.length > 0) return `${bills.length} bill(s) linked`;
+          return isReceived ? "Match supplier invoice" : "Awaiting receiving";
+        })(),
+        links: (order.linkedBills ?? []).map((b) => ({
+          label: b.number,
+          href: `/docs/bill/${b.id}`,
+          badge: b.status,
+        })),
+        href: (order.linkedBills ?? []).length === 0 ? `/docs/bill/new?poId=${id}` : undefined,
+        actionLabel: (order.linkedBills ?? []).length === 0 && isReceived ? "Create bill" : undefined,
       },
     ];
-  }, [order, id, poCreatedTimestamp, disbursementCount, receivedWeight]);
+  }, [
+    order,
+    id,
+    poCreatedTimestamp,
+    disbursementCount,
+    receivedWeight,
+    totalReceivedWeightFromGrns,
+  ]);
 
   if (loading && !order) {
     return (
@@ -153,12 +298,47 @@ export default function PurchaseOrderDetailPage() {
   }
 
   const orderedWeight = order.lines.reduce((a, line) => a + line.qty, 0);
+  const linkedGrns = order.linkedGrns ?? [];
+  const costSourceGrn =
+    linkedGrns.find((g) =>
+      ["POSTED", "RECEIVED", "CONVERTED"].includes(String(g.status).toUpperCase())
+    ) ?? linkedGrns[0];
+
+  const showPrimaryCreateGrn =
+    order.status === "APPROVED" && (linkedGrns.length === 0 || hasOpenReceiptQty);
+  const showBillFromReceipts =
+    order.status === "APPROVED" && !hasOpenReceiptQty && linkedGrns.length > 0;
+
   const lineColumns = [
     { id: "sku", header: "SKU", accessor: (r: (typeof order.lines)[number]) => r.sku, sticky: true },
     { id: "product", header: "Product", accessor: (r: (typeof order.lines)[number]) => r.productName },
-    { id: "qty", header: "Qty", accessor: (r: (typeof order.lines)[number]) => `${r.qty} ${r.uom}` },
+    { id: "qty", header: "Ordered qty", accessor: (r: (typeof order.lines)[number]) => `${r.qty} ${r.uom}` },
     { id: "rate", header: "Rate", accessor: (r: (typeof order.lines)[number]) => formatMoney(r.rate, order.currency) },
-    { id: "total", header: "Total", accessor: (r: (typeof order.lines)[number]) => formatMoney(r.total, order.currency) },
+    { id: "total", header: "Ordered total", accessor: (r: (typeof order.lines)[number]) => formatMoney(r.total, order.currency) },
+    {
+      id: "recvQty",
+      header: "Received qty",
+      accessor: (r: (typeof order.lines)[number]) => {
+        const rec = receiptMap.get(r.id);
+        return rec && rec.receivedQty > 0 ? `${rec.receivedQty.toLocaleString()} ${r.uom}` : "—";
+      },
+    },
+    {
+      id: "recvKg",
+      header: "Received kg",
+      accessor: (r: (typeof order.lines)[number]) => {
+        const rec = receiptMap.get(r.id);
+        return rec && rec.receivedWeightKg > 0 ? rec.receivedWeightKg.toLocaleString() : "—";
+      },
+    },
+    {
+      id: "recvVal",
+      header: "Received value",
+      accessor: (r: (typeof order.lines)[number]) => {
+        const rec = receiptMap.get(r.id);
+        return rec && rec.receivedValue > 0 ? formatMoney(rec.receivedValue, order.currency) : "—";
+      },
+    },
   ];
 
   return (
@@ -218,11 +398,19 @@ export default function PurchaseOrderDetailPage() {
                 Approve
               </Button>
             )}
-            {order.status === "APPROVED" && (
+            {showPrimaryCreateGrn && (
               <Button size="sm" asChild>
                 <Link href={`/docs/grn/new?poId=${id}`}>
                   <Icons.PackagePlus className="mr-2 h-4 w-4" />
-                  Create GRN
+                  {linkedGrns.length > 0 ? "Receive remaining (GRN)" : "Create GRN"}
+                </Link>
+              </Button>
+            )}
+            {showBillFromReceipts && (
+              <Button size="sm" variant="default" asChild>
+                <Link href={`/docs/bill/new?poId=${id}`}>
+                  <Icons.FileText className="mr-2 h-4 w-4" />
+                  Create bill
                 </Link>
               </Button>
             )}
@@ -352,25 +540,112 @@ export default function PurchaseOrderDetailPage() {
               receivedWeightKg={receivedWeight}
             />
 
+            {linkedGrns.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Goods receipts (GRN)</CardTitle>
+                  <CardDescription>Receipts recorded against this purchase order.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3">
+                    {linkedGrns.map((g) => {
+                      const bill = (order.linkedBills ?? []).find((b) => b.grnId === g.id);
+                      return (
+                        <li
+                          key={g.id}
+                          className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2 last:border-0 last:pb-0"
+                        >
+                          <Link
+                            href={`/docs/grn/${g.id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {g.number}
+                          </Link>
+                          <StatusBadge status={g.status} />
+                          <span className="text-muted-foreground text-sm">{g.date}</span>
+                          <span className="text-sm tabular-nums">{formatMoney(g.total, order.currency)}</span>
+                          {bill && (
+                            <Link
+                              href={`/docs/bill/${bill.id}`}
+                              className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium text-primary hover:bg-muted/60 transition-colors"
+                            >
+                              <Icons.FileText className="h-3 w-3" />
+                              {bill.number}
+                              <StatusBadge status={bill.status} className="ml-0.5 text-[10px]" />
+                            </Link>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {(order.linkedBills ?? []).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Linked supplier bills</CardTitle>
+                  <CardDescription>Bills created from goods receipts on this PO. Match against supplier invoices.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3">
+                    {(order.linkedBills ?? []).map((b) => (
+                      <li
+                        key={b.id}
+                        className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2 last:border-0 last:pb-0"
+                      >
+                        <Link href={`/docs/bill/${b.id}`} className="font-medium text-primary hover:underline">
+                          {b.number}
+                        </Link>
+                        <StatusBadge status={b.status} />
+                        <span className="text-muted-foreground text-sm">from {b.grnNumber}</span>
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link href={`/ap/three-way-match?billId=${b.id}`}>
+                            <Icons.GitCompare className="mr-1 h-3.5 w-3.5" />
+                            3-way match
+                          </Link>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
-                <CardTitle>Purchase Lines</CardTitle>
+                <CardTitle>Purchase vs received (lines)</CardTitle>
+                <CardDescription>Ordered from the PO; received totals come from linked GRN lines.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <DataTable<(typeof order.lines)[number]> data={order.lines} columns={lineColumns} emptyMessage="No PO lines." />
               </CardContent>
             </Card>
 
-            <CostImpactPanel
-              title="Landed Cost Preview"
-              currency={order.currency}
-              quantityKg={orderedWeight}
-              lines={[
-                { label: "Purchase value", amount: order.total ?? 0 },
-                { label: "Border / permit estimate", amount: (order.total ?? 0) * 0.04 },
-                { label: "Inbound logistics estimate", amount: (order.total ?? 0) * 0.06 },
-              ]}
-            />
+            {otherCostsLoading ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Other costs</CardTitle>
+                  <CardDescription>Loading allocation from GRN…</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">Please wait.</CardContent>
+              </Card>
+            ) : (
+              <CostImpactPanel
+                title={otherCostsAlloc ? "Other costs" : "Other costs (estimate)"}
+                cardDescription={
+                  otherCostsAlloc && costSourceGrn
+                    ? `Actual charges allocated on GRN ${costSourceGrn.number}. Manage in Inventory → Costing.`
+                    : linkedGrns.length
+                      ? "No other-cost allocation on the GRN yet. Add charges in Inventory → Costing, or use estimates below until posted."
+                      : "Estimated add-ons before goods are received. Replace with actual other costs after GRN allocation."
+                }
+                currency={order.currency}
+                quantityKg={orderedWeight}
+                lines={otherCostsPanelLines}
+              />
+            )}
 
             {relatedScos.length > 0 && (
               <Card>
