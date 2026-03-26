@@ -9,6 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ActivityPanel } from "@/components/shared/ActivityPanel";
 import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimeline";
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
@@ -21,6 +31,66 @@ import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontra
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 
+function ReceiveWeightRow({
+  line,
+  lineIndex,
+  editable,
+  lineActualKg,
+  setLineActualKg,
+}: {
+  line: SubcontractOrderLineRow;
+  lineIndex: number;
+  editable: boolean;
+  lineActualKg: string[];
+  setLineActualKg: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const planned = line.plannedQuantity ?? line.quantity;
+  const pack = line.packSizeKg != null && line.packSizeKg > 0 ? line.packSizeKg : null;
+  const rawKg = Number.parseFloat(lineActualKg[lineIndex] ?? "") || 0;
+  const boxes = pack != null ? Math.floor(Math.max(0, rawKg) / pack) : 0;
+  const remainder = pack != null ? Math.round((rawKg - boxes * pack) * 100) / 100 : 0;
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <Label className="text-xs font-medium text-foreground">{line.productName}</Label>
+        <span className="text-xs text-muted-foreground">
+          Planned: {planned.toLocaleString()} kg
+        </span>
+      </div>
+      {editable ? (
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={lineActualKg[lineIndex] ?? ""}
+          onChange={(e) => {
+            const next = [...lineActualKg];
+            next[lineIndex] = e.target.value;
+            setLineActualKg(next);
+          }}
+        />
+      ) : (
+        <Input
+          type="number"
+          readOnly
+          tabIndex={-1}
+          className="bg-muted/50 text-muted-foreground"
+          value={lineActualKg[lineIndex] ?? String(planned)}
+        />
+      )}
+      {editable && pack != null ? (
+        <p className="text-xs text-muted-foreground">
+          → {boxes.toLocaleString()} {boxes === 1 ? "box" : "boxes"}
+          {remainder > 0.001
+            ? ` (${remainder.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg remainder)`
+            : ""}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function SubcontractOrderDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -31,6 +101,8 @@ export default function SubcontractOrderDetailPage() {
   const [drilldown, setDrilldown] = React.useState<Awaited<ReturnType<typeof fetchSubcontractCostingDrilldown>>>(null);
   const [auditEntries, setAuditEntries] = React.useState<Array<{ id: string; action: string; user: string; timestamp: string; detail?: string }>>([]);
   const [yieldRecords, setYieldRecords] = React.useState<Awaited<ReturnType<typeof fetchYieldRecords>>>([]);
+  const [receiveSheetOpen, setReceiveSheetOpen] = React.useState(false);
+  const [lineActualKg, setLineActualKg] = React.useState<string[]>([]);
 
   const reload = React.useCallback(async () => {
     const [r, logs, yields] = await Promise.allSettled([
@@ -75,13 +147,25 @@ export default function SubcontractOrderDetailPage() {
     }
   };
 
-  const handleReceive = async () => {
+  const openReceiveSheet = () => {
+    if (!order || order.status !== "WIP") return;
+    setLineActualKg((order.lines ?? []).map((l) => String(l.plannedQuantity ?? l.quantity)));
+    setReceiveSheetOpen(true);
+  };
+
+  const handleConfirmReceive = async () => {
     if (!order || order.status !== "WIP") return;
     setReceiving(true);
     try {
-      await receiveSubcontractOrder(order.id);
-      toast.success("Order marked received.");
+      const actualLineQuantities = (order.lines ?? []).map((_, i) => ({
+        lineIndex: i,
+        quantity: Math.max(0, Number.parseFloat(lineActualKg[i] ?? "0") || 0),
+      }));
+      await receiveSubcontractOrder(order.id, { actualLineQuantities });
+      toast.success("Order received with actual weights. Stock and fees updated.");
+      setReceiveSheetOpen(false);
       await reload();
+      fetchSubcontractCostingDrilldown(id).then((r) => { setDrilldown(r); }).catch(() => {});
     } catch (e) {
       toast.error((e as Error)?.message ?? "Receive failed");
     } finally {
@@ -89,14 +173,39 @@ export default function SubcontractOrderDetailPage() {
     }
   };
 
-  const lineColumns = [
-    { id: "type", header: "Type", accessor: (r: SubcontractOrderLineRow) => r.type, sticky: true },
-    { id: "sku", header: "SKU", accessor: (r: SubcontractOrderLineRow) => r.sku },
-    { id: "product", header: "Product", accessor: (r: SubcontractOrderLineRow) => r.productName },
-    { id: "quantity", header: "Qty", accessor: (r: SubcontractOrderLineRow) => `${r.quantity} ${r.uom}` },
-    { id: "fee", header: "Fee/unit", accessor: (r: SubcontractOrderLineRow) => r.processingFeePerUnit != null ? formatMoney(r.processingFeePerUnit, "KES") : "—" },
-    { id: "amount", header: "Amount", accessor: (r: SubcontractOrderLineRow) => r.amount != null ? formatMoney(r.amount, "KES") : "—" },
-  ];
+  const lineColumns = React.useMemo(
+    () => {
+      const cols: Array<{
+        id: string;
+        header: string;
+        accessor: (r: SubcontractOrderLineRow) => React.ReactNode;
+        sticky?: boolean;
+      }> = [
+        { id: "type", header: "Type", accessor: (r: SubcontractOrderLineRow) => r.type, sticky: true },
+        { id: "sku", header: "SKU", accessor: (r: SubcontractOrderLineRow) => r.sku },
+        { id: "product", header: "Product", accessor: (r: SubcontractOrderLineRow) => r.productName },
+    ];
+      if (order?.status === "RECEIVED") {
+        cols.push({
+          id: "planned",
+          header: "Planned kg",
+          accessor: (r: SubcontractOrderLineRow) =>
+            `${(r.plannedQuantity ?? r.quantity).toLocaleString()} ${r.uom}`,
+        });
+      }
+      cols.push(
+        {
+          id: "quantity",
+          header: order?.status === "RECEIVED" ? "Actual kg" : "Qty",
+          accessor: (r: SubcontractOrderLineRow) => `${r.quantity.toLocaleString()} ${r.uom}`,
+        },
+        { id: "fee", header: "Fee/unit", accessor: (r: SubcontractOrderLineRow) => r.processingFeePerUnit != null ? formatMoney(r.processingFeePerUnit, "KES") : "—" },
+        { id: "amount", header: "Amount", accessor: (r: SubcontractOrderLineRow) => r.amount != null ? formatMoney(r.amount, "KES") : "—" }
+      );
+      return cols;
+    },
+    [order?.status]
+  );
 
   if (loading) {
     return (
@@ -121,11 +230,24 @@ export default function SubcontractOrderDetailPage() {
     );
   }
 
-  const inputQty = (order.lines ?? []).filter((line) => line.type === "INPUT").reduce((a, line) => a + line.quantity, 0);
-  const primaryQty = (order.lines ?? []).filter((line) => line.type === "OUTPUT_PRIMARY").reduce((a, line) => a + line.quantity, 0);
-  const secondaryQty = (order.lines ?? []).filter((line) => line.type === "OUTPUT_SECONDARY").reduce((a, line) => a + line.quantity, 0);
-  const wasteQty = (order.lines ?? []).filter((line) => line.type === "WASTE").reduce((a, line) => a + line.quantity, 0);
-  const feeLines = (order.lines ?? []).filter((line) => line.processingFeePerUnit != null);
+  const lines = order.lines ?? [];
+  const sumByType = (type: SubcontractOrderLineRow["type"], usePlanned: boolean) =>
+    lines
+      .filter((l) => l.type === type)
+      .reduce((a, l) => a + (usePlanned ? (l.plannedQuantity ?? l.quantity) : l.quantity), 0);
+
+  const plannedInputQty = sumByType("INPUT", true);
+  const plannedPrimaryQty = sumByType("OUTPUT_PRIMARY", true);
+  const plannedSecondaryQty = sumByType("OUTPUT_SECONDARY", true);
+  const plannedWasteQty = sumByType("WASTE", true);
+
+  const actualInputQty = sumByType("INPUT", false);
+  const actualPrimaryQty = sumByType("OUTPUT_PRIMARY", false);
+  const actualSecondaryQty = sumByType("OUTPUT_SECONDARY", false);
+  const actualWasteQty = sumByType("WASTE", false);
+
+  const feeLines = lines.filter((line) => line.processingFeePerUnit != null);
+  const feeTotal = feeLines.reduce((a, line) => a + (line.amount ?? 0), 0);
 
   return (
     <PageShell>
@@ -147,8 +269,8 @@ export default function SubcontractOrderDetailPage() {
               </Button>
             )}
             {order.status === "WIP" && (
-              <Button size="sm" disabled={receiving} onClick={handleReceive}>
-                {receiving ? "Receiving…" : "Receive"}
+              <Button size="sm" disabled={receiving} onClick={openReceiveSheet}>
+                Receive
               </Button>
             )}
             <Button variant="outline" size="sm" asChild>
@@ -204,13 +326,35 @@ export default function SubcontractOrderDetailPage() {
               </CardContent>
             </Card>
 
-            <YieldBreakdownCard
-              inputKg={inputQty}
-              primaryKg={primaryQty}
-              secondaryKg={secondaryQty}
-              lossKg={wasteQty}
-              serviceFeeTotal={feeLines.reduce((a, line) => a + (line.amount ?? 0), 0)}
-            />
+            {order.status === "RECEIVED" ? (
+              <YieldBreakdownCard
+                inputKg={actualInputQty}
+                primaryKg={actualPrimaryQty}
+                secondaryKg={actualSecondaryQty}
+                lossKg={actualWasteQty}
+                serviceFeeTotal={feeTotal}
+                planned={{
+                  inputKg: plannedInputQty,
+                  primaryKg: plannedPrimaryQty,
+                  secondaryKg: plannedSecondaryQty,
+                  lossKg: plannedWasteQty,
+                }}
+                actual={{
+                  inputKg: actualInputQty,
+                  primaryKg: actualPrimaryQty,
+                  secondaryKg: actualSecondaryQty,
+                  lossKg: actualWasteQty,
+                }}
+              />
+            ) : (
+              <YieldBreakdownCard
+                inputKg={plannedInputQty}
+                primaryKg={plannedPrimaryQty}
+                secondaryKg={plannedSecondaryQty}
+                lossKg={plannedWasteQty}
+                serviceFeeTotal={feeTotal}
+              />
+            )}
 
             {order.lines && order.lines.length > 0 && (
               <Card>
@@ -226,7 +370,7 @@ export default function SubcontractOrderDetailPage() {
             <CostImpactPanel
               title="Processor Cost Impact"
               currency="KES"
-              quantityKg={inputQty}
+              quantityKg={order.status === "RECEIVED" ? actualInputQty : plannedInputQty}
               lines={[
                 { label: "Primary processing fees", amount: feeLines.filter((line) => line.type === "OUTPUT_PRIMARY").reduce((a, line) => a + (line.amount ?? 0), 0) },
                 { label: "Secondary/byproduct fees", amount: feeLines.filter((line) => line.type !== "OUTPUT_PRIMARY").reduce((a, line) => a + (line.amount ?? 0), 0) },
@@ -328,6 +472,101 @@ export default function SubcontractOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      <Sheet open={receiveSheetOpen} onOpenChange={setReceiveSheetOpen}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Receive — enter actual weights</SheetTitle>
+            <SheetDescription>
+              Input weight is fixed from dispatch. Enter actual primary and secondary output kg; values default to BOM-planned kg. Stock and processing fees use these actuals.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid gap-6 py-6">
+            {(() => {
+              const rows = (order.lines ?? []).map((line, i) => ({ line, i }));
+              const inputRows = rows.filter((r) => r.line.type === "INPUT");
+              const primaryRows = rows.filter((r) => r.line.type === "OUTPUT_PRIMARY");
+              const secondaryRows = rows.filter((r) => r.line.type === "OUTPUT_SECONDARY");
+              const wasteRows = rows.filter((r) => r.line.type === "WASTE");
+              return (
+                <>
+                  {inputRows.length > 0 ? (
+                    <div className="grid gap-3">
+                      <h3 className="text-sm font-semibold tracking-tight">Input</h3>
+                      <p className="text-xs text-muted-foreground -mt-1">
+                        Matches quantity sent to the processor; not editable here.
+                      </p>
+                      {inputRows.map(({ line, i }) => (
+                        <ReceiveWeightRow
+                          key={line.id}
+                          line={line}
+                          lineIndex={i}
+                          editable={false}
+                          lineActualKg={lineActualKg}
+                          setLineActualKg={setLineActualKg}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {primaryRows.length > 0 ? (
+                    <div className="grid gap-3">
+                      <h3 className="text-sm font-semibold tracking-tight">Primary output</h3>
+                      {primaryRows.map(({ line, i }) => (
+                        <ReceiveWeightRow
+                          key={line.id}
+                          line={line}
+                          lineIndex={i}
+                          editable
+                          lineActualKg={lineActualKg}
+                          setLineActualKg={setLineActualKg}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {secondaryRows.length > 0 ? (
+                    <div className="grid gap-3">
+                      <h3 className="text-sm font-semibold tracking-tight">Secondary output</h3>
+                      {secondaryRows.map(({ line, i }) => (
+                        <ReceiveWeightRow
+                          key={line.id}
+                          line={line}
+                          lineIndex={i}
+                          editable
+                          lineActualKg={lineActualKg}
+                          setLineActualKg={setLineActualKg}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {wasteRows.length > 0 ? (
+                    <div className="grid gap-3">
+                      <h3 className="text-sm font-semibold tracking-tight">Waste / loss</h3>
+                      {wasteRows.map(({ line, i }) => (
+                        <ReceiveWeightRow
+                          key={line.id}
+                          line={line}
+                          lineIndex={i}
+                          editable
+                          lineActualKg={lineActualKg}
+                          setLineActualKg={setLineActualKg}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              );
+            })()}
+          </div>
+          <SheetFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReceiveSheetOpen(false)} disabled={receiving}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmReceive} disabled={receiving}>
+              {receiving ? "Receiving…" : "Confirm receive"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

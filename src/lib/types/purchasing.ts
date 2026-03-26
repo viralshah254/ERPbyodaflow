@@ -10,7 +10,24 @@ export type PurchasingDocRow = {
   poRef?: string;
   warehouse?: string;
   hasLandedCost?: boolean;
+  /** Sum of receivedWeightKg across all GRN lines — fish weight received at the facility. */
+  receivedWeightKg?: number;
+  /** Sum of processedWeightKg across all GRN lines — weight after processing/sorting. */
   processedWeightKg?: number;
+  /** Per-line availability for the subcontracting form (present when ?availableForProcessing=true). */
+  lineAvailability?: Array<{
+    lineIndex: number;
+    /** Product ID of the GRN line — used for product-aware BOM matching. */
+    productId?: string;
+    productName: string;
+    sku: string;
+    receivedWeightKg: number;
+    available: boolean;
+    /** Why this line is unavailable: "already_processed" | "no_weight" */
+    unavailableReason?: string;
+  }>;
+  /** Count of lines still eligible for processing (available + positive weight). */
+  eligibleLineCount?: number;
 };
 
 export type GrnLineRow = {

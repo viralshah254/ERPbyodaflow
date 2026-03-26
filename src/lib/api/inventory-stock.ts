@@ -11,6 +11,8 @@ type BackendStockLevel = {
   productId: string;
   sku?: string;
   name: string;
+  uom?: string;
+  packSizeKg?: number | null;
   warehouseId: string;
   warehouse: string;
   location?: string;
@@ -43,6 +45,8 @@ function mapStock(item: BackendStockLevel): InventoryStockRow {
     available: item.available,
     reorderLevel: item.reorderLevel,
     status: mapStatus(item.status),
+    uom: item.uom,
+    packSizeKg: item.packSizeKg ?? null,
   };
 }
 

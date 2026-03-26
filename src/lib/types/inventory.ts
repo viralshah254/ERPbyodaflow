@@ -11,6 +11,10 @@ export interface StockRow {
   reorderLevel: number;
   status: "In Stock" | "Low Stock" | "Out of Stock";
   category?: string;
+  /** Stock unit (e.g. KG, BOX). */
+  uom?: string;
+  /** Kg per box when stock is counted in boxes. */
+  packSizeKg?: number | null;
 }
 
 export interface MovementRow {

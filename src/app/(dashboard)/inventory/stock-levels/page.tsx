@@ -136,7 +136,10 @@ export default function StockLevelsPage() {
       id: "quantity",
       header: "Quantity",
       accessor: (row: InventoryStockRow) => (
-        <div className="text-right font-medium">{row.quantity}</div>
+        <div className="text-right font-medium">
+          {row.quantity.toLocaleString()}
+          {row.uom ? <span className="ml-1 text-muted-foreground text-xs">{row.uom}</span> : null}
+        </div>
       ),
     },
     {

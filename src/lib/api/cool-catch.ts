@@ -477,6 +477,8 @@ export async function createSubcontractOrder(body: {
   processType?: "FILLETING" | "GUTTING";
   purchaseOrderId?: string | null;
   grnId?: string | null;
+  /** Zero-based index of the specific GRN line being processed. Enables line-level reuse tracking. */
+  grnLineIndex?: number;
   /** Override input weight (kg) — used when BOM-driven without a GRN link */
   inputWeightKg?: number;
   /** Explicit lines (optional — if omitted and bomId provided, lines are auto-generated) */
@@ -560,11 +562,22 @@ export async function dispatchSubcontractOrder(id: string): Promise<SubcontractO
   return res;
 }
 
-export async function receiveSubcontractOrder(id: string, warehouseId?: string): Promise<SubcontractOrderRow> {
+export async function receiveSubcontractOrder(
+  id: string,
+  body?: {
+    warehouseId?: string;
+    /** Per-line actual kg at receive; indices match order.lines */
+    actualLineQuantities?: Array<{ lineIndex: number; quantity: number }>;
+  }
+): Promise<SubcontractOrderRow> {
   requireLiveApi("Receive subcontract order");
+  const payload =
+    body?.warehouseId || (body?.actualLineQuantities && body.actualLineQuantities.length)
+      ? { warehouseId: body?.warehouseId, actualLineQuantities: body?.actualLineQuantities }
+      : {};
   const res = await apiRequest<SubcontractOrderRow>(
     `/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}/receive`,
-    { method: "POST", body: warehouseId ? { warehouseId } : {} }
+    { method: "POST", body: Object.keys(payload).length ? payload : {} }
   );
   return res;
 }

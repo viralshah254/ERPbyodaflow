@@ -26,8 +26,12 @@ export interface SubcontractOrderLineRow {
   productId?: string;
   productName: string;
   type: "INPUT" | "OUTPUT_PRIMARY" | "OUTPUT_SECONDARY" | "WASTE";
+  /** BOM/GRN planned kg (same as quantity until receive overwrites quantity with actual). */
+  plannedQuantity?: number;
   quantity: number;
   uom: string;
+  /** Kg per box; receive converts kg → boxes for stock when set. */
+  packSizeKg?: number | null;
   processingFeePerUnit: number | null;
   amount: number | null;
 }

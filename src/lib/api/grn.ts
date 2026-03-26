@@ -8,10 +8,11 @@ import { type GrnDetailRow, type PurchasingDocRow } from "@/lib/types/purchasing
 
 export type { GrnDetailRow };
 
-export async function fetchGRNs(): Promise<PurchasingDocRow[]> {
+export async function fetchGRNs(opts?: { availableForProcessing?: boolean }): Promise<PurchasingDocRow[]> {
   requireLiveApi("Goods receipts");
   try {
-    const res = await apiRequest<{ items: PurchasingDocRow[] }>("/api/purchasing/grn");
+    const params = opts?.availableForProcessing ? "?availableForProcessing=true" : "";
+    const res = await apiRequest<{ items: PurchasingDocRow[] }>(`/api/purchasing/grn${params}`);
     return res?.items ?? [];
   } catch {
     return [];

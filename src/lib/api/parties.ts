@@ -191,6 +191,15 @@ function mapParty(item: BackendParty): PartyRow {
   };
 }
 
+/** Preview next supplier code (su0001, …). Server allocates the real code on create. */
+export async function fetchNextSupplierCodeApi(): Promise<string> {
+  requireLiveApi("Supplier code preview");
+  const data = await apiRequest<{ code: string }>("/api/parties/next-code", {
+    params: new URLSearchParams({ role: "supplier" }),
+  });
+  return data.code;
+}
+
 export async function fetchPartiesApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";

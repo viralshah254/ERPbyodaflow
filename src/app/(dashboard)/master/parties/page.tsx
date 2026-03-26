@@ -23,7 +23,13 @@ import { Separator } from "@/components/ui/separator";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { PartyRow, CustomerType, SupplierType } from "@/lib/types/masters";
-import { createPartyApi, fetchPartiesApi, updatePartyApi, fetchPartyByIdApi } from "@/lib/api/parties";
+import {
+  createPartyApi,
+  fetchPartiesApi,
+  updatePartyApi,
+  fetchPartyByIdApi,
+  fetchNextSupplierCodeApi,
+} from "@/lib/api/parties";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
 import { t } from "@/lib/terminology";
@@ -63,6 +69,7 @@ export default function MasterPartiesPage() {
   const [formPerInvoiceDaysToPayCap, setFormPerInvoiceDaysToPayCap] = React.useState("");
   const [formCreditWarningThresholdPct, setFormCreditWarningThresholdPct] = React.useState("");
   const [creditFieldsLoading, setCreditFieldsLoading] = React.useState(false);
+  const [supplierCodeLoading, setSupplierCodeLoading] = React.useState(false);
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -201,6 +208,19 @@ export default function MasterPartiesPage() {
     setDrawerOpen(true);
   };
 
+  /** Load next supplier code (su0001, …) whenever the create drawer opens on the Suppliers tab. */
+  React.useEffect(() => {
+    if (!drawerOpen || editingId !== null || tab !== "suppliers") return;
+    setSupplierCodeLoading(true);
+    void fetchNextSupplierCodeApi()
+      .then((code) => setFormCode(code))
+      .catch(() => {
+        setFormCode("");
+        toast.error("Could not load the next supplier code. Check your connection and try again.");
+      })
+      .finally(() => setSupplierCodeLoading(false));
+  }, [drawerOpen, editingId, tab]);
+
   const openEditDrawer = async (row: PartyRow) => {
     setEditingId(row.id);
     setFormName(row.name);
@@ -253,7 +273,10 @@ export default function MasterPartiesPage() {
       const warningPctNum = formCreditWarningThresholdPct ? parseFloat(formCreditWarningThresholdPct) : undefined;
       const payload = {
         name: formName.trim(),
-        code: formCode.trim() || undefined,
+        code:
+          tab === "suppliers" && !editingId
+            ? undefined
+            : formCode.trim() || undefined,
         email: formEmail.trim() || undefined,
         phone: formPhone.trim() || undefined,
         roles: [...roles],
@@ -479,12 +502,41 @@ export default function MasterPartiesPage() {
             <Input placeholder="Party name" value={formName} onChange={(e) => setFormName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Code</Label>
+            <div className="flex items-center gap-2">
+              <Label>{tab === "suppliers" && !editingId ? "Supplier code" : "Code"}</Label>
+              {tab === "suppliers" && !editingId && supplierCodeLoading && (
+                <Icons.Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />
+              )}
+            </div>
             <Input
-              placeholder={editingId ? "Supplier code" : "Auto-generated if left blank"}
+              placeholder={
+                tab === "suppliers" && !editingId
+                  ? supplierCodeLoading
+                    ? "Fetching next code…"
+                    : formCode
+                      ? ""
+                      : "Could not load — close and try again"
+                  : editingId
+                    ? "Party code"
+                    : "Auto-generated if left blank"
+              }
               value={formCode}
+              readOnly={tab === "suppliers" && !editingId}
+              disabled={tab === "suppliers" && !editingId && supplierCodeLoading}
+              className={tab === "suppliers" && !editingId ? "bg-muted/40 font-mono text-sm" : undefined}
               onChange={(e) => setFormCode(e.target.value)}
+              aria-label={
+                tab === "suppliers" && !editingId
+                  ? "Next supplier code assigned on save"
+                  : "Party code"
+              }
             />
+            {tab === "suppliers" && !editingId && (
+              <p className="text-xs text-muted-foreground">
+                Shown here is the next code in sequence (su0001, su0002, …). The server assigns the next available code
+                when you click Create.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Email</Label>
