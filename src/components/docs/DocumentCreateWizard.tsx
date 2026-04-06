@@ -16,7 +16,7 @@ import type { DocTypeKey } from "@/config/documents/types";
 import type { FormFieldConfig } from "@/config/documents/types";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { t } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useTerminology, useOrgContextStore } from "@/stores/orgContextStore";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
@@ -50,6 +50,7 @@ import {
   type PartyCreditSummary,
 } from "@/lib/api/parties";
 import { searchArCustomerOptionsApi } from "@/lib/api/payments";
+import { fetchFranchiseOutletHqSupplier } from "@/lib/api/cool-catch";
 import { fetchBranchOptions, fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import {
   fetchCustomerDefaultPriceLists,
@@ -299,6 +300,7 @@ const STEPS = [
 export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizardProps) {
   const router = useRouter();
   const terminology = useTerminology();
+  const orgRole = useOrgContextStore((s) => s.orgRole);
   const copilotEnabled = useCopilotFeatureEnabled();
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const { settings: financialSettings } = useFinancialSettings();
@@ -307,6 +309,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
   const label = config ? t(config.termKey, terminology) : type;
 
   const [step, setStep] = React.useState(1);
+  const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [loadingFxRate, setLoadingFxRate] = React.useState(false);
@@ -861,8 +864,43 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
     };
   }, [baseCurrency, form, selectedCurrency, selectedFxDate]);
 
+  // For franchise outlets creating a PO or PR: auto-set the HQ supplier and jump to step 2.
+  React.useEffect(() => {
+    const isSupplierDoc = type === "purchase-order" || type === "purchase-request";
+    if (orgRole !== "FRANCHISEE" || !isSupplierDoc) return;
+    let cancelled = false;
+    fetchFranchiseOutletHqSupplier()
+      .then((hq) => {
+        if (cancelled) return;
+        form.setValue("party", hq.id, { shouldDirty: true });
+        setHqSupplierName(hq.name);
+        setStep(2);
+      })
+      .catch(() => {
+        // Fallback: try first active supplier from party search
+        return searchPartyLookupOptionsApi({ role: "supplier", status: "ACTIVE", limit: 1 }).then((options) => {
+          if (cancelled || !options.length) return;
+          const hq = options[0];
+          form.setValue("party", hq.id, { shouldDirty: true });
+          setHqSupplierName(hq.label);
+          setStep(2);
+        });
+      })
+      .catch(() => {
+        // If still no HQ supplier found, remain on step 1 but don't block.
+      });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgRole, type]);
+
   return (
     <div className="space-y-6">
+      {hqSupplierName && (type === "purchase-order" || type === "purchase-request") && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
+          <Icons.Store className="h-4 w-4 text-primary shrink-0" />
+          <span>Ordering from <strong>{hqSupplierName}</strong></span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <Progress value={(step / 3) * 100} className="max-w-xs" />
         <span className="text-sm text-muted-foreground">

@@ -75,7 +75,7 @@ const SEAFOOD_DISTRIBUTOR_TEMPLATE: IndustryTemplateDefinition = {
     massBalanceYield: true,
   },
   terminology: {
-    customer: "B2B Customer / Franchisee",
+    customer: "B2B Customer",
     supplier: "Source Supplier / Processor",
     product: "Fish SKU / Product",
     warehouse: "Cold Hub / Warehouse",
@@ -404,7 +404,7 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       "Client deployment of the seafood/perishables distribution vertical with farm-gate procurement, outsourced processing, cold hub, franchise settlement, and VMI replenishment.",
     terminology: {
       ...SEAFOOD_DISTRIBUTOR_TEMPLATE.terminology,
-      customer: "Customer / Franchisee",
+      customer: "Customer",
       supplier: "Supplier",
       product: "SKU / Product",
       outlet: "Franchisee Outlet",

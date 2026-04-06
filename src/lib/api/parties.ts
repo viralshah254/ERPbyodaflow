@@ -200,6 +200,15 @@ export async function fetchNextSupplierCodeApi(): Promise<string> {
   return data.code;
 }
 
+/** Preview next customer code (0001, 0002, …). Server allocates the real code on create. */
+export async function fetchNextCustomerCodeApi(): Promise<string> {
+  requireLiveApi("Customer code preview");
+  const data = await apiRequest<{ code: string }>("/api/parties/next-code", {
+    params: new URLSearchParams({ role: "customer" }),
+  });
+  return data.code;
+}
+
 export async function fetchPartiesApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";

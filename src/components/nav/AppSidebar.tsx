@@ -8,7 +8,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { buildVisibleNav, type ResolvedNavSection, type ResolvedNavItem } from "@/config/navigation";
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation";
-import type { TemplateOrgType } from "@/config/industryTemplates/index";
+import type { TemplateOrgType, ModuleKey } from "@/config/industryTemplates/index";
 import { NavSection } from "./NavSection";
 import { useNavCounts } from "@/lib/use-nav-counts";
 import type { NavCounts } from "@/lib/api/nav-counts";
@@ -58,17 +58,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
   } = useOrgContextStore();
   const navCounts = useNavCounts();
 
+  const FRANCHISEE_MODULES: ModuleKey[] = ["dashboard", "sales", "purchasing", "inventory", "franchise", "reports", "settings", "docs"];
+
   const visibleSections = React.useMemo((): ResolvedNavSection[] => {
     const orgType = toTemplateOrgType(ctxOrgType ?? org?.orgType ?? undefined);
+    const isFranchiseePersona = franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE";
     const baseModules = enabledModules.length > 0 ? enabledModules : [...ALL_MODULES];
-    const resolvedModules =
-      template?.enabledModules?.length
+    const resolvedModules = isFranchiseePersona
+      ? FRANCHISEE_MODULES
+      : template?.enabledModules?.length
         ? [...new Set([...baseModules, ...template.enabledModules])]
         : baseModules;
-    const personaNav =
-      franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE"
-        ? ["core", "docs", "sales", "inventory", "warehouse", "franchise", "settings"]
-        : null;
+    const personaNav = isFranchiseePersona
+      ? ["core", "sales", "purchasing", "inventory", "franchise", "settings"]
+      : null;
     const input = {
       orgType,
       enabledModules: resolvedModules,

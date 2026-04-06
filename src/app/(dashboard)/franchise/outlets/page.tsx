@@ -24,9 +24,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchFranchiseNetworkOutlets, createFranchiseOutletApi, type FranchiseNetworkOutletRow, type CreateFranchiseOutletPayload } from "@/lib/api/cool-catch";
+import {
+  fetchFranchiseNetworkOutlets,
+  createFranchiseOutletApi,
+  fetchNextOutletCodeApi,
+  type FranchiseNetworkOutletRow,
+  type CreateFranchiseOutletPayload,
+} from "@/lib/api/cool-catch";
 import { useAuthStore } from "@/stores/auth-store";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 const emptyForm: CreateFranchiseOutletPayload = {
@@ -44,6 +50,9 @@ export default function FranchiseOutletsPage() {
   const [addOpen, setAddOpen] = React.useState(false);
   const [form, setForm] = React.useState<CreateFranchiseOutletPayload>(emptyForm);
   const [saving, setSaving] = React.useState(false);
+  const [outletCodeLoading, setOutletCodeLoading] = React.useState(false);
+  const [managerPhone, setManagerPhone] = React.useState("");
+  const [managerPhonePrefix, setManagerPhonePrefix] = React.useState("+254");
   const permissions = useAuthStore((s) => s.permissions);
   const canView =
     permissions.includes("franchise.network.read") ||
@@ -68,9 +77,19 @@ export default function FranchiseOutletsPage() {
     load();
   }, [canView, load]);
 
+  // Auto-fetch next outlet code when the sheet opens
+  React.useEffect(() => {
+    if (!addOpen) return;
+    setOutletCodeLoading(true);
+    fetchNextOutletCodeApi()
+      .then((code) => setForm((p) => ({ ...p, outletCode: code })))
+      .catch(() => {/* non-fatal — user can type manually */})
+      .finally(() => setOutletCodeLoading(false));
+  }, [addOpen]);
+
   const handleAdd = async () => {
-    if (!form.name.trim() || !form.outletCode.trim() || !form.adminEmail.trim() || !form.initialPassword.trim()) {
-      toast.error("Name, outlet code, admin email, and password are required.");
+    if (!form.name.trim() || !form.adminEmail.trim() || !form.initialPassword.trim()) {
+      toast.error("Name, admin email, and password are required.");
       return;
     }
     if (form.initialPassword.length < 8) {
@@ -79,7 +98,7 @@ export default function FranchiseOutletsPage() {
     }
     setSaving(true);
     try {
-      const result = await createFranchiseOutletApi({
+      await createFranchiseOutletApi({
         name: form.name.trim(),
         outletCode: form.outletCode.trim(),
         adminEmail: form.adminEmail.trim().toLowerCase(),
@@ -89,15 +108,15 @@ export default function FranchiseOutletsPage() {
       });
       setAddOpen(false);
       setForm(emptyForm);
+      setManagerPhone("");
+      setManagerPhonePrefix("+254");
       load();
-      toast.success("Franchisee staged for checkout.");
-      if (result.checkout) {
-        toast.info(
-          `Checkout updated: ${result.checkout.items.length} staged item(s) ready to confirm from Billing.`
-        );
-      }
+      toast.success("Franchisee created and activated.");
     } catch (err) {
-      const msg = err && typeof err === "object" && "message" in err ? String((err as { message: string }).message) : "Failed to create franchisee";
+      const msg =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : "Failed to create franchisee";
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -123,7 +142,9 @@ export default function FranchiseOutletsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Franchisees (outlets)</CardTitle>
-          <CardDescription>Outlets that can log in to the ERP. Add a new franchisee to create an org and admin user for them.</CardDescription>
+          <CardDescription>
+            Outlets that can log in to the ERP. Each franchisee gets their own org and admin user immediately on creation.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {!canView ? (
@@ -164,7 +185,10 @@ export default function FranchiseOutletsPage() {
           )}
           {canView && !loading && outlets.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No franchisees yet. {canAdd ? "Click “Add franchisee” to create one and give them login access." : "You need franchise.network.write permission to add franchisees."}
+              No franchisees yet.{" "}
+              {canAdd
+                ? "Click \u201cAdd franchisee\u201d to create one and give them login access."
+                : "You need franchise.network.write permission to add franchisees."}
             </div>
           )}
         </CardContent>
@@ -175,12 +199,9 @@ export default function FranchiseOutletsPage() {
           <SheetHeader>
             <SheetTitle>Add franchisee</SheetTitle>
             <SheetDescription>
-              Stage a new outlet and admin user. They will only be created and activated after you confirm checkout from Billing.
+              Create a new outlet and admin user. The franchisee org is activated immediately — billing starts end of the current month.
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-4 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            Each active franchise outlet is billed at $50/month and includes 2 users before additional-seat charges apply. You can stage multiple outlets here and check out once.
-          </div>
           <div className="grid gap-4 py-6">
             <div className="space-y-2">
               <Label htmlFor="name">Outlet / franchisee name</Label>
@@ -192,13 +213,22 @@ export default function FranchiseOutletsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="outletCode">Outlet code</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="outletCode">Outlet code</Label>
+                {outletCodeLoading && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />
+                )}
+              </div>
               <Input
                 id="outletCode"
                 value={form.outletCode}
                 onChange={(e) => setForm((p) => ({ ...p, outletCode: e.target.value }))}
-                placeholder="e.g. WL-01"
+                placeholder={outletCodeLoading ? "Fetching next code…" : "e.g. F0001"}
+                className="font-mono text-sm"
               />
+              <p className="text-xs text-muted-foreground">
+                Auto-assigned (F0001, F0002, …). You can override it before saving.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="adminEmail">Admin email (for login)</Label>
@@ -239,10 +269,32 @@ export default function FranchiseOutletsPage() {
                 placeholder="Outlet manager"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="managerPhone">Manager phone (optional)</Label>
+              <div className="flex gap-1">
+                <Input
+                  className="w-20 shrink-0 font-mono text-sm"
+                  value={managerPhonePrefix}
+                  onChange={(e) => setManagerPhonePrefix(e.target.value)}
+                  placeholder="+254"
+                  aria-label="Country code"
+                />
+                <Input
+                  id="managerPhone"
+                  type="tel"
+                  placeholder="712 345 678"
+                  value={managerPhone}
+                  onChange={(e) => setManagerPhone(e.target.value)}
+                  className="flex-1"
+                />
+              </div>
+            </div>
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleAdd()} disabled={saving}>{saving ? "Saving…" : "Add to checkout"}</Button>
+            <Button onClick={() => void handleAdd()} disabled={saving}>
+              {saving ? "Creating…" : "Create franchisee"}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

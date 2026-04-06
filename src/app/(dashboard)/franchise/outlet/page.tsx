@@ -4,11 +4,44 @@ import * as React from "react";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { fetchFranchiseOutletWorkspace } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
+import {
+  ShoppingCart,
+  PackageSearch,
+  FileText,
+  TrendingUp,
+  AlertTriangle,
+  ClipboardList,
+  Truck,
+} from "lucide-react";
+
+interface ActionTileProps {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  sublabel?: string;
+  highlight?: boolean;
+}
+
+function ActionTile({ href, icon, label, sublabel, highlight }: ActionTileProps) {
+  return (
+    <Link
+      href={href}
+      className={`flex flex-col items-center justify-center gap-3 rounded-xl border p-6 text-center transition-colors hover:bg-accent hover:text-accent-foreground ${highlight ? "border-primary bg-primary/5" : "bg-card"}`}
+    >
+      <div className={`flex h-14 w-14 items-center justify-center rounded-full ${highlight ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-base font-semibold leading-tight">{label}</p>
+        {sublabel && <p className="mt-0.5 text-xs text-muted-foreground">{sublabel}</p>}
+      </div>
+    </Link>
+  );
+}
 
 export default function FranchiseOutletWorkspacePage() {
   const [workspace, setWorkspace] = React.useState<Awaited<ReturnType<typeof fetchFranchiseOutletWorkspace>> | null>(null);
@@ -18,91 +51,125 @@ export default function FranchiseOutletWorkspacePage() {
     let active = true;
     setLoading(true);
     void fetchFranchiseOutletWorkspace()
-      .then((payload) => {
-        if (active) setWorkspace(payload);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+      .then((payload) => { if (active) setWorkspace(payload); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   return (
     <PageShell>
       <PageHeader
-        title="Outlet Workspace"
-        description="Lightweight ERP workspace for franchise operations, stock, selling, and settlement visibility."
+        title="My Outlet"
+        description="Everything you need to sell, order, and manage your stock — in one place."
         breadcrumbs={[{ label: "Franchise", href: "/franchise/outlet" }, { label: "Outlet Workspace" }]}
         sticky
         showCommandHint
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 sm:p-6">
+        {/* KPI snapshot */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <OperationalKpiCard title="Sales Today" value={formatMoney(workspace?.salesToday ?? 0, "KES")} subtitle="Posted invoices for today" />
-          <OperationalKpiCard title="Sales MTD" value={formatMoney(workspace?.monthlySales ?? 0, "KES")} subtitle="Current invoice value visible to outlet" />
-          <OperationalKpiCard title="Open Orders" value={workspace?.openSalesOrders ?? 0} subtitle="Sales orders awaiting close-out" />
-          <OperationalKpiCard title="Low Stock Alerts" value={workspace?.lowStockCount ?? 0} subtitle="SKU positions below operating threshold" severity={(workspace?.lowStockCount ?? 0) > 0 ? "warning" : "default"} />
+          <OperationalKpiCard
+            title="Sales Today"
+            value={formatMoney(workspace?.salesToday ?? 0, "KES")}
+            subtitle="Invoiced today"
+          />
+          <OperationalKpiCard
+            title="Sales This Month"
+            value={formatMoney(workspace?.monthlySales ?? 0, "KES")}
+            subtitle="Month-to-date invoices"
+          />
+          <OperationalKpiCard
+            title="Open Orders"
+            value={workspace?.openSalesOrders ?? 0}
+            subtitle="Awaiting delivery or close-out"
+          />
+          <OperationalKpiCard
+            title="Low Stock"
+            value={workspace?.lowStockCount ?? 0}
+            subtitle="Items running low"
+            severity={(workspace?.lowStockCount ?? 0) > 0 ? "warning" : "default"}
+          />
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>Sell</CardTitle>
-              <CardDescription>Create commercial documents and follow customer activity.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Button asChild><Link href="/docs/quote/new">New Quote</Link></Button>
-              <Button variant="outline" asChild><Link href="/docs/sales-order/new">New Sales Order</Link></Button>
-              <Button variant="outline" asChild><Link href="/docs/invoice/new">New Invoice</Link></Button>
-              <Button variant="outline" asChild><Link href="/ar/payments">Customer Receipts</Link></Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Operate</CardTitle>
-              <CardDescription>Check stock, receipts, and warehouse execution.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Button asChild><Link href="/inventory/stock-levels">Stock Levels</Link></Button>
-              <Button variant="outline" asChild><Link href="/inventory/receipts">Receipts</Link></Button>
-              <Button variant="outline" asChild><Link href="/warehouse/pick-pack">Pick & Pack</Link></Button>
-              <Button variant="outline" asChild><Link href="/warehouse/putaway">Putaway</Link></Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Settle</CardTitle>
-              <CardDescription>Monitor payables, bills, and franchise statement readiness.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Button asChild><Link href="/docs/bill/new">New Bill</Link></Button>
-              <Button variant="outline" asChild><Link href="/ap/payments">Supplier Payments</Link></Button>
-              <Button variant="outline" asChild><Link href="/franchise/commission">Commission Statement</Link></Button>
-            </CardContent>
-          </Card>
+        {/* Primary quick-actions */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Quick actions</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            <ActionTile
+              href="/docs/sales-order/new"
+              icon={<ShoppingCart className="h-7 w-7" />}
+              label="New Sale"
+              sublabel="Record a customer order"
+              highlight
+            />
+            <ActionTile
+              href="/docs/invoice/new"
+              icon={<FileText className="h-7 w-7" />}
+              label="New Invoice"
+              sublabel="Bill a customer"
+            />
+            <ActionTile
+              href="/docs/purchase-order/new"
+              icon={<Truck className="h-7 w-7" />}
+              label="Order from HQ"
+              sublabel="Request stock from Cool Catch"
+              highlight
+            />
+            <ActionTile
+              href="/inventory/stock-levels"
+              icon={<PackageSearch className="h-7 w-7" />}
+              label="My Stock"
+              sublabel="Check current stock levels"
+            />
+            <ActionTile
+              href="/docs/purchase-request/new"
+              icon={<ClipboardList className="h-7 w-7" />}
+              label="Stock Request"
+              sublabel="Raise a replenishment request"
+            />
+            <ActionTile
+              href="/docs/delivery/new"
+              icon={<Truck className="h-7 w-7" />}
+              label="Record Delivery"
+              sublabel="Goods received from HQ"
+            />
+            <ActionTile
+              href="/franchise/commission"
+              icon={<TrendingUp className="h-7 w-7" />}
+              label="Commission"
+              sublabel="View your statement"
+            />
+            <ActionTile
+              href="/ar/payments"
+              icon={<FileText className="h-7 w-7" />}
+              label="Customer Receipts"
+              sublabel="Record payments received"
+            />
+          </div>
         </div>
 
+        {/* Recent activity */}
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Recent invoices</CardTitle>
-              <CardDescription>Most recent posted sales visible to this outlet.</CardDescription>
+              <CardTitle className="text-base">Recent Invoices</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2">
               {loading ? (
-                <p className="text-sm text-muted-foreground">Loading outlet workspace…</p>
+                <p className="text-sm text-muted-foreground">Loading…</p>
               ) : (workspace?.recentInvoices.length ?? 0) === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent invoices yet.</p>
+                <p className="text-sm text-muted-foreground">No invoices yet. Create your first sale above.</p>
               ) : (
                 workspace?.recentInvoices.map((invoice) => (
-                  <div key={invoice.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                  <div
+                    key={invoice.id}
+                    className="flex items-center justify-between rounded-lg border px-4 py-3 text-sm"
+                  >
                     <div>
                       <p className="font-medium">{invoice.number}</p>
-                      <p className="text-muted-foreground">{invoice.date} · {invoice.status}</p>
+                      <p className="text-xs text-muted-foreground">{invoice.date} · {invoice.status}</p>
                     </div>
-                    <span>{formatMoney(invoice.total, "KES")}</span>
+                    <span className="font-semibold">{formatMoney(invoice.total, "KES")}</span>
                   </div>
                 ))
               )}
@@ -111,22 +178,31 @@ export default function FranchiseOutletWorkspacePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Low stock watchlist</CardTitle>
-              <CardDescription>SKU positions that need action from the outlet or franchisor.</CardDescription>
+              <CardTitle className="flex items-center gap-2 text-base">
+                {(workspace?.lowStockCount ?? 0) > 0 && (
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                )}
+                Low Stock Watchlist
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2">
               {loading ? (
-                <p className="text-sm text-muted-foreground">Loading stock watchlist…</p>
+                <p className="text-sm text-muted-foreground">Loading…</p>
               ) : (workspace?.lowStockItems.length ?? 0) === 0 ? (
-                <p className="text-sm text-muted-foreground">No low stock items right now.</p>
+                <p className="text-sm text-muted-foreground">All stock levels look good.</p>
               ) : (
                 workspace?.lowStockItems.map((item, index) => (
-                  <div key={`${item.productId}-${index}`} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                  <div
+                    key={`${item.productId}-${index}`}
+                    className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900 dark:bg-amber-950/30"
+                  >
                     <div>
-                      <p className="font-medium">{item.productId}</p>
-                      <p className="text-muted-foreground">{item.warehouseId}</p>
+                      <p className="font-medium">{item.productName ?? item.productId}</p>
+                      <p className="text-xs text-muted-foreground">{item.warehouseName ?? item.warehouseId}</p>
                     </div>
-                    <span>{item.quantity}</span>
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">
+                      {item.quantity} {item.uom ?? "units"}
+                    </span>
                   </div>
                 ))
               )}

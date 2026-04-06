@@ -29,6 +29,7 @@ import {
   updatePartyApi,
   fetchPartyByIdApi,
   fetchNextSupplierCodeApi,
+  fetchNextCustomerCodeApi,
 } from "@/lib/api/parties";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
@@ -39,7 +40,8 @@ import * as Icons from "lucide-react";
 
 export default function MasterPartiesPage() {
   const terminology = useTerminology();
-  const customerLabel = t("customer", terminology);
+  /** Always "Customer" on this screen — franchisees have their own tab and Franchise → Manage franchisees. */
+  const customerOnlyLabel = "Customer";
   const supplierLabel = t("supplier", terminology);
   const franchiseeLabel = t("franchisee", terminology);
 
@@ -70,6 +72,15 @@ export default function MasterPartiesPage() {
   const [formCreditWarningThresholdPct, setFormCreditWarningThresholdPct] = React.useState("");
   const [creditFieldsLoading, setCreditFieldsLoading] = React.useState(false);
   const [supplierCodeLoading, setSupplierCodeLoading] = React.useState(false);
+  const [customerCodeLoading, setCustomerCodeLoading] = React.useState(false);
+  const [formPhonePrefix, setFormPhonePrefix] = React.useState("+254");
+
+  const label =
+    tab === "customers"
+      ? customerOnlyLabel
+      : tab === "franchisees"
+        ? franchiseeLabel
+        : supplierLabel;
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -179,13 +190,6 @@ export default function MasterPartiesPage() {
     []
   );
 
-  const label =
-    tab === "customers"
-      ? customerLabel
-      : tab === "franchisees"
-      ? franchiseeLabel
-      : supplierLabel;
-
   const resetCreditFields = () => {
     setFormPaymentTermsId("");
     setFormCreditControlMode("");
@@ -201,6 +205,7 @@ export default function MasterPartiesPage() {
     setFormCode("");
     setFormEmail("");
     setFormPhone("");
+    setFormPhonePrefix("+254");
     setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
     setFormSupplierType(supplierType || "RAW_MATERIAL");
     setFormCustomerCategoryId("");
@@ -219,6 +224,19 @@ export default function MasterPartiesPage() {
         toast.error("Could not load the next supplier code. Check your connection and try again.");
       })
       .finally(() => setSupplierCodeLoading(false));
+  }, [drawerOpen, editingId, tab]);
+
+  /** Load next customer code (0001, …) when creating a customer only (franchisees are added under Franchise → Manage franchisees). */
+  React.useEffect(() => {
+    if (!drawerOpen || editingId !== null || tab !== "customers") return;
+    setCustomerCodeLoading(true);
+    void fetchNextCustomerCodeApi()
+      .then((code) => setFormCode(code))
+      .catch(() => {
+        setFormCode("");
+        toast.error("Could not load the next customer code. Check your connection and try again.");
+      })
+      .finally(() => setCustomerCodeLoading(false));
   }, [drawerOpen, editingId, tab]);
 
   const openEditDrawer = async (row: PartyRow) => {
@@ -278,7 +296,7 @@ export default function MasterPartiesPage() {
             ? undefined
             : formCode.trim() || undefined,
         email: formEmail.trim() || undefined,
-        phone: formPhone.trim() || undefined,
+        phone: formPhone.trim() ? `${formPhonePrefix}${formPhone.trim()}` : undefined,
         roles: [...roles],
         customerType: isCustomerTab ? formCustomerType : undefined,
         customerCategoryId: isCustomerTab ? formCustomerCategoryId || undefined : undefined,
@@ -311,7 +329,7 @@ export default function MasterPartiesPage() {
     <PageShell>
       <PageHeader
         title="Parties"
-        description={`${customerLabel}s, ${franchiseeLabel}s and ${supplierLabel}s. One place to manage every external counterparty.`}
+        description={`Customers, ${franchiseeLabel}s and ${supplierLabel}s. One place to manage every external counterparty.`}
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: "Parties" },
@@ -319,24 +337,31 @@ export default function MasterPartiesPage() {
         sticky
         showCommandHint
         actions={
-          <Button
-            onClick={openCreateDrawer}
-          >
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add {label}
-          </Button>
+          tab !== "franchisees" ? (
+            <Button onClick={openCreateDrawer}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add {label}
+            </Button>
+          ) : (
+            <Button variant="outline" asChild>
+              <Link href="/franchise/outlets">
+                <Icons.ExternalLink className="mr-2 h-4 w-4" />
+                Manage franchisees
+              </Link>
+            </Button>
+          )
         }
       />
       <div className="p-6 space-y-4">
         <Tabs value={tab} onValueChange={(v) => setTab(v as "customers" | "franchisees" | "suppliers")}>
           <TabsList>
-            <TabsTrigger value="customers">{customerLabel}s</TabsTrigger>
+            <TabsTrigger value="customers">{customerOnlyLabel}s</TabsTrigger>
             <TabsTrigger value="franchisees">{franchiseeLabel}s</TabsTrigger>
             <TabsTrigger value="suppliers">{supplierLabel}s</TabsTrigger>
           </TabsList>
           <TabsContent value="customers" className="mt-4 space-y-4">
             <DataTableToolbar
-              searchPlaceholder={`Search ${customerLabel.toLowerCase()}s...`}
+              searchPlaceholder={`Search ${customerOnlyLabel.toLowerCase()}s...`}
               searchValue={search}
               onSearchChange={setSearch}
               filters={[
@@ -348,7 +373,6 @@ export default function MasterPartiesPage() {
                     { label: "Distributor", value: "DISTRIBUTOR" },
                     { label: "Wholesaler", value: "WHOLESALER" },
                     { label: "Retailer", value: "RETAILER" },
-                    { label: "Franchisee", value: "FRANCHISEE" },
                     { label: "End customer", value: "END_CUSTOMER" },
                   ],
                   value: customerType,
@@ -366,15 +390,15 @@ export default function MasterPartiesPage() {
             />
             {loading ? (
               <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
-                Loading {customerLabel.toLowerCase()}s...
+                Loading {customerOnlyLabel.toLowerCase()}s...
               </div>
             ) : filteredCustomers.length === 0 ? (
               <EmptyState
                 icon="Users"
-                title={`No ${customerLabel.toLowerCase()}s`}
+                title={`No ${customerOnlyLabel.toLowerCase()}s`}
                 description="Add your first customer."
                 action={{
-                  label: `Add ${customerLabel}`,
+                  label: `Add ${customerOnlyLabel}`,
                   onClick: openCreateDrawer,
                 }}
               />
@@ -383,7 +407,7 @@ export default function MasterPartiesPage() {
                 data={filteredCustomers}
                 columns={columns}
                 onRowClick={openEditDrawer}
-                emptyMessage={`No ${customerLabel.toLowerCase()}s.`}
+                emptyMessage={`No ${customerOnlyLabel.toLowerCase()}s.`}
               />
             )}
           </TabsContent>
@@ -461,10 +485,10 @@ export default function MasterPartiesPage() {
               <EmptyState
                 icon="Users"
                 title={`No ${franchiseeLabel.toLowerCase()}s`}
-                description="Add your first franchisee."
+                description="Franchisees are added via Franchise → Manage franchisees. They appear here automatically once created."
                 action={{
-                  label: `Add ${franchiseeLabel}`,
-                  onClick: openCreateDrawer,
+                  label: "Go to Manage franchisees",
+                  onClick: () => { window.location.href = "/franchise/outlets"; },
                 }}
               />
             ) : (
@@ -503,38 +527,50 @@ export default function MasterPartiesPage() {
           </div>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Label>{tab === "suppliers" && !editingId ? "Supplier code" : "Code"}</Label>
-              {tab === "suppliers" && !editingId && supplierCodeLoading && (
+              <Label>
+                {tab === "suppliers" && !editingId
+                  ? "Supplier code"
+                  : tab === "customers" && !editingId
+                    ? "Customer code"
+                    : tab === "franchisees"
+                      ? "Outlet code"
+                      : "Code"}
+              </Label>
+              {!editingId && tab === "suppliers" && supplierCodeLoading && (
+                <Icons.Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />
+              )}
+              {!editingId && tab === "customers" && customerCodeLoading && (
                 <Icons.Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden />
               )}
             </div>
             <Input
               placeholder={
-                tab === "suppliers" && !editingId
-                  ? supplierCodeLoading
-                    ? "Fetching next code…"
-                    : formCode
-                      ? ""
-                      : "Could not load — close and try again"
-                  : editingId
-                    ? "Party code"
-                    : "Auto-generated if left blank"
+                !editingId && tab === "suppliers"
+                  ? supplierCodeLoading ? "Fetching next code…" : formCode ? "" : "Could not load — close and try again"
+                  : !editingId && tab === "customers"
+                  ? customerCodeLoading ? "Fetching next code…" : formCode ? "" : "Could not load — close and try again"
+                  : editingId ? "Party code" : "Auto-generated if left blank"
               }
               value={formCode}
-              readOnly={tab === "suppliers" && !editingId}
-              disabled={tab === "suppliers" && !editingId && supplierCodeLoading}
-              className={tab === "suppliers" && !editingId ? "bg-muted/40 font-mono text-sm" : undefined}
+              readOnly={!editingId && (tab === "suppliers" || tab === "customers")}
+              disabled={(!editingId && tab === "suppliers" && supplierCodeLoading) || (!editingId && tab === "customers" && customerCodeLoading)}
+              className={!editingId && (tab === "suppliers" || tab === "customers") ? "bg-muted/40 font-mono text-sm" : undefined}
               onChange={(e) => setFormCode(e.target.value)}
-              aria-label={
-                tab === "suppliers" && !editingId
-                  ? "Next supplier code assigned on save"
-                  : "Party code"
-              }
+              aria-label="Party code (auto-assigned on save)"
             />
-            {tab === "suppliers" && !editingId && (
+            {!editingId && tab === "suppliers" && (
               <p className="text-xs text-muted-foreground">
-                Shown here is the next code in sequence (su0001, su0002, …). The server assigns the next available code
-                when you click Create.
+                Next code in sequence (su0001, su0002, …). The server assigns the next available code when you click Create.
+              </p>
+            )}
+            {!editingId && tab === "customers" && (
+              <p className="text-xs text-muted-foreground">
+                Next code in sequence (0001, 0002, …). The server assigns the next available code when you click Create.
+              </p>
+            )}
+            {tab === "franchisees" && (
+              <p className="text-xs text-muted-foreground">
+                Same as the outlet code from Franchise → Manage franchisees.
               </p>
             )}
           </div>
@@ -544,7 +580,22 @@ export default function MasterPartiesPage() {
           </div>
           <div className="space-y-2">
             <Label>Phone</Label>
-            <Input placeholder="Phone" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} />
+            <div className="flex gap-1">
+              <Input
+                className="w-20 shrink-0 font-mono text-sm"
+                value={formPhonePrefix}
+                onChange={(e) => setFormPhonePrefix(e.target.value)}
+                placeholder="+254"
+                aria-label="Country code"
+              />
+              <Input
+                type="tel"
+                placeholder="712 345 678"
+                value={formPhone}
+                onChange={(e) => setFormPhone(e.target.value.replace(/^\+\d+\s*/, ""))}
+                className="flex-1"
+              />
+            </div>
           </div>
           {tab === "customers" && (
             <div className="grid gap-4 sm:grid-cols-2">

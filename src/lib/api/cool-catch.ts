@@ -85,7 +85,7 @@ export interface FranchiseOutletWorkspace {
   openBills: number;
   stockSkuCount: number;
   lowStockCount: number;
-  lowStockItems: Array<{ productId: string; warehouseId: string; quantity: number }>;
+  lowStockItems: Array<{ productId: string; productName: string | null; warehouseId: string; warehouseName: string | null; quantity: number; uom: string | null }>;
   recentInvoices: Array<{ id: string; number: string; total: number; date: string; status: string }>;
 }
 
@@ -124,19 +124,18 @@ export type CreateFranchiseOutletPayload = {
 
 export type CreateFranchiseOutletResult = {
   id: string;
-  outletId: string | null;
   userId: string | null;
+  outletCode?: string;
   adminEmail: string;
-  initialPassword: string;
-  stagedForCheckout?: boolean;
-  checkout?: {
-    id: string | null;
-    quoteTotalCents: number;
-    projectedMonthlyCents: number;
-    items: Array<{ id: string; itemType: string; label: string }>;
-  };
+  activated?: boolean;
   message?: string;
 };
+
+export async function fetchNextOutletCodeApi(): Promise<string> {
+  requireLiveApi("Outlet code preview");
+  const data = await apiRequest<{ code: string }>("/api/franchise/network/outlets/next-code");
+  return data.code;
+}
 
 export async function createFranchiseOutletApi(body: CreateFranchiseOutletPayload): Promise<CreateFranchiseOutletResult> {
   requireLiveApi("Create franchise outlet");
@@ -149,6 +148,11 @@ export async function createFranchiseOutletApi(body: CreateFranchiseOutletPayloa
 export async function fetchFranchiseOutletWorkspace(): Promise<FranchiseOutletWorkspace> {
   requireLiveApi("Franchise outlet workspace");
   return apiRequest<FranchiseOutletWorkspace>("/api/franchise/outlet/workspace");
+}
+
+export async function fetchFranchiseOutletHqSupplier(): Promise<{ id: string; name: string }> {
+  requireLiveApi("Franchise HQ supplier");
+  return apiRequest<{ id: string; name: string }>("/api/franchise/outlet/hq-supplier");
 }
 
 export async function fetchCommissionRunById(id: string): Promise<CommissionRunRow | null> {
