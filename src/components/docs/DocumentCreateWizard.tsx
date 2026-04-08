@@ -76,6 +76,7 @@ import {
 } from "@/lib/api/document-drafts";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
+import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 
 const schema = z.object({
   date: z.string().min(1, "Date is required"),
@@ -146,11 +147,13 @@ function RenderField({
   form,
   options,
   selectedPartyOption,
+  onCreateNewCustomer,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
   options?: LookupOption[];
   selectedPartyOption?: { id: string; label: string; description?: string } | null;
+  onCreateNewCustomer?: (searchQuery: string) => void;
 }) {
   const key = fieldIdToKey(field.id);
   const isDate = field.type === "date";
@@ -191,6 +194,8 @@ function RenderField({
           searchPlaceholder="Type name, code, phone, or email"
           emptyMessage={`No ${field.label.toLowerCase()}s found.`}
           recentStorageKey={role === "customer" ? "lookup:recent-customers" : "lookup:recent-suppliers"}
+          onCreateNew={role === "customer" ? onCreateNewCustomer : undefined}
+          createNewLabel="Add new customer"
         />
         {form.formState.errors[key] && (
           <p className="text-sm text-destructive">
@@ -308,7 +313,8 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
 
-  const [step, setStep] = React.useState(1);
+  const isHqDoc = orgRole === "FRANCHISEE" && (type === "purchase-order" || type === "purchase-request");
+  const [step, setStep] = React.useState(isHqDoc ? 2 : 1);
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
@@ -337,6 +343,8 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
     type === "grn" && initialPoId ? initialPoId : null
   );
   const [linkedPoOption, setLinkedPoOption] = React.useState<PurchaseOrderLookupOption | null>(null);
+  const [showQuickAddCustomer, setShowQuickAddCustomer] = React.useState(false);
+  const [quickAddInitialName, setQuickAddInitialName] = React.useState("");
   const [loadingPo, setLoadingPo] = React.useState(false);
   /** Resolve GRN warehouse after warehouse options load (PO may have branchId but no warehouseId). */
   const pendingGrnWarehouseFromPoRef = React.useRef<{ warehouseId?: string; branchId?: string } | null>(null);
@@ -732,8 +740,15 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
       setLoadingPostingPreview(true);
       setPostingPreview(await previewDocumentPostingApi(type as DocTypeKey, buildDraftPayload()));
     } catch (error) {
-      const msg = (error as Error).message || "Failed to load posting preview.";
-      setPostingPreviewError(msg);
+      const err = error as Error & { status?: number };
+      if (err.status === 403 || err.message?.toLowerCase().includes("forbidden")) {
+        const msg = "You don't have permission to create this document. Sign out and back in, or contact your administrator.";
+        setPostingPreviewError(msg);
+        toast.error(msg);
+      } else {
+        const msg = err.message || "Failed to load posting preview.";
+        setPostingPreviewError(msg);
+      }
       setPostingPreview([]);
     } finally {
       setLoadingPostingPreview(false);
@@ -769,7 +784,12 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
       toast.success(`${label} draft created.`);
       router.push(`/docs/${type}/${result.id}`);
     } catch (error) {
-      toast.error((error as Error).message);
+      const err = error as Error & { status?: number };
+      if (err.status === 403 || err.message?.toLowerCase().includes("forbidden")) {
+        toast.error("You don't have permission to create this document. Sign out and back in, or contact your administrator.");
+      } else {
+        toast.error(err.message || "Failed to create document.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -978,13 +998,22 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
                 </div>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
-                {headerFields.filter((f) => f.type !== "po-search").map((f) => (
+                {headerFields.filter((f) => {
+                  if (f.type === "po-search") return false;
+                  // For franchise outlets, the HQ supplier is auto-set — hide the party picker.
+                  if (isHqDoc && f.id === "party") return false;
+                  return true;
+                }).map((f) => (
                     <RenderField
                       key={f.id}
                       field={f}
                       form={form}
                       options={fieldOptions[f.id]}
                       selectedPartyOption={selectedPartyOption}
+                      onCreateNewCustomer={(query) => {
+                        setQuickAddInitialName(query);
+                        setShowQuickAddCustomer(true);
+                      }}
                     />
                 ))}
               </div>
@@ -1319,6 +1348,27 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
           </div>
         </div>
       )}
+
+      {/* Quick-add customer sheet — available from any customer field in the document wizard */}
+      <QuickAddCustomerSheet
+        open={showQuickAddCustomer}
+        onOpenChange={setShowQuickAddCustomer}
+        initialName={quickAddInitialName}
+        onSuccess={(newCustomer) => {
+          form.setValue("party", newCustomer.id);
+          setSelectedPartyDetail({
+            id: newCustomer.id,
+            name: newCustomer.name,
+            code: newCustomer.code,
+            type: "customer",
+            roles: newCustomer.roles ?? ["customer"],
+            customerType: newCustomer.customerType,
+            email: newCustomer.email,
+            phone: newCustomer.phone,
+            status: newCustomer.status ?? "ACTIVE",
+          });
+        }}
+      />
     </div>
   );
 }

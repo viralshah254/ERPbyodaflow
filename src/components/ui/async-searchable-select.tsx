@@ -53,6 +53,14 @@ interface AsyncSearchableSelectProps {
   portalContainer?: HTMLElement | null;
   recentStorageKey?: string;
   recentItemsLabel?: string;
+  /**
+   * When provided, a sticky "＋ [createNewLabel]" button appears at the bottom of the dropdown.
+   * Called with the current search query so the caller can pre-fill a creation form.
+   * Closes the dropdown before calling the handler.
+   */
+  onCreateNew?: (searchQuery: string) => void;
+  /** Label for the create-new button. Defaults to "Add new". */
+  createNewLabel?: string;
 }
 
 export function AsyncSearchableSelect({
@@ -76,6 +84,8 @@ export function AsyncSearchableSelect({
   portalContainer = null,
   recentStorageKey,
   recentItemsLabel = "Recent",
+  onCreateNew,
+  createNewLabel = "Add new",
 }: AsyncSearchableSelectProps) {
   const orgId = useAuthStore((s) => s.org?.orgId);
   // Scope recent items per org so selections from one org never bleed into another
@@ -424,6 +434,21 @@ export function AsyncSearchableSelect({
           ))
         )}
       </div>
+      {onCreateNew ? (
+        <button
+          type="button"
+          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-primary hover:bg-primary/10 border-t border-border/50"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+            onCreateNew(query.trim());
+          }}
+        >
+          <Icons.Plus className="h-4 w-4 shrink-0" />
+          {createNewLabel}
+        </button>
+      ) : null}
     </>
   );
 
@@ -469,8 +494,9 @@ export function AsyncSearchableSelect({
         <span
           className={cn(
             "text-left flex-1 min-w-0",
-            wrapLabels ? "whitespace-normal break-words" : "truncate"
+            wrapLabels ? "whitespace-normal break-words line-clamp-2" : "truncate"
           )}
+          title={wrapLabels ? (effectiveSelected?.label ?? undefined) : undefined}
         >
           {effectiveSelected?.label ?? placeholder}
         </span>

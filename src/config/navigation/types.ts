@@ -11,6 +11,8 @@ export interface NavItemConfig {
   requiresFlags?: FeatureFlagKey[];
   requiresOrgTypes?: TemplateOrgType[];
   requiresPermissions?: string[];
+  /** Restricts this nav item to a specific org role (e.g. "FRANCHISOR", "FRANCHISEE"). */
+  requiresOrgRole?: string;
   children?: NavItemConfig[];
   badge?: { type: "count" | "text"; value: string };
   /** Terminology key for label override when t() is used */

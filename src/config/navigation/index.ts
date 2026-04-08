@@ -33,6 +33,10 @@ export interface BuildVisibleNavInput {
   terminology: TerminologyOverrides;
   user: User | null;
   permissions: string[];
+  /** Current org role (e.g. "STANDARD", "FRANCHISOR", "FRANCHISEE") for role-gated nav items. */
+  orgRole?: string;
+  /** When true, only sections listed in defaultNav are rendered; no extra sections are appended. */
+  strictSections?: boolean;
 }
 
 function hasRuntimePermission(permissions: string[], required: string): boolean {
@@ -57,6 +61,7 @@ function itemPasses(item: NavItemConfig, input: BuildVisibleNavInput): boolean {
     const hasPermission = item.requiresPermissions.some((perm) => hasRuntimePermission(input.permissions, perm));
     if (!hasPermission) return false;
   }
+  if (item.requiresOrgRole && input.orgRole !== item.requiresOrgRole) return false;
   return true;
 }
 
@@ -95,13 +100,16 @@ function resolveItems(items: NavItemConfig[], input: BuildVisibleNavInput): Reso
 /** Build visible nav sections with module/flag/orgType/permission gating applied. */
 export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection[] {
   const fullSectionKeys = NAV_SECTIONS_CONFIG.map((s) => s.key);
-  // Include every section from config; use defaultNav only for ordering (sections in defaultNav first, then the rest in config order)
   const fullSectionKeysStr = fullSectionKeys as readonly string[];
+  // When strictSections is true (e.g. franchisee persona), only include sections listed in defaultNav.
+  // Otherwise, append all remaining sections after the defaultNav ones (legacy behaviour).
   let order: string[] = input.defaultNav.length
-    ? [
-        ...input.defaultNav.filter((k) => fullSectionKeysStr.includes(k)),
-        ...fullSectionKeys.filter((k) => !input.defaultNav.includes(k)),
-      ]
+    ? input.strictSections
+      ? input.defaultNav.filter((k) => fullSectionKeysStr.includes(k))
+      : [
+          ...input.defaultNav.filter((k) => fullSectionKeysStr.includes(k)),
+          ...fullSectionKeys.filter((k) => !input.defaultNav.includes(k)),
+        ]
     : [...fullSectionKeys];
   // Core (Dashboard, Control Tower, etc.) first when dashboard module is enabled
   if (input.enabledModules.includes("dashboard")) {

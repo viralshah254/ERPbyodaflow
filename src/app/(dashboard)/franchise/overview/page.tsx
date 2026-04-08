@@ -47,8 +47,12 @@ type FranchiseOverviewRow = {
 
 function FranchiseeOutletOverview() {
   const permissions = useAuthStore((s) => s.permissions);
+  const orgRole = useOrgContextStore((s) => s.orgRole);
+  // Always allow franchisee orgs to add branches; also allow users with explicit branch/admin permissions.
   const canManageBranches =
-    permissions.includes("settings.branches.write") || permissions.includes("admin.settings");
+    orgRole === "FRANCHISEE" ||
+    permissions.includes("settings.branches.write") ||
+    permissions.includes("admin.settings");
 
   const [branches, setBranches] = React.useState<BranchRow[]>([]);
   const [workspace, setWorkspace] = React.useState<Awaited<ReturnType<typeof fetchFranchiseOutletWorkspace>> | null>(null);
@@ -60,13 +64,14 @@ function FranchiseeOutletOverview() {
 
   const load = React.useCallback(() => {
     setLoading(true);
-    Promise.all([fetchBranchesApi(), fetchFranchiseOutletWorkspace()])
-      .then(([b, w]) => {
-        setBranches(b);
-        setWorkspace(w);
-      })
+    // Load workspace and branches independently so one failure doesn't block the other.
+    fetchFranchiseOutletWorkspace()
+      .then((w) => setWorkspace(w))
+      .catch(() => {});
+    fetchBranchesApi()
+      .then((b) => setBranches(b))
       .catch(() => {
-        toast.error("Could not load outlet overview.");
+        toast.error("Could not load branches.");
       })
       .finally(() => setLoading(false));
   }, []);

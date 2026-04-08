@@ -505,7 +505,7 @@ export function DocumentLineEditor({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[min(100%,24rem)] w-[36%]">Product</TableHead>
+                  <TableHead className="min-w-[10rem] sm:min-w-[16rem] w-[36%]">Product</TableHead>
                   <TableHead>Variant</TableHead>
                   <TableHead>UOM</TableHead>
                   <TableHead className="w-28">
@@ -560,7 +560,7 @@ export function DocumentLineEditor({
                   return (
                   <TableRow key={l.id}>
                     <TableCell>
-                      <div className="min-w-[min(100%,18rem)] w-full max-w-[min(100%,42rem)]">
+                      <div className="min-w-[8rem] sm:min-w-[14rem] w-full max-w-[min(100%,36rem)]">
                         <AsyncSearchableSelect
                           value={l.productId}
                           onValueChange={(v) => setProduct(l.id, v)}

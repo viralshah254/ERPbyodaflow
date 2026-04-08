@@ -69,8 +69,9 @@ export function AppSidebar({ className }: AppSidebarProps) {
       : template?.enabledModules?.length
         ? [...new Set([...baseModules, ...template.enabledModules])]
         : baseModules;
+    // docs included so "Document Center" section is available for outlets.
     const personaNav = isFranchiseePersona
-      ? ["core", "sales", "purchasing", "inventory", "franchise", "settings"]
+      ? ["core", "sales", "purchasing", "inventory", "franchise", "docs", "settings"]
       : null;
     const input = {
       orgType,
@@ -80,8 +81,32 @@ export function AppSidebar({ className }: AppSidebarProps) {
       terminology: template?.terminology ?? {},
       user,
       permissions,
+      orgRole: orgRole ?? undefined,
+      // Franchisee: render only the sections explicitly listed above — no extra appending.
+      strictSections: isFranchiseePersona,
     };
-    return buildVisibleNav(input);
+    const sections = buildVisibleNav(input);
+
+    // For franchisees, restrict purchasing and inventory to the relevant outlet items only.
+    if (!isFranchiseePersona) return sections;
+
+    const PURCHASING_ALLOWED = new Set(["purchasing-requests", "purchasing-orders"]);
+    const INVENTORY_ALLOWED = new Set([
+      "inventory-products",
+      "inventory-stock-levels",
+      "inventory-movements",
+      "inventory-receipts",
+    ]);
+
+    return sections.map((section) => {
+      if (section.key === "purchasing") {
+        return { ...section, items: section.items.filter((i) => PURCHASING_ALLOWED.has(i.key)) };
+      }
+      if (section.key === "inventory") {
+        return { ...section, items: section.items.filter((i) => INVENTORY_ALLOWED.has(i.key)) };
+      }
+      return section;
+    }).filter((section) => section.items.length > 0);
   }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]);
 
   const sectionsWithCounts = React.useMemo(

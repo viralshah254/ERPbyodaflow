@@ -301,6 +301,22 @@ export async function fetchPartyCreditSummaryApi(id: string): Promise<PartyCredi
   }
 }
 
+/**
+ * Check whether a customer with the given phone or email already exists in the franchise network.
+ * Returns the shared networkCustomerId if found, allowing the UI to inform the user and optionally
+ * link the new customer to the same identity.
+ */
+export async function checkCustomerIdentityApi(params: {
+  phone?: string;
+  email?: string;
+}): Promise<{ found: false } | { found: true; networkCustomerId: string; matchedOn: { name?: string; phone?: string; email?: string } }> {
+  requireLiveApi("Customer identity check");
+  const query = new URLSearchParams();
+  if (params.phone?.trim()) query.set("phone", params.phone.trim());
+  if (params.email?.trim()) query.set("email", params.email.trim());
+  return apiRequest("/api/parties/check-identity", { params: query });
+}
+
 export async function searchPartyLookupOptionsApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";

@@ -174,6 +174,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "franchise-commission", label: "Commission & Rebates", href: "/franchise/commission", icon: "Percent", moduleKey: "franchise", termKey: "commission", requiresFlags: ["commissionEngine", "franchiseSettlement"], requiresPermissions: ["franchise.commission.read"] },
       { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment", "franchiseNetworkMonitoring"], requiresPermissions: ["inventory.read"] },
       { key: "franchise-comparison", label: "Franchise Comparison", href: "/franchise/comparison", icon: "BarChart3", moduleKey: "franchise", requiresFlags: ["franchiseNetworkAnalytics"], requiresPermissions: ["franchise.analytics.read"] },
+      { key: "franchise-network-customers", label: "Network Customers", href: "/franchise/customers", icon: "Users2", moduleKey: "franchise", requiresFlags: ["franchiseNetworkMonitoring"], requiresPermissions: ["sales.customers.read"], requiresOrgRole: "FRANCHISOR" },
     ],
   },
   {
