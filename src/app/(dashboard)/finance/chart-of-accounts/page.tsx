@@ -22,6 +22,7 @@ import {
   createFinanceAccountApi,
   deleteFinanceAccountApi,
   fetchFinanceAccountsApi,
+  fetchSuggestedFinanceAccountCodeApi,
   updateFinanceAccountApi,
   type FinanceAccount,
 } from "@/lib/api/finance";
@@ -32,6 +33,23 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
+
+/** Client-side fallback when suggested-code API is unavailable (same rules as backend). */
+function suggestNextCodeFromRows(accounts: FinanceAccount[]): string {
+  const codes = new Set(accounts.map((a) => a.code));
+  let maxNum = 0;
+  for (const c of codes) {
+    if (/^\d+$/.test(c)) {
+      const n = parseInt(c, 10);
+      if (n > maxNum) maxNum = n;
+    }
+  }
+  let candidate = maxNum > 0 ? maxNum + 1 : 9000;
+  while (codes.has(String(candidate)) && candidate < 999_999_999) {
+    candidate++;
+  }
+  return String(candidate);
+}
 
 export default function ChartOfAccountsPage() {
   const baseCurrency = useBaseCurrency();
@@ -145,10 +163,23 @@ export default function ChartOfAccountsPage() {
     [accountById]
   );
 
+  const applySuggestedCode = React.useCallback(async () => {
+    try {
+      const { code } = await fetchSuggestedFinanceAccountCodeApi();
+      setForm((prev) => ({ ...prev, code }));
+    } catch {
+      setForm((prev) => ({ ...prev, code: suggestNextCodeFromRows(rows) }));
+    }
+  }, [rows]);
+
   const openCreate = () => {
     setEditing(null);
-    setForm({ code: "", name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "" });
+    const initialCode = suggestNextCodeFromRows(rows);
+    setForm({ code: initialCode, name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "" });
     setCreateOpen(true);
+    void fetchSuggestedFinanceAccountCodeApi()
+      .then(({ code }) => setForm((prev) => ({ ...prev, code })))
+      .catch(() => {});
   };
 
   const openEdit = (row: FinanceAccount) => {
@@ -259,10 +290,23 @@ export default function ChartOfAccountsPage() {
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
-              <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))} placeholder="e.g. 1120" />
+              <div className="flex items-center justify-between gap-2">
+                <Label>{isEditMode ? "Code" : "Code (auto-suggested)"}</Label>
+                {!isEditMode && (
+                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs shrink-0" onClick={() => void applySuggestedCode()}>
+                    Next available code
+                  </Button>
+                )}
+              </div>
+              <Input
+                value={form.code}
+                onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
+                placeholder={isEditMode ? "e.g. 1120" : "Assigned on save if left blank"}
+              />
               <p className="text-xs text-muted-foreground">
-                Unique identifier for this account. Use numeric or alphanumeric codes (e.g. 1000 for Cash, 5000 for Rent Expense).
+                {isEditMode
+                  ? "Unique identifier for this account. Use numeric or alphanumeric codes (e.g. 1000 for Cash, 5000 for Rent Expense)."
+                  : "A unique code is suggested from your existing chart (next free number). You may edit it; duplicates are rejected. Leave blank to let the server assign the next free code on save."}
               </p>
             </div>
             <div className="space-y-2">
@@ -362,15 +406,16 @@ export default function ChartOfAccountsPage() {
                     });
                     toast.success("Account updated.");
                   } else {
-                    await createFinanceAccountApi({
-                      code: form.code,
+                    const trimmedCode = form.code.trim();
+                    const created = await createFinanceAccountApi({
+                      ...(trimmedCode ? { code: trimmedCode } : {}),
                       name: form.name,
                       type: form.type,
                       parentId: form.parentId || undefined,
                       currency: form.currency || undefined,
                       description: form.description.trim() || undefined,
                     });
-                    toast.success("Account created.");
+                    toast.success(`Account created — code ${created.code}.`);
                   }
                   await refresh();
                   setCreateOpen(false);

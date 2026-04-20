@@ -258,16 +258,22 @@ export async function fetchFinanceAccountsApi(): Promise<FinanceAccount[]> {
   return payload.items ?? [];
 }
 
+/** Next unused numeric-style code from the server (for new ledger accounts). */
+export async function fetchSuggestedFinanceAccountCodeApi(): Promise<{ code: string }> {
+  requireLiveApi("Suggested ledger account code");
+  return apiRequest<{ code: string }>("/api/finance/accounts/suggested-code");
+}
+
 export async function createFinanceAccountApi(payload: {
-  code: string;
+  code?: string;
   name: string;
   type: string;
   parentId?: string;
   currency?: string;
   description?: string;
-}): Promise<void> {
+}): Promise<{ id: string; code: string }> {
   requireLiveApi("Finance account creation");
-  await apiRequest("/api/finance/accounts", {
+  return apiRequest<{ id: string; code: string }>("/api/finance/accounts", {
     method: "POST",
     body: payload,
   });
