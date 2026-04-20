@@ -23,6 +23,11 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -67,6 +72,18 @@ import * as Icons from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface CostBreakdown {
+  currencyConversion: number;
+  permits: number;
+  inboundLogistics: number;
+  otherLanded: number;
+  /** Per landed-cost line outside FX / permits / inbound logistics (from API). */
+  otherLandedLines?: Array<{ label: string; amountKes: number }>;
+  processing: number;
+  processingLines?: Array<{ label: string; amountKes: number }>;
+  total: number;
+}
+
 type WizardStep = 0 | 1 | 2 | 3 | 4; // 0=FX, 1=Permits, 2=Logistics, 3=Processing costs, 4=Summary
 
 interface CostLine {
@@ -105,6 +122,119 @@ const WIZARD_STEPS = [
   { id: 3, label: "Processing costs", icon: Icons.Factory },
   { id: 4, label: "Summary & confirm", icon: Icons.CheckCircle2 },
 ] as const;
+
+// ─── Cost breakdown popover ───────────────────────────────────────────────────
+
+function CostBreakdownPopover({
+  amount,
+  breakdown,
+  goodsValue,
+  currency,
+  isFinal = false,
+}: {
+  amount: number;
+  breakdown?: CostBreakdown;
+  goodsValue: number | null;
+  currency: string;
+  isFinal?: boolean;
+}) {
+  const fmt = (n: number) =>
+    n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const rows: Array<{ label: string; value: number; icon: React.ReactNode }> = [];
+  if (isFinal && goodsValue !== null && goodsValue > 0) {
+    rows.push({
+      label: `Goods value (${currency})`,
+      value: goodsValue,
+      icon: <Icons.ShoppingBag className="h-3.5 w-3.5 text-muted-foreground" />,
+    });
+  }
+  if (breakdown) {
+    if (breakdown.currencyConversion > 0)
+      rows.push({ label: "FX conversion", value: breakdown.currencyConversion, icon: <Icons.TrendingUp className="h-3.5 w-3.5 text-blue-500" /> });
+    if (breakdown.permits > 0)
+      rows.push({ label: "Permits & customs", value: breakdown.permits, icon: <Icons.FileCheck className="h-3.5 w-3.5 text-amber-500" /> });
+    if (breakdown.inboundLogistics > 0)
+      rows.push({ label: "Inbound logistics", value: breakdown.inboundLogistics, icon: <Icons.Truck className="h-3.5 w-3.5 text-emerald-500" /> });
+    if (breakdown.otherLanded > 0) {
+      const detail = breakdown.otherLandedLines?.filter((l) => l.amountKes > 0) ?? [];
+      if (detail.length > 0) {
+        for (const line of detail) {
+          rows.push({
+            label: line.label,
+            value: line.amountKes,
+            icon: <Icons.PackagePlus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />,
+          });
+        }
+      } else {
+        rows.push({
+          label: "Other landed costs",
+          value: breakdown.otherLanded,
+          icon: <Icons.PackagePlus className="h-3.5 w-3.5 text-muted-foreground" />,
+        });
+      }
+    }
+    if (breakdown.processing > 0) {
+      const pDetail = breakdown.processingLines?.filter((l) => l.amountKes > 0) ?? [];
+      if (pDetail.length > 0) {
+        for (const line of pDetail) {
+          rows.push({
+            label: line.label,
+            value: line.amountKes,
+            icon: <Icons.Factory className="h-3.5 w-3.5 text-violet-500 shrink-0" />,
+          });
+        }
+      } else {
+        rows.push({
+          label: "Processing & packing",
+          value: breakdown.processing,
+          icon: <Icons.Factory className="h-3.5 w-3.5 text-violet-500" />,
+        });
+      }
+    }
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "tabular-nums underline decoration-dotted underline-offset-2 cursor-pointer hover:no-underline transition-all",
+            isFinal ? "font-semibold text-primary" : "text-foreground"
+          )}
+        >
+          KES {fmt(amount)}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(22rem,calc(100vw-2rem))] max-w-[22rem] p-0 text-sm" align="end">
+        <div className="px-3 py-2 border-b bg-muted/40 rounded-t-md">
+          <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+            {isFinal ? "Final batch cost breakdown" : "Other costs breakdown"}
+          </p>
+        </div>
+        {rows.length === 0 ? (
+          <p className="px-3 py-3 text-muted-foreground text-xs">No breakdown available.</p>
+        ) : (
+          <div className="divide-y">
+            {rows.map((row, i) => (
+              <div key={i} className="flex items-start justify-between px-3 py-2 gap-3">
+                <div className="flex items-start gap-2 text-muted-foreground min-w-0">
+                  {row.icon}
+                  <span className="text-xs leading-snug break-words">{row.label}</span>
+                </div>
+                <span className="tabular-nums font-mono text-xs font-medium shrink-0">KES {fmt(row.value)}</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 font-semibold rounded-b-md">
+              <span className="text-xs">{isFinal ? "Final batch cost" : "Total other costs"}</span>
+              <span className="tabular-nums font-mono text-xs text-primary">KES {fmt(amount)}</span>
+            </div>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // ─── Wizard step indicator ────────────────────────────────────────────────────
 
@@ -1547,10 +1677,18 @@ export default function InventoryCostingPage() {
     () => valuationSummary.filter((row) => warehouseFilter === "ALL" || row.warehouseId === warehouseFilter),
     [valuationSummary, warehouseFilter]
   );
-  const warehouses = React.useMemo(
-    () => Array.from(new Set(summary.map((s) => s.warehouse))),
-    [summary]
-  );
+  /** Unique warehouses for the filter; value is warehouseId (Select used to use display name and broke the filter). */
+  const warehouseOptions = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: { warehouseId: string; label: string }[] = [];
+    for (const s of valuationSummary) {
+      const id = s.warehouseId;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ warehouseId: id, label: s.warehouse || id });
+    }
+    return out;
+  }, [valuationSummary]);
 
   const searchParams = useSearchParams();
   // Accept either ?sourceId= or ?grnId= (GRN list uses grnId, detail uses sourceId)
@@ -1737,8 +1875,10 @@ export default function InventoryCostingPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All warehouses</SelectItem>
-                {warehouses.map((w) => (
-                  <SelectItem key={w} value={w}>{w}</SelectItem>
+                {warehouseOptions.map((opt) => (
+                  <SelectItem key={opt.warehouseId} value={opt.warehouseId}>
+                    {opt.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1821,7 +1961,11 @@ export default function InventoryCostingPage() {
                     <TableCell className="text-right tabular-nums">
                       {(() => {
                         const oc = (s as { otherCostsKes?: number }).otherCostsKes ?? 0;
-                        return oc > 0 ? formatMoney(oc, "KES") : <span className="text-muted-foreground">—</span>;
+                        const bd = (s as { costBreakdown?: CostBreakdown }).costBreakdown;
+                        if (oc <= 0) return <span className="text-muted-foreground">—</span>;
+                        return (
+                          <CostBreakdownPopover amount={oc} breakdown={bd} goodsValue={null} currency={s.currency ?? "KES"} />
+                        );
                       })()}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold">
@@ -1830,7 +1974,10 @@ export default function InventoryCostingPage() {
                         const goodsVal = (s as { totalAmount?: number; total?: number }).totalAmount ?? (s as { total?: number }).total ?? 0;
                         if (oc === 0 && !s.isAllocated) return <span className="text-muted-foreground">—</span>;
                         const fbc = (s as { finalBatchCostKes?: number }).finalBatchCostKes ?? goodsVal + oc;
-                        return <span className="text-primary">{formatMoney(fbc, "KES")}</span>;
+                        const bd = (s as { costBreakdown?: CostBreakdown }).costBreakdown;
+                        return (
+                          <CostBreakdownPopover amount={fbc} breakdown={bd} goodsValue={goodsVal} currency={s.currency ?? "KES"} isFinal />
+                        );
                       })()}
                     </TableCell>
                     <TableCell>

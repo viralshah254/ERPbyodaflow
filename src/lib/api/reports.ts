@@ -250,6 +250,31 @@ export async function fetchBatchCostingReportApi(input?: {
   );
 }
 
+export type BatchCostSummary = {
+  grnId: string;
+  grnNumber: string;
+  poNumber?: string;
+  receivedKg: number;
+  purchaseCurrency: string;
+  fxRate: number;
+  totalLandedCostKes: number;
+  perKg: number | null;
+  hasLandedCostAllocation: boolean;
+  hasProcessingCostAllocation: boolean;
+  productLines: Array<{
+    productId: string;
+    name: string;
+    weightKg: number;
+  }>;
+};
+
+export async function fetchBatchCostSummaryApi(grnId: string): Promise<BatchCostSummary> {
+  requireLiveApi("Batch cost summary");
+  return apiRequest<BatchCostSummary>(
+    `/api/inventory/batch-cost-summary?grnId=${encodeURIComponent(grnId)}`
+  );
+}
+
 export function downloadBatchCostingCsvApi(
   input: { dateFrom?: string; dateTo?: string; margin?: number },
   onError: (message: string) => void

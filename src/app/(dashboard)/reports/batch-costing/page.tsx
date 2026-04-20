@@ -25,9 +25,32 @@ import {
 } from "@/components/ui/tooltip";
 import {
   fetchBatchCostingReportApi,
+  fetchBatchCostSummaryApi,
   downloadBatchCostingCsvApi,
   type BatchCostingRow,
+  type BatchCostSummary,
 } from "@/lib/api/reports";
+import {
+  fetchPriceListsApi,
+  fetchPriceListByIdApi,
+  updatePriceListApi,
+  type PriceListDetail,
+} from "@/lib/api/pricing";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -65,6 +88,76 @@ export default function BatchCostingReportPage() {
   const [rows, setRows] = React.useState<BatchCostingRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [hasLoaded, setHasLoaded] = React.useState(false);
+
+  // Publish-to-price-list state
+  const [publishRow, setPublishRow] = React.useState<BatchCostingRow | null>(null);
+  const [publishSummary, setPublishSummary] = React.useState<BatchCostSummary | null>(null);
+  const [priceLists, setPriceLists] = React.useState<PriceListDetail[]>([]);
+  const [selectedListId, setSelectedListId] = React.useState("");
+  const [publishPrices, setPublishPrices] = React.useState<Record<string, string>>({});
+  const [publishLoading, setPublishLoading] = React.useState(false);
+  const [publishSaving, setPublishSaving] = React.useState(false);
+
+  const openPublish = React.useCallback(async (row: BatchCostingRow) => {
+    setPublishRow(row);
+    setSelectedListId("");
+    setPublishSummary(null);
+    setPublishPrices({});
+    setPublishLoading(true);
+    try {
+      const [summary, lists] = await Promise.all([
+        fetchBatchCostSummaryApi(row.grnId),
+        fetchPriceListsApi(),
+      ]);
+      setPublishSummary(summary);
+      setPriceLists(lists);
+      const defaultPrice = row.recommendedSellPricePerKg != null
+        ? String(row.recommendedSellPricePerKg.toFixed(2))
+        : "";
+      const prices: Record<string, string> = {};
+      for (const line of summary.productLines) {
+        prices[line.productId] = defaultPrice;
+      }
+      setPublishPrices(prices);
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to load batch details.");
+      setPublishRow(null);
+    } finally {
+      setPublishLoading(false);
+    }
+  }, []);
+
+  const closePublish = React.useCallback(() => {
+    setPublishRow(null);
+    setPublishSummary(null);
+  }, []);
+
+  const savePublish = React.useCallback(async () => {
+    if (!selectedListId || !publishSummary) return;
+    setPublishSaving(true);
+    try {
+      const existing = await fetchPriceListByIdApi(selectedListId);
+      const mergedItems = [...(existing?.items ?? [])];
+      for (const line of publishSummary.productLines) {
+        const price = parseFloat(publishPrices[line.productId] ?? "");
+        if (isNaN(price) || price <= 0) continue;
+        const idx = mergedItems.findIndex((it) => it.productId === line.productId);
+        if (idx >= 0) {
+          mergedItems[idx] = { ...mergedItems[idx], price };
+        } else {
+          mergedItems.push({ productId: line.productId, price });
+        }
+      }
+      await updatePriceListApi(selectedListId, { items: mergedItems });
+      const listName = priceLists.find((l) => l.id === selectedListId)?.name ?? "price list";
+      toast.success(`Prices published to "${listName}".`);
+      closePublish();
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to publish prices.");
+    } finally {
+      setPublishSaving(false);
+    }
+  }, [selectedListId, publishSummary, publishPrices, priceLists, closePublish]);
 
   const load = React.useCallback(async () => {
     if (!isApiConfigured()) {
@@ -301,6 +394,7 @@ export default function BatchCostingReportPage() {
                       </TooltipProvider>
                     </TableHead>
                     <TableHead className="min-w-24">Data</TableHead>
+                    <TableHead className="min-w-28">Publish</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -377,6 +471,18 @@ export default function BatchCostingReportPage() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7"
+                          disabled={!isApiConfigured() || row.recommendedSellPricePerKg == null}
+                          onClick={() => openPublish(row)}
+                        >
+                          <Icons.Send className="h-3 w-3 mr-1" />
+                          Set price
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -421,6 +527,151 @@ export default function BatchCostingReportPage() {
           </Card>
         )}
       </div>
+
+      {/* Publish to price list sheet */}
+      <Sheet open={!!publishRow} onOpenChange={(open) => { if (!open) closePublish(); }}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Set selling price from batch cost</SheetTitle>
+            <SheetDescription>
+              {publishRow && (
+                <>
+                  Batch <span className="font-medium">{publishRow.grnNumber ?? publishRow.grnId.slice(0, 8)}</span>
+                  {" · "}Cost/kg:{" "}
+                  <span className="font-medium">
+                    KES {publishRow.recommendedSellPricePerKg != null
+                      ? fmt(publishRow.recommendedSellPricePerKg)
+                      : fmt(publishRow.costPerKgRaw)}
+                  </span>
+                  {" "}(incl. {margin}% margin)
+                </>
+              )}
+            </SheetDescription>
+          </SheetHeader>
+
+          {publishLoading ? (
+            <div className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Icons.Loader2 className="h-4 w-4 animate-spin" />
+              Loading batch details…
+            </div>
+          ) : publishSummary ? (
+            <div className="mt-6 space-y-6">
+              {/* Cost summary */}
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total landed cost</span>
+                  <span className="font-medium tabular-nums">KES {fmt(publishSummary.totalLandedCostKes, 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Received weight</span>
+                  <span className="tabular-nums">{fmt(publishSummary.receivedKg, 1)} kg</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Cost / kg</span>
+                  <span className="tabular-nums">KES {publishSummary.perKg != null ? fmt(publishSummary.perKg) : "—"}</span>
+                </div>
+              </div>
+
+              {/* Target price list */}
+              <div className="space-y-1.5">
+                <Label>Target price list</Label>
+                <Select value={selectedListId} onValueChange={setSelectedListId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a price list…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {priceLists.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name}
+                        {l.currency && l.currency !== "KES" && (
+                          <span className="ml-1 text-xs text-muted-foreground">({l.currency})</span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {priceLists.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No price lists found. Create one in <Link href="/pricing/price-lists" className="text-primary hover:underline">Price Lists</Link>.</p>
+                )}
+              </div>
+
+              {/* Per-product prices */}
+              {publishSummary.productLines.length > 0 ? (
+                <div className="space-y-2">
+                  <Label>Prices to set (KES / kg)</Label>
+                  <div className="rounded-md border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Product</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground w-36">Sell price (KES)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {publishSummary.productLines.map((line) => (
+                          <tr key={line.productId} className="border-t">
+                            <td className="px-3 py-2">
+                              <div className="font-medium">{line.name}</div>
+                              {line.weightKg > 0 && (
+                                <div className="text-xs text-muted-foreground">{fmt(line.weightKg, 1)} kg</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                className="h-8 text-right tabular-nums"
+                                value={publishPrices[line.productId] ?? ""}
+                                onChange={(e) =>
+                                  setPublishPrices((prev) => ({ ...prev, [line.productId]: e.target.value }))
+                                }
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pre-filled from recommended sell price. Existing items in the price list will be updated; new products will be added.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No products with IDs found on this GRN.</p>
+              )}
+            </div>
+          ) : null}
+
+          <SheetFooter className="mt-6 gap-2">
+            <Button variant="outline" onClick={closePublish} disabled={publishSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={savePublish}
+              disabled={
+                publishSaving ||
+                publishLoading ||
+                !selectedListId ||
+                !publishSummary ||
+                publishSummary.productLines.length === 0
+              }
+            >
+              {publishSaving ? (
+                <>
+                  <Icons.Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Icons.Check className="h-4 w-4 mr-2" />
+                  Publish prices
+                </>
+              )}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }
