@@ -517,9 +517,18 @@ export default function BatchCostingReportPage() {
                 <div>
                   <p className="font-medium">Missing data?</p>
                   <ul className="mt-1 text-muted-foreground space-y-0.5 text-xs">
-                    <li>No "Landed" badge → add a Landed Cost Allocation in <Link href="/inventory/costing" className="text-primary hover:underline">Costing</Link></li>
-                    <li>No "Processing" badge → add a Processing Cost in <Link href="/inventory/costing" className="text-primary hover:underline">Costing</Link></li>
-                    <li>No "Yield" badge → record a yield entry in <Link href="/manufacturing/yield" className="text-primary hover:underline">Manufacturing → Yield</Link></li>
+                    <li>
+                      {'No "Landed" badge → add a Landed Cost Allocation in '}
+                      <Link href="/inventory/costing" className="text-primary hover:underline">Costing</Link>
+                    </li>
+                    <li>
+                      {'No "Processing" badge → add a Processing Cost in '}
+                      <Link href="/inventory/costing" className="text-primary hover:underline">Costing</Link>
+                    </li>
+                    <li>
+                      {'No "Yield" badge → record a yield entry in '}
+                      <Link href="/manufacturing/yield" className="text-primary hover:underline">Manufacturing → Yield</Link>
+                    </li>
                   </ul>
                 </div>
               </div>

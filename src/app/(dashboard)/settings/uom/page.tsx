@@ -200,7 +200,7 @@ export default function UomSettingsPage() {
                   {uoms.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-6 text-sm">
-                        No UOMs yet. Click "Add UOM" to get started.
+                        {"No UOMs yet. Click \"Add UOM\" to get started."}
                       </TableCell>
                     </TableRow>
                   )}

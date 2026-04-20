@@ -67,7 +67,7 @@ export default function CustomersPage() {
         customer.email.toLowerCase().includes(searchQuery.toLowerCase())
       );
     });
-  }, [searchQuery]);
+  }, [searchQuery, customers]);
 
   const columns = [
     {

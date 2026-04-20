@@ -93,17 +93,6 @@ export function CommandPalette() {
   const filtered = React.useMemo(() => filterItems(query, allItems), [query, allItems]);
   const sorted = React.useMemo(() => sortByGroup(filtered), [filtered]);
 
-  const askAiItem: AskAiItem | null =
-    copilotEnabled && query.trim()
-      ? {
-          id: "ask-ai",
-          group: "ask",
-          label: "Ask AI",
-          prompt: query.trim(),
-          intentPreview: getIntentPreview(query),
-        }
-      : null;
-
   React.useEffect(() => {
     let active = true;
     if (!query.trim()) {
@@ -136,10 +125,20 @@ export function CommandPalette() {
   }, [query]);
 
   const displayList = React.useMemo(() => {
+    const askAiItem: AskAiItem | null =
+      copilotEnabled && query.trim()
+        ? {
+            id: "ask-ai",
+            group: "ask",
+            label: "Ask AI",
+            prompt: query.trim(),
+            intentPreview: getIntentPreview(query),
+          }
+        : null;
     const base = searchResults.length > 0 ? [...searchResults, ...sorted] : sorted;
     if (!askAiItem) return base;
     return [askAiItem, ...base];
-  }, [askAiItem, sorted, searchResults]);
+  }, [copilotEnabled, query, sorted, searchResults]);
 
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

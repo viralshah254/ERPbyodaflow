@@ -12,7 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
-import { createWarehouseLocation, fetchWarehouseLocations, updateWarehouseLocation, type WarehouseLocationRow } from "@/lib/api/warehouse-locations";
+import {
+  createWarehouseLocation,
+  fetchWarehouseLocations,
+  updateWarehouseLocation,
+  type WarehouseLocationRow,
+} from "@/lib/api/warehouse-locations";
+
+type BinLocationTableRow = WarehouseLocationRow & { onHand: number };
 import { fetchLocationStock, type WarehouseLocationStockRow } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -78,13 +85,13 @@ export default function BinLocationsPage() {
 
   const columns = React.useMemo(
     () => [
-      { id: "code", header: "Code", accessor: (r: (typeof filtered)[number]) => <span className="font-medium">{r.code ?? "—"}</span>, sticky: true },
-      { id: "name", header: "Name", accessor: "name" as keyof (typeof filtered)[number] },
-      { id: "type", header: "Type", accessor: "type" as keyof (typeof filtered)[number] },
-      { id: "status", header: "Status", accessor: (r: (typeof filtered)[number]) => r.status ?? "ACTIVE" },
-      { id: "onHand", header: "On hand", accessor: "onHand" as keyof (typeof filtered)[number] },
+      { id: "code", header: "Code", accessor: (r: BinLocationTableRow) => <span className="font-medium">{r.code ?? "—"}</span>, sticky: true },
+      { id: "name", header: "Name", accessor: "name" as keyof BinLocationTableRow },
+      { id: "type", header: "Type", accessor: "type" as keyof BinLocationTableRow },
+      { id: "status", header: "Status", accessor: (r: BinLocationTableRow) => r.status ?? "ACTIVE" },
+      { id: "onHand", header: "On hand", accessor: "onHand" as keyof BinLocationTableRow },
     ],
-    [filtered]
+    []
   );
 
   return (
