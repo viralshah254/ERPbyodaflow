@@ -283,7 +283,6 @@ export default function FranchiseCustomersPage() {
         <PageHeader
           title="Network Customers"
           description="Cross-franchise customer intelligence"
-          icon={<Users2 className="h-5 w-5" />}
         />
         <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
           <AlertTriangle className="h-10 w-10 text-muted-foreground" />
@@ -300,7 +299,6 @@ export default function FranchiseCustomersPage() {
       <PageHeader
         title="Network Customers"
         description="Cross-franchise customer intelligence — view buying patterns and identity across all outlets"
-        icon={<Users2 className="h-5 w-5" />}
       />
 
       {/* Summary strip */}
