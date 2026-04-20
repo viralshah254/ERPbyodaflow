@@ -27,6 +27,7 @@ import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard"
 import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, receiveSubcontractOrder, dispatchSubcontractOrder } from "@/lib/api/cool-catch";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { fetchYieldRecords } from "@/lib/api/yield";
+import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCard";
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -442,6 +443,12 @@ export default function SubcontractOrderDetailPage() {
                 )}
               </CardContent>
             </Card>
+            {order.grnId && (
+              <BatchLandedCostCard
+                grnId={order.grnId}
+                costingHref={`/inventory/costing?grnId=${order.grnId}`}
+              />
+            )}
           </div>
 
           <div className="space-y-6">

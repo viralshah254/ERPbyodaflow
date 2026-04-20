@@ -83,7 +83,9 @@ export function AppSidebar({ className }: AppSidebarProps) {
       permissions,
       orgRole: orgRole ?? undefined,
       // Franchisee: render only the sections explicitly listed above — no extra appending.
-      strictSections: isFranchiseePersona,
+      // Seafood / perishable template: same strict behaviour from template config.
+      strictSections:
+        isFranchiseePersona || template?.strictNavSections === true,
     };
     const sections = buildVisibleNav(input);
 

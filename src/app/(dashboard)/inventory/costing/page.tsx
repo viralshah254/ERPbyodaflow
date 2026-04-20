@@ -700,7 +700,7 @@ function StepProcessingCosts({
         </Button>
         {draftLines.length > 0 && (
           <span className="text-xs text-muted-foreground">
-            Total: KES {total.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+            Total: KES {total.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         )}
       </div>
@@ -988,11 +988,11 @@ function StepSummary({
             {totalWeightKg > 0 && (
               <tr>
                 <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                  Total weight ({totalWeightKg.toLocaleString()} kg)
+                  Total weight ({totalWeightKg.toLocaleString("en-KE")} kg)
                 </td>
                 <td className="px-4 py-2.5" />
                 <td className="px-4 py-2.5 text-right font-semibold text-emerald-600 text-sm">
-                  {costPerKg !== null ? `KES ${costPerKg.toFixed(2)} / kg` : "—"}
+                  {costPerKg !== null ? `KES ${costPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
                 </td>
                 <td className="px-3 py-2.5" />
               </tr>
@@ -1006,8 +1006,8 @@ function StepSummary({
         <div className="rounded-lg border overflow-hidden">
           <div className="bg-muted/50 px-4 py-2.5 flex items-center gap-2">
             <Icons.Scale className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              New cost per kg — {totalWeightKg.toLocaleString()} kg total
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              New cost per kg — {totalWeightKg.toLocaleString("en-KE")} kg total
             </span>
           </div>
           <table className="w-full text-sm">
@@ -1018,7 +1018,7 @@ function StepSummary({
                   {formatMoney(docInKes, "KES")}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums font-mono">
-                  {goodsPerKg !== null ? `KES ${goodsPerKg.toFixed(2)} / kg` : "—"}
+                  {goodsPerKg !== null ? `KES ${goodsPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
                 </td>
               </tr>
               {permitTotal > 0 && (
@@ -1028,7 +1028,7 @@ function StepSummary({
                     {formatMoney(permitTotal, "KES")}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
-                    {permitsPerKg !== null ? `KES ${permitsPerKg.toFixed(2)} / kg` : "—"}
+                    {permitsPerKg !== null ? `KES ${permitsPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
                   </td>
                 </tr>
               )}
@@ -1039,7 +1039,7 @@ function StepSummary({
                     {formatMoney(logisticsTotal, "KES")}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
-                    {logisticsPerKg !== null ? `KES ${logisticsPerKg.toFixed(2)} / kg` : "—"}
+                    {logisticsPerKg !== null ? `KES ${logisticsPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
                   </td>
                 </tr>
               )}
@@ -1050,7 +1050,7 @@ function StepSummary({
                     {formatMoney(processingCostTotal, "KES")}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
-                    {processingPerKg !== null ? `KES ${processingPerKg.toFixed(2)} / kg` : "—"}
+                    {processingPerKg !== null ? `KES ${processingPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
                   </td>
                 </tr>
               )}
@@ -1064,7 +1064,7 @@ function StepSummary({
                   {formatMoney(totalLanded, "KES")}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700 dark:text-emerald-400 text-base">
-                  KES {costPerKg.toFixed(2)} / kg
+                  KES {costPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg
                 </td>
               </tr>
             </tfoot>
@@ -1102,10 +1102,10 @@ function StepSummary({
                 return (
                   <tr key={idx}>
                     <td className="px-4 py-2 text-muted-foreground">{line.productId ?? `Line ${idx + 1}`}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{lineWeight > 0 ? lineWeight.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{lineWeight > 0 ? lineWeight.toLocaleString("en-KE", { maximumFractionDigits: 2 }) : "—"}</td>
                     <td className="px-4 py-2 text-right tabular-nums font-mono">{formatMoney(lineGoods, currency)}</td>
                     <td className="px-4 py-2 text-right tabular-nums font-mono text-amber-700">{landedShare > 0 ? `+${formatMoney(landedShare, "KES")}` : "—"}</td>
-                    <td className="px-4 py-2 text-right tabular-nums font-semibold">{linePerKg !== null ? `KES ${linePerKg.toFixed(2)}` : "—"}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-semibold">{linePerKg !== null ? `KES ${linePerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</td>
                   </tr>
                 );
               })}
@@ -1381,7 +1381,7 @@ function LandedCostWizard({
         landedLines.reduce((s, l) => s + parseCostLineAmount(l.amount), 0) +
         processingLinesValid.reduce((s, l) => s + l.amount, 0);
       toast.success(
-        `Other costs saved for ${source.number} — KES ${totalOtherCosts.toLocaleString("en-US", { maximumFractionDigits: 2 })} total. Run costing to update valuations.`,
+        `Other costs saved for ${source.number} — KES ${totalOtherCosts.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total. Run costing to update valuations.`,
         { duration: 6000 }
       );
       onDone();
@@ -1748,18 +1748,18 @@ export default function InventoryCostingPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Warehouse</TableHead>
-                  <TableHead>SKU count</TableHead>
-                  <TableHead>Total qty</TableHead>
-                  <TableHead>Total value (KES)</TableHead>
+                  <TableHead className="text-right">SKU count</TableHead>
+                  <TableHead className="text-right">Total qty</TableHead>
+                  <TableHead className="text-right">Total value (KES)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {summary.map((r) => (
                   <TableRow key={r.warehouseId}>
                     <TableCell className="font-medium">{r.warehouse}</TableCell>
-                    <TableCell>{r.skuCount}</TableCell>
-                    <TableCell>{r.totalQty}</TableCell>
-                    <TableCell>{formatMoney(r.totalValue, "KES")}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.skuCount.toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.totalQty.toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatMoney(r.totalValue, "KES")}</TableCell>
                   </TableRow>
                 ))}
                 {summary.length === 0 && (
@@ -1791,7 +1791,9 @@ export default function InventoryCostingPage() {
                   <TableHead>Date</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead>Currency</TableHead>
-                  <TableHead>Goods value</TableHead>
+                  <TableHead className="text-right">Goods value</TableHead>
+                  <TableHead className="text-right">Other costs</TableHead>
+                  <TableHead className="text-right">Final batch cost</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -1810,11 +1812,26 @@ export default function InventoryCostingPage() {
                         <span className="text-muted-foreground">KES</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-right tabular-nums">
                       {formatMoney(
                         (s as { totalAmount?: number; total?: number }).totalAmount ?? (s as { total?: number }).total ?? 0,
                         s.currency ?? "KES"
                       )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {(() => {
+                        const oc = (s as { otherCostsKes?: number }).otherCostsKes ?? 0;
+                        return oc > 0 ? formatMoney(oc, "KES") : <span className="text-muted-foreground">—</span>;
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">
+                      {(() => {
+                        const oc = (s as { otherCostsKes?: number }).otherCostsKes ?? 0;
+                        const goodsVal = (s as { totalAmount?: number; total?: number }).totalAmount ?? (s as { total?: number }).total ?? 0;
+                        if (oc === 0 && !s.isAllocated) return <span className="text-muted-foreground">—</span>;
+                        const fbc = (s as { finalBatchCostKes?: number }).finalBatchCostKes ?? goodsVal + oc;
+                        return <span className="text-primary">{formatMoney(fbc, "KES")}</span>;
+                      })()}
                     </TableCell>
                     <TableCell>
                       {s.isAllocated ? (
@@ -1937,6 +1954,34 @@ export default function InventoryCostingPage() {
               <p className="text-xs text-amber-800">
                 <strong>Admin edit:</strong> This document already has other costs allocated. Saving will replace the existing allocation and re-post the GL entries.
               </p>
+            </div>
+          )}
+
+          {/* Show currently allocated cost summary so users can verify before editing */}
+          {selectedSource?.isAllocated && ((selectedSource as { otherCostsKes?: number }).otherCostsKes ?? 0) > 0 && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2.5 mb-3 space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Icons.Receipt className="h-3.5 w-3.5" />
+                Currently allocated for {selectedSource.number}
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <span className="text-muted-foreground">Goods value</span>
+                <span className="text-right tabular-nums font-medium">
+                  {formatMoney(
+                    (selectedSource as { totalAmount?: number; total?: number }).totalAmount ?? (selectedSource as { total?: number }).total ?? 0,
+                    selectedSource.currency ?? "KES"
+                  )}
+                </span>
+                <span className="text-muted-foreground">Other costs (KES)</span>
+                <span className="text-right tabular-nums font-medium">
+                  {formatMoney((selectedSource as { otherCostsKes?: number }).otherCostsKes ?? 0, "KES")}
+                </span>
+                <span className="font-semibold">Final batch cost</span>
+                <span className="text-right tabular-nums font-semibold text-primary">
+                  {formatMoney((selectedSource as { finalBatchCostKes?: number }).finalBatchCostKes ?? ((selectedSource as { totalAmount?: number; total?: number }).totalAmount ?? 0) + ((selectedSource as { otherCostsKes?: number }).otherCostsKes ?? 0), "KES")}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Editing will overwrite these amounts.</p>
             </div>
           )}
 

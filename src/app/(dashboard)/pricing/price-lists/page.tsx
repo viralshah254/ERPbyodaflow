@@ -147,6 +147,26 @@ function PriceListsContent() {
         }
       />
       <div className="p-6 space-y-6">
+        {/* Cost basis banner */}
+        <div className="flex items-center gap-3 rounded-md border bg-amber-50 border-amber-200 px-4 py-2.5 text-sm">
+          <Icons.Calculator className="h-4 w-4 text-amber-600 shrink-0" />
+          <span className="text-amber-800">
+            <strong>Set prices based on landed batch cost.</strong> Know your cost per kg before entering prices here.
+          </span>
+          <Button variant="outline" size="sm" className="ml-auto shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100" asChild>
+            <Link href="/reports/batch-costing">
+              <Icons.BarChart3 className="h-3.5 w-3.5 mr-1.5" />
+              View batch cost report
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100" asChild>
+            <Link href="/inventory/costing">
+              <Icons.Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              Batch allocation
+            </Link>
+          </Button>
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Lists</CardTitle>

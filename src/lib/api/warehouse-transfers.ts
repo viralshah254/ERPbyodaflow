@@ -37,6 +37,9 @@ export async function createTransfer(body: {
   toWarehouseId: string;
   reference?: string;
   lines: { sku: string; productName?: string; quantity: number; unit?: string }[];
+  transferCostKes?: number;
+  costNotes?: string;
+  sourceGrnId?: string;
 }): Promise<{ id: string }> {
   requireLiveApi("Create warehouse transfer");
   return apiRequest<{ id: string }>("/api/warehouse/transfers", {

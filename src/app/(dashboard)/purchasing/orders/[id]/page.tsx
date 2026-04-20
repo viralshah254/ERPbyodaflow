@@ -18,6 +18,7 @@ import { fetchPurchaseOrderById, approvePurchaseOrders } from "@/lib/api/purchas
 import { requestDocumentApprovalApi } from "@/lib/api/documents";
 import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
 import { fetchCashWeightAuditLines, fetchCashDisbursements, buildCashWeightAudit, fetchSubcontractOrders } from "@/lib/api/cool-catch";
+import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCard";
 import type { SubcontractOrderRow } from "@/lib/api/cool-catch";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/money";
@@ -355,26 +356,34 @@ export default function PurchaseOrderDetailPage() {
         actions={
           <div className="flex gap-2 flex-wrap">
             {order.status === "DRAFT" && (
-              <Button
-                size="sm"
-                disabled={actionLoading}
-                onClick={async () => {
-                  setActionLoading(true);
-                  try {
-                    await requestDocumentApprovalApi("purchase-order", id);
-                    toast.success("Submitted for approval.");
-                    const refreshed = await fetchPurchaseOrderById(id);
-                    setOrder(refreshed);
-                  } catch {
-                    toast.error("Failed to submit for approval.");
-                  } finally {
-                    setActionLoading(false);
-                  }
-                }}
-              >
-                {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
-                Submit for approval
-              </Button>
+              <>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/docs/purchase-order/${id}`}>
+                    <Icons.Pencil className="mr-2 h-4 w-4" />
+                    Edit PO
+                  </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    setActionLoading(true);
+                    try {
+                      await requestDocumentApprovalApi("purchase-order", id);
+                      toast.success("Submitted for approval.");
+                      const refreshed = await fetchPurchaseOrderById(id);
+                      setOrder(refreshed);
+                    } catch {
+                      toast.error("Failed to submit for approval.");
+                    } finally {
+                      setActionLoading(false);
+                    }
+                  }}
+                >
+                  {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
+                  Submit for approval
+                </Button>
+              </>
             )}
             {order.status === "PENDING_APPROVAL" && (
               <Button
@@ -449,8 +458,14 @@ export default function PurchaseOrderDetailPage() {
             <CardContent className="py-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  This PO is a draft — submit it for approval before creating a GRN.
+                  This PO is a draft — edit the lines then submit for approval before creating a GRN.
                 </span>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/docs/purchase-order/${id}`}>
+                    <Icons.Pencil className="mr-1.5 h-3.5 w-3.5" />
+                    Edit PO
+                  </Link>
+                </Button>
                 <Button
                   size="sm"
                   variant="default"
@@ -644,6 +659,14 @@ export default function PurchaseOrderDetailPage() {
                 currency={order.currency}
                 quantityKg={orderedWeight}
                 lines={otherCostsPanelLines}
+              />
+            )}
+
+            {linkedGrns.length > 0 && costSourceGrn && (
+              <BatchLandedCostCard
+                grnId={costSourceGrn.id}
+                grnNumber={costSourceGrn.number}
+                costingHref={`/inventory/costing?grnId=${costSourceGrn.id}`}
               />
             )}
 

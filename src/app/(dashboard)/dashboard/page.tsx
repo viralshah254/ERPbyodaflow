@@ -7,11 +7,15 @@ import { PageHeader } from "@/components/layout/page-header";
 import { QuickActionsRow } from "@/components/layout/quick-actions-row";
 import { DashboardRenderer } from "@/components/dashboard/DashboardRenderer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { isPerishableVerticalEnabled } from "@/lib/perishable-vertical";
 import Link from "next/link";
 
 export default function DashboardPage() {
   const router = useRouter();
   const orgRole = useOrgContextStore((s) => s.orgRole);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const featureFlags = useOrgContextStore((s) => s.featureFlags);
+  const showSupplyChainCta = isPerishableVerticalEnabled(templateId, featureFlags ?? {});
 
   // Franchise outlet users get their own simplified workspace.
   useEffect(() => {
@@ -35,6 +39,14 @@ export default function DashboardPage() {
         showCommandHint
         actions={
           <>
+            {showSupplyChainCta ? (
+              <Link
+                href="/operations/supply-chain"
+                className="text-sm font-medium text-primary hover:underline hidden sm:inline"
+              >
+                Supply chain journey
+              </Link>
+            ) : null}
             <Link
               href="/control-tower"
               className="text-sm font-medium text-primary hover:underline hidden sm:inline"

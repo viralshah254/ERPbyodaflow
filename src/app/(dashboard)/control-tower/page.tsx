@@ -49,7 +49,7 @@ import type { CashWeightAuditLineRow } from "@/lib/mock/purchasing/cash-weight-a
 import type { WIPBalanceRow, SubcontractOrderRow } from "@/lib/mock/manufacturing/subcontracting";
 import type { CommissionRunRow, TopUpRow } from "@/lib/mock/franchise/commission";
 import type { FranchiseeStockRow, VMIReplenishmentOrderRow } from "@/lib/mock/franchise/vmi";
-import { PERISHABLE_DISTRIBUTION_TEMPLATE_IDS } from "@/config/industryTemplates/templates";
+import { isPerishableVerticalEnabled } from "@/lib/perishable-vertical";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useUIStore } from "@/stores/ui-store";
 import { formatMoney } from "@/lib/money";
@@ -117,13 +117,7 @@ export default function ControlTowerPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const featureFlags = useOrgContextStore((s) => s.featureFlags);
 
-  const perishableControlTowerEnabled =
-    PERISHABLE_DISTRIBUTION_TEMPLATE_IDS.includes(
-      (templateId ?? "") as (typeof PERISHABLE_DISTRIBUTION_TEMPLATE_IDS)[number]
-    ) ||
-    (featureFlags.procurementAuditCashWeight === true &&
-      featureFlags.vmiReplenishment === true &&
-      featureFlags.commissionEngine === true);
+  const perishableControlTowerEnabled = isPerishableVerticalEnabled(templateId, featureFlags ?? {});
 
   // ——— Date range ———
   const [dateFrom, setDateFrom] = React.useState(() => {

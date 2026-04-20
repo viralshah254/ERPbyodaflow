@@ -30,6 +30,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
 import { fetchProcessingCostAllocation, type ProcessingCostAllocationRecord } from "@/lib/api/processing-cost";
+import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCard";
 import { addDocumentCommentApi, editDocumentCommentApi, deleteDocumentCommentApi, convertDocumentApi } from "@/lib/api/documents";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
@@ -833,6 +834,11 @@ export default function ReceiptDetailPage() {
                 </div>
               );
             })()}
+            <BatchLandedCostCard
+              grnId={id}
+              grnNumber={grn.number}
+              costingHref={`/inventory/costing?grnId=${id}`}
+            />
           </div>
 
           <div className="space-y-6">

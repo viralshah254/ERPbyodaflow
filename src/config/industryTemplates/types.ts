@@ -153,6 +153,15 @@ export interface IndustryTemplateDefinition {
   onboardingDefaults: OnboardingDefaults;
   /** Icon key for lucide */
   icon: string;
+  /**
+   * When true, sidebar shows only sections listed in defaultNav (no appending extra sections).
+   * Used for seafood / perishable vertical focused navigation.
+   */
+  strictNavSections?: boolean;
+  /**
+   * When true, dashboard hides onboarding/guided cards for a calmer ops view.
+   */
+  compactOperationalDashboard?: boolean;
 }
 
 export type TemplateId = string;

@@ -212,6 +212,56 @@ export function downloadTaxSummaryCsvApi(
   downloadFile(`/api/reports/${reportId}?format=csv`, filename, onError);
 }
 
+export type BatchCostingRow = {
+  grnId: string;
+  grnNumber?: string;
+  date?: string;
+  poNumber?: string;
+  purchaseCurrency: string;
+  products: string;
+  receivedKg: number;
+  poValueKes: number;
+  landedCostsKes: number;
+  processingCostsKes: number;
+  transferCostKes: number;
+  totalLandedCostKes: number;
+  costPerKgRaw: number | null;
+  outputPrimaryKg: number | null;
+  costPerKgProcessed: number | null;
+  recommendedSellPricePerKg: number | null;
+  hasLandedCostAllocation: boolean;
+  hasProcessingCostAllocation: boolean;
+  hasYieldData: boolean;
+};
+
+export async function fetchBatchCostingReportApi(input?: {
+  dateFrom?: string;
+  dateTo?: string;
+  margin?: number;
+}): Promise<{ items: BatchCostingRow[]; margin: number; total: number }> {
+  requireLiveApi("Batch costing report");
+  const params = new URLSearchParams();
+  if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
+  if (input?.dateTo) params.set("dateTo", input.dateTo);
+  if (input?.margin != null) params.set("margin", String(input.margin));
+  return apiRequest<{ items: BatchCostingRow[]; margin: number; total: number }>(
+    "/api/reports/batch-costing",
+    { params }
+  );
+}
+
+export function downloadBatchCostingCsvApi(
+  input: { dateFrom?: string; dateTo?: string; margin?: number },
+  onError: (message: string) => void
+): void {
+  requireLiveApi("Batch costing CSV export");
+  const params = new URLSearchParams({ format: "csv" });
+  if (input.dateFrom) params.set("dateFrom", input.dateFrom);
+  if (input.dateTo) params.set("dateTo", input.dateTo);
+  if (input.margin != null) params.set("margin", String(input.margin));
+  downloadFile(`/api/reports/batch-costing?${params.toString()}`, "batch-costing.csv", onError);
+}
+
 export async function downloadReportExportApi(row: ExportHistoryRow): Promise<void> {
   requireLiveApi("Report export detail");
   const detail = await apiRequest<BackendReportExportDetail>(`/api/reports/export/${row.id}`);

@@ -30,6 +30,7 @@ const QUICK_LINKS = [
   { href: "/reports/vat-summary", label: "VAT summary", desc: "VAT output, input, net", icon: "Receipt" as const },
   { href: "/reports/wht-summary", label: "WHT summary", desc: "Withholding tax by period", icon: "Percent" as const },
   { href: "/reports/commission-reconciliation", label: "Commission reconciliation", desc: "Sales/commission/top-up/journal/settlement", icon: "Scale" as const },
+  { href: "/reports/batch-costing", label: "Batch Costing", desc: "Total landed cost per batch — cost/kg & recommended sell price", icon: "Calculator" as const },
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {

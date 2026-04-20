@@ -9,6 +9,14 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     order: 0,
     items: [
       { key: "control-tower", label: "Control Tower", href: "/control-tower", icon: "Gauge", moduleKey: "dashboard" },
+      {
+        key: "supply-chain-journey",
+        label: "Supply chain journey",
+        href: "/operations/supply-chain",
+        icon: "Route",
+        moduleKey: "dashboard",
+        requiresFlags: ["procurementAuditCashWeight", "vmiReplenishment", "commissionEngine"],
+      },
       { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", moduleKey: "dashboard" },
       { key: "approvals", label: "Approvals", href: "/approvals", icon: "CheckCircle2", moduleKey: "automation", requiresFlags: ["approvals"], requiresPermissions: ["approvals.read"], children: [
         { key: "approvals-inbox", label: "Inbox", href: "/approvals/inbox", icon: "Inbox", moduleKey: "automation", requiresPermissions: ["approvals.read"] },

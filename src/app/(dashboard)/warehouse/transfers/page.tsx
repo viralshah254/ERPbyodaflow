@@ -68,6 +68,9 @@ export default function WarehouseTransfersPage() {
   const [lineProductId, setLineProductId] = React.useState("");
   const [lineQty, setLineQty] = React.useState("");
   const [lineUnit, setLineUnit] = React.useState("");
+  const [transferCostKes, setTransferCostKes] = React.useState("");
+  const [costNotes, setCostNotes] = React.useState("");
+  const [sourceGrnId, setSourceGrnId] = React.useState("");
 
   // Derived from selected product
   const selectedProduct = React.useMemo(
@@ -165,6 +168,9 @@ export default function WarehouseTransfersPage() {
     setLineProductId("");
     setLineQty("");
     setLineUnit("");
+    setTransferCostKes("");
+    setCostNotes("");
+    setSourceGrnId("");
   };
 
   const handleCreateTransfer = async () => {
@@ -183,6 +189,7 @@ export default function WarehouseTransfersPage() {
     }
     setSavingTransfer(true);
     try {
+      const costKes = transferCostKes.trim() ? Number(transferCostKes.trim()) : undefined;
       const res = await import("@/lib/api/warehouse-transfers").then((m) =>
         m.createTransfer({
           date,
@@ -197,6 +204,9 @@ export default function WarehouseTransfersPage() {
               unit: lineUnit || selectedProduct?.unit || "pcs",
             },
           ],
+          transferCostKes: Number.isFinite(costKes) && costKes! > 0 ? costKes : undefined,
+          costNotes: costNotes.trim() || undefined,
+          sourceGrnId: sourceGrnId.trim() || undefined,
         })
       );
       toast.success("Transfer created.");
@@ -334,6 +344,41 @@ export default function WarehouseTransfersPage() {
                           )}
                         </SelectContent>
                       </Select>
+                    </div>
+                  </div>
+                  <div className="border-t pt-4 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Logistics cost (optional)</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="transferCostKes">Transport cost (KES)</Label>
+                        <Input
+                          id="transferCostKes"
+                          type="number"
+                          min={0}
+                          step="1"
+                          placeholder="0"
+                          value={transferCostKes}
+                          onChange={(e) => setTransferCostKes(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="sourceGrnId">Source GRN ID (optional)</Label>
+                        <Input
+                          id="sourceGrnId"
+                          placeholder="Link to batch GRN"
+                          value={sourceGrnId}
+                          onChange={(e) => setSourceGrnId(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="costNotes">Cost description</Label>
+                      <Input
+                        id="costNotes"
+                        placeholder="e.g. truck hire Kisumu → Nairobi"
+                        value={costNotes}
+                        onChange={(e) => setCostNotes(e.target.value)}
+                      />
                     </div>
                   </div>
                   <Button onClick={handleCreateTransfer} disabled={savingTransfer} className="w-full">

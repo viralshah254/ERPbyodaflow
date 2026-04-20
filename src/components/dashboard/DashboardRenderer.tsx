@@ -76,6 +76,8 @@ export function DashboardRenderer() {
     (id) => copilotEnabled || id !== "copilot-suggestions"
   );
 
+  const compactOps = template?.compactOperationalDashboard === true;
+
   const approvals = widgets.approvals;
   const alerts = widgets.alerts;
   const suggestions = widgets.suggestions;
@@ -139,19 +141,23 @@ export function DashboardRenderer() {
         })}
       </div>
 
-      {/* Guided workflow for new users + Setup checklist */}
+      {/* Guided workflow for new users + Setup checklist (hidden for compact operational templates e.g. seafood) */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <GuidedWorkflowCard
-          title="Create your first sales order"
-          description="Set up products and customers, then create a sales order."
-          steps={[
-            { label: "Add products", href: "/master/products" },
-            { label: "Add customers", href: "/master/parties" },
-            { label: "Create sales order", href: "/docs/sales-order/new" },
-          ]}
-          showWhenExploredLessThan={5}
-        />
-        <SetupChecklistCard />
+        {!compactOps ? (
+          <>
+            <GuidedWorkflowCard
+              title="Create your first sales order"
+              description="Set up products and customers, then create a sales order."
+              steps={[
+                { label: "Add products", href: "/master/products" },
+                { label: "Add customers", href: "/master/parties" },
+                { label: "Create sales order", href: "/docs/sales-order/new" },
+              ]}
+              showWhenExploredLessThan={5}
+            />
+            <SetupChecklistCard />
+          </>
+        ) : null}
         <MyApprovalsCard items={approvals} />
         <MyTasksCard items={[]} />
         <AlertsCard items={alerts} />
