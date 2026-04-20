@@ -223,7 +223,7 @@ export default function PurchaseRequestsPage() {
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
                 {filtered.some((r) => selectedIds.includes(r.id) && r.status === "APPROVED") && (
                   <span className="text-xs text-muted-foreground">
-                    Approved requests can be converted to POs individually using the "Create PO" button on each row.
+                    {'Approved requests can be converted to POs individually using the "Create PO" button on each row.'}
                   </span>
                 )}
                 <Button variant="outline" size="sm" onClick={() => router.push("/purchasing/orders")}>
