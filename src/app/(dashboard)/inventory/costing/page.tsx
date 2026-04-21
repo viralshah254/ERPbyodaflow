@@ -1953,10 +1953,20 @@ export default function InventoryCostingPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatMoney(
-                        (s as { totalAmount?: number; total?: number }).totalAmount ?? (s as { total?: number }).total ?? 0,
-                        s.currency ?? "KES"
-                      )}
+                      {(() => {
+                        const currency = s.currency ?? "KES";
+                        const goodsKes = (s as { goodsValueKes?: number }).goodsValueKes ?? (s as { totalAmount?: number; total?: number }).totalAmount ?? (s as { total?: number }).total ?? 0;
+                        const original = (s as { goodsOriginalAmount?: number }).goodsOriginalAmount ?? goodsKes;
+                        const isForeign = currency.toUpperCase() !== "KES";
+                        return (
+                          <div>
+                            <div>{formatMoney(goodsKes, "KES")}</div>
+                            {isForeign && (
+                              <div className="text-xs text-muted-foreground mt-0.5">{formatMoney(original, currency)}</div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {(() => {
@@ -1964,19 +1974,19 @@ export default function InventoryCostingPage() {
                         const bd = (s as { costBreakdown?: CostBreakdown }).costBreakdown;
                         if (oc <= 0) return <span className="text-muted-foreground">—</span>;
                         return (
-                          <CostBreakdownPopover amount={oc} breakdown={bd} goodsValue={null} currency={s.currency ?? "KES"} />
+                          <CostBreakdownPopover amount={oc} breakdown={bd} goodsValue={null} currency="KES" />
                         );
                       })()}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold">
                       {(() => {
                         const oc = (s as { otherCostsKes?: number }).otherCostsKes ?? 0;
-                        const goodsVal = (s as { totalAmount?: number; total?: number }).totalAmount ?? (s as { total?: number }).total ?? 0;
+                        const goodsKes = (s as { goodsValueKes?: number }).goodsValueKes ?? (s as { totalAmount?: number; total?: number }).totalAmount ?? (s as { total?: number }).total ?? 0;
                         if (oc === 0 && !s.isAllocated) return <span className="text-muted-foreground">—</span>;
-                        const fbc = (s as { finalBatchCostKes?: number }).finalBatchCostKes ?? goodsVal + oc;
+                        const fbc = (s as { finalBatchCostKes?: number }).finalBatchCostKes ?? goodsKes + oc;
                         const bd = (s as { costBreakdown?: CostBreakdown }).costBreakdown;
                         return (
-                          <CostBreakdownPopover amount={fbc} breakdown={bd} goodsValue={goodsVal} currency={s.currency ?? "KES"} isFinal />
+                          <CostBreakdownPopover amount={fbc} breakdown={bd} goodsValue={goodsKes} currency="KES" isFinal />
                         );
                       })()}
                     </TableCell>
