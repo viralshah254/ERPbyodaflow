@@ -35,12 +35,14 @@ import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
 import {
   createDocumentApi,
+  patchDocumentApi,
   previewDocumentPostingApi,
   searchPurchaseOrderLookupApi,
   fetchDocumentDetailApi,
   type DocumentPostingPreviewLine,
   type PurchaseOrderLookupOption,
 } from "@/lib/api/documents";
+import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
   fetchPartyByIdApi,
   fetchPartyCreditSummaryApi,
@@ -294,6 +296,9 @@ interface DocumentCreateWizardProps {
   type: string;
   /** Pre-link a GRN to this PO id (hydrated from ?poId= URL param). */
   initialPoId?: string;
+  /** When set, the wizard runs in edit mode: pre-fills from this document and PATCHes on save. */
+  mode?: "create" | "edit";
+  existingDocument?: DocumentDetailRecord;
 }
 
 const STEPS = [
@@ -302,7 +307,8 @@ const STEPS = [
   { id: "review", label: "Review & Submit" },
 ];
 
-export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizardProps) {
+export function DocumentCreateWizard({ type, initialPoId, mode = "create", existingDocument }: DocumentCreateWizardProps) {
+  const isEditMode = mode === "edit" && !!existingDocument;
   const router = useRouter();
   const terminology = useTerminology();
   const orgRole = useOrgContextStore((s) => s.orgRole);
@@ -359,6 +365,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
   });
 
   React.useEffect(() => {
+    if (isEditMode) return; // skip local-draft restore when editing an existing document
     let cancelled = false;
     fetchDocumentDraftApi(type)
       .then((draft) => {
@@ -369,15 +376,60 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
     return () => {
       cancelled = true;
     };
-  }, [defaults, form, type]);
+  }, [defaults, form, type, isEditMode]);
 
   React.useEffect(() => {
+    if (isEditMode) return; // skip local-draft autosave when editing an existing document
     const sub = form.watch((data) => {
       const payload = data as Record<string, unknown>;
       void saveDocumentDraftApi(type, payload).catch(() => {});
     });
     return () => sub.unsubscribe();
-  }, [type, form]);
+  }, [type, form, isEditMode]);
+
+  // Pre-populate from existingDocument when in edit mode
+  React.useEffect(() => {
+    if (!isEditMode || !existingDocument) return;
+    const doc = existingDocument;
+    const storedRate = doc.exchangeRate ?? 1;
+    form.reset({
+      date: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      party: doc.partyId ?? "",
+      reference: "",
+      branch: doc.branchId ?? "",
+      dueDate: (doc as { dueDate?: string }).dueDate?.slice(0, 10) ?? "",
+      poRef: "",
+      warehouse: doc.warehouseId ?? "",
+      linesCount: doc.lines?.length ?? 0,
+      linesAreTaxInclusive: false,
+      currency: doc.currency ?? baseCurrency,
+      exchangeRate: storedRate,
+      fxDate: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      totalAmount: doc.total ?? 0,
+    });
+    const prefilled: DocumentLine[] = (doc.lines ?? []).map((l, i) => {
+      const qty = l.qty ?? 1;
+      const price = l.unitPrice ?? (qty > 0 && l.amount ? l.amount / qty : 0);
+      return {
+        id: l.id ?? `edit-line-${i}`,
+        productId: l.productId ?? "",
+        sku: l.productSku ?? "",
+        name: l.description ?? l.productName ?? "",
+        uom: l.unit ?? "EA",
+        qty,
+        baseQty: qty,
+        price,
+        priceReason: "Existing",
+        amount: l.amount ?? 0,
+        tax: l.tax ?? 0,
+        taxCodeId: l.taxCodeId ?? l.effectiveTaxCodeId ?? undefined,
+        sourceLineId: l.id,
+      };
+    });
+    setLines(prefilled);
+    setStep(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, existingDocument?.id]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -776,19 +828,25 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
     try {
       setSubmitting(true);
       const payload = buildDraftPayload();
-      if (creditOverrideGranted && creditOverrideReason) {
-        (payload as Record<string, unknown>).notes = `[Credit override: ${creditOverrideReason}]`;
+      if (isEditMode && existingDocument) {
+        await patchDocumentApi(type as DocTypeKey, existingDocument.id, payload);
+        toast.success(`${label} updated.`);
+        router.push(`/docs/${type}/${existingDocument.id}`);
+      } else {
+        if (creditOverrideGranted && creditOverrideReason) {
+          (payload as Record<string, unknown>).notes = `[Credit override: ${creditOverrideReason}]`;
+        }
+        const result = await createDocumentApi(type as DocTypeKey, payload);
+        await deleteDocumentDraftApi(type);
+        toast.success(`${label} draft created.`);
+        router.push(`/docs/${type}/${result.id}`);
       }
-      const result = await createDocumentApi(type as DocTypeKey, payload);
-      await deleteDocumentDraftApi(type);
-      toast.success(`${label} draft created.`);
-      router.push(`/docs/${type}/${result.id}`);
     } catch (error) {
       const err = error as Error & { status?: number };
       if (err.status === 403 || err.message?.toLowerCase().includes("forbidden")) {
-        toast.error("You don't have permission to create this document. Sign out and back in, or contact your administrator.");
+        toast.error(`You don't have permission to ${isEditMode ? "update" : "create"} this document.`);
       } else {
-        toast.error(err.message || "Failed to create document.");
+        toast.error(err.message || `Failed to ${isEditMode ? "update" : "create"} document.`);
       }
     } finally {
       setSubmitting(false);
@@ -1230,7 +1288,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
-                Confirm and create draft. You can edit after creation.
+                {isEditMode ? "Review your changes and save." : "Confirm and create draft. You can edit after creation."}
               </p>
             </CardContent>
           </Card>
@@ -1291,7 +1349,9 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
             </Button>
           )}
           <Button variant="outline" asChild>
-            <Link href={`/docs/${type}`}>Cancel</Link>
+            <Link href={isEditMode && existingDocument ? `/docs/${type}/${existingDocument.id}` : `/docs/${type}`}>
+              Cancel
+            </Link>
           </Button>
         </div>
         <div className="flex gap-2">
@@ -1299,7 +1359,7 @@ export function DocumentCreateWizard({ type, initialPoId }: DocumentCreateWizard
             <Button onClick={validateAndNext}>Next</Button>
           ) : (
             <Button onClick={() => void onSubmit()} disabled={submitting}>
-              {submitting ? "Creating..." : "Create draft"}
+              {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
           )}
           {step < 3 && (

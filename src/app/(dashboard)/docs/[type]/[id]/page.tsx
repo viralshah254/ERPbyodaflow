@@ -312,6 +312,16 @@ export default function DocViewPage() {
       rightSlot={rightSlot}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          {document?.status === "DRAFT" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => router.push(`/docs/${type}/${id}/edit`)}
+            >
+              <Icons.Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+          )}
           {convertTargets.map((targetType) => (
             <Button
               key={targetType}

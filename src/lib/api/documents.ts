@@ -479,7 +479,7 @@ export function exportDocumentListApi(
 export async function patchDocumentApi(
   type: DocTypeKey,
   id: string,
-  payload: { notes?: string }
+  payload: Partial<DocumentDraftPayload> & { notes?: string }
 ): Promise<void> {
   requireLiveApi("Document update");
   await apiRequest(`/api/documents/${type}/${id}`, {
