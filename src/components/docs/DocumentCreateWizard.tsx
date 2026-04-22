@@ -79,6 +79,7 @@ import {
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
+import { QuickAddSupplierSheet } from "@/components/suppliers/QuickAddSupplierSheet";
 
 const schema = z.object({
   date: z.string().min(1, "Date is required"),
@@ -150,12 +151,14 @@ function RenderField({
   options,
   selectedPartyOption,
   onCreateNewCustomer,
+  onCreateNewSupplier,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
   options?: LookupOption[];
   selectedPartyOption?: { id: string; label: string; description?: string } | null;
   onCreateNewCustomer?: (searchQuery: string) => void;
+  onCreateNewSupplier?: (searchQuery: string) => void;
 }) {
   const key = fieldIdToKey(field.id);
   const isDate = field.type === "date";
@@ -196,8 +199,8 @@ function RenderField({
           searchPlaceholder="Type name, code, phone, or email"
           emptyMessage={`No ${field.label.toLowerCase()}s found.`}
           recentStorageKey={role === "customer" ? "lookup:recent-customers" : "lookup:recent-suppliers"}
-          onCreateNew={role === "customer" ? onCreateNewCustomer : undefined}
-          createNewLabel="Add new customer"
+          onCreateNew={role === "customer" ? onCreateNewCustomer : onCreateNewSupplier}
+          createNewLabel={role === "customer" ? "Add new customer" : "Add new supplier"}
         />
         {form.formState.errors[key] && (
           <p className="text-sm text-destructive">
@@ -351,6 +354,8 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   const [linkedPoOption, setLinkedPoOption] = React.useState<PurchaseOrderLookupOption | null>(null);
   const [showQuickAddCustomer, setShowQuickAddCustomer] = React.useState(false);
   const [quickAddInitialName, setQuickAddInitialName] = React.useState("");
+  const [showQuickAddSupplier, setShowQuickAddSupplier] = React.useState(false);
+  const [quickAddSupplierInitialName, setQuickAddSupplierInitialName] = React.useState("");
   const [loadingPo, setLoadingPo] = React.useState(false);
   /** Resolve GRN warehouse after warehouse options load (PO may have branchId but no warehouseId). */
   const pendingGrnWarehouseFromPoRef = React.useRef<{ warehouseId?: string; branchId?: string } | null>(null);
@@ -1072,6 +1077,10 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
                         setQuickAddInitialName(query);
                         setShowQuickAddCustomer(true);
                       }}
+                      onCreateNewSupplier={(query) => {
+                        setQuickAddSupplierInitialName(query);
+                        setShowQuickAddSupplier(true);
+                      }}
                     />
                 ))}
               </div>
@@ -1426,6 +1435,27 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
             email: newCustomer.email,
             phone: newCustomer.phone,
             status: newCustomer.status ?? "ACTIVE",
+          });
+        }}
+      />
+
+      {/* Quick-add supplier sheet — available from any supplier field in the document wizard */}
+      <QuickAddSupplierSheet
+        open={showQuickAddSupplier}
+        onOpenChange={setShowQuickAddSupplier}
+        initialName={quickAddSupplierInitialName}
+        onSuccess={(newSupplier) => {
+          form.setValue("party", newSupplier.id);
+          setSelectedPartyDetail({
+            id: newSupplier.id,
+            name: newSupplier.name,
+            code: newSupplier.code,
+            type: "supplier",
+            roles: newSupplier.roles ?? ["supplier"],
+            supplierType: newSupplier.supplierType,
+            email: newSupplier.email,
+            phone: newSupplier.phone,
+            status: newSupplier.status ?? "ACTIVE",
           });
         }}
       />
