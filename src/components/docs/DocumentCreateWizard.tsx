@@ -342,6 +342,8 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   const [priceListOptions, setPriceListOptions] = React.useState<PricingOption[]>([]);
   /** User-selected price list override for the current order; null = use the customer's default. */
   const [overridePriceListId, setOverridePriceListId] = React.useState<string | null>(null);
+  /** Maps customerId → "party" | "category" to show how the default was resolved. */
+  const [customerPriceListSources, setCustomerPriceListSources] = React.useState<Record<string, "party" | "category">>({});
   const [selectedPartyDetail, setSelectedPartyDetail] = React.useState<PartyDetail | null>(null);
   const [creditSummary, setCreditSummary] = React.useState<PartyCreditSummary | null>(null);
   const [creditOverrideOpen, setCreditOverrideOpen] = React.useState(false);
@@ -466,6 +468,9 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
         });
         setCustomerDefaultPriceLists(
           Object.fromEntries(customerDefaults.map((item) => [item.customerId, item.priceListId]))
+        );
+        setCustomerPriceListSources(
+          Object.fromEntries(customerDefaults.map((item) => [item.customerId, item.source ?? "party"]))
         );
         setSupplierDefaultCostLists(
           Object.fromEntries(supplierCostLists.map((item) => [item.supplierId, item.costListId]))
@@ -1233,29 +1238,37 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
             <CardTitle>2. Lines</CardTitle>
             <div className="flex items-center gap-2">
               {lineEditorMode === "sales" && priceListOptions.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Price list</Label>
-                  <Select
-                    value={effectiveSalesPriceListId}
-                    onValueChange={(newId) => {
-                      setOverridePriceListId(newId);
-                      if (selectedPartyId) {
-                        setCustomerDefaultPriceLists((prev) => ({ ...prev, [selectedPartyId]: newId }));
-                        setCustomerDefaultPriceList(selectedPartyId, newId).catch(() => {});
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-[160px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {priceListOptions.map((pl) => (
-                        <SelectItem key={pl.id} value={pl.id} className="text-xs">
-                          {pl.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-col items-end gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Price list</Label>
+                    <Select
+                      value={effectiveSalesPriceListId}
+                      onValueChange={(newId) => {
+                        setOverridePriceListId(newId);
+                        if (selectedPartyId) {
+                          setCustomerDefaultPriceLists((prev) => ({ ...prev, [selectedPartyId]: newId }));
+                          setCustomerPriceListSources((prev) => ({ ...prev, [selectedPartyId]: "party" }));
+                          setCustomerDefaultPriceList(selectedPartyId, newId).catch(() => {});
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[160px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {priceListOptions.map((pl) => (
+                          <SelectItem key={pl.id} value={pl.id} className="text-xs">
+                            {pl.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedPartyId && !overridePriceListId && customerPriceListSources[selectedPartyId] === "category" && (
+                    <span className="text-[10px] text-muted-foreground pr-0.5">
+                      From customer category
+                    </span>
+                  )}
                 </div>
               )}
               {copilotEnabled ? (

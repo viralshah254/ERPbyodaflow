@@ -187,7 +187,7 @@ function PriceListsContent() {
                   <TableHead>Name</TableHead>
                   <TableHead>Currency</TableHead>
                   <TableHead>Channel</TableHead>
-                  <TableHead>Default</TableHead>
+                  <TableHead>Based on</TableHead>
                   <TableHead>Products</TableHead>
                   <TableHead>Today's prices</TableHead>
                   <TableHead className="w-40"></TableHead>
@@ -203,7 +203,20 @@ function PriceListsContent() {
                     <TableCell>
                       <Badge variant="outline">{pl.channel}</Badge>
                     </TableCell>
-                    <TableCell>{pl.isDefault ? "Yes" : "—"}</TableCell>
+                    <TableCell>
+                      {pl.parentPriceListId ? (
+                        <span className="text-xs">
+                          <span className="font-medium">{pl.parentName ?? pl.parentPriceListId}</span>
+                          {pl.markupType && pl.markupValue != null && (
+                            <span className="ml-1 text-muted-foreground">
+                              +{pl.markupValue}{pl.markupType === "PERCENT" ? "%" : " flat"}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>{productCountByList.get(pl.id) ?? 0}</TableCell>
                     <TableCell>
                       {status ? (
@@ -281,12 +294,27 @@ function PriceListsContent() {
       {sheetOpen && (
         <PriceListSheet
           initial={editing}
+          allLists={lists}
           onSave={async (pl) => {
             try {
               if (editing) {
-                await updatePriceListApi(editing.id, { name: pl.name, currency: pl.currency, code: pl.channel });
+                await updatePriceListApi(editing.id, {
+                  name: pl.name,
+                  currency: pl.currency,
+                  code: pl.channel,
+                  parentPriceListId: pl.parentPriceListId ?? null,
+                  markupType: pl.markupType ?? null,
+                  markupValue: pl.markupValue ?? null,
+                });
               } else {
-                await createPriceListApi({ name: pl.name, currency: pl.currency, code: pl.channel });
+                await createPriceListApi({
+                  name: pl.name,
+                  currency: pl.currency,
+                  code: pl.channel,
+                  parentPriceListId: pl.parentPriceListId,
+                  markupType: pl.markupType,
+                  markupValue: pl.markupValue,
+                });
               }
               await refresh();
               setSheetOpen(false);
@@ -371,10 +399,12 @@ function ProductPriceTable({
 
 function PriceListSheet({
   initial,
+  allLists,
   onSave,
   onClose,
 }: {
   initial: PriceList | null;
+  allLists: PriceList[];
   onSave: (pl: Omit<PriceList, "id">) => void;
   onClose: () => void;
 }) {
@@ -382,29 +412,43 @@ function PriceListSheet({
   const [currency, setCurrency] = React.useState(initial?.currency ?? "KES");
   const [channel, setChannel] = React.useState(initial?.channel ?? "Retail");
   const [isDefault, setIsDefault] = React.useState(!!initial?.isDefault);
+  const [parentId, setParentId] = React.useState<string>(initial?.parentPriceListId ?? "");
+  const [markupType, setMarkupType] = React.useState<"PERCENT" | "FLAT">(initial?.markupType ?? "PERCENT");
+  const [markupValue, setMarkupValue] = React.useState<string>(
+    initial?.markupValue != null ? String(initial.markupValue) : ""
+  );
+
+  // Only allow lists other than the one being edited as parents.
+  const parentCandidates = allLists.filter((pl) => pl.id !== initial?.id);
 
   const handleSave = () => {
-    onSave({ name: name.trim(), currency, channel, isDefault: isDefault || undefined });
+    onSave({
+      name: name.trim(),
+      currency,
+      channel,
+      isDefault: isDefault || undefined,
+      parentPriceListId: parentId || undefined,
+      markupType: parentId ? markupType : undefined,
+      markupValue: parentId && markupValue !== "" ? Number(markupValue) : undefined,
+    });
   };
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent>
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{initial ? "Edit price list" : "Add price list"}</SheetTitle>
-          <SheetDescription>Name, currency, channel. Used for tiered product pricing.</SheetDescription>
+          <SheetDescription>Name, currency, channel. Optionally derive prices from a master list.</SheetDescription>
         </SheetHeader>
         <div className="space-y-4 py-6">
           <div>
             <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Retail" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Nairobi Franchise" />
           </div>
           <div>
             <Label>Currency</Label>
             <Select value={currency} onValueChange={setCurrency}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="KES">KES</SelectItem>
                 <SelectItem value="USD">USD</SelectItem>
@@ -415,9 +459,7 @@ function PriceListSheet({
           <div>
             <Label>Channel</Label>
             <Select value={channel} onValueChange={setChannel}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CHANNELS.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
@@ -425,6 +467,65 @@ function PriceListSheet({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Inheritance / logistics markup */}
+          <div className="rounded-md border p-4 space-y-3">
+            <p className="text-sm font-medium">Based on (master list)</p>
+            <p className="text-xs text-muted-foreground">
+              Leave blank for a standalone list. When set, products not priced explicitly on this list
+              inherit the master price plus your markup — useful for adding logistics costs per route.
+            </p>
+            <Select value={parentId || "__none__"} onValueChange={(v) => setParentId(v === "__none__" ? "" : v)}>
+              <SelectTrigger><SelectValue placeholder="None (standalone)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None (standalone)</SelectItem>
+                {parentCandidates.map((pl) => (
+                  <SelectItem key={pl.id} value={pl.id}>{pl.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {parentId && (
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Label className="text-xs">Add-on type</Label>
+                  <Select value={markupType} onValueChange={(v) => setMarkupType(v as "PERCENT" | "FLAT")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PERCENT">Percent (%)</SelectItem>
+                      <SelectItem value="FLAT">Flat per unit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1">
+                  <Label className="text-xs">
+                    Add-on value {markupType === "PERCENT" ? "(%)" : `(${currency})`}
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step={markupType === "PERCENT" ? "0.1" : "1"}
+                    value={markupValue}
+                    onChange={(e) => setMarkupValue(e.target.value)}
+                    placeholder={markupType === "PERCENT" ? "e.g. 8" : "e.g. 50"}
+                  />
+                </div>
+              </div>
+            )}
+
+            {parentId && markupValue !== "" && (
+              <div className="rounded bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                Example: if master price = 300, effective price ={" "}
+                <span className="font-semibold text-foreground">
+                  {markupType === "PERCENT"
+                    ? (300 * (1 + Number(markupValue) / 100)).toFixed(2)
+                    : (300 + Number(markupValue)).toFixed(2)}
+                </span>{" "}
+                {currency}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <input type="checkbox" id="default" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} className="rounded" />
             <Label htmlFor="default">Default price list</Label>
@@ -432,7 +533,7 @@ function PriceListSheet({
         </div>
         <SheetFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave}>Save</Button>
+          <Button onClick={handleSave} disabled={!name.trim()}>Save</Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

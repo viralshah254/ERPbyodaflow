@@ -11,6 +11,9 @@ export interface CustomerDefaultPriceListRow {
   customerName?: string;
   priceListId: string;
   priceListName?: string;
+  customerCategoryId?: string;
+  /** "party" = explicitly set on the customer; "category" = inherited from their customer category. */
+  source?: "party" | "category";
   customerCurrency?: string;
   paymentTermsId?: string;
 }
@@ -142,6 +145,10 @@ export async function fetchPriceListsForUi(): Promise<PriceList[]> {
     currency: d.currency ?? "KES",
     channel: d.code ?? "Retail",
     isDefault: false,
+    parentPriceListId: (d as unknown as { parentPriceListId?: string }).parentPriceListId,
+    parentName: (d as unknown as { parentName?: string }).parentName,
+    markupType: (d as unknown as { markupType?: "PERCENT" | "FLAT" }).markupType,
+    markupValue: (d as unknown as { markupValue?: number }).markupValue,
   }));
 }
 
@@ -159,6 +166,9 @@ export async function createPriceListApi(body: {
   code?: string;
   currency?: string;
   items?: Array<{ productId: string; price: number; currency?: string }>;
+  parentPriceListId?: string;
+  markupType?: "PERCENT" | "FLAT";
+  markupValue?: number;
 }): Promise<{ id: string }> {
   requireLiveApi("Create price list");
   return apiRequest<{ id: string }>("/api/pricing/price-lists", { method: "POST", body });
@@ -166,7 +176,15 @@ export async function createPriceListApi(body: {
 
 export async function updatePriceListApi(
   id: string,
-  body: Partial<{ name: string; code?: string; currency: string; items: Array<{ productId: string; price: number; currency?: string }> }>
+  body: Partial<{
+    name: string;
+    code?: string;
+    currency: string;
+    items: Array<{ productId: string; price: number; currency?: string }>;
+    parentPriceListId: string | null;
+    markupType: "PERCENT" | "FLAT" | null;
+    markupValue: number | null;
+  }>
 ): Promise<void> {
   requireLiveApi("Update price list");
   await apiRequest(`/api/pricing/price-lists/${encodeURIComponent(id)}`, { method: "PATCH", body });

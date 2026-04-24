@@ -6,6 +6,8 @@ export type CustomerCategoryRow = {
   name: string;
   description?: string;
   isActive: boolean;
+  /** Default price list for all customers in this category. Per-customer override takes priority. */
+  defaultPriceListId?: string | null;
 };
 
 export async function fetchCustomerCategoriesApi(): Promise<CustomerCategoryRow[]> {
@@ -18,6 +20,7 @@ export async function createCustomerCategoryApi(input: {
   code: string;
   name: string;
   description?: string;
+  defaultPriceListId?: string | null;
 }): Promise<CustomerCategoryRow> {
   requireLiveApi("Customer categories");
   return apiRequest<CustomerCategoryRow>("/api/settings/customer-categories", {
@@ -28,7 +31,7 @@ export async function createCustomerCategoryApi(input: {
 
 export async function updateCustomerCategoryApi(
   id: string,
-  patch: Partial<{ code: string; name: string; description: string; isActive: boolean }>
+  patch: Partial<{ code: string; name: string; description: string; isActive: boolean; defaultPriceListId: string | null }>
 ): Promise<CustomerCategoryRow> {
   requireLiveApi("Customer categories");
   return apiRequest<CustomerCategoryRow>(`/api/settings/customer-categories/${encodeURIComponent(id)}`, {

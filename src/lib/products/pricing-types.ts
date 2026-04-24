@@ -35,6 +35,11 @@ export interface PriceList {
   currency: string;
   channel: PriceListChannel;
   isDefault?: boolean;
+  /** When set, prices not in this list's own items are derived from the parent + markup. */
+  parentPriceListId?: string;
+  parentName?: string;
+  markupType?: "PERCENT" | "FLAT";
+  markupValue?: number;
 }
 
 export interface PricingTier {
