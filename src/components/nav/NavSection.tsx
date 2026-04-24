@@ -15,6 +15,7 @@ interface NavSectionLike {
     icon: string;
     children?: NavSectionLike["items"];
     badge?: { type: "count" | "text"; value: string };
+    navGroupLabel?: string;
   }>;
 }
 
@@ -60,9 +61,21 @@ export function NavSection({ section, isCollapsed }: NavSectionProps) {
       </button>
       {isExpanded && (
         <div className="space-y-1">
-          {section.items.map((item) => (
-            <NavItem key={item.id} item={item} isCollapsed={isCollapsed} />
-          ))}
+          {section.items.map((item, idx) => {
+            const prev = section.items[idx - 1];
+            const showGroup =
+              item.navGroupLabel && item.navGroupLabel !== prev?.navGroupLabel;
+            return (
+              <div key={item.id}>
+                {showGroup && (
+                  <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-border/40 mt-2 first:mt-0 first:border-t-0 first:pt-0">
+                    {item.navGroupLabel}
+                  </div>
+                )}
+                <NavItem item={item} isCollapsed={isCollapsed} />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

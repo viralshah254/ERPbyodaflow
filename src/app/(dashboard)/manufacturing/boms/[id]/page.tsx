@@ -23,12 +23,16 @@ import {
 } from "@/lib/api/manufacturing";
 import { listProducts } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function BomDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const products = React.useMemo(() => listProducts(), []);
   const uoms = React.useMemo(() => listUoms().map((item) => item.code), []);
   const [bom, setBom] = React.useState<ManufacturingBom | null>(null);
@@ -80,7 +84,7 @@ export default function BomDetailPage() {
   if (loading && !bom) {
     return (
       <PageShell>
-        <PageHeader title="Loading BOM..." breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/boms" }, { label: "BOMs" }]} />
+        <PageHeader title="Loading BOM..." breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "BOMs" }]} />
       </PageShell>
     );
   }
@@ -88,7 +92,7 @@ export default function BomDetailPage() {
   if (!bom) {
     return (
       <PageShell>
-        <PageHeader title="BOM not found" breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/boms" }, { label: "BOMs" }]} />
+        <PageHeader title="BOM not found" breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "BOMs" }]} />
         <div className="p-6">
           <p className="text-muted-foreground">This BOM could not be loaded from the backend.</p>
         </div>
@@ -104,7 +108,7 @@ export default function BomDetailPage() {
         title={`${bom.code} - ${bom.name}`}
         description={`${bom.quantity} ${bom.uom} output for ${bom.finishedProductSku ? `${bom.finishedProductSku} - ${bom.finishedProductName}` : bom.finishedProductName ?? bom.finishedProductId}`}
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "BOMs", href: "/manufacturing/boms" },
           { label: bom.code },
         ]}
@@ -112,7 +116,9 @@ export default function BomDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Badge variant={bom.type === "formula" ? "secondary" : "outline"}>{bom.type}</Badge>
+            <Badge variant={bom.type === "formula" ? "secondary" : bom.type === "disassembly" ? "default" : "outline"}>
+              {bom.type === "disassembly" ? "Disassembly" : bom.type === "formula" ? "Formula" : "BOM"}
+            </Badge>
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/boms">Back to list</Link>
             </Button>

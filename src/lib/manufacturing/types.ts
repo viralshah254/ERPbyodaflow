@@ -2,7 +2,8 @@
  * BOM, formula, and routing types for manufacturing.
  */
 
-export type BomType = "bom" | "formula";
+/** bom = standard assembly (inputs → output), formula = process/batch, disassembly = reverse (one input → many outputs) */
+export type BomType = "bom" | "formula" | "disassembly";
 
 export interface BOMRow {
   id: string;

@@ -58,7 +58,10 @@ import {
   fetchCustomerDefaultPriceLists,
   fetchPriceListOptions,
   fetchSupplierDefaultCostLists,
+  setCustomerDefaultPriceList,
   fetchPriceListByIdApi,
+  fetchDailyPricesApi,
+  type PricingOption,
 } from "@/lib/api/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
@@ -335,6 +338,10 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   const [customerDefaultPriceLists, setCustomerDefaultPriceLists] = React.useState<Record<string, string>>({});
   const [supplierDefaultCostLists, setSupplierDefaultCostLists] = React.useState<Record<string, string>>({});
   const [fallbackPriceListId, setFallbackPriceListId] = React.useState<string>("pl-retail");
+  /** All available price lists for the org (for the dropdown). */
+  const [priceListOptions, setPriceListOptions] = React.useState<PricingOption[]>([]);
+  /** User-selected price list override for the current order; null = use the customer's default. */
+  const [overridePriceListId, setOverridePriceListId] = React.useState<string | null>(null);
   const [selectedPartyDetail, setSelectedPartyDetail] = React.useState<PartyDetail | null>(null);
   const [creditSummary, setCreditSummary] = React.useState<PartyCreditSummary | null>(null);
   const [creditOverrideOpen, setCreditOverrideOpen] = React.useState(false);
@@ -348,6 +355,9 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   const [catalogUomCodes, setCatalogUomCodes] = React.useState<string[]>([]);
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
   const [costPricingByProductId, setCostPricingByProductId] = React.useState<Record<string, ProductPrice[]>>({});
+  const [dailyPricesByProductId, setDailyPricesByProductId] = React.useState<Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }>>({});
+  const [dailyPriceStaleCount, setDailyPriceStaleCount] = React.useState(0);
+  const [dailyPriceListName, setDailyPriceListName] = React.useState("");
   const [linkedPoId, setLinkedPoId] = React.useState<string | null>(() =>
     type === "grn" && initialPoId ? initialPoId : null
   );
@@ -461,6 +471,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
           Object.fromEntries(supplierCostLists.map((item) => [item.supplierId, item.costListId]))
         );
         setFallbackPriceListId(priceLists[0]?.id ?? "pl-retail");
+        setPriceListOptions(priceLists);
         setPaymentTermsNameById(Object.fromEntries(paymentTerms.map((item) => [item.id, item.name])));
         setCustomerCategoryNameById(
           Object.fromEntries(customerCategories.map((item) => [item.id, item.name]))
@@ -882,12 +893,54 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
     type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note"
       ? "purchasing" : "sales";
   const useCostPricing = lineEditorMode === "purchasing" && !supplierCostListId;
+  // For sales docs, the user may override the price list; otherwise fall back to customer default or org default.
+  const effectiveSalesPriceListId = overridePriceListId ?? resolvedPriceListId;
   const lineEditorPriceListId = lineEditorMode === "purchasing"
     ? (supplierCostListId ?? "")
-    : resolvedPriceListId;
+    : effectiveSalesPriceListId;
   const lineEditorPricingByProductId = lineEditorMode === "purchasing" && supplierCostListId
     ? costPricingByProductId
     : pricingByProductId;
+
+  // Fetch daily prices for the active sales price list when entering the Lines step.
+  React.useEffect(() => {
+    if (step !== 2 || lineEditorMode !== "sales" || !lineEditorPriceListId || !isApiConfigured()) {
+      setDailyPricesByProductId({});
+      setDailyPriceStaleCount(0);
+      setDailyPriceListName("");
+      return;
+    }
+    let cancelled = false;
+    fetchDailyPricesApi(lineEditorPriceListId)
+      .then((res) => {
+        if (cancelled) return;
+        const map: Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }> = {};
+        for (const item of res.items) {
+          map[item.productId] = {
+            effectivePrice: item.effectivePrice,
+            isStale: item.isStale,
+            fallbackDate: item.fallbackDate,
+          };
+        }
+        setDailyPricesByProductId(map);
+        setDailyPriceStaleCount(res.staleCount);
+        setDailyPriceListName(res.priceListName);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDailyPricesByProductId({});
+          setDailyPriceStaleCount(0);
+          setDailyPriceListName("");
+        }
+      });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, lineEditorPriceListId, lineEditorMode]);
+
+  React.useEffect(() => {
+    // When customer changes, clear the price list override so it re-derives from the new customer's default.
+    setOverridePriceListId(null);
+  }, [selectedPartyId]);
 
   React.useEffect(() => {
     if (!selectedPartyId) {
@@ -1178,18 +1231,66 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>2. Lines</CardTitle>
-            {copilotEnabled ? (
-              <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
-                <Icons.Sparkles className="mr-2 h-4 w-4" />
-                Generate draft with Copilot
-              </Button>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {lineEditorMode === "sales" && priceListOptions.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Price list</Label>
+                  <Select
+                    value={effectiveSalesPriceListId}
+                    onValueChange={(newId) => {
+                      setOverridePriceListId(newId);
+                      if (selectedPartyId) {
+                        setCustomerDefaultPriceLists((prev) => ({ ...prev, [selectedPartyId]: newId }));
+                        setCustomerDefaultPriceList(selectedPartyId, newId).catch(() => {});
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[160px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priceListOptions.map((pl) => (
+                        <SelectItem key={pl.id} value={pl.id} className="text-xs">
+                          {pl.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {copilotEnabled ? (
+                <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
+                  <Icons.Sparkles className="mr-2 h-4 w-4" />
+                  Generate draft with Copilot
+                </Button>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent>
             {type === "grn" && linkedPoId && (
               <div className="mb-4 flex items-center gap-2 rounded-md bg-blue-500/10 px-3 py-2 text-sm text-blue-700 dark:text-blue-300">
                 <Icons.Link className="h-3.5 w-3.5 shrink-0" />
                 Lines prefilled from PO <span className="font-medium">{form.watch("poRef")}</span> · Edit quantities to match actual goods received.
+              </div>
+            )}
+            {lineEditorMode === "sales" && dailyPriceStaleCount > 0 && (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-300">
+                <div className="flex items-center gap-2">
+                  <Icons.AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>
+                    <span className="font-semibold">{dailyPriceStaleCount} product{dailyPriceStaleCount !== 1 ? "s" : ""}</span>
+                    {" "}in <span className="font-medium">{dailyPriceListName}</span> haven&apos;t been priced today — using yesterday&apos;s rate.
+                    {" "}Prices marked <span className="font-semibold">⚠ Stale</span> in the Price reason column.
+                  </span>
+                </div>
+                <a
+                  href={`/pricing/price-lists/${lineEditorPriceListId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded bg-amber-500/20 px-2.5 py-1 text-xs font-medium hover:bg-amber-500/30"
+                >
+                  Update prices →
+                </a>
               </div>
             )}
             <DocumentLineEditor
@@ -1203,6 +1304,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
               packagingByProductId={packagingByProductId}
               catalogUomCodes={catalogUomCodes}
               pricingByProductId={lineEditorPricingByProductId}
+              dailyPricesByProductId={lineEditorMode === "sales" ? dailyPricesByProductId : undefined}
               taxCodes={taxCodes}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
               lineColumnLabels={

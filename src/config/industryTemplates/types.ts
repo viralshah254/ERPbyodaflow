@@ -59,18 +59,17 @@ export type FeatureFlagKey =
 
 export type NavSectionKey =
   | "core"
+  | "processing"
   | "masters"
   | "inventory"
   | "warehouse"
   | "treasury"
   | "assets"
   | "projects"
-  | "payroll"
   | "intercompany"
   | "sales"
   | "purchasing"
   | "pricing"
-  | "manufacturing"
   | "distribution"
   | "franchise"
   | "retail"
@@ -113,7 +112,9 @@ export type TerminologyKey =
   | "purchaseRequest"
   | "bill"
   | "franchisee"
-  | "commission";
+  | "commission"
+  /** Sidebar subheading + breadcrumb parent for /manufacturing/* (e.g. "Processing" on Cool-Catch, "Manufacturing" default). */
+  | "processing";
 
 export type TerminologyOverrides = Partial<Record<TerminologyKey, string>>;
 
@@ -162,6 +163,11 @@ export interface IndustryTemplateDefinition {
    * When true, dashboard hides onboarding/guided cards for a calmer ops view.
    */
   compactOperationalDashboard?: boolean;
+  /**
+   * When true, this template is internal/client-specific and excluded from the
+   * public template selector shown in org settings.
+   */
+  hidden?: boolean;
 }
 
 export type TemplateId = string;

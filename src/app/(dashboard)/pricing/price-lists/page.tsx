@@ -39,6 +39,8 @@ import {
   createPriceListApi,
   updatePriceListApi,
   deletePriceListApi,
+  fetchDailyPriceStatusApi,
+  type DailyPriceStatusList,
 } from "@/lib/api/pricing";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { fetchProductsApi } from "@/lib/api/products";
@@ -49,6 +51,7 @@ import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const CHANNELS = ["Retail", "Wholesale", "Distributor", "ModernTrade", "Export"];
 
@@ -62,6 +65,7 @@ function PriceListsContent() {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PriceList | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [dailyStatus, setDailyStatus] = React.useState<DailyPriceStatusList[]>([]);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -79,6 +83,10 @@ function PriceListsContent() {
     } finally {
       setLoading(false);
     }
+    // Load daily price staleness status (best-effort)
+    fetchDailyPriceStatusApi()
+      .then((s) => setDailyStatus(s.lists))
+      .catch(() => {});
   }, [selectedId]);
   React.useEffect(() => {
     refresh();
@@ -181,11 +189,14 @@ function PriceListsContent() {
                   <TableHead>Channel</TableHead>
                   <TableHead>Default</TableHead>
                   <TableHead>Products</TableHead>
-                  <TableHead className="w-32"></TableHead>
+                  <TableHead>Today's prices</TableHead>
+                  <TableHead className="w-40"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {lists.map((pl) => (
+                {lists.map((pl) => {
+                  const status = dailyStatus.find((s) => s.priceListId === pl.id);
+                  return (
                   <TableRow key={pl.id}>
                     <TableCell className="font-medium">{pl.name}</TableCell>
                     <TableCell>{pl.currency}</TableCell>
@@ -194,9 +205,29 @@ function PriceListsContent() {
                     </TableCell>
                     <TableCell>{pl.isDefault ? "Yes" : "—"}</TableCell>
                     <TableCell>{productCountByList.get(pl.id) ?? 0}</TableCell>
+                    <TableCell>
+                      {status ? (
+                        status.staleCount > 0 ? (
+                          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20 gap-1 text-xs whitespace-nowrap">
+                            <Icons.Clock className="h-3 w-3" />
+                            {status.staleCount} need update
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs gap-1">
+                            <Icons.CheckCircle2 className="h-3 w-3" />
+                            Up to date
+                          </Badge>
+                        )
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="space-x-1">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/pricing/price-lists?list=${pl.id}`}>View</Link>
+                      <Button variant="default" size="sm" asChild>
+                        <Link href={`/pricing/price-lists/${pl.id}`}>
+                          <Icons.Tag className="mr-1.5 h-3.5 w-3.5" />
+                          Set prices
+                        </Link>
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => openEdit(pl)}>Edit</Button>
                       {canDelete && (
@@ -223,7 +254,8 @@ function PriceListsContent() {
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>

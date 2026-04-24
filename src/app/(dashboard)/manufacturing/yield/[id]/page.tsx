@@ -16,11 +16,15 @@ import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocati
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
 import { fetchYieldById } from "@/lib/api/yield";
 import type { YieldRecordRow } from "@/lib/api/yield";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
 
 export default function YieldDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [record, setRecord] = React.useState<YieldRecordRow | null>(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -32,7 +36,7 @@ export default function YieldDetailPage() {
   if (loading && !record) {
     return (
       <PageShell>
-        <PageHeader title="Yield" breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/boms" }, { label: "Yield", href: "/manufacturing/yield" }, { label: id }]} />
+        <PageHeader title="Yield" breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "Yield", href: "/manufacturing/yield" }, { label: id }]} />
         <div className="p-6 text-sm text-muted-foreground">Loading…</div>
       </PageShell>
     );
@@ -40,7 +44,7 @@ export default function YieldDetailPage() {
   if (record === null) {
     return (
       <PageShell>
-        <PageHeader title="Yield not found" breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/boms" }, { label: "Yield", href: "/manufacturing/yield" }, { label: id }]} />
+        <PageHeader title="Yield not found" breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "Yield", href: "/manufacturing/yield" }, { label: id }]} />
         <div className="p-6">
           <p className="text-muted-foreground">Yield record not found.</p>
           <Button variant="outline" className="mt-4" asChild>
@@ -57,7 +61,7 @@ export default function YieldDetailPage() {
         title={`Yield ${record.id}`}
         description={record.workOrderNumber ?? record.subcontractOrderId ?? record.recordedAt}
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Yield", href: "/manufacturing/yield" },
           { label: record.id },
         ]}

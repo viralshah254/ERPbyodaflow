@@ -77,33 +77,11 @@ import { formatMoney } from "@/lib/money";
 import { t } from "@/lib/terminology";
 import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
+import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-// ─── Product type helpers ────────────────────────────────────────────────────
-
 type ProductType = "RAW" | "FINISHED" | "BOTH" | undefined;
-
-function productTypeLabel(type: ProductType): string {
-  if (type === "RAW") return "Purchased item";
-  if (type === "FINISHED") return "Sellable item";
-  return "Stock item";
-}
-
-function ProductTypeBadge({ type }: { type: ProductType }) {
-  const label = productTypeLabel(type);
-  const cls =
-    type === "RAW"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
-      : type === "FINISHED"
-      ? "border-green-500/30 bg-green-500/10 text-green-400"
-      : "border-purple-500/30 bg-purple-500/10 text-purple-400";
-  return (
-    <Badge variant="outline" className={cls}>
-      {label}
-    </Badge>
-  );
-}
 
 /** Whether a given section is relevant to this product type. */
 function showSection(
@@ -502,7 +480,7 @@ export default function ProductDetailPage() {
         showCommandHint
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            <ProductTypeBadge type={productType} />
+            <ProductTypeBadge type={productType} whenUnset="stock" />
             <ExplainThis
               prompt={`Explain product ${product.sku} (${product.name}): type, packaging, pricing.`}
               label="Explain"
@@ -687,25 +665,25 @@ export default function ProductDetailPage() {
                         <SelectItem value="RAW">
                           <span className="flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full bg-blue-400" />
-                            Purchased item — appears on purchase orders
+                            Purchased product — appears on purchase orders
                           </span>
                         </SelectItem>
                         <SelectItem value="FINISHED">
                           <span className="flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full bg-green-400" />
-                            Sellable item — appears on sales orders
+                            Finished product — appears on sales orders
                           </span>
                         </SelectItem>
                         <SelectItem value="__default__">
                           <span className="flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full bg-purple-400" />
-                            Stock item — buy and sell
+                            Stock product — buy and sell
                           </span>
                         </SelectItem>
                         <SelectItem value="BOTH">
                           <span className="flex items-center gap-2">
                             <span className="h-2 w-2 rounded-full bg-purple-400" />
-                            Stock item (both)
+                            Stock product (explicit)
                           </span>
                         </SelectItem>
                       </SelectContent>
@@ -844,13 +822,13 @@ export default function ProductDetailPage() {
           <TabsContent value="pricing" className="space-y-4">
             {/* Context banner */}
             <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
-              <ProductTypeBadge type={productType} />
+              <ProductTypeBadge type={productType} whenUnset="stock" />
               <p className="text-sm text-muted-foreground">
                 {!showSection("purchase", productType)
-                  ? "Sellable item — configure customer-facing sales price lists below."
+                  ? "Finished product — configure customer-facing sales price lists below."
                   : !showSection("sales", productType)
-                  ? "Purchased item — configure cost / purchase price lists below."
-                  : "Stock item — configure both purchase cost and sales price lists below."}
+                  ? "Purchased product — configure cost / purchase price lists below."
+                  : "Stock product — configure both purchase cost and sales price lists below."}
               </p>
               <div className="ml-auto flex gap-2">
                 <ExplainThis prompt="Explain tiered pricing and effective unit price." label="Explain" />

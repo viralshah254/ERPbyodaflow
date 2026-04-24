@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchPriceListsForUi, fetchDiscountPolicies } from "@/lib/api/pricing";
+import { fetchPriceListsForUi, fetchDiscountPolicies, fetchDailyPriceStatusApi, type DailyPriceStatusResponse } from "@/lib/api/pricing";
 import { fetchProductsApi } from "@/lib/api/products";
 import { fetchProductPricingApi } from "@/lib/api/product-master";
 import { fetchBatchCostingReportApi, type BatchCostingRow } from "@/lib/api/reports";
@@ -33,6 +33,7 @@ export default function PricingOverviewPage() {
   const [batchCosts, setBatchCosts] = React.useState<BatchCostingRow[]>([]);
   const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
+  const [dailyStatus, setDailyStatus] = React.useState<DailyPriceStatusResponse | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -45,6 +46,9 @@ export default function PricingOverviewPage() {
     // Fetch recent batch cost data to show cost basis
     fetchBatchCostingReportApi({ margin: 30 })
       .then((data) => { if (!cancelled) setBatchCosts(data.items.slice(0, 6)); })
+      .catch(() => {});
+    fetchDailyPriceStatusApi()
+      .then((s) => { if (!cancelled) setDailyStatus(s); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -151,6 +155,22 @@ export default function PricingOverviewPage() {
           </Card>
         )}
 
+        {/* Daily pricing alert */}
+        {dailyStatus && dailyStatus.totalListsNeedingUpdate > 0 && (
+          <div className="flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-2.5 text-sm">
+            <Icons.Clock className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="text-amber-800 dark:text-amber-300">
+              <strong>{dailyStatus.totalListsNeedingUpdate} price list{dailyStatus.totalListsNeedingUpdate > 1 ? "s" : ""}</strong> haven't been updated today. Set today's prices before processing orders.
+            </span>
+            <Button variant="outline" size="sm" className="ml-auto shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100" asChild>
+              <Link href="/pricing/price-lists">
+                <Icons.Tag className="h-3.5 w-3.5 mr-1.5" />
+                Update prices
+              </Link>
+            </Button>
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
@@ -183,13 +203,28 @@ export default function PricingOverviewPage() {
               </Button>
             </CardContent>
           </Card>
-          <Card>
+          <Card className={dailyStatus && dailyStatus.totalListsNeedingUpdate > 0 ? "border-amber-200 dark:border-amber-800" : undefined}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Simulate</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Prices today</CardTitle>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/analytics/simulations">Pricing what-if</Link>
+              {dailyStatus ? (
+                dailyStatus.totalListsNeedingUpdate > 0 ? (
+                  <>
+                    <p className="text-2xl font-bold text-amber-600">{dailyStatus.totalListsNeedingUpdate}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">list{dailyStatus.totalListsNeedingUpdate > 1 ? "s" : ""} need update</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold text-emerald-600">{priceLists.length}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">all up to date</p>
+                  </>
+                )
+              ) : (
+                <p className="text-2xl font-bold text-muted-foreground">—</p>
+              )}
+              <Button variant="link" className="h-auto p-0 mt-1" asChild>
+                <Link href="/pricing/price-lists">Set prices</Link>
               </Button>
             </CardContent>
           </Card>

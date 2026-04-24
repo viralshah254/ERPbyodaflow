@@ -14,8 +14,12 @@ import {
   fetchProductsApi,
   deleteProductApi,
 } from "@/lib/api/products";
+import { fetchProductCategoriesApi, type ItemCategoryRow } from "@/lib/api/product-categories";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
+import type { ProductKind } from "@/lib/products/product-type";
+import { productTypeSortKey, rowMatchesProductTypeFilter } from "@/lib/products/product-type";
+import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -24,6 +28,7 @@ interface Product {
   id: string;
   name: string;
   sku: string;
+  productType?: ProductKind;
   category: string;
   stock: number;
   price: number;
@@ -38,6 +43,7 @@ function buildProductRow(row: ProductRow): Product {
     id: row.id,
     name: row.name,
     sku: row.sku,
+    productType: row.productType,
     category: row.category ?? "",
     stock: row.currentStock ?? 0,
     // Until the products list returns richer pricing metadata, keep these read-only fields neutral.
@@ -55,13 +61,26 @@ export default function ProductsPage() {
   const canDelete = permissions.includes("admin.settings");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
+  const [productTypeFilter, setProductTypeFilter] = React.useState<"all" | ProductKind>("all");
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
   const [rows, setRows] = React.useState<Product[]>([]);
+  const [categories, setCategories] = React.useState<ItemCategoryRow[]>([]);
+  // Map categoryId → display name for the table column
+  const categoryNameById = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of categories) m.set(c.id, c.name);
+    return m;
+  }, [categories]);
 
   React.useEffect(() => {
     let active = true;
-    void fetchProductsApi()
-      .then((products) => {
+    void Promise.all([
+      fetchProductsApi(),
+      fetchProductCategoriesApi().catch(() => [] as ItemCategoryRow[]),
+    ])
+      .then(([products, cats]) => {
         if (!active) return;
+        setCategories(cats);
         setProductsCache(products);
         setRows(products.map(buildProductRow));
       })
@@ -81,9 +100,12 @@ export default function ProductsPage() {
         product.sku.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus =
         statusFilter === "all" || product.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesCategory =
+        categoryFilter === "all" || product.category === categoryFilter;
+      const matchesType = rowMatchesProductTypeFilter(product.productType, productTypeFilter);
+      return matchesSearch && matchesStatus && matchesCategory && matchesType;
     });
-  }, [rows, searchQuery, statusFilter]);
+  }, [rows, searchQuery, statusFilter, categoryFilter, productTypeFilter]);
 
   const handleView = (id: string) => {
     router.push(`/master/products/${id}`);
@@ -111,6 +133,8 @@ export default function ProductsPage() {
     {
       id: "name",
       header: "Product Name",
+      sortable: true,
+      sortValue: (row: Product) => row.name.toLowerCase(),
       accessor: (row: Product) => (
         <div className="space-y-1">
           <div className="font-medium">{row.name}</div>
@@ -128,13 +152,32 @@ export default function ProductsPage() {
       sticky: true,
     },
     {
+      id: "productType",
+      header: "Product type",
+      sortable: true,
+      sortValue: (row: Product) => productTypeSortKey(row.productType),
+      accessor: (row: Product) => <ProductTypeBadge type={row.productType} />,
+    },
+    {
       id: "category",
       header: "Category",
-      accessor: "category" as keyof Product,
+      sortable: true,
+      sortValue: (row: Product) =>
+        (categoryNameById.get(row.category) ?? row.category ?? "").toLowerCase(),
+      accessor: (row: Product) => {
+        const name = categoryNameById.get(row.category) ?? row.category;
+        return name ? (
+          <Badge variant="secondary" className="text-xs font-normal">{name}</Badge>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        );
+      },
     },
     {
       id: "stock",
       header: "Stock",
+      sortable: true,
+      sortValue: (row: Product) => row.stock,
       accessor: (row: Product) => (
         <div className="text-right">
           <div className="font-medium">{row.stock}</div>
@@ -147,6 +190,8 @@ export default function ProductsPage() {
     {
       id: "price",
       header: "Price",
+      sortable: true,
+      sortValue: (row: Product) => row.price,
       accessor: (row: Product) => (
         <div className="text-right font-medium">
           KES {row.price.toFixed(2)}
@@ -156,11 +201,14 @@ export default function ProductsPage() {
     {
       id: "status",
       header: "Status",
+      sortable: true,
+      sortValue: (row: Product) => row.status.toLowerCase(),
       accessor: (row: Product) => <StatusBadge status={row.status} />,
     },
     {
       id: "lastUpdated",
       header: "Last Updated",
+      sortable: true,
       accessor: "lastUpdated" as keyof Product,
     },
     {
@@ -230,21 +278,38 @@ export default function ProductsPage() {
               onChange: setStatusFilter,
             },
             {
+              id: "productType",
+              label: "Product type",
+              options: [
+                { label: "All types", value: "all" },
+                { label: "Purchased product", value: "RAW" },
+                { label: "Finished product", value: "FINISHED" },
+                { label: "Stock product", value: "BOTH" },
+              ],
+              value: productTypeFilter,
+              onChange: (v) => setProductTypeFilter(v as "all" | ProductKind),
+            },
+            {
               id: "category",
               label: "Category",
               options: [
                 { label: "All Categories", value: "all" },
-                { label: "Electronics", value: "Electronics" },
-                { label: "Components", value: "Components" },
-                { label: "Kits", value: "Kits" },
-                { label: "Raw Materials", value: "Raw Materials" },
+                ...categories.map((c) => ({ label: c.name, value: c.id })),
               ],
+              value: categoryFilter,
+              onChange: setCategoryFilter,
             },
           ]}
           activeFiltersCount={
-            statusFilter !== "all" ? 1 : 0
+            (statusFilter !== "all" ? 1 : 0) +
+            (productTypeFilter !== "all" ? 1 : 0) +
+            (categoryFilter !== "all" ? 1 : 0)
           }
-          onClearFilters={() => setStatusFilter("all")}
+          onClearFilters={() => {
+            setStatusFilter("all");
+            setProductTypeFilter("all");
+            setCategoryFilter("all");
+          }}
         />
         <CardHeader>
           <div className="flex items-center justify-between">

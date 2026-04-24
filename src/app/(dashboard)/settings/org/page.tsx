@@ -13,25 +13,18 @@ import {
 } from "@/config/industryTemplates/templates";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { fetchOrgProfileApi, saveOrgProfileApi } from "@/lib/api/org";
-import { saveCurrentOrgContext } from "@/lib/api/context";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const ALL_TEMPLATES = getAllTemplates();
 
 export default function OrganizationPage() {
-  const { templateId, template, hydrateFromBackend } = useOrgContextStore();
+  const { templateId, template } = useOrgContextStore();
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [name, setName] = React.useState("");
   const [taxId, setTaxId] = React.useState("");
   const [registrationNumber, setRegistrationNumber] = React.useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>("");
-  const [savingTemplate, setSavingTemplate] = React.useState(false);
-
-  React.useEffect(() => {
-    if (templateId) setSelectedTemplateId(templateId);
-  }, [templateId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -117,73 +110,38 @@ export default function OrganizationPage() {
           <CardHeader>
             <CardTitle>Industry Template</CardTitle>
             <CardDescription>
-              Controls which modules, feature flags, and terminology are active for your organisation. Changes take effect immediately.
+              The active template controls which modules, feature flags, and terminology are available for your organisation. Contact Odaflow to change your template.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {ALL_TEMPLATES.map((t) => {
-                const isActive = selectedTemplateId === t.id;
-                const isPerishable = PERISHABLE_DISTRIBUTION_TEMPLATE_IDS.includes(
-                  t.id as (typeof PERISHABLE_DISTRIBUTION_TEMPLATE_IDS)[number]
-                );
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setSelectedTemplateId(t.id)}
-                    className={`rounded-lg border p-4 text-left transition-colors ${
-                      isActive
-                        ? "border-primary bg-primary/5 ring-1 ring-primary"
-                        : "border-border hover:border-muted-foreground/40 hover:bg-muted/30"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center gap-2">
-                      {isPerishable ? (
-                        <Icons.Fish className="h-4 w-4 shrink-0 text-blue-500" />
-                      ) : (
-                        <Icons.Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="text-sm font-medium">{t.name}</span>
-                      {isActive && (
-                        <Badge variant="default" className="ml-auto text-[10px]">
-                          Active
-                        </Badge>
-                      )}
+          <CardContent>
+            {(() => {
+              const active = template ?? ALL_TEMPLATES.find((t) => t.id === templateId) ?? null;
+              const isPerishable = active && PERISHABLE_DISTRIBUTION_TEMPLATE_IDS.includes(
+                active.id as (typeof PERISHABLE_DISTRIBUTION_TEMPLATE_IDS)[number]
+              );
+              return (
+                <div className="flex items-start gap-3 rounded-lg border border-primary bg-primary/5 ring-1 ring-primary p-4 max-w-sm">
+                  <div className="mt-0.5">
+                    {isPerishable ? (
+                      <Icons.Fish className="h-4 w-4 text-blue-500" />
+                    ) : (
+                      <Icons.Building2 className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium">
+                        {active?.name ?? templateId ?? "—"}
+                      </span>
+                      <Badge variant="default" className="text-[10px]">Active</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{t.description}</p>
-                  </button>
-                );
-              })}
-            </div>
-            {selectedTemplateId && selectedTemplateId !== templateId && (
-              <Button
-                size="sm"
-                disabled={savingTemplate}
-                onClick={async () => {
-                  setSavingTemplate(true);
-                  try {
-                    const updated = await saveCurrentOrgContext({ templateId: selectedTemplateId });
-                    hydrateFromBackend({
-                      templateId: updated.templateId,
-                      enabledModules: updated.enabledModules,
-                      featureFlags: updated.featureFlags,
-                      terminology: updated.terminology,
-                      defaultNav: updated.defaultNav,
-                      orgRole: updated.orgRole,
-                    });
-                    toast.success("Industry template updated. The page will reflect new modules.");
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  } finally {
-                    setSavingTemplate(false);
-                  }
-                }}
-              >
-                <Icons.Check className="mr-2 h-3.5 w-3.5" />
-                Apply Template
-              </Button>
-            )}
+                    {active?.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{active.description}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>

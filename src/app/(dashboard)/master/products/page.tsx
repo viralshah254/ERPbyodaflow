@@ -11,7 +11,6 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -36,6 +35,8 @@ import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
 import type { TaxRow } from "@/lib/types/taxes";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
+import { productTypeLabel } from "@/lib/products/product-type";
+import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { useAuthStore } from "@/stores/auth-store";
@@ -68,31 +69,6 @@ function suggestNextCode(existing: string[]): string {
   return String(max + 1).padStart(5, "0");
 }
 
-type ProductType = "RAW" | "FINISHED" | "BOTH" | undefined;
-
-function productTypeLabel(type: ProductType | string | undefined): string {
-  if (type === "RAW") return "Purchased item";
-  if (type === "FINISHED") return "Sellable item";
-  if (type === "BOTH") return "Stock item";
-  return "Stock item";
-}
-
-function ProductTypeBadge({ type }: { type: ProductType | string | undefined }) {
-  if (!type) return <span className="text-muted-foreground text-xs">—</span>;
-  const label = productTypeLabel(type);
-  const cls =
-    type === "RAW"
-      ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
-      : type === "FINISHED"
-      ? "border-green-500/30 bg-green-500/10 text-green-400"
-      : "border-purple-500/30 bg-purple-500/10 text-purple-400";
-  return (
-    <Badge variant="outline" className={cls}>
-      {label}
-    </Badge>
-  );
-}
-
 export default function MasterProductsPage() {
   const router = useRouter();
   const terminology = useTerminology();
@@ -101,6 +77,7 @@ export default function MasterProductsPage() {
   const productLabel = t("product", terminology);
 
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [productTypeFilter, setProductTypeFilter] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -127,6 +104,11 @@ export default function MasterProductsPage() {
   const [addingCategory, setAddingCategory] = React.useState(false);
   const [uomOptions, setUomOptions] = React.useState<string[]>([]);
 
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
   const loadCategories = React.useCallback(async () => {
     try {
       const list = await fetchProductCategoriesApi();
@@ -149,7 +131,7 @@ export default function MasterProductsPage() {
     setLoading(true);
     try {
       const data = await fetchProductsApi({
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         status: statusFilter || undefined,
         productType: productTypeFilter || undefined,
       });
@@ -160,7 +142,7 @@ export default function MasterProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, productTypeFilter]);
+  }, [debouncedSearch, statusFilter, productTypeFilter]);
 
   React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
@@ -293,7 +275,7 @@ export default function MasterProductsPage() {
     };
     try {
       const created = await createProductApi(payload);
-      toast.success(`${productTypeLabel(productType)} created.`);
+      toast.success(`${productTypeLabel(productType || undefined)} created.`);
       resetForm();
       setDrawerOpen(false);
       await refreshProducts();
@@ -313,21 +295,21 @@ export default function MasterProductsPage() {
   const typeOptions: Array<{ value: "RAW" | "FINISHED" | "BOTH"; label: string; description: string; color: string; icon: keyof typeof Icons }> = [
     {
       value: "RAW",
-      label: "Purchased item",
+      label: "Purchased product",
       description: "Buy from suppliers. Appears on purchase orders and bills.",
       color: "border-blue-500/40 bg-blue-500/5 data-[active=true]:border-blue-500 data-[active=true]:bg-blue-500/10",
       icon: "ShoppingCart",
     },
     {
       value: "FINISHED",
-      label: "Sellable item",
+      label: "Finished product",
       description: "Sell to customers. Appears on sales orders and invoices.",
       color: "border-green-500/40 bg-green-500/5 data-[active=true]:border-green-500 data-[active=true]:bg-green-500/10",
       icon: "TrendingUp",
     },
     {
       value: "BOTH",
-      label: "Stock item",
+      label: "Stock product",
       description: "Buy and sell. Appears on both purchase and sales documents.",
       color: "border-purple-500/40 bg-purple-500/5 data-[active=true]:border-purple-500 data-[active=true]:bg-purple-500/10",
       icon: "Package",
@@ -380,9 +362,9 @@ export default function MasterProductsPage() {
               label: "Type",
               options: [
                 { label: "All types", value: "" },
-                { label: "Purchased item", value: "RAW" },
-                { label: "Sellable item", value: "FINISHED" },
-                { label: "Stock item", value: "BOTH" },
+                { label: "Purchased product", value: "RAW" },
+                { label: "Finished product", value: "FINISHED" },
+                { label: "Stock product", value: "BOTH" },
               ],
               value: productTypeFilter,
               onChange: (v) => setProductTypeFilter(v as "RAW" | "FINISHED" | "BOTH" | ""),

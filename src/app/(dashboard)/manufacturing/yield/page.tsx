@@ -42,9 +42,15 @@ import {
   type SubcontractOrderRow,
   type ExternalWorkCenterRow,
 } from "@/lib/api/cool-catch";
+import {
+  fetchManufacturingWorkOrders,
+  type ManufacturingWorkOrder,
+} from "@/lib/api/manufacturing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { formatMoney } from "@/lib/money";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +72,8 @@ function lineTypeBadge(type: string) {
 
 export default function ManufacturingYieldPage() {
   const router = useRouter();
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
 
   // List/report state
   const [records, setRecords] = React.useState<YieldRecordRow[]>([]);
@@ -85,7 +93,9 @@ export default function ManufacturingYieldPage() {
   // Smart form state
   const [subcontractOrders, setSubcontractOrders] = React.useState<SubcontractOrderRow[]>([]);
   const [reverseBoms, setReverseBoms] = React.useState<Array<{ id: string; name: string; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>>([]);
+  const [workOrders, setWorkOrders] = React.useState<ManufacturingWorkOrder[]>([]);
   const [selectedScoId, setSelectedScoId] = React.useState<string>("");
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = React.useState<string>("");
   const [inputKgOverride, setInputKgOverride] = React.useState<string>("");
   const [outputLines, setOutputLines] = React.useState<BomOutputLine[]>([]);
 
@@ -108,12 +118,15 @@ export default function ManufacturingYieldPage() {
 
   React.useEffect(() => { loadData(); }, [loadData]);
 
-  // Load subcontract orders + BOMs when sheet opens
+  // Load work orders, subcontract orders + BOMs when sheet opens
   React.useEffect(() => {
     if (!recordYieldOpen) return;
     Promise.all([
       fetchSubcontractOrders({ status: "WIP" }).then(setSubcontractOrders),
       fetchReverseBoms().then(setReverseBoms),
+      fetchManufacturingWorkOrders().then((all) =>
+        setWorkOrders(all.filter((wo) => ["released", "in_progress", "started", "completed"].includes(wo.status.toLowerCase())))
+      ),
     ]).catch(() => {});
   }, [recordYieldOpen]);
 
@@ -167,6 +180,34 @@ export default function ManufacturingYieldPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedScoId, subcontractOrders, reverseBoms]);
 
+  // When a work order is selected, auto-populate input qty + BOM output lines
+  React.useEffect(() => {
+    if (!selectedWorkOrderId) return;
+    const wo = workOrders.find((w) => w.id === selectedWorkOrderId);
+    if (!wo) return;
+
+    const inputQty = wo.quantity ?? wo.plannedQuantity ?? 0;
+    if (!inputKgOverride && inputQty > 0) setInputKgOverride(String(inputQty));
+
+    const bom = reverseBoms.find((b) => b.id === wo.bomId);
+    if (!bom) { setOutputLines([]); return; }
+
+    const scale = inputQty > 0 ? inputQty / 100 : 1;
+    const lines: BomOutputLine[] = bom.items.map((item) => {
+      const lineType: BomOutputLine["type"] =
+        item.type === "PRIMARY" ? "OUTPUT_PRIMARY" : item.type === "SECONDARY" ? "OUTPUT_SECONDARY" : "WASTE";
+      return {
+        productId: item.productId ?? "",
+        productName: item.productName ?? (item.productId ?? "").slice(-12),
+        type: lineType,
+        expectedKg: Math.round(item.quantity * scale * 100) / 100,
+        actualKg: "",
+      };
+    });
+    setOutputLines(lines);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkOrderId, workOrders, reverseBoms]);
+
   const currentInputKg = Number(inputKgOverride) || 0;
 
   // Re-scale expected kg when input changes
@@ -207,6 +248,7 @@ export default function ManufacturingYieldPage() {
     setYieldSaving(true);
     try {
       await createYieldRecord({
+        workOrderId: selectedWorkOrderId || undefined,
         subcontractOrderId: selectedScoId || undefined,
         inputWeightKg: currentInputKg,
         lines,
@@ -214,6 +256,7 @@ export default function ManufacturingYieldPage() {
       toast.success("Yield record saved.");
       setRecordYieldOpen(false);
       setSelectedScoId("");
+      setSelectedWorkOrderId("");
       setInputKgOverride("");
       setOutputLines([]);
       loadData();
@@ -327,7 +370,7 @@ export default function ManufacturingYieldPage() {
         title="Yield / Mass balance"
         description="Record actual outputs per batch; compare to BOM-expected. Process loss = input − primary − secondary."
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Yield" },
         ]}
         sticky
@@ -474,20 +517,60 @@ export default function ManufacturingYieldPage() {
           <SheetHeader>
             <SheetTitle>Record yield</SheetTitle>
             <SheetDescription>
-              Select a WIP subcontract order. Output lines are pre-populated from the BOM. Enter actual kg received per product. Process loss is calculated automatically.
+              Link to a work order (batch) or WIP subcontract order. Output lines are pre-populated from the BOM — enter actual kg per product. Process loss is calculated automatically.
             </SheetDescription>
           </SheetHeader>
 
           <div className="mt-6 space-y-5">
-            {/* Subcontract order selector */}
+            {/* Work order selector (primary source) */}
             <div className="space-y-2">
-              <Label>Subcontract order (WIP)</Label>
-              <Select value={selectedScoId || ""} onValueChange={(v) => { setSelectedScoId(v); setInputKgOverride(""); setOutputLines([]); }}>
+              <Label>Work order (batch)</Label>
+              <Select
+                value={selectedWorkOrderId || "__none_wo__"}
+                onValueChange={(v) => {
+                  const id = v === "__none_wo__" ? "" : v;
+                  setSelectedWorkOrderId(id);
+                  if (id) { setSelectedScoId(""); }
+                  setInputKgOverride("");
+                  setOutputLines([]);
+                }}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select order in WIP status" />
+                  <SelectValue placeholder="Select a released / in-progress work order" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— Manual entry —</SelectItem>
+                  <SelectItem value="__none_wo__">— No work order —</SelectItem>
+                  {workOrders.map((wo) => (
+                    <SelectItem key={wo.id} value={wo.id}>
+                      {wo.number}
+                      {wo.productName ? ` · ${wo.productName}` : ""}
+                      {wo.quantity ? ` · ${wo.quantity} kg` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
+            {/* Subcontract order selector (secondary source) */}
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Or: subcontract order (WIP)</Label>
+              <Select
+                value={selectedScoId || "__none_sco__"}
+                onValueChange={(v) => {
+                  const id = v === "__none_sco__" ? "" : v;
+                  setSelectedScoId(id);
+                  if (id) { setSelectedWorkOrderId(""); }
+                  setInputKgOverride("");
+                  setOutputLines([]);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select subcontract order in WIP status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none_sco__">— None —</SelectItem>
                   {subcontractOrders.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.number} · {s.workCenterName}
@@ -589,17 +672,17 @@ export default function ManufacturingYieldPage() {
               </>
             )}
 
-            {/* Manual mode: no SCO selected */}
-            {!selectedScoId && (
+            {/* Manual mode: no source selected */}
+            {!selectedScoId && !selectedWorkOrderId && (
               <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground text-center">
-                Select a WIP subcontract order above to auto-populate output lines from BOM, or continue with manual entry.
+                Select a work order or WIP subcontract order above to auto-populate output lines from BOM, or enter input weight and lines manually.
               </div>
             )}
           </div>
 
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setRecordYieldOpen(false)} disabled={yieldSaving}>Cancel</Button>
-            <Button onClick={handleRecordYield} disabled={yieldSaving || !currentInputKg || (scaledLines.length === 0 && !selectedScoId)}>
+            <Button onClick={handleRecordYield} disabled={yieldSaving || !currentInputKg || (scaledLines.length === 0 && !selectedScoId && !selectedWorkOrderId)}>
               {yieldSaving ? "Saving…" : "Save yield"}
             </Button>
           </SheetFooter>

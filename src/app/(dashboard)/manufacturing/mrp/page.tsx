@@ -10,10 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { applyManufacturingMrp, fetchManufacturingMrp, type ManufacturingMrpSuggestion } from "@/lib/api/manufacturing";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function MrpPage() {
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [itemFilter, setItemFilter] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<ManufacturingMrpSuggestion[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -49,7 +53,7 @@ export default function MrpPage() {
         title="MRP"
         description="Material requirements planning — periods × items, requirements and planned orders"
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "MRP" },
         ]}
         sticky

@@ -31,6 +31,8 @@ import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCar
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 
 function ReceiveWeightRow({
   line,
@@ -95,6 +97,8 @@ function ReceiveWeightRow({
 export default function SubcontractOrderDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchSubcontractOrderById>>>(null);
   const [loading, setLoading] = React.useState(true);
   const [receiving, setReceiving] = React.useState(false);
@@ -211,7 +215,7 @@ export default function SubcontractOrderDetailPage() {
   if (loading) {
     return (
       <PageShell>
-        <PageHeader title="Subcontract order" breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/subcontracting" }, { label: "Subcontracting" }, { label: id }]} />
+        <PageHeader title="Subcontract order" breadcrumbs={[{ label: areaLabel, href: "/manufacturing/subcontracting" }, { label: "Subcontracting" }, { label: id }]} />
         <div className="p-6"><p className="text-muted-foreground text-sm">Loading…</p></div>
       </PageShell>
     );
@@ -220,7 +224,7 @@ export default function SubcontractOrderDetailPage() {
   if (!order) {
     return (
       <PageShell>
-        <PageHeader title="Order not found" breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/subcontracting" }, { label: "Subcontracting" }, { label: id }]} />
+        <PageHeader title="Order not found" breadcrumbs={[{ label: areaLabel, href: "/manufacturing/subcontracting" }, { label: "Subcontracting" }, { label: id }]} />
         <div className="p-6">
           <p className="text-muted-foreground">Subcontract order not found.</p>
           <Button variant="outline" className="mt-4" asChild>
@@ -256,7 +260,7 @@ export default function SubcontractOrderDetailPage() {
         title={order.number}
         description={`${order.workCenterName} · ${order.status}`}
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Subcontracting", href: "/manufacturing/subcontracting" },
           { label: order.number },
         ]}

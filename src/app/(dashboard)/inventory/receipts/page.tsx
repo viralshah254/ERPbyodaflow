@@ -153,13 +153,38 @@ export default function InventoryReceiptsPage() {
       {
         id: "subcontracted",
         header: "VAS",
-        accessor: (r: PurchasingDocRow) =>
-          subcontractedGrnIds.has(r.id) ? (
-            <Badge variant="secondary" className="text-xs gap-1 whitespace-nowrap">
-              <Icons.Factory className="h-3 w-3" />
-              Subcontracted
-            </Badge>
-          ) : null,
+        accessor: (r: PurchasingDocRow) => {
+          const badges: React.ReactNode[] = [];
+
+          if (subcontractedGrnIds.has(r.id)) {
+            badges.push(
+              <Badge key="sub" variant="secondary" className="text-xs gap-1 whitespace-nowrap">
+                <Icons.Factory className="h-3 w-3" />
+                Subcontracted
+              </Badge>
+            );
+          }
+
+          if (r.workOrderId && r.workOrderStatus !== "CANCELLED") {
+            if (r.workOrderStatus === "COMPLETED") {
+              badges.push(
+                <Badge key="wo" variant="outline" className="text-emerald-600 border-emerald-300 text-xs gap-1 whitespace-nowrap">
+                  <Icons.CheckCircle2 className="h-3 w-3" />
+                  Processed
+                </Badge>
+              );
+            } else {
+              badges.push(
+                <Badge key="wo" variant="outline" className="text-amber-600 border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-xs gap-1 whitespace-nowrap">
+                  <Icons.Settings2 className="h-3 w-3" />
+                  {r.workOrderNumber ?? "In work order"}
+                </Badge>
+              );
+            }
+          }
+
+          return badges.length > 0 ? <div className="flex flex-wrap gap-1">{badges}</div> : null;
+        },
       },
       {
         id: "landedCost",

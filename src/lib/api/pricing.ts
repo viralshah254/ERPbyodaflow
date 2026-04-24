@@ -176,3 +176,90 @@ export async function deletePriceListApi(id: string): Promise<void> {
   requireLiveApi("Delete price list");
   await apiRequest(`/api/pricing/price-lists/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+
+// ─── Daily prices ─────────────────────────────────────────────────────────────
+
+export interface DailyPriceItem {
+  productId: string;
+  sku: string;
+  name: string;
+  uom: string;
+  currency: string;
+  /** Price set for the target date, null if not yet entered. */
+  todayPrice: number | null;
+  todayUpdatedAt: string | null;
+  todayNotes: string | null;
+  /** Most recent price from a prior day, used as fallback display. */
+  fallbackPrice: number | null;
+  fallbackDate: string | null;
+  /** True when no price has been entered for the target date. */
+  isStale: boolean;
+  /** todayPrice if set, else fallbackPrice. */
+  effectivePrice: number | null;
+}
+
+export interface DailyPriceListResponse {
+  priceListId: string;
+  priceListName: string;
+  currency: string;
+  date: string;
+  items: DailyPriceItem[];
+  staleCount: number;
+  totalCount: number;
+}
+
+export interface DailyPriceStatusList {
+  priceListId: string;
+  priceListName: string;
+  totalProducts: number;
+  pricedToday: number;
+  staleCount: number;
+  needsUpdate: boolean;
+}
+
+export interface DailyPriceStatusResponse {
+  date: string;
+  totalListsNeedingUpdate: number;
+  lists: DailyPriceStatusList[];
+}
+
+export async function fetchDailyPricesApi(
+  priceListId: string,
+  date?: string
+): Promise<DailyPriceListResponse> {
+  requireLiveApi("Daily prices");
+  const params = date ? `?date=${encodeURIComponent(date)}` : "";
+  return apiRequest<DailyPriceListResponse>(
+    `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices${params}`
+  );
+}
+
+export async function setDailyPriceApi(
+  priceListId: string,
+  productId: string,
+  price: number,
+  opts?: { date?: string; notes?: string }
+): Promise<void> {
+  requireLiveApi("Set daily price");
+  await apiRequest(
+    `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices/${encodeURIComponent(productId)}`,
+    { method: "PUT", body: { price, date: opts?.date, notes: opts?.notes } }
+  );
+}
+
+export async function bulkSetDailyPricesApi(
+  priceListId: string,
+  items: Array<{ productId: string; price: number; notes?: string }>,
+  date?: string
+): Promise<void> {
+  requireLiveApi("Bulk set daily prices");
+  await apiRequest(
+    `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices`,
+    { method: "PUT", body: { items, date } }
+  );
+}
+
+export async function fetchDailyPriceStatusApi(): Promise<DailyPriceStatusResponse> {
+  requireLiveApi("Daily price status");
+  return apiRequest<DailyPriceStatusResponse>("/api/pricing/daily-prices/status");
+}

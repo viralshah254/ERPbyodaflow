@@ -161,7 +161,8 @@ export default function SourcingFlowPage() {
           openPoCount: orders.filter((r) => !["RECEIVED", "CANCELLED"].includes(r.status)).length,
           unresolvedVarianceCount:
             (auditSummary.summary?.varianceCount ?? 0) + (auditSummary.summary?.pendingCount ?? 0),
-          landedCostSourceCount: landedCostSources.length,
+          // Match Inventory → Costing: only GRNs that still need an other-costs allocation (not total queue size).
+          landedCostSourceCount: landedCostSources.filter((s) => !s.isAllocated).length,
           disbursementCount: disbursements.length,
           postedGrnCount: grns.filter((g) => g.status === "POSTED").length,
           receivedGrnCount: grns.filter((g) => g.status === "RECEIVED").length,

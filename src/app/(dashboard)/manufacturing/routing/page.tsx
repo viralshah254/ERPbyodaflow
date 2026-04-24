@@ -16,6 +16,8 @@ import {
   updateManufacturingRoute,
   type ManufacturingRoute,
 } from "@/lib/api/manufacturing";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -29,6 +31,8 @@ type RouteOperationInput = {
 };
 
 export default function RoutingPage() {
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [routes, setRoutes] = React.useState<ManufacturingRoute[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -93,7 +97,7 @@ export default function RoutingPage() {
         title="Routing"
         description="Live operation sequences used by manufacturing BOMs and work orders."
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Routing" },
         ]}
         sticky

@@ -109,7 +109,7 @@ const FALLBACK_TEMPLATES: PlatformTemplate[] = [
   { id: "fmcg-distributor", name: "FMCG Distributor", description: "", orgType: "DISTRIBUTOR" },
   { id: "fmcg-manufacturer", name: "FMCG Manufacturer", description: "", orgType: "MANUFACTURER" },
   { id: "retail-multi-store", name: "Retail Multi-Store", description: "", orgType: "RETAIL" },
-  { id: "seafood-distributor", name: "Seafood / Cool Catch", description: "", orgType: "DISTRIBUTOR" },
+  { id: "seafood-distributor", name: "Cool-Catch Template", description: "", orgType: "DISTRIBUTOR" },
 ];
 
 export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: ProvisionCustomerSheetProps) {

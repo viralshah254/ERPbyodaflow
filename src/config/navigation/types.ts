@@ -17,11 +17,15 @@ export interface NavItemConfig {
   badge?: { type: "count" | "text"; value: string };
   /** Terminology key for label override when t() is used */
   termKey?: TerminologyKey;
+  /** Optional sidebar subheading (resolved via t(key)); consecutive items with the same key share one heading */
+  navGroupTermKey?: TerminologyKey;
 }
 
 export interface NavSectionConfig {
   key: NavSectionKey;
   label: string;
+  /** If set, sidebar section title is t(labelTermKey) (template overrides). */
+  labelTermKey?: TerminologyKey;
   moduleKey?: ModuleKey;
   requiresOrgTypes?: TemplateOrgType[];
   order: number;

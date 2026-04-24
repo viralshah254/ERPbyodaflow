@@ -106,6 +106,12 @@ interface DocumentLineEditorProps {
     baseQtyHeader: string;
     baseQtyTooltip: string;
   };
+  /**
+   * Daily prices keyed by productId. When provided, the effective daily price is used
+   * as the primary price source (overriding tier-based pricing).
+   * isStale=true means no price was set today — the effective price is from a prior day.
+   */
+  dailyPricesByProductId?: Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }>;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -181,6 +187,7 @@ export function DocumentLineEditor({
   linesAreTaxInclusive = false,
   catalogUomCodes = [],
   lineColumnLabels,
+  dailyPricesByProductId,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
@@ -240,6 +247,7 @@ export function DocumentLineEditor({
             sellable: productFilter === "sellable",
             search: q,
             limit: 100,
+            includeStock: false,
           });
           return mapRows(rows);
         } catch {
@@ -255,6 +263,22 @@ export function DocumentLineEditor({
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
   }, []);
   const priceListIdResolved = useCostPricing ? "" : (priceListId || priceLists[0]?.id || "pl-retail");
+
+  // Resolve price: daily price takes priority over tier-based pricing.
+  const resolvePrice = React.useCallback(
+    (productId: string, qty: number, uom: string): { price: number; reason: string } => {
+      if (useCostPricing) return { price: 0, reason: "Manual" };
+      const daily = dailyPricesByProductId?.[productId];
+      if (daily?.effectivePrice != null) {
+        const label = daily.isStale
+          ? `⚠ Stale${daily.fallbackDate ? ` (${daily.fallbackDate})` : ""}`
+          : "Daily price";
+        return { price: daily.effectivePrice, reason: label };
+      }
+      return getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+    },
+    [useCostPricing, dailyPricesByProductId, priceListIdResolved, pricingByProductId]
+  );
 
   // Variants per product — loaded lazily when a product with variants is selected
   const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
@@ -276,9 +300,7 @@ export function DocumentLineEditor({
     const packaging = packagingByProductId?.[p.id] ?? [];
     const uom = pickDefaultUomFromPackaging(packaging, mode) ?? p.unit ?? p.baseUom ?? "EA";
     const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
-    const { price, reason } = useCostPricing
-      ? { price: 0, reason: "Manual" }
-      : getPriceForLine(p.id, priceListIdResolved, 1, uom, pricingByProductId?.[p.id]);
+    const { price, reason } = resolvePrice(p.id, 1, uom);
     const newLine: DocumentLine = {
       id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       productId: p.id,
@@ -329,7 +351,7 @@ export function DocumentLineEditor({
           next.price = 0;
           next.priceReason = "Manual";
         } else if (!useCostPricing) {
-          const { price, reason } = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+          const { price, reason } = resolvePrice(productId, qty, uom);
           next.price = price;
           next.priceReason = reason;
         }
@@ -368,9 +390,7 @@ export function DocumentLineEditor({
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
       const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
-      const { price, reason } = useCostPricing
-        ? { price: 0, reason: "Manual" }
-        : getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+      const { price, reason } = resolvePrice(productId, qty, uom);
       updateLine(lineId, {
         productId: row.id,
         sku: row.sku,
@@ -410,7 +430,7 @@ export function DocumentLineEditor({
       patch.uom = uom;
       patch.baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
       if (!useCostPricing) {
-        const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, line.qty, uom, pricingByProductId?.[line.productId]);
+        const { price, reason } = resolvePrice(line.productId, line.qty, uom);
         patch.price = price;
         patch.priceReason = reason;
         patch.amount = line.qty * price;
@@ -426,7 +446,7 @@ export function DocumentLineEditor({
     if (useCostPricing) {
       updateLine(lineId, { uom, baseQty, amount: line.qty * line.price });
     } else {
-      const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, line.qty, uom, pricingByProductId?.[line.productId]);
+      const { price, reason } = resolvePrice(line.productId, line.qty, uom);
       updateLine(lineId, { uom, baseQty, price, priceReason: reason, amount: line.qty * price });
     }
   };
@@ -438,7 +458,7 @@ export function DocumentLineEditor({
     if (useCostPricing) {
       updateLine(lineId, { qty, baseQty, amount: qty * line.price });
     } else {
-      const { price, reason } = getPriceForLine(line.productId, priceListIdResolved, qty, line.uom, pricingByProductId?.[line.productId]);
+      const { price, reason } = resolvePrice(line.productId, qty, line.uom);
       updateLine(lineId, { qty, baseQty, price, priceReason: reason, amount: qty * price });
     }
   };

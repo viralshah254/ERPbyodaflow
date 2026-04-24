@@ -45,6 +45,8 @@ import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { formatMoney } from "@/lib/money";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 
 const SPECIES_OPTIONS = [
   { value: "TILAPIA", label: "Tilapia" },
@@ -238,6 +240,8 @@ function buildPreviewLines(
 }
 
 export default function SubcontractingPage() {
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [tab, setTab] = React.useState<"orders" | "wip" | "workcenters">("orders");
   const [orderStatusFilter, setOrderStatusFilter] = React.useState<string>("");
   const [workCenterFilter, setWorkCenterFilter] = React.useState<string>("");
@@ -581,7 +585,7 @@ export default function SubcontractingPage() {
         title="Subcontracting / Job Work"
         description="WIP at external work centers — factories and women's groups. Processing fees auto-post to GL on receive."
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Subcontracting" },
         ]}
         sticky

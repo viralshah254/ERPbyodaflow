@@ -30,7 +30,13 @@ const FALLBACK = {
   bill: "Bill",
   franchisee: "Franchisee",
   commission: "Commission",
+  processing: "Manufacturing",
 } as const satisfies Record<TerminologyKey, string>;
+
+/** Breadcrumb / nav group label for the manufacturing module area (template may override to e.g. "Processing"). */
+export function manufacturingAreaLabel(terminology?: TerminologyOverrides | null): string {
+  return t("processing", terminology);
+}
 
 /**
  * Resolve a terminology key to display label.

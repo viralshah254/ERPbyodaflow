@@ -22,7 +22,8 @@ export type ManufacturingBom = {
   quantity: number;
   uom: string;
   version: string;
-  type: "bom" | "formula";
+  type: "bom" | "formula" | "disassembly";
+  direction?: "STANDARD" | "REVERSE";
   isActive: boolean;
   routeId?: string;
   items: ManufacturingBomItem[];
@@ -55,6 +56,9 @@ export type ManufacturingWorkOrder = {
   bomName?: string;
   routingId?: string;
   routingName?: string;
+  /** GRN (receipt batch) this work order processes. */
+  grnId?: string;
+  grnNumber?: string;
   quantity: number;
   plannedQuantity: number;
   releasedQuantity: number;
@@ -115,7 +119,7 @@ export async function createManufacturingBom(payload: {
   productId: string;
   quantity: number;
   uom: string;
-  type: "bom" | "formula";
+  type: "bom" | "formula" | "disassembly";
 }): Promise<{ id: string }> {
   return apiRequest("/api/manufacturing/boms", { method: "POST", body: payload });
 }
@@ -153,6 +157,7 @@ export async function createManufacturingWorkOrder(payload: {
   productId?: string;
   bomId?: string;
   routingId?: string;
+  grnId?: string;
   quantity: number;
   dueDate?: string;
   plannedDate?: string;
@@ -181,4 +186,24 @@ export async function applyManufacturingMrp(suggestionIds?: string[]): Promise<{
     method: "POST",
     body: { suggestionIds },
   });
+}
+
+export type MaterialAvailabilityLine = {
+  productId: string;
+  productName: string;
+  productSku?: string;
+  requiredQty: number;
+  onHandQty: number;
+  shortfall: number;
+  uom: string;
+  type: string;
+};
+
+export async function checkWorkOrderAvailability(
+  bomId: string,
+  quantity: number
+): Promise<{ lines: MaterialAvailabilityLine[] }> {
+  requireLiveApi("Work order availability check");
+  const params = new URLSearchParams({ bomId, quantity: String(quantity) });
+  return apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/availability?${params.toString()}`);
 }

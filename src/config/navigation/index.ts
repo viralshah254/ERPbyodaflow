@@ -15,6 +15,8 @@ export interface ResolvedNavItem {
   icon: string;
   children?: ResolvedNavItem[];
   badge?: { type: "count" | "text"; value: string };
+  /** Subheading label shown above this item when it starts a new nav group */
+  navGroupLabel?: string;
 }
 
 export interface ResolvedNavSection {
@@ -92,6 +94,7 @@ function resolveItems(items: NavItemConfig[], input: BuildVisibleNavInput): Reso
       icon: item.icon,
       children: children?.length ? children : undefined,
       badge: item.badge,
+      navGroupLabel: item.navGroupTermKey ? t(item.navGroupTermKey, input.terminology) : undefined,
     });
   }
   return out;
@@ -116,6 +119,25 @@ export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection
     if (!order.includes("core")) order = ["core", ...order];
     else if (order[0] !== "core") order = ["core", ...order.filter((k) => k !== "core")];
   }
+  // Org-stored defaultNav may predate the "processing" section; insert after Core so manufacturing areas still appear (incl. strict nav).
+  if (input.enabledModules.includes("manufacturing") && !order.includes("processing")) {
+    const hasProcessingSection = NAV_SECTIONS_CONFIG.some((s) => s.key === "processing");
+    if (hasProcessingSection) {
+      const coreIdx = order.indexOf("core");
+      if (coreIdx >= 0) {
+        order.splice(coreIdx + 1, 0, "processing");
+      } else {
+        order.splice(0, 0, "processing");
+      }
+    }
+  }
+  // Payroll is nested under Finance; map legacy "payroll" section key to "finance" and de-dupe.
+  {
+    const seen = new Set<string>();
+    order = order
+      .map((k) => (k === "payroll" ? "finance" : k))
+      .filter((k) => (seen.has(k) ? false : (seen.add(k), true)));
+  }
   const byKey = new Map<string, NavSectionConfig>(NAV_SECTIONS_CONFIG.map((s) => [s.key, s]));
   const result: ResolvedNavSection[] = [];
 
@@ -129,7 +151,7 @@ export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection
     result.push({
       id: section.key,
       key: section.key,
-      label: section.label,
+      label: section.labelTermKey ? t(section.labelTermKey, input.terminology) : section.label,
       items,
       tier: section.tier ?? "secondary",
     });

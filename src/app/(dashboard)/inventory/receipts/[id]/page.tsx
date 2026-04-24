@@ -34,6 +34,7 @@ import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCar
 import { addDocumentCommentApi, editDocumentCommentApi, deleteDocumentCommentApi, convertDocumentApi } from "@/lib/api/documents";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -326,7 +327,8 @@ export default function ReceiptDetailPage() {
           { label: grn.number },
         ]}
         sticky
-        showCommandHint
+        dense
+        showCommandHint={false}
         actions={
           <div className="flex gap-2">
             {(["DRAFT", "POSTED"].includes(grn.status) &&
@@ -466,7 +468,7 @@ export default function ReceiptDetailPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-3">
         {hasCashWeightAudit && totalReceivedWeight !== totalPaidWeight ? (
           <ExceptionBanner
             type="warning"
@@ -481,7 +483,7 @@ export default function ReceiptDetailPage() {
         {/* Contextual "what's next" guidance — visible for every status */}
         {grn.status === "DRAFT" && (
           <Card className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20">
-            <CardContent className="py-4">
+            <CardContent className="py-2.5 px-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
                   {hasAnyCosts
@@ -533,7 +535,7 @@ export default function ReceiptDetailPage() {
 
         {grn.status === "POSTED" && (
           <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="py-4">
+            <CardContent className="py-2.5 px-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-primary">
                   {grn.processingConfirmed ? "Processing confirmed — final steps:" : "GRN posted — what's next:"}
@@ -585,7 +587,7 @@ export default function ReceiptDetailPage() {
 
         {grn.status === "RECEIVED" && (
           <Card className="border-emerald-300/60 bg-emerald-50/60 dark:bg-emerald-950/20">
-            <CardContent className="py-4">
+            <CardContent className="py-2.5 px-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                   Goods fully received — create supplier bill and run 3-way match.
@@ -611,7 +613,7 @@ export default function ReceiptDetailPage() {
 
         {(grn.status === "CONVERTED" || grn.linkedBill) && grn.status !== "POSTED" && grn.status !== "RECEIVED" && (
           <Card className="border-muted bg-muted/20">
-            <CardContent className="py-4">
+            <CardContent className="py-2.5 px-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold">
                   Supplier bill has been created from this GRN.
@@ -635,75 +637,136 @@ export default function ReceiptDetailPage() {
           </Card>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Receipt Summary</CardTitle>
-            <CardDescription>Goods receipt object page with operational, variance, and valuation context.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-            <div>
-              <p className="text-muted-foreground">Number</p>
-              <p className="font-medium">{grn.number}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Date</p>
-              <p className="font-medium">{grn.date}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">PO Reference</p>
-              <p className="font-medium">{grn.poRef ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Warehouse</p>
-              <p className="font-medium">{grn.warehouse ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Supplier</p>
-              <p className="font-medium">{grn.supplier ?? grn.party ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Status</p>
-              <StatusBadge status={grn.status} />
-            </div>
-            <div>
-              <p className="text-muted-foreground">Total</p>
-              {grn.totalAmount != null && grn.currency ? (
-                <DualCurrencyAmount
-                  amount={grn.totalAmount}
-                  currency={grn.currency}
-                  exchangeRate={grn.exchangeRate}
-                  size="md"
-                />
-              ) : <p className="font-medium">—</p>}
-            </div>
-            <div>
-              <p className="text-muted-foreground">Ownership / Location</p>
-              <OwnershipLocationBadge owner="CoolCatch" location={grn.warehouse ?? "Warehouse"} />
-            </div>
-            <div>
-              <p className="text-muted-foreground">Stock age</p>
-              <StockAgeIndicator days={grn.status === "POSTED" ? 2 : 0} />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(220px,17rem)] xl:items-start">
+          <div className="min-w-0 space-y-3">
+            <div
+              className={cn(
+                "grid gap-3",
+                hasCashWeightAudit ? "lg:grid-cols-2 lg:items-stretch" : "",
+              )}
+            >
+              <Card>
+                <CardHeader className="space-y-0 p-4 pb-2">
+                  <CardTitle className="text-base">Receipt Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 p-4 pt-0 text-xs md:grid-cols-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Number</p>
+                    <p className="font-medium leading-tight">{grn.number}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Date</p>
+                    <p className="font-medium leading-tight">{grn.date}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">PO Reference</p>
+                    <p className="font-medium leading-tight">{grn.poRef ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Warehouse</p>
+                    <p className="font-medium leading-tight">{grn.warehouse ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Supplier</p>
+                    <p className="font-medium leading-tight">{grn.supplier ?? grn.party ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</p>
+                    <StatusBadge status={grn.status} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+                    {grn.totalAmount != null && grn.currency ? (
+                      <DualCurrencyAmount
+                        amount={grn.totalAmount}
+                        currency={grn.currency}
+                        exchangeRate={grn.exchangeRate}
+                        size="sm"
+                      />
+                    ) : (
+                      <p className="font-medium">—</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Ownership / Location</p>
+                    <OwnershipLocationBadge owner="CoolCatch" location={grn.warehouse ?? "Warehouse"} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Stock age</p>
+                    <StockAgeIndicator days={grn.status === "POSTED" ? 2 : 0} />
+                  </div>
+                  {totalReceivedWeight > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Received kg</p>
+                      <p className="font-medium leading-tight tabular-nums text-xs">
+                        {totalReceivedWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                      </p>
+                    </div>
+                  )}
+                  {hasCashWeightAudit && totalReceivedWeight > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Available kg</p>
+                      <p className="font-medium leading-tight tabular-nums text-xs">
+                        {Math.max(0, totalReceivedWeight - totalProcessedWeight).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Work order</p>
+                    {grn.workOrderId ? (
+                      <Link
+                        href="/manufacturing/work-orders"
+                        className="text-xs font-medium text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {grn.workOrderNumber ?? grn.workOrderId}
+                      </Link>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Not scheduled</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Processing status</p>
+                    {!grn.workOrderId || grn.workOrderStatus === "CANCELLED" ? (
+                      <span className="text-xs text-muted-foreground">Not scheduled</span>
+                    ) : grn.workOrderStatus === "COMPLETED" ? (
+                      <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs gap-1 px-1.5 py-0">
+                        <Icons.CheckCircle2 className="h-3 w-3" />
+                        Processed
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-xs gap-1 px-1.5 py-0">
+                        <Icons.Settings2 className="h-3 w-3" />
+                        {grn.workOrderStatus === "IN_PROGRESS"
+                          ? "In progress"
+                          : grn.workOrderStatus === "RELEASED"
+                            ? "Released"
+                            : "In work order"}
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-            {hasCashWeightAudit ? (
-              <ProcurementVariancePanel
-                poWeightKg={totalQty}
-                paidWeightKg={totalPaidWeight}
-                receivedWeightKg={totalReceivedWeight}
-              />
-            ) : null}
+              {hasCashWeightAudit ? (
+                <ProcurementVariancePanel
+                  poWeightKg={totalQty}
+                  paidWeightKg={totalPaidWeight}
+                  receivedWeightKg={totalReceivedWeight}
+                  compact
+                />
+              ) : null}
+            </div>
 
             <Card ref={weightTableRef}>
-              <CardHeader>
-                <CardTitle>Receipt Lines</CardTitle>
-                <CardDescription>Received quantity and financial value per line.</CardDescription>
+              <CardHeader className="space-y-0 p-4 pb-2">
+                <CardTitle className="text-base">Receipt Lines</CardTitle>
+                <CardDescription className="text-xs">Received quantity and financial value per line.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={lineColumns} emptyMessage="No receipt lines." />
+                <div className="max-h-[min(38vh,20rem)] overflow-auto">
+                  <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={lineColumns} emptyMessage="No receipt lines." />
+                </div>
               </CardContent>
               {hasCashWeightAudit && totalReceivedWeight > 0 && (
                 <div className="border-t px-4 py-3 space-y-3">
@@ -841,13 +904,25 @@ export default function ReceiptDetailPage() {
             />
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-3 min-w-0">
             <BatchStatusTimeline
+              compact
               title="Receipt Timeline"
               steps={[
                 { id: "po", label: "Purchase order approved", status: "completed", detail: grn.poRef ?? "PO linked" },
                 { id: "arrive", label: "Stock arrived at facility", status: "completed", timestamp: grn.date ? `${grn.date.slice(0, 10)}T08:00:00Z` : undefined },
-                { id: "verify", label: "Weight / QA verification", status: hasCashWeightAudit ? "current" : "completed", detail: hasCashWeightAudit ? "Compare paid vs received weight" : "Verification complete" },
+                {
+                  id: "verify",
+                  label: "Weight / QA verification",
+                  status: hasCashWeightAudit ? "current" : "completed",
+                  detail: hasCashWeightAudit ? "Compare paid vs received weight" : "Verification complete",
+                  href: hasCashWeightAudit
+                    ? (grn.sourceDocumentId
+                        ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(grn.sourceDocumentId)}`
+                        : "/purchasing/cash-weight-audit")
+                    : undefined,
+                  actionLabel: hasCashWeightAudit ? "Open audit" : undefined,
+                },
                 { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "completed" : "upcoming" },
                 {
                   id: "landed",
@@ -859,16 +934,39 @@ export default function ReceiptDetailPage() {
                         processingAllocation ? `KES ${(processingAllocation.totalAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} processing` : null,
                       ].filter(Boolean).join(" · ")
                     : "Allocate freight, duty, and processing charges",
+                  href: !(landedAllocation || processingAllocation) && ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status)
+                    ? `/inventory/costing?sourceId=${encodeURIComponent(grn.id)}`
+                    : undefined,
+                  actionLabel: !(landedAllocation || processingAllocation) && ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status)
+                    ? "Allocate costs"
+                    : undefined,
                 },
-                { id: "putaway", label: "Putaway completed", status: grn.status === "RECEIVED" ? "completed" : "upcoming", detail: putawayLink ? "Warehouse execution closed" : "Awaiting putaway" },
+                {
+                  id: "putaway",
+                  label: "Putaway completed",
+                  status: grn.status === "RECEIVED"
+                    ? "completed"
+                    : putawayLink
+                      ? "current"
+                      : "upcoming",
+                  detail: grn.status === "RECEIVED"
+                    ? "Putaway confirmed"
+                    : putawayLink
+                      ? "Assign bin locations to complete"
+                      : grn.warehouseId
+                        ? "Awaiting putaway"
+                        : "No warehouse assigned — edit GRN to enable putaway",
+                  href: putawayLink ? `/warehouse/putaway/${putawayLink.id}` : undefined,
+                  actionLabel: putawayLink ? "Open putaway" : undefined,
+                },
               ]}
             />
 
-            <Card className="overflow-hidden">
-              <CardHeader>
-                <CardTitle>Activity & Audit</CardTitle>
+            <Card className="flex max-h-[min(36vh,18rem)] flex-col overflow-hidden">
+              <CardHeader className="shrink-0 space-y-0 p-4 pb-2">
+                <CardTitle className="text-base">Activity & Audit</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
                 <ActivityPanel
                   auditEntries={auditEntries}
                   comments={comments}

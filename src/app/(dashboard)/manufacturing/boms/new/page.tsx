@@ -20,11 +20,15 @@ import { createManufacturingBom } from "@/lib/api/manufacturing";
 import { listProducts } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function NewBomPage() {
   const router = useRouter();
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const products = React.useMemo(() => listProducts(), []);
   const uoms = React.useMemo(() => listUoms().map((u) => u.code), []);
 
@@ -59,7 +63,7 @@ export default function NewBomPage() {
         title="New BOM"
         description="Create a bill of material or formula"
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "BOMs", href: "/manufacturing/boms" },
           { label: "New" },
         ]}
@@ -135,8 +139,9 @@ export default function NewBomPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bom">BOM</SelectItem>
-                    <SelectItem value="formula">Formula</SelectItem>
+                    <SelectItem value="bom">BOM (Standard assembly)</SelectItem>
+                    <SelectItem value="formula">Formula (Batch / process)</SelectItem>
+                    <SelectItem value="disassembly">Disassembly (Reverse — one input → many outputs)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

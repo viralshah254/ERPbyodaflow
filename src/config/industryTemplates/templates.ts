@@ -2,7 +2,7 @@ import type { IndustryTemplateDefinition } from "./types";
 
 const SEAFOOD_DISTRIBUTOR_TEMPLATE: IndustryTemplateDefinition = {
   id: "seafood-distributor",
-  name: "Seafood Distributor",
+  name: "Cool-Catch Template",
   description:
     "Procurement-led perishable distributor with outsourced processing, reverse BOM/yield, cold-hub logistics, franchise monitoring, and settlement analytics.",
   orgType: "DISTRIBUTOR",
@@ -31,21 +31,20 @@ const SEAFOOD_DISTRIBUTOR_TEMPLATE: IndustryTemplateDefinition = {
   compactOperationalDashboard: true,
   defaultNav: [
     "core",
+    "processing",
     "purchasing",
-    "manufacturing",
     "inventory",
     "warehouse",
     "distribution",
     "franchise",
     "sales",
-    "pricing",
-    "docs",
     "masters",
     "finance",
+    "pricing",
+    "docs",
     "treasury",
     "assets",
     "projects",
-    "payroll",
     "intercompany",
     "crm",
     "reports",
@@ -95,6 +94,7 @@ const SEAFOOD_DISTRIBUTOR_TEMPLATE: IndustryTemplateDefinition = {
     route: "Route",
     delivery: "Delivery",
     collection: "Collection",
+    processing: "Processing",
   },
   defaultKPIs: [
     { kpiId: "procurement-recon", label: "Procurement Recon", order: 1 },
@@ -150,19 +150,18 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
     ],
     defaultNav: [
       "core",
-      "docs",
+      "processing",
       "masters",
       "inventory",
       "warehouse",
       "sales",
       "purchasing",
-      "pricing",
-      "manufacturing",
       "finance",
+      "pricing",
+      "docs",
       "treasury",
       "assets",
       "projects",
-      "payroll",
       "intercompany",
       "crm",
       "reports",
@@ -239,19 +238,18 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
     ],
     defaultNav: [
       "core",
-      "docs",
       "masters",
       "inventory",
       "warehouse",
       "sales",
       "purchasing",
-      "pricing",
       "distribution",
       "finance",
+      "pricing",
+      "docs",
       "treasury",
       "assets",
       "projects",
-      "payroll",
       "intercompany",
       "crm",
       "reports",
@@ -330,19 +328,18 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
     ],
     defaultNav: [
       "core",
-      "docs",
       "masters",
       "inventory",
       "warehouse",
       "sales",
       "purchasing",
-      "pricing",
       "retail",
       "finance",
+      "pricing",
+      "docs",
       "treasury",
       "assets",
       "projects",
-      "payroll",
       "intercompany",
       "crm",
       "reports",
@@ -398,11 +395,12 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
 
   "seafood-distributor": SEAFOOD_DISTRIBUTOR_TEMPLATE,
 
-  /** Cool Catch Distributors Ltd — first live deployment of the reusable seafood/perishables vertical. */
+  /** Cool Catch Distributors Ltd — first live deployment of the reusable seafood/perishables vertical. Internal template, hidden from the public selector. */
   "cool-catch": {
     ...SEAFOOD_DISTRIBUTOR_TEMPLATE,
     id: "cool-catch",
     name: "Cool Catch (Seafood Vertical)",
+    hidden: true,
     description:
       "Client deployment of the seafood/perishables distribution vertical with farm-gate procurement, outsourced processing, cold hub, franchise settlement, and VMI replenishment.",
     terminology: {
@@ -452,20 +450,19 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
     compactOperationalDashboard: true,
     defaultNav: [
       "core",
+      "processing",
       "purchasing",
-      "manufacturing",
       "inventory",
       "warehouse",
       "distribution",
       "sales",
-      "pricing",
-      "docs",
       "masters",
       "finance",
+      "pricing",
+      "docs",
       "treasury",
       "assets",
       "projects",
-      "payroll",
       "intercompany",
       "crm",
       "reports",
@@ -538,8 +535,9 @@ export function getTemplatesByOrgType(orgType: "MANUFACTURER" | "DISTRIBUTOR" | 
   return Object.values(INDUSTRY_TEMPLATES_REGISTRY).filter((t) => t.orgType === orgType);
 }
 
+/** Returns all non-hidden templates — suitable for display in the public template selector. */
 export function getAllTemplates(): IndustryTemplateDefinition[] {
-  return Object.values(INDUSTRY_TEMPLATES_REGISTRY);
+  return Object.values(INDUSTRY_TEMPLATES_REGISTRY).filter((t) => !t.hidden);
 }
 
 export const MODULE_LABELS: Record<string, string> = {

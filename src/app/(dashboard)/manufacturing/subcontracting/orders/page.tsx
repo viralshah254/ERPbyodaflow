@@ -24,6 +24,8 @@ import {
 } from "@/lib/api/cool-catch";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 
 function statusVariant(status: SubcontractOrderRow["status"]): "default" | "secondary" | "outline" {
   if (status === "RECEIVED") return "default";
@@ -32,6 +34,8 @@ function statusVariant(status: SubcontractOrderRow["status"]): "default" | "seco
 }
 
 export default function SubcontractOrdersListPage() {
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [orders, setOrders] = React.useState<SubcontractOrderRow[]>([]);
   const [workCenters, setWorkCenters] = React.useState<ExternalWorkCenterRow[]>([]);
   const [statusFilter, setStatusFilter] = React.useState<string>("");
@@ -149,7 +153,7 @@ export default function SubcontractOrdersListPage() {
         title="Subcontract Orders"
         description="All orders sent to external processors — factories and women's groups"
         breadcrumbs={[
-          { label: "Manufacturing", href: "/manufacturing/boms" },
+          { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Subcontracting", href: "/manufacturing/subcontracting" },
           { label: "Orders" },
         ]}

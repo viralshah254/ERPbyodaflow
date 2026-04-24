@@ -28,6 +28,11 @@ export type PurchasingDocRow = {
   }>;
   /** Count of lines still eligible for processing (available + positive weight). */
   eligibleLineCount?: number;
+  /** Work order this GRN batch is being processed in (set once a WO is linked). */
+  workOrderId?: string;
+  workOrderNumber?: string;
+  /** DRAFT | RELEASED | IN_PROGRESS | COMPLETED | CANCELLED */
+  workOrderStatus?: string;
 };
 
 export type GrnLineRow = {
@@ -51,6 +56,7 @@ export type GrnDetailRow = PurchasingDocRow & {
   warehouseId?: string;
   lines: GrnLineRow[];
   linkedBill?: { id: string; number: string; status: string } | null;
+  // Work order link (inherited via PurchasingDocRow but repeated here for clarity)
 };
 
 export type LinkedGrnSummary = {

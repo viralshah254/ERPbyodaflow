@@ -1934,6 +1934,7 @@ export default function InventoryCostingPage() {
                   <TableHead className="text-right">Goods value</TableHead>
                   <TableHead className="text-right">Other costs</TableHead>
                   <TableHead className="text-right">Final batch cost</TableHead>
+                  <TableHead className="text-right">Cost / kg</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -1987,6 +1988,28 @@ export default function InventoryCostingPage() {
                         const bd = (s as { costBreakdown?: CostBreakdown }).costBreakdown;
                         return (
                           <CostBreakdownPopover amount={fbc} breakdown={bd} goodsValue={goodsKes} currency="KES" isFinal />
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">
+                      {(() => {
+                        const lines = (s as { lines?: Array<{ weightKg?: number; quantity?: number }> }).lines ?? [];
+                        const totalWeightKg = lines.reduce((sum, l) => sum + (l.weightKg ?? 0), 0);
+                        if (totalWeightKg <= 0) return <span className="text-muted-foreground text-xs">—</span>;
+                        const oc = (s as { otherCostsKes?: number }).otherCostsKes ?? 0;
+                        const goodsKes = (s as { goodsValueKes?: number }).goodsValueKes ?? (s as { totalAmount?: number }).totalAmount ?? 0;
+                        const fbc = (s as { finalBatchCostKes?: number }).finalBatchCostKes ?? goodsKes + oc;
+                        const costPerKg = fbc / totalWeightKg;
+                        const isAllocated = s.isAllocated;
+                        return (
+                          <div>
+                            <span className={isAllocated ? "font-semibold text-primary" : "text-muted-foreground"}>
+                              {costPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg
+                            </span>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              {totalWeightKg.toLocaleString("en-KE")} kg
+                            </div>
+                          </div>
                         );
                       })()}
                     </TableCell>

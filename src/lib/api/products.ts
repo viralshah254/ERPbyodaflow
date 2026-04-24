@@ -14,6 +14,7 @@ type BackendProduct = {
   createdAt?: string;
   updatedAt?: string;
   description?: string;
+  currentStock?: number;
 };
 
 export type ProductPayload = {
@@ -43,6 +44,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string }
     defaultTaxCodeId: item.defaultTaxCodeId,
     status: item.status ?? "ACTIVE",
     description: item.description,
+    currentStock: typeof item.currentStock === "number" ? item.currentStock : undefined,
   };
 }
 
@@ -56,6 +58,13 @@ export type FetchProductsOptions = {
   limit?: number;
   /** Pagination offset (server skip). Omit for first page. */
   cursor?: string;
+  /**
+   * Whether to include on-hand stock totals in each row.
+   * Pass false for document line pickers that don't display stock — this skips
+   * a StockLevel aggregate and cuts search latency significantly.
+   * Defaults to true when omitted (server decides based on whether search is present).
+   */
+  includeStock?: boolean;
 };
 
 export type FetchProductsPageResult = {
@@ -71,6 +80,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions): Promise<
   if (opts.purchasable) params.set("purchasable", "true");
   if (opts.sellable) params.set("sellable", "true");
   if (opts.productType) params.set("productType", opts.productType);
+  if (opts.includeStock !== undefined) params.set("includeStock", opts.includeStock ? "true" : "false");
   const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 100;
   params.set("limit", String(lim));
   if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);

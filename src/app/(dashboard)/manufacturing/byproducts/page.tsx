@@ -9,6 +9,8 @@ import { MassBalanceChart } from "@/components/operational/MassBalanceChart";
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
 import { fetchByproductInventory, type ByproductRow, type ByproductYieldSummary } from "@/lib/api/manufacturing-byproducts";
 import { isApiConfigured } from "@/lib/api/client";
+import { manufacturingAreaLabel } from "@/lib/terminology";
+import { useTerminology } from "@/stores/orgContextStore";
 
 // ── Static demo data shown when API is not wired ─────────────────────────────
 
@@ -50,6 +52,8 @@ const columns = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ManufacturingByproductsPage() {
+  const terminology = useTerminology();
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [rows,    setRows]    = React.useState<ByproductRow[]>([]);
   const [summary, setSummary] = React.useState<ByproductYieldSummary | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -86,7 +90,7 @@ export default function ManufacturingByproductsPage() {
       <PageHeader
         title="Byproducts"
         description="Track byproduct stock, valuation, reservation, and destination channel."
-        breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/yield" }, { label: "Byproducts" }]}
+        breadcrumbs={[{ label: areaLabel, href: "/manufacturing/yield" }, { label: "Byproducts" }]}
         sticky
         showCommandHint
       />

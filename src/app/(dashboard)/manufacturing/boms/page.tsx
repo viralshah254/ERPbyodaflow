@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { fetchManufacturingBoms, type ManufacturingBom } from "@/lib/api/manufacturing";
-import { t } from "@/lib/terminology";
+import { manufacturingAreaLabel, t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -23,7 +23,7 @@ type BomRow = {
   quantity: number;
   uom: string;
   version: string;
-  type: "bom" | "formula";
+  type: "bom" | "formula" | "disassembly";
   isActive: boolean;
 };
 
@@ -31,6 +31,7 @@ export default function BomsPage() {
   const router = useRouter();
   const terminology = useTerminology();
   const bomLabel = t("bom", terminology);
+  const areaLabel = manufacturingAreaLabel(terminology);
   const [boms, setBoms] = React.useState<ManufacturingBom[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -90,7 +91,11 @@ export default function BomsPage() {
     {
       id: "type",
       header: "Type",
-      accessor: (r: BomRow) => <Badge variant={r.type === "formula" ? "secondary" : "outline"}>{r.type}</Badge>,
+      accessor: (r: BomRow) => {
+        const variant = r.type === "formula" ? "secondary" : r.type === "disassembly" ? "default" : "outline";
+        const label = r.type === "disassembly" ? "Disassembly" : r.type === "formula" ? "Formula" : "BOM";
+        return <Badge variant={variant}>{label}</Badge>;
+      },
     },
     {
       id: "status",
@@ -104,7 +109,7 @@ export default function BomsPage() {
       <PageHeader
         title={`Bills of Material (${bomLabel})`}
         description="Define product structures, formulas, and cost rollup"
-        breadcrumbs={[{ label: "Manufacturing", href: "/manufacturing/boms" }, { label: "BOMs" }]}
+        breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "BOMs" }]}
         sticky
         showCommandHint
         actions={

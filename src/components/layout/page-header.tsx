@@ -25,6 +25,8 @@ interface PageHeaderProps {
   showCommandHint?: boolean;
   /** Show RightPanel toggle when page has a right slot */
   showRightPanelToggle?: boolean;
+  /** Tighter typography and padding for data-heavy pages */
+  dense?: boolean;
   className?: string;
 }
 
@@ -36,6 +38,7 @@ export function PageHeader({
   sticky = true,
   showCommandHint = true,
   showRightPanelToggle = false,
+  dense = false,
   className,
 }: PageHeaderProps) {
   const { rightPanelOpen, toggleRightPanel } = useUIStore();
@@ -43,13 +46,19 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "border-b bg-card px-6 py-4 shrink-0",
+        "border-b bg-card shrink-0",
+        dense ? "px-4 py-2.5" : "px-6 py-4",
         sticky && "sticky top-0 z-30 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80",
         className
       )}
     >
       {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+        <nav
+          className={cn(
+            "flex items-center gap-2 text-muted-foreground",
+            dense ? "mb-1 text-xs" : "mb-2 text-sm",
+          )}
+        >
           {breadcrumbs.map((crumb, i) => (
             <React.Fragment key={i}>
               {i > 0 && <Icons.ChevronRight className="h-4 w-4 shrink-0" />}
@@ -66,11 +75,25 @@ export function PageHeader({
       )}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">{title}</h1>
+          <h1
+            className={cn(
+              "font-semibold text-foreground tracking-tight",
+              dense ? "text-xl" : "text-2xl",
+            )}
+          >
+            {title}
+          </h1>
           {description && (
-            <p className="text-sm text-muted-foreground mt-1">{description}</p>
+            <p
+              className={cn(
+                "text-muted-foreground",
+                dense ? "text-xs mt-0.5" : "text-sm mt-1",
+              )}
+            >
+              {description}
+            </p>
           )}
-          <div className="flex items-center gap-3 mt-2 flex-wrap">
+          <div className={cn("flex items-center gap-3 flex-wrap", dense ? "mt-1" : "mt-2")}>
             <PageHelp />
             {showCommandHint && (
               <CommandPaletteHint />
