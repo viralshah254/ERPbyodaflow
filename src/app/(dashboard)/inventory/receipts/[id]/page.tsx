@@ -359,9 +359,16 @@ export default function ReceiptDetailPage() {
                         onClick={async () => {
                           setPosting(true);
                           try {
-                            await postGRN(grn.id);
+                            const result = await postGRN(grn.id);
                             setGrn(await fetchGRNById(grn.id));
-                            toast.success("GRN posted.");
+                            if (result.stockAdded?.length) {
+                              const summary = result.stockAdded
+                                .map((s) => `+${s.qty} ${s.productName ?? s.productId}`)
+                                .join(", ");
+                              toast.success(`GRN posted — stock updated`, { description: summary, duration: 8000 });
+                            } else {
+                              toast.success("GRN posted.");
+                            }
                           } catch (raw) {
                             const e = raw as GrnPostError;
                             const msg = e.message ?? "Failed to post GRN.";
@@ -498,8 +505,15 @@ export default function ReceiptDetailPage() {
                     onClick={async () => {
                       setPosting(true);
                       try {
-                        await postGRN(id);
-                        toast.success("GRN posted.");
+                        const result = await postGRN(id);
+                        if (result.stockAdded?.length) {
+                          const summary = result.stockAdded
+                            .map((s) => `+${s.qty} ${s.productName ?? s.productId}`)
+                            .join(", ");
+                          toast.success("GRN posted — stock updated", { description: summary, duration: 8000 });
+                        } else {
+                          toast.success("GRN posted.");
+                        }
                         setGrn(await fetchGRNById(id));
                       } catch (raw) {
                         const e = raw as GrnPostError;

@@ -94,6 +94,8 @@ export type LandedCostCostCentre = "currency_conversion" | "permits" | "inbound_
 
 export interface LandedCostAllocationLine {
   templateId: string;
+  /** Resolved template display name — present on GET allocation responses. */
+  templateName?: string | null;
   amount: number;
   currency: string;
   reference?: string;

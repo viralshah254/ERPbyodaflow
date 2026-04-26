@@ -585,3 +585,129 @@ export async function receiveSubcontractOrder(
   );
   return res;
 }
+
+// ─── Franchise Management ────────────────────────────────────────────────────
+
+export interface NetworkOutletRow {
+  id: string;
+  name: string;
+  territory: string | null;
+  code: string | null;
+  isActive: boolean;
+  revenue30d: number;
+  orderCount30d: number;
+  customerCount: number;
+  lastOrderDate: string | null;
+  priceListId: string | null;
+  priceListName: string | null;
+}
+
+export interface NetworkKpis {
+  totalRevenue30d: number;
+  activeOutlets: number;
+  totalCustomers: number;
+  pendingOrdersValue: number;
+}
+
+export async function fetchNetworkSummaryV2(): Promise<{ kpis: NetworkKpis; outlets: NetworkOutletRow[] }> {
+  return apiRequest("/api/franchise/network/summary-v2");
+}
+
+export interface OutletSummary {
+  outletOrgId: string;
+  revenue30d: number;
+  orderCount30d: number;
+  customerCount: number;
+  lastOrderDate: string | null;
+  topProducts: Array<{ productId: string; name: string; sku?: string; totalQty: number; totalRevenue: number }>;
+}
+
+export async function fetchOutletSummary(outletOrgId: string): Promise<OutletSummary> {
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/summary`);
+}
+
+export interface FranchiseCustomerRow {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  networkCustomerId: string | null;
+  totalSpend: number;
+  orderCount: number;
+  lastPurchaseDate: string | null;
+}
+
+export async function fetchOutletCustomers(
+  outletOrgId: string,
+  params?: { search?: string; cursor?: string; limit?: number }
+): Promise<{ items: FranchiseCustomerRow[]; nextCursor: string | null }> {
+  const p = new URLSearchParams();
+  if (params?.search) p.set("search", params.search);
+  if (params?.cursor) p.set("cursor", params.cursor);
+  if (params?.limit) p.set("limit", String(params.limit));
+  const qs = p.toString();
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/customers${qs ? `?${qs}` : ""}`);
+}
+
+export interface CustomerHistoryItem {
+  date: string;
+  docId: string;
+  docNumber: string;
+  outletOrgId: string;
+  outletName: string;
+  productId: string;
+  productName: string;
+  sku?: string;
+  qty: number;
+  unitPrice: number;
+  amount: number;
+}
+
+export async function fetchCustomerNetworkHistory(
+  networkCustomerId: string,
+  params?: { from?: string; to?: string; outletId?: string }
+): Promise<{ items: CustomerHistoryItem[]; networkCustomerId: string }> {
+  const p = new URLSearchParams();
+  if (params?.from) p.set("from", params.from);
+  if (params?.to) p.set("to", params.to);
+  if (params?.outletId) p.set("outletId", params.outletId);
+  const qs = p.toString();
+  return apiRequest(`/api/franchise/customers/${encodeURIComponent(networkCustomerId)}/history${qs ? `?${qs}` : ""}`);
+}
+
+export async function assignOutletPriceList(outletOrgId: string, priceListId: string): Promise<{ outletOrgId: string; priceListId: string; priceListName: string }> {
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/price-list`, {
+    method: "PATCH",
+    body: { priceListId },
+  });
+}
+
+export async function fetchMyCustomers(
+  params?: { search?: string; cursor?: string; limit?: number }
+): Promise<{ items: FranchiseCustomerRow[]; nextCursor: string | null }> {
+  const p = new URLSearchParams();
+  if (params?.search) p.set("search", params.search);
+  if (params?.cursor) p.set("cursor", params.cursor);
+  if (params?.limit) p.set("limit", String(params.limit));
+  const qs = p.toString();
+  return apiRequest(`/api/franchise/my-customers${qs ? `?${qs}` : ""}`);
+}
+
+export async function fetchMyCustomerHistory(partyId: string): Promise<{
+  customerId: string;
+  customerName: string;
+  items: Array<{
+    date: string;
+    docId: string;
+    docNumber: string;
+    typeKey: string;
+    productId: string;
+    productName: string;
+    sku?: string;
+    qty: number;
+    unitPrice: number;
+    amount: number;
+  }>;
+}> {
+  return apiRequest(`/api/franchise/my-customers/${encodeURIComponent(partyId)}/history`);
+}

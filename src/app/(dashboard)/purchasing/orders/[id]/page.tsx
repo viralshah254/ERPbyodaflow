@@ -128,28 +128,33 @@ export default function PurchaseOrderDetailPage() {
     return (order?.lineReceipts ?? []).reduce((a, r) => a + (r.receivedWeightKg ?? 0), 0);
   }, [order?.receivedTotals, order?.lineReceipts]);
 
+  const COST_CENTRE_LABELS: Record<string, string> = {
+    currency_conversion: "Currency conversion",
+    permits: "Permits & customs",
+    inbound_logistics: "Inbound logistics",
+    other: "Other charges",
+  };
+
   const otherCostsPanelLines = React.useMemo(() => {
     if (!order) return [];
     const estimate = [
       { label: "Purchase value", amount: order.total ?? 0 },
-      { label: "Border / permit estimate", amount: (order.total ?? 0) * 0.04 },
-      { label: "Inbound logistics estimate", amount: (order.total ?? 0) * 0.06 },
+      { label: "Permits & customs (estimate)", amount: (order.total ?? 0) * 0.04 },
+      { label: "Inbound logistics (estimate)", amount: (order.total ?? 0) * 0.06 },
     ];
     if (otherCostsAlloc?.lines?.length) {
-      return otherCostsAlloc.lines.map((l, i) => ({
-        label: [l.costCentre, l.reference].filter(Boolean).join(" · ") || `Charge ${i + 1}`,
-        amount: typeof l.amount === "number" ? l.amount : 0,
-      }));
+      return otherCostsAlloc.lines.map((l, i) => {
+        // Resolution order: template name → human cost-centre label → fallback
+        const base = l.templateName
+          || COST_CENTRE_LABELS[l.costCentre ?? ""]
+          || `Charge ${i + 1}`;
+        const label = l.reference ? `${base} — ${l.reference}` : base;
+        return { label, amount: typeof l.amount === "number" ? l.amount : 0 };
+      });
     }
     if (otherCostsAlloc?.costCentreSummary && Object.keys(otherCostsAlloc.costCentreSummary).length > 0) {
-      const CC: Record<string, string> = {
-        currency_conversion: "Currency conversion",
-        permits: "Permits and customs",
-        inbound_logistics: "Inbound logistics",
-        other: "Other",
-      };
       return Object.entries(otherCostsAlloc.costCentreSummary).map(([k, v]) => ({
-        label: CC[k] ?? k,
+        label: COST_CENTRE_LABELS[k] ?? k,
         amount: v.originalAmount ?? 0,
       }));
     }

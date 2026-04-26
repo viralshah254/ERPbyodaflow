@@ -46,10 +46,17 @@ export type GrnPostError = Error & {
   billNumber?: string | null;
 };
 
-export async function postGRN(id: string): Promise<void> {
+export interface GrnPostResult {
+  id: string;
+  status: string;
+  stockAdded: Array<{ productId: string; productName?: string; qty: number; warehouseId: string }>;
+}
+
+export async function postGRN(id: string): Promise<GrnPostResult> {
   requireLiveApi("Post goods receipt");
   try {
-    await apiRequest(`/api/purchasing/grn/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
+    const res = await apiRequest<GrnPostResult>(`/api/purchasing/grn/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
+    return res ?? { id, status: "POSTED", stockAdded: [] };
   } catch (raw) {
     const base = raw as Error & { body?: Record<string, unknown> };
     const body = base.body ?? {};
