@@ -16,6 +16,9 @@ export type InventoryCostingSnapshot = {
 };
 
 export type InventoryValuationResponse = {
+  /** ISO timestamp of the costing run that produced this snapshot; null if none. */
+  ranAt: string | null;
+  method: string | null;
   summary: Array<{
     warehouseId: string;
     warehouse: string;
@@ -29,6 +32,7 @@ export type InventoryValuationResponse = {
     sku: string;
     productName: string;
     warehouseId: string;
+    warehouseName?: string;
     quantity: number;
     unitCost: number;
     inventoryValue: number;

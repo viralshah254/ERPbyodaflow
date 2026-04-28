@@ -55,6 +55,8 @@ export async function fetchStockLevelsApi(filters?: {
   productId?: string;
   status?: "In Stock" | "Low Stock" | "Out of Stock" | "all";
   search?: string;
+  /** Server caps at 100; default 50 when omitted. */
+  limit?: number;
 }): Promise<InventoryStockRow[]> {
   requireLiveApi("Inventory stock levels");
   const statusMap: Record<string, string | undefined> = {
@@ -71,6 +73,9 @@ export async function fetchStockLevelsApi(filters?: {
     if (mappedStatus) params.set("status", mappedStatus);
   }
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.limit != null && filters.limit > 0) {
+    params.set("limit", String(Math.min(filters.limit, 100)));
+  }
   const data = await apiRequest<{ items: BackendStockLevel[] }>("/api/inventory/stock-levels", {
     params,
   });

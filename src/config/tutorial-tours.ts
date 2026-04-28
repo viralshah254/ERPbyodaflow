@@ -649,7 +649,8 @@ export const TUTORIAL_TOURS: TourDef[] = [
       {
         element: "h1",
         title: "Valuation",
-        description: "Inventory value by product, category, or warehouse for reporting and period-end checks.",
+        description:
+          "Latest costing snapshot per SKU and warehouse—use with the Costing page; full period close and GL tie-out workflows are still coordinated with finance.",
       },
     ],
   },

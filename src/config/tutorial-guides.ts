@@ -464,19 +464,19 @@ export const ITEM_GUIDES: Partial<
   },
   "inventory-valuation": {
     guideSummary:
-      "Valuation reports inventory value by product, category, or warehouse—essential for month-end, loans, insurance, and management margin reviews. Numbers should reconcile with GL inventory after costing runs and adjustments.",
+      "This screen shows the latest persisted inventory valuation from the costing run (weighted-average snapshot per stock level). Use it with costing runs and Finance journals—period-end reconciliation to GL still happens outside this page.",
     guideSteps: [
-      "Select scope: whole org, one warehouse, or one category for targeted analysis.",
-      "Run as of a specific date to match period close.",
-      "Export and tie subtotals to the trial balance inventory lines.",
-      "Investigate outliers (single SKU dominating value, negative lines).",
-      "Coordinate with finance before posting large revaluation journals.",
-      "Archive exports for audit—valuation is a common auditor ask.",
+      "Review per-SKU unit cost, quantity, and extended value from the last costing snapshot.",
+      "See warehouse subtotals when stock spans multiple sites (table rows include warehouse).",
+      "If the table is empty, run Inventory costing first so a snapshot can be saved.",
+      "For period close: coordinate as-of dates and tie-outs with finance—historical \"as of\" snapshots and CSV export are not on this page yet.",
     ],
     guideTips: [
+      "Month-end practice: scope by warehouse using the summary rows, export manually if needed (e.g. copy or print), and match subtotals to trial balance inventory lines after postings.",
+      "Investigate outliers (one SKU dominating value, negative quantities) before large revaluation journals.",
       "FX multi-currency stock may need translation rules—confirm with finance.",
     ],
-    recommendedNextStep: { label: "Finance journals", href: "/finance/journals" },
+    recommendedNextStep: { label: "Costing run", href: "/inventory/costing" },
   },
   "inventory-transfers": {
     guideSummary:

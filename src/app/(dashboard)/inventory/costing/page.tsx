@@ -1880,10 +1880,19 @@ export default function InventoryCostingPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Stock valuation summary</CardTitle>
-              <CardDescription>
-                By warehouse — values include all posted other cost allocations.
+              <CardDescription className="space-y-1 max-w-3xl">
+                <span className="block">
+                  By warehouse from the last <strong className="font-medium">Run costing</strong>. Posting GRNs,
+                  allocating other costs, or changing stock does <strong className="font-medium">not</strong> update this
+                  automatically—click <strong className="font-medium">Run costing</strong> to refresh after changes.
+                </span>
+                <span className="block text-muted-foreground text-xs">
+                  Only warehouses that have warehouse-level on-hand stock records appear (see Stock levels). Weighted
+                  average uses posted GRNs per costing settings; valuations include allocated landed/processing costs once
+                  costing is re-run.
+                </span>
                 {costingSnapshot.ranAt && (
-                  <span className="ml-1 text-muted-foreground">
+                  <span className="block text-muted-foreground text-xs">
                     Last run: {new Date(costingSnapshot.ranAt).toLocaleString()} · {costingSnapshot.method}
                   </span>
                 )}
