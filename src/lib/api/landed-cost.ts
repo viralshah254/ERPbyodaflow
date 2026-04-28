@@ -21,6 +21,7 @@ export async function createLandedCostTemplate(body: {
   name: string;
   type: LandedCostTemplateRow["type"];
   allocationBasis: LandedCostTemplateRow["allocationBasis"];
+  wizardGroup?: LandedCostTemplateRow["wizardGroup"];
   currency?: string;
 }): Promise<{ id: string }> {
   requireLiveApi("Create landed cost template");
@@ -36,6 +37,7 @@ export async function updateLandedCostTemplate(
     name: string;
     type: LandedCostTemplateRow["type"];
     allocationBasis: LandedCostTemplateRow["allocationBasis"];
+    wizardGroup: LandedCostTemplateRow["wizardGroup"];
     currency: string;
     isActive: boolean;
   }>

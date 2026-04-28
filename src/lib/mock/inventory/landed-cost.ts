@@ -14,12 +14,16 @@ export type LandedCostType =
   | "outbound_freight"
   | "storage";
 
+export type LandedCostWizardGroup = "additional_costs" | "logistics";
+
 export interface LandedCostTemplateRow {
   id: string;
   code: string;
   name: string;
   type: LandedCostType;
   allocationBasis: "qty" | "value" | "weight";
+  /** Which wizard step bucket this template belongs to. Drives costCentre auto-assignment. */
+  wizardGroup?: LandedCostWizardGroup;
 }
 
 export interface LandedCostLineRow {

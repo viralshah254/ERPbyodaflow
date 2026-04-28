@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { fetchFranchiseOutletWorkspace } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
+import { Button } from "@/components/ui/button";
 import {
   ShoppingCart,
   PackageSearch,
@@ -16,6 +17,7 @@ import {
   AlertTriangle,
   ClipboardList,
   Truck,
+  ArrowRight,
 } from "lucide-react";
 
 interface ActionTileProps {
@@ -66,6 +68,20 @@ export default function FranchiseOutletWorkspacePage() {
         showCommandHint
       />
       <div className="space-y-6 p-4 sm:p-6">
+        {/* Prominent stock request CTA */}
+        <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-5 py-4">
+          <div>
+            <p className="font-semibold text-sm">Need to restock?</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Request stock from HQ — your order is sent straight to Cool Catch for fulfilment.</p>
+          </div>
+          <Button asChild size="sm" className="shrink-0 ml-4">
+            <Link href="/docs/purchase-request/new">
+              Request stock from HQ
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+
         {/* KPI snapshot */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <OperationalKpiCard
@@ -109,10 +125,10 @@ export default function FranchiseOutletWorkspacePage() {
               sublabel="Bill a customer"
             />
             <ActionTile
-              href="/docs/purchase-order/new"
+              href="/docs/purchase-request/new"
               icon={<Truck className="h-7 w-7" />}
-              label="Order from HQ"
-              sublabel="Request stock from Cool Catch"
+              label="Request Stock from HQ"
+              sublabel="Order replenishment from Cool Catch"
               highlight
             />
             <ActionTile

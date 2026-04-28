@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { FranchiseHealthCard } from "@/components/operational/FranchiseHealthCard";
-import { fetchFranchiseNetworkSummary, fetchFranchiseOutletWorkspace, fetchNetworkSummaryV2, assignOutletPriceList } from "@/lib/api/cool-catch";
+import { fetchFranchiseNetworkSummary, fetchFranchiseOutletWorkspace, fetchNetworkSummaryV2, assignOutletPriceList, type FranchiseNetworkOutletRow } from "@/lib/api/cool-catch";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { type PriceList } from "@/lib/products/pricing-types";
 import { formatMoney } from "@/lib/money";
@@ -190,19 +190,24 @@ function FranchisorNetworkDashboard() {
   const [outlets, setOutlets] = React.useState<NetworkOutletRow[]>([]);
   const [kpis, setKpis] = React.useState<NetworkKpis | null>(null);
   const [priceLists, setPriceLists] = React.useState<PriceList[]>([]);
+  const [outletStockMap, setOutletStockMap] = React.useState<Map<string, FranchiseNetworkOutletRow>>(new Map());
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
 
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [summary, pls] = await Promise.all([
+      const [summary, pls, networkSummary] = await Promise.all([
         fetchNetworkSummaryV2(),
         fetchPriceListsForUi(),
+        fetchFranchiseNetworkSummary().catch(() => null),
       ]);
       setKpis(summary.kpis);
       setOutlets(summary.outlets);
       setPriceLists(pls);
+      if (networkSummary?.outlets) {
+        setOutletStockMap(new Map(networkSummary.outlets.map((o) => [o.id, o])));
+      }
     } catch {
       toast.error("Could not load network data");
     } finally {
@@ -327,17 +332,20 @@ function FranchisorNetworkDashboard() {
         {/* Health cards — top 4 outlets */}
         {outlets.length > 0 && (
           <div className="grid gap-4 lg:grid-cols-2">
-            {outlets.slice(0, 4).map((o) => (
-              <FranchiseHealthCard
-                key={o.id}
-                franchiseeId={o.id}
-                franchiseeName={o.name}
-                qtyOnHand={0}
-                skuCount={o.orderCount30d}
-                topUpExposure={0}
-                openReplenishments={0}
-              />
-            ))}
+            {outlets.slice(0, 4).map((o) => {
+              const stockData = outletStockMap.get(o.id);
+              return (
+                <FranchiseHealthCard
+                  key={o.id}
+                  franchiseeId={o.id}
+                  franchiseeName={o.name}
+                  qtyOnHand={stockData?.totalStockQty ?? 0}
+                  skuCount={stockData?.lowStockCount !== undefined ? (stockData.lowStockCount > 0 ? stockData.lowStockCount : o.orderCount30d) : o.orderCount30d}
+                  topUpExposure={stockData?.arOverdue ?? 0}
+                  openReplenishments={stockData?.lowStockCount ?? 0}
+                />
+              );
+            })}
           </div>
         )}
 

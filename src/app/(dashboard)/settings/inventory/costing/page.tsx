@@ -75,6 +75,7 @@ export default function InventoryCostingSettingsPage() {
     name: "",
     type: "freight" as LandedCostTemplateRow["type"],
     allocationBasis: "qty" as LandedCostTemplateRow["allocationBasis"],
+    wizardGroup: "additional_costs" as NonNullable<LandedCostTemplateRow["wizardGroup"]>,
   });
 
   const reload = React.useCallback(async () => {
@@ -111,7 +112,7 @@ export default function InventoryCostingSettingsPage() {
   };
 
   const resetTemplateForm = () => {
-    setTemplateForm({ name: "", type: "freight", allocationBasis: "qty" });
+    setTemplateForm({ name: "", type: "freight", allocationBasis: "qty", wizardGroup: "additional_costs" });
     setEditingTemplateId(null);
   };
 
@@ -127,6 +128,7 @@ export default function InventoryCostingSettingsPage() {
       name: t.name,
       type: type as LandedCostTemplateRow["type"],
       allocationBasis: (t.allocationBasis ?? "qty") as LandedCostTemplateRow["allocationBasis"],
+      wizardGroup: (t.wizardGroup ?? "additional_costs") as NonNullable<LandedCostTemplateRow["wizardGroup"]>,
     });
     setEditingTemplateId(t.id);
     setTemplateSheetOpen(true);
@@ -143,6 +145,7 @@ export default function InventoryCostingSettingsPage() {
           name: templateForm.name.trim(),
           type: templateForm.type,
           allocationBasis: templateForm.allocationBasis,
+          wizardGroup: templateForm.wizardGroup,
         });
         toast.success("Landed cost template updated.");
       } else {
@@ -150,6 +153,7 @@ export default function InventoryCostingSettingsPage() {
           name: templateForm.name.trim(),
           type: templateForm.type,
           allocationBasis: templateForm.allocationBasis,
+          wizardGroup: templateForm.wizardGroup,
         });
         toast.success("Landed cost template created.");
       }
@@ -268,6 +272,7 @@ export default function InventoryCostingSettingsPage() {
                   <TableHead>Code</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Allocation basis</TableHead>
                   <TableHead className="w-[120px] text-right">Actions</TableHead>
                 </TableRow>
@@ -278,6 +283,15 @@ export default function InventoryCostingSettingsPage() {
                     <TableCell className="font-medium">{t.code || slugFromName(t.name)}</TableCell>
                     <TableCell>{t.name}</TableCell>
                     <TableCell>{t.type}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        (t.wizardGroup ?? "additional_costs") === "logistics"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-amber-50 text-amber-700 border border-amber-200"
+                      }`}>
+                        {(t.wizardGroup ?? "additional_costs") === "logistics" ? "Logistics" : "Additional Costs"}
+                      </span>
+                    </TableCell>
                     <TableCell>{t.allocationBasis ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
@@ -365,6 +379,19 @@ export default function InventoryCostingSettingsPage() {
                   <SelectItem value="qty">Quantity</SelectItem>
                   <SelectItem value="value">Value</SelectItem>
                   <SelectItem value="weight">Weight</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <p className="text-xs text-muted-foreground">
+                Determines which wizard step this cost type appears in.
+              </p>
+              <Select value={templateForm.wizardGroup} onValueChange={(value) => setTemplateForm((current) => ({ ...current, wizardGroup: value as NonNullable<LandedCostTemplateRow["wizardGroup"]> }))}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="additional_costs">Additional Costs (permits, duties, border, etc.)</SelectItem>
+                  <SelectItem value="logistics">Logistics (freight, transport, cold-chain)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

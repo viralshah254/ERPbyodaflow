@@ -31,13 +31,19 @@ import {
   fetchOutletCustomers,
   fetchCustomerNetworkHistory,
   assignOutletPriceList,
+  fetchOutletStock,
+  fetchOutletSummaryRange,
   type OutletSummary,
   type FranchiseCustomerRow,
   type CustomerHistoryItem,
+  type OutletStockRow,
+  type OutletInvoiceRow,
 } from "@/lib/api/cool-catch";
+import { fetchInboundOrders, type InboundOrderRow } from "@/lib/api/cool-catch";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { type PriceList } from "@/lib/products/pricing-types";
 import { formatMoney } from "@/lib/money";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { toast } from "sonner";
 import {
   TrendingUp,
@@ -49,6 +55,8 @@ import {
   Package,
   Calendar,
   RefreshCw,
+  BarChart2,
+  Boxes,
 } from "lucide-react";
 
 // ─── KPI Cards ───────────────────────────────────────────────────────────────
@@ -184,6 +192,188 @@ function CustomerHistorySheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ─── Stock tab ────────────────────────────────────────────────────────────────
+
+function StockTab({ outletOrgId }: { outletOrgId: string }) {
+  const [rows, setRows] = React.useState<OutletStockRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [search, setSearch] = React.useState("");
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetchOutletStock(outletOrgId)
+      .then((r) => setRows(r.items))
+      .catch(() => toast.error("Could not load outlet stock"))
+      .finally(() => setLoading(false));
+  }, [outletOrgId]);
+
+  const filtered = search.trim()
+    ? rows.filter((r) => r.productName.toLowerCase().includes(search.toLowerCase()) || r.sku.toLowerCase().includes(search.toLowerCase()))
+    : rows;
+
+  const columns = [
+    { id: "sku", header: "SKU", accessor: (r: OutletStockRow) => <span className="font-mono text-xs">{r.sku}</span> },
+    { id: "product", header: "Product", accessor: (r: OutletStockRow) => r.productName },
+    { id: "warehouse", header: "Warehouse", accessor: (r: OutletStockRow) => r.warehouseName },
+    { id: "qty", header: "On hand", accessor: (r: OutletStockRow) => r.quantity.toLocaleString() },
+    { id: "reserved", header: "Reserved", accessor: (r: OutletStockRow) => r.reservedQuantity.toLocaleString() },
+    { id: "available", header: "Available", accessor: (r: OutletStockRow) => (
+      <span className={r.available <= 0 ? "text-destructive font-medium" : ""}>{r.available.toLocaleString()}</span>
+    )},
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <input
+          type="search"
+          placeholder="Search SKU or product…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-9 w-64 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <span className="text-xs text-muted-foreground ml-auto">{rows.length} SKU{rows.length !== 1 ? "s" : ""}</span>
+      </div>
+      <DataTable data={filtered} columns={columns} emptyMessage={loading ? "Loading stock…" : "No stock records for this outlet."} />
+    </div>
+  );
+}
+
+// ─── Sales tab ────────────────────────────────────────────────────────────────
+
+type DatePreset = "today" | "week" | "month" | "custom";
+
+function SalesTab({ outletOrgId }: { outletOrgId: string }) {
+  const [preset, setPreset] = React.useState<DatePreset>("month");
+  const [customFrom, setCustomFrom] = React.useState("");
+  const [customTo, setCustomTo] = React.useState("");
+  const [invoices, setInvoices] = React.useState<OutletInvoiceRow[]>([]);
+  const [kpis, setKpis] = React.useState<{ revenue: number; count: number } | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  const dateRange = React.useMemo(() => {
+    const today = new Date();
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    if (preset === "today") return { from: fmt(today), to: fmt(today) };
+    if (preset === "week") {
+      const d = new Date(today); d.setDate(today.getDate() - 6);
+      return { from: fmt(d), to: fmt(today) };
+    }
+    if (preset === "month") {
+      const d = new Date(today); d.setDate(today.getDate() - 29);
+      return { from: fmt(d), to: fmt(today) };
+    }
+    return { from: customFrom, to: customTo };
+  }, [preset, customFrom, customTo]);
+
+  React.useEffect(() => {
+    if (!dateRange.from || !dateRange.to) return;
+    setLoading(true);
+    fetchOutletSummaryRange(outletOrgId, dateRange)
+      .then((r) => {
+        setKpis({ revenue: r.revenue30d, count: r.orderCount30d });
+        setInvoices(r.invoices ?? []);
+      })
+      .catch(() => toast.error("Could not load sales data"))
+      .finally(() => setLoading(false));
+  }, [outletOrgId, dateRange]);
+
+  const columns = [
+    { id: "number", header: "Invoice", accessor: (r: OutletInvoiceRow) => <span className="font-medium">{r.number}</span> },
+    { id: "date", header: "Date", accessor: (r: OutletInvoiceRow) => r.date },
+    { id: "customer", header: "Customer", accessor: (r: OutletInvoiceRow) => r.customerName ?? "—" },
+    { id: "total", header: "Total", accessor: (r: OutletInvoiceRow) => formatMoney(r.total, "KES") },
+    { id: "status", header: "Status", accessor: (r: OutletInvoiceRow) => <StatusBadge status={r.status} /> },
+  ];
+
+  const presets: Array<{ key: DatePreset; label: string }> = [
+    { key: "today", label: "Today" },
+    { key: "week", label: "This week" },
+    { key: "month", label: "This month" },
+    { key: "custom", label: "Custom" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {presets.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => setPreset(p.key)}
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${preset === p.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-input hover:bg-muted"}`}
+          >
+            {p.label}
+          </button>
+        ))}
+        {preset === "custom" && (
+          <>
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
+            <span className="text-muted-foreground text-sm">to</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
+          </>
+        )}
+      </div>
+
+      {kpis && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Revenue", value: formatMoney(kpis.revenue, "KES") },
+            { label: "Invoices", value: String(kpis.count) },
+            { label: "Avg order", value: kpis.count > 0 ? formatMoney(kpis.revenue / kpis.count, "KES") : "—" },
+          ].map(({ label, value }) => (
+            <Card key={label} className="border-none shadow-sm">
+              <CardContent className="pt-4 pb-3">
+                <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                <p className="text-lg font-bold">{loading ? <span className="inline-block h-5 w-20 bg-muted animate-pulse rounded" /> : value}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <DataTable data={invoices} columns={columns} emptyMessage={loading ? "Loading sales…" : "No invoices in this period."} />
+    </div>
+  );
+}
+
+// ─── Orders to HQ tab ─────────────────────────────────────────────────────────
+
+function OrdersToHqTab({ outletOrgId }: { outletOrgId: string }) {
+  const [rows, setRows] = React.useState<InboundOrderRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    setLoading(true);
+    fetchInboundOrders({ outletOrgId })
+      .then((r) => setRows(r.items))
+      .catch(() => toast.error("Could not load orders to HQ"))
+      .finally(() => setLoading(false));
+  }, [outletOrgId]);
+
+  const columns = [
+    { id: "number", header: "PR Number", accessor: (r: InboundOrderRow) => <span className="font-medium">{r.number}</span> },
+    { id: "date", header: "Date", accessor: (r: InboundOrderRow) => r.date ?? "—" },
+    { id: "products", header: "Products", accessor: (r: InboundOrderRow) => (
+      <span className="text-xs text-muted-foreground">
+        {r.lines.slice(0, 2).map((l) => l.productName ?? l.sku ?? "—").join(", ")}
+        {r.lines.length > 2 ? ` +${r.lines.length - 2} more` : ""}
+      </span>
+    )},
+    { id: "total", header: "Total", accessor: (r: InboundOrderRow) => `${r.currency} ${r.total.toLocaleString()}` },
+    { id: "status", header: "Status", accessor: (r: InboundOrderRow) => <StatusBadge status={r.status} /> },
+  ];
+
+  return (
+    <DataTable
+      data={rows}
+      columns={columns}
+      emptyMessage={loading ? "Loading orders…" : "No purchase requests sent to HQ yet."}
+    />
   );
 }
 
@@ -426,6 +616,7 @@ export default function OutletDetailPage() {
     try {
       const s = await fetchOutletSummary(outletOrgId);
       setSummary(s);
+      if (s.outletName) setOutletName(s.outletName);
     } catch {
       // summary may fail if no permissions — silently degrade
     } finally {
@@ -470,7 +661,15 @@ export default function OutletDetailPage() {
           <TabsList className="mb-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="customers">Customers</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="stock" className="gap-1.5">
+              <Boxes size={14} />
+              Stock
+            </TabsTrigger>
+            <TabsTrigger value="sales" className="gap-1.5">
+              <BarChart2 size={14} />
+              Sales
+            </TabsTrigger>
+            <TabsTrigger value="orders">Orders to HQ</TabsTrigger>
             <TabsTrigger value="pricelist">Price List</TabsTrigger>
           </TabsList>
 
@@ -482,20 +681,16 @@ export default function OutletDetailPage() {
             <CustomersTab outletOrgId={outletOrgId} />
           </TabsContent>
 
+          <TabsContent value="stock">
+            <StockTab outletOrgId={outletOrgId} />
+          </TabsContent>
+
+          <TabsContent value="sales">
+            <SalesTab outletOrgId={outletOrgId} />
+          </TabsContent>
+
           <TabsContent value="orders">
-            <Card>
-              <CardHeader>
-                <CardTitle>Orders to HQ</CardTitle>
-                <CardDescription>Purchase orders placed by this outlet to the parent organisation.</CardDescription>
-              </CardHeader>
-              <CardContent className="py-6 text-center">
-                <Button variant="outline" asChild>
-                  <Link href={`/docs/purchase-orders?orgId=${outletOrgId}`}>
-                    View in documents →
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+            <OrdersToHqTab outletOrgId={outletOrgId} />
           </TabsContent>
 
           <TabsContent value="pricelist">

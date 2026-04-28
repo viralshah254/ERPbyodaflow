@@ -84,7 +84,7 @@ interface CostBreakdown {
   total: number;
 }
 
-type WizardStep = 0 | 1 | 2 | 3 | 4; // 0=FX, 1=Permits, 2=Logistics, 3=Processing costs, 4=Summary
+type WizardStep = 0 | 1 | 2 | 3; // 0=FX, 1=Additional Costs, 2=Processing costs, 3=Summary
 
 interface CostLine {
   templateId: string;
@@ -117,11 +117,21 @@ const LANDED_COST_TYPE_LABELS: Record<string, string> = {
 
 const WIZARD_STEPS = [
   { id: 0, label: "FX conversion", icon: Icons.TrendingUp },
-  { id: 1, label: "Permits & customs", icon: Icons.FileCheck },
-  { id: 2, label: "Inbound logistics", icon: Icons.Truck },
-  { id: 3, label: "Processing costs", icon: Icons.Factory },
-  { id: 4, label: "Summary & confirm", icon: Icons.CheckCircle2 },
+  { id: 1, label: "Additional costs", icon: Icons.PackagePlus },
+  { id: 2, label: "Processing costs", icon: Icons.Factory },
+  { id: 3, label: "Summary & confirm", icon: Icons.CheckCircle2 },
 ] as const;
+
+/** Derive the costCentre from the template's wizardGroup. */
+function costCentreForTemplate(
+  templateId: string,
+  templates: LandedCostTemplateRow[]
+): "permits" | "inbound_logistics" {
+  const t = templates.find((x) => x.id === templateId);
+  return (t as { wizardGroup?: string } | undefined)?.wizardGroup === "logistics"
+    ? "inbound_logistics"
+    : "permits";
+}
 
 // ─── Cost breakdown popover ───────────────────────────────────────────────────
 
@@ -153,9 +163,9 @@ function CostBreakdownPopover({
     if (breakdown.currencyConversion > 0)
       rows.push({ label: "FX conversion", value: breakdown.currencyConversion, icon: <Icons.TrendingUp className="h-3.5 w-3.5 text-blue-500" /> });
     if (breakdown.permits > 0)
-      rows.push({ label: "Permits & customs", value: breakdown.permits, icon: <Icons.FileCheck className="h-3.5 w-3.5 text-amber-500" /> });
+      rows.push({ label: "Additional costs", value: breakdown.permits, icon: <Icons.PackagePlus className="h-3.5 w-3.5 text-amber-500" /> });
     if (breakdown.inboundLogistics > 0)
-      rows.push({ label: "Inbound logistics", value: breakdown.inboundLogistics, icon: <Icons.Truck className="h-3.5 w-3.5 text-emerald-500" /> });
+      rows.push({ label: "Logistics", value: breakdown.inboundLogistics, icon: <Icons.Truck className="h-3.5 w-3.5 text-emerald-500" /> });
     if (breakdown.otherLanded > 0) {
       const detail = breakdown.otherLandedLines?.filter((l) => l.amountKes > 0) ?? [];
       if (detail.length > 0) {
@@ -396,18 +406,19 @@ function StepFxConversion({
         disabled={!isKes && !!fxError && !fxRate}
       >
         <Icons.ArrowRight className="mr-2 h-4 w-4" />
-        {isKes ? "No conversion needed — continue to permits" : "Confirm rate & continue to permits"}
+        {isKes ? "No conversion needed — continue to additional costs" : "Confirm rate & continue to additional costs"}
       </Button>
     </div>
   );
 }
 
-// ─── Step 1: Permits & Customs ───────────────────────────────────────────────
+// ─── Step 1: Additional Costs (permits + logistics merged) ───────────────────
 
-function StepPermits({
+function StepAdditionalCosts({
   lines,
   templates,
   onChange,
+  onTemplateChange,
   onFilesChange,
   onAdd,
   onRemove,
@@ -418,6 +429,7 @@ function StepPermits({
   lines: CostLine[];
   templates: LandedCostTemplateRow[];
   onChange: (idx: number, field: keyof CostLine, value: string) => void;
+  onTemplateChange: (idx: number, templateId: string) => void;
   onFilesChange: (idx: number, files: File[]) => void;
   onAdd: () => void;
   onRemove: (idx: number) => void;
@@ -425,139 +437,172 @@ function StepPermits({
   onBack: () => void;
   onSkip: () => void;
 }) {
-  const permitTemplates = templates; // all templates; the wizard step determines costCentre, not the template type
+  const additionalTemplates = templates.filter(
+    (t) => !t.wizardGroup || t.wizardGroup === "additional_costs"
+  );
+  const logisticsTemplates = templates.filter((t) => t.wizardGroup === "logistics");
 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="font-semibold text-base">Step 2: Permits &amp; customs costs</h3>
+        <h3 className="font-semibold text-base">Step 2: Additional costs</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Add any fishing licences, border clearance fees, or customs duties paid for this shipment.
-          Include the permit reference number for audit traceability.
+          Add any permits, licences, border fees, freight, or other costs for this shipment.
+          Each cost type is tracked separately for reporting.
         </p>
       </div>
 
       <div className="flex items-start gap-2 rounded-md border bg-amber-50 border-amber-100 px-3 py-2">
-        <Icons.FileCheck className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+        <Icons.PackagePlus className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
         <p className="text-xs text-amber-700">
-          Each permit cost is tracked as a separate cost centre (<strong>permits</strong>). This allows you to report
-          permit spend independently from freight and the purchase value.
+          Cost types marked as <strong>Logistics</strong> in settings are tracked under the inbound logistics cost centre; all others under additional costs. Configure categories in{" "}
+          <a href="/settings/inventory/costing" className="underline font-medium" target="_blank">Settings → Costing</a>.
         </p>
       </div>
 
       <div className="space-y-3">
         <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Permit cost lines
+          Cost lines
         </Label>
-        {lines.map((line, idx) => (
-          <div key={idx} className="rounded-lg border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Cost line {idx + 1}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => onRemove(idx)}
-                disabled={lines.length <= 1}
-              >
-                <Icons.X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="col-span-2">
-                <Label className="text-xs mb-1 block">Cost type</Label>
-                <Select value={line.templateId} onValueChange={(v) => onChange(idx, "templateId", v)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select permit type…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {permitTemplates.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {(t as { name?: string }).name ?? LANDED_COST_TYPE_LABELS[(t as { type?: string }).type as keyof typeof LANDED_COST_TYPE_LABELS]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        {lines.map((line, idx) => {
+          const selectedTemplate = templates.find((t) => t.id === line.templateId);
+          const isLogistics = selectedTemplate?.wizardGroup === "logistics";
+          return (
+            <div key={idx} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Cost line {idx + 1}</span>
+                  {line.templateId && (
+                    <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${isLogistics ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {isLogistics ? "Logistics" : "Additional Costs"}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => onRemove(idx)}
+                  disabled={lines.length <= 1}
+                >
+                  <Icons.X className="h-3.5 w-3.5" />
+                </Button>
               </div>
-              <div>
-                <Label className="text-xs mb-1 block">Amount</Label>
-                <FormattedDecimalInput
-                  placeholder="0.00"
-                  className="h-9"
-                  value={line.amount}
-                  onValueChange={(raw) => onChange(idx, "amount", raw)}
-                />
-              </div>
-              <div>
-                <Label className="text-xs mb-1 block">Currency</Label>
-                <Select value={line.currency} onValueChange={(v) => onChange(idx, "currency", v)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="KES">KES</SelectItem>
-                    <SelectItem value="UGX">UGX</SelectItem>
-                    <SelectItem value="USD">USD</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-2">
-                <Label className="text-xs mb-1 block">
-                  Permit / licence number{" "}
-                  <span className="text-muted-foreground font-normal">(optional — for audit trail)</span>
-                </Label>
-                <Input
-                  placeholder="e.g. KFS/LIC/2025/04821"
-                  className="h-9"
-                  value={line.reference}
-                  onChange={(e) => onChange(idx, "reference", e.target.value)}
-                />
-              </div>
-              <div className="col-span-2">
-                <Label className="text-xs mb-1 block flex items-center gap-1">
-                  <Icons.Paperclip className="h-3 w-3" />
-                  Evidence{" "}
-                  <span className="text-muted-foreground font-normal">(invoice / receipt — optional)</span>
-                </Label>
-                <label className="flex items-center gap-2 cursor-pointer rounded border border-dashed px-3 py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors">
-                  <Icons.Upload className="h-3.5 w-3.5 shrink-0" />
-                  {(line.files?.length ?? 0) > 0
-                    ? (line.files ?? []).map((f) => f.name).join(", ")
-                    : "Upload invoice or receipt"}
-                  <input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    multiple
-                    className="sr-only"
-                    onChange={(e) => {
-                      const selected = Array.from(e.target.files ?? []);
-                      onFilesChange(idx, [...(line.files ?? []), ...selected]);
-                    }}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="col-span-2">
+                  <Label className="text-xs mb-1 block">Cost type</Label>
+                  <Select value={line.templateId} onValueChange={(v) => onTemplateChange(idx, v)}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select cost type…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {additionalTemplates.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Additional Costs
+                          </div>
+                          {additionalTemplates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name ?? LANDED_COST_TYPE_LABELS[t.type as keyof typeof LANDED_COST_TYPE_LABELS]}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      {logisticsTemplates.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-1">
+                            Logistics
+                          </div>
+                          {logisticsTemplates.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name ?? LANDED_COST_TYPE_LABELS[t.type as keyof typeof LANDED_COST_TYPE_LABELS]}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Amount</Label>
+                  <FormattedDecimalInput
+                    placeholder="0.00"
+                    className="h-9"
+                    value={line.amount}
+                    onValueChange={(raw) => onChange(idx, "amount", raw)}
                   />
-                </label>
-                {(line.files?.length ?? 0) > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {(line.files ?? []).map((f, fi) => (
-                      <span key={fi} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs">
-                        {f.name}
-                        <button
-                          type="button"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => onFilesChange(idx, (line.files ?? []).filter((_, i) => i !== fi))}
-                        >
-                          <Icons.X className="h-2.5 w-2.5" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Currency</Label>
+                  <Select value={line.currency} onValueChange={(v) => onChange(idx, "currency", v)}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="KES">KES</SelectItem>
+                      <SelectItem value="UGX">UGX</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs mb-1 block">
+                    Reference / number{" "}
+                    <span className="text-muted-foreground font-normal">(optional — for audit trail)</span>
+                  </Label>
+                  <Input
+                    placeholder="e.g. KFS/LIC/2025/04821 or waybill ref"
+                    className="h-9"
+                    value={line.reference}
+                    onChange={(e) => onChange(idx, "reference", e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs mb-1 block flex items-center gap-1">
+                    <Icons.Paperclip className="h-3 w-3" />
+                    Evidence{" "}
+                    <span className="text-muted-foreground font-normal">(invoice / receipt — optional)</span>
+                  </Label>
+                  <label className="flex items-center gap-2 cursor-pointer rounded border border-dashed px-3 py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                    <Icons.Upload className="h-3.5 w-3.5 shrink-0" />
+                    {(line.files?.length ?? 0) > 0
+                      ? (line.files ?? []).map((f) => f.name).join(", ")
+                      : "Upload invoice or receipt"}
+                    <input
+                      type="file"
+                      accept="application/pdf,image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        const selected = Array.from(e.target.files ?? []);
+                        onFilesChange(idx, [...(line.files ?? []), ...selected]);
+                      }}
+                    />
+                  </label>
+                  {(line.files?.length ?? 0) > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {(line.files ?? []).map((f, fi) => (
+                        <span key={fi} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs">
+                          {f.name}
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => onFilesChange(idx, (line.files ?? []).filter((_, i) => i !== fi))}
+                          >
+                            <Icons.X className="h-2.5 w-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <Button variant="ghost" size="sm" onClick={onAdd} className="w-full border border-dashed">
           <Icons.Plus className="mr-2 h-4 w-4" />
-          Add another permit cost
+          Add another cost
         </Button>
       </div>
 
@@ -566,181 +611,7 @@ function StepPermits({
           <Icons.ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back
         </Button>
         <Button variant="ghost" size="sm" onClick={onSkip} className="text-muted-foreground">
-          Skip (no permit costs)
-        </Button>
-        <Button size="sm" className="ml-auto" onClick={onNext}>
-          Next: Inbound logistics <Icons.ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Step 2: Inbound Logistics ────────────────────────────────────────────────
-
-function StepLogistics({
-  lines,
-  templates,
-  onChange,
-  onFilesChange,
-  onAdd,
-  onRemove,
-  onNext,
-  onBack,
-  onSkip,
-}: {
-  lines: CostLine[];
-  templates: LandedCostTemplateRow[];
-  onChange: (idx: number, field: keyof CostLine, value: string) => void;
-  onFilesChange: (idx: number, files: File[]) => void;
-  onAdd: () => void;
-  onRemove: (idx: number) => void;
-  onNext: () => void;
-  onBack: () => void;
-  onSkip: () => void;
-}) {
-  const logisticsTemplates = templates; // all templates; the wizard step determines costCentre, not the template type
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h3 className="font-semibold text-base">Step 3: Inbound logistics costs</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Add the cost of transporting the fish from farm to your processing hub — truck hire, cold-chain storage, or
-          any handling fees paid to carriers.
-        </p>
-      </div>
-
-      <div className="flex items-start gap-2 rounded-md border bg-emerald-50 border-emerald-100 px-3 py-2">
-        <Icons.Truck className="h-4 w-4 mt-0.5 text-emerald-600 shrink-0" />
-        <p className="text-xs text-emerald-700">
-          Logistics costs are tracked as a separate cost centre (<strong>inbound logistics</strong>). This shows you the
-          exact freight cost per kg — essential for route-level profitability.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Logistics cost lines
-        </Label>
-        {lines.map((line, idx) => (
-          <div key={idx} className="rounded-lg border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Cost line {idx + 1}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => onRemove(idx)}
-                disabled={lines.length <= 1}
-              >
-                <Icons.X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="col-span-2">
-                <Label className="text-xs mb-1 block">Cost type</Label>
-                <Select value={line.templateId} onValueChange={(v) => onChange(idx, "templateId", v)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select logistics type…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {logisticsTemplates.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {(t as { name?: string }).name ?? LANDED_COST_TYPE_LABELS[(t as { type?: string }).type as keyof typeof LANDED_COST_TYPE_LABELS]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs mb-1 block">Amount</Label>
-                <FormattedDecimalInput
-                  placeholder="0.00"
-                  className="h-9"
-                  value={line.amount}
-                  onValueChange={(raw) => onChange(idx, "amount", raw)}
-                />
-              </div>
-              <div>
-                <Label className="text-xs mb-1 block">Currency</Label>
-                <Select value={line.currency} onValueChange={(v) => onChange(idx, "currency", v)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="KES">KES</SelectItem>
-                    <SelectItem value="UGX">UGX</SelectItem>
-                    <SelectItem value="USD">USD</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-2">
-                <Label className="text-xs mb-1 block">
-                  Carrier / waybill reference{" "}
-                  <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
-                <Input
-                  placeholder="e.g. KE-2025-00471"
-                  className="h-9"
-                  value={line.reference}
-                  onChange={(e) => onChange(idx, "reference", e.target.value)}
-                />
-              </div>
-              <div className="col-span-2">
-                <Label className="text-xs mb-1 block flex items-center gap-1">
-                  <Icons.Paperclip className="h-3 w-3" />
-                  Evidence{" "}
-                  <span className="text-muted-foreground font-normal">(invoice / receipt — optional)</span>
-                </Label>
-                <label className="flex items-center gap-2 cursor-pointer rounded border border-dashed px-3 py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors">
-                  <Icons.Upload className="h-3.5 w-3.5 shrink-0" />
-                  {(line.files?.length ?? 0) > 0
-                    ? (line.files ?? []).map((f) => f.name).join(", ")
-                    : "Upload invoice or receipt"}
-                  <input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    multiple
-                    className="sr-only"
-                    onChange={(e) => {
-                      const selected = Array.from(e.target.files ?? []);
-                      onFilesChange(idx, [...(line.files ?? []), ...selected]);
-                    }}
-                  />
-                </label>
-                {(line.files?.length ?? 0) > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {(line.files ?? []).map((f, fi) => (
-                      <span key={fi} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs">
-                        {f.name}
-                        <button
-                          type="button"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => onFilesChange(idx, (line.files ?? []).filter((_, i) => i !== fi))}
-                        >
-                          <Icons.X className="h-2.5 w-2.5" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-        <Button variant="ghost" size="sm" onClick={onAdd} className="w-full border border-dashed">
-          <Icons.Plus className="mr-2 h-4 w-4" />
-          Add another logistics cost
-        </Button>
-      </div>
-
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onBack}>
-          <Icons.ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onSkip} className="text-muted-foreground">
-          Skip (no logistics costs)
+          Skip (no additional costs)
         </Button>
         <Button size="sm" className="ml-auto" onClick={onNext}>
           Next: Processing costs <Icons.ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -780,7 +651,7 @@ function StepProcessingCosts({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="font-semibold text-base">Step 4: Processing &amp; packing costs</h3>
+        <h3 className="font-semibold text-base">Step 3: Processing &amp; packing costs</h3>
         <p className="text-sm text-muted-foreground mt-1">
           Auto-calculate processing fee, packaging materials, and outbound logistics from your org&apos;s
           cost profile. Review and override any line before saving.
@@ -895,12 +766,12 @@ function StepProcessingCosts({
   );
 }
 
-// ─── Step 4: Summary & Confirm ────────────────────────────────────────────────
+// ─── Step 3: Summary & Confirm ────────────────────────────────────────────────
 
 function StepSummary({
   source,
-  permitLines,
-  logisticsLines,
+  additionalLines,
+  templates,
   processingCostLines,
   fxRate,
   onBack,
@@ -911,8 +782,8 @@ function StepSummary({
   hasExistingAllocation,
 }: {
   source: LandedCostSourceRow;
-  permitLines: CostLine[];
-  logisticsLines: CostLine[];
+  additionalLines: CostLine[];
+  templates: LandedCostTemplateRow[];
   processingCostLines: ProcessingCostDraftLine[];
   fxRate: FinancialExchangeRateRow | null;
   onBack: () => void;
@@ -932,17 +803,21 @@ function StepSummary({
     return amount * (fxRate?.rate ?? 1);
   };
 
-  const permitTotal = permitLines
+  // Split lines by costCentre for the summary breakdown
+  const additionalCostLines = additionalLines.filter((l) => l.costCentre === "permits");
+  const logisticsCostLines = additionalLines.filter((l) => l.costCentre === "inbound_logistics");
+
+  const additionalTotal = additionalCostLines
     .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
     .reduce((s, l) => s + toKes(parseCostLineAmount(l.amount), l.currency), 0);
 
-  const logisticsTotal = logisticsLines
+  const logisticsTotal = logisticsCostLines
     .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
     .reduce((s, l) => s + toKes(parseCostLineAmount(l.amount), l.currency), 0);
 
   const processingCostTotal = processingCostLines.reduce((s, l) => s + l.amount, 0);
 
-  const totalLanded = docInKes + permitTotal + logisticsTotal + processingCostTotal;
+  const totalLanded = docInKes + additionalTotal + logisticsTotal + processingCostTotal;
 
   const totalWeightKg = ((source as { lines?: Array<{ weightKg?: number; receivedWeightKg?: number; quantity?: number }> }).lines ?? []).reduce(
     (s, l) => s + (l.receivedWeightKg ?? l.weightKg ?? 0),
@@ -950,19 +825,18 @@ function StepSummary({
   );
   const costPerKg = totalWeightKg > 0 ? totalLanded / totalWeightKg : null;
   const goodsPerKg = totalWeightKg > 0 ? docInKes / totalWeightKg : null;
-  const permitsPerKg = totalWeightKg > 0 ? permitTotal / totalWeightKg : null;
+  const additionalPerKg = totalWeightKg > 0 ? additionalTotal / totalWeightKg : null;
   const logisticsPerKg = totalWeightKg > 0 ? logisticsTotal / totalWeightKg : null;
   const processingPerKg = totalWeightKg > 0 ? processingCostTotal / totalWeightKg : null;
 
   const hasValidLines =
-    permitLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0) ||
-    logisticsLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0) ||
+    additionalLines.some((l) => l.templateId && parseCostLineAmount(l.amount) > 0) ||
     processingCostLines.some((l) => l.amount > 0);
 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="font-semibold text-base">Step 5: Summary &amp; confirm</h3>
+        <h3 className="font-semibold text-base">Step 4: Summary &amp; confirm</h3>
         <p className="text-sm text-muted-foreground mt-1">
           Review the complete other costs breakdown before posting to inventory.
         </p>
@@ -1006,31 +880,36 @@ function StepSummary({
               <td className="px-3 py-3" />
             </tr>
 
-            {/* Permits */}
-            <tr className={cn(permitTotal === 0 && "opacity-50")}>
+            {/* Additional Costs */}
+            <tr className={cn(additionalTotal === 0 && "opacity-50")}>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <Icons.FileCheck className="h-4 w-4 text-amber-500" />
+                  <Icons.PackagePlus className="h-4 w-4 text-amber-500" />
                   <div>
-                    <p className="font-medium">Permits &amp; customs</p>
-                    {permitLines.filter((l) => l.reference).map((l, i) => (
-                      <p key={i} className="text-xs text-muted-foreground">Ref: {l.reference}</p>
-                    ))}
+                    <p className="font-medium">Additional costs</p>
+                    {additionalCostLines.filter((l) => l.reference).map((l, i) => {
+                      const t = templates.find((x) => x.id === l.templateId);
+                      return (
+                        <p key={i} className="text-xs text-muted-foreground">
+                          {t?.name ?? "Cost"}{l.reference ? ` — Ref: ${l.reference}` : ""}
+                        </p>
+                      );
+                    })}
                   </div>
                 </div>
               </td>
               <td className="px-4 py-3 text-right font-mono">
-                {permitLines
+                {additionalCostLines
                   .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
                   .map((l, i) => (
                     <span key={i} className="block">{formatMoney(parseCostLineAmount(l.amount), l.currency)}</span>
                   ))}
-                {permitLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0).length === 0 && (
+                {additionalCostLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0).length === 0 && (
                   <span className="text-muted-foreground">—</span>
                 )}
               </td>
               <td className="px-4 py-3 text-right font-mono font-medium">
-                {formatMoney(permitTotal, "KES")}
+                {formatMoney(additionalTotal, "KES")}
               </td>
               <td className="px-3 py-3">
                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onJumpToStep(1)}>
@@ -1039,38 +918,42 @@ function StepSummary({
               </td>
             </tr>
 
-            {/* Logistics */}
-            <tr className={cn(logisticsTotal === 0 && "opacity-50")}>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Icons.Truck className="h-4 w-4 text-emerald-500" />
-                  <div>
-                    <p className="font-medium">Inbound logistics</p>
-                    {logisticsLines.filter((l) => l.reference).map((l, i) => (
-                      <p key={i} className="text-xs text-muted-foreground">Ref: {l.reference}</p>
-                    ))}
+            {/* Logistics (only shown if any logistics lines exist) */}
+            {logisticsTotal > 0 && (
+              <tr>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Icons.Truck className="h-4 w-4 text-emerald-500" />
+                    <div>
+                      <p className="font-medium">Logistics</p>
+                      {logisticsCostLines.filter((l) => l.reference).map((l, i) => {
+                        const t = templates.find((x) => x.id === l.templateId);
+                        return (
+                          <p key={i} className="text-xs text-muted-foreground">
+                            {t?.name ?? "Cost"}{l.reference ? ` — Ref: ${l.reference}` : ""}
+                          </p>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              </td>
-              <td className="px-4 py-3 text-right font-mono">
-                {logisticsLines
-                  .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
-                  .map((l, i) => (
-                    <span key={i} className="block">{formatMoney(parseCostLineAmount(l.amount), l.currency)}</span>
-                  ))}
-                {logisticsLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0).length === 0 && (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </td>
-              <td className="px-4 py-3 text-right font-mono font-medium">
-                {formatMoney(logisticsTotal, "KES")}
-              </td>
-              <td className="px-3 py-3">
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onJumpToStep(2)}>
-                  <Icons.Pencil className="h-3 w-3" />
-                </Button>
-              </td>
-            </tr>
+                </td>
+                <td className="px-4 py-3 text-right font-mono">
+                  {logisticsCostLines
+                    .filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0)
+                    .map((l, i) => (
+                      <span key={i} className="block">{formatMoney(parseCostLineAmount(l.amount), l.currency)}</span>
+                    ))}
+                </td>
+                <td className="px-4 py-3 text-right font-mono font-medium">
+                  {formatMoney(logisticsTotal, "KES")}
+                </td>
+                <td className="px-3 py-3">
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onJumpToStep(1)}>
+                    <Icons.Pencil className="h-3 w-3" />
+                  </Button>
+                </td>
+              </tr>
+            )}
 
             {/* Processing costs */}
             <tr className={cn(processingCostTotal === 0 && "opacity-50")}>
@@ -1100,7 +983,7 @@ function StepSummary({
                 {formatMoney(processingCostTotal, "KES")}
               </td>
               <td className="px-3 py-3">
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onJumpToStep(3)}>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onJumpToStep(2)}>
                   <Icons.Pencil className="h-3 w-3" />
                 </Button>
               </td>
@@ -1136,7 +1019,7 @@ function StepSummary({
         <div className="rounded-lg border overflow-hidden">
           <div className="bg-muted/50 px-4 py-2.5 flex items-center gap-2">
             <Icons.Scale className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               New cost per kg — {totalWeightKg.toLocaleString("en-KE")} kg total
             </span>
           </div>
@@ -1151,20 +1034,20 @@ function StepSummary({
                   {goodsPerKg !== null ? `KES ${goodsPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
                 </td>
               </tr>
-              {permitTotal > 0 && (
+              {additionalTotal > 0 && (
                 <tr>
-                  <td className="px-4 py-2.5 text-muted-foreground">Permits &amp; customs</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">Additional costs</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
-                    {formatMoney(permitTotal, "KES")}
+                    {formatMoney(additionalTotal, "KES")}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
-                    {permitsPerKg !== null ? `KES ${permitsPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
+                    {additionalPerKg !== null ? `KES ${additionalPerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / kg` : "—"}
                   </td>
                 </tr>
               )}
               {logisticsTotal > 0 && (
                 <tr>
-                  <td className="px-4 py-2.5 text-muted-foreground">Inbound logistics</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">Logistics</td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
                     {formatMoney(logisticsTotal, "KES")}
                   </td>
@@ -1202,7 +1085,7 @@ function StepSummary({
         </div>
       )}
 
-      {/* Per-product cost/kg allocation — shown when there are multiple lines with weight data */}
+      {/* Per-product cost/kg allocation */}
       {totalWeightKg > 0 && ((source as { lines?: Array<{ productId?: string; weightKg?: number; quantity?: number; amount?: number }> }).lines?.length ?? 0) > 1 && (
         <div className="rounded-lg border overflow-hidden">
           <div className="bg-muted/50 px-4 py-2.5 flex items-center gap-2">
@@ -1225,7 +1108,7 @@ function StepSummary({
               {((source as { lines?: Array<{ productId?: string; weightKg?: number; quantity?: number; amount?: number }> }).lines ?? []).map((line, idx) => {
                 const lineWeight = (line as { receivedWeightKg?: number; weightKg?: number }).receivedWeightKg ?? line.weightKg ?? line.quantity ?? 0;
                 const lineGoods = line.amount ?? 0;
-                const landedShare = totalWeightKg > 0 ? ((permitTotal + logisticsTotal) * lineWeight) / totalWeightKg : 0;
+                const landedShare = totalWeightKg > 0 ? ((additionalTotal + logisticsTotal) * lineWeight) / totalWeightKg : 0;
                 const fxShare = totalWeightKg > 0 ? ((docInKes - (currency.toUpperCase() === "KES" ? docTotal : 0)) * lineWeight) / totalWeightKg : 0;
                 const totalForLine = lineGoods * (currency.toUpperCase() === "KES" ? 1 : rate) + landedShare + (currency.toUpperCase() !== "KES" ? fxShare : 0);
                 const linePerKg = lineWeight > 0 ? totalForLine / lineWeight : null;
@@ -1248,8 +1131,7 @@ function StepSummary({
         <div className="flex items-start gap-2 rounded-md border bg-amber-50 border-amber-100 px-3 py-2">
           <Icons.AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700">
-            No additional cost lines entered. You can still save to record a zero-cost entry, or go back to add permit
-            or logistics costs.
+            No additional cost lines entered. You can still save to record a zero-cost entry, or go back to add costs.
           </p>
         </div>
       )}
@@ -1302,27 +1184,17 @@ function LandedCostWizard({
   const [hydrating, setHydrating] = React.useState(source.isAllocated ?? false);
   const [hasExistingAllocation, setHasExistingAllocation] = React.useState(false);
 
-  const defaultPermitCurrency = currency.toUpperCase() !== "KES" ? currency : "KES";
-  const defaultLogisticsCurrency = "KES";
+  const defaultAdditionalCurrency = currency.toUpperCase() !== "KES" ? currency : "KES";
 
-  const emptyPermitLine = (): CostLine => ({
-    templateId: templates.find((t) => (t as { type?: string }).type === "permit")?.id ?? "",
+  const emptyAdditionalLine = (): CostLine => ({
+    templateId: "",
     amount: "",
-    currency: defaultPermitCurrency,
+    currency: defaultAdditionalCurrency,
     reference: "",
     costCentre: "permits",
   });
 
-  const emptyLogisticsLine = (): CostLine => ({
-    templateId: templates.find((t) => (t as { type?: string }).type === "inbound_freight")?.id ?? "",
-    amount: "",
-    currency: defaultLogisticsCurrency,
-    reference: "",
-    costCentre: "inbound_logistics",
-  });
-
-  const [permitLines, setPermitLines] = React.useState<CostLine[]>([emptyPermitLine()]);
-  const [logisticsLines, setLogisticsLines] = React.useState<CostLine[]>([emptyLogisticsLine()]);
+  const [additionalLines, setAdditionalLines] = React.useState<CostLine[]>([emptyAdditionalLine()]);
 
   // Processing cost state
   const [processingType, setProcessingType] = React.useState<ProcessingType>("filleting");
@@ -1364,27 +1236,17 @@ function LandedCostWizard({
       .then(([allocation, processingAlloc]) => {
         if (allocation) {
           setHasExistingAllocation(true);
-          const savedPermitLines = (allocation.lines ?? []).filter((l) => l.costCentre === "permits");
-          const savedLogisticsLines = (allocation.lines ?? []).filter((l) => l.costCentre === "inbound_logistics");
-          if (savedPermitLines.length > 0) {
-            setPermitLines(
-              savedPermitLines.map((l) => ({
+          const allSavedLines = (allocation.lines ?? []).filter(
+            (l) => l.costCentre === "permits" || l.costCentre === "inbound_logistics"
+          );
+          if (allSavedLines.length > 0) {
+            setAdditionalLines(
+              allSavedLines.map((l) => ({
                 templateId: l.templateId,
                 amount: String(l.amount ?? ""),
-                currency: l.currency ?? defaultPermitCurrency,
+                currency: l.currency ?? defaultAdditionalCurrency,
                 reference: l.reference ?? "",
-                costCentre: "permits" as const,
-              }))
-            );
-          }
-          if (savedLogisticsLines.length > 0) {
-            setLogisticsLines(
-              savedLogisticsLines.map((l) => ({
-                templateId: l.templateId,
-                amount: String(l.amount ?? ""),
-                currency: l.currency ?? defaultLogisticsCurrency,
-                reference: l.reference ?? "",
-                costCentre: "inbound_logistics" as const,
+                costCentre: (l.costCentre === "inbound_logistics" ? "inbound_logistics" : "permits") as "permits" | "inbound_logistics",
               }))
             );
           }
@@ -1425,21 +1287,26 @@ function LandedCostWizard({
       .finally(() => setFxLoading(false));
   }, [currency, source.date]);
 
-  const updateLine = (lines: CostLine[], setLines: React.Dispatch<React.SetStateAction<CostLine[]>>) =>
-    (idx: number, field: keyof CostLine, value: string) => {
-      setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
-    };
+  const updateAdditionalLine = (idx: number, field: keyof CostLine, value: string) => {
+    setAdditionalLines((prev) => prev.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
+  };
 
-  const updateLineFiles = (setLines: React.Dispatch<React.SetStateAction<CostLine[]>>) =>
-    (idx: number, files: File[]) => {
-      setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, files } : l)));
-    };
+  const updateAdditionalLineTemplate = (idx: number, templateId: string) => {
+    const centre = costCentreForTemplate(templateId, templates);
+    setAdditionalLines((prev) =>
+      prev.map((l, i) => (i === idx ? { ...l, templateId, costCentre: centre } : l))
+    );
+  };
 
-  const addLine = (setLines: React.Dispatch<React.SetStateAction<CostLine[]>>, costCentre: LandedCostCostCentre, defaultCurrency: string) =>
-    () => setLines((prev) => [...prev, { templateId: "", amount: "", currency: defaultCurrency, reference: "", costCentre }]);
+  const updateAdditionalLineFiles = (idx: number, files: File[]) => {
+    setAdditionalLines((prev) => prev.map((l, i) => (i === idx ? { ...l, files } : l)));
+  };
 
-  const removeLine = (setLines: React.Dispatch<React.SetStateAction<CostLine[]>>) =>
-    (idx: number) => setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+  const addAdditionalLine = () =>
+    setAdditionalLines((prev) => [...prev, { templateId: "", amount: "", currency: defaultAdditionalCurrency, reference: "", costCentre: "permits" as const }]);
+
+  const removeAdditionalLine = (idx: number) =>
+    setAdditionalLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
 
   const handleSave = async () => {
     if (hasExistingAllocation && !canEdit) {
@@ -1447,10 +1314,7 @@ function LandedCostWizard({
       return;
     }
 
-    const landedLines = [
-      ...permitLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0),
-      ...logisticsLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0),
-    ];
+    const landedLines = additionalLines.filter((l) => l.templateId && parseCostLineAmount(l.amount) > 0);
     const processingLinesValid = processingLines.filter((l) => l.amount > 0);
 
     if (!landedLines.length && !processingLinesValid.length) {
@@ -1577,32 +1441,20 @@ function LandedCostWizard({
           />
         )}
         {wizardStep === 1 && (
-          <StepPermits
-            lines={permitLines}
+          <StepAdditionalCosts
+            lines={additionalLines}
             templates={templates}
-            onChange={updateLine(permitLines, setPermitLines)}
-            onFilesChange={updateLineFiles(setPermitLines)}
-            onAdd={addLine(setPermitLines, "permits", defaultPermitCurrency)}
-            onRemove={removeLine(setPermitLines)}
+            onChange={updateAdditionalLine}
+            onTemplateChange={updateAdditionalLineTemplate}
+            onFilesChange={updateAdditionalLineFiles}
+            onAdd={addAdditionalLine}
+            onRemove={removeAdditionalLine}
             onNext={() => setWizardStep(2)}
             onBack={() => setWizardStep(0)}
             onSkip={() => setWizardStep(2)}
           />
         )}
         {wizardStep === 2 && (
-          <StepLogistics
-            lines={logisticsLines}
-            templates={templates}
-            onChange={updateLine(logisticsLines, setLogisticsLines)}
-            onFilesChange={updateLineFiles(setLogisticsLines)}
-            onAdd={addLine(setLogisticsLines, "inbound_logistics", defaultLogisticsCurrency)}
-            onRemove={removeLine(setLogisticsLines)}
-            onNext={() => setWizardStep(3)}
-            onBack={() => setWizardStep(1)}
-            onSkip={() => setWizardStep(3)}
-          />
-        )}
-        {wizardStep === 3 && (
           <StepProcessingCosts
             sourceId={source.id}
             processingType={processingType}
@@ -1615,19 +1467,19 @@ function LandedCostWizard({
             onLoadDraft={handleLoadProcessingDraft}
             loadingDraft={loadingDraft}
             onLineAmountChange={handleProcessingLineAmountChange}
-            onNext={() => setWizardStep(4)}
-            onBack={() => setWizardStep(2)}
-            onSkip={() => setWizardStep(4)}
+            onNext={() => setWizardStep(3)}
+            onBack={() => setWizardStep(1)}
+            onSkip={() => setWizardStep(3)}
           />
         )}
-        {wizardStep === 4 && (
+        {wizardStep === 3 && (
           <StepSummary
             source={source}
-            permitLines={permitLines}
-            logisticsLines={logisticsLines}
+            additionalLines={additionalLines}
+            templates={templates}
             processingCostLines={processingLines}
             fxRate={fxRate}
-            onBack={() => setWizardStep(3)}
+            onBack={() => setWizardStep(2)}
             onJumpToStep={(s) => setWizardStep(s)}
             onSave={handleSave}
             saving={saving}
@@ -2153,7 +2005,7 @@ export default function InventoryCostingPage() {
             <SheetDescription>
               {selectedSource?.isAllocated
                 ? "You are amending an existing allocation. Changes will overwrite the previously posted costs."
-                : "Apply currency conversion, permit costs, and inbound logistics in three guided steps."}
+                : "Apply currency conversion, additional costs, and processing in three guided steps."}
             </SheetDescription>
           </SheetHeader>
 
@@ -2209,7 +2061,7 @@ export default function InventoryCostingPage() {
               <Icons.AlertCircle className="h-8 w-8 mx-auto text-amber-500" />
               <p className="text-sm text-muted-foreground">No cost templates found.</p>
               <p className="text-xs text-muted-foreground">
-                Create permit, border, and inbound freight templates in{" "}
+                Create cost templates (permits, freight, border, etc.) in{" "}
                 <Link href="/settings/inventory/costing" className="underline">
                   Settings → Costing
                 </Link>{" "}

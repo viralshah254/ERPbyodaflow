@@ -615,6 +615,7 @@ export async function fetchNetworkSummaryV2(): Promise<{ kpis: NetworkKpis; outl
 
 export interface OutletSummary {
   outletOrgId: string;
+  outletName?: string;
   revenue30d: number;
   orderCount30d: number;
   customerCount: number;
@@ -710,4 +711,113 @@ export async function fetchMyCustomerHistory(partyId: string): Promise<{
   }>;
 }> {
   return apiRequest(`/api/franchise/my-customers/${encodeURIComponent(partyId)}/history`);
+}
+
+// ─── Franchise Ordering — Inbound Orders (HQ side) ───────────────────────────
+
+export interface InboundOrderLine {
+  productId?: string;
+  productName?: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+}
+
+export interface InboundOrderRow {
+  id: string;
+  number: string;
+  date: string | null;
+  status: string;
+  outletOrgId: string;
+  outletName: string;
+  total: number;
+  currency: string;
+  lines: InboundOrderLine[];
+}
+
+export async function fetchInboundOrders(params?: {
+  status?: string;
+  outletOrgId?: string;
+}): Promise<{ items: InboundOrderRow[] }> {
+  const p = new URLSearchParams();
+  if (params?.status) p.set("status", params.status);
+  if (params?.outletOrgId) p.set("outletOrgId", params.outletOrgId);
+  const qs = p.toString();
+  return apiRequest(`/api/franchise/network/inbound-orders${qs ? `?${qs}` : ""}`);
+}
+
+export async function acceptInboundOrder(
+  childOrgId: string,
+  prId: string
+): Promise<{ soId: string; soNumber: string; outletName: string }> {
+  return apiRequest(`/api/franchise/network/inbound-orders/${encodeURIComponent(childOrgId)}/${encodeURIComponent(prId)}/accept`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+// ─── Franchise Stock (HQ reads outlet stock) ──────────────────────────────────
+
+export interface OutletStockRow {
+  id: string;
+  productId: string;
+  sku: string;
+  productName: string;
+  warehouseId: string;
+  warehouseName: string;
+  quantity: number;
+  reservedQuantity: number;
+  available: number;
+}
+
+export async function fetchOutletStock(outletOrgId: string): Promise<{ items: OutletStockRow[] }> {
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock`);
+}
+
+// ─── Franchise Network Sales Analytics ───────────────────────────────────────
+
+export interface NetworkSalesSeries {
+  period: string;
+  outletOrgId: string;
+  outletName: string;
+  revenue: number;
+  count: number;
+}
+
+export async function fetchNetworkSales(params?: {
+  from?: string;
+  to?: string;
+  groupBy?: "day" | "week" | "month";
+  outletOrgId?: string;
+}): Promise<{ series: NetworkSalesSeries[]; totals: { revenue: number; count: number }; from: string; to: string; groupBy: string }> {
+  const p = new URLSearchParams();
+  if (params?.from) p.set("from", params.from);
+  if (params?.to) p.set("to", params.to);
+  if (params?.groupBy) p.set("groupBy", params.groupBy);
+  if (params?.outletOrgId) p.set("outletOrgId", params.outletOrgId);
+  const qs = p.toString();
+  return apiRequest(`/api/franchise/network/sales${qs ? `?${qs}` : ""}`);
+}
+
+// ─── Extended OutletSummary with date-range invoices ─────────────────────────
+
+export interface OutletInvoiceRow {
+  id: string;
+  number: string;
+  date: string;
+  total: number;
+  customerName: string | null;
+  status: string;
+}
+
+export async function fetchOutletSummaryRange(
+  outletOrgId: string,
+  params?: { from?: string; to?: string }
+): Promise<OutletSummary & { from: string; to: string; invoices: OutletInvoiceRow[] }> {
+  const p = new URLSearchParams();
+  if (params?.from) p.set("from", params.from);
+  if (params?.to) p.set("to", params.to);
+  const qs = p.toString();
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/summary${qs ? `?${qs}` : ""}`);
 }
