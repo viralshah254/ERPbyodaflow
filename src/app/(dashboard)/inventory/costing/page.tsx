@@ -1694,24 +1694,61 @@ export default function InventoryCostingPage() {
   // Accept either ?sourceId= or ?grnId= (GRN list uses grnId, detail uses sourceId)
   const sourceIdFromUrl = searchParams.get("sourceId") ?? searchParams.get("grnId");
 
-  const loadSources = React.useCallback(() => {
-    let cancelled = false;
+  /** Refresh GRN source rows + templates after saving allocation (lighter than full page reload). */
+  const reloadSources = React.useCallback(async () => {
     setSourcesLoading(true);
-    Promise.all([fetchLandedCostSources({ type: "grn" }), fetchLandedCostTemplates()])
-      .then(([srcList, tplList]) => {
-        if (!cancelled) {
-          setSources(srcList);
-          setTemplates(tplList);
-        }
-      })
-      .catch(() => { if (!cancelled) setSources([]); })
-      .finally(() => { if (!cancelled) setSourcesLoading(false); });
-    return () => { cancelled = true; };
+    try {
+      const [srcList, tplList] = await Promise.all([
+        fetchLandedCostSources({ type: "grn" }),
+        fetchLandedCostTemplates(),
+      ]);
+      setSources(srcList);
+      setTemplates(tplList);
+    } catch {
+      setSources([]);
+    } finally {
+      setSourcesLoading(false);
+    }
   }, []);
 
+  /**
+   * Initial load: one parallel batch (was two effects + a loadSources() that returned a cleanup
+   * from inside useCallback — React Strict Mode could cancel in-flight requests without clearing loading).
+   */
   React.useEffect(() => {
-    return loadSources();
-  }, [loadSources]);
+    let alive = true;
+    void (async () => {
+      setSourcesLoading(true);
+      try {
+        const [srcList, tplList, valuation, snapshot] = await Promise.all([
+          fetchLandedCostSources({ type: "grn" }),
+          fetchLandedCostTemplates(),
+          fetchInventoryValuation(),
+          fetchLatestInventoryCosting(),
+        ]);
+        if (!alive) return;
+        setSources(srcList);
+        setTemplates(tplList);
+        setValuationSummary(valuation.summary);
+        setCostingSnapshot({
+          ranAt: snapshot.ranAt,
+          method: snapshot.method,
+          updated: snapshot.updated,
+          totalValue: snapshot.totalValue,
+        });
+      } catch {
+        if (alive) {
+          setSources([]);
+          setValuationSummary([]);
+        }
+      } finally {
+        if (alive) setSourcesLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (sourceIdFromUrl && sources.length > 0) {
@@ -1724,23 +1761,6 @@ export default function InventoryCostingPage() {
     }
   }, [sourceIdFromUrl, sources]);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    void Promise.all([fetchInventoryValuation(), fetchLatestInventoryCosting()])
-      .then(([valuation, snapshot]) => {
-        if (cancelled) return;
-        setValuationSummary(valuation.summary);
-        setCostingSnapshot({
-          ranAt: snapshot.ranAt,
-          method: snapshot.method,
-          updated: snapshot.updated,
-          totalValue: snapshot.totalValue,
-        });
-      })
-      .catch(() => { if (!cancelled) setValuationSummary([]); });
-    return () => { cancelled = true; };
-  }, []);
-
   const openAllocation = (src: LandedCostSourceRow) => {
     setSelectedSource(src);
     setAllocationOpen(true);
@@ -1750,7 +1770,7 @@ export default function InventoryCostingPage() {
     setAllocationOpen(false);
     setSelectedSource(null);
     setAllocations(listLandedCostAllocations());
-    loadSources();
+    void reloadSources();
   };
 
   return (
