@@ -109,6 +109,11 @@ export function AsyncSearchableSelect({
     maxH: number;
   } | null>(null);
   const requestIdRef = React.useRef(0);
+  /** Always call latest loader without putting it in effect deps (inline handlers would retrigger searches every parent render). */
+  const loadOptionsRef = React.useRef(loadOptions);
+  React.useLayoutEffect(() => {
+    loadOptionsRef.current = loadOptions;
+  }, [loadOptions]);
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
 
   const updateFloatingPosition = React.useCallback(() => {
@@ -245,7 +250,7 @@ export function AsyncSearchableSelect({
     const runLoad = () => {
       const requestId = ++requestIdRef.current;
       setLoading(true);
-      void loadOptions(query.trim())
+      void loadOptionsRef.current(query.trim())
         .then((nextOptions) => {
           if (requestId !== requestIdRef.current) return;
           setOptions(nextOptions);
@@ -268,7 +273,7 @@ export function AsyncSearchableSelect({
     }
     const timeoutId = window.setTimeout(runLoad, searchDebounceMs);
     return () => window.clearTimeout(timeoutId);
-  }, [loadOptions, minSearchLength, open, query, searchDebounceMs]);
+  }, [minSearchLength, open, query, searchDebounceMs]);
 
   const hint =
     query.trim().length > 0 && query.trim().length < minSearchLength

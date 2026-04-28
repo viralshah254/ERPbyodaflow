@@ -457,7 +457,7 @@ export default function PurchaseOrderDetailPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-6">
+      <div className="mx-auto max-w-[1536px] min-w-0 space-y-6 px-1 pb-8 sm:px-0">
         {order.status === "DRAFT" && (
           <Card className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20">
             <CardContent className="py-4">
@@ -539,18 +539,30 @@ export default function PurchaseOrderDetailPage() {
           </Card>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
+        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(260px,min(100%,340px))] xl:gap-8 xl:items-start">
+          <div className="min-w-0 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Purchase Order Summary</CardTitle>
                 <CardDescription>Cross-border procurement context for Kenya/Uganda sourcing.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-4 text-sm md:grid-cols-4">
-                <div><div className="text-muted-foreground">Supplier</div><div className="font-medium">{order.supplier}</div></div>
-                <div><div className="text-muted-foreground">Status</div><StatusBadge status={order.status} /></div>
-                <div><div className="text-muted-foreground">Currency</div><div className="font-medium">{order.currency} @ {order.fxRate}</div></div>
-                <div><div className="text-muted-foreground">Total</div><div className="font-medium">{formatMoney(order.total ?? 0, order.currency)}</div></div>
+              <CardContent className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Supplier</div>
+                  <div className="font-medium break-words">{order.supplier}</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Status</div>
+                  <StatusBadge status={order.status} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Currency</div>
+                  <div className="font-medium tabular-nums">{order.currency} @ {order.fxRate}</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-muted-foreground">Total</div>
+                  <div className="font-medium tabular-nums">{formatMoney(order.total ?? 0, order.currency)}</div>
+                </div>
               </CardContent>
             </Card>
 
@@ -573,7 +585,7 @@ export default function PurchaseOrderDetailPage() {
                       return (
                         <li
                           key={g.id}
-                          className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2 last:border-0 last:pb-0"
+                          className="grid grid-cols-1 gap-2 border-b border-border/60 pb-3 last:border-0 last:pb-0 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:gap-x-3"
                         >
                           <Link
                             href={`/docs/grn/${g.id}`}
@@ -706,7 +718,7 @@ export default function PurchaseOrderDetailPage() {
             )}
           </div>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6 xl:sticky xl:top-[4.5rem]">
             <BatchStatusTimeline
               title="Procurement Lifecycle"
               steps={lifecycleSteps}

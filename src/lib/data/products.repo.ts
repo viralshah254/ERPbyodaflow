@@ -32,27 +32,25 @@ export function listProducts(): ProductRow[] {
   return productsCache;
 }
 
-/** Fetch products filtered by purchasable (for purchase orders) or sellable (for sales orders). Paginates until all rows are loaded (100 per page). */
+/**
+ * Fetch the first page (up to 100) of products for document line pickers.
+ * A single page is enough to populate the initial dropdown; subsequent typed
+ * searches go to the server via `loadProductOptions` in DocumentLineEditor.
+ */
 export async function fetchProductsForDocumentLines(
   filter: "purchasable" | "sellable" | "all"
 ): Promise<ProductRow[]> {
-  const base =
+  const opts =
     filter === "all"
-      ? { limit: 100 as const }
+      ? { limit: 100 as const, includeStock: false as const }
       : {
           purchasable: filter === "purchasable",
           sellable: filter === "sellable",
           limit: 100 as const,
+          includeStock: false as const,
         };
-  const acc: ProductRow[] = [];
-  let cursor: string | undefined = "0";
-  for (let page = 0; page < 200; page++) {
-    const { items, nextCursor } = await fetchProductsPageApi({ ...base, cursor });
-    acc.push(...items);
-    if (!nextCursor || items.length === 0) break;
-    cursor = nextCursor;
-  }
-  return acc;
+  const { items } = await fetchProductsPageApi(opts);
+  return items;
 }
 
 /** Hydrate products cache from API; call from pages that need listProducts() to reflect live data. */

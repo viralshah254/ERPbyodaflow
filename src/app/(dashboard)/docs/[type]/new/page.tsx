@@ -17,8 +17,12 @@ export default function DocTypeNewPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
 
-  // ?poId= is used when arriving from the PO detail lifecycle timeline (GRN creation shortcut)
-  const initialPoId = type === "grn" ? (searchParams.get("poId") ?? undefined) : undefined;
+  // ?poId= — GRN from PO, or supplier bill from PO lifecycle (supplier + lines prefilled)
+  const initialPoId =
+    type === "grn" || type === "bill" ? (searchParams.get("poId") ?? undefined) : undefined;
+  // ?grnId= — new bill prefilled from a GRN (supplier + lines); takes precedence over poId when both set
+  const initialGrnId =
+    type === "bill" ? (searchParams.get("grnId") ?? undefined) : undefined;
 
   return (
     <PageShell>
@@ -32,9 +36,10 @@ export default function DocTypeNewPage() {
         ]}
         sticky
         showCommandHint
+        dense
       />
-      <div className="p-6">
-        <DocumentCreateWizard type={type} initialPoId={initialPoId} />
+      <div className="p-4 pb-8 max-w-4xl">
+        <DocumentCreateWizard type={type} initialPoId={initialPoId} initialGrnId={initialGrnId} />
       </div>
     </PageShell>
   );

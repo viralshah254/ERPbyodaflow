@@ -52,3 +52,35 @@ export async function runInventoryCostingApi(): Promise<void> {
     body: {},
   });
 }
+
+/** FIFO-style remaining layers (GRN-derived) for batch / average cost drill-down. */
+export type ProductCostLayersBatchRow = {
+  warehouseId: string;
+  warehouseName: string;
+  quantity: number;
+  unitCost: number;
+  lineValue: number;
+  sourceType: string;
+  reference?: string;
+  grnId?: string | null;
+  date: string;
+  currency: string;
+};
+
+export type ProductCostLayersResponse = {
+  currency: string;
+  totalQty: number;
+  averageUnitCost: number;
+  totalInventoryValue: number;
+  fifoMatchesStock: boolean;
+  stockLevelQty: number;
+  warehouses: Array<{ warehouseId: string; warehouseName: string; qty: number }>;
+  batches: ProductCostLayersBatchRow[];
+};
+
+export async function fetchProductCostLayers(productId: string): Promise<ProductCostLayersResponse> {
+  requireLiveApi("Inventory cost batches");
+  return apiRequest<ProductCostLayersResponse>(
+    `/api/inventory/product-cost-layers/${encodeURIComponent(productId)}`
+  );
+}

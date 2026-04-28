@@ -256,6 +256,34 @@ export default function ReceiptDetailPage() {
       toast.error((e as Error)?.message ?? "Failed to update processed weight");
     }
   };
+
+  /** Persist edited received kg before post — blur may not have fired if the user goes straight to Post. */
+  const flushPendingReceivedWeights = React.useCallback(async () => {
+    if (!grn || !hasCashWeightAudit) return;
+    let working = grn;
+    let anyPatch = false;
+    for (let idx = 0; idx < working.lines.length; idx++) {
+      const pending = editingWeight[idx];
+      if (pending === undefined) continue;
+      const trimmed = pending.trim();
+      if (trimmed === "") continue;
+      const num = parseFloat(trimmed);
+      if (Number.isNaN(num) || num < 0) continue;
+      const line = working.lines[idx];
+      const persisted = Number(line.receivedWeightKg ?? line.qty);
+      if (Math.abs(num - persisted) < 1e-6) continue;
+      const updated = await patchGRNLine(working.id, idx, { receivedWeightKg: num });
+      if (updated) {
+        working = updated;
+        anyPatch = true;
+      }
+    }
+    if (anyPatch) {
+      setGrn(working);
+      setEditingWeight({});
+    }
+  }, [grn, hasCashWeightAudit, editingWeight]);
+
   const lineColumns = [
     { id: "sku", header: "SKU", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.sku ?? "—", sticky: true },
     { id: "product", header: "Product", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.productName ?? "—" },
@@ -359,6 +387,7 @@ export default function ReceiptDetailPage() {
                         onClick={async () => {
                           setPosting(true);
                           try {
+                            await flushPendingReceivedWeights();
                             const result = await postGRN(grn.id);
                             setGrn(await fetchGRNById(grn.id));
                             if (result.stockAdded?.length) {
@@ -505,6 +534,7 @@ export default function ReceiptDetailPage() {
                     onClick={async () => {
                       setPosting(true);
                       try {
+                        await flushPendingReceivedWeights();
                         const result = await postGRN(id);
                         if (result.stockAdded?.length) {
                           const summary = result.stockAdded

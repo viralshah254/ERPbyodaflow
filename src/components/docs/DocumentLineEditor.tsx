@@ -89,6 +89,11 @@ interface DocumentLineEditorProps {
   productFilter?: "purchasable" | "sellable" | "all";
   /** Available tax codes for the tax column select. */
   taxCodes?: Array<{ id: string; code: string; name: string; rate: number }>;
+  /**
+   * Org-level default tax code id. Applied to new lines when the product has no
+   * own defaultTaxCodeId (e.g. to default all lines to KE-VAT0 for a specific org).
+   */
+  defaultLineTaxCodeId?: string;
   /** When true, unit prices already include VAT — tax is back-calculated. Default: false (tax-exclusive). */
   linesAreTaxInclusive?: boolean;
   /**
@@ -184,6 +189,7 @@ export function DocumentLineEditor({
   pricingByProductId,
   productFilter,
   taxCodes = [],
+  defaultLineTaxCodeId,
   linesAreTaxInclusive = false,
   catalogUomCodes = [],
   lineColumnLabels,
@@ -232,7 +238,7 @@ export function DocumentLineEditor({
         const filtered = rows.filter((p) => productMatchesLineSearch(p, query));
         const sorted =
           q.length === 0
-            ? [...filtered].sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 400)
+            ? [...filtered].sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 100)
             : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
         return sorted.map((p) => ({
           id: p.id,
@@ -240,13 +246,16 @@ export function DocumentLineEditor({
           description: p.category?.trim() || undefined,
         }));
       };
-      if (isApiConfigured() && productFilter && productFilter !== "all" && q) {
+      // For filtered pickers (purchasable / sellable), always go to the server —
+      // this resolves correctly even before the prefetch finishes, and typed
+      // searches benefit from the server text index.
+      if (isApiConfigured() && productFilter && productFilter !== "all") {
         try {
           const rows = await fetchProductsApi({
             purchasable: productFilter === "purchasable",
             sellable: productFilter === "sellable",
-            search: q,
-            limit: 100,
+            ...(q ? { search: q } : {}),
+            limit: 50,
             includeStock: false,
           });
           return mapRows(rows);
@@ -312,14 +321,14 @@ export function DocumentLineEditor({
       price,
       priceReason: reason,
       amount: price,
-      taxCodeId: p.defaultTaxCodeId ?? undefined,
+      taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
     };
     const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
     onLinesChange((prev) => [...prev, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
     // Enrich from API in the background if default tax differs (no blocking the UI).
     if (isApiConfigured()) {
       void fetchProductApi(p.id).then((full) => {
-        if (!full?.id || full.defaultTaxCodeId === (p.defaultTaxCodeId ?? undefined)) return;
+        if (!full?.id || (full.defaultTaxCodeId ?? defaultLineTaxCodeId) === (p.defaultTaxCodeId ?? defaultLineTaxCodeId)) return;
         onLinesChange((prev) => {
           const idx = prev.findIndex((l) => l.id === newLine.id);
           if (idx < 0) return prev;
@@ -400,7 +409,7 @@ export function DocumentLineEditor({
         price,
         priceReason: reason,
         amount: qty * price,
-        taxCodeId: row.defaultTaxCodeId ?? undefined,
+        taxCodeId: row.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
         variantId: undefined,
         variantSku: undefined,
       });

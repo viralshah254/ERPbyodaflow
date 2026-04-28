@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageLayout } from "@/components/layout/page-layout";
 import { DataTable } from "@/components/ui/data-table";
@@ -10,17 +11,26 @@ import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   fetchProductsApi,
   deleteProductApi,
 } from "@/lib/api/products";
 import { fetchProductCategoriesApi, type ItemCategoryRow } from "@/lib/api/product-categories";
+import {
+  fetchLatestInventoryCosting,
+  fetchProductCostLayers,
+  type InventoryCostingSnapshot,
+  type ProductCostLayersResponse,
+} from "@/lib/api/inventory-costing";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
 import type { ProductKind } from "@/lib/products/product-type";
 import { productTypeSortKey, rowMatchesProductTypeFilter } from "@/lib/products/product-type";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { useAuthStore } from "@/stores/auth-store";
+import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -31,14 +41,33 @@ interface Product {
   productType?: ProductKind;
   category: string;
   stock: number;
-  price: number;
+  /** Weighted average inventory unit cost from last costing run (book basis). */
+  avgInventoryCost?: number | null;
   status: string;
   lastUpdated: string;
   variantsCount: number;
   packagingCount: number;
 }
 
-function buildProductRow(row: ProductRow): Product {
+function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null): Map<string, number> {
+  const result = new Map<string, number>();
+  if (!costing?.items?.length) return result;
+  const agg = new Map<string, { q: number; v: number }>();
+  for (const item of costing.items) {
+    const q = item.quantity ?? 0;
+    if (q <= 0) continue;
+    const cur = agg.get(item.productId) ?? { q: 0, v: 0 };
+    cur.q += q;
+    cur.v += item.inventoryValue ?? 0;
+    agg.set(item.productId, cur);
+  }
+  for (const [pid, { q, v }] of agg) {
+    if (q > 0) result.set(pid, v / q);
+  }
+  return result;
+}
+
+function buildProductRow(row: ProductRow, avgCostMap: Map<string, number>): Product {
   return {
     id: row.id,
     name: row.name,
@@ -46,8 +75,7 @@ function buildProductRow(row: ProductRow): Product {
     productType: row.productType,
     category: row.category ?? "",
     stock: row.currentStock ?? 0,
-    // Until the products list returns richer pricing metadata, keep these read-only fields neutral.
-    price: 0,
+    avgInventoryCost: avgCostMap.has(row.id) ? avgCostMap.get(row.id)! : null,
     status: row.status === "ACTIVE" ? "Active" : row.status,
     lastUpdated: "",
     variantsCount: 0,
@@ -65,6 +93,11 @@ export default function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
   const [rows, setRows] = React.useState<Product[]>([]);
   const [categories, setCategories] = React.useState<ItemCategoryRow[]>([]);
+  const [costingRanAt, setCostingRanAt] = React.useState<string | null>(null);
+  const [batchSheetProductId, setBatchSheetProductId] = React.useState<string | null>(null);
+  const [layersPayload, setLayersPayload] = React.useState<ProductCostLayersResponse | null>(null);
+  const [layersLoading, setLayersLoading] = React.useState(false);
+
   // Map categoryId → display name for the table column
   const categoryNameById = React.useMemo(() => {
     const m = new Map<string, string>();
@@ -77,12 +110,15 @@ export default function ProductsPage() {
     void Promise.all([
       fetchProductsApi(),
       fetchProductCategoriesApi().catch(() => [] as ItemCategoryRow[]),
+      fetchLatestInventoryCosting().catch(() => null),
     ])
-      .then(([products, cats]) => {
+      .then(([products, cats, costing]) => {
         if (!active) return;
         setCategories(cats);
         setProductsCache(products);
-        setRows(products.map(buildProductRow));
+        const avgMap = weightedAvgBookCostByProduct(costing);
+        setCostingRanAt(costing?.ranAt ?? null);
+        setRows(products.map((p) => buildProductRow(p, avgMap)));
       })
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "Failed to load products.");
@@ -91,6 +127,29 @@ export default function ProductsPage() {
       active = false;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!batchSheetProductId) {
+      setLayersPayload(null);
+      return;
+    }
+    let cancelled = false;
+    setLayersLoading(true);
+    setLayersPayload(null);
+    void fetchProductCostLayers(batchSheetProductId)
+      .then((data) => {
+        if (!cancelled) setLayersPayload(data);
+      })
+      .catch((e) => {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Failed to load batches.");
+      })
+      .finally(() => {
+        if (!cancelled) setLayersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [batchSheetProductId]);
 
   const filteredProducts = React.useMemo(() => {
     return rows.filter((product) => {
@@ -188,15 +247,52 @@ export default function ProductsPage() {
       ),
     },
     {
-      id: "price",
-      header: "Price",
+      id: "avgCost",
+      header: "Avg inventory cost",
       sortable: true,
-      sortValue: (row: Product) => row.price,
-      accessor: (row: Product) => (
-        <div className="text-right font-medium">
-          KES {row.price.toFixed(2)}
-        </div>
-      ),
+      sortValue: (row: Product) => row.avgInventoryCost ?? -1,
+      accessor: (row: Product) => {
+        const v = row.avgInventoryCost;
+        if (v == null || Number.isNaN(v)) {
+          return <div className="text-right text-muted-foreground text-sm">—</div>;
+        }
+        return (
+          <div className="text-right">
+            <div className="font-medium tabular-nums">{formatMoney(v, "KES")}</div>
+            <div className="text-[11px] text-muted-foreground">Book avg / unit</div>
+          </div>
+        );
+      },
+    },
+    {
+      id: "batchDrilldown",
+      header: "",
+      accessor: (row: Product) =>
+        row.stock > 0 ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="View cost batches"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBatchSheetProductId(row.id);
+                  }}
+                >
+                  <Icons.Layers className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">FIFO-style batches & average</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+      className: "w-[48px]",
     },
     {
       id: "status",
@@ -315,8 +411,28 @@ export default function ProductsPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Products</CardTitle>
-              <CardDescription>
-                {filteredProducts.length} of {rows.length} products
+              <CardDescription className="space-y-1 max-w-xl">
+                <span>
+                  {filteredProducts.length} of {rows.length} products
+                </span>
+                {costingRanAt ? (
+                  <span className="block text-xs text-muted-foreground">
+                    Avg inventory cost uses the last costing snapshot ({new Date(costingRanAt).toLocaleString()}
+                    ).{" "}
+                    <Link href="/inventory/costing" className="text-primary underline-offset-4 hover:underline">
+                      Run costing
+                    </Link>{" "}
+                    to refresh book values.
+                  </span>
+                ) : (
+                  <span className="block text-xs text-muted-foreground">
+                    Run{" "}
+                    <Link href="/inventory/costing" className="text-primary underline-offset-4 hover:underline">
+                      inventory costing
+                    </Link>{" "}
+                    first so average cost can populate from receipts.
+                  </span>
+                )}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -340,6 +456,97 @@ export default function ProductsPage() {
           />
         </CardContent>
       </Card>
+
+      <Sheet open={batchSheetProductId != null} onOpenChange={(open) => !open && setBatchSheetProductId(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          <SheetHeader className="pr-8">
+            <SheetTitle>{rows.find((r) => r.id === batchSheetProductId)?.name ?? "Cost batches"}</SheetTitle>
+            <SheetDescription>
+              Receipt-based FIFO layers remaining in stock (after issues and transfers). Uses GRN line amounts plus
+              landed-cost snapshots where available.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            {layersLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Icons.Loader2 className="h-4 w-4 animate-spin" />
+                Loading batches…
+              </div>
+            ) : layersPayload ? (
+              <>
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm grid gap-1 sm:grid-cols-2">
+                  <div>
+                    <span className="text-muted-foreground">Fifo qty total</span>{" "}
+                    <span className="font-medium tabular-nums">{layersPayload.totalQty.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">System on-hand</span>{" "}
+                    <span className="font-medium tabular-nums">{layersPayload.stockLevelQty.toLocaleString()}</span>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="text-muted-foreground">Weighted avg (fifo layers)</span>{" "}
+                    <span className="font-medium tabular-nums">
+                      {layersPayload.totalQty > 0
+                        ? `${formatMoney(layersPayload.averageUnitCost, layersPayload.currency)} / unit`
+                        : "—"}
+                    </span>
+                  </div>
+                  {!layersPayload.fifoMatchesStock ? (
+                    <div className="sm:col-span-2 rounded border border-amber-500/40 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+                      FIFO reconciliation differs from recorded stock — common after transfers or adjustments. Book cost
+                      still uses costing run; batches are operational guidance.
+                    </div>
+                  ) : null}
+                </div>
+                {layersPayload.batches.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No receipt layers found for remaining stock.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr className="text-left">
+                          <th className="px-3 py-2 font-medium">Warehouse</th>
+                          <th className="px-3 py-2 font-medium">Qty</th>
+                          <th className="px-3 py-2 font-medium text-right">Unit cost</th>
+                          <th className="px-3 py-2 font-medium text-right">Line value</th>
+                          <th className="px-3 py-2 font-medium">Receipt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {layersPayload.batches.map((b, i) => (
+                          <tr key={`${b.reference ?? ""}-${b.date}-${i}`} className="border-t border-border/60">
+                            <td className="px-3 py-2 align-top">
+                              <div>{b.warehouseName}</div>
+                              <div className="text-[11px] text-muted-foreground capitalize">
+                                {b.sourceType.replace(/_/g, " ")}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">{b.quantity.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(b.unitCost, b.currency)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(b.lineValue, b.currency)}</td>
+                            <td className="px-3 py-2 align-top">
+                              <div className="text-xs text-muted-foreground">{new Date(b.date).toLocaleString()}</div>
+                              {b.reference ? <div>{b.reference}</div> : null}
+                              {b.grnId ? (
+                                <Link
+                                  href={`/inventory/receipts/${encodeURIComponent(b.grnId)}`}
+                                  className="text-primary text-xs underline-offset-4 hover:underline inline-block mt-0.5"
+                                >
+                                  Open GRN
+                                </Link>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
     </PageLayout>
   );
 }

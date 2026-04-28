@@ -17,6 +17,7 @@ import type { FormFieldConfig } from "@/config/documents/types";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { t } from "@/lib/terminology";
 import { useTerminology, useOrgContextStore } from "@/stores/orgContextStore";
+import { useAuthStore } from "@/stores/auth-store";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
@@ -171,6 +172,17 @@ function RenderField({
 
   if (isPartyEntity) {
     const role = field.id === "supplier" ? "supplier" : "customer";
+    /** Stable reference required: AsyncSearchableSelect effect depends on loadOptions; inline arrows retrigger search every parent render. */
+    const loadPartyLookupOptions = React.useCallback(
+      (query: string) =>
+        searchPartyLookupOptionsApi({
+          role,
+          status: "ACTIVE",
+          search: query,
+          limit: 20,
+        }),
+      [role]
+    );
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-1">
@@ -186,17 +198,7 @@ function RenderField({
         <AsyncSearchableSelect
           value={(form.watch(key) as string | undefined) || ""}
           onValueChange={(value) => form.setValue(key, value)}
-          loadOptions={
-            role === "customer"
-              ? searchArCustomerOptionsApi
-              : (query) =>
-                  searchPartyLookupOptionsApi({
-                    role,
-                    status: "ACTIVE",
-                    search: query,
-                    limit: 20,
-                  })
-          }
+          loadOptions={role === "customer" ? searchArCustomerOptionsApi : loadPartyLookupOptions}
           selectedOption={selectedPartyOption}
           placeholder={`Select ${field.label.toLowerCase()}`}
           searchPlaceholder="Type name, code, phone, or email"
@@ -302,6 +304,8 @@ interface DocumentCreateWizardProps {
   type: string;
   /** Pre-link a GRN to this PO id (hydrated from ?poId= URL param). */
   initialPoId?: string;
+  /** New bill from GRN (?grnId=): prefills supplier and lines from the receipt. */
+  initialGrnId?: string;
   /** When set, the wizard runs in edit mode: pre-fills from this document and PATCHes on save. */
   mode?: "create" | "edit";
   existingDocument?: DocumentDetailRecord;
@@ -313,7 +317,13 @@ const STEPS = [
   { id: "review", label: "Review & Submit" },
 ];
 
-export function DocumentCreateWizard({ type, initialPoId, mode = "create", existingDocument }: DocumentCreateWizardProps) {
+export function DocumentCreateWizard({
+  type,
+  initialPoId,
+  initialGrnId,
+  mode = "create",
+  existingDocument,
+}: DocumentCreateWizardProps) {
   const isEditMode = mode === "edit" && !!existingDocument;
   const router = useRouter();
   const terminology = useTerminology();
@@ -322,6 +332,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const { settings: financialSettings } = useFinancialSettings();
   const baseCurrency = financialSettings.baseCurrency;
+  const currentOrgId = useAuthStore((s) => s.org?.orgId);
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
 
@@ -352,6 +363,13 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
   const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
   const [taxCodes, setTaxCodes] = React.useState<Array<{ id: string; code: string; name: string; rate: number }>>([]);
+  // Org-level default tax: KE-VAT0 for the Cool Catch org.
+  const DEFAULT_TAX_ORG_ID = "ada28a32-8d06-4559-be60-add8d1ab038f";
+  const DEFAULT_TAX_CODE = "KE-VAT0";
+  const defaultLineTaxCodeId = React.useMemo(() => {
+    if (currentOrgId !== DEFAULT_TAX_ORG_ID) return undefined;
+    return taxCodes.find((t) => t.code === DEFAULT_TAX_CODE)?.id;
+  }, [currentOrgId, taxCodes]);
   const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>>>({});
   /** Org catalog UOM codes (same source as Settings → UOM) for line dropdown merge. */
   const [catalogUomCodes, setCatalogUomCodes] = React.useState<string[]>([]);
@@ -363,6 +381,11 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   const [linkedPoId, setLinkedPoId] = React.useState<string | null>(() =>
     type === "grn" && initialPoId ? initialPoId : null
   );
+  /** For supplier bill: linked upstream doc for create payload (PO or GRN). */
+  const [billSourceLink, setBillSourceLink] = React.useState<{
+    id: string;
+    typeKey: "purchase-order" | "grn";
+  } | null>(null);
   const [linkedPoOption, setLinkedPoOption] = React.useState<PurchaseOrderLookupOption | null>(null);
   const [showQuickAddCustomer, setShowQuickAddCustomer] = React.useState(false);
   const [quickAddInitialName, setQuickAddInitialName] = React.useState("");
@@ -450,9 +473,19 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
 
   React.useEffect(() => {
     let cancelled = false;
+    // Fast path: branches and warehouses resolve in one round trip so step-1
+    // selectors are interactive immediately, before products or price lists load.
+    Promise.all([fetchBranchOptions(), fetchWarehouseOptions()])
+      .then(([branches, warehouses]) => {
+        if (cancelled) return;
+        setFieldOptions({ branch: branches, warehouse: warehouses });
+      })
+      .catch(() => {
+        if (!cancelled) setFieldOptions({});
+      });
+    // Deferred: secondary metadata (price lists, party defaults, categories, products).
+    // These are needed for step 2 but must not block branch/warehouse rendering.
     Promise.all([
-      fetchBranchOptions(),
-      fetchWarehouseOptions(),
       fetchCustomerDefaultPriceLists(),
       fetchSupplierDefaultCostLists(),
       fetchPriceListOptions(),
@@ -460,12 +493,8 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
       fetchCustomerCategoriesApi(),
       hydrateProductsFromApi(),
     ])
-      .then(([branches, warehouses, customerDefaults, supplierCostLists, priceLists, paymentTerms, customerCategories, _products]) => {
+      .then(([customerDefaults, supplierCostLists, priceLists, paymentTerms, customerCategories]) => {
         if (cancelled) return;
-        setFieldOptions({
-          branch: branches,
-          warehouse: warehouses,
-        });
         setCustomerDefaultPriceLists(
           Object.fromEntries(customerDefaults.map((item) => [item.customerId, item.priceListId]))
         );
@@ -484,7 +513,6 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
       })
       .catch(() => {
         if (!cancelled) {
-          setFieldOptions({});
           setCustomerDefaultPriceLists({});
           setSupplierDefaultCostLists({});
           setFallbackPriceListId("pl-retail");
@@ -567,6 +595,17 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
 
   React.useEffect(() => {
     if (step !== 2) return;
+    // Purchasing docs use cost-based / manual pricing; bulk prefetching all packaging
+    // and price-list data for every product creates hundreds of parallel API calls.
+    // Skip for purchasing flows — data will be fetched lazily per selected line.
+    const isPurchasingDoc =
+      type === "bill" || type === "purchase-order" || type === "grn" ||
+      type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note";
+    if (isPurchasingDoc) {
+      setPackagingByProductId({});
+      setPricingByProductId({});
+      return;
+    }
     const products = listProducts();
     if (!products.length) {
       setPackagingByProductId({});
@@ -599,7 +638,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
     return () => {
       cancelled = true;
     };
-  }, [step]);
+  }, [step, type]);
 
   const selectedPartyIdForCost = form.watch("party");
   const lineEditorModeForCost =
@@ -681,17 +720,22 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
         }
         if (po.partyId) form.setValue("party", po.partyId);
         if (po.branchId) form.setValue("branch", po.branchId);
-        pendingGrnWarehouseFromPoRef.current = {
-          warehouseId: po.warehouseId,
-          branchId: po.branchId,
-        };
-        if (po.warehouseId) {
-          form.setValue("warehouse", po.warehouseId);
-        } else {
-          form.setValue("warehouse", "");
+        if (type === "grn") {
+          pendingGrnWarehouseFromPoRef.current = {
+            warehouseId: po.warehouseId,
+            branchId: po.branchId,
+          };
+          if (po.warehouseId) {
+            form.setValue("warehouse", po.warehouseId);
+          } else {
+            form.setValue("warehouse", "");
+          }
         }
         if (po.currency) form.setValue("currency", po.currency);
         form.setValue("poRef", po.number);
+        if (type === "bill") {
+          setBillSourceLink({ id: poId, typeKey: "purchase-order" });
+        }
         const receivable = (po.lines ?? []).filter(
           (l) => l.productId && (l.remainingQuantity ?? l.qty ?? 0) > 0.01
         );
@@ -732,6 +776,64 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
         setLoadingPo(false);
       }
     },
+    [form, type]
+  );
+
+  /** Prefill supplier bill from a GRN (?grnId=…) — supplier and lines match the receipt. */
+  const handleBillFromGrn = React.useCallback(
+    async (grnId: string) => {
+      setLoadingPo(true);
+      try {
+        const grn = await fetchDocumentDetailApi("grn", grnId);
+        if (!grn) return;
+        if (grn.partyId) form.setValue("party", grn.partyId);
+        if (grn.branchId) form.setValue("branch", grn.branchId);
+        if (grn.currency) form.setValue("currency", grn.currency);
+        if (grn.warehouseId) form.setValue("warehouse", grn.warehouseId);
+        const poNum = grn.sourceDocument?.typeKey === "purchase-order" ? grn.sourceDocument.number : "";
+        if (poNum) form.setValue("poRef", poNum);
+        setBillSourceLink({ id: grnId, typeKey: "grn" });
+        setLinkedPoId(grn.sourceDocument?.typeKey === "purchase-order" ? grn.sourceDocument.id : null);
+        const prefilled: DocumentLine[] = (grn.lines ?? []).map((l, i) => {
+          const lineQty = l.qty ?? 1;
+          const qty =
+            typeof l.remainingQuantity === "number" ? l.remainingQuantity : lineQty;
+          const unitPrice =
+            l.unitPrice ?? (lineQty > 0 ? (l.amount ?? 0) / lineQty : 0);
+          const safeQty = Math.max(qty, 0);
+          const amount = Math.round(unitPrice * safeQty * 100) / 100;
+          return {
+            id: `grn-${grnId}-line-${i}`,
+            productId: l.productId ?? "",
+            sku: l.productSku ?? "",
+            name: l.description ?? l.productName ?? "",
+            uom: l.unit ?? "EA",
+            qty: safeQty || 1,
+            baseQty: safeQty || 1,
+            price: unitPrice,
+            priceReason: "From GRN",
+            amount,
+            taxCodeId: l.taxCodeId ?? l.effectiveTaxCodeId ?? undefined,
+            sourceLineId: l.id,
+          };
+        }).filter((line) => line.productId);
+        if (prefilled.length > 0) {
+          setLines(prefilled);
+          form.setValue("linesCount", prefilled.length);
+          form.setValue("totalAmount", prefilled.reduce((s, l) => s + l.amount, 0));
+          toast.success(`Prefilled from ${grn.number} — ${prefilled.length} line(s).`);
+        } else {
+          setLines([]);
+          form.setValue("linesCount", 0);
+          form.setValue("totalAmount", 0);
+          toast.info(`Linked to ${grn.number}. Add lines manually if needed.`);
+        }
+      } catch {
+        toast.error("Could not load GRN details.");
+      } finally {
+        setLoadingPo(false);
+      }
+    },
     [form]
   );
 
@@ -739,17 +841,22 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
     pendingGrnWarehouseFromPoRef.current = null;
     setLinkedPoId(null);
     setLinkedPoOption(null);
+    setBillSourceLink(null);
     form.setValue("poRef", "");
     setLines([]);
     form.setValue("linesCount", 0);
     form.setValue("totalAmount", 0);
   }, [form]);
 
-  // When arriving from a deep-link (?poId=…), auto-trigger PO load so lines, party, and warehouse are pre-filled.
+  // Deep-link: GRN from PO (?poId=), or supplier bill from PO / from GRN (?poId= / ?grnId=)
   React.useEffect(() => {
-    if (type !== "grn" || !initialPoId) return;
-    void handlePoSelect(initialPoId, null);
-  // Run once on mount only — initialPoId and type are stable props, handlePoSelect will be called once.
+    if (type === "bill" && initialGrnId) {
+      void handleBillFromGrn(initialGrnId);
+      return;
+    }
+    if ((type === "grn" || type === "bill") && initialPoId) {
+      void handlePoSelect(initialPoId, null);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -765,11 +872,19 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
         poRef: form.getValues("poRef") || undefined,
         reference: form.getValues("reference") || undefined,
         dueDate: form.getValues("dueDate") || undefined,
-        ...(linkedPoId && {
-          sourceDocumentId: linkedPoId,
-          sourceDocumentType: "purchase-order" as const,
-          sourceDocumentNumber: form.getValues("poRef") || undefined,
-        }),
+        ...(type === "bill" && billSourceLink
+          ? {
+              sourceDocumentId: billSourceLink.id,
+              sourceDocumentType: billSourceLink.typeKey,
+              sourceDocumentNumber: form.getValues("poRef") || undefined,
+            }
+          : linkedPoId
+            ? {
+                sourceDocumentId: linkedPoId,
+                sourceDocumentType: "purchase-order" as const,
+                sourceDocumentNumber: form.getValues("poRef") || undefined,
+              }
+            : {}),
         lines: lines.map((line) => ({
           productId: line.productId,
           description: line.name,
@@ -789,7 +904,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
         linesAreTaxInclusive: form.getValues("linesAreTaxInclusive") ?? false,
       };
     },
-    [baseCurrency, form, lines, linkedPoId]
+    [baseCurrency, form, lines, linkedPoId, type, billSourceLink]
   );
 
   const onReview = async () => {
@@ -1035,7 +1150,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
   }, [orgRole, type]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {hqSupplierName && (type === "purchase-order" || type === "purchase-request") && (
         <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
           <Icons.Store className="h-4 w-4 text-primary shrink-0" />
@@ -1051,7 +1166,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
 
       {step === 1 && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle>1. Header</CardTitle>
             {copilotEnabled ? (
               <Button type="button" variant="ghost" size="sm" onClick={openDrawer}>
@@ -1060,7 +1175,10 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
               </Button>
             ) : null}
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-2 pb-4">
+            {type === "bill" && loadingPo && (
+              <p className="mb-3 text-xs text-muted-foreground">Loading supplier and lines from linked document…</p>
+            )}
             <form className="space-y-4">
               {type === "grn" && (
                 <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
@@ -1319,6 +1437,7 @@ export function DocumentCreateWizard({ type, initialPoId, mode = "create", exist
               pricingByProductId={lineEditorPricingByProductId}
               dailyPricesByProductId={lineEditorMode === "sales" ? dailyPricesByProductId : undefined}
               taxCodes={taxCodes}
+              defaultLineTaxCodeId={defaultLineTaxCodeId}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
               lineColumnLabels={
                 type === "grn"

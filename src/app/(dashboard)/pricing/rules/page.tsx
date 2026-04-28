@@ -99,6 +99,28 @@ export default function PricingRulesPage() {
     fetchSupplierDefaultCostLists().then(setSupplierCostDefaults).catch(() => setSupplierCostDefaults([]));
   }, []);
 
+  const loadCustomerLookupOptions = React.useCallback(
+    (query: string) =>
+      searchPartyLookupOptionsApi({
+        role: "customer",
+        status: "ACTIVE",
+        search: query,
+        limit: 20,
+      }),
+    []
+  );
+
+  const loadSupplierLookupOptions = React.useCallback(
+    (query: string) =>
+      searchPartyLookupOptionsApi({
+        role: "supplier",
+        status: "ACTIVE",
+        search: query,
+        limit: 20,
+      }),
+    []
+  );
+
   React.useEffect(() => {
     if (!configureOpen) return;
     loadCustomerDefaults();
@@ -346,14 +368,7 @@ export default function PricingRulesPage() {
                           if (!value) setSelectedCustomerOption(null);
                         }}
                         onOptionSelect={(option) => setSelectedCustomerOption(option)}
-                        loadOptions={(query) =>
-                          searchPartyLookupOptionsApi({
-                            role: "customer",
-                            status: "ACTIVE",
-                            search: query,
-                            limit: 20,
-                          })
-                        }
+                        loadOptions={loadCustomerLookupOptions}
                         selectedOption={selectedCustomerOption}
                         placeholder="Select customer"
                         searchPlaceholder="Type name, code, phone, or email"
@@ -432,14 +447,7 @@ export default function PricingRulesPage() {
                           if (!value) setSelectedSupplierOption(null);
                         }}
                         onOptionSelect={(option) => setSelectedSupplierOption(option)}
-                        loadOptions={(query) =>
-                          searchPartyLookupOptionsApi({
-                            role: "supplier",
-                            status: "ACTIVE",
-                            search: query,
-                            limit: 20,
-                          })
-                        }
+                        loadOptions={loadSupplierLookupOptions}
                         selectedOption={selectedSupplierOption}
                         placeholder="Select supplier"
                         searchPlaceholder="Type name, code, phone, or email"

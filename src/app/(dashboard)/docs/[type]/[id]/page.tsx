@@ -858,6 +858,11 @@ export default function DocViewPage() {
             <SheetTitle>Convert document</SheetTitle>
             <SheetDescription>
               Confirm downstream details before creating the next linked document.
+              {type === "grn" && convertType === "bill" && (
+                <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">
+                  If this GRN has not been posted yet, it will be posted automatically to update stock before the bill is created.
+                </span>
+              )}
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">

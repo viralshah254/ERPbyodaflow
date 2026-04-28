@@ -117,16 +117,17 @@ export function DataTable<T extends object>({
 
   const colSpan = columns.length + (selectable ? 1 : 0);
 
+  /** Narrower min width avoids forcing page-level horizontal scroll on dense operational tables. */
   const stickyCell =
-    "sticky z-20 min-w-[14rem] max-w-[24rem] border-r border-border/70 bg-background shadow-[4px_0_12px_-6px_rgba(0,0,0,0.25)] dark:shadow-[4px_0_12px_-6px_rgba(0,0,0,0.45)]";
+    "sticky z-20 min-w-[10rem] max-w-[20rem] border-r border-border/70 bg-background shadow-[4px_0_12px_-6px_rgba(0,0,0,0.25)] dark:shadow-[4px_0_12px_-6px_rgba(0,0,0,0.45)]";
   const stickyHead =
-    "sticky top-0 z-30 min-w-[14rem] max-w-[24rem] border-r border-border/70 bg-muted/95 backdrop-blur-sm shadow-[4px_0_12px_-6px_rgba(0,0,0,0.2)] dark:shadow-[4px_0_12px_-6px_rgba(0,0,0,0.45)]";
+    "sticky top-0 z-30 min-w-[10rem] max-w-[20rem] border-r border-border/70 bg-muted/95 backdrop-blur-sm shadow-[4px_0_12px_-6px_rgba(0,0,0,0.2)] dark:shadow-[4px_0_12px_-6px_rgba(0,0,0,0.45)]";
   const headerCell =
     "sticky top-0 z-10 bg-muted/95 backdrop-blur-sm";
 
   return (
-    <div className={cn("rounded-md border", className)}>
-      <div className="h-[calc(100vh-24rem)] w-full overflow-auto">
+    <div className={cn("min-w-0 max-w-full rounded-md border", className)}>
+      <div className="h-[min(28rem,70vh)] w-full min-w-0 max-w-full overflow-auto sm:h-[calc(100vh-22rem)]">
         {/* Native <table> — avoid Table component's inner overflow wrapper (breaks sticky columns). */}
         <table className="w-max min-w-full caption-bottom text-sm">
           <TableHeader>

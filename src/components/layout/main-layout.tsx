@@ -78,7 +78,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto flex flex-col">
           <TutorialProgressTracker />
           <FirstVisitBanner />
-          <div className="flex-1 p-6">{children}</div>
+          <div className="flex-1 min-w-0 p-6">{children}</div>
         </main>
       </div>
       <CommandPalette />
