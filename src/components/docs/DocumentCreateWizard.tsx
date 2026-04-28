@@ -149,6 +149,67 @@ function fieldIdToKey(id: string): keyof FormValues {
   return (map[id] ?? "reference") as keyof FormValues;
 }
 
+/** Isolated so hooks run in a component that always calls them in a fixed order (not inside parent branches). */
+function PartyEntityField({
+  field,
+  form,
+  role,
+  selectedPartyOption,
+  onCreateNewCustomer,
+  onCreateNewSupplier,
+}: {
+  field: FormFieldConfig;
+  form: ReturnType<typeof useForm<FormValues>>;
+  role: "customer" | "supplier";
+  selectedPartyOption?: { id: string; label: string; description?: string } | null;
+  onCreateNewCustomer?: (searchQuery: string) => void;
+  onCreateNewSupplier?: (searchQuery: string) => void;
+}) {
+  const key = fieldIdToKey(field.id);
+  /** Stable reference required: AsyncSearchableSelect effect depends on loadOptions; inline arrows retrigger search every parent render. */
+  const loadPartyLookupOptions = React.useCallback(
+    (query: string) =>
+      searchPartyLookupOptionsApi({
+        role,
+        status: "ACTIVE",
+        search: query,
+        limit: 20,
+      }),
+    [role]
+  );
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1">
+        <Label>
+          {field.label}
+          {field.required ? " *" : ""}
+        </Label>
+        <ExplainThis
+          prompt={`Explain: ${field.label} in document context.`}
+          label={`Explain ${field.label}`}
+        />
+      </div>
+      <AsyncSearchableSelect
+        value={(form.watch(key) as string | undefined) || ""}
+        onValueChange={(value) => form.setValue(key, value)}
+        loadOptions={role === "customer" ? searchArCustomerOptionsApi : loadPartyLookupOptions}
+        selectedOption={selectedPartyOption}
+        placeholder={`Select ${field.label.toLowerCase()}`}
+        searchPlaceholder="Type name, code, phone, or email"
+        emptyMessage={`No ${field.label.toLowerCase()}s found.`}
+        recentStorageKey={role === "customer" ? "lookup:recent-customers" : "lookup:recent-suppliers"}
+        onCreateNew={role === "customer" ? onCreateNewCustomer : onCreateNewSupplier}
+        createNewLabel={role === "customer" ? "Add new customer" : "Add new supplier"}
+      />
+      {form.formState.errors[key] && (
+        <p className="text-sm text-destructive">
+          {form.formState.errors[key]?.message as string}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function RenderField({
   field,
   form,
@@ -172,47 +233,15 @@ function RenderField({
 
   if (isPartyEntity) {
     const role = field.id === "supplier" ? "supplier" : "customer";
-    /** Stable reference required: AsyncSearchableSelect effect depends on loadOptions; inline arrows retrigger search every parent render. */
-    const loadPartyLookupOptions = React.useCallback(
-      (query: string) =>
-        searchPartyLookupOptionsApi({
-          role,
-          status: "ACTIVE",
-          search: query,
-          limit: 20,
-        }),
-      [role]
-    );
     return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-1">
-          <Label>
-            {field.label}
-            {field.required ? " *" : ""}
-          </Label>
-          <ExplainThis
-            prompt={`Explain: ${field.label} in document context.`}
-            label={`Explain ${field.label}`}
-          />
-        </div>
-        <AsyncSearchableSelect
-          value={(form.watch(key) as string | undefined) || ""}
-          onValueChange={(value) => form.setValue(key, value)}
-          loadOptions={role === "customer" ? searchArCustomerOptionsApi : loadPartyLookupOptions}
-          selectedOption={selectedPartyOption}
-          placeholder={`Select ${field.label.toLowerCase()}`}
-          searchPlaceholder="Type name, code, phone, or email"
-          emptyMessage={`No ${field.label.toLowerCase()}s found.`}
-          recentStorageKey={role === "customer" ? "lookup:recent-customers" : "lookup:recent-suppliers"}
-          onCreateNew={role === "customer" ? onCreateNewCustomer : onCreateNewSupplier}
-          createNewLabel={role === "customer" ? "Add new customer" : "Add new supplier"}
-        />
-        {form.formState.errors[key] && (
-          <p className="text-sm text-destructive">
-            {form.formState.errors[key]?.message as string}
-          </p>
-        )}
-      </div>
+      <PartyEntityField
+        field={field}
+        form={form}
+        role={role}
+        selectedPartyOption={selectedPartyOption}
+        onCreateNewCustomer={onCreateNewCustomer}
+        onCreateNewSupplier={onCreateNewSupplier}
+      />
     );
   }
 
