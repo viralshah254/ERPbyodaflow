@@ -160,7 +160,7 @@ export default function PricingOverviewPage() {
           <div className="flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-2.5 text-sm">
             <Icons.Clock className="h-4 w-4 text-amber-600 shrink-0" />
             <span className="text-amber-800 dark:text-amber-300">
-              <strong>{dailyStatus.totalListsNeedingUpdate} price list{dailyStatus.totalListsNeedingUpdate > 1 ? "s" : ""}</strong> haven't been updated today. Set today's prices before processing orders.
+              <strong>{dailyStatus.totalListsNeedingUpdate} price list{dailyStatus.totalListsNeedingUpdate > 1 ? "s" : ""}</strong> haven&apos;t been updated today. Set today&apos;s prices before processing orders.
             </span>
             <Button variant="outline" size="sm" className="ml-auto shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100" asChild>
               <Link href="/pricing/price-lists">

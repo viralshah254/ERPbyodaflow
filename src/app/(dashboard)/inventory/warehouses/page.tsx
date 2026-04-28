@@ -70,12 +70,12 @@ export default function WarehousesPage() {
     setDrawerOpen(true);
   };
 
-  const openEdit = (row: WarehouseRow) => {
+  const openEdit = React.useCallback((row: WarehouseRow) => {
     setEditing(row);
     const branchId = branches.find((branch) => branch.label === row.branch)?.id ?? "none";
     setForm({ code: row.code, name: row.name, branchId });
     setDrawerOpen(true);
-  };
+  }, [branches]);
 
   const columns = React.useMemo(
     () => [
@@ -98,7 +98,7 @@ export default function WarehousesPage() {
         ),
       },
     ],
-    [branches]
+    [branches, openEdit]
   );
 
   return (

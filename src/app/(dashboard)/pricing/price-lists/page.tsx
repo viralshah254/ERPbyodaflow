@@ -189,7 +189,7 @@ function PriceListsContent() {
                   <TableHead>Channel</TableHead>
                   <TableHead>Based on</TableHead>
                   <TableHead>Products</TableHead>
-                  <TableHead>Today's prices</TableHead>
+                  <TableHead>{"Today's prices"}</TableHead>
                   <TableHead className="w-40"></TableHead>
                 </TableRow>
               </TableHeader>

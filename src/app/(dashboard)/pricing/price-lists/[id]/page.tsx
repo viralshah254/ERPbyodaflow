@@ -183,7 +183,8 @@ export default function PriceListViewPage() {
                 <>
                   <Icons.AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
                   <span className="text-amber-800 dark:text-amber-300">
-                    <strong>{staleCount} of {totalCount} product{totalCount !== 1 ? "s" : ""}</strong> {isToday ? "haven't been priced today" : `have no price for ${selectedDate}`} — showing previous day's fallback price.
+                    <strong>{staleCount} of {totalCount} product{totalCount !== 1 ? "s" : ""}</strong>{" "}
+                    {isToday ? "haven\u2019t been priced today" : `have no price for ${selectedDate}`} — showing previous day&apos;s fallback price.
                   </span>
                   {isToday && (
                     <Button
@@ -232,7 +233,7 @@ export default function PriceListViewPage() {
                     {isToday && <Badge variant="secondary" className="ml-2 text-xs">Today</Badge>}
                   </CardTitle>
                   <CardDescription>
-                    {data?.currency} · Enter price per kg. Stale rows (amber) use previous day's price as fallback.
+                    {data?.currency} · Enter price per kg. Stale rows (amber) use previous day&apos;s price as fallback.
                   </CardDescription>
                 </div>
                 {staleCount > 0 && (
@@ -250,7 +251,7 @@ export default function PriceListViewPage() {
                 </div>
               ) : !data || data.items.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
-                  No sellable products found. Add products with type "Finished" or "Both" to see them here.
+                  No sellable products found. Add products with type &quot;Finished&quot; or &quot;Both&quot; to see them here.
                 </div>
               ) : (
                 <Table>

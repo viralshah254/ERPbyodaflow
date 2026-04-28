@@ -174,7 +174,7 @@ export default function ProductDetailPage() {
     }
     setNameDraft(product.name ?? "");
     setDescriptionDraft(product.description ?? "");
-  }, [product?.id, product?.name, product?.description]);
+  }, [product]);
 
   // Load all data in parallel
   React.useEffect(() => {
