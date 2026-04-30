@@ -55,7 +55,7 @@ export default function DisposalsPage() {
       fetchAssetsApi(),
     ]);
     setRows(disposalItems);
-    setAssets(assetItems.filter((asset) => asset.status === "ACTIVE"));
+    setAssets(assetItems.filter((asset) => asset.status !== "DISPOSED"));
   }, []);
 
   React.useEffect(() => {

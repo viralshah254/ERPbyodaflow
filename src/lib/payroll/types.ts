@@ -38,6 +38,9 @@ export interface Employee {
   hourlyCostRate?: number;
   contractDailyRate?: number;
   currency: string;
+  /** ISO date — used for payroll proration */
+  startDate?: string;
+  endDate?: string;
   allowances: PayComponent[];
   deductions: PayComponent[];
   bankAccountMasked?: string;
@@ -91,8 +94,16 @@ export interface CalculatedLine {
   totalEmployerCost: number;
   netPay: number;
   unpaidLeaveDays: number;
+  /** Working days from approved unpaid leave in this pay month (when auto-unpaid enabled) */
+  autoUnpaidLeaveDays?: number;
+  explicitUnpaidLeaveDays?: number;
   /** True when employee is CASUAL — enter deductions manually before saving */
   requiresManualDeductions?: boolean;
+  /** Calendar proration (salaried); null for consultants billed by weekday */
+  prorationFactor?: number | null;
+  employedCalendarDaysInMonth?: number;
+  daysInMonth?: number;
+  consultantBillableWeekdays?: number;
 }
 
 export interface PayRun {

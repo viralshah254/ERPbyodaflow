@@ -191,7 +191,7 @@ export default function InventoryCostingSettingsPage() {
         title="Inventory costing settings"
         description="Costing method, landed cost templates, valuation accounts"
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Inventory", href: "/settings/inventory/costing" },
           { label: "Costing" },
         ]}

@@ -186,7 +186,7 @@ export default function CurrenciesSettingsPage() {
         title="Currencies"
         description="Set base currency and enabled currencies for this business."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Financial", href: "/settings/financial/currencies" },
           { label: "Currencies" },
         ]}

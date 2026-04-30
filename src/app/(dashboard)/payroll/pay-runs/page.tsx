@@ -18,8 +18,9 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -74,6 +75,7 @@ export default function PayRunsPage() {
   const [calculatedLines, setCalculatedLines] = React.useState<CalculatedLine[] | null>(null);
   /** Deduction amount for CASUAL employees (manual); keyed by employeeId */
   const [casualDeductions, setCasualDeductions] = React.useState<Record<string, number>>({});
+  const [autoUnpaidLeave, setAutoUnpaidLeave] = React.useState(true);
   const [expandedLineId, setExpandedLineId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -121,9 +123,10 @@ export default function PayRunsPage() {
     try {
       const lines = await calculatePayRunLinesApi({
         periodStart: `${month}-01`,
+        autoUnpaidLeave,
         employees: filteredEmployees.map((e) => ({
           employeeId: e.id,
-          grossPay: e.baseSalary > 0 ? e.baseSalary : (e.contractDailyRate ? e.contractDailyRate * 20 : 0),
+          grossPay: e.baseSalary > 0 ? e.baseSalary : e.contractDailyRate ? e.contractDailyRate * 20 : 0,
         })),
       });
       setCalculatedLines(lines);
@@ -160,9 +163,12 @@ export default function PayRunsPage() {
     if (!summaryLines.length) { toast.info("Click Auto-calculate taxes first."); return; }
     setSaving(true);
     try {
+      const [y, m] = month.split("-").map((v) => parseInt(v, 10));
+      const lastDay = new Date(y, m, 0).getDate();
+      const periodEnd = `${month}-${String(lastDay).padStart(2, "0")}`;
       const payload = {
         periodStart: `${month}-01`,
-        periodEnd: `${month}-31`,
+        periodEnd,
         branchId,
         currency,
         lines: summaryLines.map((l) => {
@@ -179,6 +185,7 @@ export default function PayRunsPage() {
             manualDeductionLines: manual,
             employmentType: l.employmentType,
             taxCountry: l.taxCountry,
+            unpaidLeaveDays: l.unpaidLeaveDays > 0 ? l.unpaidLeaveDays : undefined,
           };
         }),
       };
@@ -310,10 +317,22 @@ export default function PayRunsPage() {
 
             <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
               <Icons.Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                {filteredEmployees.length} employee(s) in selected branch
-              </span>
-              <div className="ml-auto">
+              <div className="flex flex-col gap-2 flex-1 sm:flex-row sm:items-center">
+                <span className="text-sm text-muted-foreground">
+                  {filteredEmployees.length} employee(s) in selected branch
+                </span>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={autoUnpaidLeave}
+                    onCheckedChange={(c) => {
+                      setAutoUnpaidLeave(c === true);
+                      setCalculatedLines(null);
+                    }}
+                  />
+                  <span>Load unpaid leave days from approved leave</span>
+                </label>
+              </div>
+              <div className="ml-auto shrink-0">
                 <Button
                   size="sm"
                   variant="secondary"
@@ -348,6 +367,33 @@ export default function PayRunsPage() {
                           <span className="ml-2 text-xs text-muted-foreground">
                             {employmentLabel(line.employmentType)} · {line.taxCountry}
                           </span>
+                          {(line.prorationFactor != null && line.prorationFactor < 1) ||
+                          (line.employmentType === "CONSULTANT" && line.consultantBillableWeekdays != null) ? (
+                            <div className="text-[11px] text-amber-700 dark:text-amber-500 mt-0.5 space-y-0.5">
+                              {line.prorationFactor != null && line.prorationFactor < 1 ? (
+                                <div>
+                                  Prorated {Math.round(line.prorationFactor * 1000) / 10}% of month
+                                  {line.employedCalendarDaysInMonth != null && line.daysInMonth != null
+                                    ? ` (${line.employedCalendarDaysInMonth}/${line.daysInMonth} calendar days employed)`
+                                    : null}
+                                </div>
+                              ) : null}
+                              {line.employmentType === "CONSULTANT" && line.consultantBillableWeekdays != null ? (
+                                <div>Consultant: {line.consultantBillableWeekdays} weekday(s) billed in period</div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {(line.unpaidLeaveDays ?? 0) > 0 ? (
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              Unpaid leave: {line.unpaidLeaveDays} day(s)
+                              {line.autoUnpaidLeaveDays != null && line.autoUnpaidLeaveDays > 0 ? (
+                                <> ({line.autoUnpaidLeaveDays} from leave module)</>
+                              ) : null}
+                              {line.explicitUnpaidLeaveDays != null && line.explicitUnpaidLeaveDays > 0 ? (
+                                <> (+{line.explicitUnpaidLeaveDays} manual)</>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                         <span className="text-muted-foreground">{fmt(line.grossPay, line.currency)}</span>
                         <span className="text-red-500">−{fmt(ed, line.currency)}</span>

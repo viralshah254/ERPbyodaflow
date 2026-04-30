@@ -74,7 +74,7 @@ export default function PostingMappingsPage() {
         title="Posting mappings"
         description="Choose which ledger accounts operational postings use before finance statements read the journals."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Financial", href: "/settings/financial" },
           { label: "Posting mappings" },
         ]}

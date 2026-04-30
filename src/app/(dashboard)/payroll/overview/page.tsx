@@ -18,10 +18,7 @@ const LINKS = [
   { href: "/payroll/pay-runs", label: "Pay runs", desc: "Auto-calculate taxes, approve, post", icon: "CreditCard" as const },
   { href: "/payroll/payslips", label: "Payslips", desc: "Preview, download PDF", icon: "FileText" as const },
   { href: "/payroll/statutories", label: "Statutory rates", desc: "KE PAYE/NSSF/SHIF/AHL + UG", icon: "ShieldCheck" as const },
-  { href: "/payroll/leave/requests", label: "Leave requests", desc: "Approve, reject, manage", icon: "CalendarDays" as const },
-  { href: "/payroll/leave/balances", label: "Leave balances", desc: "Annual remaining per employee", icon: "BarChart2" as const },
-  { href: "/payroll/leave/calendar", label: "Leave calendar", desc: "Monthly approved leaves view", icon: "CalendarRange" as const },
-  { href: "/payroll/leave/policies", label: "Leave policies", desc: "Statutory + extra entitlements", icon: "ClipboardList" as const },
+  { href: "/payroll/leave", label: "Leave", desc: "Policies, balances, requests; unpaid flows to pay runs", icon: "Palmtree" as const },
   { href: "/settings/payroll", label: "Payroll settings", desc: "Jurisdiction, currency, pay period", icon: "Settings" as const },
 ];
 

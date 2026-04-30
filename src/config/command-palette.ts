@@ -105,7 +105,7 @@ export const COMMAND_NAV_ITEMS: CommandItemNav[] = [
   { id: "nav-onboarding", label: "Setup / Onboarding", group: "nav", href: "/onboarding", keywords: ["onboarding", "setup", "checklist"], icon: "ClipboardCheck" },
   { id: "nav-work-queue", label: "Work queue", group: "nav", href: "/work/queue", keywords: ["work", "queue", "payroll", "tax", "pricing", "alerts"], icon: "ListTodo" },
   { id: "nav-dev", label: "Dev (QA)", group: "nav", href: "/dev", keywords: ["dev", "qa", "route", "audit", "health"], icon: "Wrench" },
-  { id: "nav-settings", label: "Settings", group: "nav", href: "/settings/org", keywords: ["org", "preferences"], icon: "Settings" },
+  { id: "nav-settings", label: "Settings", group: "nav", href: "/settings", keywords: ["settings", "hub", "org", "preferences", "configuration"], icon: "Settings" },
   { id: "search-products", label: "Search products", group: "nav", href: "/inventory/products", keywords: ["search", "masters", "products"], icon: "Search" },
   { id: "search-parties", label: "Search parties", group: "nav", href: "/master/parties", keywords: ["search", "masters", "customers", "suppliers", "parties"], icon: "Search" },
 ];

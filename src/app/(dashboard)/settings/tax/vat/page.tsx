@@ -77,7 +77,7 @@ export default function VatSettingsPage() {
         title="VAT (Kenya)"
         description="VAT rates backed by live settings."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Tax", href: "/settings/tax/kenya" },
           { label: "VAT" },
         ]}

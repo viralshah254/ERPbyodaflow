@@ -23,7 +23,7 @@ export default function ApprovalPolicyPage() {
       <PageHeader
         title="Approval policy configurator"
         description="Configure maker-checker rules by document type, amount threshold, and branch."
-        breadcrumbs={[{ label: "Settings", href: "/settings/org" }, { label: "Approval policy" }]}
+        breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Approval policy" }]}
         sticky
         showCommandHint
         actions={

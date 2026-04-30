@@ -63,7 +63,7 @@ export default function WithholdingTaxPage() {
         title="Withholding tax"
         description="WHT codes. Apply on supplier bills (AP), payments (Treasury)."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Tax", href: "/settings/tax/kenya" },
           { label: "Withholding" },
         ]}

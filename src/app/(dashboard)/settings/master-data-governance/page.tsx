@@ -29,7 +29,7 @@ export default function MasterDataGovernancePage() {
       <PageHeader
         title="Master data governance"
         description="Review and approve critical master data changes with version tracking."
-        breadcrumbs={[{ label: "Settings", href: "/settings/org" }, { label: "Master data governance" }]}
+        breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Master data governance" }]}
         sticky
         showCommandHint
       />

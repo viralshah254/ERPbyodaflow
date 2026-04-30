@@ -99,6 +99,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
       { id: "DRAFT", label: "Draft" },
       { id: "IN_TRANSIT", label: "In Transit" },
       { id: "DELIVERED", label: "Delivered" },
+      { id: "CONVERTED", label: "Invoiced" },
     ],
     validations: [
       { id: "has-lines", message: "At least one line required" },

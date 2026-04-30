@@ -304,6 +304,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         children: [
           { key: "payroll-overview", label: "Payroll Overview", href: "/payroll/overview", icon: "LayoutDashboard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
           { key: "payroll-employees", label: "Employees", href: "/payroll/employees", icon: "Users", moduleKey: "finance", requiresPermissions: ["finance.read"] },
+          { key: "payroll-leave", label: "Leave", href: "/payroll/leave", icon: "Palmtree", moduleKey: "finance", requiresPermissions: ["finance.read"] },
           { key: "payroll-payruns", label: "Pay runs", href: "/payroll/pay-runs", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
           { key: "payroll-payslips", label: "Payslips", href: "/payroll/payslips", icon: "FileText", moduleKey: "finance", requiresPermissions: ["finance.read"] },
           { key: "payroll-statutories", label: "Statutories", href: "/payroll/statutories", icon: "ShieldCheck", moduleKey: "finance", requiresPermissions: ["finance.read"] },
@@ -423,66 +424,5 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "work-queue", label: "Work queue", href: "/work/queue", icon: "ListTodo", moduleKey: "automation", requiresPermissions: ["automation.read"] },
     ],
   },
-  {
-    key: "settings",
-    label: "Settings",
-    moduleKey: "settings",
-    tier: "secondary",
-    order: 20,
-    items: [
-      { key: "settings-org", label: "Organization Profile", href: "/settings/org", icon: "Building", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      { key: "settings-platform", label: "Platform Control", href: "/settings/platform", icon: "Shield", moduleKey: "settings", requiresPermissions: ["platform.read"] },
-      { key: "settings-billing", label: "Billing", href: "/settings/billing", icon: "CreditCard", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      { key: "settings-entities", label: "Entities", href: "/settings/organization/entities", icon: "Building2", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      { key: "settings-branches", label: "Branches", href: "/settings/branches", icon: "MapPin", moduleKey: "settings", termKey: "branch", requiresPermissions: ["settings.branches.read"] },
-      { key: "settings-users-roles", label: "Users & Roles", href: "/settings/users-roles", icon: "Users", moduleKey: "settings", requiresPermissions: ["settings.users.read"] },
-      { key: "settings-preferences", label: "Preferences", href: "/settings/preferences", icon: "Settings", moduleKey: "settings", requiresPermissions: ["settings.preferences.read"] },
-      { key: "settings-sequences", label: "Numbering Sequences", href: "/settings/sequences", icon: "Hash", moduleKey: "settings", requiresPermissions: ["settings.sequences.read"] },
-      { key: "settings-compliance", label: "Compliance", href: "/settings/compliance", icon: "ShieldCheck", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      { key: "settings-notifications", label: "Notifications", href: "/settings/notifications", icon: "Bell", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      { key: "settings-migrations", label: "Migration Console", href: "/settings/migrations", icon: "DatabaseZap", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      { key: "settings-payroll", label: "Payroll", href: "/settings/payroll", icon: "CreditCard", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      { key: "settings-audit-log", label: "Audit Log", href: "/settings/audit-log", icon: "FileSearch", moduleKey: "settings", requiresPermissions: ["settings.audit.read"] },
-      { key: "settings-financial", label: "Financial", href: "/settings/financial/currencies", icon: "Wallet", moduleKey: "settings", requiresPermissions: ["settings.financial.read"], children: [
-        { key: "settings-financial-currencies", label: "Currencies", href: "/settings/financial/currencies", icon: "Banknote", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-financial-rates", label: "Exchange rates", href: "/settings/financial/exchange-rates", icon: "TrendingUp", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-financial-coa", label: "Chart of Accounts", href: "/settings/financial/chart-of-accounts", icon: "ListTree", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-financial-taxes", label: "Taxes", href: "/settings/financial/taxes", icon: "Receipt", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-financial-fiscal", label: "Fiscal years", href: "/settings/financial/fiscal-years", icon: "Calendar", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-payment-terms", label: "Payment terms", href: "/settings/payment-terms", icon: "CalendarClock", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-      ]},
-      { key: "settings-inventory", label: "Inventory", href: "/settings/inventory/costing", icon: "Package", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"], children: [
-        { key: "settings-inventory-costing", label: "Costing", href: "/settings/inventory/costing", icon: "Calculator", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"] },
-        { key: "settings-uom", label: "UOM catalog", href: "/settings/uom", icon: "Ruler", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"] },
-      ]},
-      { key: "settings-products", label: "Products", href: "/settings/products/pricing-rules", icon: "Package", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"], children: [
-        { key: "settings-products-pricing-rules", label: "Pricing rules", href: "/settings/products/pricing-rules", icon: "Calculator", moduleKey: "settings", requiresPermissions: ["settings.inventory.read"] },
-      ]},
-      { key: "settings-sales", label: "Sales & Customers", href: "/settings/customer-categories", icon: "Users", moduleKey: "settings", requiresPermissions: ["settings.org.read"], children: [
-        { key: "settings-customer-categories", label: "Customer categories", href: "/settings/customer-categories", icon: "Tag", moduleKey: "settings", requiresPermissions: ["settings.org.read"] },
-      ]},
-      { key: "settings-tax", label: "Tax (Kenya)", href: "/settings/tax/kenya", icon: "Receipt", moduleKey: "settings", requiresPermissions: ["settings.financial.read"], children: [
-        { key: "settings-tax-kenya", label: "Kenya profile", href: "/settings/tax/kenya", icon: "Globe", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-tax-vat", label: "VAT", href: "/settings/tax/vat", icon: "Receipt", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-tax-withholding", label: "Withholding", href: "/settings/tax/withholding", icon: "Percent", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-        { key: "settings-tax-mappings", label: "Tax mappings", href: "/settings/tax/tax-mappings", icon: "Link", moduleKey: "settings", requiresPermissions: ["settings.financial.read"] },
-      ]},
-      { key: "settings-customizer", label: "Customizer (Enterprise)", href: "/settings/customizer", icon: "Sliders", moduleKey: "settings", requiresPermissions: ["settings.customizer.read"], children: [
-        { key: "settings-customizer-modules", label: "Modules", href: "/settings/customizer/modules", icon: "Grid", moduleKey: "settings", requiresPermissions: ["settings.customizer.read"] },
-        { key: "settings-customizer-fields", label: "Custom Fields", href: "/settings/customizer/fields", icon: "FileText", moduleKey: "settings", requiresPermissions: ["settings.customizer.read"] },
-        { key: "settings-customizer-workflows", label: "Workflows", href: "/settings/customizer/workflows", icon: "Workflow", moduleKey: "settings", requiresPermissions: ["settings.customizer.read"] },
-        { key: "settings-customizer-dashboards", label: "Dashboards", href: "/settings/customizer/dashboards", icon: "LayoutDashboard", moduleKey: "settings", requiresPermissions: ["settings.customizer.read"] },
-      ]},
-    ],
-  },
-  {
-    key: "help",
-    label: "Help & Tutorial",
-    moduleKey: "dashboard",
-    tier: "secondary",
-    order: 21,
-    items: [
-      { key: "tutorial", label: "Tutorial", href: "/tutorial", icon: "BookOpen", moduleKey: "dashboard" },
-    ],
-  },
+
 ];

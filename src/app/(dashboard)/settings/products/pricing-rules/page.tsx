@@ -58,7 +58,7 @@ export default function PricingRulesSettingsPage() {
         title="Pricing rules"
         description="Configure pricing rules that override or default tier selection."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Products" },
           { label: "Pricing rules" },
         ]}

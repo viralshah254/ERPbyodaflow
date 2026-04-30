@@ -9,15 +9,25 @@ import { useOrgContextStore } from "@/stores/orgContextStore";
 import { buildVisibleNav, type ResolvedNavSection, type ResolvedNavItem } from "@/config/navigation";
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation";
 import type { TemplateOrgType, ModuleKey } from "@/config/industryTemplates/index";
+import Link from "next/link";
+import { OdaLogo } from "@/components/brand/OdaLogo";
+import { ODA_BRAND } from "@/lib/brand";
 import { NavSection } from "./NavSection";
 import { useNavCounts } from "@/lib/use-nav-counts";
 import type { NavCounts } from "@/lib/api/nav-counts";
 import * as Icons from "lucide-react";
 
-function applyCountsToItems(items: ResolvedNavItem[], counts: NavCounts): ResolvedNavItem[] {
+function applyCountsToItems(
+  items: ResolvedNavItem[],
+  counts: NavCounts,
+  franchisorInboundMerge: boolean
+): ResolvedNavItem[] {
   return items.map((item) => {
-    const count = counts[item.key] ?? 0;
-    const children = item.children ? applyCountsToItems(item.children, counts) : undefined;
+    let count = counts[item.key] ?? 0;
+    if (franchisorInboundMerge && item.key === "sales-orders") {
+      count += counts["franchise-inbound-orders"] ?? 0;
+    }
+    const children = item.children ? applyCountsToItems(item.children, counts, franchisorInboundMerge) : undefined;
     const badge =
       count > 0
         ? { type: "count" as const, value: String(count) }
@@ -71,7 +81,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
         : baseModules;
     // docs included so "Document Center" section is available for outlets.
     const personaNav = isFranchiseePersona
-      ? ["core", "sales", "purchasing", "inventory", "franchise", "docs", "settings"]
+      ? ["core", "sales", "purchasing", "inventory", "franchise", "docs"]
       : null;
     const input = {
       orgType,
@@ -111,12 +121,16 @@ export function AppSidebar({ className }: AppSidebarProps) {
     }).filter((section) => section.items.length > 0);
   }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]);
 
+  const franchisorInboundMerge =
+    orgRole === "FRANCHISOR" && featureFlags?.franchiseNetworkMonitoring === true;
+
   const sectionsWithCounts = React.useMemo(
-    () => visibleSections.map((section) => ({
-      ...section,
-      items: applyCountsToItems(section.items, navCounts),
-    })),
-    [visibleSections, navCounts]
+    () =>
+      visibleSections.map((section) => ({
+        ...section,
+        items: applyCountsToItems(section.items, navCounts, franchisorInboundMerge),
+      })),
+    [visibleSections, navCounts, franchisorInboundMerge]
   );
 
   const primarySections = React.useMemo(
@@ -140,27 +154,34 @@ export function AppSidebar({ className }: AppSidebarProps) {
         className
       )}
     >
-      <div className="flex h-16 items-center justify-between border-b px-4">
-        {!sidebarCollapsed && (
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground">
-              <Icons.Box className="h-5 w-5" />
-            </div>
-            <span className="font-semibold">
-              {franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE" ? "OdaFlow Outlet ERP" : "OdaFlow ERP"}
-            </span>
-          </div>
+      <div
+        className={cn(
+          "flex h-16 items-center border-b px-1 gap-0.5",
+          sidebarCollapsed ? "flex-col justify-center py-1.5" : "justify-between px-2"
         )}
-        {sidebarCollapsed && (
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground mx-auto">
-            <Icons.Box className="h-5 w-5" />
-          </div>
+      >
+        {!sidebarCollapsed ? (
+          <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 pr-1">
+            <OdaLogo height={30} className="min-w-0 shrink" />
+            <span className="truncate text-sm font-semibold">
+              {franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE" ? "Outlet" : "OdaFlow"}
+            </span>
+          </Link>
+        ) : (
+          <Link
+            href="/dashboard"
+            aria-label="Oda ERP"
+            className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md"
+            style={{ backgroundColor: ODA_BRAND.navy }}
+          >
+            <img src={ODA_BRAND.logoSrc} alt="" className="h-7 w-12 max-w-none object-contain object-left" />
+          </Link>
         )}
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="ml-auto"
+          className={cn("shrink-0", sidebarCollapsed && "mt-0.5 h-8 w-8")}
         >
           {sidebarCollapsed ? (
             <Icons.ChevronRight className="h-4 w-4" />

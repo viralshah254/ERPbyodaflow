@@ -74,7 +74,7 @@ export default function CompliancePage() {
         title="Compliance"
         description="Tax IDs, invoice templates, e-invoicing, and withholding control settings."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Compliance" },
         ]}
         sticky

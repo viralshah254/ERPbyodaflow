@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { OdaLogo } from "@/components/brand/OdaLogo";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
@@ -55,17 +56,15 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Header */}
       <div className="flex h-16 items-center justify-between border-b px-4">
         {!sidebarCollapsed && (
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground">
-              <Icons.Box className="h-5 w-5" />
-            </div>
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
+            <OdaLogo height={28} />
             <span className="font-semibold">OdaFlow ERP</span>
-          </div>
+          </Link>
         )}
         {sidebarCollapsed && (
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground mx-auto">
-            <Icons.Box className="h-5 w-5" />
-          </div>
+          <Link href="/dashboard" aria-label="Oda ERP" className="mx-auto">
+            <OdaLogo height={28} />
+          </Link>
         )}
         <Button
           variant="ghost"

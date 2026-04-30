@@ -10,6 +10,8 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 
+import { OdaLogo } from "@/components/brand/OdaLogo";
+
 const navItems = [
   { label: "Features", href: "/features" },
   { label: "Industries", href: "/industries" },
@@ -27,12 +29,7 @@ export function MarketingHeader() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground">
-            <Icons.Box className="h-5 w-5" />
-          </div>
-          <span className="font-semibold text-lg">ERP by OdaFlow</span>
-        </Link>
+        <OdaLogo href="/" height={36} />
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-6">

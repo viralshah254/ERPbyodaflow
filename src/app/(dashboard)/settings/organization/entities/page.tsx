@@ -57,7 +57,7 @@ export default function EntitiesPage() {
         title="Entities"
         description="Multi-entity setup with reporting and base-currency control."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Organization" },
           { label: "Entities" },
         ]}

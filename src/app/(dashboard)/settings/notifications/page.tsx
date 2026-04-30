@@ -57,7 +57,7 @@ export default function NotificationsPage() {
         title="Notifications"
         description="Email, SMS, WhatsApp toggles. Notification rules link to automation."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Notifications" },
         ]}
         sticky

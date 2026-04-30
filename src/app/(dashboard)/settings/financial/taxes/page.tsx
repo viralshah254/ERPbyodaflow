@@ -86,7 +86,7 @@ export default function TaxesSettingsPage() {
         title="Taxes"
         description="Tax codes: rate, inclusive/exclusive, effective dates"
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Financial", href: "/settings/financial/currencies" },
           { label: "Taxes" },
         ]}

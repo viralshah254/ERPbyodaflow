@@ -72,7 +72,7 @@ export default function SettingsBillingPage() {
         title="Billing"
         description="Seat usage, franchise allocations, pending prorations, and internal invoices."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Billing" },
         ]}
         sticky

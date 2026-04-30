@@ -55,7 +55,7 @@ export default function KenyaTaxProfilePage() {
         title="Kenya tax profile"
         description="VAT registration, PIN. Configure VAT, WHT, mappings."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Tax", href: "/settings/tax/kenya" },
           { label: "Kenya" },
         ]}

@@ -31,6 +31,8 @@ type BackendEmployee = {
   nssfNumber?: string;
   shifNumber?: string;
   residency?: string;
+  startDate?: string;
+  endDate?: string;
 };
 
 type BackendPayRunLine = {
@@ -148,6 +150,8 @@ function mapEmployee(item: BackendEmployee): Employee {
     hourlyCostRate: item.hourlyCostRate,
     contractDailyRate: item.contractDailyRate,
     currency: item.currency ?? "KES",
+    startDate: item.startDate,
+    endDate: item.endDate,
     allowances: [],
     deductions: [],
   };
@@ -313,6 +317,7 @@ export async function fetchPayRunDetailApi(
 
 export async function calculatePayRunLinesApi(payload: {
   periodStart: string;
+  autoUnpaidLeave?: boolean;
   employees: { employeeId: string; grossPay?: number; adjustments?: number; unpaidLeaveDays?: number }[];
 }): Promise<CalculatedLine[]> {
   requireLiveApi("Payroll tax calculation");
@@ -443,6 +448,18 @@ export async function savePayrollSettingsApi(patch: Partial<PayrollSettings>): P
 // ---------------------------------------------------------------------------
 // Leave Management API
 // ---------------------------------------------------------------------------
+
+export async function initLeaveBalanceApi(payload: {
+  employeeId: string;
+  year?: number;
+  annualEntitled: number;
+}): Promise<void> {
+  requireLiveApi("Leave balance init");
+  await apiRequest("/api/payroll/leave/balances/init", {
+    method: "POST",
+    body: payload,
+  });
+}
 
 export async function fetchLeavePoliciesApi(): Promise<LeavePolicy[]> {
   requireLiveApi("Leave policies");

@@ -321,7 +321,7 @@ export default function MigrationConsolePage() {
         title="Migration Console"
         description="Run dry-runs, review conflicts, and reconcile migrations from Zoho Books, QuickBooks, and SAP Business One."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Migration Console" },
         ]}
         sticky

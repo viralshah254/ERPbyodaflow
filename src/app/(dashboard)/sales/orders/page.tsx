@@ -26,6 +26,7 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import { bulkDocumentActionApi, documentActionApi, convertDocumentApi } from "@/lib/api/documents";
 import { fetchInboundOrders, acceptInboundOrder, type InboundOrderRow } from "@/lib/api/cool-catch";
+import { useNavCounts } from "@/lib/use-nav-counts";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
 import {
@@ -49,7 +50,7 @@ const scope = "sales-orders";
 
 // ─── Franchise Inbound Orders panel ──────────────────────────────────────────
 
-function FranchiseOrdersTab() {
+function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) => void }) {
   const router = useRouter();
   const [rows, setRows] = React.useState<InboundOrderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -60,12 +61,13 @@ function FranchiseOrdersTab() {
     try {
       const data = await fetchInboundOrders();
       setRows(data.items);
+      onRowsChange?.(data.items.length);
     } catch (e) {
       toast.error((e as Error).message ?? "Failed to load franchise orders.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onRowsChange]);
 
   React.useEffect(() => { void load(); }, [load]);
 
@@ -147,8 +149,12 @@ function FranchiseOrdersTab() {
 export default function SalesOrdersPage() {
   const router = useRouter();
   const baseCurrency = useBaseCurrency();
+  const navCounts = useNavCounts();
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const isFranchisor = orgRole === "FRANCHISOR";
+  const [franchiseRowsCount, setFranchiseRowsCount] = React.useState<number | null>(null);
+  const franchiseOrdersBadge =
+    franchiseRowsCount !== null ? franchiseRowsCount : (navCounts["franchise-inbound-orders"] ?? 0);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -334,10 +340,15 @@ export default function SalesOrdersPage() {
               <TabsTrigger value="franchise-orders" className="gap-1.5">
                 Franchise Orders
                 <Badge variant="secondary" className="text-xs px-1.5 py-0">Inbound</Badge>
+                {franchiseOrdersBadge > 0 ? (
+                  <Badge variant="default" className="tabular-nums h-5 min-w-5 rounded-full px-1.5 text-[10px]">
+                    {franchiseOrdersBadge > 99 ? "99+" : franchiseOrdersBadge}
+                  </Badge>
+                ) : null}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="franchise-orders" className="mt-4">
-              <FranchiseOrdersTab />
+              <FranchiseOrdersTab onRowsChange={setFranchiseRowsCount} />
             </TabsContent>
             <TabsContent value="orders" className="mt-4 space-y-4">
               <DataTableToolbar

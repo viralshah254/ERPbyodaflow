@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { PlatformSidebar } from "@/components/platform/PlatformSidebar";
 import { Header } from "@/components/layout/header";
+import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
 
 export default function PlatformLayout({
   children,
@@ -27,11 +28,7 @@ export default function PlatformLayout({
   }, [isLoading, isAuthenticated, isPlatformOperator, router]);
 
   if (isLoading || !isAuthenticated || !isPlatformOperator) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
+    return <AppSplashScreen message={isLoading ? "Loading…" : "Redirecting…"} variant="fullscreen" />;
   }
 
   return (

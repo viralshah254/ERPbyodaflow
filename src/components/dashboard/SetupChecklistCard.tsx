@@ -9,7 +9,7 @@ import * as Icons from "lucide-react";
 const MARKED_INCOMPLETE_KEY = "odaflow_setup_marked_incomplete";
 
 const STEPS: { id: string; label: string; href: string; statusKey: keyof SetupStatus }[] = [
-  { id: "company", label: "Company setup", href: "/settings/org", statusKey: "companySetupDone" },
+  { id: "company", label: "Company setup", href: "/settings", statusKey: "companySetupDone" },
   { id: "currencies", label: "Currencies", href: "/settings/financial/currencies", statusKey: "currenciesDone" },
   { id: "coa", label: "Chart of Accounts", href: "/settings/financial/chart-of-accounts", statusKey: "coaDone" },
   { id: "taxes", label: "Taxes", href: "/settings/financial/taxes", statusKey: "taxesDone" },

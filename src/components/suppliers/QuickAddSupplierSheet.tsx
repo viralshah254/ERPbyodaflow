@@ -37,6 +37,7 @@ interface FormValues {
   name: string;
   phone: string;
   email: string;
+  taxId: string;
   supplierType: string;
 }
 
@@ -60,12 +61,12 @@ export function QuickAddSupplierSheet({
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    defaultValues: { name: "", phone: "", email: "", supplierType: "OTHER" },
+    defaultValues: { name: "", phone: "", email: "", taxId: "", supplierType: "OTHER" },
   });
 
   React.useEffect(() => {
     if (open) {
-      reset({ name: initialName ?? "", phone: "", email: "", supplierType: "OTHER" });
+      reset({ name: initialName ?? "", phone: "", email: "", taxId: "", supplierType: "OTHER" });
     }
   }, [open, initialName, reset]);
 
@@ -74,11 +75,12 @@ export function QuickAddSupplierSheet({
       name: values.name.trim(),
       roles: ["supplier"],
       supplierType: values.supplierType as PartyRow["supplierType"],
-      phone: values.phone.trim() || undefined,
-      email: values.email.trim() || undefined,
+      phone: values.phone.trim(),
+      email: values.email.trim(),
+      taxId: values.taxId.trim(),
       status: "ACTIVE",
     });
-    const descParts = [created.code, values.phone.trim(), values.email.trim()].filter(Boolean);
+    const descParts = [created.code, values.phone.trim(), values.email.trim(), values.taxId.trim()].filter(Boolean);
     onSuccess({
       ...created,
       id: created.id,
@@ -122,22 +124,53 @@ export function QuickAddSupplierSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="qas-phone">Phone</Label>
+            <Label htmlFor="qas-phone">
+              Contact number <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="qas-phone"
-              placeholder="e.g. 0712 345 678"
-              {...register("phone")}
+              placeholder="e.g. +254712345678"
+              {...register("phone", { required: "Contact number is required" })}
             />
+            {errors.phone && (
+              <p className="text-xs text-destructive">{errors.phone.message}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="qas-email">Email</Label>
+            <Label htmlFor="qas-email">
+              Email <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="qas-email"
               type="email"
               placeholder="supplier@example.com"
-              {...register("email")}
+              {...register("email", {
+                required: "Email is required",
+                pattern: {
+                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                  message: "Enter a valid email address",
+                },
+              })}
             />
+            {errors.email && (
+              <p className="text-xs text-destructive">{errors.email.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="qas-tax-id">
+              KRA PIN <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="qas-tax-id"
+              placeholder="e.g. P051234567X"
+              autoComplete="off"
+              {...register("taxId", { required: "KRA PIN is required" })}
+            />
+            {errors.taxId && (
+              <p className="text-xs text-destructive">{errors.taxId.message}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">

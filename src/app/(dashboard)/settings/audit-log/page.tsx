@@ -103,7 +103,7 @@ export default function AuditLogPage() {
         title="Audit Log"
         description="Who did what, when. Before/after preview for changes."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Audit Log" },
         ]}
         sticky

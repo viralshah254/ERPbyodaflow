@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createAssetApi, fetchAssetsApi, updateAssetApi } from "@/lib/api/assets";
-import type { AssetRow, DepreciationMethod } from "@/lib/types/assets";
+import type { AssetRow, CustodyType, DepreciationMethod } from "@/lib/types/assets";
 import { fetchApSuppliersApi } from "@/lib/api/payments";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { formatMoney } from "@/lib/money";
@@ -35,32 +35,102 @@ import * as Icons from "lucide-react";
 
 const CATEGORIES = ["IT Equipment", "Machinery", "Furniture", "Vehicles", "Other"];
 
+const CUSTODY_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "ALL", label: "All custody" },
+  { value: "ORG_STOCK", label: "HQ / stock" },
+  { value: "FRANCHISE_OUTLET", label: "With franchise outlet" },
+  { value: "EMPLOYEE", label: "With employee" },
+  { value: "IN_TRANSIT", label: "In transit" },
+];
+
+function custodyLabel(r: AssetRow): string {
+  if (r.custodianOutletName) return r.custodianOutletName;
+  if (r.custodianEmployeeName) return r.custodianEmployeeName;
+  return r.currentCustodyType?.replace(/_/g, " ") ?? "—";
+}
+
+type AssetForm = {
+  code: string;
+  name: string;
+  category: string;
+  branchId: string;
+  serialNumber: string;
+  assetTag: string;
+  model: string;
+  inServiceDate: string;
+  acquisitionDate: string;
+  cost: number;
+  salvage: number;
+  usefulLifeYears: number;
+  usefulLifeMonths: string;
+  depreciationMethod: DepreciationMethod;
+  depreciationRatePct: string;
+  linkedVendorId: string;
+  linkedInvoiceId: string;
+};
+
+function emptyForm(): AssetForm {
+  return {
+    code: "",
+    name: "",
+    category: CATEGORIES[0] ?? "",
+    branchId: "",
+    serialNumber: "",
+    assetTag: "",
+    model: "",
+    inServiceDate: "",
+    acquisitionDate: new Date().toISOString().slice(0, 10),
+    cost: 0,
+    salvage: 0,
+    usefulLifeYears: 3,
+    usefulLifeMonths: "",
+    depreciationMethod: "STRAIGHT_LINE",
+    depreciationRatePct: "",
+    linkedVendorId: "",
+    linkedInvoiceId: "",
+  };
+}
+
+function formFromRow(r: AssetRow): AssetForm {
+  return {
+    code: r.code,
+    name: r.name,
+    category: r.category,
+    branchId: r.branchId ?? "",
+    serialNumber: r.serialNumber ?? "",
+    assetTag: r.assetTag ?? "",
+    model: r.model ?? "",
+    inServiceDate: r.inServiceDate ?? "",
+    acquisitionDate: r.acquisitionDate,
+    cost: r.cost,
+    salvage: r.salvage,
+    usefulLifeYears: r.usefulLifeYears,
+    usefulLifeMonths: r.usefulLifeMonths != null ? String(r.usefulLifeMonths) : "",
+    depreciationMethod: r.depreciationMethod,
+    depreciationRatePct: r.depreciationRatePct != null ? String(r.depreciationRatePct) : "",
+    linkedVendorId: r.linkedVendorId ?? "",
+    linkedInvoiceId: r.linkedInvoiceId ?? "",
+  };
+}
+
 export default function AssetRegisterPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [custodyFilter, setCustodyFilter] = React.useState("ALL");
   const [isLoading, setIsLoading] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<AssetRow | null>(null);
   const [suppliers, setSuppliers] = React.useState<Array<{ id: string; name: string }>>([]);
-  const [form, setForm] = React.useState({
-    code: "",
-    name: "",
-    category: "",
-    acquisitionDate: "",
-    cost: 0,
-    salvage: 0,
-    usefulLifeYears: 3,
-    depreciationMethod: "STRAIGHT_LINE" as DepreciationMethod,
-    linkedVendorId: "",
-    linkedInvoiceId: "",
-  });
+  const [form, setForm] = React.useState<AssetForm>(() => emptyForm());
 
   const [rows, setRows] = React.useState<AssetRow[]>([]);
   const refresh = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const [assets, supplierOptions] = await Promise.all([
-        fetchAssetsApi(),
+        fetchAssetsApi(
+          custodyFilter === "ALL" ? undefined : { custodyType: custodyFilter as CustodyType }
+        ),
         fetchApSuppliersApi(),
       ]);
       setRows(assets);
@@ -70,7 +140,8 @@ export default function AssetRegisterPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [custodyFilter]);
+
   const filtered = React.useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -78,7 +149,11 @@ export default function AssetRegisterPage() {
       (r) =>
         r.code.toLowerCase().includes(q) ||
         r.name.toLowerCase().includes(q) ||
-        r.category.toLowerCase().includes(q)
+        r.category.toLowerCase().includes(q) ||
+        (r.assetTag?.toLowerCase().includes(q) ?? false) ||
+        (r.serialNumber?.toLowerCase().includes(q) ?? false) ||
+        (r.custodianOutletName?.toLowerCase().includes(q) ?? false) ||
+        (r.custodianEmployeeName?.toLowerCase().includes(q) ?? false)
     );
   }, [rows, search]);
 
@@ -88,35 +163,13 @@ export default function AssetRegisterPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({
-      code: "",
-      name: "",
-      category: CATEGORIES[0] ?? "",
-      acquisitionDate: new Date().toISOString().slice(0, 10),
-      cost: 0,
-      salvage: 0,
-      usefulLifeYears: 3,
-      depreciationMethod: "STRAIGHT_LINE",
-      linkedVendorId: "",
-      linkedInvoiceId: "",
-    });
+    setForm(emptyForm());
     setDrawerOpen(true);
   };
 
   const openEdit = (r: AssetRow) => {
     setEditing(r);
-    setForm({
-      code: r.code,
-      name: r.name,
-      category: r.category,
-      acquisitionDate: r.acquisitionDate,
-      cost: r.cost,
-      salvage: r.salvage,
-      usefulLifeYears: r.usefulLifeYears,
-      depreciationMethod: r.depreciationMethod,
-      linkedVendorId: r.linkedVendorId ?? "",
-      linkedInvoiceId: r.linkedInvoiceId ?? "",
-    });
+    setForm(formFromRow(r));
     setDrawerOpen(true);
   };
 
@@ -125,18 +178,42 @@ export default function AssetRegisterPage() {
       { id: "code", header: "Code", accessor: (r: AssetRow) => <span className="font-medium">{r.code}</span>, sticky: true },
       { id: "name", header: "Name", accessor: "name" as keyof AssetRow },
       { id: "category", header: "Category", accessor: "category" as keyof AssetRow },
+      {
+        id: "assigned",
+        header: "Assigned to",
+        accessor: (r: AssetRow) => <span className="text-sm text-muted-foreground">{custodyLabel(r)}</span>,
+      },
+      {
+        id: "tag",
+        header: "Tag / serial",
+        accessor: (r: AssetRow) => (
+          <span className="text-xs text-muted-foreground font-mono">
+            {[r.assetTag, r.serialNumber].filter(Boolean).join(" · ") || "—"}
+          </span>
+        ),
+      },
       { id: "acquisitionDate", header: "Acquired", accessor: "acquisitionDate" as keyof AssetRow },
       { id: "cost", header: "Cost", accessor: (r: AssetRow) => formatMoney(r.cost, "KES") },
-      { id: "status", header: "Status", accessor: (r: AssetRow) => r.status },
+      { id: "status", header: "Status", accessor: (r: AssetRow) => r.status.replace(/_/g, " ") },
     ],
     []
   );
+
+  const parseOptionalInt = (v: string): number | undefined => {
+    const n = Number(v);
+    return v.trim() !== "" && Number.isFinite(n) ? Math.round(n) : undefined;
+  };
+
+  const parseOptionalRate = (v: string): number | undefined => {
+    const n = Number(v);
+    return v.trim() !== "" && Number.isFinite(n) ? n : undefined;
+  };
 
   return (
     <PageShell>
       <PageHeader
         title="Asset register"
-        description="Create/edit assets, depreciation method, linked vendor/invoice"
+        description="Custody (outlets & staff), depreciation, and linked source documents."
         breadcrumbs={[
           { label: "Assets", href: "/assets/overview" },
           { label: "Register" },
@@ -145,7 +222,7 @@ export default function AssetRegisterPage() {
         showCommandHint
         actions={
           <div className="flex items-center gap-2">
-            <ExplainThis prompt="Explain asset register, depreciation methods, and linked vendor/invoice." label="Explain register" />
+            <ExplainThis prompt="Explain asset register, custody vs ownership, and depreciation methods." label="Explain register" />
             <Button size="sm" onClick={openCreate}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add asset
@@ -154,15 +231,33 @@ export default function AssetRegisterPage() {
         }
       />
       <div className="p-6 space-y-4">
-        <DataTableToolbar
-          searchPlaceholder="Search by code, name, category..."
-          searchValue={search}
-          onSearchChange={setSearch}
-        />
+        <div className="flex flex-wrap items-end gap-4">
+          <DataTableToolbar
+            searchPlaceholder="Search code, name, tag, assignee…"
+            searchValue={search}
+            onSearchChange={setSearch}
+            className="flex-1 min-w-[200px]"
+          />
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Custody</Label>
+            <Select value={custodyFilter} onValueChange={setCustodyFilter}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CUSTODY_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>Assets</CardTitle>
-            <CardDescription>Live asset register with cost, salvage, useful life, and linked source references.</CardDescription>
+            <CardDescription>Legal register lives here; custody can move to franchisees or staff without changing book cost.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<AssetRow>
@@ -176,10 +271,10 @@ export default function AssetRegisterPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit asset" : "Add asset"}</SheetTitle>
-            <SheetDescription>Create and maintain fixed assets in the backend register.</SheetDescription>
+            <SheetDescription>Financial master record — use the asset detail page to transfer custody.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -191,6 +286,28 @@ export default function AssetRegisterPage() {
               <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Asset name" />
             </div>
             <div className="space-y-2">
+              <Label>Branch ID (optional)</Label>
+              <Input
+                value={form.branchId}
+                onChange={(e) => setForm((p) => ({ ...p, branchId: e.target.value }))}
+                placeholder="Branch document id"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Serial</Label>
+                <Input value={form.serialNumber} onChange={(e) => setForm((p) => ({ ...p, serialNumber: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Asset tag</Label>
+                <Input value={form.assetTag} onChange={(e) => setForm((p) => ({ ...p, assetTag: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Model</Label>
+              <Input value={form.model} onChange={(e) => setForm((p) => ({ ...p, model: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
               <Label>Category</Label>
               <Select value={form.category} onValueChange={(v) => setForm((p) => ({ ...p, category: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
@@ -200,6 +317,14 @@ export default function AssetRegisterPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>In-service date (optional)</Label>
+              <Input
+                type="date"
+                value={form.inServiceDate}
+                onChange={(e) => setForm((p) => ({ ...p, inServiceDate: e.target.value }))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Acquisition date</Label>
@@ -217,7 +342,21 @@ export default function AssetRegisterPage() {
             </div>
             <div className="space-y-2">
               <Label>Useful life (years)</Label>
-              <Input type="number" value={form.usefulLifeYears || ""} onChange={(e) => setForm((p) => ({ ...p, usefulLifeYears: Number(e.target.value) || 0 }))} placeholder="3" />
+              <Input
+                type="number"
+                value={form.usefulLifeYears || ""}
+                onChange={(e) => setForm((p) => ({ ...p, usefulLifeYears: Number(e.target.value) || 0 }))}
+                placeholder="3"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Useful life (months override, optional)</Label>
+              <Input
+                type="number"
+                value={form.usefulLifeMonths}
+                onChange={(e) => setForm((p) => ({ ...p, usefulLifeMonths: e.target.value }))}
+                placeholder="e.g. 36 — else years × 12"
+              />
             </div>
             <div className="space-y-2">
               <Label>Depreciation method</Label>
@@ -225,9 +364,21 @@ export default function AssetRegisterPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="STRAIGHT_LINE">Straight-line</SelectItem>
+                  <SelectItem value="REDUCING_BALANCE">Reducing balance</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {form.depreciationMethod === "REDUCING_BALANCE" && (
+              <div className="space-y-2">
+                <Label>Annual depreciation % (reducing balance)</Label>
+                <Input
+                  type="number"
+                  value={form.depreciationRatePct}
+                  onChange={(e) => setForm((p) => ({ ...p, depreciationRatePct: e.target.value }))}
+                  placeholder="e.g. 25"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Linked vendor</Label>
               <Select value={form.linkedVendorId} onValueChange={(v) => setForm((p) => ({ ...p, linkedVendorId: v }))}>
@@ -249,32 +400,34 @@ export default function AssetRegisterPage() {
             <Button
               onClick={async () => {
                 try {
+                  const usefulLifeMonths = parseOptionalInt(form.usefulLifeMonths);
+                  const depreciationRatePct = parseOptionalRate(form.depreciationRatePct);
+                  const patchBody = {
+                    code: form.code,
+                    name: form.name,
+                    category: form.category,
+                    branchId: form.branchId || undefined,
+                    serialNumber: form.serialNumber || undefined,
+                    assetTag: form.assetTag || undefined,
+                    model: form.model || undefined,
+                    inServiceDate: form.inServiceDate || undefined,
+                    acquisitionDate: form.acquisitionDate,
+                    cost: form.cost,
+                    salvage: form.salvage,
+                    usefulLifeYears: form.usefulLifeYears,
+                    usefulLifeMonths,
+                    depreciationMethod: form.depreciationMethod,
+                    depreciationRatePct:
+                      form.depreciationMethod === "REDUCING_BALANCE" ? depreciationRatePct : undefined,
+                    linkedVendorId: form.linkedVendorId || undefined,
+                    linkedInvoiceId: form.linkedInvoiceId || undefined,
+                  };
                   if (editing) {
-                    await updateAssetApi(editing.id, {
-                      code: form.code,
-                      name: form.name,
-                      category: form.category,
-                      acquisitionDate: form.acquisitionDate,
-                      cost: form.cost,
-                      salvage: form.salvage,
-                      usefulLifeYears: form.usefulLifeYears,
-                      depreciationMethod: form.depreciationMethod,
-                      linkedVendorId: form.linkedVendorId || undefined,
-                      linkedInvoiceId: form.linkedInvoiceId || undefined,
-                    });
+                    await updateAssetApi(editing.id, patchBody);
                     toast.success("Asset updated.");
                   } else {
                     await createAssetApi({
-                      code: form.code,
-                      name: form.name,
-                      category: form.category,
-                      acquisitionDate: form.acquisitionDate,
-                      cost: form.cost,
-                      salvage: form.salvage,
-                      usefulLifeYears: form.usefulLifeYears,
-                      depreciationMethod: form.depreciationMethod,
-                      linkedVendorId: form.linkedVendorId || undefined,
-                      linkedInvoiceId: form.linkedInvoiceId || undefined,
+                      ...patchBody,
                       status: "ACTIVE",
                     });
                     toast.success("Asset created.");

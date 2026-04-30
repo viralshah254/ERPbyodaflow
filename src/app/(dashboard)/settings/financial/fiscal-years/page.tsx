@@ -54,7 +54,7 @@ export default function FiscalYearsPage() {
         title="Fiscal years"
         description="Years and periods backed by the finance close calendar."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Financial", href: "/settings/financial/currencies" },
           { label: "Fiscal years" },
         ]}

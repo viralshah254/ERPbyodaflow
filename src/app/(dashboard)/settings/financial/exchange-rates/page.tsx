@@ -171,7 +171,7 @@ export default function ExchangeRatesSettingsPage() {
         title="Exchange rates"
         description={`Manage manual and imported rates. Base: ${settings.baseCurrency}`}
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Financial", href: "/settings/financial/currencies" },
           { label: "Exchange rates" },
         ]}

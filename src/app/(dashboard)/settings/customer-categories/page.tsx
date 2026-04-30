@@ -87,7 +87,7 @@ export default function CustomerCategoriesPage() {
         title="Customer categories"
         description="Segment customers into categories for pricing, credit policy, and reporting."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Customer categories" },
         ]}
         sticky

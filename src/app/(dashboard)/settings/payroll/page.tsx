@@ -64,7 +64,7 @@ export default function PayrollSettingsPage() {
         title="Payroll settings"
         description="Company-level payroll configuration — jurisdiction, currency, and pay frequency."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Payroll" },
         ]}
         sticky

@@ -132,7 +132,7 @@ export default function UomSettingsPage() {
         title="UOM catalog"
         description="Units of measure and global conversions. Used by product packaging and pricing."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Inventory", href: "/settings/inventory/costing" },
           { label: "UOM catalog" },
         ]}

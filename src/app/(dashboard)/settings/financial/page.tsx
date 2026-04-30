@@ -53,7 +53,7 @@ export default function FinancialSettingsHubPage() {
         title="Financial settings"
         description="Currencies, exchange rates, and related configuration"
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Financial" },
         ]}
         sticky

@@ -1392,6 +1392,7 @@ const STATUS_COLORS: Record<string, string> = {
   PAID: "border-emerald-500 bg-emerald-100 text-emerald-800",
   DELIVERED: "border-emerald-400 bg-emerald-50 text-emerald-700",
   IN_TRANSIT: "border-blue-300 bg-blue-50 text-blue-600",
+  CONVERTED: "border-violet-400 bg-violet-50 text-violet-800",
   CANCELLED: "border-red-300 bg-red-50 text-red-500",
   REVERSED: "border-red-400 bg-red-50 text-red-600",
 };

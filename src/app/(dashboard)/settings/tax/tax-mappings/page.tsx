@@ -131,7 +131,7 @@ export default function TaxMappingsPage() {
         title="Tax mappings"
         description="Link tax codes to COA accounts. VAT Output, VAT Input, WHT Payable."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Tax", href: "/settings/tax/kenya" },
           { label: "Tax mappings" },
         ]}

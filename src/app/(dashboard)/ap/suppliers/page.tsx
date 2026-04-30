@@ -47,6 +47,7 @@ export default function APSuppliersPage() {
   const [form, setForm] = React.useState({
     name: "",
     email: "",
+    phone: "",
     paymentTermsId: "",
     defaultCurrency: "KES",
     taxId: "",
@@ -88,6 +89,7 @@ export default function APSuppliersPage() {
       setForm({
         name: "",
         email: "",
+        phone: "",
         paymentTermsId: "",
         defaultCurrency: baseCode,
         taxId: "",
@@ -102,6 +104,7 @@ export default function APSuppliersPage() {
         setForm({
           name: party.name ?? "",
           email: party.email ?? "",
+          phone: party.phone ?? "",
           paymentTermsId: party.paymentTermsId ?? "",
           defaultCurrency: party.defaultCurrency ?? "KES",
           taxId: party.taxId ?? "",
@@ -134,10 +137,24 @@ export default function APSuppliersPage() {
     return () => clearTimeout(timer);
   }, [drawerOpen, form.name, editingId]);
 
+  const emailLooksValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
   function validateForm(): boolean {
     const nextErrors: Record<string, string> = {};
     if (!form.name.trim()) {
       nextErrors.name = "Name is required.";
+    }
+    const email = form.email.trim();
+    if (!email) {
+      nextErrors.email = "Email is required.";
+    } else if (!emailLooksValid(email)) {
+      nextErrors.email = "Enter a valid email address.";
+    }
+    if (!form.phone.trim()) {
+      nextErrors.phone = "Contact number is required.";
+    }
+    if (!form.taxId.trim()) {
+      nextErrors.taxId = "KRA PIN is required.";
     }
     const currency = form.defaultCurrency.trim().toUpperCase();
     if (currency && !/^[A-Z]{3}$/.test(currency)) {
@@ -156,10 +173,11 @@ export default function APSuppliersPage() {
     const payload: PartyPayload = {
       name: form.name.trim(),
       roles: ["supplier"],
-      email: form.email.trim() || undefined,
+      email: form.email.trim(),
+      phone: form.phone.trim(),
       paymentTermsId: form.paymentTermsId || undefined,
       defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,
-      taxId: form.taxId.trim() || undefined,
+      taxId: form.taxId.trim(),
       status: "ACTIVE",
     };
     const optimisticId = editingId ?? `optimistic-supplier-${Date.now()}`;
@@ -293,7 +311,9 @@ export default function APSuppliersPage() {
       >
         <div className="space-y-4 pr-4">
           <div className="space-y-2">
-            <Label>Name</Label>
+            <Label>
+              Name <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={form.name}
               onChange={(e) => {
@@ -304,8 +324,33 @@ export default function APSuppliersPage() {
             {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
           </div>
           <div className="space-y-2">
-            <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} />
+            <Label>
+              Email <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => {
+                setForm((prev) => ({ ...prev, email: e.target.value }));
+                if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
+              }}
+            />
+            {errors.email ? <p className="text-xs text-destructive">{errors.email}</p> : null}
+          </div>
+          <div className="space-y-2">
+            <Label>
+              Contact number <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => {
+                setForm((prev) => ({ ...prev, phone: e.target.value }));
+                if (errors.phone) setErrors((prev) => ({ ...prev, phone: "" }));
+              }}
+              placeholder="e.g. +254712345678"
+            />
+            {errors.phone ? <p className="text-xs text-destructive">{errors.phone}</p> : null}
           </div>
           <div className="space-y-2">
             <Label>Payment terms</Label>
@@ -349,8 +394,18 @@ export default function APSuppliersPage() {
             {errors.defaultCurrency ? <p className="text-xs text-destructive">{errors.defaultCurrency}</p> : null}
           </div>
           <div className="space-y-2">
-            <Label>Tax PIN</Label>
-            <Input value={form.taxId} onChange={(e) => setForm((prev) => ({ ...prev, taxId: e.target.value }))} />
+            <Label>
+              KRA PIN <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={form.taxId}
+              onChange={(e) => {
+                setForm((prev) => ({ ...prev, taxId: e.target.value }));
+                if (errors.taxId) setErrors((prev) => ({ ...prev, taxId: "" }));
+              }}
+              placeholder="e.g. P051234567X"
+            />
+            {errors.taxId ? <p className="text-xs text-destructive">{errors.taxId}</p> : null}
           </div>
         </div>
       </EntityDrawer>

@@ -164,7 +164,7 @@ export default function UsersRolesPage() {
         title="Users & Roles"
         description="Manage users, roles, and permissions"
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Users & Roles" },
         ]}
         sticky

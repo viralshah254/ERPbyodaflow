@@ -92,7 +92,7 @@ export default function NumberingSequencesPage() {
         title="Numbering Sequences"
         description="Document number prefixes, next value, padding"
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Numbering Sequences" },
         ]}
         sticky

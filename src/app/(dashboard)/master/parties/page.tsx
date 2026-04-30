@@ -74,6 +74,7 @@ export default function MasterPartiesPage() {
   const [supplierCodeLoading, setSupplierCodeLoading] = React.useState(false);
   const [customerCodeLoading, setCustomerCodeLoading] = React.useState(false);
   const [formPhonePrefix, setFormPhonePrefix] = React.useState("+254");
+  const [formTaxId, setFormTaxId] = React.useState("");
 
   const label =
     tab === "customers"
@@ -206,6 +207,7 @@ export default function MasterPartiesPage() {
     setFormEmail("");
     setFormPhone("");
     setFormPhonePrefix("+254");
+    setFormTaxId("");
     setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
     setFormSupplierType(supplierType || "RAW_MATERIAL");
     setFormCustomerCategoryId("");
@@ -245,6 +247,7 @@ export default function MasterPartiesPage() {
     setFormCode(row.code ?? "");
     setFormEmail(row.email ?? "");
     setFormPhone(row.phone ?? "");
+    setFormTaxId(row.taxId ?? "");
     setFormCustomerType(row.customerType ?? "RETAILER");
     setFormSupplierType(row.supplierType ?? "RAW_MATERIAL");
     setFormCustomerCategoryId(row.customerCategoryId ?? "");
@@ -276,6 +279,25 @@ export default function MasterPartiesPage() {
       toast.error("Name is required.");
       return;
     }
+    if (tab === "suppliers") {
+      const email = formEmail.trim();
+      if (!email) {
+        toast.error("Email is required.");
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        toast.error("Enter a valid email address.");
+        return;
+      }
+      if (!formPhone.trim()) {
+        toast.error("Contact number is required.");
+        return;
+      }
+      if (!formTaxId.trim()) {
+        toast.error("KRA PIN is required.");
+        return;
+      }
+    }
     setSaving(true);
     try {
       const roles =
@@ -301,6 +323,7 @@ export default function MasterPartiesPage() {
         customerType: isCustomerTab ? formCustomerType : undefined,
         customerCategoryId: isCustomerTab ? formCustomerCategoryId || undefined : undefined,
         supplierType: tab === "suppliers" ? formSupplierType : undefined,
+        taxId: tab === "suppliers" ? formTaxId.trim() : undefined,
         paymentTermsId: formPaymentTermsId || undefined,
         creditControlMode: isCustomerTab && formCreditControlMode ? formCreditControlMode : undefined,
         creditLimitAmount: isCustomerTab && creditLimitAmountNum != null && !isNaN(creditLimitAmountNum) ? creditLimitAmountNum : undefined,
@@ -575,11 +598,17 @@ export default function MasterPartiesPage() {
             )}
           </div>
           <div className="space-y-2">
-            <Label>Email</Label>
+            <Label>
+              Email
+              {tab === "suppliers" ? <span className="text-destructive"> *</span> : null}
+            </Label>
             <Input type="email" placeholder="email@example.com" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Phone</Label>
+            <Label>
+              Phone
+              {tab === "suppliers" ? <span className="text-destructive"> *</span> : null}
+            </Label>
             <div className="flex gap-1">
               <Input
                 className="w-20 shrink-0 font-mono text-sm"
@@ -661,6 +690,17 @@ export default function MasterPartiesPage() {
                   <SelectItem value="OTHER">Other</SelectItem>
                 </SelectContent>
               </Select>
+              <div className="space-y-2 pt-2">
+                <Label>
+                  KRA PIN <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  placeholder="e.g. P051234567X"
+                  value={formTaxId}
+                  onChange={(e) => setFormTaxId(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
             </div>
           )}
 

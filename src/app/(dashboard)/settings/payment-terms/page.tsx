@@ -111,7 +111,7 @@ export default function PaymentTermsPage() {
         title="Payment terms"
         description="Define payment conditions assigned to customers and suppliers (e.g. Net 30, COD, EOM+15)."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Payment terms" },
         ]}
         sticky

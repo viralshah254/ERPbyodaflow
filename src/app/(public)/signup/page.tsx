@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { AppFrame } from "@/components/marketing/app-frame";
+import { OdaLogo } from "@/components/brand/OdaLogo";
+import { ODA_BRAND } from "@/lib/brand";
 import * as Icons from "lucide-react";
 
 export default function SignupPage() {
@@ -13,6 +15,9 @@ export default function SignupPage() {
         <div className="grid lg:grid-cols-2 gap-12 items-center max-w-6xl mx-auto">
           <div>
             <div className="mb-8">
+              <div className="mb-6">
+                <OdaLogo height={40} />
+              </div>
               <h1 className="text-3xl font-bold mb-2">Organization setup is assisted</h1>
               <p className="text-muted-foreground">
                 New tenants and the first admin account are provisioned by OdaFlow or your
@@ -48,11 +53,13 @@ export default function SignupPage() {
 
           <div className="hidden lg:block">
             <AppFrame>
-              <div className="p-8 bg-muted/30 min-h-[500px] flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <Icons.Box className="h-16 w-16 mx-auto text-primary" />
-                  <h3 className="text-xl font-semibold">ERP by OdaFlow</h3>
-                  <p className="text-muted-foreground max-w-sm">
+              <div
+                className="flex min-h-[500px] items-center justify-center p-8"
+                style={{ backgroundColor: ODA_BRAND.navy }}
+              >
+                <div className="max-w-sm space-y-4 text-center">
+                  <OdaLogo height={56} className="mx-auto max-w-[min(100%,280px)]" />
+                  <p className="text-sm text-white/85">
                     Provision manufacturers, distributors, and retail orgs with controlled
                     onboarding instead of browser-only demo accounts.
                   </p>

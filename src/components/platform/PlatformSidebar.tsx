@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { OdaLogo } from "@/components/brand/OdaLogo";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
@@ -15,7 +16,6 @@ import {
   HeadphonesIcon,
   ClipboardList,
   Settings,
-  Box,
 } from "lucide-react";
 
 const PLATFORM_NAV: { label: string; href: string; icon: React.ComponentType<{ className?: string }>; permission?: string }[] = [
@@ -43,11 +43,11 @@ export function PlatformSidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center gap-2 border-b px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground">
-          <Box className="h-5 w-5" />
-        </div>
-        <span className="font-semibold">OdaFlow Platform</span>
+      <div className="flex h-16 min-w-0 items-center gap-2 border-b px-3">
+        <Link href="/platform" className="flex min-w-0 flex-1 items-center gap-2">
+          <OdaLogo height={28} />
+          <span className="truncate text-sm font-semibold">Platform</span>
+        </Link>
       </div>
       <ScrollArea className="flex-1 py-4">
         <nav className="grid gap-1 px-2">

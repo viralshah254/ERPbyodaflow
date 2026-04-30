@@ -29,7 +29,7 @@ export default function OpsRunbookPage() {
   if (!state) {
     return (
       <PageShell>
-        <PageHeader title="Operational runbook" breadcrumbs={[{ label: "Settings", href: "/settings/org" }, { label: "Operational runbook" }]} />
+        <PageHeader title="Operational runbook" breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Operational runbook" }]} />
         <div className="p-6 text-sm text-muted-foreground">Loading…</div>
       </PageShell>
     );
@@ -40,7 +40,7 @@ export default function OpsRunbookPage() {
       <PageHeader
         title="Operational runbook"
         description="Track readiness checks, dependencies, and retention/release gates."
-        breadcrumbs={[{ label: "Settings", href: "/settings/org" }, { label: "Operational runbook" }]}
+        breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Operational runbook" }]}
         sticky
         showCommandHint
       />

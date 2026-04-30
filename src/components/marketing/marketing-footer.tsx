@@ -5,6 +5,8 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
 
+import { OdaLogo } from "@/components/brand/OdaLogo";
+
 const footerLinks = {
   Product: [
     { label: "Features", href: "/features" },
@@ -32,12 +34,7 @@ export function MarketingFooter() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground">
-                <Icons.Box className="h-5 w-5" />
-              </div>
-              <span className="font-semibold">ERP by OdaFlow</span>
-            </Link>
+            <OdaLogo href="/" height={32} className="mb-4 block" />
             <p className="text-sm text-muted-foreground">
               The ERP built for trade in the real world.
             </p>

@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
 
 const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   MANUFACTURER: "fmcg-manufacturer",
@@ -50,14 +51,7 @@ export default function DashboardLayout({
   }, [org, templateId, applyTemplate]);
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
-          <span className="text-sm text-muted-foreground">Restoring session…</span>
-        </div>
-      </div>
-    );
+    return <AppSplashScreen message="Restoring session…" variant="fullscreen" />;
   }
 
   return (

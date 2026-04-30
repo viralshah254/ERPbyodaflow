@@ -441,7 +441,7 @@ export default function PlatformSettingsPage() {
         title="Platform control plane"
         description="Operate every ERP customer from one internal console: provisioning, commercial state, entitlements, and audit."
         breadcrumbs={[
-          { label: "Settings", href: "/settings/org" },
+          { label: "Settings", href: "/settings" },
           { label: "Platform" },
         ]}
         sticky

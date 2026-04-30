@@ -12,6 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppFrame } from "@/components/marketing/app-frame";
+import { OdaLogo } from "@/components/brand/OdaLogo";
+import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
+import { ODA_BRAND } from "@/lib/brand";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 import { isFirebaseConfigured, signInAndGetIdToken, setRememberMeUntil, clearRememberMeUntil } from "@/lib/firebase";
@@ -146,6 +149,9 @@ function LoginContent() {
           {/* Left: Form */}
           <div>
             <div className="mb-8">
+              <div className="mb-6">
+                <OdaLogo height={40} />
+              </div>
               <h1 className="text-3xl font-bold mb-2">Sign in to your account</h1>
               <p className="text-muted-foreground">
                 Welcome back. Enter your credentials to continue.
@@ -255,11 +261,13 @@ function LoginContent() {
           {/* Right: Visual */}
           <div className="hidden lg:block">
             <AppFrame>
-              <div className="p-8 bg-muted/30 min-h-[500px] flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <Icons.Box className="h-16 w-16 mx-auto text-primary" />
-                  <h3 className="text-xl font-semibold">ERP by OdaFlow</h3>
-                  <p className="text-muted-foreground max-w-sm">
+              <div
+                className="flex min-h-[500px] items-center justify-center p-8"
+                style={{ backgroundColor: ODA_BRAND.navy }}
+              >
+                <div className="max-w-sm space-y-4 text-center">
+                  <OdaLogo height={56} className="mx-auto max-w-[min(100%,280px)]" />
+                  <p className="text-sm text-white/85">
                     Manage inventory, orders, finance, and more—all in one place.
                   </p>
                 </div>
@@ -274,7 +282,9 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <React.Suspense fallback={<div className="min-h-[calc(100vh-8rem)] flex items-center justify-center">Loading...</div>}>
+    <React.Suspense
+      fallback={<AppSplashScreen message="Loading…" variant="fullscreen" />}
+    >
       <LoginContent />
     </React.Suspense>
   );
