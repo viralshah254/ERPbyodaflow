@@ -48,6 +48,12 @@ function statusVariant(s: string): "default" | "secondary" | "outline" {
   return "default";
 }
 
+function employmentLabel(t: string) {
+  if (t === "CONSULTANT") return "Consultant";
+  if (t === "CASUAL") return "Casual";
+  return "Full-time";
+}
+
 function fmt(n: number, currency: string) {
   return formatMoney(n, currency);
 }
@@ -66,6 +72,8 @@ export default function PayRunsPage() {
   const [runs, setRuns] = React.useState<PayRun[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [calculatedLines, setCalculatedLines] = React.useState<CalculatedLine[] | null>(null);
+  /** Deduction amount for CASUAL employees (manual); keyed by employeeId */
+  const [casualDeductions, setCasualDeductions] = React.useState<Record<string, number>>({});
   const [expandedLineId, setExpandedLineId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -119,6 +127,13 @@ export default function PayRunsPage() {
         })),
       });
       setCalculatedLines(lines);
+      setCasualDeductions((prev) => {
+        const next: Record<string, number> = {};
+        for (const line of lines) {
+          if (line.requiresManualDeductions) next[line.employeeId] = prev[line.employeeId] ?? 0;
+        }
+        return next;
+      });
       if (lines.length > 0) {
         setCurrency(lines[0].currency ?? "KES");
       }
@@ -131,9 +146,13 @@ export default function PayRunsPage() {
   };
 
   const summaryLines = calculatedLines ?? [];
+  const effectiveDeduction = (l: CalculatedLine) =>
+    l.requiresManualDeductions ? (casualDeductions[l.employeeId] ?? 0) : l.totalEmployeeDeductions;
+  const effectiveNet = (l: CalculatedLine) => Math.round((l.grossPay - effectiveDeduction(l)) * 100) / 100;
+
   const totalGross = summaryLines.reduce((s, l) => s + l.grossPay, 0);
-  const totalNet = summaryLines.reduce((s, l) => s + l.netPay, 0);
-  const totalDeductions = summaryLines.reduce((s, l) => s + l.totalEmployeeDeductions, 0);
+  const totalNet = summaryLines.reduce((s, l) => s + effectiveNet(l), 0);
+  const totalDeductions = summaryLines.reduce((s, l) => s + effectiveDeduction(l), 0);
   const totalEmployerNssf = summaryLines.reduce((s, l) => s + l.totalEmployerCost, 0);
 
   const handleCreate = async (andSubmit = false) => {
@@ -146,14 +165,22 @@ export default function PayRunsPage() {
         periodEnd: `${month}-31`,
         branchId,
         currency,
-        lines: summaryLines.map((l) => ({
-          employeeId: l.employeeId,
-          grossPay: l.grossPay,
-          deductions: l.totalEmployeeDeductions,
-          statBreakdown: l.statBreakdown,
-          employmentType: l.employmentType,
-          taxCountry: l.taxCountry,
-        })),
+        lines: summaryLines.map((l) => {
+          const ded = effectiveDeduction(l);
+          const manual =
+            l.requiresManualDeductions && ded > 0
+              ? [{ label: "Manual deductions", amount: ded }]
+              : undefined;
+          return {
+            employeeId: l.employeeId,
+            grossPay: l.grossPay,
+            deductions: ded,
+            statBreakdown: l.statBreakdown,
+            manualDeductionLines: manual,
+            employmentType: l.employmentType,
+            taxCountry: l.taxCountry,
+          };
+        }),
       };
       const created = await createPayRunApi(payload);
       if (andSubmit) await submitPayRunForApprovalApi(created.id);
@@ -253,7 +280,7 @@ export default function PayRunsPage() {
         </Card>
       </div>
 
-      <Sheet open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) setCalculatedLines(null); }}>
+      <Sheet open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) { setCalculatedLines(null); setCasualDeductions({}); } }}>
         <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>New pay run</SheetTitle>
@@ -307,29 +334,65 @@ export default function PayRunsPage() {
               <div className="space-y-3">
                 <p className="text-sm font-medium">Tax breakdown per employee</p>
                 <div className="divide-y rounded-lg border text-sm">
-                  {calculatedLines.map((line) => (
+                  {calculatedLines.map((line) => {
+                    const ed = effectiveDeduction(line);
+                    const en = effectiveNet(line);
+                    return (
                     <div key={line.employeeId} className="p-3">
                       <div
-                        className="flex items-center gap-2 cursor-pointer"
+                        className="flex flex-wrap items-center gap-2 cursor-pointer"
                         onClick={() => setExpandedLineId(expandedLineId === line.employeeId ? null : line.employeeId)}
                       >
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-[140px]">
                           <span className="font-medium">{line.employeeName}</span>
                           <span className="ml-2 text-xs text-muted-foreground">
-                            {line.employmentType === "CONSULTANT" ? "Consultant" : "Full-time"} · {line.taxCountry}
+                            {employmentLabel(line.employmentType)} · {line.taxCountry}
                           </span>
                         </div>
                         <span className="text-muted-foreground">{fmt(line.grossPay, line.currency)}</span>
-                        <span className="text-red-500">−{fmt(line.totalEmployeeDeductions, line.currency)}</span>
-                        <span className="font-semibold text-green-600">{fmt(line.netPay, line.currency)}</span>
-                        <Icons.ChevronDown className={`h-4 w-4 transition-transform ${expandedLineId === line.employeeId ? "rotate-180" : ""}`} />
+                        <span className="text-red-500">−{fmt(ed, line.currency)}</span>
+                        <span className="font-semibold text-green-600">{fmt(en, line.currency)}</span>
+                        <Icons.ChevronDown className={`h-4 w-4 transition-transform shrink-0 ${expandedLineId === line.employeeId ? "rotate-180" : ""}`} />
                       </div>
+                      {line.requiresManualDeductions && (
+                        <div className="mt-2 flex items-center gap-2 text-sm">
+                          <Label htmlFor={`casual-ded-${line.employeeId}`} className="text-muted-foreground shrink-0">Manual deductions</Label>
+                          <Input
+                            id={`casual-ded-${line.employeeId}`}
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className="max-w-[140px] h-8"
+                            value={casualDeductions[line.employeeId] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value === "" ? 0 : Number(e.target.value);
+                              setCasualDeductions((prev) => ({ ...prev, [line.employeeId]: Number.isFinite(v) ? Math.max(0, v) : 0 }));
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      )}
                       {expandedLineId === line.employeeId && (
                         <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground border-t pt-3">
+                          {(line.statBreakdown.payeTaxableIncome ?? 0) > 0 && line.employmentType === "FULL_TIME" && line.taxCountry === "KE" && (
+                            <><span>PAYE taxable pay</span><span className="text-right">{fmt(line.statBreakdown.payeTaxableIncome ?? 0, line.currency)}</span></>
+                          )}
+                          {(line.statBreakdown.payePersonalRelief ?? 0) > 0 && line.employmentType === "FULL_TIME" && (
+                            <><span>Personal relief</span><span className="text-right">{fmt(line.statBreakdown.payePersonalRelief ?? 0, line.currency)}</span></>
+                          )}
+                          {(line.statBreakdown.payeTaxBeforeRelief ?? 0) > 0 && line.statBreakdown.paye > 0 && (
+                            <><span>PAYE (before relief)</span><span className="text-right">{fmt(line.statBreakdown.payeTaxBeforeRelief ?? 0, line.currency)}</span></>
+                          )}
                           {line.statBreakdown.paye > 0 && (
                             <><span>PAYE</span><span className="text-right">{fmt(line.statBreakdown.paye, line.currency)}</span></>
                           )}
-                          {line.statBreakdown.nssfEmployee > 0 && (
+                          {(line.statBreakdown.nssfTierIEmployee ?? 0) > 0 && (
+                            <><span>NSSF Tier I (employee)</span><span className="text-right">{fmt(line.statBreakdown.nssfTierIEmployee ?? 0, line.currency)}</span></>
+                          )}
+                          {(line.statBreakdown.nssfTierIIEmployee ?? 0) > 0 && (
+                            <><span>NSSF Tier II (employee)</span><span className="text-right">{fmt(line.statBreakdown.nssfTierIIEmployee ?? 0, line.currency)}</span></>
+                          )}
+                          {line.statBreakdown.nssfEmployee > 0 && !(line.statBreakdown.nssfTierIEmployee || line.statBreakdown.nssfTierIIEmployee) && (
                             <><span>NSSF (employee)</span><span className="text-right">{fmt(line.statBreakdown.nssfEmployee, line.currency)}</span></>
                           )}
                           {line.statBreakdown.nssfEmployer > 0 && (
@@ -339,7 +402,7 @@ export default function PayRunsPage() {
                             <><span>SHIF</span><span className="text-right">{fmt(line.statBreakdown.shif, line.currency)}</span></>
                           )}
                           {line.statBreakdown.ahl > 0 && (
-                            <><span>AHL</span><span className="text-right">{fmt(line.statBreakdown.ahl, line.currency)}</span></>
+                            <><span>AHL (housing levy)</span><span className="text-right">{fmt(line.statBreakdown.ahl, line.currency)}</span></>
                           )}
                           {line.statBreakdown.lst > 0 && (
                             <><span>LST</span><span className="text-right">{fmt(line.statBreakdown.lst, line.currency)}</span></>
@@ -347,10 +410,14 @@ export default function PayRunsPage() {
                           {line.statBreakdown.wht > 0 && (
                             <><span>WHT</span><span className="text-right">{fmt(line.statBreakdown.wht, line.currency)}</span></>
                           )}
+                          {line.requiresManualDeductions && ed > 0 && (
+                            <><span>Manual deductions</span><span className="text-right">{fmt(ed, line.currency)}</span></>
+                          )}
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="rounded-lg bg-muted/60 p-3 grid grid-cols-2 gap-y-1 text-sm">
@@ -368,7 +435,7 @@ export default function PayRunsPage() {
           </div>
 
           <SheetFooter className="mt-6 flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => { setCreateOpen(false); setCalculatedLines(null); }}>
+            <Button variant="outline" onClick={() => { setCreateOpen(false); setCalculatedLines(null); setCasualDeductions({}); }}>
               Cancel
             </Button>
             <Button

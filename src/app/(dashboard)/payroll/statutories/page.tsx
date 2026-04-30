@@ -46,8 +46,8 @@ function KenyaRates({ data }: { data: StatRef }) {
   const paye = fullTime.paye as Record<string, unknown> | undefined;
   const payeBands = (paye?.bands as { label: string; rate: number }[]) ?? [];
   const nssf = fullTime.nssf as Record<string, unknown> | undefined;
-  const nssfTierI = nssf?.tierI as { employee: number; employer: number; label: string } | undefined;
-  const nssfTierII = nssf?.tierII as { rate: number; lower: number; upper: number; maxEmployee: number; label: string } | undefined;
+  const nssfTierI = nssf?.tierI as { lowerEarningsLimitKes?: number; label: string } | undefined;
+  const nssfTierII = nssf?.tierII as { rate: number; lower: number; upper: number; label: string } | undefined;
   const shif = fullTime.shif as Record<string, unknown> | undefined;
   const ahl = fullTime.ahl as Record<string, unknown> | undefined;
   const wht = consultant?.wht as { rates: { type: string; rate: number; label: string }[]; threshold?: number; thresholdLabel?: string } | undefined;
@@ -56,7 +56,7 @@ function KenyaRates({ data }: { data: StatRef }) {
     <div className="space-y-6">
       {/* PAYE */}
       <Section title="PAYE — Pay As You Earn (Full-time)">
-        <p className="mb-2">Progressive income tax on taxable income after NSSF + SHIF deductions.</p>
+        <p className="mb-2">Progressive income tax on taxable income after NSSF employee, SHIF, and housing levy (AHL) deductions.</p>
         {payeBands.map((b) => (
           <Band key={b.label} label={b.label} rate={b.rate} />
         ))}
@@ -67,7 +67,7 @@ function KenyaRates({ data }: { data: StatRef }) {
       <Section title="NSSF — National Social Security Fund (2023 Act)">
         {nssfTierI && <Band label={`Tier I: ${nssfTierI.label}`} />}
         {nssfTierII && <Band label={`Tier II: ${nssfTierII.label}`} rate={nssfTierII.rate} />}
-        <p className="text-xs mt-1">Max employee contribution: KES 4,320/month (Tier I + Tier II).</p>
+        <p className="text-xs mt-1">Phase 4 effective Feb 2026: LEL KES 9,000 / UEL KES 108,000 — max employee contribution KES 6,480/month.</p>
       </Section>
 
       {/* SHIF */}

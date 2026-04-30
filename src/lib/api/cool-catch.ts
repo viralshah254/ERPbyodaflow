@@ -342,6 +342,19 @@ export async function fetchCashDisbursements(poId?: string): Promise<CashDisburs
   return res.items ?? [];
 }
 
+/** Download supplier invoice / receipt attached to a cash disbursement. */
+export function downloadCashDisbursementInvoice(
+  disbursementId: string,
+  onNotAvailable: (message: string) => void
+): Promise<void> {
+  requireLiveApi("Disbursement invoice");
+  return downloadFile(
+    `/api/purchasing/cash-weight-audit/disbursements/${encodeURIComponent(disbursementId)}/invoice`,
+    `cod-invoice-${disbursementId}`,
+    onNotAvailable
+  );
+}
+
 export async function createCashDisbursement(body: {
   poId: string;
   /** Optional: single GRN this payment is associated with (legacy; prefer grnIds). */
@@ -355,6 +368,9 @@ export async function createCashDisbursement(body: {
   paidWeightKg?: number;
   /** Per-line paid weight for multi-line POs. poLineId format: `${poId}:${lineIndex}` */
   lines?: { poLineId: string; paidWeightKg: number }[];
+  paymentMethod?: string;
+  /** Base64 file content (no data: prefix); optional supplier invoice / receipt. */
+  invoiceAttachment?: { fileName: string; contentType?: string; content: string };
 }): Promise<{ id: string; reference: string; warnings?: string[] }> {
   requireLiveApi("Create cash disbursement");
   return apiRequest<{ id: string; reference: string; warnings?: string[] }>("/api/purchasing/cash-weight-audit/disbursements", {

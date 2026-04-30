@@ -2000,7 +2000,7 @@ export default function InventoryCostingPage() {
           <SheetHeader className="mb-2">
             <SheetTitle className="flex items-center gap-2">
               <Icons.Sparkles className="h-5 w-5 text-primary" />
-              {selectedSource?.isAllocated ? "Edit other cost allocation" : "Other costs wizard"}
+              {selectedSource?.isAllocated ? "Edit other cost allocation" : "rd"}
             </SheetTitle>
             <SheetDescription>
               {selectedSource?.isAllocated

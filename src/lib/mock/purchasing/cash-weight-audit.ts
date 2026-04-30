@@ -11,6 +11,9 @@ export interface CashDisbursementRow {
   paidAt: string;
   reference: string;
   status: "PENDING" | "RECONCILED";
+  paymentMethod?: string;
+  hasSupplierInvoice?: boolean;
+  supplierInvoiceFileName?: string;
 }
 
 export interface CashWeightAuditLineRow {

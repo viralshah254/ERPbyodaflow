@@ -2,7 +2,7 @@
  * Payroll types — Kenya + Uganda, UI-first.
  */
 
-export type EmploymentType = "FULL_TIME" | "CONSULTANT";
+export type EmploymentType = "FULL_TIME" | "CONSULTANT" | "CASUAL";
 export type TaxCountry = "KE" | "UG";
 export type ConsultantResidency = "RESIDENT" | "EAC_NON_RESIDENT" | "NON_RESIDENT";
 export type SalaryType = "MONTHLY" | "HOURLY";
@@ -50,10 +50,17 @@ export interface StatBreakdown {
   paye: number;
   nssfEmployee: number;
   nssfEmployer: number;
+  nssfTierIEmployee?: number;
+  nssfTierIIEmployee?: number;
+  nssfTierIEmployer?: number;
+  nssfTierIIEmployer?: number;
   shif: number;
   ahl: number;
   lst: number;
   wht: number;
+  payeTaxableIncome?: number;
+  payePersonalRelief?: number;
+  payeTaxBeforeRelief?: number;
 }
 
 export interface PayRunLine {
@@ -67,6 +74,7 @@ export interface PayRunLine {
   net: number;
   currency: string;
   statBreakdown?: StatBreakdown;
+  manualDeductionLines?: { label: string; amount: number }[];
   unpaidLeaveDays?: number;
   adjustments?: { label: string; amount: number }[];
 }
@@ -83,6 +91,8 @@ export interface CalculatedLine {
   totalEmployerCost: number;
   netPay: number;
   unpaidLeaveDays: number;
+  /** True when employee is CASUAL — enter deductions manually before saving */
+  requiresManualDeductions?: boolean;
 }
 
 export interface PayRun {
@@ -109,6 +119,10 @@ export interface Payslip {
   statutory: number;
   net: number;
   currency: string;
+  employmentType?: EmploymentType;
+  statBreakdown?: StatBreakdown;
+  manualDeductionLines?: { label: string; amount: number }[];
+  nssfEmployer?: number;
 }
 
 // Leave types

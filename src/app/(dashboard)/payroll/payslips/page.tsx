@@ -25,6 +25,26 @@ import { toast } from "sonner";
 import { downloadFile, downloadTextFile, isApiConfigured } from "@/lib/api/client";
 import * as Icons from "lucide-react";
 
+function payslipDeductionRows(slip: Payslip): { label: string; amount: number }[] {
+  if (slip.manualDeductionLines?.length) return slip.manualDeductionLines;
+  const s = slip.statBreakdown;
+  if (!s) {
+    return slip.statutory > 0 ? [{ label: "Deductions", amount: slip.statutory }] : [];
+  }
+  const rows: { label: string; amount: number }[] = [];
+  if (s.paye > 0) rows.push({ label: "PAYE (Pay As You Earn)", amount: s.paye });
+  const t1 = s.nssfTierIEmployee ?? 0;
+  const t2 = s.nssfTierIIEmployee ?? 0;
+  if (t1 > 0) rows.push({ label: "NSSF Tier I (employee)", amount: t1 });
+  if (t2 > 0) rows.push({ label: "NSSF Tier II (employee)", amount: t2 });
+  if (t1 === 0 && t2 === 0 && s.nssfEmployee > 0) rows.push({ label: "NSSF (employee)", amount: s.nssfEmployee });
+  if (s.shif > 0) rows.push({ label: "SHIF", amount: s.shif });
+  if (s.ahl > 0) rows.push({ label: "Housing levy (AHL)", amount: s.ahl });
+  if (s.lst > 0) rows.push({ label: "LST", amount: s.lst });
+  if (s.wht > 0) rows.push({ label: "Withholding tax (WHT)", amount: s.wht });
+  return rows;
+}
+
 export default function PayslipsPage() {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Payslip | null>(null);
@@ -92,7 +112,8 @@ export default function PayslipsPage() {
         `Payslip: ${slip.employeeName}`,
         `Month: ${slip.month}`,
         `Gross: ${formatMoney(slip.gross, slip.currency)}`,
-        `Statutory: ${formatMoney(slip.statutory, slip.currency)}`,
+        ...payslipDeductionRows(slip).map((r) => `${r.label}: ${formatMoney(r.amount, slip.currency)}`),
+        `Total deductions: ${formatMoney(slip.statutory, slip.currency)}`,
         `Net: ${formatMoney(slip.net, slip.currency)}`,
       ].join("\n")
     );
@@ -155,16 +176,46 @@ export default function PayslipsPage() {
       </div>
 
       <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Payslip preview</SheetTitle>
             <SheetDescription>{selected?.employeeName ?? "—"} · {selected?.month ?? "—"}</SheetDescription>
           </SheetHeader>
           {selected && (
-            <div className="mt-6 space-y-2 text-sm">
-              <p><span className="text-muted-foreground">Gross:</span> {formatMoney(selected.gross, selected.currency)}</p>
-              <p><span className="text-muted-foreground">Statutory:</span> {formatMoney(selected.statutory, selected.currency)}</p>
-              <p><span className="text-muted-foreground">Net:</span> {formatMoney(selected.net, selected.currency)}</p>
+            <div className="mt-6 space-y-4 text-sm">
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Summary</p>
+                <p><span className="text-muted-foreground">Gross pay:</span> {formatMoney(selected.gross, selected.currency)}</p>
+                <p><span className="text-muted-foreground">Total deductions:</span> {formatMoney(selected.statutory, selected.currency)}</p>
+                <p className="font-semibold"><span className="text-muted-foreground font-normal">Net pay:</span> {formatMoney(selected.net, selected.currency)}</p>
+                {(selected.nssfEmployer ?? 0) > 0 && (
+                  <p className="text-xs text-amber-600">Employer NSSF (informational): {formatMoney(selected.nssfEmployer ?? 0, selected.currency)}</p>
+                )}
+              </div>
+              <div className="rounded-lg border p-4 space-y-2">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Deduction breakdown</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                  {payslipDeductionRows(selected).map((row) => (
+                    <React.Fragment key={row.label}>
+                      <span className="text-muted-foreground">{row.label}</span>
+                      <span className="text-right tabular-nums">{formatMoney(row.amount, selected.currency)}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+                {payslipDeductionRows(selected).length === 0 && (
+                  <p className="text-xs text-muted-foreground">No itemised deductions on file.</p>
+                )}
+              </div>
+              {selected.statBreakdown && (selected.statBreakdown.payeTaxableIncome ?? 0) > 0 && (
+                <div className="rounded-lg border p-4 space-y-1 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">PAYE reference</p>
+                  <p>Taxable pay: {formatMoney(selected.statBreakdown.payeTaxableIncome ?? 0, selected.currency)}</p>
+                  {(selected.statBreakdown.payeTaxBeforeRelief ?? 0) > 0 && (
+                    <p>Tax before relief: {formatMoney(selected.statBreakdown.payeTaxBeforeRelief ?? 0, selected.currency)}</p>
+                  )}
+                  <p>Personal relief: {formatMoney(selected.statBreakdown.payePersonalRelief ?? 0, selected.currency)}</p>
+                </div>
+              )}
             </div>
           )}
           <SheetFooter className="mt-6">

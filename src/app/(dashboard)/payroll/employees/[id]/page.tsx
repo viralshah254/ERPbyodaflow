@@ -96,7 +96,13 @@ export default function PayrollEmployeeDetailPage() {
             <p><span className="text-muted-foreground">Department:</span> {employee.department ?? "Not set"}</p>
             <p><span className="text-muted-foreground">Role:</span> {employee.role ?? "Not set"}</p>
             <p><span className="text-muted-foreground">Branch:</span> {employee.branch ?? "Not set"}</p>
-            <p><span className="text-muted-foreground">Employment type:</span> {employee.employmentType}</p>
+            <p><span className="text-muted-foreground">Employment type:</span>{" "}
+              {employee.employmentType === "FULL_TIME"
+                ? "Full-time"
+                : employee.employmentType === "CASUAL"
+                  ? "Casual (manual deductions)"
+                  : "Consultant / contractor"}
+            </p>
             <p><span className="text-muted-foreground">Salary type:</span> {employee.salaryType}</p>
             <p><span className="text-muted-foreground">Base salary:</span> {formatMoney(employee.baseSalary, employee.currency)}</p>
             <p>

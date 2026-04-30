@@ -34,6 +34,7 @@ import {
   fetchCashWeightAuditLines,
   fetchCashWeightExceptions,
   fetchCashDisbursements,
+  downloadCashDisbursementInvoice,
   createCashDisbursement,
   reconcileCashWeightAudit,
   requestAuditWeightOverride,
@@ -45,10 +46,12 @@ import {
   resolveCashWeightException,
 } from "@/lib/api/cool-catch";
 import { fetchPurchaseOrderById } from "@/lib/api/purchasing";
+import { fetchGRNById } from "@/lib/api/grn";
 import { searchPurchaseOrderLookupApi } from "@/lib/api/documents";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import type { AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import type { CashWeightAuditLineRow, CashDisbursementRow } from "@/lib/mock/purchasing/cash-weight-audit";
+import type { GrnDetailRow, ReceivedTotals } from "@/lib/types/purchasing";
 import { formatMoney } from "@/lib/money";
 import { parseDecimalString } from "@/lib/decimal-input";
 import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
@@ -61,6 +64,32 @@ import { Permissions } from "@/lib/permissions";
 type NotesMode = "investigate" | "resolve";
 
 const DISB_GRN_NONE = "__none__";
+
+const DISB_PAYMENT_METHODS = [
+  { value: "CASH", label: "Cash" },
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "CHEQUE", label: "Cheque" },
+  { value: "MPESA", label: "M-Pesa" },
+  { value: "MOBILE_MONEY", label: "Mobile money" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Could not read file."));
+        return;
+      }
+      const [, base64 = ""] = result.split(",", 2);
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+}
 
 // ── Per-PO aggregated audit row ──────────────────────────────────────────────
 interface PoAuditRow {
@@ -194,6 +223,11 @@ export default function CashWeightAuditPage() {
   const [savingDisb, setSavingDisb] = React.useState(false);
   const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
+  const [disbPaymentMethod, setDisbPaymentMethod] = React.useState<string>("CASH");
+  const [disbInvoiceFile, setDisbInvoiceFile] = React.useState<File | null>(null);
+  const [disbGrnDetail, setDisbGrnDetail] = React.useState<GrnDetailRow | null>(null);
+  const [poReceivedTotals, setPoReceivedTotals] = React.useState<ReceivedTotals | null>(null);
+  const [poReferenceOpen, setPoReferenceOpen] = React.useState(false);
 
   const receivedWeightForPo = React.useMemo(() => {
     if (!disbPoId.trim()) return null;
@@ -229,6 +263,44 @@ export default function CashWeightAuditPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  React.useEffect(() => {
+    if (disbursementOpen) {
+      setDisbPaidAt(new Date().toISOString().slice(0, 10));
+    }
+  }, [disbursementOpen]);
+
+  React.useEffect(() => {
+    if (!disbGrnId || disbGrnId === DISB_GRN_NONE) {
+      setDisbGrnDetail(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchGRNById(disbGrnId).then((g) => {
+      if (!cancelled) setDisbGrnDetail(g);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [disbGrnId]);
+
+  /** Total receipt value for disbursement UI (matches GRN card footer). */
+  const grnReceiptTotal = React.useCallback((g: GrnDetailRow | null): number | null => {
+    if (!g?.lines?.length) return null;
+    const sum =
+      g.total ?? g.totalAmount ?? g.lines.reduce((s, l) => s + (l.value ?? 0), 0);
+    if (!Number.isFinite(sum) || sum <= 0) return null;
+    return Math.round(sum * 100) / 100;
+  }, []);
+
+  React.useEffect(() => {
+    if (!disbGrnId || disbGrnId === DISB_GRN_NONE || !disbGrnDetail || disbGrnDetail.id !== disbGrnId) {
+      return;
+    }
+    const total = grnReceiptTotal(disbGrnDetail);
+    if (total == null) return;
+    setDisbAmount(total % 1 === 0 ? String(total) : total.toFixed(2));
+  }, [disbGrnId, disbGrnDetail, grnReceiptTotal]);
 
   // Batch-load landed cost allocations for all GRN IDs
   React.useEffect(() => {
@@ -292,9 +364,12 @@ export default function CashWeightAuditPage() {
       setDisbLineWeights({});
       setPoLinkedGrns([]);
       setDisbGrnId(DISB_GRN_NONE);
+      setPoReceivedTotals(null);
+      setPoReferenceOpen(false);
       return;
     }
     let cancelled = false;
+    setPoReferenceOpen(false);
     fetchPurchaseOrderById(disbPoId.trim())
       .then((po) => {
         if (cancelled || !po) return;
@@ -315,6 +390,7 @@ export default function CashWeightAuditPage() {
         }));
         setPoLinkedGrns(grns);
         if (grns.length > 0) setDisbGrnId(grns[0].id);
+        setPoReceivedTotals(po.receivedTotals ?? null);
         if (!po.lines?.length) return;
         const lines = po.lines.map((l, i) => ({
           poLineId: `${po.id}:${i}`,
@@ -339,6 +415,7 @@ export default function CashWeightAuditPage() {
           setPoLines([]);
           setPoDetail(null);
           setPoLinkedGrns([]);
+          setPoReceivedTotals(null);
         }
       });
     return () => {
@@ -483,14 +560,32 @@ export default function CashWeightAuditPage() {
     }
     setSavingDisb(true);
     try {
+      let invoiceAttachment: { fileName: string; contentType: string; content: string } | undefined;
+      if (disbInvoiceFile) {
+        try {
+          const content = await readFileAsBase64(disbInvoiceFile);
+          invoiceAttachment = {
+            fileName: disbInvoiceFile.name,
+            contentType: disbInvoiceFile.type || "application/octet-stream",
+            content,
+          };
+        } catch {
+          toast.error("Could not read the supplier invoice file.");
+          setSavingDisb(false);
+          return;
+        }
+      }
+      const grnIds = disbGrnId && disbGrnId !== DISB_GRN_NONE ? [disbGrnId] : undefined;
       const disbResult = await createCashDisbursement({
         poId: disbPoId.trim(),
-        ...(disbGrnId && disbGrnId !== DISB_GRN_NONE ? { grnId: disbGrnId } : {}),
+        ...(disbGrnId && disbGrnId !== DISB_GRN_NONE ? { grnId: disbGrnId, grnIds } : {}),
         amount,
         currency: disbCurrency,
         paidAt: disbPaidAt,
         paidWeightKg,
         lines,
+        paymentMethod: disbPaymentMethod,
+        ...(invoiceAttachment ? { invoiceAttachment } : {}),
       });
       const receiptLabel = disbResult.reference ? ` Receipt: ${disbResult.reference}.` : "";
       if (disbResult.warnings?.length) {
@@ -524,6 +619,10 @@ export default function CashWeightAuditPage() {
       setPoLines([]);
       setPoLinkedGrns([]);
       setDisbGrnId(DISB_GRN_NONE);
+      setDisbPaymentMethod("CASH");
+      setDisbInvoiceFile(null);
+      setDisbGrnDetail(null);
+      setPoReceivedTotals(null);
       await load();
     } catch (e) {
       const msg = (e as Error)?.message ?? "Record failed";
@@ -920,8 +1019,10 @@ export default function CashWeightAuditPage() {
                 <SheetHeader>
                   <SheetTitle>Record cash disbursement</SheetTitle>
                   <SheetDescription>
-                    Farm-gate CoD payment. Select the PO, enter what you paid and the weight paid
-                    for. Audit lines are created automatically.
+                    Select PO and GRN. Farm-gate payment and amount checks use the <strong>GRN receipt</strong> (received
+                    weight and line values), not the PO total. The PO section below is reference only—expand it to see
+                    ordered lines. On save, the backend posts to the GL (GR/NI clearing debit, farm-gate cash credit) in
+                    base currency when FX is available.
                   </SheetDescription>
                 </SheetHeader>
                 <div className="grid gap-4 py-6">
@@ -945,86 +1046,12 @@ export default function CashWeightAuditPage() {
                     </p>
                   </div>
 
-                  {poDetail && (
-                    <div className="rounded-md border bg-muted/40 text-sm overflow-hidden">
-                      <div className="px-3 py-2 flex items-center justify-between gap-2 border-b bg-muted/60">
-                        <div className="flex items-center gap-2 font-medium flex-wrap">
-                          <Icons.FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>{poDetail.number}</span>
-                          {poDetail.status && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] font-normal uppercase"
-                            >
-                              {poDetail.status}
-                            </Badge>
-                          )}
-                          {poDetail.supplier && (
-                            <span className="text-muted-foreground font-normal">
-                              · {poDetail.supplier}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="font-semibold">
-                            {formatMoney(poDetail.total, poDetail.currency)}
-                          </p>
-                          {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                              ≈ {formatMoney(poDetail.total * poDetail.fxRate, "KES")}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      {poLines.length > 0 && (
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b text-muted-foreground">
-                              <th className="px-3 py-1.5 text-left font-medium">Product</th>
-                              <th className="px-2 py-1.5 text-right font-medium">Qty</th>
-                              <th className="px-2 py-1.5 text-left font-medium">UOM</th>
-                              <th className="px-2 py-1.5 text-right font-medium">Rate</th>
-                              <th className="px-3 py-1.5 text-right font-medium">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {poLines.map((l) => (
-                              <tr key={l.poLineId} className="border-b last:border-0">
-                                <td className="px-3 py-1.5">
-                                  <p className="truncate max-w-[120px]">{l.productName}</p>
-                                  <p className="text-muted-foreground">{l.sku}</p>
-                                </td>
-                                <td className="px-2 py-1.5 text-right tabular-nums">{l.qty}</td>
-                                <td className="px-2 py-1.5 text-muted-foreground">{l.uom}</td>
-                                <td className="px-2 py-1.5 text-right tabular-nums">
-                                  <p>{formatMoney(l.rate, poDetail.currency)}</p>
-                                  {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
-                                    <p className="text-muted-foreground">
-                                      ≈ {formatMoney(l.rate * poDetail.fxRate, "KES")}
-                                    </p>
-                                  )}
-                                </td>
-                                <td className="px-3 py-1.5 text-right tabular-nums">
-                                  <p className="font-medium">
-                                    {formatMoney(l.total, poDetail.currency)}
-                                  </p>
-                                  {poDetail.currency !== "KES" && poDetail.fxRate > 0 && (
-                                    <p className="text-muted-foreground">
-                                      ≈ {formatMoney(l.total * poDetail.fxRate, "KES")}
-                                    </p>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  )}
-
                   {poLinkedGrns.length > 0 && (
                     <div className="grid gap-2">
-                      <Label>GRN <span className="text-destructive">*</span></Label>
+                      <Label>
+                        GRN <span className="text-destructive">*</span>
+                        <span className="font-normal text-muted-foreground"> — receipt for this payment</span>
+                      </Label>
                       <Select
                         value={disbGrnId || DISB_GRN_NONE}
                         onValueChange={setDisbGrnId}
@@ -1051,13 +1078,198 @@ export default function CashWeightAuditPage() {
                       {(!disbGrnId || disbGrnId === DISB_GRN_NONE) ? (
                         <p className="text-xs text-amber-600 flex items-center gap-1">
                           <Icons.AlertTriangle className="h-3 w-3 shrink-0" />
-                          Select the GRN to determine the received weight for payment.
+                          Select the GRN to see goods received and to validate payment against this receipt.
                         </p>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Payment will be based on the received weight of the selected GRN.
+                          Payment is based on received weight and line values for this GRN.
                         </p>
                       )}
+                    </div>
+                  )}
+
+                  {disbGrnDetail &&
+                    disbGrnId &&
+                    disbGrnId !== DISB_GRN_NONE &&
+                    (disbGrnDetail.lines?.length ?? 0) > 0 && (
+                      <div className="rounded-md border border-primary/30 bg-primary/5 text-sm overflow-hidden">
+                        <div className="px-3 py-2 border-b border-primary/20 bg-primary/10">
+                          <p className="font-semibold flex items-center gap-2">
+                            <Icons.Truck className="h-4 w-4 text-primary shrink-0" />
+                            Receipt to pay against — GRN {disbGrnDetail.number}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Goods received and line values below. System caps amount vs this receipt (+10%).
+                          </p>
+                        </div>
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b text-muted-foreground">
+                              <th className="px-3 py-1.5 text-left font-medium">Product</th>
+                              <th className="px-2 py-1.5 text-right font-medium">Recv. kg</th>
+                              <th className="px-3 py-1.5 text-right font-medium">Line value</th>
+                              <th className="px-3 py-1.5 text-right font-medium">/kg</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {disbGrnDetail.lines.map((l) => {
+                              const kg = l.receivedWeightKg ?? 0;
+                              const val = l.value ?? 0;
+                              const perKg = kg > 0 ? val / kg : null;
+                              return (
+                                <tr key={l.id} className="border-b last:border-0">
+                                  <td className="px-3 py-1.5">
+                                    <p className="font-medium truncate max-w-[140px]">{l.productName}</p>
+                                    <p className="text-muted-foreground">{l.sku}</p>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">
+                                    {kg > 0 ? kg.toLocaleString("en-KE", { maximumFractionDigits: 2 }) : "—"}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums">
+                                    {formatMoney(val, poDetail?.currency ?? disbCurrency)}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                                    {perKg != null
+                                      ? formatMoney(perKg, poDetail?.currency ?? disbCurrency)
+                                      : "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <div className="px-3 py-2 text-xs border-t border-primary/15 bg-primary/5 flex flex-wrap gap-x-4 gap-y-1 justify-end">
+                          <span>
+                            Total weight:{" "}
+                            <strong className="tabular-nums">
+                              {disbGrnDetail.lines
+                                .reduce((s, l) => s + (l.receivedWeightKg ?? 0), 0)
+                                .toLocaleString("en-KE", { maximumFractionDigits: 2 })}{" "}
+                              kg
+                            </strong>
+                          </span>
+                          <span>
+                            Total receipt value:{" "}
+                            <strong className="tabular-nums">
+                              {formatMoney(
+                                disbGrnDetail.total ??
+                                  disbGrnDetail.lines.reduce((s, l) => s + (l.value ?? 0), 0),
+                                poDetail?.currency ?? disbCurrency
+                              )}
+                            </strong>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                  {poDetail && (
+                    <div className="rounded-md border bg-muted/40 text-sm overflow-hidden">
+                      <button
+                        type="button"
+                        aria-expanded={poReferenceOpen}
+                        onClick={() => setPoReferenceOpen((open) => !open)}
+                        className="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left hover:bg-muted/60"
+                      >
+                        <span className="min-w-0 flex-1 space-y-1">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm">
+                            <Icons.FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="font-medium">{poDetail.number}</span>
+                            {poDetail.status && (
+                              <Badge variant="outline" className="text-[10px] font-normal uppercase">
+                                {poDetail.status}
+                              </Badge>
+                            )}
+                            <span className="text-muted-foreground">·</span>
+                            <span className="truncate max-w-[200px] text-muted-foreground">
+                              {poDetail.supplier || "—"}
+                            </span>
+                            <span className="text-muted-foreground">·</span>
+                            <span className="tabular-nums text-muted-foreground">
+                              {formatMoney(poDetail.total, poDetail.currency)}
+                            </span>
+                          </span>
+                          <span className="block text-[11px] font-normal text-muted-foreground">
+                            PO details (reference) — expand for ordered lines and PO-wide received totals
+                          </span>
+                        </span>
+                        <Icons.ChevronDown
+                          className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${poReferenceOpen ? "rotate-180" : ""}`}
+                          aria-hidden
+                        />
+                      </button>
+                      {poReferenceOpen ? (
+                        <div className="border-t bg-muted/30">
+                          <div className="px-3 py-2 space-y-1 border-b bg-muted/50">
+                            <p className="text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">Supplier</span> (from PO):{" "}
+                              {poDetail.supplier || "—"}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              PO order value{" "}
+                              <span className="tabular-nums">{formatMoney(poDetail.total, poDetail.currency)}</span> is for
+                              reference only. Pay and audit against the GRN receipt above.
+                            </p>
+                          </div>
+                          {poLines.length > 0 && (
+                            <div className="border-b bg-background/50">
+                              <p className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Ordered on PO (reference)
+                              </p>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b text-muted-foreground">
+                                    <th className="px-3 py-1.5 text-left font-medium">Product</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">Qty</th>
+                                    <th className="px-2 py-1.5 text-left font-medium">UOM</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">Rate</th>
+                                    <th className="px-3 py-1.5 text-right font-medium">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {poLines.map((l) => (
+                                    <tr key={l.poLineId} className="border-b last:border-0">
+                                      <td className="px-3 py-1.5">
+                                        <p className="truncate max-w-[120px]">{l.productName}</p>
+                                        <p className="text-muted-foreground">{l.sku}</p>
+                                      </td>
+                                      <td className="px-2 py-1.5 text-right tabular-nums">{l.qty}</td>
+                                      <td className="px-2 py-1.5 text-muted-foreground">{l.uom}</td>
+                                      <td className="px-2 py-1.5 text-right tabular-nums">
+                                        {formatMoney(l.rate, poDetail.currency)}
+                                      </td>
+                                      <td className="px-3 py-1.5 text-right tabular-nums">
+                                        {formatMoney(l.total, poDetail.currency)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                          {poReceivedTotals && poReceivedTotals.weightKg > 0 && (
+                            <div className="rounded-none border-t border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+                              <p className="font-medium text-foreground flex items-center gap-1.5">
+                                <Icons.Scale className="h-3.5 w-3.5" />
+                                Received to date (all GRNs on this PO)
+                              </p>
+                              <p className="mt-1 text-muted-foreground">
+                                <span className="font-semibold text-foreground tabular-nums">
+                                  {poReceivedTotals.weightKg.toLocaleString("en-KE", { maximumFractionDigits: 2 })} kg
+                                </span>
+                                {poReceivedTotals.value > 0 && (
+                                  <>
+                                    {" "}
+                                    · value{" "}
+                                    <span className="tabular-nums font-medium text-foreground">
+                                      {formatMoney(poReceivedTotals.value, poDetail.currency)}
+                                    </span>
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   )}
 
@@ -1111,6 +1323,10 @@ export default function CashWeightAuditPage() {
                         onValueChange={setDisbAmount}
                         placeholder="0.00"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Prefilled from the selected GRN total receipt value when available. You can change it before
+                        saving.
+                      </p>
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="disbCurrency">Currency</Label>
@@ -1137,6 +1353,22 @@ export default function CashWeightAuditPage() {
                   )}
 
                   <div className="grid gap-2">
+                    <Label htmlFor="disbPaymentMethod">How paid</Label>
+                    <Select value={disbPaymentMethod} onValueChange={setDisbPaymentMethod}>
+                      <SelectTrigger id="disbPaymentMethod">
+                        <SelectValue placeholder="Payment method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DISB_PAYMENT_METHODS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
                     <Label htmlFor="disbPaidAt">Date paid</Label>
                     <Input
                       id="disbPaidAt"
@@ -1144,6 +1376,22 @@ export default function CashWeightAuditPage() {
                       value={disbPaidAt}
                       onChange={(e) => setDisbPaidAt(e.target.value)}
                     />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="disbInvoice">Supplier invoice or receipt (optional)</Label>
+                    <Input
+                      id="disbInvoice"
+                      type="file"
+                      accept=".pdf,image/jpeg,image/png,image/webp"
+                      className="cursor-pointer"
+                      onChange={(e) => setDisbInvoiceFile(e.target.files?.[0] ?? null)}
+                    />
+                    {disbInvoiceFile ? (
+                      <p className="text-xs text-muted-foreground truncate">{disbInvoiceFile.name}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">PDF or image, max 5 MB.</p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 rounded-md bg-muted/50 border px-3 py-2 text-xs text-muted-foreground">
@@ -1452,13 +1700,43 @@ export default function CashWeightAuditPage() {
                           key={d.id}
                           className="px-3 py-2.5 flex items-center justify-between gap-3"
                         >
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium font-mono text-xs">
                               {d.reference ?? d.id}
                             </p>
                             <p className="text-xs text-muted-foreground">{d.paidAt}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              Paid via{" "}
+                              {DISB_PAYMENT_METHODS.find(
+                                (m) => m.value === (d.paymentMethod ?? "CASH")
+                              )?.label ?? d.paymentMethod}
+                            </p>
+                            {d.hasSupplierInvoice ? (
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <Badge variant="outline" className="text-[10px]">
+                                  Invoice on file
+                                  {d.supplierInvoiceFileName
+                                    ? `: ${d.supplierInvoiceFileName}`
+                                    : ""}
+                                </Badge>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() =>
+                                    void downloadCashDisbursementInvoice(d.id, (msg) =>
+                                      toast.error(msg)
+                                    )
+                                  }
+                                >
+                                  <Icons.Download className="h-3 w-3 mr-1" />
+                                  Download
+                                </Button>
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="text-right">
+                          <div className="text-right shrink-0">
                             <p className="font-semibold">{formatMoney(d.amount, d.currency)}</p>
                             <Badge
                               variant={d.status === "RECONCILED" ? "default" : "secondary"}

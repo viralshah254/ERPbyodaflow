@@ -40,6 +40,18 @@ import * as Icons from "lucide-react";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+function supplierLabelForBill(
+  bill: OpenBillRow,
+  supplierId: string,
+  supplierOptions: Array<{ id: string; name: string }>
+): string {
+  const fromBill = bill.supplierName?.trim();
+  if (fromBill) return fromBill;
+  const fromSelect = supplierOptions.find((s) => s.id === supplierId)?.name?.trim();
+  if (fromSelect) return fromSelect;
+  return "—";
+}
+
 export default function APPaymentsPage() {
   const [search, setSearch] = React.useState("");
   const [allRows, setAllRows] = React.useState<APPaymentRow[]>([]);
@@ -84,6 +96,11 @@ export default function APPaymentsPage() {
         r.party.toLowerCase().includes(q)
     );
   }, [allRows, search]);
+
+  const payingSupplierName = React.useMemo(
+    () => supplierOptions.find((s) => s.id === supplierId)?.name?.trim() ?? "",
+    [supplierId, supplierOptions]
+  );
 
   const columns = React.useMemo(
     () => [
@@ -197,7 +214,17 @@ export default function APPaymentsPage() {
         <SheetContent side="right" className="w-full sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>Pay supplier</SheetTitle>
-            <SheetDescription>Select a supplier, review open bills, and allocate the payment.</SheetDescription>
+            <SheetDescription>
+              {supplierId && payingSupplierName ? (
+                <>
+                  Paying <span className="font-medium text-foreground">{payingSupplierName}</span>. Allocate only to each
+                  supplier bill balance below; GRN-linked logistics and other inbound costs are separate postings and are not
+                  added to these balances.
+                </>
+              ) : (
+                "Select a supplier, review open bills, and allocate the payment."
+              )}
+            </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
@@ -232,73 +259,110 @@ export default function APPaymentsPage() {
             </div>
             <div className="space-y-2">
               <Label>Open bills</Label>
-              <div className="rounded border divide-y max-h-80 overflow-auto">
-                {openBills.length === 0 ? (
-                  <div className="p-3 text-sm text-muted-foreground">No open bills for this supplier.</div>
-                ) : (
-                  openBills.map((bill) => {
-                    const hasLanded = (bill.landedAllocated ?? 0) > 0;
-                    return (
-                      <div key={bill.id} className="flex flex-col gap-1 p-2 text-sm">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-medium truncate">{bill.number}</span>
-                            <span className="text-xs text-muted-foreground">
-                              Outstanding: {formatMoney(bill.outstanding, bill.currency ?? "KES")}
-                            </span>
-                            {(bill.grnNumber || bill.poRef) && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                {bill.grnNumber && (
-                                  <Link
-                                    href={`/inventory/receipts`}
-                                    className="text-primary underline-offset-2 hover:underline"
-                                    target="_blank"
-                                  >
-                                    GRN: {bill.grnNumber}
-                                  </Link>
-                                )}
-                                {bill.poRef && <span>· PO: {bill.poRef}</span>}
+              <TooltipProvider delayDuration={200}>
+                <div className="rounded border divide-y max-h-80 overflow-auto">
+                  {openBills.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No open bills for this supplier.</div>
+                  ) : (
+                    openBills.map((bill) => {
+                      const hasLanded = (bill.landedAllocated ?? 0) > 0;
+                      const supplierLine = supplierLabelForBill(bill, supplierId, supplierOptions);
+                      return (
+                        <div key={bill.id} className="flex flex-col gap-1.5 p-3 text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-medium truncate">{bill.number}</span>
+                              <span className="text-xs text-muted-foreground truncate">
+                                Supplier: <span className="text-foreground">{supplierLine}</span>
                               </span>
-                            )}
+                              <span className="text-xs text-muted-foreground">
+                                Amount due on this bill:{" "}
+                                <span className="font-medium text-foreground">
+                                  {formatMoney(bill.outstanding, bill.currency ?? "KES")}
+                                </span>
+                              </span>
+                              {(bill.grnNumber || bill.poRef) && (
+                                <span className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-1 gap-y-0.5">
+                                  <span className="text-muted-foreground/80">Linked for reference:</span>
+                                  {bill.grnNumber && (
+                                    <Link
+                                      href={`/inventory/receipts`}
+                                      className="text-primary underline-offset-2 hover:underline"
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      GRN {bill.grnNumber}
+                                    </Link>
+                                  )}
+                                  {bill.poRef && <span>· PO {bill.poRef}</span>}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Allocate</span>
+                              <Input
+                                type="number"
+                                className="w-28 h-8 shrink-0"
+                                placeholder="0"
+                                aria-label={`Payment amount for bill ${bill.number}`}
+                                value={allocations[bill.id] ?? ""}
+                                onChange={(e) =>
+                                  setAllocations((current) => ({
+                                    ...current,
+                                    [bill.id]: parseFloat(e.target.value) || 0,
+                                  }))
+                                }
+                              />
+                            </div>
                           </div>
-                          <Input
-                            type="number"
-                            className="w-28 h-8 shrink-0"
-                            placeholder="Amount"
-                            value={allocations[bill.id] ?? ""}
-                            onChange={(e) =>
-                              setAllocations((current) => ({
-                                ...current,
-                                [bill.id]: parseFloat(e.target.value) || 0,
-                              }))
-                            }
-                          />
-                        </div>
-                        {hasLanded && (
-                          <TooltipProvider>
+                          {hasLanded ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1.5 rounded bg-amber-50 border border-amber-200 px-2 py-1 text-xs text-amber-800 cursor-default w-fit">
-                                  <Icons.Package className="h-3 w-3" />
-                                  +{formatMoney(bill.landedAllocated ?? 0, bill.currency ?? "KES")} landed
-                                  <span className="text-amber-600">→ Economic: {formatMoney(bill.economicTotal ?? bill.total, bill.currency ?? "KES")}</span>
-                                </div>
+                                <button
+                                  type="button"
+                                  className="flex w-full flex-col gap-0.5 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-left text-xs text-muted-foreground"
+                                >
+                                  <span className="flex items-center gap-1.5 font-medium text-foreground/90">
+                                    <Icons.Package className="h-3 w-3 shrink-0" aria-hidden />
+                                    GRN-linked costs (reference only)
+                                  </span>
+                                  <span>
+                                    <span className="tabular-nums">
+                                      {formatMoney(bill.landedAllocated ?? 0, bill.currency ?? "KES")}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      posted separately (landed allocations / related documents) — not part of this bill
+                                      balance.
+                                    </span>
+                                  </span>
+                                </button>
                               </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-xs text-xs">
-                                <p className="font-medium mb-1">Landed cost breakdown (on linked GRN)</p>
-                                {(bill.landedBreakdown ?? []).map((b) => (
-                                  <p key={b.label}>{b.label}: {formatMoney(b.amount, bill.currency ?? "KES")}</p>
-                                ))}
-                                <p className="mt-1 text-muted-foreground">This amount is already posted to inventory. Payment covers only the bill outstanding above.</p>
+                              <TooltipContent side="top" className="max-w-sm text-xs">
+                                <p className="font-medium mb-1">Breakdown (linked GRN)</p>
+                                {(bill.landedBreakdown ?? []).length ? (
+                                  (bill.landedBreakdown ?? []).map((b) => (
+                                    <p key={b.label}>
+                                      {b.label}: {formatMoney(b.amount, bill.currency ?? "KES")}
+                                    </p>
+                                  ))
+                                ) : (
+                                  <p className="text-muted-foreground">No line detail available.</p>
+                                )}
+                                <p className="mt-2 border-t pt-2 text-muted-foreground">
+                                  These amounts are not added to the supplier invoice line above. Use allocation only against
+                                  “Amount due on this bill.” Inventory costing may combine bill and GRN-linked costs; this
+                                  payment settles the supplier bill only.
+                                </p>
                               </TooltipContent>
                             </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </TooltipProvider>
             </div>
             <SheetFooter>
               <Button variant="outline" onClick={() => setWizardOpen(false)}>Cancel</Button>

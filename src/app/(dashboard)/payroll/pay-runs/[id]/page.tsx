@@ -56,6 +56,32 @@ function exportPayRunBankCSV(runId: string, lines: PayRunLine[]) {
   URL.revokeObjectURL(url);
 }
 
+function lineDeductionPreview(l: PayRunLine): { label: string; amount: number }[] {
+  if (l.manualDeductionLines?.length) return l.manualDeductionLines;
+  const s = l.statBreakdown;
+  if (!s) {
+    return l.statutoryTotal > 0 ? [{ label: "Deductions", amount: l.statutoryTotal }] : [];
+  }
+  const rows: { label: string; amount: number }[] = [];
+  if (s.paye > 0) rows.push({ label: "PAYE", amount: s.paye });
+  const t1 = s.nssfTierIEmployee ?? 0;
+  const t2 = s.nssfTierIIEmployee ?? 0;
+  if (t1 > 0) rows.push({ label: "NSSF Tier I (employee)", amount: t1 });
+  if (t2 > 0) rows.push({ label: "NSSF Tier II (employee)", amount: t2 });
+  if (t1 === 0 && t2 === 0 && s.nssfEmployee > 0) rows.push({ label: "NSSF (employee)", amount: s.nssfEmployee });
+  if (s.shif > 0) rows.push({ label: "SHIF", amount: s.shif });
+  if (s.ahl > 0) rows.push({ label: "Housing levy (AHL)", amount: s.ahl });
+  if (s.lst > 0) rows.push({ label: "LST", amount: s.lst });
+  if (s.wht > 0) rows.push({ label: "WHT", amount: s.wht });
+  return rows;
+}
+
+function employmentLabel(t?: string) {
+  if (t === "CONSULTANT") return "Consultant";
+  if (t === "CASUAL") return "Casual";
+  return "Full-time";
+}
+
 export default function PayRunDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -222,16 +248,50 @@ export default function PayRunDetailPage() {
       </div>
 
       <Sheet open={lineSheetOpen} onOpenChange={setLineSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Pay run line</SheetTitle>
-            <SheetDescription>{selectedLine?.employeeName ?? "—"}</SheetDescription>
+            <SheetDescription>
+              {selectedLine?.employeeName ?? "—"}
+              {selectedLine?.employmentType && (
+                <span className="text-muted-foreground"> · {employmentLabel(selectedLine.employmentType)} · {selectedLine.taxCountry ?? "—"}</span>
+              )}
+            </SheetDescription>
           </SheetHeader>
           {selectedLine && (
-            <div className="mt-6 space-y-2 text-sm">
-              <p><span className="text-muted-foreground">Gross:</span> {formatMoney(selectedLine.gross, selectedLine.currency)}</p>
-              <p><span className="text-muted-foreground">Statutory:</span> {formatMoney(selectedLine.statutoryTotal, selectedLine.currency)}</p>
-              <p><span className="text-muted-foreground">Net:</span> {formatMoney(selectedLine.net, selectedLine.currency)}</p>
+            <div className="mt-6 space-y-4 text-sm">
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                <p><span className="text-muted-foreground">Gross:</span> {formatMoney(selectedLine.gross, selectedLine.currency)}</p>
+                <p><span className="text-muted-foreground">Total deductions:</span> {formatMoney(selectedLine.statutoryTotal, selectedLine.currency)}</p>
+                <p className="font-semibold"><span className="text-muted-foreground font-normal">Net:</span> {formatMoney(selectedLine.net, selectedLine.currency)}</p>
+                {(selectedLine.statBreakdown?.nssfEmployer ?? 0) > 0 && (
+                  <p className="text-xs text-amber-600">Employer NSSF: {formatMoney(selectedLine.statBreakdown!.nssfEmployer, selectedLine.currency)}</p>
+                )}
+              </div>
+              <div className="rounded-lg border p-4 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Breakdown</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                  {lineDeductionPreview(selectedLine).map((row) => (
+                    <React.Fragment key={row.label}>
+                      <span className="text-muted-foreground">{row.label}</span>
+                      <span className="text-right tabular-nums">{formatMoney(row.amount, selectedLine.currency)}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+                {lineDeductionPreview(selectedLine).length === 0 && (
+                  <p className="text-xs text-muted-foreground">No itemised deduction lines.</p>
+                )}
+              </div>
+              {selectedLine.statBreakdown && (selectedLine.statBreakdown.payeTaxableIncome ?? 0) > 0 && (
+                <div className="rounded-lg border p-4 space-y-1 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">PAYE reference</p>
+                  <p>Taxable pay: {formatMoney(selectedLine.statBreakdown.payeTaxableIncome ?? 0, selectedLine.currency)}</p>
+                  {(selectedLine.statBreakdown.payeTaxBeforeRelief ?? 0) > 0 && (
+                    <p>Tax before relief: {formatMoney(selectedLine.statBreakdown.payeTaxBeforeRelief ?? 0, selectedLine.currency)}</p>
+                  )}
+                  <p>Personal relief: {formatMoney(selectedLine.statBreakdown.payePersonalRelief ?? 0, selectedLine.currency)}</p>
+                </div>
+              )}
             </div>
           )}
         </SheetContent>

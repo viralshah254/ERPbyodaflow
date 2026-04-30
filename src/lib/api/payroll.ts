@@ -4,6 +4,7 @@ import type {
   PayRunLine,
   Payslip,
   CalculatedLine,
+  StatBreakdown,
   LeavePolicy,
   LeaveBalance,
   LeaveRequest,
@@ -40,14 +41,22 @@ type BackendPayRunLine = {
   deductions?: number;
   netPay: number;
   currency?: string;
+  manualDeductionLines?: { label: string; amount: number }[];
   statBreakdown?: {
     paye?: number;
     nssfEmployee?: number;
     nssfEmployer?: number;
+    nssfTierIEmployee?: number;
+    nssfTierIIEmployee?: number;
+    nssfTierIEmployer?: number;
+    nssfTierIIEmployer?: number;
     shif?: number;
     ahl?: number;
     lst?: number;
     wht?: number;
+    payeTaxableIncome?: number;
+    payePersonalRelief?: number;
+    payeTaxBeforeRelief?: number;
   };
   unpaidLeaveDays?: number;
 };
@@ -72,12 +81,43 @@ type BackendPayslip = {
   id: string;
   payRunId: string;
   employeeId: string;
+  employeeName: string;
   grossPay: number;
   deductions?: number;
   netPay: number;
   currency?: string;
   periodStart?: string;
+  periodEnd?: string;
+  employmentType?: string;
+  statBreakdown?: BackendPayRunLine["statBreakdown"];
+  manualDeductionLines?: { label: string; amount: number }[];
+  nssfEmployer?: number;
 };
+
+function mapEmploymentType(raw?: string): Employee["employmentType"] {
+  if (raw === "CONSULTANT") return "CONSULTANT";
+  if (raw === "CASUAL") return "CASUAL";
+  return "FULL_TIME";
+}
+
+function mapStatBreakdownFromBackend(s: NonNullable<BackendPayRunLine["statBreakdown"]>): StatBreakdown {
+  return {
+    paye: s.paye ?? 0,
+    nssfEmployee: s.nssfEmployee ?? 0,
+    nssfEmployer: s.nssfEmployer ?? 0,
+    nssfTierIEmployee: s.nssfTierIEmployee,
+    nssfTierIIEmployee: s.nssfTierIIEmployee,
+    nssfTierIEmployer: s.nssfTierIEmployer,
+    nssfTierIIEmployer: s.nssfTierIIEmployer,
+    shif: s.shif ?? 0,
+    ahl: s.ahl ?? 0,
+    lst: s.lst ?? 0,
+    wht: s.wht ?? 0,
+    payeTaxableIncome: s.payeTaxableIncome,
+    payePersonalRelief: s.payePersonalRelief,
+    payeTaxBeforeRelief: s.payeTaxBeforeRelief,
+  };
+}
 
 function monthFromDate(value?: string): string {
   if (!value) return "";
@@ -97,7 +137,7 @@ function mapEmployee(item: BackendEmployee): Employee {
     department: item.department,
     role: item.jobTitle,
     branch: item.branchId,
-    employmentType: (item.employmentType === "CONSULTANT" ? "CONSULTANT" : "FULL_TIME") as Employee["employmentType"],
+    employmentType: mapEmploymentType(item.employmentType),
     taxCountry: (item.taxCountry === "UG" ? "UG" : "KE") as Employee["taxCountry"],
     taxId: item.taxId,
     nssfNo: item.nssfNumber,
@@ -133,7 +173,7 @@ function mapPayRunLines(item: BackendPayRun, employees: Employee[]): PayRunLine[
   const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
   return (item.lines ?? []).map((line, index) => {
     const employee = employeeMap.get(line.employeeId);
-    const statutoryTotal = line.grossPay - line.netPay;
+    const statutoryTotal = line.deductions ?? line.grossPay - line.netPay;
     return {
       id: `${item.id}-${line.employeeId}-${index}`,
       employeeId: line.employeeId,
@@ -148,11 +188,19 @@ function mapPayRunLines(item: BackendPayRun, employees: Employee[]): PayRunLine[
         paye: line.statBreakdown.paye ?? 0,
         nssfEmployee: line.statBreakdown.nssfEmployee ?? 0,
         nssfEmployer: line.statBreakdown.nssfEmployer ?? 0,
+        nssfTierIEmployee: line.statBreakdown.nssfTierIEmployee,
+        nssfTierIIEmployee: line.statBreakdown.nssfTierIIEmployee,
+        nssfTierIEmployer: line.statBreakdown.nssfTierIEmployer,
+        nssfTierIIEmployer: line.statBreakdown.nssfTierIIEmployer,
         shif: line.statBreakdown.shif ?? 0,
         ahl: line.statBreakdown.ahl ?? 0,
         lst: line.statBreakdown.lst ?? 0,
         wht: line.statBreakdown.wht ?? 0,
+        payeTaxableIncome: line.statBreakdown.payeTaxableIncome,
+        payePersonalRelief: line.statBreakdown.payePersonalRelief,
+        payeTaxBeforeRelief: line.statBreakdown.payeTaxBeforeRelief,
       } : undefined,
+      manualDeductionLines: line.manualDeductionLines,
       unpaidLeaveDays: line.unpaidLeaveDays,
     };
   });
@@ -183,7 +231,7 @@ export async function createEmployeeApi(payload: {
   hourlyCostRate?: number;
   contractDailyRate?: number;
   currency?: string;
-  employmentType?: "FULL_TIME" | "CONSULTANT";
+  employmentType?: "FULL_TIME" | "CONSULTANT" | "CASUAL";
   taxCountry?: "KE" | "UG";
   taxId?: string;
   nssfNumber?: string;
@@ -227,7 +275,7 @@ export async function updateEmployeeApi(
     hourlyCostRate: number;
     contractDailyRate: number;
     currency: string;
-    employmentType: "FULL_TIME" | "CONSULTANT";
+    employmentType: "FULL_TIME" | "CONSULTANT" | "CASUAL";
     taxCountry: "KE" | "UG";
     taxId: string;
     nssfNumber: string;
@@ -284,10 +332,8 @@ export async function createPayRunApi(payload: {
     employeeId: string;
     grossPay: number;
     deductions?: number;
-    statBreakdown?: {
-      paye: number; nssfEmployee: number; nssfEmployer: number;
-      shif: number; ahl: number; lst: number; wht: number;
-    };
+    statBreakdown?: StatBreakdown;
+    manualDeductionLines?: { label: string; amount: number }[];
     employmentType?: string;
     taxCountry?: string;
     unpaidLeaveDays?: number;
@@ -326,23 +372,23 @@ export async function postPayRunJournalApi(id: string): Promise<void> {
 
 export async function fetchPayslipsApi(payRunId?: string): Promise<Payslip[]> {
   requireLiveApi("Payroll payslips");
-  const [data, employees] = await Promise.all([
-    apiRequest<{ items: BackendPayslip[] }>("/api/payroll/payslips", {
-      params: payRunId ? { payRunId } : undefined,
-    }),
-    fetchEmployeesApi(),
-  ]);
-  const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
+  const data = await apiRequest<{ items: BackendPayslip[] }>("/api/payroll/payslips", {
+    params: payRunId ? { payRunId } : undefined,
+  });
   return data.items.map((item) => ({
     id: item.id,
     payRunId: item.payRunId,
     employeeId: item.employeeId,
-    employeeName: employeeMap.get(item.employeeId)?.name ?? item.employeeId,
+    employeeName: item.employeeName,
     month: monthFromDate(item.periodStart),
     gross: item.grossPay,
-    statutory: item.grossPay - item.netPay,
+    statutory: item.deductions ?? item.grossPay - item.netPay,
     net: item.netPay,
     currency: item.currency ?? "KES",
+    employmentType: mapEmploymentType(item.employmentType),
+    statBreakdown: item.statBreakdown ? mapStatBreakdownFromBackend(item.statBreakdown) : undefined,
+    manualDeductionLines: item.manualDeductionLines,
+    nssfEmployer: item.nssfEmployer,
   }));
 }
 

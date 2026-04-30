@@ -119,8 +119,15 @@ export default function PayrollEmployeesPage() {
         id: "type",
         header: "Type",
         accessor: (r: Employee) => (
-          <Badge variant={r.employmentType === "CONSULTANT" ? "outline" : "secondary"} className="text-xs">
-            {r.employmentType === "FULL_TIME" ? "Full-time" : "Consultant"}
+          <Badge
+            variant={r.employmentType === "CONSULTANT" ? "outline" : "secondary"}
+            className="text-xs"
+          >
+            {r.employmentType === "FULL_TIME"
+              ? "Full-time"
+              : r.employmentType === "CASUAL"
+                ? "Casual"
+                : "Consultant"}
           </Badge>
         ),
       },
@@ -296,6 +303,7 @@ export default function PayrollEmployeesPage() {
                   <SelectContent>
                     <SelectItem value="FULL_TIME">Full-time employee</SelectItem>
                     <SelectItem value="CONSULTANT">Consultant / Contractor</SelectItem>
+                    <SelectItem value="CASUAL">Casual (manual deductions)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -359,9 +367,12 @@ export default function PayrollEmployeesPage() {
             {/* Compensation */}
             <div className="border-t pt-4">
               <p className="text-sm font-medium mb-3 text-muted-foreground">Compensation</p>
-              {employmentType === "FULL_TIME" ? (
+              {employmentType === "FULL_TIME" || employmentType === "CASUAL" ? (
                 <div className="space-y-1.5">
-                  <Label htmlFor="emp-salary">Monthly gross salary ({currency})</Label>
+                  <Label htmlFor="emp-salary">
+                    {employmentType === "CASUAL" ? "Gross pay for period (" : "Monthly gross salary ("}
+                    {currency})
+                  </Label>
                   <Input
                     id="emp-salary"
                     type="number"
