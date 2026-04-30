@@ -763,6 +763,22 @@ export async function fetchInboundOrders(params?: {
   return apiRequest(`/api/franchise/network/inbound-orders${qs ? `?${qs}` : ""}`);
 }
 
+export type FranchiseInboundOrderDetail = Omit<InboundOrderRow, "lines"> & {
+  notes: string | null;
+  partyId: string | null;
+  supplierName: string | null;
+  lines: Array<InboundOrderLine & { unit?: string; description?: string }>;
+};
+
+export async function fetchFranchiseInboundOrderDetail(
+  childOrgId: string,
+  prId: string
+): Promise<FranchiseInboundOrderDetail> {
+  return apiRequest(
+    `/api/franchise/network/inbound-orders/${encodeURIComponent(childOrgId)}/${encodeURIComponent(prId)}`
+  );
+}
+
 export async function acceptInboundOrder(
   childOrgId: string,
   prId: string

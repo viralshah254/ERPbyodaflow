@@ -43,6 +43,19 @@ export default function PickPackDetailPage() {
     void refresh();
   }, [refresh]);
 
+  const runWarehouseAction = React.useCallback(
+    async (successMessage: string, fn: () => Promise<void>) => {
+      try {
+        await fn();
+        toast.success(successMessage);
+        await refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Action failed.");
+      }
+    },
+    [refresh]
+  );
+
   if (!task && loading) {
     return <PageShell><PageHeader title="Loading task..." /></PageShell>;
   }
@@ -145,47 +158,56 @@ export default function PickPackDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={async () => {
-            await runPickPackAction(task.id, {
-              action: "pick",
-              lines: task.lines.map((line) => ({
-                lineId: line.id,
-                pickedQty: line.quantity,
-                locationId: line.locationId,
-              })),
-            });
-            toast.success("Pick confirmed.");
-            await refresh();
-          }}>
+          <Button
+            onClick={() =>
+              void runWarehouseAction("Pick confirmed.", () =>
+                runPickPackAction(task.id, {
+                  action: "pick",
+                  lines: task.lines.map((line) => ({
+                    lineId: line.id,
+                    pickedQty: line.quantity,
+                    locationId: line.locationId,
+                  })),
+                })
+              )
+            }
+          >
             Confirm pick
           </Button>
-          <Button variant="secondary" onClick={async () => {
-            await runPickPackAction(task.id, {
-              action: "pack",
-              cartonsCount: Number(cartons) || 0,
-              packingNote,
-            });
-            toast.success("Pack confirmed.");
-            await refresh();
-          }}>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              void runWarehouseAction("Pack confirmed.", () =>
+                runPickPackAction(task.id, {
+                  action: "pack",
+                  cartonsCount: Number(cartons) || 0,
+                  packingNote,
+                })
+              )
+            }
+          >
             Confirm pack
           </Button>
-          <Button variant="secondary" onClick={async () => {
-            await runPickPackAction(task.id, {
-              action: "dispatch",
-              courier,
-              trackingRef,
-            });
-            toast.success("Dispatch recorded.");
-            await refresh();
-          }}>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              void runWarehouseAction("Dispatch recorded.", () =>
+                runPickPackAction(task.id, {
+                  action: "dispatch",
+                  courier,
+                  trackingRef,
+                })
+              )
+            }
+          >
             Mark dispatched
           </Button>
-          <Button variant="outline" onClick={async () => {
-            await runPickPackAction(task.id, { action: "complete" });
-            toast.success("Task completed.");
-            await refresh();
-          }}>
+          <Button
+            variant="outline"
+            onClick={() =>
+              void runWarehouseAction("Task completed.", () => runPickPackAction(task.id, { action: "complete" }))
+            }
+          >
             Complete
           </Button>
           {task.sourceDocumentId ? (

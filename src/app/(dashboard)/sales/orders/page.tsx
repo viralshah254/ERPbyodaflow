@@ -50,6 +50,10 @@ const scope = "sales-orders";
 
 // ─── Franchise Inbound Orders panel ──────────────────────────────────────────
 
+function franchiseInboundDetailHref(r: InboundOrderRow) {
+  return `/sales/orders/franchise-inbound/${encodeURIComponent(r.outletOrgId)}/${encodeURIComponent(r.id)}`;
+}
+
 function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) => void }) {
   const router = useRouter();
   const [rows, setRows] = React.useState<InboundOrderRow[]>([]);
@@ -86,7 +90,15 @@ function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) =
 
   const columns = [
     { id: "outlet", header: "Outlet", accessor: (r: InboundOrderRow) => <span className="font-medium">{r.outletName}</span> },
-    { id: "number", header: "PR Number", accessor: (r: InboundOrderRow) => r.number },
+    {
+      id: "number",
+      header: "PR Number",
+      accessor: (r: InboundOrderRow) => (
+        <Link href={franchiseInboundDetailHref(r)} className="font-medium text-primary hover:underline">
+          {r.number}
+        </Link>
+      ),
+    },
     { id: "date", header: "Date", accessor: (r: InboundOrderRow) => r.date ?? "—" },
     {
       id: "products",
@@ -108,18 +120,26 @@ function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) =
       id: "action",
       header: "",
       accessor: (r: InboundOrderRow) => (
-        <Button
-          size="sm"
-          disabled={acceptingId === r.id || r.status === "CONVERTED"}
-          onClick={(e) => { e.stopPropagation(); void handleAccept(r); }}
-        >
-          {acceptingId === r.id ? (
-            <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
-          ) : (
-            <Icons.CheckCircle className="h-3 w-3 mr-1" />
-          )}
-          {r.status === "CONVERTED" ? "Accepted" : "Accept"}
-        </Button>
+        <div className="flex justify-end gap-1">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={franchiseInboundDetailHref(r)} onClick={(e) => e.stopPropagation()}>
+              <Icons.ExternalLink className="h-3 w-3 mr-1" />
+              View
+            </Link>
+          </Button>
+          <Button
+            size="sm"
+            disabled={acceptingId === r.id || r.status === "CONVERTED"}
+            onClick={(e) => { e.stopPropagation(); void handleAccept(r); }}
+          >
+            {acceptingId === r.id ? (
+              <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
+            ) : (
+              <Icons.CheckCircle className="h-3 w-3 mr-1" />
+            )}
+            {r.status === "CONVERTED" ? "Accepted" : "Accept"}
+          </Button>
+        </div>
       ),
     },
   ];
@@ -139,6 +159,7 @@ function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) =
         data={rows}
         columns={columns}
         emptyMessage={loading ? "Loading franchise orders…" : "No inbound orders from franchise outlets."}
+        onRowClick={(r) => router.push(franchiseInboundDetailHref(r))}
       />
     </div>
   );

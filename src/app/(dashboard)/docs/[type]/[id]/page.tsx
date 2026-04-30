@@ -59,6 +59,10 @@ import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execu
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+function humanizeDocTypeKey(key: string) {
+  return key.replace(/-/g, " ");
+}
+
 export default function DocViewPage() {
   const params = useParams();
   const router = useRouter();
@@ -322,17 +326,33 @@ export default function DocViewPage() {
               Edit
             </Button>
           )}
-          {convertTargets.map((targetType) => (
+          {convertTargets.length === 1 ? (
             <Button
-              key={targetType}
               size="sm"
               disabled={actionLoading}
-              onClick={() => openConvertSheet(targetType)}
+              onClick={() => openConvertSheet(convertTargets[0])}
             >
               <Icons.GitBranchPlus className="mr-2 h-4 w-4" />
-              Convert to {targetType.replace(/-/g, " ")}
+              Convert to {humanizeDocTypeKey(convertTargets[0])}
             </Button>
-          ))}
+          ) : convertTargets.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" disabled={actionLoading}>
+                  <Icons.GitBranchPlus className="mr-2 h-4 w-4" />
+                  Convert…
+                  <Icons.ChevronDown className="ml-1 h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {convertTargets.map((targetType) => (
+                  <DropdownMenuItem key={targetType} onClick={() => openConvertSheet(targetType)}>
+                    Convert to {humanizeDocTypeKey(targetType)}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
           {canRequestApproval && (
             <Button
               variant="outline"
@@ -1177,6 +1197,12 @@ function DynamicNextStepsPanel({
   onConvert: (target: DocTypeKey) => void;
   onSendEmail: () => void;
 }) {
+  const [notesPreviewOpen, setNotesPreviewOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setNotesPreviewOpen(false);
+  }, [document?.id]);
+
   const status = document?.status ?? "";
   const paymentStatus = document?.paymentStatus;
 
@@ -1311,19 +1337,23 @@ function DynamicNextStepsPanel({
     }
   }
 
-  const seenConvertTargets = new Set<string>();
-  for (const target of convertTargets) {
-    if (seenConvertTargets.has(target)) continue;
-    seenConvertTargets.add(target);
-    const label = target.replace(/-/g, " ");
-    if (!steps.some((s) => s.actionLabel?.toLowerCase().includes(label))) {
-      steps.push({
-        icon: <Icons.GitBranchPlus className="h-4 w-4" />,
-        text: `Convert to ${label}`,
-        action: () => onConvert(target),
-        actionLabel: `Convert to ${label}`,
-        variant: "outline",
-      });
+  // Typed blocks above cover sales-order + delivery-note; avoid repeating the same convert CTAs here.
+  const skipGenericConvertAppend = type === "sales-order" || type === "delivery-note";
+  if (!skipGenericConvertAppend) {
+    const seenConvertTargets = new Set<string>();
+    for (const target of convertTargets) {
+      if (seenConvertTargets.has(target)) continue;
+      seenConvertTargets.add(target);
+      const label = target.replace(/-/g, " ");
+      if (!steps.some((s) => s.actionLabel?.toLowerCase().includes(label))) {
+        steps.push({
+          icon: <Icons.GitBranchPlus className="h-4 w-4" />,
+          text: `Convert to ${label}`,
+          action: () => onConvert(target),
+          actionLabel: `Convert to ${label}`,
+          variant: "outline",
+        });
+      }
     }
   }
 
@@ -1370,12 +1400,23 @@ function DynamicNextStepsPanel({
             </ul>
           )}
         </div>
-        {document?.notes && (
-          <div>
-            <p className="font-medium text-sm mb-1">Notes</p>
-            <p className="text-muted-foreground text-sm bg-muted/50 rounded p-2">{document.notes}</p>
+        {document?.notes ? (
+          <div className="border-t border-border/60 pt-3">
+            <button
+              type="button"
+              className="text-xs font-medium text-muted-foreground flex items-center gap-1 w-full text-left hover:text-foreground"
+              onClick={() => setNotesPreviewOpen((v) => !v)}
+            >
+              <Icons.ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${notesPreviewOpen ? "rotate-90" : ""}`} />
+              Notes preview
+            </button>
+            {notesPreviewOpen ? (
+              <p className="text-muted-foreground text-sm bg-muted/50 rounded p-2 mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap">
+                {document.notes}
+              </p>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
     </DocumentRightPanel>
   );

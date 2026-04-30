@@ -80,6 +80,19 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     ],
   },
   {
+    id: "integrations",
+    title: "Integrations",
+    links: [
+      {
+        href: "/settings/integrations/whatsapp",
+        label: "WhatsApp orders",
+        description: "WhatsApp Business routing and sales order defaults",
+        icon: "MessageCircle",
+        requiresPermissions: ["settings.org.read"],
+      },
+    ],
+  },
+  {
     id: "customizer",
     title: "Customizer (enterprise)",
     links: [
