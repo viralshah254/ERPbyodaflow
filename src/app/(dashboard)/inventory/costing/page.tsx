@@ -2000,8 +2000,8 @@ export default function InventoryCostingPage() {
           <SheetHeader className="mb-2">
             <SheetTitle className="flex items-center gap-2">
               <Icons.Sparkles className="h-5 w-5 text-primary" />
-              {selectedSource?.isAllocated ? "Edit other cost allocation" : "rd"}
-            </SheetTitle>
+              {selectedSource?.isAllocated ? "Edit input costs" : "Input costs"}
+            </SheetTitle>ZZZ
             <SheetDescription>
               {selectedSource?.isAllocated
                 ? "You are amending an existing allocation. Changes will overwrite the previously posted costs."

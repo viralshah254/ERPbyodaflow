@@ -10,6 +10,7 @@ type BackendStockLevel = {
   id: string;
   productId: string;
   sku?: string;
+  productFamily?: string | null;
   name: string;
   uom?: string;
   packSizeKg?: number | null;
@@ -36,6 +37,7 @@ function mapStock(item: BackendStockLevel): InventoryStockRow {
     id: item.id,
     productId: item.productId,
     sku: item.sku ?? item.productId,
+    productFamily: item.productFamily ?? undefined,
     name: item.name,
     warehouse: item.warehouse,
     warehouseId: item.warehouseId,

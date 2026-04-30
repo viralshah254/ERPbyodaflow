@@ -92,6 +92,7 @@ export default function MasterProductsPage() {
   const [name, setName] = React.useState("");
   const [productType, setProductType] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
   const [categoryId, setCategoryId] = React.useState("");
+  const [productFamily, setProductFamily] = React.useState("");
   const [unit, setUnit] = React.useState("");
 
   const [taxCodes, setTaxCodes] = React.useState<TaxRow[]>([]);
@@ -165,6 +166,15 @@ export default function MasterProductsPage() {
     [categories]
   );
 
+  const existingProductFamilies = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of allRows) {
+      const f = r.productFamily?.trim();
+      if (f) set.add(f);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [allRows]);
+
   const columns = React.useMemo(
     () => [
       {
@@ -176,6 +186,11 @@ export default function MasterProductsPage() {
           </div>
         ),
         sticky: true,
+      },
+      {
+        id: "productFamily",
+        header: "Product family",
+        accessor: (r: ProductRow) => r.productFamily?.trim() || "—",
       },
       { id: "name", header: "Name", accessor: "name" as keyof ProductRow },
       {
@@ -238,6 +253,7 @@ export default function MasterProductsPage() {
     setCode("");
     setName("");
     setCategoryId("");
+    setProductFamily("");
     setProductType("");
     setUnit("");
     setDefaultTaxCodeId("");
@@ -266,6 +282,7 @@ export default function MasterProductsPage() {
       sku: trimmedSku,
       code: code.trim() || undefined,
       name: name.trim(),
+      productFamily: productFamily.trim() || undefined,
       category: categoryId.trim() || undefined,
       productType: productType || undefined,
       defaultTaxCodeId: defaultTaxCodeId || undefined,
@@ -514,6 +531,23 @@ export default function MasterProductsPage() {
                     );
                   })}
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Product family (optional)</Label>
+                <Input
+                  placeholder="e.g. Tilapia, Nile Perch — groups SKUs in pickers"
+                  value={productFamily}
+                  onChange={(e) => setProductFamily(e.target.value)}
+                  list="product-family-suggestions"
+                />
+                <datalist id="product-family-suggestions">
+                  {existingProductFamilies.map((f) => (
+                    <option key={f} value={f} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground">
+                  Used for document lines and stock views (Product → SKU). Leave blank if not needed.
+                </p>
               </div>
               {/* Category — Add category available to any authenticated user (no role-specific permission) */}
               <div className="space-y-2">

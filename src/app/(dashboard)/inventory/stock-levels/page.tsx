@@ -61,7 +61,19 @@ export default function StockLevelsPage() {
     void refreshStock();
   }, [refreshStock]);
 
-  const filteredItems = stockItems;
+  const filteredItems = React.useMemo(() => {
+    const arr = [...stockItems];
+    const famKey = (f: string | null | undefined) => {
+      const t = f?.trim();
+      return t ? t.toLowerCase() : "\uFFFF";
+    };
+    arr.sort((a, b) => {
+      const c = famKey(a.productFamily).localeCompare(famKey(b.productFamily));
+      if (c !== 0) return c;
+      return (a.sku ?? "").localeCompare(b.sku ?? "", undefined, { numeric: true });
+    });
+    return arr;
+  }, [stockItems]);
   const warehouseOptions = React.useMemo(() => {
     const options = new Map<string, string>();
     stockItems.forEach((item) => {
@@ -112,15 +124,20 @@ export default function StockLevelsPage() {
 
   const columns = [
     {
+      id: "productFamily",
+      header: "Product",
+      accessor: (row: InventoryStockRow) => row.productFamily?.trim() || "—",
+      sticky: true,
+    },
+    {
       id: "sku",
       header: "SKU",
       accessor: (row: InventoryStockRow) => (
         <div>
-          <div className="font-medium">{row.sku}</div>
+          <div className="font-medium font-mono">{row.sku}</div>
           <div className="text-xs text-muted-foreground">{row.name}</div>
         </div>
       ),
-      sticky: true,
     },
     {
       id: "warehouse",

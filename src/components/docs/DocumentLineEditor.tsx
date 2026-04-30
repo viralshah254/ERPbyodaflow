@@ -33,6 +33,12 @@ import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
 import { isApiConfigured } from "@/lib/api/client";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
+import {
+  UNCATEGORIZED_FAMILY,
+  productFamilyKey,
+  productFamilyLabel,
+  lineProductFamilyKey,
+} from "@/lib/products/product-family";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
 import {
@@ -121,7 +127,7 @@ interface DocumentLineEditorProps {
 
 const defaultPriceListId = "pl-retail";
 
-/** Multi-word search: every token must appear somewhere in sku, name, category, or description (case-insensitive). */
+/** Multi-word search: every token must appear somewhere in sku, name, category, description, or productFamily (case-insensitive). */
 function productMatchesLineSearch(p: ProductRow, query: string): boolean {
   const tokens = query
     .trim()
@@ -129,7 +135,7 @@ function productMatchesLineSearch(p: ProductRow, query: string): boolean {
     .split(/\s+/)
     .filter(Boolean);
   if (tokens.length === 0) return true;
-  const hay = [p.sku, p.name, p.category ?? "", p.description ?? ""].join(" ").toLowerCase();
+  const hay = [p.sku, p.name, p.category ?? "", p.description ?? "", p.productFamily ?? ""].join(" ").toLowerCase();
   return tokens.every((t) => hay.includes(t));
 }
 
@@ -231,11 +237,14 @@ export function DocumentLineEditor({
       cancelled = true;
     };
   }, [productFilter]);
-  const loadProductOptions = React.useCallback(
-    async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+  const loadSkuOptionsForLine = React.useCallback(
+    async (line: DocumentLine, query: string): Promise<AsyncSearchableSelectOption[]> => {
+      const famKey = lineProductFamilyKey(products, line.productId);
       const q = query.trim();
       const mapRows = (rows: ProductRow[]) => {
-        const filtered = rows.filter((p) => productMatchesLineSearch(p, query));
+        const filtered = rows.filter(
+          (p) => productFamilyKey(p) === famKey && productMatchesLineSearch(p, query)
+        );
         const sorted =
           q.length === 0
             ? [...filtered].sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 100)
@@ -246,9 +255,6 @@ export function DocumentLineEditor({
           description: p.category?.trim() || undefined,
         }));
       };
-      // For filtered pickers (purchasable / sellable), always go to the server —
-      // this resolves correctly even before the prefetch finishes, and typed
-      // searches benefit from the server text index.
       if (isApiConfigured() && productFilter && productFilter !== "all") {
         try {
           const rows = await fetchProductsApi({
@@ -267,6 +273,15 @@ export function DocumentLineEditor({
     },
     [products, productFilter]
   );
+  const familyOptions = React.useMemo(() => {
+    const keys = new Set<string>();
+    for (const p of products) keys.add(productFamilyKey(p));
+    return [...keys].sort((a, b) => {
+      if (a === UNCATEGORIZED_FAMILY) return 1;
+      if (b === UNCATEGORIZED_FAMILY) return -1;
+      return a.localeCompare(b);
+    });
+  }, [products]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
@@ -391,8 +406,6 @@ export function DocumentLineEditor({
   }, [taxCodesKey, linesAreTaxInclusive, taxCodes.length]);
 
   const setProduct = (lineId: string, productId: string) => {
-    const p = products.find((x) => x.id === productId);
-    if (!p) return;
     const applyRow = (row: ProductRow) => {
       const packaging = packagingByProductId?.[productId] ?? [];
       const uom = pickDefaultUomFromPackaging(packaging, mode) ?? row.unit ?? row.baseUom ?? "EA";
@@ -415,11 +428,37 @@ export function DocumentLineEditor({
       });
       ensureVariantsLoaded(productId);
     };
-    if (isApiConfigured()) {
-      void fetchProductApi(productId).then((full) => applyRow(full ?? p)).catch(() => applyRow(p));
-    } else {
-      applyRow(p);
+    const p = products.find((x) => x.id === productId);
+    if (p) {
+      if (isApiConfigured()) {
+        void fetchProductApi(productId).then((full) => applyRow(full ?? p)).catch(() => applyRow(p));
+      } else {
+        applyRow(p);
+      }
+      return;
     }
+    if (isApiConfigured()) {
+      void fetchProductApi(productId)
+        .then((full) => {
+          if (full) applyRow(full);
+        })
+        .catch(() => {});
+    }
+  };
+
+  const setLineFamily = (lineId: string, newKey: string) => {
+    const line = linesRef.current.find((l) => l.id === lineId);
+    if (!line) return;
+    const candidates = products
+      .filter((p) => productFamilyKey(p) === newKey)
+      .sort((a, b) => a.sku.localeCompare(b.sku));
+    if (candidates.length === 0) {
+      toast.error("No SKUs in this product family.");
+      return;
+    }
+    const cur = products.find((p) => p.id === line.productId);
+    if (cur && productFamilyKey(cur) === newKey) return;
+    setProduct(lineId, candidates[0]!.id);
   };
 
   const setVariant = (lineId: string, variantId: string) => {
@@ -486,6 +525,15 @@ export function DocumentLineEditor({
   const totalTax = lines.reduce((s, l) => s + (l.tax ?? 0), 0);
   const total = lines.reduce((s, l) => s + l.amount, 0);
 
+  const showVariantColumn = React.useMemo(
+    () =>
+      lines.some((l) => {
+        const v = variantsByProductId[l.productId];
+        return Boolean(v && v.length > 0);
+      }),
+    [lines, variantsByProductId]
+  );
+
   // Eagerly load variants for all products already on existing lines
   React.useEffect(() => {
     lines.forEach((l) => ensureVariantsLoaded(l.productId));
@@ -525,8 +573,8 @@ export function DocumentLineEditor({
       {lines.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {useCostPricing
-            ? `No lines. Add a line above. Product, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, cost per unit (enter manually).`
-            : `No lines. Add a line above. Product, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, price (from price list), price reason.`}
+            ? `No lines. Add a line above. Product family, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, cost per unit (enter manually).`
+            : `No lines. Add a line above. Product family, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, price (from price list), price reason.`}
         </div>
       ) : (
         <>
@@ -534,8 +582,9 @@ export function DocumentLineEditor({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[10rem] sm:min-w-[16rem] w-[36%]">Product</TableHead>
-                  <TableHead>Variant</TableHead>
+                  <TableHead className="min-w-[9rem] w-[14%]">Product</TableHead>
+                  <TableHead className="min-w-[10rem] sm:min-w-[16rem] w-[36%]">SKU</TableHead>
+                  {showVariantColumn && <TableHead className="min-w-[7rem]">Packaging variant</TableHead>}
                   <TableHead>UOM</TableHead>
                   <TableHead className="w-28">
                     {lineColumnLabels ? (
@@ -589,27 +638,44 @@ export function DocumentLineEditor({
                   return (
                   <TableRow key={l.id}>
                     <TableCell>
+                      <Select
+                        value={lineProductFamilyKey(products, l.productId)}
+                        onValueChange={(v) => setLineFamily(l.id, v)}
+                      >
+                        <SelectTrigger className="w-[10rem] sm:w-[12rem]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {familyOptions.map((k) => (
+                            <SelectItem key={k} value={k}>
+                              {productFamilyLabel(k)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
                       <div className="min-w-[8rem] sm:min-w-[14rem] w-full max-w-[min(100%,36rem)]">
                         <AsyncSearchableSelect
                           value={l.productId}
                           onValueChange={(v) => setProduct(l.id, v)}
-                          loadOptions={loadProductOptions}
+                          loadOptions={(q) => loadSkuOptionsForLine(l, q)}
                           selectedOption={{
                             id: l.productId,
                             label: `${l.sku} — ${l.name}`,
                           }}
                           placeholder={
-                            productListLoading ? "Loading products…" : "Search product…"
+                            productListLoading ? "Loading products…" : "Search SKU…"
                           }
-                          searchPlaceholder="Type SKU, name, or any words…"
+                          searchPlaceholder="Type SKU, name, product family, or any words…"
                           emptyMessage={
                             productListLoading
                               ? "Loading products…"
                               : productFilter === "purchasable"
-                                ? "No purchasable products match. Try another search."
+                                ? "No purchasable SKUs match in this product family. Try another search."
                                 : productFilter === "sellable"
-                                  ? "No sellable products match. Try another search."
-                                  : "No products match. Try different words."
+                                  ? "No sellable SKUs match in this product family. Try another search."
+                                  : "No SKUs match in this product family. Try different words."
                           }
                           minSearchLength={0}
                           searchDebounceMs={150}
@@ -619,6 +685,7 @@ export function DocumentLineEditor({
                         />
                       </div>
                     </TableCell>
+                    {showVariantColumn && (
                     <TableCell>
                       {lineVariants && lineVariants.length > 0 ? (
                         <Select value={l.variantId ?? "_none_"} onValueChange={(v) => setVariant(l.id, v)}>
@@ -636,6 +703,7 @@ export function DocumentLineEditor({
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
+                    )}
                     <TableCell>
                       <UomSelect
                         lineId={l.id}

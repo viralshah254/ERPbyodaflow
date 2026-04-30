@@ -38,6 +38,7 @@ interface Product {
   id: string;
   name: string;
   sku: string;
+  productFamily?: string;
   productType?: ProductKind;
   category: string;
   stock: number;
@@ -72,6 +73,7 @@ function buildProductRow(row: ProductRow, avgCostMap: Map<string, number>): Prod
     id: row.id,
     name: row.name,
     sku: row.sku,
+    productFamily: row.productFamily,
     productType: row.productType,
     category: row.category ?? "",
     stock: row.currentStock ?? 0,
@@ -197,7 +199,10 @@ export default function ProductsPage() {
       accessor: (row: Product) => (
         <div className="space-y-1">
           <div className="font-medium">{row.name}</div>
-          <div className="text-xs text-muted-foreground">{row.sku}</div>
+          <div className="text-xs text-muted-foreground font-mono">{row.sku}</div>
+          {row.productFamily?.trim() ? (
+            <div className="text-xs text-muted-foreground">{row.productFamily}</div>
+          ) : null}
           <div className="flex flex-wrap gap-1">
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
               {row.variantsCount} variants

@@ -162,6 +162,8 @@ export default function ProductDetailPage() {
   const [savingName, setSavingName] = React.useState(false);
   const [descriptionDraft, setDescriptionDraft] = React.useState("");
   const [savingNotes, setSavingNotes] = React.useState(false);
+  const [productFamilyDraft, setProductFamilyDraft] = React.useState("");
+  const [savingFamily, setSavingFamily] = React.useState(false);
 
   React.useEffect(() => setMounted(true), []);
 
@@ -170,10 +172,12 @@ export default function ProductDetailPage() {
     if (product === null) {
       setNameDraft("");
       setDescriptionDraft("");
+      setProductFamilyDraft("");
       return;
     }
     setNameDraft(product.name ?? "");
     setDescriptionDraft(product.description ?? "");
+    setProductFamilyDraft(product.productFamily ?? "");
   }, [product]);
 
   // Load all data in parallel
@@ -315,6 +319,22 @@ export default function ProductDetailPage() {
       toast.error((err as Error).message);
     } finally {
       setSavingNotes(false);
+    }
+  };
+
+  const saveProductFamily = async () => {
+    if (!product) return;
+    const next = productFamilyDraft.trim() || undefined;
+    if (next === (product.productFamily ?? undefined)) return;
+    setSavingFamily(true);
+    try {
+      await patchProductApi(id, { productFamily: next });
+      setProduct((p) => (p ? { ...p, productFamily: next } : p));
+      toast.success("Product family updated.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingFamily(false);
     }
   };
 
@@ -601,6 +621,33 @@ export default function ProductDetailPage() {
                         }
                       >
                         {savingName ? "Saving…" : "Save name"}
+                      </Button>
+                    </div>
+                    <span className="text-muted-foreground align-top pt-1.5">Product family</span>
+                    <div className="space-y-2 min-w-0">
+                      <Input
+                        id="product-family"
+                        value={productFamilyDraft}
+                        onChange={(e) => setProductFamilyDraft(e.target.value)}
+                        placeholder="e.g. Tilapia — groups this SKU in pickers"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void saveProductFamily();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void saveProductFamily()}
+                        disabled={
+                          savingFamily ||
+                          productFamilyDraft.trim() === (product.productFamily ?? "").trim()
+                        }
+                      >
+                        {savingFamily ? "Saving…" : "Save product family"}
                       </Button>
                     </div>
                     <span className="text-muted-foreground">Category</span>

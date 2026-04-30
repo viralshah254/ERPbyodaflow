@@ -2,6 +2,8 @@ export type ProductRow = {
   id: string;
   sku: string;
   name: string;
+  /** High-level line for grouping in pickers and grids (e.g. Tilapia, Nile Perch). */
+  productFamily?: string;
   category?: string;
   unit?: string;
   baseUom?: string;
