@@ -6,9 +6,14 @@ import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { buildVisibleNav, type ResolvedNavSection, type ResolvedNavItem } from "@/config/navigation";
-import { NAV_SECTIONS_CONFIG } from "@/config/navigation";
-import type { TemplateOrgType, ModuleKey } from "@/config/industryTemplates/index";
+import { type ResolvedNavSection, type ResolvedNavItem } from "@/config/navigation";
+import { applySidebarLayout, type SidebarLayout } from "@/config/navigation/sidebar-layout";
+import {
+  computeDashboardSidebarModules,
+  computeDashboardSidebarSections,
+} from "@/lib/nav/compute-dashboard-sidebar-sections";
+import { fetchPreferencesApi } from "@/lib/api/preferences";
+import { isApiConfigured } from "@/lib/api/client";
 import Link from "next/link";
 import { OdaLogo } from "@/components/brand/OdaLogo";
 import { ODA_BRAND } from "@/lib/brand";
@@ -38,19 +43,6 @@ function applyCountsToItems(
   });
 }
 
-/** Map legacy orgType SHOP to RETAIL for template-driven nav */
-function toTemplateOrgType(orgType: string | undefined): TemplateOrgType | null {
-  if (!orgType) return null;
-  if (orgType === "SHOP") return "RETAIL";
-  return orgType as TemplateOrgType;
-}
-
-const ALL_MODULES = [
-  "dashboard", "inventory", "sales", "purchasing", "pricing", "finance",
-  "manufacturing", "distribution", "franchise", "retail", "crm", "projects", "payroll", "reports", "automation", "analytics", "settings", "docs",
-] as const;
-const DEFAULT_NAV_ORDER = NAV_SECTIONS_CONFIG.map((s) => s.key);
-
 interface AppSidebarProps {
   className?: string;
 }
@@ -68,58 +60,50 @@ export function AppSidebar({ className }: AppSidebarProps) {
   } = useOrgContextStore();
   const navCounts = useNavCounts();
 
-  const FRANCHISEE_MODULES: ModuleKey[] = ["dashboard", "sales", "purchasing", "inventory", "franchise", "reports", "settings", "docs"];
+  const [sidebarLayout, setSidebarLayout] = React.useState<SidebarLayout | null | undefined>(undefined);
 
-  const visibleSections = React.useMemo((): ResolvedNavSection[] => {
-    const orgType = toTemplateOrgType(ctxOrgType ?? org?.orgType ?? undefined);
-    const isFranchiseePersona = franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE";
-    const baseModules = enabledModules.length > 0 ? enabledModules : [...ALL_MODULES];
-    const resolvedModules = isFranchiseePersona
-      ? FRANCHISEE_MODULES
-      : template?.enabledModules?.length
-        ? [...new Set([...baseModules, ...template.enabledModules])]
-        : baseModules;
-    // docs included so "Document Center" section is available for outlets.
-    const personaNav = isFranchiseePersona
-      ? ["core", "sales", "purchasing", "inventory", "franchise", "docs"]
-      : null;
-    const input = {
-      orgType,
-      enabledModules: resolvedModules,
+  React.useEffect(() => {
+    if (!isApiConfigured()) {
+      setSidebarLayout(null);
+      return;
+    }
+    let cancelled = false;
+    fetchPreferencesApi()
+      .then((p) => {
+        if (!cancelled) setSidebarLayout(p.sidebarLayout ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSidebarLayout(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const navParams = React.useMemo(
+    () => ({
+      ctxOrgType,
+      orgOrgType: org?.orgType,
+      enabledModules,
       featureFlags: featureFlags ?? {},
-      defaultNav: personaNav ?? (template?.defaultNav?.length ? template.defaultNav : DEFAULT_NAV_ORDER),
-      terminology: template?.terminology ?? {},
+      template,
       user,
       permissions,
-      orgRole: orgRole ?? undefined,
-      // Franchisee: render only the sections explicitly listed above — no extra appending.
-      // Seafood / perishable template: same strict behaviour from template config.
-      strictSections:
-        isFranchiseePersona || template?.strictNavSections === true,
+      orgRole,
+      franchisePersona,
+    }),
+    [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]
+  );
+
+  const visibleSections = React.useMemo((): ResolvedNavSection[] => {
+    const base = computeDashboardSidebarSections(navParams);
+    const modules = computeDashboardSidebarModules(navParams);
+    const pins = {
+      dashboardEnabled: modules.includes("dashboard"),
+      manufacturingEnabled: modules.includes("manufacturing"),
     };
-    const sections = buildVisibleNav(input);
-
-    // For franchisees, restrict purchasing and inventory to the relevant outlet items only.
-    if (!isFranchiseePersona) return sections;
-
-    const PURCHASING_ALLOWED = new Set(["purchasing-requests", "purchasing-orders"]);
-    const INVENTORY_ALLOWED = new Set([
-      "inventory-products",
-      "inventory-stock-levels",
-      "inventory-movements",
-      "inventory-receipts",
-    ]);
-
-    return sections.map((section) => {
-      if (section.key === "purchasing") {
-        return { ...section, items: section.items.filter((i) => PURCHASING_ALLOWED.has(i.key)) };
-      }
-      if (section.key === "inventory") {
-        return { ...section, items: section.items.filter((i) => INVENTORY_ALLOWED.has(i.key)) };
-      }
-      return section;
-    }).filter((section) => section.items.length > 0);
-  }, [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]);
+    return applySidebarLayout(base, sidebarLayout === undefined ? undefined : sidebarLayout ?? undefined, pins);
+  }, [navParams, sidebarLayout]);
 
   const franchisorInboundMerge =
     orgRole === "FRANCHISOR" && featureFlags?.franchiseNetworkMonitoring === true;

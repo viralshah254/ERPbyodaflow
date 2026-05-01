@@ -1,4 +1,7 @@
+import type { SidebarLayout } from "@/config/navigation/sidebar-layout";
 import { apiRequest, requireLiveApi } from "./client";
+
+export type { SidebarLayout };
 
 export type Preferences = {
   theme?: string;
@@ -6,6 +9,7 @@ export type Preferences = {
   dateFormat?: string;
   currency?: string;
   timeZone?: string;
+  sidebarLayout?: SidebarLayout | null;
 };
 
 const DEFAULT_PREFERENCES: Preferences = {

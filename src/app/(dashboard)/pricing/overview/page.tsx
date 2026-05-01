@@ -130,6 +130,32 @@ export default function PricingOverviewPage() {
                   </li>
                 ))}
               </ul>
+              <details className="mt-3 text-xs text-rose-900/90 dark:text-rose-200/95 [&_summary]:cursor-pointer [&_summary]:font-medium">
+                <summary>How to publish (HQ checklist)</summary>
+                <ol className="mt-2 list-decimal pl-4 space-y-1.5 text-muted-foreground dark:text-rose-300/85">
+                  <li>
+                    Use POST <code className="rounded bg-rose-100/80 px-1 dark:bg-rose-900/40">/api/franchise/hq/batch-franchise-pricing/upsert</code> with a posted GRN{" "}
+                    <code className="rounded px-1">grnId</code>, <code className="rounded px-1">items[]</code> (<code className="rounded px-1">productId</code>,{" "}
+                    <code className="rounded px-1">transferPrice</code>, <code className="rounded px-1">minRetailFloor</code>), and{" "}
+                    <code className="rounded px-1">release: true</code> to set outlets&apos; mandatory floors. Same permission as franchise alerts.
+                  </li>
+                  <li>
+                    Assign HQ price lists per outlet:{" "}
+                    <strong className="text-rose-950 dark:text-rose-100">Franchise → Manage franchisees → outlet → Price List</strong> (PATCH{" "}
+                    <code className="rounded px-1">/api/franchise/outlets/:id/price-list</code>).
+                  </li>
+                  <li>
+                    Mobile POS needs <code className="rounded px-1">defaultWarehouseId</code>: new outlets provision <strong>Main warehouse</strong> + retail POS setting automatically;
+                    legacy outlets use Settings → Retail POS or PATCH <code className="rounded px-1">/settings/retail/pos</code>.
+                  </li>
+                  <li>
+                    Outlets order from HQ via purchase requests / <strong>Orders to HQ</strong> (inbound orders APIs).
+                  </li>
+                </ol>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Developer reference: <code className="rounded px-1">erp-odaflow/docs/FRANCHISE_RETAIL_AND_PRICING.md</code>
+                </p>
+              </details>
             </div>
             <Button variant="outline" size="sm" className="shrink-0 border-rose-300 text-rose-900 hover:bg-rose-100" asChild>
               <Link href="/reports/batch-costing">

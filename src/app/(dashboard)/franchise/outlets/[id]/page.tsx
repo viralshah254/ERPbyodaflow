@@ -680,7 +680,15 @@ function CustomersTab({ outletOrgId }: { outletOrgId: string }) {
 
 // ─── Price List tab ───────────────────────────────────────────────────────────
 
-function PriceListTab({ outletOrgId }: { outletOrgId: string }) {
+function PriceListTab({
+  outletOrgId,
+  assignedPriceListId,
+  onAssigned,
+}: {
+  outletOrgId: string;
+  assignedPriceListId?: string | null;
+  onAssigned?: () => void;
+}) {
   const [priceLists, setPriceLists] = React.useState<PriceList[]>([]);
   const [selected, setSelected] = React.useState("");
   const [saving, setSaving] = React.useState(false);
@@ -693,14 +701,23 @@ function PriceListTab({ outletOrgId }: { outletOrgId: string }) {
       .finally(() => setLoading(false));
   }, []);
 
+  React.useEffect(() => {
+    if (assignedPriceListId) setSelected(assignedPriceListId);
+    else setSelected("");
+  }, [assignedPriceListId]);
+
   const handleAssign = async () => {
     if (!selected) return;
     setSaving(true);
     try {
       await assignOutletPriceList(outletOrgId, selected);
       toast.success("Price list assigned successfully");
+      onAssigned?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not assign price list");
+      const msg = e instanceof Error ? e.message : "Could not assign price list";
+      const hint =
+        /403|forbidden/i.test(msg) ? " You may need franchise.commission.read on your HQ user." : "";
+      toast.error(msg + hint);
     } finally {
       setSaving(false);
     }
@@ -873,7 +890,11 @@ export default function OutletDetailPage() {
           </TabsContent>
 
           <TabsContent value="pricelist">
-            <PriceListTab outletOrgId={outletOrgId} />
+            <PriceListTab
+              outletOrgId={outletOrgId}
+              assignedPriceListId={summary?.priceListId ?? null}
+              onAssigned={() => void loadSummary()}
+            />
           </TabsContent>
         </Tabs>
       </div>

@@ -698,6 +698,9 @@ export async function fetchNetworkSummaryV2(): Promise<{ kpis: NetworkKpis; outl
 export interface OutletSummary {
   outletOrgId: string;
   outletName?: string;
+  /** HQ-assigned outlet catalog price list (`PATCH .../price-list`). */
+  priceListId?: string | null;
+  priceListName?: string | null;
   revenue30d: number;
   orderCount30d: number;
   customerCount: number;

@@ -30,6 +30,19 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     ],
   },
   {
+    id: "interface",
+    title: "Interface",
+    links: [
+      {
+        href: "/settings/sidebar",
+        label: "Sidebar navigation",
+        description: "Reorder sidebar sections and links for your organization",
+        icon: "PanelLeft",
+        requiresPermissions: ["settings.preferences.read"],
+      },
+    ],
+  },
+  {
     id: "people",
     title: "People & access",
     links: [
