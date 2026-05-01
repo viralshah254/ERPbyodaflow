@@ -40,6 +40,7 @@ import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import {
   addDocumentCommentApi,
+  confirmDeliveryPodApi,
   convertDocumentApi,
   documentActionApi,
   downloadDocumentPdfApi,
@@ -58,6 +59,8 @@ import type { DocumentChainNode, DocumentDetailRecord } from "@/lib/types/docume
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useAuthStore } from "@/stores/auth-store";
+import { hasAnyPermission, Permissions } from "@/lib/permissions";
 
 function humanizeDocTypeKey(key: string) {
   return key.replace(/-/g, " ");
@@ -71,6 +74,7 @@ export default function DocViewPage() {
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
+  const user = useAuthStore((s) => s.user);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
   const [emailTo, setEmailTo] = React.useState("");
@@ -97,6 +101,13 @@ export default function DocViewPage() {
   const [selectedConvertPartyOption, setSelectedConvertPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
+  const [podSheetOpen, setPodSheetOpen] = React.useState(false);
+  const [podReceiverName, setPodReceiverName] = React.useState("");
+  const [podNote, setPodNote] = React.useState("");
+  const [podLineRows, setPodLineRows] = React.useState<
+    Array<{ lineId: string; description: string; qtyShipped: number; qtyReceived: string; varianceReason: string }>
+  >([]);
+  const [podSaving, setPodSaving] = React.useState(false);
   /** Portals AsyncSearchableSelect panel inside the sheet so Radix does not treat option clicks as “outside”. */
   const convertSheetContentRef = React.useRef<HTMLDivElement | null>(null);
   const [convertSelectPortalHost, setConvertSelectPortalHost] = React.useState<HTMLElement | null>(null);
@@ -108,6 +119,28 @@ export default function DocViewPage() {
     const raw = document?.availableConversionTargets ?? [];
     return [...new Set(raw)];
   }, [document?.availableConversionTargets]);
+  const canRecordPod = React.useMemo(() => {
+    if (type !== "delivery-note" || !document?.lines?.length) return false;
+    if (document.podConfirmation?.confirmedAt) return false;
+    const st = (document.status ?? "").toUpperCase();
+    if (!["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) return false;
+    return hasAnyPermission(user, [Permissions.SALES_DELIVERIES_POD, Permissions.SALES_WRITE]);
+  }, [type, document, user]);
+
+  React.useEffect(() => {
+    if (!podSheetOpen || !document?.lines?.length) return;
+    setPodReceiverName("");
+    setPodNote("");
+    setPodLineRows(
+      document.lines.map((l) => ({
+        lineId: l.id ?? "",
+        description: l.description,
+        qtyShipped: l.qty ?? 0,
+        qtyReceived: String(l.qty ?? 0),
+        varianceReason: "",
+      }))
+    );
+  }, [podSheetOpen, document?.id, document?.lines]);
   const [resolvedPartyName, setResolvedPartyName] = React.useState<string | null>(null);
   const isPurchaseDoc = [
     "purchase-request",
@@ -284,6 +317,7 @@ export default function DocViewPage() {
       }}
       onConvert={openConvertSheet}
       onSendEmail={() => { setEmailTo(""); setEmailDialogOpen(true); }}
+      onRecordPod={canRecordPod ? () => setPodSheetOpen(true) : undefined}
     />
   );
 
@@ -324,6 +358,12 @@ export default function DocViewPage() {
             >
               <Icons.Pencil className="mr-2 h-4 w-4" />
               Edit
+            </Button>
+          )}
+          {canRecordPod && (
+            <Button size="sm" variant="secondary" onClick={() => setPodSheetOpen(true)}>
+              <Icons.ClipboardCheck className="mr-2 h-4 w-4" />
+              Record POD
             </Button>
           )}
           {convertTargets.length === 1 ? (
@@ -587,6 +627,38 @@ export default function DocViewPage() {
                     />
                   </div>
                 </div>
+                {type === "delivery-note" && document?.podConfirmation?.confirmedAt && (
+                  <div className="mt-4 pt-4 border-t space-y-2 text-sm">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Proof of delivery</p>
+                    <p>
+                      Confirmed{" "}
+                      {new Date(document.podConfirmation.confirmedAt).toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                      {document.podConfirmation.receiverName
+                        ? ` · Received by ${document.podConfirmation.receiverName}`
+                        : ""}
+                    </p>
+                    {document.podConfirmation.note ? (
+                      <p className="text-muted-foreground whitespace-pre-wrap">{document.podConfirmation.note}</p>
+                    ) : null}
+                    <div className="rounded border divide-y max-w-3xl">
+                      {(document.podConfirmation.lines ?? []).map((ln) => {
+                        const docLine = document.lines.find((l) => l.id === ln.lineId);
+                        return (
+                          <div key={ln.lineId} className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs">
+                            <span className="min-w-0">{docLine?.description ?? ln.lineId}</span>
+                            <span className="shrink-0 text-muted-foreground">
+                              Received {ln.qtyReceived} of {ln.qtyShipped}
+                              {ln.varianceReason ? ` — ${ln.varianceReason}` : ""}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {/* Invoice payment status bar */}
                 {document?.status === "DRAFT" && (
                   <div className="mt-4 pt-4 border-t space-y-2">
@@ -982,6 +1054,137 @@ export default function DocViewPage() {
         </SheetContent>
       </Sheet>
 
+      <Sheet open={podSheetOpen} onOpenChange={setPodSheetOpen} modal={false}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Proof of delivery</SheetTitle>
+            <SheetDescription>
+              Record quantities received at the customer. Invoicing uses these quantities (not shipped quantities when they differ).
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="pod-receiver">Receiver name</Label>
+              <Input
+                id="pod-receiver"
+                value={podReceiverName}
+                onChange={(e) => setPodReceiverName(e.target.value)}
+                placeholder="Who signed / confirmed receipt"
+                autoComplete="name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pod-note">Note (optional)</Label>
+              <Textarea
+                id="pod-note"
+                value={podNote}
+                onChange={(e) => setPodNote(e.target.value)}
+                placeholder="Vehicle, condition, short shipment details…"
+                rows={2}
+              />
+            </div>
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Line quantities</p>
+              {podLineRows.map((row, idx) => {
+                const receivedNum = Number(row.qtyReceived);
+                const needsVariance =
+                  Number.isFinite(receivedNum) && Math.abs(receivedNum - row.qtyShipped) > 0.001;
+                return (
+                  <div key={row.lineId || idx} className="rounded border p-3 space-y-2">
+                    <p className="text-sm font-medium leading-snug">{row.description}</p>
+                    <p className="text-xs text-muted-foreground">Shipped: {row.qtyShipped}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <Label className="text-xs">Qty received</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={row.qtyReceived}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setPodLineRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, qtyReceived: v } : r))
+                            );
+                          }}
+                        />
+                      </div>
+                      {needsVariance ? (
+                        <div className="sm:col-span-2">
+                          <Label className="text-xs">Variance reason (required)</Label>
+                          <Input
+                            value={row.varianceReason}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPodLineRows((prev) =>
+                                prev.map((r, i) => (i === idx ? { ...r, varianceReason: v } : r))
+                              );
+                            }}
+                            placeholder="e.g. damaged cases, partial offload"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <SheetFooter className="mt-8">
+            <Button variant="outline" onClick={() => setPodSheetOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={podSaving || !podReceiverName.trim()}
+              onClick={async () => {
+                if (!podReceiverName.trim()) {
+                  toast.error("Receiver name is required.");
+                  return;
+                }
+                for (let i = 0; i < podLineRows.length; i++) {
+                  const row = podLineRows[i];
+                  const q = Number(row.qtyReceived);
+                  if (!Number.isFinite(q) || q < 0) {
+                    toast.error(`Line ${i + 1}: enter a valid received quantity.`);
+                    return;
+                  }
+                  if (q - row.qtyShipped > 0.01) {
+                    toast.error(`Line ${i + 1}: received cannot exceed shipped.`);
+                    return;
+                  }
+                  if (Math.abs(q - row.qtyShipped) > 0.01 && !row.varianceReason.trim()) {
+                    toast.error(`Line ${i + 1}: add a variance reason when quantity differs from shipped.`);
+                    return;
+                  }
+                }
+                setPodSaving(true);
+                try {
+                  await confirmDeliveryPodApi(id, {
+                    receiverName: podReceiverName.trim(),
+                    note: podNote.trim() || undefined,
+                    lines: podLineRows.map((r) => ({
+                      lineId: r.lineId,
+                      qtyReceived: Number(r.qtyReceived),
+                      varianceReason: r.varianceReason.trim() || undefined,
+                    })),
+                  });
+                  toast.success("Proof of delivery saved.");
+                  setPodSheetOpen(false);
+                  await refreshDocument();
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setPodSaving(false);
+                }
+              }}
+            >
+              {podSaving ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Check className="mr-2 h-4 w-4" />}
+              Save POD
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
       {/* Quick confirm dialog for sales-order → invoice (no warehouse/party change needed) */}
       {quickConvertOpen && quickConvertTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -1187,6 +1390,7 @@ function DynamicNextStepsPanel({
   onAction,
   onConvert,
   onSendEmail,
+  onRecordPod,
 }: {
   type: string;
   document: DocumentDetailRecord | null;
@@ -1196,6 +1400,7 @@ function DynamicNextStepsPanel({
   onAction: (action: string) => Promise<void>;
   onConvert: (target: DocTypeKey) => void;
   onSendEmail: () => void;
+  onRecordPod?: () => void;
 }) {
   const [notesPreviewOpen, setNotesPreviewOpen] = React.useState(false);
 
@@ -1220,10 +1425,29 @@ function DynamicNextStepsPanel({
       steps.push({ icon: <Icons.FileText className="h-4 w-4" />, text: "Or convert directly to Invoice", action: () => onConvert("invoice"), actionLabel: "Convert to Invoice", variant: "outline" });
     }
   } else if (type === "delivery-note") {
+    const st = status.toUpperCase();
+    const hasPod = !!document?.podConfirmation?.confirmedAt;
     if (status === "DRAFT") {
       steps.push({ icon: <Icons.Package className="h-4 w-4" />, text: "Submit and complete pick & pack" });
-    } else if (status === "DELIVERED" || status === "POSTED") {
-      steps.push({ icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />, text: "Delivery complete — create invoice", action: () => onConvert("invoice"), actionLabel: "Create Invoice", variant: "default" });
+    } else if (["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) {
+      if (!hasPod && onRecordPod) {
+        steps.push({
+          icon: <Icons.ClipboardCheck className="h-4 w-4 text-amber-600" />,
+          text: "Record proof of delivery with received quantities — required before invoicing.",
+          action: onRecordPod,
+          actionLabel: "Record POD",
+          variant: "default",
+        });
+      }
+      if (hasPod && convertTargets.includes("invoice")) {
+        steps.push({
+          icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />,
+          text: "Create invoice from quantities acknowledged at delivery.",
+          action: () => onConvert("invoice"),
+          actionLabel: "Create Invoice",
+          variant: "default",
+        });
+      }
     }
     if (warehouseTaskLink) {
       steps.push({ icon: <Icons.Warehouse className="h-4 w-4" />, text: warehouseTaskLink.label, href: warehouseTaskLink.href });

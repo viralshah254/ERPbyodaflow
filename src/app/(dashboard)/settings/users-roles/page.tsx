@@ -25,14 +25,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  PERMISSION_GROUPS,
-  getAllPermissions,
-  type UserRow,
-} from "@/lib/types/users-roles";
+import type { PermissionCatalogGroupDto, UserRow } from "@/lib/types/users-roles";
 import {
   createRoleApi,
   createUserApi,
+  fetchPermissionCatalogApi,
   fetchRolesApi,
   fetchUsersApi,
   type RoleDetailRow,
@@ -84,14 +81,15 @@ export default function UsersRolesPage() {
   });
   const [roleForm, setRoleForm] = React.useState({ name: "", description: "", permissions: [] as string[] });
 
-  const allPerms = React.useMemo(() => getAllPermissions(), []);
+  const [permissionCatalog, setPermissionCatalog] = React.useState<PermissionCatalogGroupDto[]>([]);
 
   React.useEffect(() => {
     setLoading(true);
-    Promise.all([fetchUsersApi(), fetchRolesApi()])
-      .then(([nextUsers, nextRoles]) => {
+    Promise.all([fetchUsersApi(), fetchRolesApi(), fetchPermissionCatalogApi()])
+      .then(([nextUsers, nextRoles, catalog]) => {
         setUsers(nextUsers);
         setRoles(nextRoles);
+        setPermissionCatalog(catalog);
       })
       .catch((error) => {
         toast.error((error as Error).message || "Failed to load users and roles.");
@@ -562,23 +560,36 @@ export default function UsersRolesPage() {
             </div>
             <div className="space-y-2">
               <Label>Permissions</Label>
-              <div className="space-y-3 max-h-64 overflow-y-auto rounded border p-3">
-                {PERMISSION_GROUPS.map((g) => (
-                  <div key={g.group}>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">{g.group}</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1">
-                      {g.permissions.map((perm) => (
-                        <label key={perm} className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={roleForm.permissions.includes(perm)}
-                            onCheckedChange={() => toggleRolePermission(perm)}
-                          />
-                          <span className="text-sm">{perm}</span>
-                        </label>
-                      ))}
+              <p className="text-xs text-muted-foreground">
+                Checked keys are saved exactly as the backend expects (invalid strings are ignored server-side).
+              </p>
+              <div className="space-y-4 max-h-[28rem] overflow-y-auto rounded border p-3">
+                {permissionCatalog.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {loading ? "Loading permission catalog…" : "No catalog loaded. Check API /settings/permissions."}
+                  </p>
+                ) : (
+                  permissionCatalog.map((g) => (
+                    <div key={g.id}>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">{g.label}</p>
+                      <div className="flex flex-col gap-1.5">
+                        {g.permissions.map((perm) => (
+                          <label key={perm.key} className="flex items-start gap-2 cursor-pointer">
+                            <Checkbox
+                              className="mt-0.5"
+                              checked={roleForm.permissions.includes(perm.key)}
+                              onCheckedChange={() => toggleRolePermission(perm.key)}
+                            />
+                            <span className="text-sm leading-snug">
+                              <span className="font-medium">{perm.label}</span>
+                              <span className="block text-xs text-muted-foreground font-mono">{perm.key}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>

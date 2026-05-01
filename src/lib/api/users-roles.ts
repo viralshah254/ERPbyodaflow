@@ -1,5 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { RoleRow, UserRow } from "@/lib/types/users-roles";
+import type { PermissionCatalogGroupDto, RoleRow, UserRow } from "@/lib/types/users-roles";
 
 export interface RoleDetailRow extends RoleRow {
   scope?: "ORG" | "BRANCH" | "DEPARTMENT";
@@ -96,6 +96,12 @@ export async function updateUserApi(
     body,
   });
   return mapUser(payload);
+}
+
+export async function fetchPermissionCatalogApi(): Promise<PermissionCatalogGroupDto[]> {
+  requireLiveApi("Permission catalog");
+  const payload = await apiRequest<{ groups: PermissionCatalogGroupDto[] }>("/api/settings/permissions");
+  return payload.groups ?? [];
 }
 
 export async function fetchRolesApi(search?: string): Promise<RoleDetailRow[]> {

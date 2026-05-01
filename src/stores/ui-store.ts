@@ -10,6 +10,11 @@ interface UIState {
   /** Persisted: compact mode toggle */
   compactMode: boolean;
 
+  /** Bumped when org sidebar layout prefs change so AppSidebar refetches without a full reload. */
+  sidebarPreferencesRevision: number;
+
+  bumpSidebarPreferencesRevision: () => void;
+
   setCommandPaletteOpen: (open: boolean) => void;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
@@ -38,6 +43,10 @@ export const useUIStore = create<UIState>((set) => ({
   theme: "system",
   notifications: [],
   compactMode: false,
+  sidebarPreferencesRevision: 0,
+
+  bumpSidebarPreferencesRevision: () =>
+    set((s) => ({ sidebarPreferencesRevision: s.sidebarPreferencesRevision + 1 })),
 
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),

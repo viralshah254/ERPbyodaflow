@@ -171,14 +171,14 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     tier: "primary",
     order: 6,
     items: [
-      { key: "purchasing-requests", label: "Purchase Requests", href: "/purchasing/requests", icon: "ClipboardList", moduleKey: "purchasing", requiresPermissions: ["purchasing.orders.read"] },
-      { key: "purchasing-orders", label: "Purchase Orders", href: "/purchasing/orders", icon: "FileText", moduleKey: "purchasing", termKey: "purchaseOrder", requiresPermissions: ["purchasing.orders.read"] },
-      { key: "purchasing-guided-sourcing-flow", label: "Guided Sourcing Flow", href: "/purchasing/sourcing-flow", icon: "Workflow", moduleKey: "purchasing", requiresPermissions: ["purchasing.orders.read"] },
+      { key: "purchasing-requests", label: "Purchase Requests", href: "/purchasing/requests", icon: "ClipboardList", moduleKey: "purchasing", requiresPermissions: ["purchase.read", "purchasing.orders.read"] },
+      { key: "purchasing-orders", label: "Purchase Orders", href: "/purchasing/orders", icon: "FileText", moduleKey: "purchasing", termKey: "purchaseOrder", requiresPermissions: ["purchase.read", "purchasing.orders.read"] },
+      { key: "purchasing-guided-sourcing-flow", label: "Guided Sourcing Flow", href: "/purchasing/sourcing-flow", icon: "Workflow", moduleKey: "purchasing", requiresPermissions: ["purchase.read", "purchasing.orders.read"] },
       { key: "purchasing-grn", label: "Goods Receipt (GRN)", href: "/inventory/receipts", icon: "PackageCheck", moduleKey: "purchasing", termKey: "goodsReceipt", requiresPermissions: ["purchasing.grn.read"] },
       { key: "purchasing-suppliers", label: "Suppliers", href: "/ap/suppliers", icon: "Building2", moduleKey: "purchasing", termKey: "supplier", requiresPermissions: ["purchasing.suppliers.read"] },
       { key: "purchasing-supplier-invoices", label: "Supplier Invoices (AP)", href: "/ap/bills", icon: "FileText", moduleKey: "purchasing", requiresPermissions: ["purchasing.bills.read"] },
       { key: "purchasing-returns", label: "Purchase Returns / Debit Notes", href: "/purchasing/purchase-returns", icon: "RotateCcw", moduleKey: "purchasing", requiresPermissions: ["purchasing.returns.read"] },
-      { key: "purchasing-cash-weight-audit", label: "Cash-to-Weight Audit", href: "/purchasing/cash-weight-audit", icon: "Scale", moduleKey: "purchasing", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["purchasing.orders.read"] },
+      { key: "purchasing-cash-weight-audit", label: "Cash-to-Weight Audit", href: "/purchasing/cash-weight-audit", icon: "Scale", moduleKey: "purchasing", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["purchase.read", "purchasing.orders.read"] },
     ],
   },
   {

@@ -56,6 +56,21 @@ type BackendTimelineEntry = {
   note?: string;
 };
 
+type BackendPodConfirmationLine = {
+  lineId: string;
+  qtyShipped: number;
+  qtyReceived: number;
+  varianceReason?: string;
+};
+
+type BackendPodConfirmation = {
+  confirmedAt: string | Date;
+  confirmedByUserId?: string;
+  receiverName?: string;
+  note?: string;
+  lines: BackendPodConfirmationLine[];
+};
+
 type BackendDocumentDetail = {
   id: string;
   number: string;
@@ -102,6 +117,7 @@ type BackendDocumentDetail = {
   openAmount?: number;
   isOverdue?: boolean;
   documentChain?: ChainNode[];
+  podConfirmation?: BackendPodConfirmation;
 };
 
 type ChainNode = {
@@ -325,6 +341,18 @@ function mapDocumentDetail(
     openAmount: payload.openAmount,
     isOverdue: payload.isOverdue,
     documentChain: payload.documentChain,
+    podConfirmation: payload.podConfirmation
+      ? {
+          confirmedAt:
+            typeof payload.podConfirmation.confirmedAt === "string"
+              ? payload.podConfirmation.confirmedAt
+              : new Date(payload.podConfirmation.confirmedAt).toISOString(),
+          confirmedByUserId: payload.podConfirmation.confirmedByUserId,
+          receiverName: payload.podConfirmation.receiverName,
+          note: payload.podConfirmation.note,
+          lines: payload.podConfirmation.lines ?? [],
+        }
+      : undefined,
   };
 }
 
@@ -430,6 +458,21 @@ export async function convertDocumentApi(
       body: payload,
     }
   );
+}
+
+export async function confirmDeliveryPodApi(
+  deliveryNoteId: string,
+  payload: {
+    receiverName: string;
+    note?: string;
+    lines: Array<{ lineId: string; qtyReceived: number; varianceReason?: string }>;
+  }
+): Promise<void> {
+  requireLiveApi("Proof of delivery");
+  await apiRequest(`/api/documents/delivery-note/${deliveryNoteId}/pod`, {
+    method: "POST",
+    body: payload,
+  });
 }
 
 export async function requestDocumentApprovalApi(

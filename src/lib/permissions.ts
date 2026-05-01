@@ -56,6 +56,7 @@ export const Permissions = {
   SALES_WRITE: "sales.write",
   SALES_APPROVE: "sales.approve",
   SALES_CANCEL: "sales.cancel",
+  SALES_DELIVERIES_POD: "sales.deliveries.pod",
   
   // Purchasing
   PURCHASE_READ: "purchase.read",

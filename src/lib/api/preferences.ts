@@ -1,4 +1,5 @@
 import type { SidebarLayout } from "@/config/navigation/sidebar-layout";
+import { useUIStore } from "@/stores/ui-store";
 import { apiRequest, requireLiveApi } from "./client";
 
 export type { SidebarLayout };
@@ -32,5 +33,9 @@ export async function updatePreferencesApi(patch: Partial<Preferences>): Promise
     method: "PATCH",
     body: patch,
   });
-  return { ...DEFAULT_PREFERENCES, ...data };
+  const merged = { ...DEFAULT_PREFERENCES, ...data };
+  if ("sidebarLayout" in patch && typeof window !== "undefined") {
+    useUIStore.getState().bumpSidebarPreferencesRevision();
+  }
+  return merged;
 }

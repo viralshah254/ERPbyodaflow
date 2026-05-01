@@ -2,6 +2,11 @@ import type { ResolvedNavItem, ResolvedNavSection } from "./index";
 
 export type SidebarLayout = {
   sectionOrder?: string[];
+  /**
+   * When loading: array = explicit sections above “More”; `undefined`/`null`/`missing` = use built‑in tiers.
+   * When PATCHing: array saves placement; `null` clears persisted override so built‑in tiers apply; omit keeps prior value on merge.
+   */
+  mainSectionKeys?: string[] | null;
   topLevelItemOrder?: Partial<Record<string, string[]>>;
   hiddenItemKeys?: string[];
 };
@@ -81,9 +86,42 @@ function enforceSectionPins(sections: ResolvedNavSection[], pins: SidebarLayoutP
 function layoutHasCustomization(layout: SidebarLayout): boolean {
   if (layout.hiddenItemKeys?.length) return true;
   if (layout.sectionOrder?.length) return true;
+  if (layout.mainSectionKeys != null) return true;
   const t = layout.topLevelItemOrder;
   if (t && Object.keys(t).length > 0) return true;
   return false;
+}
+
+/**
+ * Split ordered sections between the main rail and “More”, using persisted prefs when configured.
+ * Legacy when `layout.mainSectionKeys` is omitted: tier === "primary" above divider. Empty array puts all sections under “More”.
+ */
+export function splitSectionsMainAndMore(
+  ordered: ResolvedNavSection[],
+  layout: SidebarLayout | null | undefined
+): { main: ResolvedNavSection[]; more: ResolvedNavSection[] } {
+  const raw = layout?.mainSectionKeys;
+  if (raw == null) {
+    return {
+      main: ordered.filter((s) => s.tier === "primary"),
+      more: ordered.filter((s) => s.tier !== "primary"),
+    };
+  }
+
+  const pinned = raw;
+  if (!pinned.length) {
+    return { main: [], more: [...ordered] };
+  }
+
+  const byKey = new Map(ordered.map((s) => [s.key, s]));
+  const mainSet = new Set(pinned);
+  const main: ResolvedNavSection[] = [];
+  for (const k of pinned) {
+    const s = byKey.get(k);
+    if (s) main.push(s);
+  }
+  const more = ordered.filter((s) => !mainSet.has(s.key));
+  return { main, more };
 }
 
 /**

@@ -55,6 +55,21 @@ export type DocumentStatusActor = {
   name: string;
 };
 
+export type PodConfirmationLineRecord = {
+  lineId: string;
+  qtyShipped: number;
+  qtyReceived: number;
+  varianceReason?: string;
+};
+
+export type PodConfirmationRecord = {
+  confirmedAt: string;
+  confirmedByUserId?: string;
+  receiverName?: string;
+  note?: string;
+  lines: PodConfirmationLineRecord[];
+};
+
 export type DocumentDetailRecord = {
   id: string;
   type: DocTypeKey;
@@ -129,6 +144,8 @@ export type DocumentDetailRecord = {
   openAmount?: number;
   isOverdue?: boolean;
   documentChain?: DocumentChainNode[];
+  /** Proof of delivery (delivery-note only). */
+  podConfirmation?: PodConfirmationRecord;
 };
 
 export type DocumentChainNode = {

@@ -44,6 +44,36 @@ import { useOrgContextStore } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+const RAIL_ID_MAIN = "m:";
+const RAIL_ID_MORE = "o:";
+
+function parseRailDndId(id: string): { rail: "main" | "more"; key: string } | null {
+  if (id.startsWith(RAIL_ID_MAIN)) return { rail: "main", key: id.slice(RAIL_ID_MAIN.length) };
+  if (id.startsWith(RAIL_ID_MORE)) return { rail: "more", key: id.slice(RAIL_ID_MORE.length) };
+  return null;
+}
+
+/** Primary-tier section keys above the divider when no explicit rail prefs. */
+function defaultMainMembership(sectionOrder: string[], base: ResolvedNavSection[]): Set<string> {
+  const tierMain = new Set(base.filter((s) => s.tier === "primary").map((s) => s.key));
+  return new Set(sectionOrder.filter((k) => tierMain.has(k)));
+}
+
+/** Build full section order: main keys in persisted order first, then the rest (global order unchanged within “More”). */
+function mergeSectionOrderWithMainRailFirst(sectionOrder: string[], mainKeysOrdered: string[]): string[] {
+  const allow = new Set(sectionOrder);
+  const mains = mainKeysOrdered.filter((k) => allow.has(k));
+  const mainsSet = new Set(mains);
+  const mores = sectionOrder.filter((k) => !mainsSet.has(k));
+  return [...mains, ...mores];
+}
+
+function recombineSectionsByMembership(sectionOrder: string[], mem: Set<string>): string[] {
+  const mains = sectionOrder.filter((k) => mem.has(k));
+  const mores = sectionOrder.filter((k) => !mem.has(k));
+  return [...mains, ...mores];
+}
+
 function mergeKeyOrder(saved: string[] | undefined, currentKeys: string[]): string[] {
   if (!saved?.length) return [...currentKeys];
   const allow = new Set(currentKeys);
@@ -83,17 +113,26 @@ function buildLayoutDraftFromPrefs(
   return { sectionOrder, itemOrders, hidden };
 }
 
-function buildSidebarPayload(sectionOrder: string[], itemOrders: Record<string, string[]>, hidden: Set<string>): SidebarLayout {
+function buildSidebarPayload(
+  sectionOrder: string[],
+  itemOrders: Record<string, string[]>,
+  hidden: Set<string>,
+  mainSectionKeysForApi: string[] | null | undefined
+): SidebarLayout {
   const topLevelItemOrder: Record<string, string[]> = {};
   for (const sk of sectionOrder) {
     const keys = itemOrders[sk];
     if (keys?.length) topLevelItemOrder[sk] = [...keys];
   }
-  return {
+  const out: SidebarLayout = {
     sectionOrder: [...sectionOrder],
     topLevelItemOrder,
     hiddenItemKeys: hidden.size ? [...hidden] : [],
   };
+  if (mainSectionKeysForApi === undefined) return out;
+  if (mainSectionKeysForApi === null) out.mainSectionKeys = null;
+  else out.mainSectionKeys = [...mainSectionKeysForApi];
+  return out;
 }
 
 function SortableChrome({
@@ -119,7 +158,7 @@ function SortableChrome({
       >
         <Icons.GripVertical className="h-4 w-4" />
       </button>
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="min-w-0 flex-1 flex flex-col gap-0.5">{children}</div>
     </div>
   );
 }
@@ -176,6 +215,22 @@ export default function SidebarSettingsPage() {
   const [itemSectionKey, setItemSectionKey] = React.useState<string | null>(null);
   const [layoutTab, setLayoutTab] = React.useState("sections");
 
+  /** Section keys rendered above “More”; when placement is implicit, tiers from nav config determine membership. */
+  const [railMainMembership, setRailMainMembership] = React.useState<Set<string>>(() => new Set());
+  /** When true, `mainSectionKeys` is persisted; when false, live sidebar uses built-in tiers. */
+  const [railPlacementExplicit, setRailPlacementExplicit] = React.useState(false);
+
+  const baseSectionMap = React.useMemo(() => new Map(baseSections.map((s) => [s.key, s])), [baseSections]);
+
+  const sectionOrderRef = React.useRef(sectionOrder);
+  sectionOrderRef.current = sectionOrder;
+  const railMainMembershipRef = React.useRef(railMainMembership);
+  railMainMembershipRef.current = railMainMembership;
+  const railPlacementExplicitRef = React.useRef(railPlacementExplicit);
+  railPlacementExplicitRef.current = railPlacementExplicit;
+  const baseSectionsRef = React.useRef(baseSections);
+  baseSectionsRef.current = baseSections;
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -184,12 +239,25 @@ export default function SidebarSettingsPage() {
   const applyDraftFromPrefs = React.useCallback(
     (p: Preferences | null, base: typeof baseSections) => {
       const draft = buildLayoutDraftFromPrefs(base, p?.sidebarLayout ?? undefined);
-      setSectionOrder(draft.sectionOrder);
       setItemOrders(draft.itemOrders);
       setHidden(draft.hidden);
+
+      const savedMainKeys = p?.sidebarLayout?.mainSectionKeys;
+      let nextSectionOrder = draft.sectionOrder;
+      if (Array.isArray(savedMainKeys)) {
+        setRailPlacementExplicit(true);
+        const memFiltered = savedMainKeys.filter((k) => draft.sectionOrder.includes(k));
+        setRailMainMembership(new Set(memFiltered));
+        nextSectionOrder = mergeSectionOrderWithMainRailFirst(draft.sectionOrder, memFiltered);
+      } else {
+        setRailPlacementExplicit(false);
+        setRailMainMembership(defaultMainMembership(draft.sectionOrder, base));
+      }
+      setSectionOrder(nextSectionOrder);
+
       setItemSectionKey((prev) => {
-        if (prev && draft.sectionOrder.includes(prev)) return prev;
-        return draft.sectionOrder[0] ?? null;
+        if (prev && nextSectionOrder.includes(prev)) return prev;
+        return nextSectionOrder[0] ?? null;
       });
     },
     []
@@ -223,6 +291,13 @@ export default function SidebarSettingsPage() {
     applyDraftFromPrefs(prefs, baseSections);
   }, [prefs, baseSections, applyDraftFromPrefs]);
 
+  React.useEffect(() => {
+    if (railPlacementExplicit) return;
+    setRailMainMembership(defaultMainMembership(sectionOrder, baseSections));
+  }, [railPlacementExplicit, baseSections, sectionOrder]);
+
+  const recombineGroupedOrder = React.useCallback((ord: string[], mem: Set<string>) => recombineSectionsByMembership(ord, mem), []);
+
   const onSectionDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -230,8 +305,83 @@ export default function SidebarSettingsPage() {
       const oldIndex = items.indexOf(String(active.id));
       const newIndex = items.indexOf(String(over.id));
       if (oldIndex < 0 || newIndex < 0) return items;
-      return arrayMove(items, oldIndex, newIndex);
+      const moved = arrayMove(items, oldIndex, newIndex);
+      if (!railPlacementExplicitRef.current) return moved;
+      return recombineGroupedOrder(moved, railMainMembershipRef.current);
     });
+  };
+
+  const onRailsDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const parsedA = parseRailDndId(String(active.id));
+    const parsedO = parseRailDndId(String(over.id));
+    if (!parsedA || !parsedO) return;
+
+    const ord = sectionOrderRef.current;
+    let membership = railPlacementExplicitRef.current
+      ? new Set(railMainMembershipRef.current)
+      : defaultMainMembership(ord, baseSectionsRef.current);
+    let placementExplicitNext = true;
+
+    const recombineFromParts = (mains: string[], mores: string[]) => [...mains, ...mores];
+
+    if (parsedA.rail === "main" && parsedO.rail === "main") {
+      const mains = ord.filter((k) => membership.has(k));
+      const oldIndex = mains.indexOf(parsedA.key);
+      const newIndex = mains.indexOf(parsedO.key);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const nextMains = arrayMove(mains, oldIndex, newIndex);
+      const mores = ord.filter((k) => !membership.has(k));
+      setRailPlacementExplicit(placementExplicitNext);
+      setRailMainMembership(membership);
+      setSectionOrder(recombineFromParts(nextMains, mores));
+      return;
+    }
+
+    if (parsedA.rail === "more" && parsedO.rail === "more") {
+      const mores = ord.filter((k) => !membership.has(k));
+      const oldIndex = mores.indexOf(parsedA.key);
+      const newIndex = mores.indexOf(parsedO.key);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const nextMores = arrayMove(mores, oldIndex, newIndex);
+      const mains = ord.filter((k) => membership.has(k));
+      setRailPlacementExplicit(placementExplicitNext);
+      setRailMainMembership(membership);
+      setSectionOrder(recombineFromParts(mains, nextMores));
+      return;
+    }
+
+    const ak = parsedA.key;
+
+    if (parsedA.rail === "more" && parsedO.rail === "main") {
+      const without = ord.filter((k) => k !== ak);
+      const nextMem = new Set(membership);
+      nextMem.add(ak);
+      let mains = without.filter((k) => nextMem.has(k));
+      const pivotIdx = mains.indexOf(parsedO.key);
+      if (pivotIdx < 0) mains = [...mains, ak];
+      else mains = [...mains.slice(0, pivotIdx), ak, ...mains.slice(pivotIdx)];
+      const mores = without.filter((k) => !nextMem.has(k));
+      setRailPlacementExplicit(placementExplicitNext);
+      setRailMainMembership(nextMem);
+      setSectionOrder(recombineFromParts(mains, mores));
+      return;
+    }
+
+    if (parsedA.rail === "main" && parsedO.rail === "more") {
+      const without = ord.filter((k) => k !== ak);
+      const nextMem = new Set(membership);
+      nextMem.delete(ak);
+      const mains = without.filter((k) => nextMem.has(k));
+      let mores = without.filter((k) => !nextMem.has(k));
+      const pivotIdx = mores.indexOf(parsedO.key);
+      if (pivotIdx < 0) mores = [...mores, ak];
+      else mores = [...mores.slice(0, pivotIdx), ak, ...mores.slice(pivotIdx)];
+      setRailPlacementExplicit(placementExplicitNext);
+      setRailMainMembership(nextMem);
+      setSectionOrder(recombineFromParts(mains, mores));
+    }
   };
 
   const onItemDragEnd = (event: DragEndEvent) => {
@@ -246,6 +396,13 @@ export default function SidebarSettingsPage() {
     });
   };
 
+  const handleRestoreBuiltInRails = React.useCallback(() => {
+    setRailPlacementExplicit(false);
+    const mem = defaultMainMembership(sectionOrder, baseSections);
+    setRailMainMembership(mem);
+    setSectionOrder(recombineSectionsByMembership(sectionOrder, mem));
+  }, [sectionOrder, baseSections]);
+
   const handleSave = async () => {
     if (!isApiConfigured()) {
       toast.error("Set NEXT_PUBLIC_API_URL to save.");
@@ -253,7 +410,10 @@ export default function SidebarSettingsPage() {
     }
     setSaving(true);
     try {
-      const sidebarLayout = buildSidebarPayload(sectionOrder, itemOrders, hidden);
+      const mainSectionKeysForApi = railPlacementExplicit
+        ? sectionOrder.filter((k) => railMainMembership.has(k))
+        : null;
+      const sidebarLayout = buildSidebarPayload(sectionOrder, itemOrders, hidden, mainSectionKeysForApi);
       const updated = await updatePreferencesApi({ sidebarLayout });
       setPrefs(updated);
       toast.success("Sidebar layout saved.");
@@ -293,6 +453,30 @@ export default function SidebarSettingsPage() {
 
   const itemKeysForSection = itemSectionKey ? itemOrders[itemSectionKey] ?? [] : [];
 
+  const mainKeysOrdered = React.useMemo(
+    () => sectionOrder.filter((k) => railMainMembership.has(k)),
+    [sectionOrder, railMainMembership]
+  );
+  const moreKeysOrdered = React.useMemo(
+    () => sectionOrder.filter((k) => !railMainMembership.has(k)),
+    [sectionOrder, railMainMembership]
+  );
+
+  const visibilityHintForSection = React.useCallback(
+    (secKey: string): string | null => {
+      const sec = baseSectionMap.get(secKey);
+      if (!sec || sec.items.length === 0) {
+        return "Not shown — no links available for your modules or permissions.";
+      }
+      const keys = itemOrders[secKey]?.length ? itemOrders[secKey]! : sec.items.map((i) => i.key);
+      if (!keys.some((k) => !hidden.has(k))) {
+        return "Not shown — all top-level links are hidden here; use Top-level links to show at least one.";
+      }
+      return null;
+    },
+    [baseSectionMap, hidden, itemOrders]
+  );
+
   return (
     <PageLayout
       title="Sidebar navigation"
@@ -302,36 +486,119 @@ export default function SidebarSettingsPage() {
         <CardHeader>
           <CardTitle>Modular sidebar</CardTitle>
           <CardDescription>
-            Changes apply to all users in this organization. Core stays first and Processing stays after Core when manufacturing is enabled.
-            Saving requires the <code className="rounded bg-muted px-1">admin.settings</code> permission.
+            Changes apply organization-wide after modules and permission checks. Until you customize Main / More, placement
+            uses built‑in tiers (primary sections above the divider, secondary under &ldquo;More&rdquo;). Core stays first,
+            and Processing stays immediately after Core when manufacturing is enabled. Saving requires the{" "}
+            <code className="rounded bg-muted px-1">admin.settings</code> permission.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <Tabs value={layoutTab} onValueChange={setLayoutTab}>
             <TabsList>
-              <TabsTrigger value="sections">Sections</TabsTrigger>
+              <TabsTrigger value="sections">Sections order</TabsTrigger>
+              <TabsTrigger value="rails">Main / More</TabsTrigger>
               <TabsTrigger value="items">Top-level links</TabsTrigger>
             </TabsList>
           </Tabs>
 
           {layoutTab === "sections" ? (
             <div className="space-y-3 pt-4">
-              <p className="text-sm text-muted-foreground">Drag sections to change order (Core / Processing pinning still applies in the live sidebar).</p>
+              <p className="text-sm text-muted-foreground">
+                Drag to set the canonical order within each rail (Main block, then More). Pins still apply live: Core first,
+                then Processing after Core when manufacturing is on.
+              </p>
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSectionDragEnd}>
                 <SortableContext items={sectionOrder} strategy={verticalListSortingStrategy}>
                   <div className="flex flex-col gap-2">
                     {loading ? (
                       <p className="text-sm text-muted-foreground">Loading…</p>
                     ) : (
-                      sectionOrder.map((key) => (
-                        <SortableChrome key={key} id={key}>
-                          <span className="truncate text-sm font-medium">{sectionMeta.get(key) ?? key}</span>
-                          <span className="truncate text-xs text-muted-foreground">{key}</span>
-                        </SortableChrome>
-                      ))
+                      sectionOrder.map((key) => {
+                        const hint = visibilityHintForSection(key);
+                        return (
+                          <SortableChrome key={key} id={key}>
+                            <span className="truncate text-sm font-medium">{sectionMeta.get(key) ?? key}</span>
+                            <span className="truncate font-mono text-xs text-muted-foreground">{key}</span>
+                            {hint ? <span className="text-xs text-amber-600 dark:text-amber-500">{hint}</span> : null}
+                          </SortableChrome>
+                        );
+                      })
                     )}
                   </div>
                 </SortableContext>
+              </DndContext>
+            </div>
+          ) : layoutTab === "rails" ? (
+            <div className="space-y-4 pt-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="max-w-xl text-sm text-muted-foreground">
+                  Drag sections between columns to decide what stays above &ldquo;More&rdquo; in the live sidebar. Ordering
+                  within each column follows the Sections order tab within that rail block.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRestoreBuiltInRails}
+                  disabled={loading || saving}
+                >
+                  Use built‑in tiers
+                </Button>
+              </div>
+              {!railPlacementExplicit ? (
+                <p className="text-xs text-muted-foreground">
+                  Currently using automatic placement (primary-tier sections → Main).
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Custom placement will be saved with your sidebar layout.</p>
+              )}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onRailsDragEnd}>
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Main (above divider)</h3>
+                    <SortableContext
+                      items={mainKeysOrdered.map((k) => `${RAIL_ID_MAIN}${k}`)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="flex min-h-[4rem] flex-col gap-2 rounded-md border border-dashed bg-muted/20 p-2">
+                        {loading ? (
+                          <p className="text-sm text-muted-foreground">Loading…</p>
+                        ) : mainKeysOrdered.length === 0 ? (
+                          <p className="py-6 text-center text-sm text-muted-foreground">Nothing in Main — drag from More</p>
+                        ) : (
+                          mainKeysOrdered.map((key) => (
+                            <SortableChrome key={`${RAIL_ID_MAIN}${key}`} id={`${RAIL_ID_MAIN}${key}`}>
+                              <span className="truncate text-sm font-medium">{sectionMeta.get(key) ?? key}</span>
+                              <span className="truncate font-mono text-xs text-muted-foreground">{key}</span>
+                            </SortableChrome>
+                          ))
+                        )}
+                      </div>
+                    </SortableContext>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">More (below divider)</h3>
+                    <SortableContext
+                      items={moreKeysOrdered.map((k) => `${RAIL_ID_MORE}${k}`)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="flex min-h-[4rem] flex-col gap-2 rounded-md border border-dashed bg-muted/20 p-2">
+                        {loading ? (
+                          <p className="text-sm text-muted-foreground">Loading…</p>
+                        ) : moreKeysOrdered.length === 0 ? (
+                          <p className="py-6 text-center text-sm text-muted-foreground">Everything is in Main</p>
+                        ) : (
+                          moreKeysOrdered.map((key) => (
+                            <SortableChrome key={`${RAIL_ID_MORE}${key}`} id={`${RAIL_ID_MORE}${key}`}>
+                              <span className="truncate text-sm font-medium">{sectionMeta.get(key) ?? key}</span>
+                              <span className="truncate font-mono text-xs text-muted-foreground">{key}</span>
+                            </SortableChrome>
+                          ))
+                        )}
+                      </div>
+                    </SortableContext>
+                  </div>
+                </div>
               </DndContext>
             </div>
           ) : (

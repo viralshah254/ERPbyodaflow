@@ -7,7 +7,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { type ResolvedNavSection, type ResolvedNavItem } from "@/config/navigation";
-import { applySidebarLayout, type SidebarLayout } from "@/config/navigation/sidebar-layout";
+import { applySidebarLayout, splitSectionsMainAndMore, type SidebarLayout } from "@/config/navigation/sidebar-layout";
 import {
   computeDashboardSidebarModules,
   computeDashboardSidebarSections,
@@ -48,7 +48,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ className }: AppSidebarProps) {
-  const { sidebarCollapsed, setSidebarCollapsed } = useUIStore();
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarPreferencesRevision } = useUIStore();
   const { user, org, permissions } = useAuthStore();
   const {
     orgType: ctxOrgType,
@@ -78,7 +78,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sidebarPreferencesRevision]);
 
   const navParams = React.useMemo(
     () => ({
@@ -117,17 +117,11 @@ export function AppSidebar({ className }: AppSidebarProps) {
     [visibleSections, navCounts, franchisorInboundMerge]
   );
 
-  const primarySections = React.useMemo(
-    () => sectionsWithCounts.filter((s) => s.tier === "primary"),
-    [sectionsWithCounts]
-  );
+  const layoutForRails = sidebarLayout === undefined ? null : sidebarLayout;
 
-  const secondarySections = React.useMemo(
-    () =>
-      sectionsWithCounts
-        .filter((s) => s.tier !== "primary")
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [sectionsWithCounts]
+  const { main: primarySections, more: secondarySections } = React.useMemo(
+    () => splitSectionsMainAndMore(sectionsWithCounts, layoutForRails),
+    [sectionsWithCounts, layoutForRails]
   );
 
   return (
