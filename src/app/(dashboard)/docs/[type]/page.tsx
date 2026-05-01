@@ -30,6 +30,12 @@ import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import {
+  DOC_BULK_POST_RULES,
+  filterIdsForBulkApprove,
+  filterIdsForBulkPost,
+  partitionBulkDocResults,
+} from "@/lib/documents/bulk-eligibility";
 
 const TYPE_LABELS: Record<string, string> = {
   quote: "quote",
@@ -223,11 +229,43 @@ export default function DocTypeListPage() {
     );
   };
 
+  const selectedRows = React.useMemo(
+    () => allRows.filter((r) => selectedIds.includes(r.id)),
+    [allRows, selectedIds]
+  );
+
+  const showBulkApprove =
+    selectedIds.length > 0 &&
+    selectedRows.some((r) => r.status === "PENDING_APPROVAL");
+  const showBulkPost =
+    selectedIds.length > 0 && DOC_BULK_POST_RULES[type as DocTypeKey]?.canPost === true;
+
   const handleBulkApprove = async () => {
+    const approveIds = filterIdsForBulkApprove(selectedRows, selectedIds);
+    if (!approveIds.length) {
+      if (type === "invoice") {
+        toast.info(
+          "Approve only applies to items pending approval (e.g. credit policy). For draft invoices, use Post."
+        );
+      } else {
+        toast.info(
+          "None of the selected items are pending approval. Submit for approval first where required."
+        );
+      }
+      return;
+    }
     try {
-      await bulkDocumentActionApi(type as DocTypeKey, "approve", selectedIds);
+      const { results } = await bulkDocumentActionApi(type as DocTypeKey, "approve", approveIds);
+      const { succeeded, failed } = partitionBulkDocResults(results);
       await refreshRows();
-      toast.success(`${selectedIds.length} ${label.toLowerCase()} record(s) approved.`);
+      if (succeeded.length) {
+        toast.success(
+          `${succeeded.length} ${label.toLowerCase()} record(s) approved.`
+        );
+      }
+      if (failed.length) {
+        toast.error(`${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`);
+      }
       setSelectedIds([]);
     } catch (error) {
       toast.error((error as Error).message);
@@ -235,10 +273,34 @@ export default function DocTypeListPage() {
   };
 
   const handleBulkPost = async () => {
+    const postIds = filterIdsForBulkPost(type as DocTypeKey, selectedRows, selectedIds);
+    const rule = DOC_BULK_POST_RULES[type as DocTypeKey];
+    if (!rule?.canPost) {
+      toast.info("This document type cannot be posted from the list.");
+      return;
+    }
+    if (!postIds.length) {
+      if (rule.postOnlyWhenApproved) {
+        toast.info(
+          "Select approved items only. Draft documents must be submitted and approved before posting."
+        );
+      } else {
+        toast.info(
+          "None of the selected items can be posted. Choose drafts or approved documents that are not already posted or cancelled."
+        );
+      }
+      return;
+    }
     try {
-      await bulkDocumentActionApi(type as DocTypeKey, "post", selectedIds);
+      const { results } = await bulkDocumentActionApi(type as DocTypeKey, "post", postIds);
+      const { succeeded, failed } = partitionBulkDocResults(results);
       await refreshRows();
-      toast.success(`${selectedIds.length} ${label.toLowerCase()} record(s) posted.`);
+      if (succeeded.length) {
+        toast.success(`${succeeded.length} ${label.toLowerCase()} record(s) posted.`);
+      }
+      if (failed.length) {
+        toast.error(`${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`);
+      }
       setSelectedIds([]);
     } catch (error) {
       toast.error((error as Error).message);
@@ -308,12 +370,16 @@ export default function DocTypeListPage() {
                 <span className="text-sm text-muted-foreground">
                   {selectedIds.length} selected
                 </span>
-                <Button variant="outline" size="sm" onClick={handleBulkApprove}>
-                  Approve
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleBulkPost}>
-                  Post
-                </Button>
+                {showBulkApprove ? (
+                  <Button variant="outline" size="sm" onClick={handleBulkApprove}>
+                    Approve
+                  </Button>
+                ) : null}
+                {showBulkPost ? (
+                  <Button variant="outline" size="sm" onClick={handleBulkPost}>
+                    Post
+                  </Button>
+                ) : null}
                 <Button variant="outline" size="sm" onClick={handleExport}>
                   Export
                 </Button>

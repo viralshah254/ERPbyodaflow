@@ -119,30 +119,26 @@ An External Work Center is a record for each processor you work with. You set th
 
 This is the dispatch record. It tells the system that stock has physically left your warehouse and is now at the processor — but still belongs to CoolCatch.
 
+Sending to a processor is **always tied to a posted goods receipt (GRN)** so the **input kg comes from the receipt line** (true received weight), not from a purchase order. GRNs that already have every line sent to processing do not appear in the picker.
+
 ### Sending stock
 
 1. Go to **Manufacturing → Subcontracting**.
 2. Click **Send to processor**.
-3. Fill in the form:
+3. **Select a GRN** from the list (only receipts with at least one open line are shown). If a purchase order is linked to that receipt, it is shown for reference only.
+4. For **each receipt line** you want to send:
+   - Enable the line (lines already sent to a processor are shown as read-only with “Already sent to processor”).
+   - Choose **Work center**, **Species**, and **Process type** (the BOM and output preview follow from this; processing fees use the work center rate card where configured).
+5. Click **Create … orders** to create one subcontract order per enabled line.
 
-| Field | Notes |
-|---|---|
-| **Work center** | Select the processor from your list |
-| **Input SKU** | The raw product being sent (e.g. `ROUND-001`) |
-| **Quantity** | Weight in kg being dispatched |
-| **UOM** | kg |
-| **Processing fee per unit** | The agreed fee per kg (e.g. KES 15/kg for filleting). Leave blank if no fee applies. |
-| **Expected return date** | When you expect outputs back (optional) |
-
-4. Click **Create order**.
-
-The system creates a Subcontract Order with status `SENT` and records a WIP balance at the selected work center.
+The system creates subcontract order(s) with status `SENT` and records WIP at the selected work center(s) using the **GRN line weight** as input quantity.
 
 ### What happens in the background
 
-- A `WIP balance` entry is created: `X kg of Round Fish @ Nairobi Factory`
+- A `WIP balance` entry is created per order: e.g. **X kg** of the input SKU **@** the external work center
 - Stock is **not** removed from CoolCatch's books — it is reclassified as WIP
 - The order appears in the Orders list with status `SENT`
+- The order is linked to the **GRN and line index**; duplicate sends for the same line are blocked
 
 ### Viewing the WIP balance
 

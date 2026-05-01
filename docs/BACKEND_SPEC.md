@@ -668,7 +668,7 @@ All API endpoints the backend must implement. Base path assumed `/api` (or equiv
 | GET | /finance/statements/pnl | finance.statements.read | P&L |
 | GET | /finance/statements/balance-sheet | finance.statements.read | Balance sheet |
 | GET | /finance/statements/cash-flow | finance.statements.read | Cash flow |
-| GET | /finance/period-close | finance.close.write | Period close status / list periods |
+| GET | /finance/period-close | finance.close.write, finance.read, finance.statements.read | Period close status / list periods |
 | POST | /finance/period-close | finance.close.write | Close period (stub → real) |
 | POST | /finance/period-reopen | finance.close.write | Reopen period (stub → real) |
 | GET | /finance/budgets | finance.read | List budgets |

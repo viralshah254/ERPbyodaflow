@@ -14,6 +14,10 @@ import { downloadCsv } from "@/lib/export/csv";
 import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
 import { bulkDocumentActionApi } from "@/lib/api/documents";
 import {
+  filterIdsForBulkPost,
+  partitionBulkDocResults,
+} from "@/lib/documents/bulk-eligibility";
+import {
   getSavedViews,
   saveView,
   deleteSavedView,
@@ -66,6 +70,11 @@ export default function SalesInvoicesPage() {
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
     return out;
   }, [allRows, search, statusFilter]);
+
+  const selectedRows = React.useMemo(
+    () => allRows.filter((r) => selectedIds.includes(r.id)),
+    [allRows, selectedIds]
+  );
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -211,11 +220,24 @@ export default function SalesInvoicesPage() {
                   variant="outline"
                   size="sm"
                   onClick={async () => {
+                    const postIds = filterIdsForBulkPost("invoice", selectedRows, selectedIds);
+                    if (!postIds.length) {
+                      toast.info(
+                        "None of the selected invoices can be posted. Choose drafts or approved invoices that are not already posted or cancelled. Pending-approval invoices must be approved first."
+                      );
+                      return;
+                    }
                     try {
-                      await bulkDocumentActionApi("invoice", "post", selectedIds);
+                      const { results } = await bulkDocumentActionApi("invoice", "post", postIds);
+                      const { succeeded, failed } = partitionBulkDocResults(results);
                       await refreshRows();
+                      if (succeeded.length) {
+                        toast.success(`${succeeded.length} invoice(s) posted.`);
+                      }
+                      if (failed.length) {
+                        toast.error(`${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`);
+                      }
                       setSelectedIds([]);
-                      toast.success("Invoice(s) posted.");
                     } catch (error) {
                       toast.error(error instanceof Error ? error.message : "Failed to post invoices.");
                     }

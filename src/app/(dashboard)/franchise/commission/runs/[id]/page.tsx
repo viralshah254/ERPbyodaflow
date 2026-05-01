@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { CommissionSummaryCard } from "@/components/operational/CommissionSummaryCard";
-import { fetchCommissionRunById } from "@/lib/api/cool-catch";
+import { fetchCommissionRunById, fetchFranchiseesApi } from "@/lib/api/cool-catch";
+import type { FranchiseeRow } from "@/lib/api/cool-catch";
 import type { CommissionRunLineRow } from "@/lib/mock/franchise/commission";
 import { formatMoney } from "@/lib/money";
 
@@ -18,24 +19,97 @@ export default function CommissionRunDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const [run, setRun] = React.useState<Awaited<ReturnType<typeof fetchCommissionRunById>>>(null);
+  const [franchisees, setFranchisees] = React.useState<FranchiseeRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
+    fetchFranchiseesApi()
+      .then((rows) => { if (!cancelled) setFranchisees(rows); })
+      .catch(() => {});
     fetchCommissionRunById(id)
-      .then((r) => { if (!cancelled) setRun(r); })
-      .catch(() => { if (!cancelled) setRun(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .then((r) => {
+        if (!cancelled) setRun(r);
+      })
+      .catch(() => {
+        if (!cancelled) setRun(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
+  const feName = React.useCallback(
+    (fid?: string) => {
+      if (!fid) return "—";
+      const m = franchisees.find((x) => x.id === fid);
+      return m ? `${m.code} · ${m.name}` : fid.slice(0, 8);
+    },
+    [franchisees],
+  );
+
+  const displayLines: CommissionRunLineRow[] =
+    run?.lines?.map((ln, idx) => {
+      const row = ln as {
+        franchiseeId?: string;
+        salesAmount?: number;
+        commissionAmount?: number;
+        minFloor?: number | null;
+        topUpAmount?: number;
+        royaltyWithheldKes?: number;
+      };
+      const fid = row.franchiseeId;
+      const minFloor = typeof row.minFloor === "number" ? row.minFloor : null;
+      const commissionAmt = row.commissionAmount ?? 0;
+      const status: CommissionRunLineRow["status"] =
+        typeof minFloor === "number" && commissionAmt < minFloor ? "TOPUP" : "OK";
+      return {
+        id: `${fid ?? idx}:${idx}`,
+        runId: id,
+        franchiseeId: fid,
+        franchiseeName: feName(fid),
+        salesAmount: row.salesAmount ?? 0,
+        commissionAmount: commissionAmt,
+        minFloor,
+        topUpAmount: row.topUpAmount ?? 0,
+        royaltyWithheldKes: row.royaltyWithheldKes,
+        status,
+      };
+    }) ?? [];
+
   const lineColumns = [
-    { id: "franchisee", header: "Franchisee", accessor: (r: CommissionRunLineRow) => r.franchiseeName, sticky: true },
+    {
+      id: "franchisee",
+      header: "Franchisee",
+      accessor: (r: CommissionRunLineRow) => r.franchiseeName,
+      sticky: true,
+    },
     { id: "sales", header: "Sales", accessor: (r: CommissionRunLineRow) => formatMoney(r.salesAmount, "KES") },
-    { id: "commission", header: "Commission", accessor: (r: CommissionRunLineRow) => formatMoney(r.commissionAmount, "KES") },
-    { id: "topUp", header: "Top-up", accessor: (r: CommissionRunLineRow) => formatMoney(r.topUpAmount, "KES") },
-    { id: "status", header: "Status", accessor: (r: CommissionRunLineRow) => <Badge variant={r.status === "OK" ? "default" : "secondary"}>{r.status}</Badge> },
+    {
+      id: "commission",
+      header: "Commission",
+      accessor: (r: CommissionRunLineRow) => formatMoney(r.commissionAmount, "KES"),
+    },
+    { id: "topUp", header: "Top-up", accessor: (r: CommissionRunLineRow) => formatMoney(r.topUpAmount ?? 0, "KES") },
+    {
+      id: "royalty",
+      header: "Royalty withheld",
+      accessor: (r: CommissionRunLineRow) =>
+        r.royaltyWithheldKes != null ? formatMoney(r.royaltyWithheldKes, "KES") : "—",
+    },
+    {
+      id: "status",
+      header: "Status",
+      accessor: (r: CommissionRunLineRow) => (
+        <Badge variant={r.status === "OK" ? "default" : "secondary"}>{r.status ?? "—"}</Badge>
+      ),
+    },
   ];
+
+  const runTitle = typeof run?.number === "string" && run.number ? run.number : run?.id ?? id;
 
   if (loading) {
     return (
@@ -63,12 +137,12 @@ export default function CommissionRunDetailPage() {
   return (
     <PageShell>
       <PageHeader
-        title={run.number}
-        description={`${run.periodStart} – ${run.periodEnd} · ${formatMoney(run.totalPayout, "KES")}`}
+        title={runTitle}
+        description={`${String(run.periodStart)} – ${String(run.periodEnd)} · Net payout ${formatMoney(run.totalPayout, "KES")}`}
         breadcrumbs={[
           { label: "Franchise", href: "/franchise/commission" },
           { label: "Commission & Rebates", href: "/franchise/commission" },
-          { label: run.number },
+          { label: runTitle },
         ]}
         sticky
         showCommandHint
@@ -82,10 +156,10 @@ export default function CommissionRunDetailPage() {
       />
       <div className="p-6 space-y-6">
         <CommissionSummaryCard
-          title={run.number}
-          salesAmount={run.lines?.reduce((a, l) => a + l.salesAmount, 0) ?? 0}
-          commissionAmount={run.lines?.reduce((a, l) => a + l.commissionAmount, 0) ?? 0}
-          topUpAmount={run.lines?.reduce((a, l) => a + l.topUpAmount, 0) ?? 0}
+          title={runTitle}
+          salesAmount={run.lines?.reduce((a, l) => a + Number((l as { salesAmount?: number }).salesAmount ?? 0), 0) ?? 0}
+          commissionAmount={run.lines?.reduce((a, l) => a + Number((l as { commissionAmount?: number }).commissionAmount ?? 0), 0) ?? 0}
+          topUpAmount={run.lines?.reduce((a, l) => a + Number((l as { topUpAmount?: number }).topUpAmount ?? 0), 0) ?? 0}
           status={run.status}
         />
         <Card>
@@ -94,21 +168,27 @@ export default function CommissionRunDetailPage() {
             <Badge>{run.status}</Badge>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            <p>Period: {run.periodStart} – {run.periodEnd}</p>
-            <p>Total payout: {formatMoney(run.totalPayout, "KES")} · {run.lineCount ?? run.lines?.length ?? 0} franchisee(s)</p>
-            <p>Created: {new Date(run.createdAt).toLocaleString()}</p>
+            <p>Period: {String(run.periodStart)} – {String(run.periodEnd)}</p>
+            <p>
+              Net total payout (after royalty withholding): {formatMoney(run.totalPayout, "KES")} ·{" "}
+              {(run.lineCount ?? run.lines?.length ?? 0) as number}{" "}
+              franchisee(s)
+            </p>
+            {"createdAt" in run && run.createdAt ? (
+              <p>Created: {new Date(run.createdAt as string).toLocaleString()}</p>
+            ) : null}
           </CardContent>
         </Card>
-        {run.lines && run.lines.length > 0 && (
+        {run.lines && run.lines.length > 0 ? (
           <Card>
             <CardHeader>
               <CardTitle>Lines</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <DataTable data={run.lines} columns={lineColumns} emptyMessage="No lines." />
+              <DataTable data={displayLines} columns={lineColumns} emptyMessage="No lines." />
             </CardContent>
           </Card>
-        )}
+        ) : null}
       </div>
     </PageShell>
   );

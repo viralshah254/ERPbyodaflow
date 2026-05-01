@@ -96,6 +96,8 @@ interface ProcessingBatch {
   processType: ProcessType | "";
   workCenterId: string;
   bomId: string;
+  /** Receipt line still eligible for a new subcontract order (from GRN API) */
+  available: boolean;
   enabled: boolean;
   alreadyProcessed: boolean;
   unavailableReason?: string;
@@ -259,15 +261,7 @@ export default function SubcontractingPage() {
 
   // GRN-driven multi-batch state
   const [orderGrnId, setOrderGrnId] = React.useState("");
-  const [orderPoId, setOrderPoId] = React.useState("");
-  const [poFromGrn, setPoFromGrn] = React.useState(false);
   const [processingBatches, setProcessingBatches] = React.useState<ProcessingBatch[]>([]);
-  // Manual (no-GRN) single-batch state
-  const [orderWorkCenterId, setOrderWorkCenterId] = React.useState("");
-  const [orderSpecies, setOrderSpecies] = React.useState<Species | "">("");
-  const [orderProcessType, setOrderProcessType] = React.useState<ProcessType | "">("");
-  const [orderBomId, setOrderBomId] = React.useState<string>("");
-  const [orderInputKg, setOrderInputKg] = React.useState<string>("");
   const [reverseBoms, setReverseBoms] = React.useState<ReverseBom[]>([]);
   const [bomsLoading, setBomsLoading] = React.useState(false);
   const [availableGrns, setAvailableGrns] = React.useState<PurchasingDocRow[]>([]);
@@ -330,12 +324,6 @@ export default function SubcontractingPage() {
       .finally(() => setGrnsLoading(false));
   }, [sendSheetOpen]);
 
-  // Auto-select BOM for manual (no-GRN) mode
-  React.useEffect(() => {
-    if (orderGrnId || !orderSpecies || !orderProcessType) return;
-    setOrderBomId(findBom(reverseBoms, orderSpecies, orderProcessType));
-  }, [orderGrnId, orderSpecies, orderProcessType, reverseBoms]);
-
   // Re-derive BOM IDs for all batches when reverseBoms loads
   React.useEffect(() => {
     if (!reverseBoms.length) return;
@@ -344,21 +332,27 @@ export default function SubcontractingPage() {
     );
   }, [reverseBoms]);
 
-  const selectedWorkCenter = workCenters.find((w) => w.id === orderWorkCenterId) ?? null;
-  const selectedBom = reverseBoms.find((b) => b.id === orderBomId) ?? null;
-  const inputKg = Number(orderInputKg) || 0;
-
-  const previewLines = React.useMemo(
-    () => buildPreviewLines(selectedBom, inputKg, selectedWorkCenter, orderProcessType, orderSpecies),
-    [selectedBom, inputKg, selectedWorkCenter, orderProcessType, orderSpecies]
+  const selectedGrn = React.useMemo(
+    () => availableGrns.find((g) => g.id === orderGrnId) ?? null,
+    [availableGrns, orderGrnId]
   );
 
-  const totalFee = previewLines.reduce((s, l) => s + (l.amount ?? 0), 0);
-  const processLossKg =
-    inputKg > 0
-      ? inputKg -
-        previewLines.filter((l) => l.type === "OUTPUT_PRIMARY" || l.type === "OUTPUT_SECONDARY").reduce((s, l) => s + l.quantity, 0)
-      : 0;
+  const alreadyProcessedLineCount = React.useMemo(() => {
+    return processingBatches.filter((b) => b.unavailableReason === "already_processed").length;
+  }, [processingBatches]);
+
+  const linkedPoSummary = React.useMemo(() => {
+    if (!selectedGrn) return null;
+    const id = selectedGrn.sourceDocumentId;
+    const isPo = selectedGrn.sourceDocumentType === "purchase-order";
+    const ref = selectedGrn.poRef?.trim();
+    if (isPo && id) {
+      const short = id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-6)}` : id;
+      return ref ? `${ref} (${short})` : short;
+    }
+    if (ref) return ref;
+    return null;
+  }, [selectedGrn]);
 
   const handleDispatch = async (order: SubcontractOrderRow) => {
     if (order.status !== "SENT") return;
@@ -390,82 +384,59 @@ export default function SubcontractingPage() {
 
   const resetOrderForm = () => {
     setOrderGrnId("");
-    setOrderPoId("");
-    setPoFromGrn(false);
     setProcessingBatches([]);
-    setOrderWorkCenterId("");
-    setOrderSpecies("");
-    setOrderProcessType("");
-    setOrderBomId("");
-    setOrderInputKg("");
   };
 
   const handleCreateOrders = async () => {
-    if (orderGrnId) {
-      // Multi-batch GRN mode — only enabled, available, positive-weight batches
-      const toCreate = processingBatches.filter(
-        (b) => b.enabled && !b.alreadyProcessed && b.receivedWeightKg > 0
+    if (!orderGrnId) {
+      toast.error("Select a goods receipt (GRN). Processing uses recorded receipt weight only.");
+      return;
+    }
+    const toCreate = processingBatches.filter(
+      (b) => b.enabled && !b.alreadyProcessed && b.receivedWeightKg > 0
+    );
+    if (!toCreate.length) {
+      toast.error("No eligible batches selected. Enable at least one line with recorded received weight.");
+      return;
+    }
+    const missing = toCreate.find((b) => !b.workCenterId || !b.processType);
+    if (missing) {
+      toast.error(`Set work center and process type for: ${missing.productName}`);
+      return;
+    }
+    const missingBom = toCreate.find((b) => !b.bomId);
+    if (missingBom) {
+      toast.error(
+        `Pick species and process so a BOM is selected for "${missingBom.productName}", or configure reverse BOMs.`
       );
-      if (!toCreate.length) {
-        toast.error("No eligible batches selected. Enable at least one line with recorded received weight.");
-        return;
-      }
-      const missing = toCreate.find((b) => !b.workCenterId || !b.processType);
-      if (missing) {
-        toast.error(`Set work center and process type for: ${missing.productName}`);
-        return;
-      }
-      setSavingOrder(true);
-      let created = 0;
-      const errors: string[] = [];
-      for (const batch of toCreate) {
-        try {
-          await createSubcontractOrder({
-            workCenterId: batch.workCenterId,
-            bomId: batch.bomId || null,
-            species: batch.species || undefined,
-            processType: batch.processType || undefined,
-            purchaseOrderId: orderPoId.trim() || null,
-            grnId: orderGrnId,
-            grnLineIndex: batch.lineIndex,
-            inputWeightKg: batch.receivedWeightKg,
-          });
-          created++;
-        } catch (e) {
-          errors.push(`${batch.productName}: ${(e as Error)?.message ?? "failed"}`);
-        }
-      }
-      setSavingOrder(false);
-      if (created) toast.success(`${created} subcontract order${created > 1 ? "s" : ""} created.`);
-      if (errors.length) errors.forEach((msg) => toast.error(msg));
-      if (created) { setSendSheetOpen(false); resetOrderForm(); await load(); setTab("orders"); }
-    } else {
-      // Manual single-batch mode
-      if (!orderWorkCenterId) { toast.error("Select a work center."); return; }
-      if (!orderSpecies) { toast.error("Select a fish species."); return; }
-      if (!orderProcessType) { toast.error("Select a process type."); return; }
-      if (!inputKg || inputKg <= 0) { toast.error("Enter the input weight (kg)."); return; }
-      setSavingOrder(true);
+      return;
+    }
+    setSavingOrder(true);
+    let created = 0;
+    const errors: string[] = [];
+    for (const batch of toCreate) {
       try {
         await createSubcontractOrder({
-          workCenterId: orderWorkCenterId,
-          bomId: orderBomId || null,
-          species: orderSpecies,
-          processType: orderProcessType,
-          purchaseOrderId: orderPoId.trim() || null,
-          inputWeightKg: inputKg,
+          workCenterId: batch.workCenterId,
+          bomId: batch.bomId,
+          species: batch.species || undefined,
+          processType: batch.processType || undefined,
+          grnId: orderGrnId,
+          grnLineIndex: batch.lineIndex,
         });
-        toast.success("Subcontract order created.");
-        setSendSheetOpen(false);
-        resetOrderForm();
-        await load();
-        setTab("orders");
+        created++;
       } catch (e) {
-        const msg = (e as Error)?.message ?? "Create failed";
-        toast.error(msg === "STUB" ? "Configure API to create subcontract orders." : msg);
-      } finally {
-        setSavingOrder(false);
+        errors.push(`${batch.productName}: ${(e as Error)?.message ?? "failed"}`);
       }
+    }
+    setSavingOrder(false);
+    if (created) toast.success(`${created} subcontract order${created > 1 ? "s" : ""} created.`);
+    if (errors.length) errors.forEach((msg) => toast.error(msg));
+    if (created) {
+      setSendSheetOpen(false);
+      resetOrderForm();
+      await load();
+      setTab("orders");
     }
   };
 
@@ -602,30 +573,29 @@ export default function SubcontractingPage() {
               <SheetHeader>
                 <SheetTitle>Send to processor</SheetTitle>
                 <SheetDescription>
-                  Select a GRN — each product line becomes its own processing batch with its own work center, process type, and BOM.
-                  Or skip the GRN to enter manually.
+                  Choose a goods receipt (GRN). Input weight comes only from receipt lines — not from purchase orders.
+                  Each product line can become one processing batch (work center, species, process, BOM).
+                  Receipts with no eligible lines left are omitted from this list.
                 </SheetDescription>
               </SheetHeader>
 
               <div className="space-y-5 py-6">
 
+                {!grnsLoading && availableGrns.length === 0 && (
+                  <p className="text-sm text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                    No posted GRNs have open receipt lines for subcontracting right now. Lines already sent to a processor
+                    (or receipts with no weight) are excluded.
+                  </p>
+                )}
+
                 {/* ── GRN selection ── */}
                 <div className="space-y-2">
-                  <Label>GRN</Label>
+                  <Label>GRN *</Label>
                   <Select
-                    value={orderGrnId || "__none__"}
+                    value={orderGrnId || undefined}
                     onValueChange={(val) => {
-                      const resolved = val === "__none__" ? "" : val;
-                      setOrderGrnId(resolved);
-                      if (!resolved) {
-                        setProcessingBatches([]);
-                        setOrderPoId("");
-                        setPoFromGrn(false);
-                        return;
-                      }
-                      const grn = availableGrns.find((g) => g.id === resolved);
-                      if (grn?.poRef) { setOrderPoId(grn.poRef); setPoFromGrn(true); }
-                      // Build one batch per GRN line (all lines, not just available ones)
+                      setOrderGrnId(val);
+                      const grn = availableGrns.find((g) => g.id === val);
                       const lines = grn?.lineAvailability ?? [];
                       const batches: ProcessingBatch[] = lines.map((l) => {
                         const sp = detectSpecies(l.productName, l.sku);
@@ -639,6 +609,7 @@ export default function SubcontractingPage() {
                           processType: "",
                           workCenterId: "",
                           bomId: findBom(reverseBoms, sp, "", l.productId),
+                          available: l.available,
                           enabled: l.available,
                           alreadyProcessed: !l.available,
                           unavailableReason: l.unavailableReason,
@@ -647,22 +618,21 @@ export default function SubcontractingPage() {
                       });
                       setProcessingBatches(batches);
                     }}
-                    disabled={grnsLoading}
+                    disabled={grnsLoading || availableGrns.length === 0}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={grnsLoading ? "Loading GRNs…" : "Select a GRN (optional)"} />
+                      <SelectValue placeholder={grnsLoading ? "Loading GRNs…" : "Select a posted GRN"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">— None (manual entry) —</SelectItem>
                       {availableGrns.map((grn) => {
                         const eligible = grn.eligibleLineCount ?? grn.lineAvailability?.filter((l) => l.available).length ?? 0;
-                        const total = grn.lineAvailability?.length ?? 0;
+                        const total = grn.lineCount ?? grn.lineAvailability?.length ?? 0;
                         return (
                           <SelectItem key={grn.id} value={grn.id}>
                             {grn.number}
                             {grn.poRef ? ` · PO: ${grn.poRef}` : ""}
                             {` · ${grn.status}`}
-                            {total > 0 ? ` · ${eligible}/${total} lines` : ""}
+                            {total > 0 ? ` · ${eligible}/${total} lines open` : ""}
                             {grn.receivedWeightKg ? ` · ${grn.receivedWeightKg.toLocaleString()} kg` : ""}
                           </SelectItem>
                         );
@@ -671,37 +641,36 @@ export default function SubcontractingPage() {
                   </Select>
                 </div>
 
-                {/* ── PO reference (shared) ── */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Purchase Order (optional)</Label>
-                    {poFromGrn && <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">from GRN</span>}
+                {/* ── Linked PO (read-only, from GRN) ── */}
+                {selectedGrn && (
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">Linked purchase order</Label>
+                    <p className="text-sm rounded-md bg-muted px-3 py-2 font-mono break-all">
+                      {linkedPoSummary ?? (
+                        <span className="text-muted-foreground font-sans italic">None on this receipt</span>
+                      )}
+                    </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="e.g. PO-001"
-                      value={orderPoId}
-                      onChange={(e) => { setOrderPoId(e.target.value); setPoFromGrn(false); }}
-                      className="flex-1"
-                    />
-                    {poFromGrn && orderPoId && (
-                      <Button type="button" variant="ghost" size="icon" className="shrink-0"
-                        onClick={() => { setOrderPoId(""); setPoFromGrn(false); }}>
-                        <Icons.X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                )}
 
                 <Separator />
 
                 {/* ── GRN mode: per-batch cards ── */}
                 {orderGrnId && processingBatches.length > 0 && (
                   <div className="space-y-3">
+                    {alreadyProcessedLineCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        <Icons.Info className="inline h-3.5 w-3.5 mr-1 align-text-bottom" aria-hidden />
+                        {alreadyProcessedLineCount} line{alreadyProcessedLineCount !== 1 ? "s" : ""}{" "}
+                        {alreadyProcessedLineCount === 1 ? "was" : "were"} already sent to processing — excluded below.
+                      </p>
+                    )}
                     <p className="text-sm font-medium">
                       Processing batches
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        ({processingBatches.filter((b) => b.enabled && !b.alreadyProcessed).length} of {processingBatches.length} selected)
+                        ({processingBatches.filter((b) => b.enabled && !b.alreadyProcessed && b.receivedWeightKg > 0).length}{" "}
+                        selected · {processingBatches.filter((b) => b.available).length} actionable line(s) on this GRN ·{" "}
+                        {processingBatches.length} line(s) total shown)
                       </span>
                     </p>
                     {processingBatches.map((batch, idx) => {
@@ -732,7 +701,9 @@ export default function SubcontractingPage() {
                             <div className="flex items-center gap-2 shrink-0">
                               {batch.alreadyProcessed ? (
                                 <Badge variant="secondary" className="text-xs">
-                                  {batch.unavailableReason === "no_weight" ? "No weight recorded" : "Already processed"}
+                                  {batch.unavailableReason === "no_weight"
+                                    ? "No weight recorded"
+                                    : "Already sent to processor"}
                                 </Badge>
                               ) : (
                                 <div className="flex items-center gap-1 text-sm font-semibold">
@@ -846,124 +817,6 @@ export default function SubcontractingPage() {
                   </div>
                 )}
 
-                {/* ── Manual (no GRN) single-batch form ── */}
-                {!orderGrnId && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-muted-foreground">No GRN selected — enter processing details manually.</p>
-
-                    <div className="space-y-2">
-                      <Label>Work center *</Label>
-                      <Select value={orderWorkCenterId || ""} onValueChange={setOrderWorkCenterId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select work center" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {workCenters.map((w) => (
-                            <SelectItem key={w.id} value={w.id}>
-                              {w.name} <span className="text-muted-foreground ml-1 text-xs">({w.type})</span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {selectedWorkCenter?.feeRates?.length ? (
-                        <div className="text-xs text-muted-foreground bg-muted rounded p-2 space-y-0.5">
-                          {selectedWorkCenter.feeRates.map((fr, i) => (
-                            <div key={i}>{fr.species ? `${fr.species} · ` : ""}{fr.serviceType}: <span className="font-medium">{formatMoney(fr.ratePerKg, fr.currency)}/kg</span></div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Species *</Label>
-                        <Select value={orderSpecies || ""} onValueChange={(v) => setOrderSpecies(v as Species)}>
-                          <SelectTrigger><SelectValue placeholder="Species" /></SelectTrigger>
-                          <SelectContent>
-                            {SPECIES_OPTIONS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Process type *</Label>
-                        <Select value={orderProcessType || ""} onValueChange={(v) => setOrderProcessType(v as ProcessType)}>
-                          <SelectTrigger><SelectValue placeholder="Process" /></SelectTrigger>
-                          <SelectContent>
-                            {PROCESS_OPTIONS.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Reverse BOM {bomsLoading ? "(loading…)" : ""}</Label>
-                      <Select value={orderBomId || ""} onValueChange={setOrderBomId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select BOM (auto-selected by species + process)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {reverseBoms.map((b) => (
-                            <SelectItem key={b.id} value={b.id}>{b.name} ({b.code})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Input weight (kg) *</Label>
-                      <Input
-                        type="number" min={0} step="0.01"
-                        placeholder="Enter kg received at processing facility"
-                        value={orderInputKg}
-                        onChange={(e) => setOrderInputKg(e.target.value)}
-                      />
-                    </div>
-
-                    {previewLines.length > 0 && (
-                      <>
-                        <Separator />
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium">Output preview (from BOM)</p>
-                            {processLossKg > 0 && (
-                              <span className="text-xs text-muted-foreground">
-                                Process loss: <span className="font-medium text-destructive">{processLossKg.toFixed(2)} kg</span>
-                              </span>
-                            )}
-                          </div>
-                          <div className="border rounded-md divide-y text-sm">
-                            {previewLines.map((line, i) => (
-                              <div key={i} className="flex items-center justify-between px-3 py-2 gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  {lineTypeBadge(line.type)}
-                                  <span className="truncate text-xs">{line.productName}</span>
-                                </div>
-                                <div className="flex items-center gap-3 shrink-0 text-xs">
-                                  <span className="font-medium">{line.quantity.toFixed(2)} kg</span>
-                                  {line.processingFeePerUnit != null && (
-                                    <span className="text-muted-foreground">{formatMoney(line.processingFeePerUnit, "KES")}/kg</span>
-                                  )}
-                                  {line.amount != null && line.amount > 0 && (
-                                    <span className="text-primary font-medium">{formatMoney(line.amount, "KES")}</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          {totalFee > 0 && (
-                            <div className="flex justify-between text-sm font-medium px-1">
-                              <span>Total processing fee</span>
-                              <span>{formatMoney(totalFee, "KES")}</span>
-                            </div>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            Fee will auto-post to GL (Dr Inventory, Cr AP Processor) on receive.
-                          </p>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
               </div>
 
               <SheetFooter>
@@ -977,18 +830,11 @@ export default function SubcontractingPage() {
                   return (
                     <Button
                       onClick={handleCreateOrders}
-                      disabled={
-                        savingOrder ||
-                        (orderGrnId
-                          ? eligibleCount === 0
-                          : !orderWorkCenterId || !orderSpecies || !orderProcessType || !inputKg)
-                      }
+                      disabled={savingOrder || !orderGrnId || eligibleCount === 0}
                     >
                       {savingOrder
                         ? "Creating…"
-                        : orderGrnId
-                          ? `Create ${eligibleCount} order${eligibleCount !== 1 ? "s" : ""}`
-                          : "Create order"}
+                        : `Create ${eligibleCount} order${eligibleCount !== 1 ? "s" : ""}`}
                     </Button>
                   );
                 })()}

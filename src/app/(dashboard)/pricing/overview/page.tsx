@@ -19,6 +19,7 @@ import { fetchPriceListsForUi, fetchDiscountPolicies, fetchDailyPriceStatusApi, 
 import { fetchProductsApi } from "@/lib/api/products";
 import { fetchProductPricingApi } from "@/lib/api/product-master";
 import { fetchBatchCostingReportApi, type BatchCostingRow } from "@/lib/api/reports";
+import { fetchFranchiseBatchPricingAlerts, type FranchiseBatchPricingAlertRow } from "@/lib/api/franchise-pricing";
 import type { ProductRow } from "@/lib/types/masters";
 import * as Icons from "lucide-react";
 
@@ -34,6 +35,19 @@ export default function PricingOverviewPage() {
   const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
   const [dailyStatus, setDailyStatus] = React.useState<DailyPriceStatusResponse | null>(null);
+  const [batchFranchiseAlerts, setBatchFranchiseAlerts] = React.useState<FranchiseBatchPricingAlertRow[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchFranchiseBatchPricingAlerts()
+      .then((d) => {
+        if (!cancelled) setBatchFranchiseAlerts(d.items);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -98,6 +112,34 @@ export default function PricingOverviewPage() {
         }
       />
       <div className="p-6 space-y-6">
+        {batchFranchiseAlerts.length > 0 && (
+          <div className="flex flex-wrap items-start gap-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm dark:border-rose-900/40 dark:bg-rose-950/30">
+            <Icons.AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            <div className="min-w-0 flex-1 text-rose-900 dark:text-rose-200">
+              <p className="font-semibold">Franchise retail floors pending</p>
+              <p className="mt-1 text-muted-foreground dark:text-rose-300/90">
+                {batchFranchiseAlerts.length} posted batch{batchFranchiseAlerts.length > 1 ? "es" : ""} still miss{" "}
+                <strong className="text-rose-950 dark:text-rose-100">released mandatory transfer + minimum retail pricing</strong>{" "}
+                for one or more SKUs. Franchise outlets cannot sell affected products until HQ publishes pricing for each GRN.
+              </p>
+              <ul className="mt-2 list-disc pl-4 text-xs text-muted-foreground">
+                {batchFranchiseAlerts.slice(0, 4).map((row) => (
+                  <li key={row.grnId}>
+                    {row.grnNumber ?? row.grnId.slice(0, 8)} — {row.pendingProductCount} SKU
+                    {row.pendingProductCount > 1 ? "s" : ""} awaiting release
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Button variant="outline" size="sm" className="shrink-0 border-rose-300 text-rose-900 hover:bg-rose-100" asChild>
+              <Link href="/reports/batch-costing">
+                <Icons.BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                Batch costing / publish
+              </Link>
+            </Button>
+          </div>
+        )}
+
         {/* Cost basis banner */}
         {batchCosts.length > 0 && (
           <Card className="border-primary/20 bg-primary/5">

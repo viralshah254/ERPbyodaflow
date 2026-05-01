@@ -226,6 +226,82 @@ export async function createCommissionRun(body: {
   return res;
 }
 
+/** HQ franchise franchisee records (for royalty / commission linkage). */
+export type FranchiseeRow = {
+  id: string;
+  customerId: string;
+  code: string;
+  name: string;
+  monthlyRoyaltyKes?: number | null;
+  royaltyStartsOn?: string | null;
+  segment?: string;
+  isActive?: boolean;
+};
+
+export async function fetchFranchiseesApi(): Promise<FranchiseeRow[]> {
+  requireLiveApi("Franchisees");
+  const res = await apiRequest<{ items: FranchiseeRow[] }>("/api/franchise/franchisees");
+  return res.items ?? [];
+}
+
+export async function patchFranchiseeApi(
+  id: string,
+  body: Partial<{
+    monthlyRoyaltyKes: number | null;
+    royaltyStartsOn: string | null;
+    minCommissionFloor: number;
+    name: string;
+  }>
+): Promise<void> {
+  requireLiveApi("Update franchisee");
+  await apiRequest(`/api/franchise/franchisees/${encodeURIComponent(id)}`, { method: "PATCH", body });
+}
+
+export type RoyaltyChargeRow = {
+  id: string;
+  orgId?: string;
+  franchiseeId: string;
+  periodYear: number;
+  periodMonth: number;
+  amountKes: number;
+  invoiceDocumentId?: string;
+  settledKes?: number;
+  status: string;
+};
+
+export async function fetchRoyaltyChargesApi(params?: {
+  franchiseeId?: string;
+  periodYear?: number;
+  periodMonth?: number;
+}): Promise<RoyaltyChargeRow[]> {
+  requireLiveApi("Royalty charges");
+  const q = listParams({
+    ...(params?.franchiseeId !== undefined ? { franchiseeId: params.franchiseeId } : {}),
+    ...(params?.periodYear !== undefined ? { periodYear: String(params.periodYear) } : {}),
+    ...(params?.periodMonth !== undefined ? { periodMonth: String(params.periodMonth) } : {}),
+  });
+  const res = await apiRequest<{ items: RoyaltyChargeRow[] }>("/api/franchise/royalties", { params: q });
+  return res.items ?? [];
+}
+
+export async function fetchRoyaltySummaryApi(franchiseeId: string): Promise<{
+  outstandingKes: number;
+  invoicedCount: number;
+  settledViaCommissionKes: number;
+}> {
+  requireLiveApi("Royalty summary");
+  return apiRequest(`/api/franchise/royalties/summary/${encodeURIComponent(franchiseeId)}`);
+}
+
+export async function runRoyaltiesMonthApi(body?: { year?: number; month?: number }): Promise<{
+  year: number;
+  month: number;
+  results: Array<{ franchiseeId: string; chargeId?: string; invoiceId?: string; skipped?: string; error?: string }>;
+}> {
+  requireLiveApi("Run royalty invoicing month");
+  return apiRequest("/api/franchise/royalties/run-month", { method: "POST", body: body ?? {} });
+}
+
 // ——— VMI ———
 
 export async function fetchFranchiseeStock(franchiseeId?: string): Promise<FranchiseeStockRow[]> {
@@ -486,28 +562,18 @@ export async function fetchSubcontractOrders(params?: {
 }
 
 /** Create subcontract order (send stock to processor).
- *  Pass either `lines` (explicit) or `bomId + inputWeightKg` (auto-generate from BOM + rate card).
- *  If `grnId` is provided, the input weight is resolved from the GRN's processedWeightKg automatically.
+ * Requires a GRN line: `grnId` + `grnLineIndex`; input kg comes from the receipt line only.
+ * Use `bomId` with species/process for outputs/fees. Linked PO is resolved server-side from the GRN.
  */
 export async function createSubcontractOrder(body: {
   workCenterId: string;
-  bomId?: string | null;
+  bomId: string | null;
   reference?: string;
   species?: "TILAPIA" | "NILE_PERCH";
   processType?: "FILLETING" | "GUTTING";
-  purchaseOrderId?: string | null;
-  grnId?: string | null;
-  /** Zero-based index of the specific GRN line being processed. Enables line-level reuse tracking. */
-  grnLineIndex?: number;
-  /** Override input weight (kg) — used when BOM-driven without a GRN link */
-  inputWeightKg?: number;
-  /** Explicit lines (optional — if omitted and bomId provided, lines are auto-generated) */
-  lines?: {
-    skuId: string;
-    type: SubcontractOrderLineRow["type"];
-    quantity: number;
-    processingFeePerUnit?: number | null;
-  }[];
+  grnId: string;
+  /** Zero-based GRN receipt line — one subcontract order per line */
+  grnLineIndex: number;
 }): Promise<SubcontractOrderRow> {
   requireLiveApi("Create subcontract order");
   const res = await apiRequest<SubcontractOrderRow>("/api/manufacturing/subcontract-orders", {
@@ -841,6 +907,42 @@ export interface OutletInvoiceRow {
   total: number;
   customerName: string | null;
   status: string;
+  /** True when any line sells above/below stored reference unit (if any). */
+  hasRetailOverride?: boolean;
+}
+
+export interface OutletInvoiceLineDetailRow {
+  lineId: string | null;
+  lineNo: number;
+  productId: string | null;
+  sku: string | null;
+  productName: string | null;
+  quantity: number;
+  unitPrice: number;
+  referenceUnitPrice: number | null;
+  amount: number;
+  delta: number;
+}
+
+export interface OutletInvoiceDetail {
+  id: string;
+  number: string;
+  date: string | null;
+  status: string;
+  total: number;
+  currency: string;
+  outletOrgId: string;
+  outletName: string;
+  customerName: string | null;
+  retailPaymentMethod: string | null;
+  retailMpesaRef: string | null;
+  lines: OutletInvoiceLineDetailRow[];
+}
+
+export async function fetchOutletInvoiceDetail(outletOrgId: string, invoiceId: string): Promise<OutletInvoiceDetail> {
+  return apiRequest<OutletInvoiceDetail>(
+    `/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/invoices/${encodeURIComponent(invoiceId)}`
+  );
 }
 
 export async function fetchOutletSummaryRange(

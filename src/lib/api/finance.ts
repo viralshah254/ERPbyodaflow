@@ -161,6 +161,15 @@ export async function fetchFinancePeriodsApi(): Promise<FinancePeriod[]> {
   return payload.periods;
 }
 
+/** Map failures from GET /finance/period-close into copy for Financial Statements UI. */
+export function formatFinancePeriodLoadError(error: unknown): string {
+  const apiErr = error as Error & { status?: number };
+  if (apiErr.status === 403) {
+    return "You don't have permission to load fiscal periods. Ask an administrator for finance.read, Period Close access, or confirm your role can list periods for statements.";
+  }
+  return apiErr.message || "Failed to load fiscal periods.";
+}
+
 export type CloseChecklistItem = {
   key: string;
   label: string;

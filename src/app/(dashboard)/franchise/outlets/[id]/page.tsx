@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/ui/data-table";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Sheet,
   SheetContent,
@@ -33,11 +34,14 @@ import {
   assignOutletPriceList,
   fetchOutletStock,
   fetchOutletSummaryRange,
+  fetchOutletInvoiceDetail,
   type OutletSummary,
   type FranchiseCustomerRow,
   type CustomerHistoryItem,
   type OutletStockRow,
   type OutletInvoiceRow,
+  type OutletInvoiceDetail,
+  type OutletInvoiceLineDetailRow,
 } from "@/lib/api/cool-catch";
 import { fetchOutletEquipmentApi } from "@/lib/api/assets";
 import type { AssetRow } from "@/lib/types/assets";
@@ -57,7 +61,7 @@ import {
   Package,
   Calendar,
   RefreshCw,
-  BarChart2,
+  Receipt,
   Boxes,
   Cpu,
 } from "lucide-react";
@@ -245,17 +249,21 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
   );
 }
 
-// ─── Sales tab ────────────────────────────────────────────────────────────────
+// ─── Receipts tab ─────────────────────────────────────────────────────────────
 
 type DatePreset = "today" | "week" | "month" | "custom";
 
-function SalesTab({ outletOrgId }: { outletOrgId: string }) {
+function ReceiptsTab({ outletOrgId }: { outletOrgId: string }) {
   const [preset, setPreset] = React.useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = React.useState("");
   const [customTo, setCustomTo] = React.useState("");
   const [invoices, setInvoices] = React.useState<OutletInvoiceRow[]>([]);
   const [kpis, setKpis] = React.useState<{ revenue: number; count: number } | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [overridesOnly, setOverridesOnly] = React.useState(false);
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detail, setDetail] = React.useState<OutletInvoiceDetail | null>(null);
 
   const dateRange = React.useMemo(() => {
     const today = new Date();
@@ -280,14 +288,39 @@ function SalesTab({ outletOrgId }: { outletOrgId: string }) {
         setKpis({ revenue: r.revenue30d, count: r.orderCount30d });
         setInvoices(r.invoices ?? []);
       })
-      .catch(() => toast.error("Could not load sales data"))
+      .catch(() => toast.error("Could not load receipts"))
       .finally(() => setLoading(false));
   }, [outletOrgId, dateRange]);
 
+  const visibleInvoices = React.useMemo(
+    () => (overridesOnly ? invoices.filter((r) => r.hasRetailOverride) : invoices),
+    [invoices, overridesOnly],
+  );
+
+  const openReceipt = (row: OutletInvoiceRow) => {
+    setDetail(null);
+    setSheetOpen(true);
+    setDetailLoading(true);
+    fetchOutletInvoiceDetail(outletOrgId, row.id)
+      .then(setDetail)
+      .catch(() => toast.error("Could not load receipt lines"))
+      .finally(() => setDetailLoading(false));
+  };
+
   const columns = [
-    { id: "number", header: "Invoice", accessor: (r: OutletInvoiceRow) => <span className="font-medium">{r.number}</span> },
+    { id: "number", header: "Receipt", accessor: (r: OutletInvoiceRow) => <span className="font-medium">{r.number}</span> },
     { id: "date", header: "Date", accessor: (r: OutletInvoiceRow) => r.date },
     { id: "customer", header: "Customer", accessor: (r: OutletInvoiceRow) => r.customerName ?? "—" },
+    {
+      id: "variance",
+      header: "",
+      accessor: (r: OutletInvoiceRow) =>
+        r.hasRetailOverride ? (
+          <Badge variant="secondary" className="font-normal whitespace-nowrap">
+            Price variance
+          </Badge>
+        ) : null,
+    },
     { id: "total", header: "Total", accessor: (r: OutletInvoiceRow) => formatMoney(r.total, "KES") },
     { id: "status", header: "Status", accessor: (r: OutletInvoiceRow) => <StatusBadge status={r.status} /> },
   ];
@@ -300,47 +333,133 @@ function SalesTab({ outletOrgId }: { outletOrgId: string }) {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {presets.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setPreset(p.key)}
-            className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${preset === p.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-input hover:bg-muted"}`}
-          >
-            {p.label}
-          </button>
-        ))}
-        {preset === "custom" && (
-          <>
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
-            <span className="text-muted-foreground text-sm">to</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
-          </>
+    <>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {presets.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setPreset(p.key)}
+              className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${preset === p.key ? "bg-primary text-primary-foreground border-primary" : "bg-background border-input hover:bg-muted"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+          {preset === "custom" && (
+            <>
+              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
+              <span className="text-muted-foreground text-sm">to</span>
+              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <Checkbox checked={overridesOnly} onCheckedChange={(v) => setOverridesOnly(v === true)} />
+            <span className="text-sm text-muted-foreground">Overrides only</span>
+          </label>
+          <span className="text-xs text-muted-foreground">Click a row for line breakdown.</span>
+        </div>
+
+        {kpis && (
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Revenue", value: formatMoney(kpis.revenue, "KES") },
+              { label: "Receipts", value: String(kpis.count) },
+              { label: "Avg receipt", value: kpis.count > 0 ? formatMoney(kpis.revenue / kpis.count, "KES") : "—" },
+            ].map(({ label, value }) => (
+              <Card key={label} className="border-none shadow-sm">
+                <CardContent className="pt-4 pb-3">
+                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                  <p className="text-lg font-bold">{loading ? <span className="inline-block h-5 w-20 bg-muted animate-pulse rounded" /> : value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
+
+        <DataTable
+          data={visibleInvoices}
+          columns={columns}
+          onRowClick={openReceipt}
+          emptyMessage={loading ? "Loading receipts…" : "No receipts in this period."}
+        />
       </div>
 
-      {kpis && (
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Revenue", value: formatMoney(kpis.revenue, "KES") },
-            { label: "Invoices", value: String(kpis.count) },
-            { label: "Avg order", value: kpis.count > 0 ? formatMoney(kpis.revenue / kpis.count, "KES") : "—" },
-          ].map(({ label, value }) => (
-            <Card key={label} className="border-none shadow-sm">
-              <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                <p className="text-lg font-bold">{loading ? <span className="inline-block h-5 w-20 bg-muted animate-pulse rounded" /> : value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <DataTable data={invoices} columns={columns} emptyMessage={loading ? "Loading sales…" : "No invoices in this period."} />
-    </div>
+      <Sheet
+        open={sheetOpen}
+        onOpenChange={(v) => {
+          setSheetOpen(v);
+          if (!v) setDetail(null);
+        }}
+      >
+        <SheetContent side="right" className="w-full max-w-3xl overflow-y-auto sm:max-w-3xl">
+          <SheetHeader>
+            <SheetTitle>{detail?.number ?? "Receipt"}</SheetTitle>
+            <SheetDescription>
+              {detail
+                ? `${detail.date ?? "—"} · ${formatMoney(detail.total, detail.currency ?? "KES")} · ${detail.customerName ?? "Customer —"}`
+                : "Outlet receipt lines"}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            {detailLoading && <div className="text-sm text-muted-foreground">Loading lines…</div>}
+            {!detailLoading && detail && (
+              <>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground items-center">
+                  <StatusBadge status={detail.status} />
+                  {detail.retailPaymentMethod && <span>{detail.retailPaymentMethod}</span>}
+                  {detail.retailMpesaRef && (
+                    <span className="font-mono truncate max-w-full">M-Pesa ref: {detail.retailMpesaRef}</span>
+                  )}
+                </div>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full caption-bottom text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left px-3 py-2 font-medium whitespace-nowrap">SKU</th>
+                        <th className="text-left px-3 py-2 font-medium">Product</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Qty</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Ref unit</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Sold</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Total</th>
+                        <th className="text-right px-3 py-2 font-medium whitespace-nowrap">Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.lines.map((l: OutletInvoiceLineDetailRow) => (
+                        <tr key={`${detail.id}:${l.lineNo}`} className="border-b border-border/50 last:border-none">
+                          <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{l.sku ?? "—"}</td>
+                          <td className="px-3 py-2 max-w-[180px] truncate" title={l.productName ?? ""}>
+                            {l.productName ?? "—"}
+                          </td>
+                          <td className="text-right px-2 py-2 tabular-nums">{l.quantity}</td>
+                          <td className="text-right px-2 py-2 tabular-nums">
+                            {l.referenceUnitPrice != null ? formatMoney(l.referenceUnitPrice, detail.currency ?? "KES") : "—"}
+                          </td>
+                          <td className="text-right px-2 py-2 tabular-nums font-medium">{formatMoney(l.unitPrice, detail.currency ?? "KES")}</td>
+                          <td className="text-right px-2 py-2 tabular-nums">{formatMoney(l.amount, detail.currency ?? "KES")}</td>
+                          <td className={`text-right px-3 py-2 tabular-nums font-medium ${l.delta > 0.01 ? "text-emerald-600" : l.delta < -0.01 ? "text-destructive" : "text-muted-foreground"}`}>
+                            {formatMoney(l.delta, detail.currency ?? "KES")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Δ is (sold unit − reference unit) × quantity. Reference is HQ ladder default or POS snapshot at posting.
+                </p>
+              </>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 
@@ -717,9 +836,9 @@ export default function OutletDetailPage() {
               <Boxes size={14} />
               Stock
             </TabsTrigger>
-            <TabsTrigger value="sales" className="gap-1.5">
-              <BarChart2 size={14} />
-              Sales
+            <TabsTrigger value="receipts" className="gap-1.5">
+              <Receipt size={14} />
+              Receipts
             </TabsTrigger>
             <TabsTrigger value="orders">Orders to HQ</TabsTrigger>
             <TabsTrigger value="equipment" className="gap-1.5">
@@ -741,8 +860,8 @@ export default function OutletDetailPage() {
             <StockTab outletOrgId={outletOrgId} />
           </TabsContent>
 
-          <TabsContent value="sales">
-            <SalesTab outletOrgId={outletOrgId} />
+          <TabsContent value="receipts">
+            <ReceiptsTab outletOrgId={outletOrgId} />
           </TabsContent>
 
           <TabsContent value="orders">

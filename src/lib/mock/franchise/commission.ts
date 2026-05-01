@@ -15,14 +15,15 @@ export interface CommissionRuleRow {
 
 export interface CommissionRunLineRow {
   id: string;
-  runId: string;
-  franchiseeId: string;
-  franchiseeName: string;
+  runId?: string;
+  franchiseeId?: string;
+  franchiseeName?: string;
   salesAmount: number;
   commissionAmount: number;
   minFloor: number | null;
   topUpAmount: number;
-  status: "OK" | "TOPUP";
+  royaltyWithheldKes?: number;
+  status?: "OK" | "TOPUP";
 }
 
 export interface CommissionRunRow {

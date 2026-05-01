@@ -8,6 +8,9 @@ export type PurchasingDocRow = {
   exchangeRate?: number;
   status: string;
   poRef?: string;
+  /** Linked purchase order document id when GRN was created from a PO */
+  sourceDocumentId?: string | null;
+  sourceDocumentType?: string | null;
   warehouse?: string;
   hasLandedCost?: boolean;
   /** Sum of receivedWeightKg across all GRN lines — fish weight received at the facility. */
@@ -28,6 +31,8 @@ export type PurchasingDocRow = {
   }>;
   /** Count of lines still eligible for processing (available + positive weight). */
   eligibleLineCount?: number;
+  /** Total receipt lines (for subcontracting: e.g. “2/4 lines available”). */
+  lineCount?: number;
   /** Work order this GRN batch is being processed in (set once a WO is linked). */
   workOrderId?: string;
   workOrderNumber?: string;
