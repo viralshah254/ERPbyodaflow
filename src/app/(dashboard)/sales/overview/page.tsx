@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +13,6 @@ import type { SalesDocRow } from "@/lib/types/sales";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money";
-import { convertDocumentApi } from "@/lib/api/documents";
 import { toast } from "sonner";
 
 const NAV_LINKS = [
@@ -35,11 +33,8 @@ type KpiData = {
 };
 
 export default function SalesOverviewPage() {
-  const router = useRouter();
   const [kpis, setKpis] = React.useState<KpiData | null>(null);
   const [loading, setLoading] = React.useState(false);
-  const [convertConfirm, setConvertConfirm] = React.useState<{ id: string; number: string } | null>(null);
-  const [converting, setConverting] = React.useState(false);
 
   React.useEffect(() => {
     if (!isApiConfigured()) return;
@@ -229,19 +224,6 @@ export default function SalesOverviewPage() {
                             <StatusBadge status={order.status} />
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-right">
-                          {order.status === "APPROVED" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => setConvertConfirm({ id: order.id, number: order.number })}
-                            >
-                              <Icons.FileText className="mr-1 h-3 w-3" />
-                              Invoice
-                            </Button>
-                          )}
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -297,42 +279,6 @@ export default function SalesOverviewPage() {
           </div>
         </div>
       </div>
-
-      {/* Quick Convert to Invoice confirmation dialog */}
-      {convertConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
-            <h3 className="text-base font-semibold mb-2">Convert to Invoice</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Convert <strong>{convertConfirm.number}</strong> to an invoice?
-            </p>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setConvertConfirm(null)}>Cancel</Button>
-              <Button
-                disabled={converting}
-                onClick={async () => {
-                  setConverting(true);
-                  try {
-                    const created = await convertDocumentApi("sales-order", convertConfirm.id, { targetType: "invoice" });
-                    toast.success(`Invoice ${created.number ?? "created"}.`);
-                    setConvertConfirm(null);
-                    if (created.id) {
-                      router.push(`/docs/invoice/${created.id}`);
-                    }
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  } finally {
-                    setConverting(false);
-                  }
-                }}
-              >
-                <Icons.FileText className="mr-2 h-4 w-4" />
-                {converting ? "Creating…" : "Create Invoice"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </PageShell>
   );
 }

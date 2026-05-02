@@ -33,6 +33,8 @@ type BackendDocumentLine = {
   taxCodeCode?: string;
   taxCodeName?: string;
   taxRate?: number;
+  /** Line gross weight (kg); used as POD baseline for weight variance. */
+  weightKg?: number;
 };
 
 type BackendAttachment = {
@@ -61,12 +63,15 @@ type BackendPodConfirmationLine = {
   qtyShipped: number;
   qtyReceived: number;
   varianceReason?: string;
+  receivedWeightKg?: number;
+  varianceEvidenceAttachmentIds?: string[];
 };
 
 type BackendPodConfirmation = {
   confirmedAt: string | Date;
   confirmedByUserId?: string;
   receiverName?: string;
+  receiverSignatureAttachmentId?: string;
   note?: string;
   lines: BackendPodConfirmationLine[];
 };
@@ -315,6 +320,7 @@ function mapDocumentDetail(
       taxCodeCode: line.taxCodeCode,
       taxCodeName: line.taxCodeName,
       taxRate: line.taxRate,
+      ...(typeof line.weightKg === "number" ? { weightKg: line.weightKg } : {}),
     })),
     sourceDocument: payload.sourceDocument ?? null,
     linkedDeliveries: payload.linkedDeliveries ?? [],
@@ -349,8 +355,18 @@ function mapDocumentDetail(
               : new Date(payload.podConfirmation.confirmedAt).toISOString(),
           confirmedByUserId: payload.podConfirmation.confirmedByUserId,
           receiverName: payload.podConfirmation.receiverName,
+          receiverSignatureAttachmentId: payload.podConfirmation.receiverSignatureAttachmentId,
           note: payload.podConfirmation.note,
-          lines: payload.podConfirmation.lines ?? [],
+          lines: (payload.podConfirmation.lines ?? []).map((ln) => ({
+            lineId: ln.lineId,
+            qtyShipped: ln.qtyShipped,
+            qtyReceived: ln.qtyReceived,
+            ...(ln.varianceReason ? { varianceReason: ln.varianceReason } : {}),
+            ...(typeof ln.receivedWeightKg === "number" ? { receivedWeightKg: ln.receivedWeightKg } : {}),
+            ...(ln.varianceEvidenceAttachmentIds?.length
+              ? { varianceEvidenceAttachmentIds: ln.varianceEvidenceAttachmentIds }
+              : {}),
+          })),
         }
       : undefined,
   };
@@ -464,8 +480,15 @@ export async function confirmDeliveryPodApi(
   deliveryNoteId: string,
   payload: {
     receiverName: string;
+    receiverSignatureAttachmentId: string;
     note?: string;
-    lines: Array<{ lineId: string; qtyReceived: number; varianceReason?: string }>;
+    lines: Array<{
+      lineId: string;
+      qtyReceived: number;
+      varianceReason?: string;
+      receivedWeightKg?: number;
+      varianceEvidenceAttachmentIds?: string[];
+    }>;
   }
 ): Promise<void> {
   requireLiveApi("Proof of delivery");
@@ -571,17 +594,22 @@ export async function uploadDocumentAttachmentApi(
   type: DocTypeKey,
   id: string,
   file: File
-): Promise<void> {
+): Promise<{ id: string }> {
   requireLiveApi("Document attachments");
   const content = await fileToBase64(file);
-  await apiRequest(`/api/documents/${type}/${id}/attachments`, {
-    method: "POST",
-    body: {
-      fileName: file.name,
-      contentType: file.type || "application/octet-stream",
-      content,
-    },
-  });
+  const payload = await apiRequest<{ id: string; fileName?: string; contentType?: string }>(
+    `/api/documents/${type}/${id}/attachments`,
+    {
+      method: "POST",
+      body: {
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        content,
+      },
+    }
+  );
+  if (!payload?.id) throw new Error("Attachment upload did not return an id.");
+  return { id: payload.id };
 }
 
 export function downloadDocumentAttachmentApi(

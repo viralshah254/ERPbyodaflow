@@ -10,8 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchPickPackTask, runPickPackAction, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import { fetchPickPackTask, patchPickPackWarehouse, runPickPackAction, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
+import { patchDocumentApi } from "@/lib/api/documents";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function PickPackDetailPage() {
   const params = useParams();
@@ -22,6 +31,9 @@ export default function PickPackDetailPage() {
   const [packingNote, setPackingNote] = React.useState("");
   const [courier, setCourier] = React.useState("");
   const [trackingRef, setTrackingRef] = React.useState("");
+
+  const [warehouseOptions, setWarehouseOptions] = React.useState<LookupOption[]>([]);
+  const [warehouseSaving, setWarehouseSaving] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -43,6 +55,14 @@ export default function PickPackDetailPage() {
     void refresh();
   }, [refresh]);
 
+  React.useEffect(() => {
+    void fetchWarehouseOptions()
+      .then(setWarehouseOptions)
+      .catch(() => {
+        toast.error("Failed to load warehouses.");
+      });
+  }, []);
+
   const runWarehouseAction = React.useCallback(
     async (successMessage: string, fn: () => Promise<void>) => {
       try {
@@ -54,6 +74,38 @@ export default function PickPackDetailPage() {
       }
     },
     [refresh]
+  );
+
+  const fulfilmentWarehouseUi = React.useMemo(() => {
+    if (!task) {
+      return { locked: true, changeViaDn: false, isTerminal: false };
+    }
+    const dn = task.sourceDocumentStatus?.trim().toUpperCase() ?? "";
+    const changeViaDn = !!task.sourceDocumentId && dn === "DRAFT";
+    const isTerminal = ["DISPATCHED", "COMPLETED"].includes(task.status.trim().toUpperCase());
+    const locked = isTerminal || (!!task.sourceDocumentId && !changeViaDn);
+    return { locked, changeViaDn, isTerminal };
+  }, [task]);
+
+  const handleWarehouseChange = React.useCallback(
+    async (warehouseId: string) => {
+      if (!task || warehouseId === task.warehouseId) return;
+      setWarehouseSaving(true);
+      try {
+        if (fulfilmentWarehouseUi.changeViaDn && task.sourceDocumentId) {
+          await patchDocumentApi("delivery-note", task.sourceDocumentId, { warehouseId });
+        } else {
+          await patchPickPackWarehouse(task.id, warehouseId);
+        }
+        toast.success("Fulfilment warehouse updated. Pick progress was reset.");
+        await refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not update warehouse.");
+      } finally {
+        setWarehouseSaving(false);
+      }
+    },
+    [task, refresh, fulfilmentWarehouseUi.changeViaDn]
   );
 
   if (!task && loading) {
@@ -94,6 +146,55 @@ export default function PickPackDetailPage() {
       />
       <div className="space-y-6 p-6">
         <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Fulfilment warehouse</CardTitle>
+            <CardDescription>
+              Stock totals and bins are for this warehouse (not the same as the branch switcher above). Updating it resets
+              pick / pack progress until you confirm pick again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 max-w-lg">
+            {fulfilmentWarehouseUi.isTerminal ? (
+              <p className="text-sm text-muted-foreground">Warehouse cannot be changed after dispatch or completion.</p>
+            ) : task.sourceDocumentId && !fulfilmentWarehouseUi.changeViaDn ? (
+              <p className="text-sm text-muted-foreground">
+                Pick & pack can only sync this field while the linked delivery note is still in <strong>Draft</strong>.
+                <Link className="text-primary underline ml-1 inline" href={`/docs/delivery-note/${task.sourceDocumentId}`}>
+                  Open delivery note
+                </Link>
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <Label className="shrink-0 text-muted-foreground">Warehouse</Label>
+              <Select
+                disabled={
+                  fulfilmentWarehouseUi.locked || warehouseSaving || (!warehouseOptions.length && !task.warehouseId)
+                }
+                value={task.warehouseId ?? undefined}
+                onValueChange={(value) => void handleWarehouseChange(value)}
+              >
+                <SelectTrigger className="min-w-[220px] flex-1" aria-label="Fulfilment warehouse">
+                  <SelectValue placeholder="Select warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouseOptions.map((wh) => (
+                    <SelectItem key={wh.id} value={wh.id}>
+                      {wh.label}
+                    </SelectItem>
+                  ))}
+                  {task.warehouseId && !warehouseOptions.some((wh) => wh.id === task.warehouseId) ? (
+                    <SelectItem key={task.warehouseId} value={task.warehouseId}>
+                      {`${task.warehouseId.slice(0, 14)}… (current)`}
+                    </SelectItem>
+                  ) : null}
+                </SelectContent>
+              </Select>
+              {warehouseSaving ? <span className="text-xs text-muted-foreground">Saving…</span> : null}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader>
             <CardTitle>Picklist</CardTitle>
             <CardDescription>Suggested bins and picked quantities now come from backend execution records.</CardDescription>
@@ -102,23 +203,46 @@ export default function PickPackDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>SKU</TableHead>
                   <TableHead>Product</TableHead>
+                  <TableHead>SKU</TableHead>
                   <TableHead>Qty</TableHead>
+                  <TableHead className="text-right">Warehouse qty</TableHead>
+                  <TableHead className="text-right">At bin</TableHead>
                   <TableHead>Suggested bin</TableHead>
                   <TableHead>Picked</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {task.lines.map((line) => (
-                  <TableRow key={line.id}>
-                    <TableCell className="font-medium">{line.sku ?? "—"}</TableCell>
-                    <TableCell>{line.productName ?? line.productId}</TableCell>
-                    <TableCell>{line.quantity}</TableCell>
-                    <TableCell>{line.suggestedBin ?? "—"}</TableCell>
-                    <TableCell>{line.pickedQty ?? 0}</TableCell>
-                  </TableRow>
-                ))}
+                {task.lines.map((line) => {
+                  const wh = line.onHandWarehouse;
+                  const atBin = line.onHandBin;
+                  const shortage =
+                    typeof wh === "number" && Number.isFinite(wh) && wh < line.quantity;
+                  const binShort =
+                    typeof atBin === "number" &&
+                    Number.isFinite(atBin) &&
+                    line.locationId != null &&
+                    atBin < line.quantity;
+                  return (
+                    <TableRow key={line.id}>
+                      <TableCell>{line.productName ?? line.productId}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{line.sku ?? "—"}</TableCell>
+                      <TableCell>{line.quantity}</TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums ${shortage ? "text-amber-600 font-medium" : ""}`}
+                      >
+                        {typeof wh === "number" ? wh : "—"}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums ${binShort ? "text-amber-600 font-medium" : ""}`}
+                      >
+                        {line.locationId != null && typeof atBin === "number" ? atBin : "—"}
+                      </TableCell>
+                      <TableCell>{line.suggestedBin ?? "—"}</TableCell>
+                      <TableCell>{line.pickedQty ?? 0}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>

@@ -23,6 +23,8 @@ export type WarehousePickPackRow = {
     pickedQty?: number;
     suggestedBin?: string;
     locationId?: string;
+    onHandWarehouse?: number;
+    onHandBin?: number;
   }>;
 };
 
@@ -112,6 +114,14 @@ export async function runPickPackAction(
   await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}/action`, {
     method: "POST",
     body: payload,
+  });
+}
+
+export async function patchPickPackWarehouse(id: string, warehouseId: string): Promise<void> {
+  requireLiveApi("Pick-pack fulfilment warehouse");
+  await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: { warehouseId },
   });
 }
 

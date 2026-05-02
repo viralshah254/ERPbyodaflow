@@ -73,7 +73,10 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
           <IconComponent className="h-4 w-4 shrink-0" />
           <span className="flex-1 truncate">{item.label}</span>
           {item.badge && (
-            <Badge variant="secondary" className="ml-auto shrink-0">
+            <Badge
+              variant={item.badge.type === "count" ? "destructive" : "secondary"}
+              className="ml-auto shrink-0"
+            >
               {item.badge.value}
             </Badge>
           )}
@@ -117,7 +120,7 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
         <>
           <span className="flex-1">{item.label}</span>
           {item.badge && (
-            <Badge variant="secondary" className="ml-auto">
+            <Badge variant={item.badge.type === "count" ? "destructive" : "secondary"} className="ml-auto">
               {item.badge.value}
             </Badge>
           )}

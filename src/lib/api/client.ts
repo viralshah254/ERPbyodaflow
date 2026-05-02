@@ -8,6 +8,7 @@
  * - Dev: X-Dev-User-Id, X-Current-Branch-Id (set via setApiAuth or NEXT_PUBLIC_DEV_* env)
  */
 import { canUseDevHeaders } from "@/lib/runtime-flags";
+import { getCurrentFirebaseIdTokenForApi, isFirebaseConfigured } from "@/lib/firebase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const ENV_DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
@@ -76,6 +77,18 @@ function getAuthHeaders(includeJsonContentType = false): HeadersInit {
   return headers;
 }
 
+/** Keeps Bearer in sync with Firebase — ID tokens expire ~hourly otherwise API returns 401. */
+async function applyFreshFirebaseBearerIfAvailable(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    if (!isFirebaseConfigured()) return;
+    const tok = await getCurrentFirebaseIdTokenForApi();
+    if (tok) setApiAuth({ bearerToken: tok });
+  } catch {
+    /* Firebase not ready */
+  }
+}
+
 /**
  * GET and download as file (PDF, CSV, etc.). On 200, triggers browser download; on 501/404 shows toast.
  */
@@ -90,6 +103,7 @@ export async function downloadFile(
   }
   const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
   try {
+    await applyFreshFirebaseBearerIfAvailable();
     const res = await fetch(url, {
       method: "GET",
       headers: { ...getAuthHeaders(), Accept: "*/*" },
@@ -142,6 +156,7 @@ export async function uploadFormData<T = unknown>(path: string, formData: FormDa
     throw new Error("API not configured.");
   }
   const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
+  await applyFreshFirebaseBearerIfAvailable();
   const res = await fetch(url, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -177,6 +192,7 @@ export async function uploadFile(
     form.append(key, value);
   });
   try {
+    await applyFreshFirebaseBearerIfAvailable();
     const res = await fetch(url, {
       method: "POST",
       headers: getAuthHeaders(),
@@ -215,6 +231,8 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
+  await applyFreshFirebaseBearerIfAvailable();
+
   const { method = "GET", body, params } = options;
   let url = apiUrl(path);
   if (params) {

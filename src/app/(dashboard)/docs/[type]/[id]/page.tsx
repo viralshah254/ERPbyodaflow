@@ -10,6 +10,7 @@ import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { DocumentAttachments } from "@/components/docs/DocumentAttachments";
 import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
+import { PodSignaturePad } from "@/components/docs/PodSignaturePad";
 import { PrintPreviewDrawer } from "@/components/docs/PrintPreviewDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,10 +57,35 @@ import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchPartyByIdApi, type PartyLookupOption } from "@/lib/api/parties";
 import type { DocumentChainNode, DocumentDetailRecord } from "@/lib/types/documents";
+import { deliveryLinePrimaryLabel, deliveryLineSku } from "@/lib/documents/format-delivery-line";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import SignatureCanvas from "react-signature-canvas";
+
+const POD_QTY_TOLERANCE = 0.02;
+const POD_WEIGHT_TOLERANCE_KG = 0.05;
+
+function computePodLineEvidenceNeeded(row: {
+  qtyShipped: number;
+  weightKg?: number;
+  qtyReceived: string;
+  receivedWeightKg: string;
+}): boolean {
+  const qtyReceivedNum = Number(row.qtyReceived);
+  if (!Number.isFinite(qtyReceivedNum)) return false;
+  const qtyVariance = Math.abs(qtyReceivedNum - row.qtyShipped) > POD_QTY_TOLERANCE;
+  const shippedW = row.weightKg;
+  let weightVariance = false;
+  const recvWs = row.receivedWeightKg.trim();
+  if (typeof shippedW === "number" && shippedW > 0 && recvWs !== "") {
+    const rw = Number(recvWs.replace(",", "."));
+    if (Number.isFinite(rw)) weightVariance = Math.abs(rw - shippedW) > POD_WEIGHT_TOLERANCE_KG;
+  }
+  return qtyVariance || weightVariance;
+}
 import { useAuthStore } from "@/stores/auth-store";
+import { useUIStore } from "@/stores/ui-store";
 import { hasAnyPermission, Permissions } from "@/lib/permissions";
 
 function humanizeDocTypeKey(key: string) {
@@ -75,6 +101,7 @@ export default function DocViewPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const user = useAuthStore((s) => s.user);
+  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
   const [emailTo, setEmailTo] = React.useState("");
@@ -94,9 +121,6 @@ export default function DocViewPage() {
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
   const [convertPartyId, setConvertPartyId] = React.useState("");
   const [convertWarehouseId, setConvertWarehouseId] = React.useState("");
-  const [quickConvertOpen, setQuickConvertOpen] = React.useState(false);
-  const [quickConvertTarget, setQuickConvertTarget] = React.useState<DocTypeKey | null>(null);
-  const [quickConverting, setQuickConverting] = React.useState(false);
   const [outputTemplateId, setOutputTemplateId] = React.useState("");
   const [selectedConvertPartyOption, setSelectedConvertPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
@@ -105,11 +129,26 @@ export default function DocViewPage() {
   const [podReceiverName, setPodReceiverName] = React.useState("");
   const [podNote, setPodNote] = React.useState("");
   const [podLineRows, setPodLineRows] = React.useState<
-    Array<{ lineId: string; description: string; qtyShipped: number; qtyReceived: string; varianceReason: string }>
+    Array<{
+      lineId: string;
+      description: string;
+      /** Muted SKU line under primary title (when API provides SKU). */
+      displaySku?: string;
+      qtyShipped: number;
+      weightKg?: number;
+      qtyReceived: string;
+      receivedWeightKg: string;
+      varianceReason: string;
+      varianceEvidenceAttachmentIds: string[];
+    }>
   >([]);
   const [podSaving, setPodSaving] = React.useState(false);
+  const [podEvidenceUploadBusy, setPodEvidenceUploadBusy] = React.useState(false);
+  const podSigRef = React.useRef<SignatureCanvas>(null);
   /** Portals AsyncSearchableSelect panel inside the sheet so Radix does not treat option clicks as “outside”. */
   const convertSheetContentRef = React.useRef<HTMLDivElement | null>(null);
+  /** Drop-down teardown can synthesize pointer-outside dismiss on the Sheet in the same frame; briefly ignore closes. */
+  const convertSheetDismissShieldUntilRef = React.useRef(0);
   const [convertSelectPortalHost, setConvertSelectPortalHost] = React.useState<HTMLElement | null>(null);
   const setConvertSheetHostRef = React.useCallback((node: HTMLDivElement | null) => {
     convertSheetContentRef.current = node;
@@ -134,12 +173,29 @@ export default function DocViewPage() {
     setPodLineRows(
       document.lines.map((l) => ({
         lineId: l.id ?? "",
-        description: l.description,
+        description: deliveryLinePrimaryLabel({
+          productName: l.productName,
+          productSku: l.productSku,
+          description: l.description,
+        }),
+        ...(() => {
+          const sku = deliveryLineSku({
+            productName: l.productName,
+            productSku: l.productSku,
+            description: l.description,
+          });
+          return sku ? { displaySku: sku } : {};
+        })(),
         qtyShipped: l.qty ?? 0,
+        ...(typeof l.weightKg === "number" && l.weightKg > 0 ? { weightKg: l.weightKg } : {}),
         qtyReceived: String(l.qty ?? 0),
+        receivedWeightKg: "",
         varianceReason: "",
+        varianceEvidenceAttachmentIds: [],
       }))
     );
+    const raf = requestAnimationFrame(() => podSigRef.current?.clear());
+    return () => cancelAnimationFrame(raf);
   }, [podSheetOpen, document?.id, document?.lines]);
   const [resolvedPartyName, setResolvedPartyName] = React.useState<string | null>(null);
   const isPurchaseDoc = [
@@ -277,12 +333,6 @@ export default function DocViewPage() {
         router.push(`/docs/grn/new?poId=${encodeURIComponent(id)}`);
         return;
       }
-      // For sales-order → invoice: use a compact quick-confirm dialog (no warehouse/party change needed)
-      if (type === "sales-order" && targetType === "invoice") {
-        setQuickConvertTarget(targetType);
-        setQuickConvertOpen(true);
-        return;
-      }
       setConvertType(targetType);
       setConvertPartyId(document?.partyId ?? "");
       const resolvedLabel =
@@ -294,10 +344,21 @@ export default function DocViewPage() {
       );
       setConvertWarehouseId(document?.warehouseId ?? "");
       setOutputTemplateId(document?.outputTemplateId ?? "");
+      convertSheetDismissShieldUntilRef.current = Date.now() + 600;
       setConvertOpen(true);
     },
     [document, displayPartyName, type, id, router]
   );
+
+  /** Deferred past dropdown teardown + next frame so Sheet / quick modal does not get stray outside-dismiss. */
+  const scheduleConvert = React.useCallback((targetType: DocTypeKey) => {
+    window.setTimeout(() => openConvertSheet(targetType), 0);
+  }, [openConvertSheet]);
+
+  const handleConvertOpenChange = React.useCallback((open: boolean) => {
+    if (!open && Date.now() < convertSheetDismissShieldUntilRef.current) return;
+    setConvertOpen(open);
+  }, []);
 
   const rightSlot = (
     <DynamicNextStepsPanel
@@ -337,6 +398,29 @@ export default function DocViewPage() {
   const displayTitle = document?.number ? `${document.number}` : `${label} ${id}`;
   const breadcrumbLabel = document?.number ?? id;
 
+  const handleAppendPodEvidence = React.useCallback(
+    async (lineIdx: number, fileList: FileList | null) => {
+      if (!fileList?.length) return;
+      setPodEvidenceUploadBusy(true);
+      try {
+        const files = Array.from(fileList);
+        for (const file of files) {
+          const { id: vid } = await uploadDocumentAttachmentApi("delivery-note", id, file);
+          setPodLineRows((prev) =>
+            prev.map((r, i) =>
+              i === lineIdx ? { ...r, varianceEvidenceAttachmentIds: [...r.varianceEvidenceAttachmentIds, vid] } : r
+            )
+          );
+        }
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setPodEvidenceUploadBusy(false);
+      }
+    },
+    [id]
+  );
+
   return (
     <DocumentPageShell
       title={displayTitle}
@@ -360,6 +444,17 @@ export default function DocViewPage() {
               Edit
             </Button>
           )}
+          {type === "delivery-note" &&
+            warehouseTaskLink &&
+            !rightPanelOpen &&
+            document?.status === "DRAFT" && (
+              <Button size="sm" variant="default" asChild>
+                <Link href={warehouseTaskLink.href}>
+                  <Icons.Warehouse className="mr-2 h-4 w-4" />
+                  {warehouseTaskLink.label}
+                </Link>
+              </Button>
+            )}
           {canRecordPod && (
             <Button size="sm" variant="secondary" onClick={() => setPodSheetOpen(true)}>
               <Icons.ClipboardCheck className="mr-2 h-4 w-4" />
@@ -386,7 +481,7 @@ export default function DocViewPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {convertTargets.map((targetType) => (
-                  <DropdownMenuItem key={targetType} onClick={() => openConvertSheet(targetType)}>
+                  <DropdownMenuItem key={targetType} onSelect={() => scheduleConvert(targetType)}>
                     Convert to {humanizeDocTypeKey(targetType)}
                   </DropdownMenuItem>
                 ))}
@@ -627,6 +722,26 @@ export default function DocViewPage() {
                     />
                   </div>
                 </div>
+                {type === "delivery-note" && document?.status === "DRAFT" ? (
+                  <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+                    <p className="font-medium flex items-start gap-2 leading-snug">
+                      <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
+                      Draft lines are editable via Edit below. Once this delivery note is approved and dispatched, you cannot amend shipped quantities here; record what the customer received with Proof of delivery (POD)—that becomes the invoicing basis.
+                    </p>
+                  </div>
+                ) : null}
+                {type === "delivery-note" &&
+                document &&
+                document.status !== "DRAFT" &&
+                !document.podConfirmation?.confirmedAt &&
+                ["IN_TRANSIT", "DELIVERED", "POSTED"].includes(String(document.status).toUpperCase()) ? (
+                  <div className="mt-4 rounded-lg border border-blue-300/70 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50">
+                    <p className="font-medium flex items-start gap-2 leading-snug">
+                      <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
+                      Shipped quantities are frozen from warehouse issue. Capture customer-side variances with Record POD; invoices follow POD-received quantities when recorded.
+                    </p>
+                  </div>
+                ) : null}
                 {type === "delivery-note" && document?.podConfirmation?.confirmedAt && (
                   <div className="mt-4 pt-4 border-t space-y-2 text-sm">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Proof of delivery</p>
@@ -643,6 +758,30 @@ export default function DocViewPage() {
                     {document.podConfirmation.note ? (
                       <p className="text-muted-foreground whitespace-pre-wrap">{document.podConfirmation.note}</p>
                     ) : null}
+                    <p className="text-muted-foreground">
+                      Receiver signature:&nbsp;
+                      {document.podConfirmation.receiverSignatureAttachmentId ? (
+                        <button
+                          type="button"
+                          className="text-primary underline-offset-4 hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer"
+                          onClick={() => {
+                            const attId = document.podConfirmation?.receiverSignatureAttachmentId;
+                            if (!attId) return;
+                            downloadDocumentAttachmentApi(
+                              "delivery-note",
+                              id,
+                              attId,
+                              "receiver-signature.png",
+                              (msg) => toast.info(msg || "Download started.")
+                            );
+                          }}
+                        >
+                          Download PNG
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </p>
                     <div className="rounded border divide-y max-w-3xl">
                       {(document.podConfirmation.lines ?? []).map((ln) => {
                         const docLine = document.lines.find((l) => l.id === ln.lineId);
@@ -651,7 +790,11 @@ export default function DocViewPage() {
                             <span className="min-w-0">{docLine?.description ?? ln.lineId}</span>
                             <span className="shrink-0 text-muted-foreground">
                               Received {ln.qtyReceived} of {ln.qtyShipped}
+                              {typeof ln.receivedWeightKg === "number" ? ` · ${ln.receivedWeightKg} kg` : ""}
                               {ln.varianceReason ? ` — ${ln.varianceReason}` : ""}
+                              {(ln.varianceEvidenceAttachmentIds?.length ?? 0) > 0
+                                ? ` · ${ln.varianceEvidenceAttachmentIds!.length} variance photo(s)`
+                                : ""}
                             </span>
                           </div>
                         );
@@ -839,12 +982,15 @@ export default function DocViewPage() {
                           className="min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                         >
                           <div className="min-w-0">
-                            <span>{line.description}</span>
-                            {line.productSku ? (
-                              <p className="text-xs text-muted-foreground font-mono truncate">
-                                {line.productSku}
-                                {line.productName ? ` · ${line.productName}` : ""}
-                              </p>
+                            <span>
+                              {deliveryLinePrimaryLabel({
+                                productName: line.productName,
+                                productSku: line.productSku,
+                                description: line.description,
+                              })}
+                            </span>
+                            {line.productSku?.trim() ? (
+                              <p className="text-xs text-muted-foreground font-mono truncate">{line.productSku}</p>
                             ) : null}
                             {line.sourceDocumentType && line.sourceDocumentId ? (
                               <p className="text-xs text-muted-foreground">
@@ -932,15 +1078,23 @@ export default function DocViewPage() {
         doc={printDoc}
       />
       {/* modal={false} avoids focus/pointer guards that block interactions with portaled dropdown panels */}
-      <Sheet open={convertOpen} onOpenChange={setConvertOpen} modal={false}>
+      <Sheet open={convertOpen} onOpenChange={handleConvertOpenChange} modal={false}>
         <SheetContent
           side="right"
           className="w-full sm:max-w-md"
           onPointerDownOutside={(e) => {
+            if (Date.now() < convertSheetDismissShieldUntilRef.current) {
+              e.preventDefault();
+              return;
+            }
             const t = e.target as HTMLElement;
             if (t.closest?.("[data-async-searchable-panel]")) e.preventDefault();
           }}
           onInteractOutside={(e) => {
+            if (Date.now() < convertSheetDismissShieldUntilRef.current) {
+              e.preventDefault();
+              return;
+            }
             const t = e.target as HTMLElement;
             if (t.closest?.("[data-async-searchable-panel]")) e.preventDefault();
           }}
@@ -1059,40 +1213,38 @@ export default function DocViewPage() {
           <SheetHeader>
             <SheetTitle>Proof of delivery</SheetTitle>
             <SheetDescription>
-              Record quantities received at the customer. Invoicing uses these quantities (not shipped quantities when they differ).
+              Record quantities and receiver acknowledgement. Ship-to-invoice quantities follow POD where present. Variance
+              on quantity or weight requires a reason plus at least one photo.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="pod-receiver">Receiver name</Label>
-              <Input
-                id="pod-receiver"
-                value={podReceiverName}
-                onChange={(e) => setPodReceiverName(e.target.value)}
-                placeholder="Who signed / confirmed receipt"
-                autoComplete="name"
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="pod-note">Note (optional)</Label>
               <Textarea
                 id="pod-note"
                 value={podNote}
                 onChange={(e) => setPodNote(e.target.value)}
-                placeholder="Vehicle, condition, short shipment details…"
+                placeholder="Vehicle, condition, offload details…"
                 rows={2}
               />
             </div>
             <div className="space-y-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Line quantities</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Lines (qty & optional weight)
+              </p>
               {podLineRows.map((row, idx) => {
-                const receivedNum = Number(row.qtyReceived);
-                const needsVariance =
-                  Number.isFinite(receivedNum) && Math.abs(receivedNum - row.qtyShipped) > 0.001;
+                const evidenceNeeded = computePodLineEvidenceNeeded(row);
+                const showWeight = typeof row.weightKg === "number" && row.weightKg > 0;
                 return (
                   <div key={row.lineId || idx} className="rounded border p-3 space-y-2">
                     <p className="text-sm font-medium leading-snug">{row.description}</p>
-                    <p className="text-xs text-muted-foreground">Shipped: {row.qtyShipped}</p>
+                    {row.displaySku ? (
+                      <p className="text-xs text-muted-foreground font-mono">{row.displaySku}</p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Shipped qty: {row.qtyShipped}
+                      {showWeight ? ` · Shipped weight: ${row.weightKg} kg` : ""}
+                    </p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div>
                         <Label className="text-xs">Qty received</Label>
@@ -1109,8 +1261,26 @@ export default function DocViewPage() {
                           }}
                         />
                       </div>
-                      {needsVariance ? (
-                        <div className="sm:col-span-2">
+                      {showWeight ? (
+                        <div>
+                          <Label className="text-xs">Weight received (kg)</Label>
+                          <Input
+                            type="number"
+                            step="0.001"
+                            min={0}
+                            value={row.receivedWeightKg}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPodLineRows((prev) =>
+                                prev.map((r, i) => (i === idx ? { ...r, receivedWeightKg: v } : r))
+                              );
+                            }}
+                            placeholder={`vs ${row.weightKg} kg shipped`}
+                          />
+                        </div>
+                      ) : null}
+                      {evidenceNeeded ? (
+                        <div className="sm:col-span-2 space-y-2">
                           <Label className="text-xs">Variance reason (required)</Label>
                           <Input
                             value={row.varianceReason}
@@ -1122,6 +1292,62 @@ export default function DocViewPage() {
                             }}
                             placeholder="e.g. damaged cases, partial offload"
                           />
+                          <div>
+                            <Label className="text-xs">Variance photos (≥1)</Label>
+                            <p className="text-[11px] text-muted-foreground mb-1">
+                              Required when quantity or weight differs beyond tolerance from shipped.
+                            </p>
+                            <Input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              multiple
+                              disabled={podEvidenceUploadBusy || podSaving}
+                              className="text-xs"
+                              onChange={(e) => {
+                                void handleAppendPodEvidence(idx, e.target.files);
+                                e.target.value = "";
+                              }}
+                            />
+                            {row.varianceEvidenceAttachmentIds.length > 0 ? (
+                              <ul className="mt-2 text-xs text-muted-foreground space-y-1">
+                                {row.varianceEvidenceAttachmentIds.map((vid) => (
+                                  <li key={vid} className="flex items-center gap-2">
+                                    <Icons.Image className="h-3.5 w-3.5 shrink-0" />
+                                    <span className="truncate font-mono text-[11px]" title={vid}>
+                                      Photo {vid.slice(0, 8)}…
+                                    </span>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2"
+                                      onClick={() =>
+                                        setPodLineRows((prev) =>
+                                          prev.map((r, i) =>
+                                            i === idx
+                                              ? {
+                                                  ...r,
+                                                  varianceEvidenceAttachmentIds: r.varianceEvidenceAttachmentIds.filter(
+                                                    (x) => x !== vid
+                                                  ),
+                                                }
+                                              : r
+                                          )
+                                        )
+                                      }
+                                    >
+                                      Remove
+                                    </Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1">
+                                Add at least one photo before saving when this line shows as variance.
+                              </p>
+                            )}
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -1129,44 +1355,109 @@ export default function DocViewPage() {
                 );
               })}
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="pod-receiver">Receiver name</Label>
+              <Input
+                id="pod-receiver"
+                value={podReceiverName}
+                onChange={(e) => setPodReceiverName(e.target.value)}
+                placeholder="Who signed / confirmed receipt"
+                autoComplete="name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Receiver signature</Label>
+              <p className="text-xs text-muted-foreground">
+                Draw the signature below. It will be uploaded and stored with this delivery note.
+              </p>
+              <PodSignaturePad ref={podSigRef} />
+              <Button type="button" variant="outline" size="sm" onClick={() => podSigRef.current?.clear()}>
+                Clear signature
+              </Button>
+            </div>
           </div>
           <SheetFooter className="mt-8">
             <Button variant="outline" onClick={() => setPodSheetOpen(false)}>
               Cancel
             </Button>
             <Button
-              disabled={podSaving || !podReceiverName.trim()}
+              disabled={
+                podSaving ||
+                podEvidenceUploadBusy ||
+                !podReceiverName.trim()
+              }
               onClick={async () => {
                 if (!podReceiverName.trim()) {
                   toast.error("Receiver name is required.");
                   return;
                 }
+                const sigCanvas = podSigRef.current;
+                if (!sigCanvas || sigCanvas.isEmpty()) {
+                  toast.error("Receiver signature is required.");
+                  return;
+                }
                 for (let i = 0; i < podLineRows.length; i++) {
                   const row = podLineRows[i];
-                  const q = Number(row.qtyReceived);
-                  if (!Number.isFinite(q) || q < 0) {
+                  const q = Number(row.qtyReceived.replace(",", "."));
+                  if (!Number.isFinite(q) || q < -POD_QTY_TOLERANCE) {
                     toast.error(`Line ${i + 1}: enter a valid received quantity.`);
                     return;
                   }
-                  if (q - row.qtyShipped > 0.01) {
+                  if (q - row.qtyShipped > POD_QTY_TOLERANCE) {
                     toast.error(`Line ${i + 1}: received cannot exceed shipped.`);
                     return;
                   }
-                  if (Math.abs(q - row.qtyShipped) > 0.01 && !row.varianceReason.trim()) {
-                    toast.error(`Line ${i + 1}: add a variance reason when quantity differs from shipped.`);
-                    return;
+                  const needsEv = computePodLineEvidenceNeeded(row);
+                  if (needsEv) {
+                    if (!row.varianceReason.trim()) {
+                      toast.error(
+                        `Line ${i + 1}: add a variance reason when quantity or weight differs from shipped.`
+                      );
+                      return;
+                    }
+                    if (row.varianceEvidenceAttachmentIds.length < 1) {
+                      toast.error(
+                        `Line ${i + 1}: upload at least one variance photo before saving.`
+                      );
+                      return;
+                    }
                   }
                 }
                 setPodSaving(true);
                 try {
+                  const blob = await new Promise<Blob>((resolve, reject) => {
+                    sigCanvas.getTrimmedCanvas().toBlob(
+                      (b) => (b ? resolve(b) : reject(new Error("Could not capture signature."))),
+                      "image/png"
+                    );
+                  });
+                  const file = new File([blob], "receiver-signature.png", { type: "image/png" });
+                  const { id: receiverSignatureAttachmentId } = await uploadDocumentAttachmentApi(
+                    "delivery-note",
+                    id,
+                    file
+                  );
                   await confirmDeliveryPodApi(id, {
                     receiverName: podReceiverName.trim(),
+                    receiverSignatureAttachmentId,
                     note: podNote.trim() || undefined,
-                    lines: podLineRows.map((r) => ({
-                      lineId: r.lineId,
-                      qtyReceived: Number(r.qtyReceived),
-                      varianceReason: r.varianceReason.trim() || undefined,
-                    })),
+                    lines: podLineRows.map((r) => {
+                      const needsEv = computePodLineEvidenceNeeded(r);
+                      const recvWk = r.receivedWeightKg.trim();
+                      const parsedW =
+                        recvWk !== "" && Number.isFinite(Number(recvWk.replace(",", ".")))
+                          ? Number(recvWk.replace(",", "."))
+                          : undefined;
+                      return {
+                        lineId: r.lineId,
+                        qtyReceived: Number(r.qtyReceived.replace(",", ".")),
+                        ...(r.varianceReason.trim() ? { varianceReason: r.varianceReason.trim() } : {}),
+                        ...(parsedW != null ? { receivedWeightKg: parsedW } : {}),
+                        ...(needsEv && r.varianceEvidenceAttachmentIds.length
+                          ? { varianceEvidenceAttachmentIds: r.varianceEvidenceAttachmentIds }
+                          : {}),
+                      };
+                    }),
                   });
                   toast.success("Proof of delivery saved.");
                   setPodSheetOpen(false);
@@ -1184,54 +1475,6 @@ export default function DocViewPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-
-      {/* Quick confirm dialog for sales-order → invoice (no warehouse/party change needed) */}
-      {quickConvertOpen && quickConvertTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Icons.FileText className="h-5 w-5 text-primary" />
-              <h3 className="text-base font-semibold">Convert to Invoice</h3>
-            </div>
-            <p className="text-sm text-muted-foreground mb-1">
-              Convert <strong>{document?.number ?? id}</strong> to an invoice?
-            </p>
-            {document?.lines?.length ? (
-              <p className="text-xs text-muted-foreground mb-4">
-                All {document.lines.length} line item{document.lines.length !== 1 ? "s" : ""} will be included.
-              </p>
-            ) : (
-              <div className="mb-4" />
-            )}
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setQuickConvertOpen(false)}>Cancel</Button>
-              <Button
-                disabled={quickConverting}
-                onClick={async () => {
-                  setQuickConverting(true);
-                  try {
-                    const created = await convertDocumentApi(type as DocTypeKey, id, { targetType: quickConvertTarget });
-                    toast.success(`Invoice ${created.number ?? "created"}.`);
-                    setQuickConvertOpen(false);
-                    if (created.id) {
-                      router.push(`/docs/${quickConvertTarget}/${created.id}`);
-                    } else {
-                      await refreshDocument();
-                    }
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  } finally {
-                    setQuickConverting(false);
-                  }
-                }}
-              >
-                {quickConverting ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.FileText className="mr-2 h-4 w-4" />}
-                {quickConverting ? "Creating…" : "Create Invoice"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Apply credit note to invoice dialog */}
       {applyDialogOpen && (
@@ -1422,7 +1665,6 @@ function DynamicNextStepsPanel({
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
     } else if (status === "APPROVED") {
       steps.push({ icon: <Icons.Truck className="h-4 w-4 text-blue-500" />, text: "Ready to fulfill — create a Delivery Note", action: () => onConvert("delivery-note"), actionLabel: "Create Delivery Note", variant: "default" });
-      steps.push({ icon: <Icons.FileText className="h-4 w-4" />, text: "Or convert directly to Invoice", action: () => onConvert("invoice"), actionLabel: "Convert to Invoice", variant: "outline" });
     }
   } else if (type === "delivery-note") {
     const st = status.toUpperCase();

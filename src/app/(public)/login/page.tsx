@@ -49,7 +49,7 @@ function LoginContent() {
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      rememberMe: false,
+      rememberMe: true,
     },
   });
 

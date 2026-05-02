@@ -4,8 +4,6 @@ import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DocumentStatusBar } from "./DocumentStatusBar";
-import { DocumentRightPanel } from "./DocumentRightPanel";
-import { useUIStore } from "@/stores/ui-store";
 import type { DocumentStatusActor } from "@/lib/types/documents";
 
 interface DocumentPageShellProps {
@@ -28,8 +26,6 @@ export function DocumentPageShell({
   rightSlot,
   children,
 }: DocumentPageShellProps) {
-  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
-
   return (
     <PageShell rightSlot={rightSlot}>
       <PageHeader

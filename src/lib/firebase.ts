@@ -90,6 +90,22 @@ export async function getIdToken(): Promise<string | null> {
   return user.getIdToken();
 }
 
+/**
+ * Refreshes the Firebase JWT if needed (`getIdToken` renews expired tokens transparently).
+ * Call before API requests so Bearer matches a valid token (~1h lifetime).
+ */
+export async function getCurrentFirebaseIdTokenForApi(): Promise<string | null> {
+  if (typeof window === "undefined" || !isFirebaseConfigured()) return null;
+  try {
+    const auth = await getClientAuth();
+    const user = auth.currentUser;
+    if (!user) return null;
+    return user.getIdToken();
+  } catch {
+    return null;
+  }
+}
+
 export async function sendPasswordReset(email: string): Promise<void> {
   const auth = await getClientAuth();
   const { sendPasswordResetEmail } = await import("firebase/auth");

@@ -60,12 +60,16 @@ export type PodConfirmationLineRecord = {
   qtyShipped: number;
   qtyReceived: number;
   varianceReason?: string;
+  receivedWeightKg?: number;
+  varianceEvidenceAttachmentIds?: string[];
 };
 
 export type PodConfirmationRecord = {
   confirmedAt: string;
   confirmedByUserId?: string;
   receiverName?: string;
+  /** Attachment on the delivery note (signature image). */
+  receiverSignatureAttachmentId?: string;
   note?: string;
   lines: PodConfirmationLineRecord[];
 };
@@ -114,6 +118,8 @@ export type DocumentDetailRecord = {
     taxCodeCode?: string;
     taxCodeName?: string;
     taxRate?: number;
+    /** Line gross weight shipped (delivery-note POD baseline). */
+    weightKg?: number;
   }>;
   sourceDocument?: {
     id: string;
