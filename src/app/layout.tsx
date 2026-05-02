@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   title: "ERP by OdaFlow",
   description: "Multi-tenant ERP for Manufacturers, Distributors, and Shops",
   icons: {
-    icon: [{ url: "/brand/oda-erp-logo.png", type: "image/png" }],
-    apple: [{ url: "/brand/oda-erp-logo.png", type: "image/png" }],
+    icon: [{ url: "/favicon.png", type: "image/png", sizes: "1024x1024" }],
+    apple: [{ url: "/favicon.png", type: "image/png", sizes: "1024x1024" }],
   },
 };
 
