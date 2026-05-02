@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function LegacyFranchiseOutletsRedirect() {
+export default function FranchiseNetworkRootPage() {
   redirect("/franchise/network/outlets");
 }

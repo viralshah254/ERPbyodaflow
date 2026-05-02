@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -9,6 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -23,6 +31,14 @@ import {
   type DailyPriceItem,
   type DailyPriceListResponse,
 } from "@/lib/api/pricing";
+import {
+  fetchEngineItems,
+  postGenerateEngineSuggestions,
+  postPublishEngineItem,
+  fetchCostBreakdown,
+} from "@/lib/api/pricing-engine";
+import type { PriceListEngineItemDto } from "@/lib/pricing/engine-types";
+import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,6 +56,208 @@ function fmtDate(s: string | null): string {
   if (!s) return "";
   const d = new Date(s);
   return d.toLocaleDateString("en-KE", { day: "2-digit", month: "short" });
+}
+
+function PricingEnginePanel({ priceListId, currency }: { priceListId: string; currency: string }) {
+  const [items, setItems] = React.useState<PriceListEngineItemDto[]>([]);
+  const [busy, setBusy] = React.useState(false);
+  const [approvePrice, setApprovePrice] = React.useState<Record<string, string>>({});
+  const [overrideReason, setOverrideReason] = React.useState<Record<string, string>>({});
+  const [bdOpen, setBdOpen] = React.useState(false);
+  const [bdJson, setBdJson] = React.useState("");
+
+  const refresh = React.useCallback(async () => {
+    if (!isApiConfigured()) return;
+    try {
+      const list = await fetchEngineItems(priceListId);
+      setItems(list);
+      const map: Record<string, string> = {};
+      list.forEach((it) => {
+        map[it.id] = it.suggestedPrice != null ? String(Math.round(it.suggestedPrice * 100) / 100) : "";
+      });
+      setApprovePrice(map);
+    } catch {
+      setItems([]);
+    }
+  }, [priceListId]);
+
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleGenerate = async () => {
+    if (!isApiConfigured()) {
+      toast.info("Configure API URL first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await postGenerateEngineSuggestions(priceListId);
+      toast.success(`Engine refreshed (${r.updated} rows).`);
+      await refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openBreakdown = async (itemId: string) => {
+    if (!isApiConfigured()) return;
+    try {
+      const b = await fetchCostBreakdown(itemId);
+      setBdJson(JSON.stringify(b, null, 2));
+      setBdOpen(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const handlePublish = async (it: PriceListEngineItemDto) => {
+    const raw = approvePrice[it.id];
+    const approved = Number(raw);
+    if (!Number.isFinite(approved) || approved < 0) {
+      toast.error("Enter a valid approved price.");
+      return;
+    }
+    const sug = it.suggestedPrice;
+    let reason: string | undefined = overrideReason[it.id]?.trim();
+    if (sug != null && Math.abs(approved - sug) > 1e-4) {
+      if (!reason) {
+        toast.error("Override reason is required when price differs from suggested.");
+        return;
+      }
+    } else {
+      reason = undefined;
+    }
+    setBusy(true);
+    try {
+      await postPublishEngineItem(it.id, {
+        approvedPrice: approved,
+        suggestedPrice: sug ?? undefined,
+        overrideReason: reason,
+      });
+      toast.success("Published to daily price.");
+      await refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Icons.Calculator className="h-4 w-4" /> Smart pricing engine
+              </CardTitle>
+              <CardDescription>
+                Suggested prices from batch cost + markup rules. Publishing updates today&apos;s daily price row.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/pricing/daily-review">Approval queue</Link>
+              </Button>
+              <Button size="sm" disabled={busy} onClick={() => void handleGenerate()}>
+                {busy ? (
+                  <Icons.Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Icons.Sparkles className="h-4 w-4 mr-1" /> Generate suggestions
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {items.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">
+              No engine rows yet — persist batch costs (GRN recalculate), then generate.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="max-w-[100px]">Product</TableHead>
+                  <TableHead>Suggested</TableHead>
+                  <TableHead>Cost/kg</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-52">Publish</TableHead>
+                  <TableHead className="w-24"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((it) => (
+                  <TableRow key={it.id}>
+                    <TableCell className="font-mono text-[10px] break-all">{it.productId}</TableCell>
+                    <TableCell className="tabular-nums">{fmtCcy(it.suggestedPrice, currency)}</TableCell>
+                    <TableCell className="tabular-nums">{fmtCcy(it.finalCostPerKg, currency)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px]">{it.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <Input
+                          type="number"
+                          className="h-8 tabular-nums text-sm"
+                          min="0"
+                          step="1"
+                          value={approvePrice[it.id] ?? ""}
+                          onChange={(e) => setApprovePrice((p) => ({ ...p, [it.id]: e.target.value }))}
+                        />
+                        <Input
+                          placeholder="Override reason (if ≠ suggested)"
+                          className="h-7 text-xs"
+                          value={overrideReason[it.id] ?? ""}
+                          onChange={(e) => setOverrideReason((p) => ({ ...p, [it.id]: e.target.value }))}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="space-y-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs"
+                        disabled={busy}
+                        onClick={() => void handlePublish(it)}
+                      >
+                        Publish
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs h-7"
+                        type="button"
+                        onClick={() => void openBreakdown(it.id)}
+                      >
+                        Breakdown
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Sheet open={bdOpen} onOpenChange={(o) => !o && setBdOpen(false)}>
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Cost breakdown</SheetTitle>
+            <SheetDescription>Batch + delivery allocations snapshot</SheetDescription>
+          </SheetHeader>
+          <pre className="mt-4 text-[10px] leading-relaxed whitespace-pre-wrap">{bdJson}</pre>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
 }
 
 export default function PriceListViewPage() {
@@ -171,6 +389,9 @@ export default function PriceListViewPage() {
         />
 
         <div className="p-6 space-y-4">
+          {data && isApiConfigured() && (
+            <PricingEnginePanel priceListId={priceListId} currency={data.currency} />
+          )}
           {/* Status bar */}
           {data && (
             <div className={cn(

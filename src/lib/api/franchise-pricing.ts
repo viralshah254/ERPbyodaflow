@@ -1,5 +1,24 @@
 import { apiRequest, requireLiveApi } from "./client";
 
+export type FranchiseOutletSellPublishAlertRow = {
+  priceListId: string;
+  priceListName?: string;
+  outletCount: number;
+  pendingProductCount: number;
+  pendingProductSampleIds: string[];
+};
+
+export async function fetchFranchiseOutletSellPublishAlerts(): Promise<{
+  items: FranchiseOutletSellPublishAlertRow[];
+  todayISO: string;
+  generatedAt?: string;
+}> {
+  requireLiveApi("Outlet sell publish alerts");
+  return apiRequest<{ items: FranchiseOutletSellPublishAlertRow[]; todayISO: string; generatedAt?: string }>(
+    "/api/franchise/hq/outlet-sell-publish/alerts"
+  );
+}
+
 export type FranchiseBatchPricingAlertRow = {
   grnId: string;
   grnNumber?: string;

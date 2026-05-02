@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function LegacyPricingOverviewRedirect() {
+export default function PricingWorkspaceRootPage() {
   redirect("/pricing/workspace/overview");
 }

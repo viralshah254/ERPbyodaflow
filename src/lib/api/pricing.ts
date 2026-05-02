@@ -33,6 +33,16 @@ export interface PriceListDetail {
     price: number;
     currency?: string;
   }>;
+  channel?: string;
+  tier?: string;
+  zoneId?: string;
+  customerId?: string;
+  franchiseId?: string;
+  lastCalculatedAt?: string;
+  parentPriceListId?: string;
+  parentName?: string;
+  markupType?: "PERCENT" | "FLAT";
+  markupValue?: number;
 }
 
 // ——— Discount policies ———
@@ -124,6 +134,16 @@ export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
       name: string;
       code?: string;
       currency?: string;
+      channel?: string;
+      tier?: string;
+      zoneId?: string;
+      customerId?: string;
+      franchiseId?: string;
+      lastCalculatedAt?: string;
+      parentPriceListId?: string;
+      parentName?: string;
+      markupType?: "PERCENT" | "FLAT";
+      markupValue?: number;
       items?: Array<{ productId: string; price: number; currency?: string }>;
     }>;
   }>("/api/pricing/price-lists");
@@ -133,6 +153,16 @@ export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
     code: item.code,
     currency: item.currency ?? "KES",
     items: item.items ?? [],
+    channel: item.channel,
+    tier: item.tier,
+    zoneId: item.zoneId,
+    customerId: item.customerId,
+    franchiseId: item.franchiseId,
+    lastCalculatedAt: item.lastCalculatedAt,
+    parentPriceListId: item.parentPriceListId,
+    parentName: item.parentName,
+    markupType: item.markupType,
+    markupValue: item.markupValue,
   }));
 }
 
@@ -143,12 +173,18 @@ export async function fetchPriceListsForUi(): Promise<PriceList[]> {
     id: d.id,
     name: d.name,
     currency: d.currency ?? "KES",
-    channel: d.code ?? "Retail",
+    channel: ((d.channel as string | undefined) ?? d.code ?? "Retail") as PriceList["channel"],
+    pricingEngineChannel: d.channel,
+    tier: d.tier,
+    zoneId: d.zoneId,
+    customerId: d.customerId,
+    franchiseId: d.franchiseId,
+    lastCalculatedAt: d.lastCalculatedAt,
     isDefault: false,
-    parentPriceListId: (d as unknown as { parentPriceListId?: string }).parentPriceListId,
-    parentName: (d as unknown as { parentName?: string }).parentName,
-    markupType: (d as unknown as { markupType?: "PERCENT" | "FLAT" }).markupType,
-    markupValue: (d as unknown as { markupValue?: number }).markupValue,
+    parentPriceListId: d.parentPriceListId,
+    parentName: d.parentName,
+    markupType: d.markupType,
+    markupValue: d.markupValue,
   }));
 }
 
@@ -169,6 +205,12 @@ export async function createPriceListApi(body: {
   parentPriceListId?: string;
   markupType?: "PERCENT" | "FLAT";
   markupValue?: number;
+  channel?: string;
+  tier?: string;
+  zoneId?: string;
+  customerId?: string;
+  franchiseId?: string;
+  isActive?: boolean;
 }): Promise<{ id: string }> {
   requireLiveApi("Create price list");
   return apiRequest<{ id: string }>("/api/pricing/price-lists", { method: "POST", body });
@@ -184,6 +226,12 @@ export async function updatePriceListApi(
     parentPriceListId: string | null;
     markupType: "PERCENT" | "FLAT" | null;
     markupValue: number | null;
+    channel: string | null;
+    tier: string | null;
+    zoneId: string | null;
+    customerId: string | null;
+    franchiseId: string | null;
+    isActive: boolean;
   }>
 ): Promise<void> {
   requireLiveApi("Update price list");
