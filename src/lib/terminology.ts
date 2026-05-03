@@ -29,6 +29,7 @@ const FALLBACK = {
   purchaseRequest: "Purchase Request",
   bill: "Bill",
   franchisee: "Franchisee",
+  franchiseSecurityDeposit: "Franchise security deposit",
   commission: "Commission",
   processing: "Manufacturing",
 } as const satisfies Record<TerminologyKey, string>;

@@ -159,6 +159,7 @@ export default function FranchiseOutletsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Code</TableHead>
+                  <TableHead>Security deposit</TableHead>
                   <TableHead>Territory</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Revenue</TableHead>
@@ -168,9 +169,46 @@ export default function FranchiseOutletsPage() {
               <TableBody>
                 {outlets.map((o) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-medium">{o.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{o.code ?? "—"}</TableCell>
-                    <TableCell>{o.territory ?? "—"}</TableCell>
+                  <TableCell className="font-medium">{o.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{o.code ?? "—"}</TableCell>
+                  <TableCell className="text-sm">
+                    {o.securityDepositAmountKes != null && o.securityDepositAmountKes > 0 ? (
+                      o.securityDepositPaidAt ? (
+                        <span className="text-muted-foreground">
+                          Paid {o.securityDepositPaidAt}
+                          {o.securityDepositChargeDocumentId ? (
+                            <>
+                              {" · "}
+                              <Link
+                                className="underline"
+                                href={`/docs/franchise-security-deposit/${o.securityDepositChargeDocumentId}`}
+                              >
+                                Document
+                              </Link>
+                            </>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 dark:text-amber-500">
+                          Due KES {Number(o.securityDepositAmountKes).toLocaleString()}
+                          {o.securityDepositChargeDocumentId ? (
+                            <>
+                              {" · "}
+                              <Link
+                                className="underline"
+                                href={`/docs/franchise-security-deposit/${o.securityDepositChargeDocumentId}`}
+                              >
+                                Open
+                              </Link>
+                            </>
+                          ) : null}
+                        </span>
+                      )
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell>{o.territory ?? "—"}</TableCell>
                     <TableCell>{o.isActive ? "Active" : "Inactive"}</TableCell>
                     <TableCell>KES {Number(o.revenue ?? 0).toLocaleString()}</TableCell>
                     <TableCell>

@@ -61,6 +61,11 @@ export interface FranchiseNetworkOutletRow {
   totalStockQty: number;
   lowStockCount: number;
   orgType?: string;
+  /** HQ security deposit (when configured): KES amount and receipt status */
+  securityDepositAmountKes?: number | null;
+  securityDepositChargeDocumentId?: string | null;
+  securityDepositChargePostedAt?: string | null;
+  securityDepositPaidAt?: string | null;
 }
 
 export interface FranchiseNetworkSummary {

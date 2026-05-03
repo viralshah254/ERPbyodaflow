@@ -35,6 +35,11 @@ import * as Icons from "lucide-react";
 import Link from "next/link";
 import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
 import {
+  documentLinesOperational,
+  documentLinesOperationalErrorMessage,
+} from "@/components/docs/document-lines-operational";
+import { fetchRetailPosContextApi } from "@/lib/api/retail";
+import {
   createDocumentApi,
   patchDocumentApi,
   previewDocumentPostingApi,
@@ -369,6 +374,10 @@ export function DocumentCreateWizard({
   const [step, setStep] = React.useState(isHqDoc ? 2 : 1);
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
+  const linesOperational = React.useMemo(
+    () => documentLinesOperational(lines),
+    [lines]
+  );
   const [submitting, setSubmitting] = React.useState(false);
   const [loadingFxRate, setLoadingFxRate] = React.useState(false);
   const [postingPreview, setPostingPreview] = React.useState<DocumentPostingPreviewLine[]>([]);
@@ -423,6 +432,8 @@ export function DocumentCreateWizard({
   const [loadingPo, setLoadingPo] = React.useState(false);
   /** Resolve GRN warehouse after warehouse options load (PO may have branchId but no warehouseId). */
   const pendingGrnWarehouseFromPoRef = React.useRef<{ warehouseId?: string; branchId?: string } | null>(null);
+  /** Apply retail POS primary warehouse once for new delivery notes when warehouse is unset. */
+  const deliveryNoteWarehouseDefaultAppliedRef = React.useRef(false);
   const defaults = React.useMemo(
     () => getDefaultValues(baseCurrency),
     [baseCurrency]
@@ -581,6 +592,33 @@ export function DocumentCreateWizard({
       pendingGrnWarehouseFromPoRef.current = null;
     }
   }, [type, fieldOptions, form]);
+
+  React.useEffect(() => {
+    if (type !== "delivery-note" || isEditMode) return;
+    if (deliveryNoteWarehouseDefaultAppliedRef.current) return;
+    const opts = fieldOptions["warehouse"] ?? [];
+    if (!opts.length) return;
+    if (String(form.getValues("warehouse") ?? "").trim()) {
+      deliveryNoteWarehouseDefaultAppliedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    fetchRetailPosContextApi()
+      .then((ctx) => {
+        if (cancelled) return;
+        const wid = ctx.defaultWarehouseId;
+        if (wid && opts.some((o) => o.id === wid)) {
+          form.setValue("warehouse", wid, { shouldDirty: true });
+        }
+        deliveryNoteWarehouseDefaultAppliedRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) deliveryNoteWarehouseDefaultAppliedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [type, isEditMode, fieldOptions, form]);
 
   React.useEffect(() => {
     if (step === 2) void hydrateProductsFromApi();
@@ -937,8 +975,8 @@ export function DocumentCreateWizard({
   );
 
   const onReview = async () => {
-    if (lines.length === 0) {
-      toast.error("Add at least one line item before reviewing.");
+    if (!linesOperational) {
+      toast.error(documentLinesOperationalErrorMessage(lines, "review"));
       setStep(2);
       return;
     }
@@ -981,12 +1019,16 @@ export function DocumentCreateWizard({
         return;
       }
     }
+    if (step === 2 && !linesOperational) {
+      toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+      return;
+    }
     setStep((s) => Math.min(3, s + 1));
   };
 
   const onSubmit = async () => {
-    if (lines.length === 0) {
-      toast.error("Add at least one line item before submitting.");
+    if (!linesOperational) {
+      toast.error(documentLinesOperationalErrorMessage(lines, "submit"));
       setStep(2);
       return;
     }
@@ -1628,14 +1670,33 @@ export function DocumentCreateWizard({
         </div>
         <div className="flex gap-2">
           {step < 3 ? (
-            <Button onClick={validateAndNext}>Next</Button>
+            <Button
+              onClick={() => void validateAndNext()}
+              disabled={step === 2 && !linesOperational}
+              title={
+                step === 2 && !linesOperational
+                  ? documentLinesOperationalErrorMessage(lines, "continue")
+                  : undefined
+              }
+            >
+              Next
+            </Button>
           ) : (
             <Button onClick={() => void onSubmit()} disabled={submitting}>
               {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
           )}
           {step < 3 && (
-            <Button variant="outline" onClick={onReview}>
+            <Button
+              variant="outline"
+              onClick={() => void onReview()}
+              disabled={step === 2 && !linesOperational}
+              title={
+                step === 2 && !linesOperational
+                  ? documentLinesOperationalErrorMessage(lines, "review")
+                  : undefined
+              }
+            >
               Review & Submit
             </Button>
           )}

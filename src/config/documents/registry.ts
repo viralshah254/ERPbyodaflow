@@ -440,6 +440,38 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     totals: { total: true },
     actions: ["submit", "post", "cancel", "reverse"],
   },
+  "franchise-security-deposit": {
+    typeKey: "franchise-security-deposit",
+    termKey: "franchiseSecurityDeposit",
+    listColumns: [
+      { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "date", header: "Date", accessor: "date" },
+      { id: "party", header: "Franchisee", accessor: "party" },
+      { id: "total", header: "Amount", accessor: "total" },
+      { id: "status", header: "Status", accessor: "status" },
+    ],
+    createFormSections: [
+      {
+        id: "header",
+        label: "Header",
+        fields: [
+          { id: "date", label: "Date", type: "date", required: true },
+          { id: "customer", label: "Franchisee (customer)", type: "entity", entityType: "customer", required: true },
+        ],
+      },
+      { id: "lines", label: "Lines", fields: [] },
+    ],
+    statusWorkflow: [
+      { id: "DRAFT", label: "Draft" },
+      { id: "POSTED", label: "Posted" },
+    ],
+    validations: [
+      { id: "has-lines", message: "At least one line required" },
+      { id: "customer-required", message: "Customer is required" },
+    ],
+    totals: { total: true },
+    actions: ["post", "cancel"],
+  },
 };
 
 export function getDocTypeConfig(typeKey: string): DocTypeConfig | null {
@@ -460,4 +492,5 @@ export const DOC_TYPES: DocTypeKey[] = [
   "purchase-credit-note",
   "purchase-debit-note",
   "journal",
+  "franchise-security-deposit",
 ];

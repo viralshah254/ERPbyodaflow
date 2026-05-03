@@ -25,7 +25,11 @@ export type WarehousePickPackRow = {
     locationId?: string;
     onHandWarehouse?: number;
     onHandBin?: number;
+    /** On-hand in canonical MAIN / primary stock warehouse (may differ from fulfilment warehouse). */
+    onHandPrimaryWarehouse?: number;
   }>;
+  /** Resolved primary stock warehouse (code MAIN); used for MAIN stock column. */
+  primaryStockWarehouseId?: string;
 };
 
 export type WarehousePutawayRow = {

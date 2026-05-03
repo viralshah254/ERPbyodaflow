@@ -87,7 +87,7 @@ export default function DocEditPage() {
         ]}
         sticky
       />
-      <div className="p-6">
+      <div className="p-6 w-full max-w-screen-2xl mx-auto">
         <DocumentCreateWizard
           type={type}
           mode="edit"

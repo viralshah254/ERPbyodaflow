@@ -35,6 +35,22 @@ import * as Icons from "lucide-react";
 
 const CATEGORIES = ["IT Equipment", "Machinery", "Furniture", "Vehicles", "Other"];
 
+const VEHICLES_CATEGORY = "Vehicles";
+
+/** Annual reducing-balance rates: motor vehicles 25%; equipment & everything else 10%. */
+function defaultAnnualDepreciationRatePct(category: string): number {
+  return category === VEHICLES_CATEGORY ? 25 : 10;
+}
+
+function suggestNextFaCode(rows: AssetRow[]): string {
+  let max = 0;
+  for (const r of rows) {
+    const m = /^FA-(\d+)$/i.exec(String(r.code).trim());
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `FA-${String(max + 1).padStart(3, "0")}`;
+}
+
 const CUSTODY_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "ALL", label: "All custody" },
   { value: "ORG_STOCK", label: "HQ / stock" },
@@ -70,10 +86,11 @@ type AssetForm = {
 };
 
 function emptyForm(): AssetForm {
+  const defaultCat = CATEGORIES[0] ?? "Other";
   return {
     code: "",
     name: "",
-    category: CATEGORIES[0] ?? "",
+    category: defaultCat,
     branchId: "",
     serialNumber: "",
     assetTag: "",
@@ -84,8 +101,8 @@ function emptyForm(): AssetForm {
     salvage: 0,
     usefulLifeYears: 3,
     usefulLifeMonths: "",
-    depreciationMethod: "STRAIGHT_LINE",
-    depreciationRatePct: "",
+    depreciationMethod: "REDUCING_BALANCE",
+    depreciationRatePct: String(defaultAnnualDepreciationRatePct(defaultCat)),
     linkedVendorId: "",
     linkedInvoiceId: "",
   };
@@ -163,7 +180,8 @@ export default function AssetRegisterPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm());
+    const base = emptyForm();
+    setForm({ ...base, code: suggestNextFaCode(rows) });
     setDrawerOpen(true);
   };
 
@@ -279,7 +297,18 @@ export default function AssetRegisterPage() {
           <div className="mt-6 space-y-4">
             <div className="space-y-2">
               <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} placeholder="FA-001" />
+              {!editing && (
+                <p className="text-xs text-muted-foreground">
+                  Next available code ({form.code}). Editable after the asset exists.
+                </p>
+              )}
+              <Input
+                readOnly={!editing}
+                className={!editing ? "bg-muted/50" : undefined}
+                value={form.code}
+                onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))}
+                placeholder="FA-001"
+              />
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
@@ -309,7 +338,16 @@ export default function AssetRegisterPage() {
             </div>
             <div className="space-y-2">
               <Label>Category</Label>
-              <Select value={form.category} onValueChange={(v) => setForm((p) => ({ ...p, category: v }))}>
+              <Select
+                value={form.category}
+                onValueChange={(v) =>
+                  setForm((p) => ({
+                    ...p,
+                    category: v,
+                    depreciationRatePct: String(defaultAnnualDepreciationRatePct(v)),
+                  }))
+                }
+              >
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   {CATEGORIES.map((c) => (
@@ -317,6 +355,10 @@ export default function AssetRegisterPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Default reducing-balance depreciation: Vehicles 25% per year; IT Equipment, Machinery, Furniture,
+                and Other 10% per year.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>In-service date (optional)</Label>
@@ -367,18 +409,27 @@ export default function AssetRegisterPage() {
                   <SelectItem value="REDUCING_BALANCE">Reducing balance</SelectItem>
                 </SelectContent>
               </Select>
+              {form.depreciationMethod === "STRAIGHT_LINE" && (
+                <p className="text-xs text-muted-foreground">
+                  Straight-line uses cost, salvage value, and useful life only (annual % below is ignored).
+                </p>
+              )}
             </div>
-            {form.depreciationMethod === "REDUCING_BALANCE" && (
-              <div className="space-y-2">
-                <Label>Annual depreciation % (reducing balance)</Label>
-                <Input
-                  type="number"
-                  value={form.depreciationRatePct}
-                  onChange={(e) => setForm((p) => ({ ...p, depreciationRatePct: e.target.value }))}
-                  placeholder="e.g. 25"
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Annual depreciation % (for reducing balance)</Label>
+              <Input
+                type="number"
+                disabled={form.depreciationMethod !== "REDUCING_BALANCE"}
+                value={form.depreciationRatePct}
+                onChange={(e) => setForm((p) => ({ ...p, depreciationRatePct: e.target.value }))}
+                placeholder="e.g. 25"
+              />
+              {form.depreciationMethod === "REDUCING_BALANCE" && (
+                <p className="text-xs text-muted-foreground">
+                  Adjust if needed — category changes above reset to Vehicles 25% or 10% for all other categories.
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label>Linked vendor</Label>
               <Select value={form.linkedVendorId} onValueChange={(v) => setForm((p) => ({ ...p, linkedVendorId: v }))}>
@@ -400,6 +451,13 @@ export default function AssetRegisterPage() {
             <Button
               onClick={async () => {
                 try {
+                  if (form.depreciationMethod === "REDUCING_BALANCE") {
+                    const rr = parseOptionalRate(form.depreciationRatePct);
+                    if (rr == null || rr <= 0) {
+                      toast.error("Enter a positive annual depreciation % when using reducing balance.");
+                      return;
+                    }
+                  }
                   const usefulLifeMonths = parseOptionalInt(form.usefulLifeMonths);
                   const depreciationRatePct = parseOptionalRate(form.depreciationRatePct);
                   const patchBody = {

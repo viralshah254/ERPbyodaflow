@@ -18,6 +18,7 @@ export const DOC_BULK_POST_RULES: Record<
   "purchase-credit-note": { canPost: true, postOnlyWhenApproved: false },
   "purchase-debit-note": { canPost: true, postOnlyWhenApproved: false },
   journal: { canPost: true, postOnlyWhenApproved: false },
+  "franchise-security-deposit": { canPost: true, postOnlyWhenApproved: false },
 };
 
 export type BulkDocResultRow = { id: string; error?: string };

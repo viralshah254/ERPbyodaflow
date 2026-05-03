@@ -38,7 +38,7 @@ export default function DocTypeNewPage() {
         showCommandHint
         dense
       />
-      <div className="p-4 pb-8 max-w-4xl">
+      <div className="p-4 pb-8 w-full max-w-screen-2xl mx-auto">
         <DocumentCreateWizard type={type} initialPoId={initialPoId} initialGrnId={initialGrnId} />
       </div>
     </PageShell>

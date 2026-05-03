@@ -15,7 +15,8 @@ export type DocTypeKey =
   | "bill"
   | "purchase-credit-note"
   | "purchase-debit-note"
-  | "journal";
+  | "journal"
+  | "franchise-security-deposit";
 
 export type TerminologyKey =
   | "quote"
@@ -30,7 +31,8 @@ export type TerminologyKey =
   | "purchaseOrder"
   | "goodsReceipt"
   | "purchaseRequest"
-  | "bill";
+  | "bill"
+  | "franchiseSecurityDeposit";
 
 export interface ListColumnConfig {
   id: string;

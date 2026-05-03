@@ -114,7 +114,8 @@ export type TerminologyKey =
   | "franchisee"
   | "commission"
   /** Sidebar subheading + breadcrumb parent for /manufacturing/* (e.g. "Processing" on Cool-Catch, "Manufacturing" default). */
-  | "processing";
+  | "processing"
+  | "franchiseSecurityDeposit";
 
 export type TerminologyOverrides = Partial<Record<TerminologyKey, string>>;
 

@@ -1426,7 +1426,7 @@ export default function DocViewPage() {
                 setPodSaving(true);
                 try {
                   const blob = await new Promise<Blob>((resolve, reject) => {
-                    sigCanvas.getTrimmedCanvas().toBlob(
+                    sigCanvas.getCanvas().toBlob(
                       (b) => (b ? resolve(b) : reject(new Error("Could not capture signature."))),
                       "image/png"
                     );

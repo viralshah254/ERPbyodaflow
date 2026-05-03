@@ -578,12 +578,12 @@ export function DocumentLineEditor({
         </div>
       ) : (
         <>
-          <div className="rounded-md border overflow-x-auto">
+          <div className="rounded-md border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[9rem] w-[14%]">Product</TableHead>
-                  <TableHead className="min-w-[10rem] sm:min-w-[16rem] w-[36%]">SKU</TableHead>
+                  <TableHead className="min-w-[8rem] w-[12%]">Product</TableHead>
+                  <TableHead className="min-w-[8rem] sm:min-w-[11rem] w-[24%]">SKU</TableHead>
                   {showVariantColumn && <TableHead className="min-w-[7rem]">Packaging variant</TableHead>}
                   <TableHead>UOM</TableHead>
                   <TableHead className="w-28">
@@ -655,7 +655,7 @@ export function DocumentLineEditor({
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <div className="min-w-[8rem] sm:min-w-[14rem] w-full max-w-[min(100%,36rem)]">
+                      <div className="min-w-0 max-w-[min(100%,20rem)] w-full">
                         <AsyncSearchableSelect
                           value={l.productId}
                           onValueChange={(v) => setProduct(l.id, v)}

@@ -8,7 +8,7 @@ export type PodSignaturePadProps = {
   heightPx?: number;
 };
 
-/** Receiver acknowledgement — exports PNG via SignatureCanvas refs (getTrimmedCanvas). */
+/** Receiver acknowledgement — export PNG via SignatureCanvas ref (use getCanvas().toBlob from parent). */
 export const PodSignaturePad = React.forwardRef<SignatureCanvas, PodSignaturePadProps>(
   function PodSignaturePad({ penColor = "#020617", heightPx = 180 }, ref) {
     return (

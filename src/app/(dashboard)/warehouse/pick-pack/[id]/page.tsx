@@ -84,7 +84,15 @@ export default function PickPackDetailPage() {
     const changeViaDn = !!task.sourceDocumentId && dn === "DRAFT";
     const isTerminal = ["DISPATCHED", "COMPLETED"].includes(task.status.trim().toUpperCase());
     const locked = isTerminal || (!!task.sourceDocumentId && !changeViaDn);
-    return { locked, changeViaDn, isTerminal };
+    const primaryWh = task.primaryStockWarehouseId?.trim();
+    const fulfilWh = task.warehouseId?.trim();
+    const showPrimaryStockMismatch =
+      Boolean(primaryWh && fulfilWh && primaryWh !== fulfilWh) &&
+      task.lines.some(
+        (line) =>
+          (line.onHandWarehouse ?? 0) === 0 && (line.onHandPrimaryWarehouse ?? 0) > 0
+      );
+    return { locked, changeViaDn, isTerminal, showPrimaryStockMismatch };
   }, [task]);
 
   const handleWarehouseChange = React.useCallback(
@@ -164,6 +172,13 @@ export default function PickPackDetailPage() {
                 </Link>
               </p>
             ) : null}
+            {fulfilmentWarehouseUi.showPrimaryStockMismatch ? (
+              <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-100">
+                Stock is on hand in your <strong>MAIN</strong> (primary) warehouse — the fulfilment site above shows no
+                available quantity. Either switch the fulfilment warehouse to MAIN / primary stock location, or move stock
+                into the selected warehouse with a transfer.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-3">
               <Label className="shrink-0 text-muted-foreground">Warehouse</Label>
               <Select
@@ -207,6 +222,7 @@ export default function PickPackDetailPage() {
                   <TableHead>SKU</TableHead>
                   <TableHead>Qty</TableHead>
                   <TableHead className="text-right">Warehouse qty</TableHead>
+                  <TableHead className="text-right">MAIN stock</TableHead>
                   <TableHead className="text-right">At bin</TableHead>
                   <TableHead>Suggested bin</TableHead>
                   <TableHead>Picked</TableHead>
@@ -215,6 +231,7 @@ export default function PickPackDetailPage() {
               <TableBody>
                 {task.lines.map((line) => {
                   const wh = line.onHandWarehouse;
+                  const pm = line.onHandPrimaryWarehouse;
                   const atBin = line.onHandBin;
                   const shortage =
                     typeof wh === "number" && Number.isFinite(wh) && wh < line.quantity;
@@ -232,6 +249,9 @@ export default function PickPackDetailPage() {
                         className={`text-right tabular-nums ${shortage ? "text-amber-600 font-medium" : ""}`}
                       >
                         {typeof wh === "number" ? wh : "—"}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums ${typeof pm === "number" && pm >= line.quantity ? "text-emerald-600/90" : ""}`}>
+                        {typeof pm === "number" ? pm : "—"}
                       </TableCell>
                       <TableCell
                         className={`text-right tabular-nums ${binShort ? "text-amber-600 font-medium" : ""}`}
