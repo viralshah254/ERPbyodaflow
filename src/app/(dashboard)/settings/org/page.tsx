@@ -302,7 +302,7 @@ function ComplianceDocSlot({
   disabled: boolean;
   uploading: boolean;
   canManage: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  fileInputRef: React.RefObject<HTMLInputElement>;
   onFileChange: (files: FileList | null) => void;
   onDownload: () => void;
 }) {
