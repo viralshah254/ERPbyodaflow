@@ -8,43 +8,59 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
-import { fetchFranchiseeStock, fetchFranchiseNetworkOutlets, fetchVMIReplenishmentOrders, fetchTopUps } from "@/lib/api/cool-catch";
+import {
+  fetchFranchiseeStock,
+  fetchFranchiseNetworkOutletById,
+  fetchVMIReplenishmentOrders,
+  fetchTopUps,
+  type FranchiseNetworkOutletRow,
+} from "@/lib/api/cool-catch";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { formatMoney } from "@/lib/money";
+import { FranchiseProductEconomicsSection } from "@/components/franchise/franchise-product-economics-section";
 
 export default function FranchiseDetailPage() {
   const params = useParams<{ id: string }>();
-  const franchiseeId = String(params?.id ?? "");
-  const [name, setName] = React.useState(franchiseeId);
+  const routeRef = String(params?.id ?? "");
+  const [name, setName] = React.useState(routeRef);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState<{ territory?: string; storeFormat?: string; revenue: number; arOverdue: number } | null>(null);
   const [stockRows, setStockRows] = React.useState<Array<{ sku: string; productName: string; qty: number; reorderPoint: number; suggestedOrder: number }>>([]);
   const [replenishments, setReplenishments] = React.useState<Array<{ number: string; status: string; totalQty: number; createdAt: string }>>([]);
   const [topUps, setTopUps] = React.useState<Array<{ runNumber: string; amount: number; reason: string; status: string }>>([]);
+  const [outletMeta, setOutletMeta] = React.useState<FranchiseNetworkOutletRow | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    Promise.all([
-      fetchFranchiseNetworkOutlets(),
-      fetchFranchiseeStock(franchiseeId),
-      fetchVMIReplenishmentOrders({ franchiseeId }),
-      fetchTopUps({ franchiseeId }),
-    ])
-      .then(([outlets, stock, orders, topupRows]) => {
+    const run = async () => {
+      setLoading(true);
+      try {
+        const outletMetaRow = await fetchFranchiseNetworkOutletById(routeRef);
         if (cancelled) return;
-        const outlet = outlets.find((item) => item.id === franchiseeId);
+        setOutletMeta(outletMetaRow);
+        const outletOrgId = outletMetaRow?.id ?? routeRef;
+        const franchiseeRegistryId = outletMetaRow?.franchiseeRegistryId;
+        const vmiKey = franchiseeRegistryId ?? outletOrgId;
         setSummary(
-          outlet
+          outletMetaRow
             ? {
-                territory: outlet.territory,
-                storeFormat: outlet.storeFormat,
-                revenue: outlet.revenue,
-                arOverdue: outlet.arOverdue,
+                territory: outletMetaRow.territory,
+                storeFormat: outletMetaRow.storeFormat,
+                revenue: outletMetaRow.revenue,
+                arOverdue: outletMetaRow.arOverdue,
               }
             : null
         );
-        setName(stock[0]?.franchiseeName ?? orders[0]?.franchiseeName ?? franchiseeId);
+        setName(outletMetaRow?.name ?? routeRef);
+        const [stock, orders, topupRows] = await Promise.all([
+          fetchFranchiseeStock(vmiKey),
+          fetchVMIReplenishmentOrders({ franchiseeId: vmiKey }),
+          fetchTopUps({ franchiseeId: vmiKey }),
+        ]);
+        if (cancelled) return;
+        setName(
+          outletMetaRow?.name ?? stock[0]?.franchiseeName ?? orders[0]?.franchiseeName ?? routeRef
+        );
         setStockRows(
           stock.map((s) => ({
             sku: s.sku,
@@ -70,14 +86,21 @@ export default function FranchiseDetailPage() {
             status: t.status,
           }))
         );
-      })
-      .finally(() => {
+      } catch {
+        if (!cancelled) {
+          setOutletMeta(null);
+          setSummary(null);
+          setName(routeRef);
+        }
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };
-  }, [franchiseeId]);
+  }, [routeRef]);
 
   const stockColumns = [
     { id: "sku", header: "SKU", accessor: (r: (typeof stockRows)[number]) => r.sku, sticky: true },
@@ -125,23 +148,91 @@ export default function FranchiseDetailPage() {
         }
       />
       <div className="p-6 space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <OperationalKpiCard title="Revenue" value={formatMoney(summary?.revenue ?? 0, "KES")} subtitle="Posted invoice value" />
-          <OperationalKpiCard title="AR Overdue" value={formatMoney(summary?.arOverdue ?? 0, "KES")} subtitle="Collections pressure" severity={(summary?.arOverdue ?? 0) > 0 ? "warning" : "default"} />
-          <OperationalKpiCard title="Active SKUs" value={stockRows.length} subtitle="Tracked outlet stock positions" />
-          <OperationalKpiCard title="Top-up Exposure" value={formatMoney(topUps.reduce((sum, item) => sum + item.amount, 0), "KES")} subtitle="Support or settlement items" />
+        {outletMeta && !outletMeta.franchiseeRegistryId ? (
+          <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-4 text-sm">
+            <p className="font-medium text-amber-950 dark:text-amber-100">VMI and top-ups may be incomplete</p>
+            <p className="mt-1 text-muted-foreground">
+              This outlet is not linked to an HQ franchisee registry record yet. In OdaFlow, open{" "}
+              <Link href="/franchise/royalties" className="text-primary underline underline-offset-2">
+                Franchise → Royalty billing
+              </Link>{" "}
+              or{" "}
+              <Link href="/franchise/network/outlets" className="text-primary underline underline-offset-2">
+                Franchise network → Outlets
+              </Link>{" "}
+              while signed in as HQ, find the matching franchisee row, then link it with the API below (there is no separate &quot;Finance → Franchise&quot; menu in this build).
+            </p>
+            <p className="mt-2 font-mono text-xs break-all text-muted-foreground">
+              Outlet org id (use as <code className="text-foreground">outletOrgId</code> in PATCH): {outletMeta.id}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              <code className="rounded bg-muted px-1 py-0.5">
+                PATCH /api/franchise/franchisees/&lt;franchiseeId&gt;
+              </code>{" "}
+              with body{" "}
+              <code className="rounded bg-muted px-1 py-0.5 break-all">
+                {`{"outletOrgId":"${outletMeta.id}"}`}
+              </code>
+              . List franchisees:{" "}
+              <code className="rounded bg-muted px-1 py-0.5">GET /api/franchise/franchisees</code>.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          <OperationalKpiCard
+            title="Posted retail sales"
+            value={formatMoney(summary?.revenue ?? 0, "KES")}
+            subtitle="Outlet customer invoices (posted)"
+          />
+          <OperationalKpiCard
+            title="AR Overdue"
+            value={formatMoney(summary?.arOverdue ?? 0, "KES")}
+            subtitle="Collections pressure"
+            severity={(summary?.arOverdue ?? 0) > 0 ? "warning" : "default"}
+          />
+          <OperationalKpiCard
+            title="Outlet on-hand (posted)"
+            value={outletMeta?.totalStockQty ?? 0}
+            subtitle="Sum of StockLevel in the outlet org (POS-style inventory)"
+          />
+          <OperationalKpiCard
+            title="VMI snapshot SKUs"
+            value={stockRows.length}
+            subtitle="Rows from VMI ingest / reorder (not always equal to posted stock)"
+          />
+          <OperationalKpiCard
+            title="Top-up Exposure"
+            value={formatMoney(topUps.reduce((sum, item) => sum + item.amount, 0), "KES")}
+            subtitle="Support or settlement items"
+          />
         </div>
+
+        <FranchiseProductEconomicsSection
+          franchiseeRegistryId={outletMeta?.franchiseeRegistryId}
+          outletOrgId={outletMeta?.id}
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>Current stock</CardTitle>
-            <CardDescription>Available stock and reorder pressure by SKU.</CardDescription>
+            <CardTitle>VMI stock snapshot</CardTitle>
+            <CardDescription>
+              Per-SKU quantities from VMI ingest and reorder rules. Outlet selling uses posted inventory (see outlet on-hand KPI). HQ shipments confirmed via POD post as goods receipts (GRNs) in the outlet org—open{" "}
+              <Link href="/inventory/receipts" className="text-primary underline underline-offset-2">
+                Inventory → Receipts
+              </Link>{" "}
+              while scoped to that outlet to review them.
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">Loading franchise detail…</div>
             ) : (
-              <DataTable data={stockRows} columns={stockColumns} emptyMessage="No stock rows." />
+              <DataTable
+                data={stockRows}
+                columns={stockColumns}
+                emptyMessage="No VMI snapshot rows for this franchisee."
+              />
             )}
           </CardContent>
         </Card>
@@ -149,10 +240,17 @@ export default function FranchiseDetailPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Replenishment history</CardTitle>
+              <CardTitle>VMI replenishment orders</CardTitle>
+              <CardDescription>
+                Cold Hub / VMI transfers and suggested replenishment workflow. This is separate from HQ delivery notes: POD on a franchise shipment creates or posts outlet GRNs and updates posted stock, which may not appear here.
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <DataTable data={replenishments} columns={replenishmentColumns} emptyMessage="No replenishment orders." />
+              <DataTable
+                data={replenishments}
+                columns={replenishmentColumns}
+                emptyMessage="No VMI replenishment orders for this franchisee."
+              />
             </CardContent>
           </Card>
           <Card>
@@ -168,4 +266,3 @@ export default function FranchiseDetailPage() {
     </PageShell>
   );
 }
-

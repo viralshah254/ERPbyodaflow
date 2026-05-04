@@ -28,7 +28,7 @@ export function CommissionSummaryCard({
         <div className="flex items-center justify-between gap-2">
           <div>
             <CardTitle className="text-base">{title}</CardTitle>
-            <CardDescription>Commission basis, shortfall support, and payout readiness.</CardDescription>
+            <CardDescription>Retail sales basis, total outlet earnings, and top-up / payout.</CardDescription>
           </div>
           {status ? <Badge variant={status === "POSTED" ? "default" : "secondary"}>{status}</Badge> : null}
         </div>
@@ -39,7 +39,7 @@ export function CommissionSummaryCard({
           <div className="font-semibold">{formatMoney(salesAmount, currency)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">Commission</div>
+          <div className="text-xs text-muted-foreground">Outlet earnings (total)</div>
           <div className="font-semibold">{formatMoney(commissionAmount, currency)}</div>
         </div>
         <div>

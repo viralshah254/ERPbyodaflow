@@ -12,6 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -27,6 +34,7 @@ import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard"
 import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, receiveSubcontractOrder, dispatchSubcontractOrder } from "@/lib/api/cool-catch";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { fetchYieldRecords } from "@/lib/api/yield";
+import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCard";
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
@@ -107,6 +115,10 @@ export default function SubcontractOrderDetailPage() {
   const [auditEntries, setAuditEntries] = React.useState<Array<{ id: string; action: string; user: string; timestamp: string; detail?: string }>>([]);
   const [yieldRecords, setYieldRecords] = React.useState<Awaited<ReturnType<typeof fetchYieldRecords>>>([]);
   const [receiveSheetOpen, setReceiveSheetOpen] = React.useState(false);
+  const [receiveWarehouseId, setReceiveWarehouseId] = React.useState("");
+  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; name: string; code?: string; status?: string }>>(
+    []
+  );
   const [lineActualKg, setLineActualKg] = React.useState<string[]>([]);
 
   const reload = React.useCallback(async () => {
@@ -138,6 +150,30 @@ export default function SubcontractOrderDetailPage() {
     return () => { cancelled = true; };
   }, [id, reload]);
 
+  React.useEffect(() => {
+    if (!receiveSheetOpen) return;
+    void fetchWarehousesApi()
+      .then((items) => {
+        const rows = items
+          .filter((w) => (w.status ?? "ACTIVE").toUpperCase() !== "INACTIVE")
+          .map((w) => ({ id: w.id, name: w.name, code: w.code, status: w.status }))
+          .sort((a, b) => {
+            const rank = (x: { code?: string }) => ((x.code ?? "").toUpperCase() === "MAIN" ? 0 : 1);
+            const d = rank(a) - rank(b);
+            if (d !== 0) return d;
+            return a.name.localeCompare(b.name);
+          });
+        setWarehouses(rows);
+        setReceiveWarehouseId((prev) => {
+          if (prev && rows.some((r) => r.id === prev)) return prev;
+          const main = rows.find((r) => (r.code ?? "").toUpperCase() === "MAIN");
+          if (main) return main.id;
+          return rows.length === 1 ? rows[0]!.id : "";
+        });
+      })
+      .catch(() => toast.error("Could not load warehouses."));
+  }, [receiveSheetOpen]);
+
   const handleDispatch = async () => {
     if (!order || order.status !== "SENT") return;
     setDispatching(true);
@@ -160,13 +196,17 @@ export default function SubcontractOrderDetailPage() {
 
   const handleConfirmReceive = async () => {
     if (!order || order.status !== "WIP") return;
+    const wid = receiveWarehouseId.trim();
     setReceiving(true);
     try {
       const actualLineQuantities = (order.lines ?? []).map((_, i) => ({
         lineIndex: i,
         quantity: Math.max(0, Number.parseFloat(lineActualKg[i] ?? "0") || 0),
       }));
-      await receiveSubcontractOrder(order.id, { actualLineQuantities });
+      await receiveSubcontractOrder(order.id, {
+        ...(wid ? { warehouseId: wid } : {}),
+        actualLineQuantities,
+      });
       toast.success("Order received with actual weights. Stock and fees updated.");
       setReceiveSheetOpen(false);
       await reload();
@@ -328,6 +368,14 @@ export default function SubcontractOrderDetailPage() {
                     </Link>
                   ) : <p className="font-medium">—</p>}
                 </div>
+                {order.status === "RECEIVED" && (order.receiveWarehouseName ?? order.receiveWarehouseId) ? (
+                  <div className="md:col-span-3 lg:col-span-6">
+                    <p className="text-muted-foreground">Outputs received into</p>
+                    <p className="font-medium">
+                      {order.receiveWarehouseName ?? order.receiveWarehouseId}
+                    </p>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -493,6 +541,24 @@ export default function SubcontractOrderDetailPage() {
             </SheetDescription>
           </SheetHeader>
           <div className="grid gap-6 py-6">
+            <div className="space-y-2">
+              <Label>Receive outputs into warehouse</Label>
+              <Select value={receiveWarehouseId || undefined} onValueChange={(v) => setReceiveWarehouseId(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder={warehouses.length ? "Select warehouse" : "Loading warehouses…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.code?.trim() ? `${w.code} — ${w.name}` : w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Choose where finished outputs post to inventory (MAIN is listed first). Falls back to primary MAIN if unset.
+              </p>
+            </div>
             {(() => {
               const rows = (order.lines ?? []).map((line, i) => ({ line, i }));
               const inputRows = rows.filter((r) => r.line.type === "INPUT");

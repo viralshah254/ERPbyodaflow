@@ -63,6 +63,7 @@ export type NavSectionKey =
   | "masters"
   | "inventory"
   | "warehouse"
+  | "logistics"
   | "treasury"
   | "assets"
   | "projects"

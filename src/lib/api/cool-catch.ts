@@ -66,6 +66,8 @@ export interface FranchiseNetworkOutletRow {
   securityDepositChargeDocumentId?: string | null;
   securityDepositChargePostedAt?: string | null;
   securityDepositPaidAt?: string | null;
+  /** HQ franchisee registry id for commission economics / rules */
+  franchiseeRegistryId?: string;
 }
 
 export interface FranchiseNetworkSummary {
@@ -115,6 +117,15 @@ export async function fetchFranchiseNetworkOutlets(): Promise<FranchiseNetworkOu
   return payload.items ?? [];
 }
 
+export async function fetchFranchiseNetworkOutletById(outletRef: string): Promise<FranchiseNetworkOutletRow | null> {
+  requireLiveApi("Franchise network outlet");
+  try {
+    return await apiRequest<FranchiseNetworkOutletRow>(`/api/franchise/network/outlets/${encodeURIComponent(outletRef)}`);
+  } catch {
+    return null;
+  }
+}
+
 export type CreateFranchiseOutletPayload = {
   name: string;
   outletCode: string;
@@ -147,6 +158,24 @@ export async function createFranchiseOutletApi(body: CreateFranchiseOutletPayloa
   return apiRequest<CreateFranchiseOutletResult>("/api/franchise/network/outlets", {
     method: "POST",
     body,
+  });
+}
+
+export type RepairFranchiseeRegistryItem = {
+  childOrgId: string;
+  outletCode: string | null;
+  status: "linked" | "skipped_no_party" | "skipped_no_org" | "error";
+  message?: string;
+  franchiseeId?: string;
+};
+
+export async function repairFranchiseeRegistryApi(body?: {
+  childOrgId?: string;
+}): Promise<{ items: RepairFranchiseeRegistryItem[] }> {
+  requireLiveApi("Repair franchisee registry");
+  return apiRequest("/api/franchise/network/outlets/repair-franchisee-registry", {
+    method: "POST",
+    body: body ?? {},
   });
 }
 
@@ -239,6 +268,7 @@ export type FranchiseeRow = {
   name: string;
   monthlyRoyaltyKes?: number | null;
   royaltyStartsOn?: string | null;
+  outletOrgId?: string | null;
   segment?: string;
   isActive?: boolean;
 };
@@ -252,14 +282,60 @@ export async function fetchFranchiseesApi(): Promise<FranchiseeRow[]> {
 export async function patchFranchiseeApi(
   id: string,
   body: Partial<{
+    customerId: string;
+    code: string;
+    name: string;
     monthlyRoyaltyKes: number | null;
     royaltyStartsOn: string | null;
     minCommissionFloor: number;
-    name: string;
+    outletOrgId: string | null;
+    isActive: boolean;
   }>
 ): Promise<void> {
   requireLiveApi("Update franchisee");
   await apiRequest(`/api/franchise/franchisees/${encodeURIComponent(id)}`, { method: "PATCH", body });
+}
+
+export async function createFranchiseeApi(body: {
+  customerId: string;
+  code: string;
+  name: string;
+  outletOrgId?: string | null;
+  segment?: "HIGH_VALUE" | "STANDARD" | "VALUE";
+  monthlyRoyaltyKes?: number;
+  royaltyStartsOn?: string | null;
+  isActive?: boolean;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create franchisee");
+  return apiRequest("/api/franchise/franchisees", { method: "POST", body });
+}
+
+export type FranchiseeProductEconomicsRow = {
+  id: string;
+  productId: string;
+  supplyBasePrice: number;
+  commissionPerUnit: number;
+  guideRetail: number;
+};
+
+export async function fetchFranchiseeProductEconomicsApi(franchiseeId: string): Promise<FranchiseeProductEconomicsRow[]> {
+  requireLiveApi("Franchisee product economics");
+  const res = await apiRequest<{ items: FranchiseeProductEconomicsRow[] }>(
+    `/api/franchise/franchisees/${encodeURIComponent(franchiseeId)}/product-economics`
+  );
+  return res.items ?? [];
+}
+
+export async function putFranchiseeProductEconomicsApi(
+  franchiseeId: string,
+  items: Array<{ productId: string; supplyBasePrice: number; commissionPerUnit: number }>
+): Promise<FranchiseeProductEconomicsRow[]> {
+  requireLiveApi("Update franchisee product economics");
+  const res = await apiRequest<{ items: FranchiseeProductEconomicsRow[] }>(
+    `/api/franchise/franchisees/${encodeURIComponent(franchiseeId)}/product-economics`,
+    { method: "PUT", body: { items } }
+  );
+  return res.items ?? [];
 }
 
 export type RoyaltyChargeRow = {
@@ -298,10 +374,18 @@ export async function fetchRoyaltySummaryApi(franchiseeId: string): Promise<{
   return apiRequest(`/api/franchise/royalties/summary/${encodeURIComponent(franchiseeId)}`);
 }
 
+export type RoyaltyMonthRunResultRow = {
+  franchiseeId: string;
+  chargeId?: string;
+  invoiceId?: string;
+  skipped?: string;
+  error?: string;
+};
+
 export async function runRoyaltiesMonthApi(body?: { year?: number; month?: number }): Promise<{
   year: number;
   month: number;
-  results: Array<{ franchiseeId: string; chargeId?: string; invoiceId?: string; skipped?: string; error?: string }>;
+  results: RoyaltyMonthRunResultRow[];
 }> {
   requireLiveApi("Run royalty invoicing month");
   return apiRequest("/api/franchise/royalties/run-month", { method: "POST", body: body ?? {} });
@@ -360,7 +444,20 @@ export async function autoReplenish(body?: { sourceWarehouseId?: string; franchi
   return res;
 }
 
-// ——— Cash-to-weight audit ———
+/** Upsert VMI snapshots from each linked outlet's posted StockLevel (same HQ org). */
+export async function syncVmIFranchiseSnapshotsFromLedger(body?: {
+  franchiseeId?: string;
+  warehouseId?: string;
+}): Promise<{ ok: boolean; franchiseesProcessed: number; snapshotRowsUpserted: number }> {
+  requireLiveApi("Sync VMI from ledger");
+  return apiRequest<{ ok: boolean; franchiseesProcessed: number; snapshotRowsUpserted: number }>(
+    "/api/franchise/vmi/sync-from-ledger",
+    {
+      method: "POST",
+      body: body ?? {},
+    }
+  );
+}
 
 export async function fetchCashWeightAuditLines(params?: {
   dateFrom?: string;
@@ -662,10 +759,9 @@ export async function receiveSubcontractOrder(
   }
 ): Promise<SubcontractOrderRow> {
   requireLiveApi("Receive subcontract order");
-  const payload =
-    body?.warehouseId || (body?.actualLineQuantities && body.actualLineQuantities.length)
-      ? { warehouseId: body?.warehouseId, actualLineQuantities: body?.actualLineQuantities }
-      : {};
+  const payload: Record<string, unknown> = {};
+  if (body?.warehouseId?.trim()) payload.warehouseId = body.warehouseId.trim();
+  if (body?.actualLineQuantities?.length) payload.actualLineQuantities = body.actualLineQuantities;
   const res = await apiRequest<SubcontractOrderRow>(
     `/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}/receive`,
     { method: "POST", body: Object.keys(payload).length ? payload : {} }

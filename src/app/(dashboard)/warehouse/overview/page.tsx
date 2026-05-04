@@ -12,7 +12,23 @@ import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
+import {
+  Box,
+  ClipboardCheck,
+  LayoutGrid,
+  MapPin,
+  PackageCheck,
+  Sparkles,
+  Truck,
+} from "lucide-react";
+
+const LINK_ICONS = {
+  Truck,
+  PackageCheck,
+  MapPin,
+  LayoutGrid,
+  ClipboardCheck,
+} as const;
 
 const LINKS = [
   { href: "/warehouse/transfers", label: "Transfers", desc: "Inter-warehouse transfers", icon: "Truck" as const },
@@ -69,7 +85,7 @@ export default function WarehouseOverviewPage() {
         actions={
           copilotEnabled ? (
             <Button variant="outline" size="sm" onClick={() => openWithPrompt("Explain pick/pack/putaway and suggest cycle count schedule.")}>
-              <Icons.Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="mr-2 h-4 w-4" />
               Ask Copilot
             </Button>
           ) : undefined
@@ -84,7 +100,7 @@ export default function WarehouseOverviewPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">In transit</CardTitle>
-              <Icons.Truck className="h-4 w-4 text-muted-foreground" />
+              <Truck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{inTransit}</div>
@@ -94,7 +110,7 @@ export default function WarehouseOverviewPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending pick</CardTitle>
-              <Icons.PackageCheck className="h-4 w-4 text-muted-foreground" />
+              <PackageCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{pendingPick}</div>
@@ -104,7 +120,7 @@ export default function WarehouseOverviewPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Awaiting putaway</CardTitle>
-              <Icons.MapPin className="h-4 w-4 text-muted-foreground" />
+              <MapPin className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{awaitingPutaway}</div>
@@ -114,7 +130,7 @@ export default function WarehouseOverviewPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Open cycle counts</CardTitle>
-              <Icons.ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+              <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{openCounts}</div>
@@ -124,7 +140,7 @@ export default function WarehouseOverviewPage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {LINKS.map(({ href, label, desc, icon }) => {
-            const Icon = (Icons[icon] || Icons.Box) as React.ComponentType<{ className?: string }>;
+            const Icon = (LINK_ICONS[icon] ?? Box) as React.ComponentType<{ className?: string }>;
             return (
               <Link key={href} href={href}>
                 <Card className="h-full transition-colors hover:bg-muted/50">

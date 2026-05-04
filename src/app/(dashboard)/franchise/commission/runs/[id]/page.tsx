@@ -57,6 +57,9 @@ export default function CommissionRunDetailPage() {
         franchiseeId?: string;
         salesAmount?: number;
         commissionAmount?: number;
+        contractCommissionAmount?: number;
+        extraRetailMarginAmount?: number;
+        ruleCommissionAmount?: number;
         minFloor?: number | null;
         topUpAmount?: number;
         royaltyWithheldKes?: number;
@@ -73,6 +76,9 @@ export default function CommissionRunDetailPage() {
         franchiseeName: feName(fid),
         salesAmount: row.salesAmount ?? 0,
         commissionAmount: commissionAmt,
+        contractCommissionAmount: row.contractCommissionAmount,
+        extraRetailMarginAmount: row.extraRetailMarginAmount,
+        ruleCommissionAmount: row.ruleCommissionAmount,
         minFloor,
         topUpAmount: row.topUpAmount ?? 0,
         royaltyWithheldKes: row.royaltyWithheldKes,
@@ -87,10 +93,28 @@ export default function CommissionRunDetailPage() {
       accessor: (r: CommissionRunLineRow) => r.franchiseeName,
       sticky: true,
     },
-    { id: "sales", header: "Sales", accessor: (r: CommissionRunLineRow) => formatMoney(r.salesAmount, "KES") },
+    { id: "sales", header: "Retail sales", accessor: (r: CommissionRunLineRow) => formatMoney(r.salesAmount, "KES") },
+    {
+      id: "contract",
+      header: "Contract",
+      accessor: (r: CommissionRunLineRow) =>
+        r.contractCommissionAmount != null ? formatMoney(r.contractCommissionAmount, "KES") : "—",
+    },
+    {
+      id: "margin",
+      header: "Extra margin",
+      accessor: (r: CommissionRunLineRow) =>
+        r.extraRetailMarginAmount != null ? formatMoney(r.extraRetailMarginAmount, "KES") : "—",
+    },
+    {
+      id: "rules",
+      header: "HQ rules",
+      accessor: (r: CommissionRunLineRow) =>
+        r.ruleCommissionAmount != null ? formatMoney(r.ruleCommissionAmount, "KES") : "—",
+    },
     {
       id: "commission",
-      header: "Commission",
+      header: "Total earnings",
       accessor: (r: CommissionRunLineRow) => formatMoney(r.commissionAmount, "KES"),
     },
     { id: "topUp", header: "Top-up", accessor: (r: CommissionRunLineRow) => formatMoney(r.topUpAmount ?? 0, "KES") },

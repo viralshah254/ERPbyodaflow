@@ -66,6 +66,12 @@ import SignatureCanvas from "react-signature-canvas";
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
 
+/** Match backend invoice posting readiness for linked delivery notes. */
+function deliveryNoteSatisfiedForInvoicePost(status: string | undefined): boolean {
+  const st = String(status ?? "").trim().toUpperCase();
+  return ["DELIVERED", "CONVERTED", "POSTED"].includes(st);
+}
+
 function computePodLineEvidenceNeeded(row: {
   qtyShipped: number;
   weightKg?: number;
@@ -125,6 +131,7 @@ export default function DocViewPage() {
   const [selectedConvertPartyOption, setSelectedConvertPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
+  const [deliveryNoteWarehouseLabel, setDeliveryNoteWarehouseLabel] = React.useState<string | null>(null);
   const [podSheetOpen, setPodSheetOpen] = React.useState(false);
   const [podReceiverName, setPodReceiverName] = React.useState("");
   const [podNote, setPodNote] = React.useState("");
@@ -322,11 +329,31 @@ export default function DocViewPage() {
     };
   }, [document, id, type]);
 
+  React.useEffect(() => {
+    if (type !== "delivery-note" || !document?.warehouseId?.trim()) {
+      setDeliveryNoteWarehouseLabel(null);
+      return;
+    }
+    let cancelled = false;
+    fetchWarehouseOptions()
+      .then((opts) => {
+        if (cancelled) return;
+        const m = opts.find((o) => o.id === document.warehouseId);
+        setDeliveryNoteWarehouseLabel(m?.label ?? document.warehouseId ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setDeliveryNoteWarehouseLabel(document.warehouseId ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [type, document?.warehouseId]);
+
   const isUuidLike = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
   const openConvertSheet = React.useCallback(
-    (targetType: DocTypeKey) => {
+    async (targetType: DocTypeKey) => {
       // PO → GRN: use the dedicated new-GRN wizard (lines, qty, UOM, tax). It already prefills from ?poId=.
       // A sidebar cannot replace that flow without cramming the whole Lines step into a drawer.
       if (type === "purchase-order" && targetType === "grn") {
@@ -334,14 +361,44 @@ export default function DocViewPage() {
         return;
       }
       setConvertType(targetType);
-      setConvertPartyId(document?.partyId ?? "");
-      const resolvedLabel =
-        displayPartyName !== "—" && !isUuidLike(displayPartyName) ? displayPartyName : null;
-      setSelectedConvertPartyOption(
-        document?.partyId && resolvedLabel
-          ? { id: document.partyId, label: resolvedLabel }
-          : null
-      );
+
+      const seedPartyFromCurrentDocument = () => {
+        setConvertPartyId(document?.partyId ?? "");
+        const resolvedLabel =
+          displayPartyName !== "—" && !isUuidLike(displayPartyName) ? displayPartyName : null;
+        setSelectedConvertPartyOption(
+          document?.partyId && resolvedLabel
+            ? { id: document.partyId, label: resolvedLabel }
+            : null
+        );
+      };
+
+      if (
+        type === "grn" &&
+        targetType === "bill" &&
+        document?.sourceDocument?.typeKey === "purchase-order"
+      ) {
+        try {
+          const po = await fetchDocumentDetailApi("purchase-order", document.sourceDocument.id);
+          if (po?.partyId) {
+            setConvertPartyId(po.partyId);
+            const raw = (po.party ?? "").trim();
+            let label = raw && !isUuidLike(raw) ? raw : null;
+            if (!label) {
+              const row = await fetchPartyByIdApi(po.partyId).catch(() => null);
+              if (row?.name?.trim()) label = row.name.trim();
+            }
+            setSelectedConvertPartyOption(label ? { id: po.partyId, label } : null);
+          } else {
+            seedPartyFromCurrentDocument();
+          }
+        } catch {
+          seedPartyFromCurrentDocument();
+        }
+      } else {
+        seedPartyFromCurrentDocument();
+      }
+
       setConvertWarehouseId(document?.warehouseId ?? "");
       setOutputTemplateId(document?.outputTemplateId ?? "");
       convertSheetDismissShieldUntilRef.current = Date.now() + 600;
@@ -691,7 +748,7 @@ export default function DocViewPage() {
               <p className="text-sm text-muted-foreground">Loading document...</p>
             ) : (
               <>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className={`grid gap-4 sm:grid-cols-2 ${type === "delivery-note" ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Number</p>
                     <p className="font-medium">{document?.number ?? "—"}</p>
@@ -719,8 +776,19 @@ export default function DocViewPage() {
                       currency={document?.currency ?? "KES"}
                       exchangeRate={document?.exchangeRate}
                       size="md"
+                      showAlternateCurrency={type !== "delivery-note"}
                     />
                   </div>
+                  {type === "delivery-note" ? (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Warehouse</p>
+                      <p className="font-medium">
+                        {deliveryNoteWarehouseLabel ??
+                          document?.warehouseId ??
+                          "Default from branch after save"}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
                 {type === "delivery-note" && document?.status === "DRAFT" ? (
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
@@ -1014,6 +1082,7 @@ export default function DocViewPage() {
                                 exchangeRate={document?.exchangeRate}
                                 align="right"
                                 size="sm"
+                                showAlternateCurrency={type !== "delivery-note"}
                               />
                             ) : (
                               <span>—</span>
@@ -1188,6 +1257,7 @@ export default function DocViewPage() {
                     outputTemplateId: outputTemplateId || undefined,
                   });
                   toast.success(`Created ${created.number ?? convertType}.`);
+                  if (created.pickPackSyncWarning) toast.warning(created.pickPackSyncWarning);
                   setConvertOpen(false);
                   if (created.id) {
                     router.push(`/docs/${convertType}/${created.id}`);
@@ -1641,7 +1711,7 @@ function DynamicNextStepsPanel({
   warehouseTaskLink: { label: string; href: string } | null;
   actionLoading: boolean;
   onAction: (action: string) => Promise<void>;
-  onConvert: (target: DocTypeKey) => void;
+  onConvert: (target: DocTypeKey) => void | Promise<void>;
   onSendEmail: () => void;
   onRecordPod?: () => void;
 }) {
@@ -1670,7 +1740,22 @@ function DynamicNextStepsPanel({
     const st = status.toUpperCase();
     const hasPod = !!document?.podConfirmation?.confirmedAt;
     if (status === "DRAFT") {
-      steps.push({ icon: <Icons.Package className="h-4 w-4" />, text: "Submit and complete pick & pack" });
+      if (warehouseTaskLink) {
+        steps.push({
+          icon: <Icons.Package className="h-4 w-4" />,
+          text: "Use Open pick-pack (header or below) to confirm pick, pack, and dispatch.",
+        });
+      } else if (!document?.warehouseId?.trim()) {
+        steps.push({
+          icon: <Icons.Info className="h-4 w-4 text-amber-500" />,
+          text: "Save this delivery note from Edit — a fulfilment warehouse is applied automatically from your branch so pick-pack can run.",
+        });
+      } else {
+        steps.push({
+          icon: <Icons.Info className="h-4 w-4 text-amber-500" />,
+          text: "Pick-pack link missing — refresh the page. If it persists, ensure your organisation has an active warehouse for this branch.",
+        });
+      }
     } else if (["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) {
       if (!hasPod && onRecordPod) {
         steps.push({
@@ -1696,12 +1781,14 @@ function DynamicNextStepsPanel({
     }
   } else if (type === "invoice") {
     if (status === "DRAFT") {
-      const undelivered = (document?.linkedDeliveries ?? []).filter((d) => d.status !== "DELIVERED" && d.status !== "POSTED");
+      const undelivered = (document?.linkedDeliveries ?? []).filter(
+        (d) => !deliveryNoteSatisfiedForInvoicePost(d.status)
+      );
       if (undelivered.length > 0) {
         for (const dn of undelivered) {
           steps.push({
             icon: <Icons.Truck className="h-4 w-4 text-amber-500" />,
-            text: `${dn.number} must be marked Delivered before posting`,
+            text: `${dn.number} — confirm POD / delivery completion before posting`,
             href: `/docs/delivery-note/${dn.id}`,
             actionLabel: `Go to ${dn.number}`,
             variant: "default",

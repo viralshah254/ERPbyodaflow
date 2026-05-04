@@ -138,6 +138,26 @@ export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection
       .map((k) => (k === "payroll" ? "finance" : k))
       .filter((k) => (seen.has(k) ? false : (seen.add(k), true)));
   }
+
+  /** Cool Catch–style fleets: expose Logistics section when trips flag is on (migrates old saved defaultNav). */
+  {
+    const hasLogisticsSection = NAV_SECTIONS_CONFIG.some((s) => s.key === "logistics");
+    if (
+      hasLogisticsSection &&
+      input.orgType === "DISTRIBUTOR" &&
+      input.enabledModules.includes("distribution") &&
+      input.featureFlags.logisticsTrips === true &&
+      !order.includes("logistics")
+    ) {
+      const distributionIdx = order.indexOf("distribution");
+      if (distributionIdx >= 0) order.splice(distributionIdx, 0, "logistics");
+      else {
+        const warehouseIdx = order.indexOf("warehouse");
+        if (warehouseIdx >= 0) order.splice(warehouseIdx + 1, 0, "logistics");
+        else order.push("logistics");
+      }
+    }
+  }
   const byKey = new Map<string, NavSectionConfig>(NAV_SECTIONS_CONFIG.map((s) => [s.key, s]));
   const result: ResolvedNavSection[] = [];
 

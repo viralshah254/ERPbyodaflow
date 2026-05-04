@@ -14,19 +14,33 @@ export type WarehousePickPackRow = {
   packingNote?: string;
   courier?: string;
   trackingRef?: string;
+  /** When true, fulfilment warehouse is main stock only (Cool Catch); PATCH pick-pack warehouse is rejected. */
+  coolCatchFulfilmentLocked?: boolean;
+  /** Server hint when pick lines do not align with StockLevel data (see copy in UI). */
+  stockLookupHint?: string;
+  /** Product IDs on pick lines with no StockLevel documents — use to compare with Inventory. */
+  productIdsWithoutStockLevels?: string[];
+  /** Optional better ACTIVE fulfilment site by available-stock coverage (non-destructive hint). */
+  suggestedFulfilmentWarehouseId?: string;
+  suggestedFulfilmentWarehouseLabel?: string;
   lines: Array<{
     id: string;
     productId: string;
+    variantId?: string;
     sku?: string;
     productName?: string;
     quantity: number;
     pickedQty?: number;
     suggestedBin?: string;
     locationId?: string;
+    /** Available quantity at fulfilment warehouse (on-hand minus reserved). */
     onHandWarehouse?: number;
+    /** Available at suggested bin when locationId is set. */
     onHandBin?: number;
-    /** On-hand in canonical MAIN / primary stock warehouse (may differ from fulfilment warehouse). */
+    /** Available in canonical MAIN / primary stock warehouse (may differ from fulfilment warehouse). */
     onHandPrimaryWarehouse?: number;
+    /** Sum of available quantity across all warehouses (display only). */
+    onHandOrgWide?: number;
   }>;
   /** Resolved primary stock warehouse (code MAIN); used for MAIN stock column. */
   primaryStockWarehouseId?: string;
@@ -95,13 +109,28 @@ export async function fetchPickPackTasks(filters?: { status?: string; sourceDocu
   return payload.items ?? [];
 }
 
-export async function fetchPickPackTask(id: string): Promise<WarehousePickPackRow | null> {
+export async function fetchPickPackTask(id: string): Promise<WarehousePickPackRow> {
   requireLiveApi("Pick-pack task detail");
-  try {
-    return await apiRequest<WarehousePickPackRow>(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`);
-  } catch {
-    return null;
-  }
+  return apiRequest<WarehousePickPackRow>(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`);
+}
+
+export type StagePickPackStockResponse = {
+  transferId: string;
+  number: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  lines: Array<{ productId: string; sku?: string; need: number; moved: number }>;
+};
+
+export async function stagePickPackStock(
+  id: string,
+  body?: { fromWarehouseId?: string }
+): Promise<StagePickPackStockResponse> {
+  requireLiveApi("Stage pick-pack stock");
+  return apiRequest<StagePickPackStockResponse>(`/api/warehouse/pick-pack/${encodeURIComponent(id)}/stage-stock`, {
+    method: "POST",
+    body: body?.fromWarehouseId ? { fromWarehouseId: body.fromWarehouseId } : {},
+  });
 }
 
 export async function runPickPackAction(

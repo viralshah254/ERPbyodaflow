@@ -22,6 +22,8 @@ interface DualCurrencyAmountProps {
    */
   size?: "sm" | "md";
   className?: string;
+  /** When false with a foreign-currency doc, shows only document-currency amounts (no base equivalent line). */
+  showAlternateCurrency?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export function DualCurrencyAmount({
   align = "left",
   size = "sm",
   className,
+  showAlternateCurrency = true,
 }: DualCurrencyAmountProps) {
   const normalised = (currency ?? "KES").toUpperCase();
   const base = (baseCurrency ?? "KES").toUpperCase();
@@ -53,6 +56,14 @@ export function DualCurrencyAmount({
   const primarySize = size === "md" ? "text-base font-semibold" : "text-sm font-medium";
   const secondarySize = size === "md" ? "text-xs" : "text-[10px]";
   const alignClass = align === "right" ? "items-end" : "items-start";
+
+  if (showAlternateCurrency === false && !isBase) {
+    return (
+      <span className={cn("tabular-nums", primarySize, className)}>
+        {formatMoney(amount, normalised)}
+      </span>
+    );
+  }
 
   if (isBase) {
     return (

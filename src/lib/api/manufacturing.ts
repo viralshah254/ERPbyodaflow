@@ -113,14 +113,20 @@ export async function fetchManufacturingBom(id: string): Promise<ManufacturingBo
   }
 }
 
+export async function fetchNextManufacturingBomCode(): Promise<string> {
+  requireLiveApi("Manufacturing BOM next code");
+  const payload = await apiRequest<{ code: string }>("/api/manufacturing/boms/next-code");
+  return payload.code ?? "";
+}
+
 export async function createManufacturingBom(payload: {
-  code: string;
+  code?: string;
   name: string;
   productId: string;
   quantity: number;
   uom: string;
   type: "bom" | "formula" | "disassembly";
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; code?: string }> {
   return apiRequest("/api/manufacturing/boms", { method: "POST", body: payload });
 }
 

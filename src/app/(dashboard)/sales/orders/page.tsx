@@ -35,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatMoney } from "@/lib/money";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
@@ -110,7 +111,12 @@ function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) =
         </span>
       ),
     },
-    { id: "total", header: "Total", accessor: (r: InboundOrderRow) => `${r.currency} ${r.total.toLocaleString()}` },
+    {
+      id: "total",
+      header: "Total",
+      accessor: (r: InboundOrderRow) =>
+        formatMoney(r.total, r.currency || "KES", { decimals: (r.total ?? 0) % 1 === 0 ? 0 : 2 }),
+    },
     {
       id: "status",
       header: "Status",

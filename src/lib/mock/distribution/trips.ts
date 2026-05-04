@@ -9,7 +9,7 @@ export type TripStatus = "PLANNED" | "IN_TRANSIT" | "COMPLETED";
 
 export interface TripCostLineRow {
   id: string;
-  costType: "FUEL" | "DRIVER" | "HIRE_FEE" | "TOLL" | "OTHER";
+  costType: "FUEL" | "DRIVER" | "HIRE_FEE" | "TOLL" | "OTHER" | "LEASE_CHARGE";
   amount: number;
   currency: string;
   reference?: string;

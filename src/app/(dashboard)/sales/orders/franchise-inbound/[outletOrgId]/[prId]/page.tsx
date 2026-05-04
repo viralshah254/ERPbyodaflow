@@ -21,6 +21,7 @@ import {
   acceptInboundOrder,
   type FranchiseInboundOrderDetail,
 } from "@/lib/api/cool-catch";
+import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -155,9 +156,7 @@ export default function FranchiseInboundOrderDetailPage() {
             ) : null}
             <div>
               <div className="text-muted-foreground">Total</div>
-              <div className="font-medium">
-                {doc.currency} {doc.total.toLocaleString()}
-              </div>
+              <div className="font-medium">{formatMoney(doc.total, doc.currency, { decimals: 0 })}</div>
             </div>
           </CardContent>
         </Card>
@@ -185,8 +184,8 @@ export default function FranchiseInboundOrderDetailPage() {
                   <TableHead className="w-[28%]">Product</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Unit price</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Unit price ({doc.currency})</TableHead>
+                  <TableHead className="text-right">Amount ({doc.currency})</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -205,9 +204,11 @@ export default function FranchiseInboundOrderDetailPage() {
                         <span className="text-muted-foreground text-xs ml-1">{line.unit}</span>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{line.unitPrice.toLocaleString()}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(line.unitPrice, doc.currency, { decimals: 0 })}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {line.amount.toLocaleString()}
+                      {formatMoney(line.amount, doc.currency, { decimals: 0 })}
                     </TableCell>
                   </TableRow>
                 ))}

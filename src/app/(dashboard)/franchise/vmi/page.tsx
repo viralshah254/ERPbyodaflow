@@ -21,10 +21,14 @@ import {
   fetchFranchiseeStock,
   confirmReplenishmentOrder,
   autoReplenish,
+  syncVmIFranchiseSnapshotsFromLedger,
 } from "@/lib/api/cool-catch";
+import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import type { FranchiseeStockRow, VMIReplenishmentOrderRow } from "@/lib/mock/franchise/vmi";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+const VMI_SOURCE_WAREHOUSE_LS_KEY = "odaflow_vmi_source_warehouse_id";
 
 export default function FranchiseVmiPage() {
   const [tab, setTab] = React.useState<"suggestions" | "orders" | "stock">("suggestions");
@@ -36,6 +40,29 @@ export default function FranchiseVmiPage() {
   const [loading, setLoading] = React.useState(true);
   const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
   const [autoReplenishing, setAutoReplenishing] = React.useState(false);
+  const [syncingLedger, setSyncingLedger] = React.useState(false);
+  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
+  const [sourceWarehouseId, setSourceWarehouseId] = React.useState<string>("");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetchWarehousesApi()
+      .then((list) => {
+        if (cancelled) return;
+        setWarehouses(list);
+        const saved = typeof localStorage !== "undefined" ? localStorage.getItem(VMI_SOURCE_WAREHOUSE_LS_KEY) : null;
+        if (saved && list.some((w) => w.id === saved)) {
+          setSourceWarehouseId(saved);
+        } else if (list.length === 1) {
+          setSourceWarehouseId(list[0].id);
+          localStorage.setItem(VMI_SOURCE_WAREHOUSE_LS_KEY, list[0].id);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -91,9 +118,16 @@ export default function FranchiseVmiPage() {
   };
 
   const handleAutoReplenish = async () => {
+    if (!sourceWarehouseId) {
+      toast.error("Select a Cold Hub (source) warehouse first.");
+      return;
+    }
     setAutoReplenishing(true);
     try {
-      const res = await autoReplenish({ franchiseeId: franchiseeFilter || undefined });
+      const res = await autoReplenish({
+        franchiseeId: franchiseeFilter || undefined,
+        sourceWarehouseId,
+      });
       toast.success(`Created ${res.created} replenishment order(s).`);
       await load();
     } catch (e) {
@@ -101,6 +135,23 @@ export default function FranchiseVmiPage() {
       toast.error(msg === "STUB" ? "Configure API to run auto-replenish." : msg);
     } finally {
       setAutoReplenishing(false);
+    }
+  };
+
+  const handleSyncFromLedger = async () => {
+    setSyncingLedger(true);
+    try {
+      const res = await syncVmIFranchiseSnapshotsFromLedger({
+        franchiseeId: franchiseeFilter || undefined,
+      });
+      toast.success(
+        `Synced ${res.snapshotRowsUpserted} snapshot row(s) across ${res.franchiseesProcessed} franchisee(s).`
+      );
+      await load();
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Sync from ledger failed");
+    } finally {
+      setSyncingLedger(false);
     }
   };
 
@@ -152,13 +203,47 @@ export default function FranchiseVmiPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={handleAutoReplenish} disabled={autoReplenishing}>
-            <Icons.PackagePlus className="mr-2 h-4 w-4" />
-            {autoReplenishing ? "Creating…" : "Create from suggestions"}
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Select
+              value={sourceWarehouseId || "__none__"}
+              onValueChange={(v) => {
+                const id = v === "__none__" ? "" : v;
+                setSourceWarehouseId(id);
+                if (id) localStorage.setItem(VMI_SOURCE_WAREHOUSE_LS_KEY, id);
+                else localStorage.removeItem(VMI_SOURCE_WAREHOUSE_LS_KEY);
+              }}
+            >
+              <SelectTrigger className="w-[min(100vw-2rem,260px)]">
+                <SelectValue placeholder="Cold Hub (source)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Cold Hub warehouse…</SelectItem>
+                {warehouses.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.name}
+                    {w.code ? ` (${w.code})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button type="button" variant="outline" onClick={() => void handleSyncFromLedger()} disabled={syncingLedger || loading}>
+              <Icons.RefreshCw className={`mr-2 h-4 w-4 ${syncingLedger ? "animate-spin" : ""}`} />
+              {syncingLedger ? "Syncing…" : "Sync snapshots from outlets"}
+            </Button>
+            <Button type="button" onClick={() => void handleAutoReplenish()} disabled={autoReplenishing || !sourceWarehouseId}>
+              <Icons.PackagePlus className="mr-2 h-4 w-4" />
+              {autoReplenishing ? "Creating…" : "Create from suggestions"}
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-6">
+        <p className="text-muted-foreground text-sm max-w-4xl">
+          Select the HQ warehouse stock ships from (Cold Hub). Required for &quot;Create from suggestions&quot;. Use &quot;Sync snapshots
+          from outlets&quot; to pull posted inventory from each franchisee&apos;s linked outlet org into VMI (after{" "}
+          <code className="text-xs">PATCH /franchise/franchisees/:id</code> with <code className="text-xs">outletOrgId</code>
+          ).
+        </p>
         <div className="flex gap-2 border-b">
           {(["suggestions", "orders", "stock"] as const).map((t) => (
             <Button key={t} variant={tab === t ? "secondary" : "ghost"} size="sm" onClick={() => setTab(t)}>
@@ -251,7 +336,10 @@ export default function FranchiseVmiPage() {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle>Stock by franchisee</CardTitle>
-                    <CardDescription>Live VMI snapshots (ingested from franchisee-facing system).</CardDescription>
+                    <CardDescription>
+                      VMI snapshots (webhook ingest or &quot;Sync snapshots from outlets&quot;). Not the same as posted Sell
+                      on-hand unless you sync.
+                    </CardDescription>
                   </div>
                   <Select value={franchiseeFilter || "ALL"} onValueChange={(v) => setFranchiseeFilter(v === "ALL" ? "" : v)}>
                     <SelectTrigger className="w-48">

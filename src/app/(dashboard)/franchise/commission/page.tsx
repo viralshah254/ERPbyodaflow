@@ -210,7 +210,7 @@ export default function FranchiseCommissionPage() {
     { id: "franchisee", header: "Franchisee", accessor: (r: CommissionSummaryRow) => r.franchiseeName || r.franchiseeCode, sticky: true },
     { id: "runs", header: "Runs", accessor: (r: CommissionSummaryRow) => r.runs },
     { id: "sales", header: "Sales", accessor: (r: CommissionSummaryRow) => formatMoney(r.salesAmount, "KES") },
-    { id: "commission", header: "Commission", accessor: (r: CommissionSummaryRow) => formatMoney(r.commissionAmount, "KES") },
+    { id: "commission", header: "Outlet earnings", accessor: (r: CommissionSummaryRow) => formatMoney(r.commissionAmount, "KES") },
     { id: "topup", header: "Top-up", accessor: (r: CommissionSummaryRow) => formatMoney(r.topUpAmount, "KES") },
     { id: "payout", header: "Total payout", accessor: (r: CommissionSummaryRow) => formatMoney(r.totalPayout, "KES") },
   ];
@@ -219,7 +219,7 @@ export default function FranchiseCommissionPage() {
     <PageShell>
       <PageHeader
         title="Commission & Rebates"
-        description="Weekly commission runs, rules, and margin guarantee top-ups"
+        description="Outlet retail commission runs (per-product economics + HQ rules), and margin guarantee top-ups"
         breadcrumbs={[
           { label: "Franchise", href: "/franchise/commission" },
           { label: "Commission & Rebates" },
@@ -238,7 +238,7 @@ export default function FranchiseCommissionPage() {
               <SheetHeader>
                 <SheetTitle>New commission run</SheetTitle>
                 <SheetDescription>
-                  Calculate from posted invoices or create a draft run for the period.
+                  Calculate from outlet retail posted invoices or create a draft run for the period.
                 </SheetDescription>
               </SheetHeader>
               <div className="grid gap-4 py-6">
@@ -262,7 +262,7 @@ export default function FranchiseCommissionPage() {
                 </div>
                 <div className="flex gap-2 pt-2">
                   <Button onClick={handleCalculateRun} disabled={creating}>
-                    {creating ? "Calculating…" : "Calculate from invoices"}
+                    {creating ? "Calculating…" : "Calculate from retail sales"}
                   </Button>
                   <Button variant="outline" onClick={handleCreateDraftRun} disabled={creating}>
                     Create draft

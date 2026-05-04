@@ -28,11 +28,12 @@ import {
   fetchFranchiseNetworkOutlets,
   createFranchiseOutletApi,
   fetchNextOutletCodeApi,
+  repairFranchiseeRegistryApi,
   type FranchiseNetworkOutletRow,
   type CreateFranchiseOutletPayload,
 } from "@/lib/api/cool-catch";
 import { useAuthStore } from "@/stores/auth-store";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 const emptyForm: CreateFranchiseOutletPayload = {
@@ -51,6 +52,7 @@ export default function FranchiseOutletsPage() {
   const [form, setForm] = React.useState<CreateFranchiseOutletPayload>(emptyForm);
   const [saving, setSaving] = React.useState(false);
   const [outletCodeLoading, setOutletCodeLoading] = React.useState(false);
+  const [repairing, setRepairing] = React.useState(false);
   const [managerPhone, setManagerPhone] = React.useState("");
   const [managerPhonePrefix, setManagerPhonePrefix] = React.useState("+254");
   const permissions = useAuthStore((s) => s.permissions);
@@ -111,7 +113,9 @@ export default function FranchiseOutletsPage() {
       setManagerPhone("");
       setManagerPhonePrefix("+254");
       load();
-      toast.success("Franchisee created and activated.");
+      toast.success(
+        "Franchisee created and activated. HQ royalty and commission registry (customer party + franchisee row) is set up automatically."
+      );
     } catch (err) {
       const msg =
         err && typeof err === "object" && "message" in err
@@ -123,19 +127,44 @@ export default function FranchiseOutletsPage() {
     }
   };
 
+  const handleRepairRegistry = async () => {
+    setRepairing(true);
+    try {
+      const { items } = await repairFranchiseeRegistryApi();
+      const linked = items.filter((i) => i.status === "linked").length;
+      const skipped = items.filter((i) => i.status.startsWith("skipped")).length;
+      const errors = items.filter((i) => i.status === "error").length;
+      toast.success(`Registry repair: ${linked} linked, ${skipped} skipped, ${errors} errors.`);
+      if (errors > 0 || items.some((i) => i.message)) {
+        console.info("[repair-franchisee-registry]", items);
+      }
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Repair failed");
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
         title="Outlets"
-        description="Add franchisees (outlets) and give them login access. Each franchisee can sign in to their own outlet workspace."
+        description="Add franchisees (outlets) and give them login access. New outlets also get an HQ customer party and franchisee registry row for royalty and commission. Use Repair if older outlets pre-date that automation."
         breadcrumbs={[{ label: "Franchise", href: "/franchise/network/overview" }, { label: "Outlets" }]}
         sticky
         actions={
           canView && canAdd ? (
-            <Button onClick={() => setAddOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add franchisee
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={repairing} onClick={handleRepairRegistry}>
+                {repairing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wrench className="mr-2 h-4 w-4" />}
+                Repair commission registry
+              </Button>
+              <Button onClick={() => setAddOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add franchisee
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -143,7 +172,7 @@ export default function FranchiseOutletsPage() {
         <CardHeader>
           <CardTitle>Franchisees (outlets)</CardTitle>
           <CardDescription>
-            Outlets that can log in to the ERP. Each franchisee gets their own org and admin user immediately on creation.
+            Outlets that can log in to the ERP. Each franchisee gets their own org and admin user immediately on creation, plus HQ billing linkage (franchisee registry). For outlets created before that automation, run Repair commission registry.
           </CardDescription>
         </CardHeader>
         <CardContent>

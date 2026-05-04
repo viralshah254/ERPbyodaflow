@@ -20,6 +20,9 @@ export interface CommissionRunLineRow {
   franchiseeName?: string;
   salesAmount: number;
   commissionAmount: number;
+  contractCommissionAmount?: number;
+  extraRetailMarginAmount?: number;
+  ruleCommissionAmount?: number;
   minFloor: number | null;
   topUpAmount: number;
   royaltyWithheldKes?: number;

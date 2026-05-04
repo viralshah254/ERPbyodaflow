@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -47,6 +47,7 @@ type ARCustomerRow = {
 };
 
 function ARCustomersContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -75,6 +76,14 @@ function ARCustomersContent() {
   const [duplicateWarning, setDuplicateWarning] = React.useState<string | undefined>(undefined);
   const [newCategoryName, setNewCategoryName] = React.useState("");
   const requestedCustomerId = searchParams.get("id");
+  const openNewFromQuery = searchParams.get("new");
+
+  React.useEffect(() => {
+    if (openNewFromQuery !== "1") return;
+    setEditingId(null);
+    setDrawerOpen(true);
+    router.replace("/ar/customers", { scroll: false });
+  }, [openNewFromQuery, router]);
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);

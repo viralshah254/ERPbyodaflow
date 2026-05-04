@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import * as Icons from "lucide-react";
+import { ChevronRight, PanelLeftOpen, PanelRightClose } from "lucide-react";
 import { useUIStore } from "@/stores/ui-store";
 import { CommandPaletteHint } from "@/components/command/CommandPaletteHint";
 import { PageHelp } from "@/components/tutorial/PageHelp";
@@ -61,7 +61,7 @@ export function PageHeader({
         >
           {breadcrumbs.map((crumb, i) => (
             <React.Fragment key={i}>
-              {i > 0 && <Icons.ChevronRight className="h-4 w-4 shrink-0" />}
+              {i > 0 && <ChevronRight className="h-4 w-4 shrink-0" />}
               {crumb.href ? (
                 <Link href={crumb.href} className="hover:text-foreground transition-colors">
                   {crumb.label}
@@ -109,9 +109,9 @@ export function PageHeader({
               title={rightPanelOpen ? "Hide right panel" : "Show right panel"}
             >
               {rightPanelOpen ? (
-                <Icons.PanelRightClose className="h-4 w-4" />
+                <PanelRightClose className="h-4 w-4" />
               ) : (
-                <Icons.PanelLeftOpen className="h-4 w-4" />
+                <PanelLeftOpen className="h-4 w-4" />
               )}
             </Button>
           )}

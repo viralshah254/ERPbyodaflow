@@ -438,12 +438,23 @@ export async function bulkDocumentActionApi(
   );
 }
 
+export type DocumentWriteResponse = {
+  id: string;
+  number?: string;
+  status?: string;
+  date?: string;
+  total?: number;
+  typeKey?: DocTypeKey;
+  sourceDocumentId?: string;
+  pickPackSyncWarning?: string;
+};
+
 export async function createDocumentApi(
   type: DocTypeKey,
   payload: DocumentDraftPayload
-): Promise<{ id: string; number?: string; status?: string }> {
+): Promise<DocumentWriteResponse> {
   requireLiveApi("Document creation");
-  return apiRequest<{ id: string; number?: string; status?: string }>(`/api/documents/${type}`, {
+  return apiRequest<DocumentWriteResponse>(`/api/documents/${type}`, {
     method: "POST",
     body: payload,
   });
@@ -465,15 +476,12 @@ export async function convertDocumentApi(
   type: DocTypeKey,
   id: string,
   payload: DocumentConvertPayload
-): Promise<{ id: string; typeKey?: DocTypeKey; number?: string; status?: string }> {
+): Promise<DocumentWriteResponse> {
   requireLiveApi("Document conversion");
-  return apiRequest<{ id: string; typeKey?: DocTypeKey; number?: string; status?: string }>(
-    `/api/documents/${type}/${id}/convert`,
-    {
-      method: "POST",
-      body: payload,
-    }
-  );
+  return apiRequest<DocumentWriteResponse>(`/api/documents/${type}/${id}/convert`, {
+    method: "POST",
+    body: payload,
+  });
 }
 
 export async function confirmDeliveryPodApi(
@@ -546,9 +554,9 @@ export async function patchDocumentApi(
   type: DocTypeKey,
   id: string,
   payload: Partial<DocumentDraftPayload> & { notes?: string }
-): Promise<void> {
+): Promise<DocumentWriteResponse> {
   requireLiveApi("Document update");
-  await apiRequest(`/api/documents/${type}/${id}`, {
+  return apiRequest<DocumentWriteResponse>(`/api/documents/${type}/${id}`, {
     method: "PATCH",
     body: payload,
   });

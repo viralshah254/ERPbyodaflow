@@ -9,11 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { applyManufacturingMrp, fetchManufacturingMrp, type ManufacturingMrpSuggestion } from "@/lib/api/manufacturing";
+import { fetchManufacturingMrp, type ManufacturingMrpSuggestion } from "@/lib/api/manufacturing";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
 
 export default function MrpPage() {
   const terminology = useTerminology();
@@ -21,7 +20,6 @@ export default function MrpPage() {
   const [itemFilter, setItemFilter] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<ManufacturingMrpSuggestion[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [applying, setApplying] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -83,7 +81,9 @@ export default function MrpPage() {
           <CardHeader>
             <CardTitle>Planning actions</CardTitle>
             <CardDescription>
-              Live shortages and replenishment recommendations derived from sales-order demand, on-hand stock, and open work orders.
+              Live shortages and replenishment recommendations derived from sales-order demand, on-hand stock, and open
+              work orders. Inbound stock updates when goods are received to a warehouse (post GRNs with a warehouse, and
+              receive subcontract outputs into a chosen warehouse).
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -117,41 +117,6 @@ export default function MrpPage() {
             </Table>
             {loading && <div className="p-6 text-sm text-muted-foreground">Loading MRP suggestions...</div>}
             {!loading && filtered.length === 0 && <div className="p-6 text-sm text-muted-foreground">No shortages detected.</div>}
-          </CardContent>
-        </Card>
-
-        <Card className="border-primary/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Icons.Brain className="h-5 w-5" />
-              AI recommended plan
-            </CardTitle>
-            <CardDescription>
-              Create draft work orders directly from the live MRP shortage list.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={applying || suggestions.filter((item) => item.type === "WORK_ORDER").length === 0}
-              onClick={async () => {
-                setApplying(true);
-                try {
-                  const result = await applyManufacturingMrp(
-                    suggestions.filter((item) => item.type === "WORK_ORDER").map((item) => item.id)
-                  );
-                  toast.success(`Created ${result.created.length} draft work order(s).`);
-                  await refresh();
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Failed to apply MRP suggestions.");
-                } finally {
-                  setApplying(false);
-                }
-              }}
-            >
-              Apply suggestion
-            </Button>
           </CardContent>
         </Card>
       </div>

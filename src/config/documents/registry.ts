@@ -91,6 +91,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
           { id: "date", label: "Date", type: "date", required: true },
           { id: "customer", label: "Customer", type: "entity", entityType: "customer", required: true },
           { id: "branch", label: "Branch", type: "select" },
+          { id: "warehouse", label: "Warehouse", type: "select" },
         ],
       },
       { id: "lines", label: "Lines", fields: [] },

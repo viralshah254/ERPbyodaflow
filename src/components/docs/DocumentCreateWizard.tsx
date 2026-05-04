@@ -90,6 +90,26 @@ import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { QuickAddSupplierSheet } from "@/components/suppliers/QuickAddSupplierSheet";
 
+/** Client-side mirror of backend fulfilment warehouse ranking within a branch. */
+function suggestWarehouseForBranch(warehouses: LookupOption[], branchId: string | undefined): string | undefined {
+  const bid = branchId?.trim();
+  if (!bid) return undefined;
+  const inBranch = warehouses.filter((w) => w.branchId === bid);
+  if (!inBranch.length) return undefined;
+  const rank = (w: LookupOption) => {
+    const L = w.label.toUpperCase();
+    if (L.includes("HQ")) return 0;
+    if (L.includes("MAIN")) return 1;
+    return 2;
+  };
+  return [...inBranch].sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return a.label.localeCompare(b.label);
+  })[0]?.id;
+}
+
 const schema = z.object({
   date: z.string().min(1, "Date is required"),
   party: z.string().optional(),
@@ -444,6 +464,8 @@ export function DocumentCreateWizard({
     defaultValues: defaults,
   });
 
+  const watchedBranch = form.watch("branch");
+
   React.useEffect(() => {
     if (isEditMode) return; // skip local-draft restore when editing an existing document
     let cancelled = false;
@@ -508,6 +530,7 @@ export function DocumentCreateWizard({
     });
     setLines(prefilled);
     setStep(1);
+    deliveryNoteWarehouseDefaultAppliedRef.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, existingDocument?.id]);
 
@@ -594,7 +617,7 @@ export function DocumentCreateWizard({
   }, [type, fieldOptions, form]);
 
   React.useEffect(() => {
-    if (type !== "delivery-note" || isEditMode) return;
+    if (type !== "delivery-note") return;
     if (deliveryNoteWarehouseDefaultAppliedRef.current) return;
     const opts = fieldOptions["warehouse"] ?? [];
     if (!opts.length) return;
@@ -618,7 +641,18 @@ export function DocumentCreateWizard({
     return () => {
       cancelled = true;
     };
-  }, [type, isEditMode, fieldOptions, form]);
+  }, [type, fieldOptions, form]);
+
+  React.useEffect(() => {
+    if (type !== "delivery-note") return;
+    const opts = fieldOptions["warehouse"] ?? [];
+    if (!opts.length) return;
+    if (String(form.getValues("warehouse") ?? "").trim()) return;
+    const sug = suggestWarehouseForBranch(opts, watchedBranch);
+    if (sug) {
+      form.setValue("warehouse", sug, { shouldDirty: true });
+    }
+  }, [type, fieldOptions, watchedBranch, form]);
 
   React.useEffect(() => {
     if (step === 2) void hydrateProductsFromApi();
@@ -1036,8 +1070,9 @@ export function DocumentCreateWizard({
       setSubmitting(true);
       const payload = buildDraftPayload();
       if (isEditMode && existingDocument) {
-        await patchDocumentApi(type as DocTypeKey, existingDocument.id, payload);
+        const patched = await patchDocumentApi(type as DocTypeKey, existingDocument.id, payload);
         toast.success(`${label} updated.`);
+        if (patched.pickPackSyncWarning) toast.warning(patched.pickPackSyncWarning);
         router.push(`/docs/${type}/${existingDocument.id}`);
       } else {
         if (creditOverrideGranted && creditOverrideReason) {
@@ -1046,6 +1081,7 @@ export function DocumentCreateWizard({
         const result = await createDocumentApi(type as DocTypeKey, payload);
         await deleteDocumentDraftApi(type);
         toast.success(`${label} draft created.`);
+        if (result.pickPackSyncWarning) toast.warning(result.pickPackSyncWarning);
         router.push(`/docs/${type}/${result.id}`);
       }
     } catch (error) {
@@ -1331,6 +1367,11 @@ export function DocumentCreateWizard({
                     />
                 ))}
               </div>
+              {type === "delivery-note" ? (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Warehouse is optional. If unset, stock and pick-pack use your branch&apos;s default fulfilment warehouse (HQ / Main).
+                </p>
+              ) : null}
               <div className="border-t pt-4 mt-4">
                 <h4 className="text-sm font-medium mb-3">Currency</h4>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1577,6 +1618,29 @@ export function DocumentCreateWizard({
                     {form.watch("linesAreTaxInclusive") ? "Tax-inclusive (VAT in price)" : "Tax-exclusive (VAT added on top)"}
                   </p>
                 </div>
+                {type === "delivery-note" ? (
+                  <>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground">Branch</span>
+                      <p className="font-medium">
+                        {(fieldOptions["branch"] ?? []).find((b) => b.id === form.watch("branch"))?.label ||
+                          form.watch("branch") ||
+                          "—"}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground">Fulfilment warehouse</span>
+                      <p className="font-medium">
+                        {(() => {
+                          const wid = (form.watch("warehouse") ?? "").trim();
+                          if (!wid)
+                            return "Branch default (HQ / Main — applied automatically if left blank)";
+                          return (fieldOptions["warehouse"] ?? []).find((w) => w.id === wid)?.label ?? wid;
+                        })()}
+                      </p>
+                    </div>
+                  </>
+                ) : null}
               </div>
               <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
                 <div className="space-y-1">

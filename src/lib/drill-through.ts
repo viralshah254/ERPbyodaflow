@@ -101,8 +101,13 @@ export function drillFromNotification(notification: NotificationDrillContext): D
   if (notification.entityType === "approval" && notification.entityId) {
     return drillToApprovalInbox(notification.entityId);
   }
-  if (notification.entityType === "invoice" && notification.entityId) {
+  if (
+    notification.entityType === "invoice" && notification.entityId
+  ) {
     return drillToDocument("invoice", notification.entityId);
+  }
+  if (notification.entityType === "delivery-note" && notification.entityId) {
+    return drillToDocument("delivery-note", notification.entityId);
   }
   if (
     notification.entityType === "Party" ||

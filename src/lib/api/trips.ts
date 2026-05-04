@@ -57,7 +57,7 @@ export async function createTrip(body: CreateTripRequest): Promise<{ id: string 
 }
 
 export interface AddTripCostRequest {
-  costType: "FUEL" | "DRIVER" | "HIRE_FEE" | "TOLL" | "OTHER";
+  costType: "FUEL" | "DRIVER" | "HIRE_FEE" | "TOLL" | "OTHER" | "LEASE_CHARGE";
   amount: number;
   currency: string;
   reference?: string;

@@ -84,6 +84,14 @@ export const Permissions = {
   PLATFORM_AUDIT_READ: "platform.audit.read",
   /** Required to delete master data (products, parties, etc.). Backend must enforce. */
   ADMIN_DELETE: "admin.delete",
+
+  /** Outbound logistics: HQ dashboard read, fuel capture, trips (mirrors backend). */
+  LOGISTICS_DASHBOARD_READ: "logistics.dashboard.read",
+  LOGISTICS_FUEL_WRITE: "logistics.fuel.write",
+  LOGISTICS_PERIOD_CLOSE: "logistics.period.close",
+
+  DISTRIBUTION_TRIPS_READ: "distribution.trips.read",
+  DISTRIBUTION_TRIPS_WRITE: "distribution.trips.write",
 } as const;
 
 /** Role ID that grants admin delete in mock; backend should map roles to permissions. */

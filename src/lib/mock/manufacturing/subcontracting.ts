@@ -55,6 +55,9 @@ export interface SubcontractOrderRow {
   status: "SENT" | "WIP" | "RECEIVED";
   sentAt: string | null;
   receivedAt: string | null;
+  /** Warehouse stock was posted to on receive. */
+  receiveWarehouseId?: string | null;
+  receiveWarehouseName?: string | null;
   createdAt: string;
   lines?: SubcontractOrderLineRow[];
 }
