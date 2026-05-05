@@ -58,70 +58,76 @@ export function AuthRestore() {
           }
         };
 
-        const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-          if (cancelled) return;
-          if (pendingTimeout) {
-            clearTimeout(pendingTimeout);
-            pendingTimeout = null;
-          }
-          if (firebaseUser) {
-            if (isRememberMeExpired()) {
-              await signOut();
-              if (!cancelled) logout();
+        const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+          void (async () => {
+            if (cancelled) return;
+            if (pendingTimeout) {
+              clearTimeout(pendingTimeout);
+              pendingTimeout = null;
+            }
+            if (firebaseUser) {
+              if (isRememberMeExpired()) {
+                await signOut();
+                if (!cancelled) logout();
+                done();
+                return;
+              }
+              try {
+                const token = await firebaseUser.getIdToken();
+                setApiAuth({ bearerToken: token });
+                const session = await fetchRuntimeSession();
+                if (cancelled) return;
+                setSession({
+                  user: session.user,
+                  org: session.org,
+                  tenant: session.tenant,
+                  currentBranch: session.currentBranch,
+                  branches: session.branches,
+                  permissions: session.permissions,
+                  isPlatformOperator: session.isPlatformOperator,
+                });
+                useOrgContextStore.getState().hydrateFromBackend({
+                  orgType: session.org.orgType,
+                  templateId: session.orgContext.templateId,
+                  enabledModules: session.orgContext.enabledModules,
+                  featureFlags: session.orgContext.featureFlags,
+                  terminology: session.orgContext.terminology,
+                  defaultNav: session.orgContext.defaultNav,
+                  orgRole: session.orgContext.orgRole,
+                  parentOrgId: session.orgContext.parentOrgId,
+                  franchiseNetworkId: session.orgContext.franchiseNetworkId,
+                  franchiseCode: session.orgContext.franchiseCode,
+                  franchiseTerritory: session.orgContext.franchiseTerritory,
+                  franchiseStoreFormat: session.orgContext.franchiseStoreFormat,
+                  franchiseManagerName: session.orgContext.franchiseManagerName,
+                  franchisePersona: session.orgContext.franchisePersona,
+                });
+                setApiAuth({
+                  bearerToken: token,
+                  branchId: session.currentBranch?.branchId,
+                });
+                // Only fall back to the org-type default if the backend didn't
+                // already specify a template (e.g. "seafood-distributor").
+                if (!session.orgContext.templateId) {
+                  const tid = DEFAULT_TEMPLATE_BY_ORG_TYPE[session.org.orgType];
+                  if (tid) applyTemplate(tid);
+                }
+              } catch {
+                if (!cancelled) logout();
+              }
               done();
               return;
             }
-            try {
-              const token = await firebaseUser.getIdToken();
-              setApiAuth({ bearerToken: token });
-              const session = await fetchRuntimeSession();
-              if (cancelled) return;
-              setSession({
-                user: session.user,
-                org: session.org,
-                tenant: session.tenant,
-                currentBranch: session.currentBranch,
-                branches: session.branches,
-                permissions: session.permissions,
-                isPlatformOperator: session.isPlatformOperator,
-              });
-              useOrgContextStore.getState().hydrateFromBackend({
-                orgType: session.org.orgType,
-                templateId: session.orgContext.templateId,
-                enabledModules: session.orgContext.enabledModules,
-                featureFlags: session.orgContext.featureFlags,
-                terminology: session.orgContext.terminology,
-                defaultNav: session.orgContext.defaultNav,
-                orgRole: session.orgContext.orgRole,
-                parentOrgId: session.orgContext.parentOrgId,
-                franchiseNetworkId: session.orgContext.franchiseNetworkId,
-                franchiseCode: session.orgContext.franchiseCode,
-                franchiseTerritory: session.orgContext.franchiseTerritory,
-                franchiseStoreFormat: session.orgContext.franchiseStoreFormat,
-                franchiseManagerName: session.orgContext.franchiseManagerName,
-                franchisePersona: session.orgContext.franchisePersona,
-              });
-              setApiAuth({
-                bearerToken: token,
-                branchId: session.currentBranch?.branchId,
-              });
-              // Only fall back to the org-type default if the backend didn't
-              // already specify a template (e.g. "seafood-distributor").
-              if (!session.orgContext.templateId) {
-                const tid = DEFAULT_TEMPLATE_BY_ORG_TYPE[session.org.orgType];
-                if (tid) applyTemplate(tid);
-              }
-            } catch {
-              if (!cancelled) logout();
-            }
+            // No user: give Firebase time to restore from persistence, then mark logged out
+            pendingTimeout = setTimeout(() => {
+              pendingTimeout = null;
+              if (!cancelled && !resolved) done();
+            }, 700);
+          })().catch((err) => {
+            console.warn("[AuthRestore] session restore failed:", err);
+            if (!cancelled) logout();
             done();
-            return;
-          }
-          // No user: give Firebase time to restore from persistence, then mark logged out
-          pendingTimeout = setTimeout(() => {
-            pendingTimeout = null;
-            if (!cancelled && !resolved) done();
-          }, 700);
+          });
         });
 
         teardown = () => {

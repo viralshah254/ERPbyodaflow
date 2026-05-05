@@ -1,5 +1,5 @@
 import { type CustomerType, type PartyRole, type PartyRow, type SupplierType } from "@/lib/types/masters";
-import { apiRequest, requireLiveApi } from "./client";
+import { apiRequest, requireLiveApi, uploadFormData } from "./client";
 
 type BackendParty = {
   id: string;
@@ -339,4 +339,14 @@ export async function searchPartyLookupOptionsApi(filters?: {
     params,
   });
   return sortPartyLookupOptions(data.items.map((item) => toPartyLookupOption(item)), filters?.search ?? "");
+}
+
+export async function uploadPartyPinCertificateApi(partyId: string, file: File): Promise<{ storageKey: string; fileName: string }> {
+  requireLiveApi("PIN certificate upload");
+  const formData = new FormData();
+  formData.append("file", file);
+  return uploadFormData<{ storageKey: string; fileName: string }>(
+    `/api/parties/${encodeURIComponent(partyId)}/pin-certificate`,
+    formData
+  );
 }

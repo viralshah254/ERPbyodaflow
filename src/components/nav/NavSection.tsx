@@ -48,7 +48,7 @@ export function NavSection({ section, isCollapsed }: NavSectionProps) {
         type="button"
         onClick={toggle}
         className={cn(
-          "sticky top-0 z-10 flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors rounded-md hover:bg-accent/50 bg-card backdrop-blur-sm"
+          "sticky top-0 z-10 flex items-center gap-2 w-full px-3 py-2 text-xs font-bold text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors rounded-md hover:bg-accent/50 bg-card backdrop-blur-sm"
         )}
       >
         <Icons.ChevronRight
@@ -68,7 +68,7 @@ export function NavSection({ section, isCollapsed }: NavSectionProps) {
             return (
               <div key={item.id}>
                 {showGroup && (
-                  <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-border/40 mt-2 first:mt-0 first:border-t-0 first:pt-0">
+                  <div className="px-3 pt-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground border-t border-border/40 mt-2 first:mt-0 first:border-t-0 first:pt-0">
                     {item.navGroupLabel}
                   </div>
                 )}

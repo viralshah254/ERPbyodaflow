@@ -5,8 +5,10 @@ import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { fetchFranchiseOutletWorkspace } from "@/lib/api/cool-catch";
+import { fetchTransfers, type TransferRow } from "@/lib/api/warehouse-transfers";
 import { formatMoney } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +20,7 @@ import {
   ClipboardList,
   Truck,
   ArrowRight,
+  Package,
 } from "lucide-react";
 
 interface ActionTileProps {
@@ -48,13 +51,19 @@ function ActionTile({ href, icon, label, sublabel, highlight }: ActionTileProps)
 export default function FranchiseOutletWorkspacePage() {
   const [workspace, setWorkspace] = React.useState<Awaited<ReturnType<typeof fetchFranchiseOutletWorkspace>> | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [pendingTransfers, setPendingTransfers] = React.useState<TransferRow[]>([]);
 
   React.useEffect(() => {
     let active = true;
     setLoading(true);
-    void fetchFranchiseOutletWorkspace()
-      .then((payload) => { if (active) setWorkspace(payload); })
-      .finally(() => { if (active) setLoading(false); });
+    void Promise.all([
+      fetchFranchiseOutletWorkspace().catch(() => null),
+      fetchTransfers({ status: "IN_TRANSIT" }).catch(() => []),
+    ]).then(([ws, transfers]) => {
+      if (!active) return;
+      if (ws) setWorkspace(ws);
+      setPendingTransfers(transfers);
+    }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
@@ -144,10 +153,10 @@ export default function FranchiseOutletWorkspacePage() {
               sublabel="Raise a replenishment request"
             />
             <ActionTile
-              href="/docs/delivery/new"
+              href="/warehouse/transfers"
               icon={<Truck className="h-7 w-7" />}
-              label="Record Delivery"
-              sublabel="Goods received from HQ"
+              label="Receive Stock"
+              sublabel="View & receive incoming shipments from HQ"
             />
             <ActionTile
               href="/franchise/commission"
@@ -163,6 +172,43 @@ export default function FranchiseOutletWorkspacePage() {
             />
           </div>
         </div>
+
+        {/* Pending deliveries from HQ */}
+        {(loading || pendingTransfers.length > 0) && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <Package className="h-4 w-4" />
+                Pending deliveries from HQ
+              </h2>
+              <Link href="/warehouse/transfers" className="text-xs text-primary hover:underline">
+                View all transfers
+              </Link>
+            </div>
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingTransfers.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm dark:border-blue-900 dark:bg-blue-950/30">
+                    <div>
+                      <p className="font-medium">{t.number}</p>
+                      <p className="text-xs text-muted-foreground">
+                        From: {t.fromWarehouse} · {t.lines.length} {t.lines.length === 1 ? "item" : "items"} · {t.date}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      <Badge variant="secondary" className="text-[10px]">In transit</Badge>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/warehouse/transfers/${t.id}`}>Receive</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Recent activity */}
         <div className="grid gap-4 lg:grid-cols-2">

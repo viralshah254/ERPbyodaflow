@@ -62,7 +62,7 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
         <button
           type="button"
           className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer w-full text-left",
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer w-full text-left",
             level > 0 && "ml-6",
             isActive
               ? "bg-primary text-primary-foreground"
@@ -107,7 +107,7 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
     <div
       ref={itemRef}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         level > 0 && "ml-6",
         isActive
           ? "bg-primary text-primary-foreground"

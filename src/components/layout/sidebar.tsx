@@ -91,7 +91,7 @@ export function Sidebar({ className }: SidebarProps) {
             if (hasChildren && !sidebarCollapsed) {
               return (
                 <div key={module.id} className="space-y-1">
-                  <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase">
+                  <div className="px-3 py-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
                     {module.label}
                   </div>
                   {module.children?.map((child) => {
@@ -105,7 +105,7 @@ export function Sidebar({ className }: SidebarProps) {
                       <Link key={child.id} href={child.path}>
                         <div
                           className={cn(
-                            "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                            "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                             isChildActive
                               ? "bg-primary text-primary-foreground"
                               : "hover:bg-accent"
@@ -128,7 +128,7 @@ export function Sidebar({ className }: SidebarProps) {
                     <Link href={module.path}>
                       <div
                         className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                           sidebarCollapsed && "justify-center",
                           isActive
                             ? "bg-primary text-primary-foreground"

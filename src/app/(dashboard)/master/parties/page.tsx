@@ -30,6 +30,7 @@ import {
   fetchPartyByIdApi,
   fetchNextSupplierCodeApi,
   fetchNextCustomerCodeApi,
+  uploadPartyPinCertificateApi,
 } from "@/lib/api/parties";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
@@ -75,6 +76,9 @@ export default function MasterPartiesPage() {
   const [customerCodeLoading, setCustomerCodeLoading] = React.useState(false);
   const [formPhonePrefix, setFormPhonePrefix] = React.useState("+254");
   const [formTaxId, setFormTaxId] = React.useState("");
+  const [pinCertFile, setPinCertFile] = React.useState<File | null>(null);
+  const [pinCertExistingUrl, setPinCertExistingUrl] = React.useState<string | null>(null);
+  const pinCertInputRef = React.useRef<HTMLInputElement>(null);
 
   const label =
     tab === "customers"
@@ -208,6 +212,8 @@ export default function MasterPartiesPage() {
     setFormPhone("");
     setFormPhonePrefix("+254");
     setFormTaxId("");
+    setPinCertFile(null);
+    setPinCertExistingUrl(null);
     setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
     setFormSupplierType(supplierType || "RAW_MATERIAL");
     setFormCustomerCategoryId("");
@@ -248,6 +254,8 @@ export default function MasterPartiesPage() {
     setFormEmail(row.email ?? "");
     setFormPhone(row.phone ?? "");
     setFormTaxId(row.taxId ?? "");
+    setPinCertFile(null);
+    setPinCertExistingUrl((row as PartyRow & { pinCertificateUrl?: string }).pinCertificateUrl ?? null);
     setFormCustomerType(row.customerType ?? "RETAILER");
     setFormSupplierType(row.supplierType ?? "RAW_MATERIAL");
     setFormCustomerCategoryId(row.customerCategoryId ?? "");
@@ -332,12 +340,23 @@ export default function MasterPartiesPage() {
         creditWarningThresholdPct: isCustomerTab && warningPctNum != null && !isNaN(warningPctNum) ? warningPctNum : undefined,
         status: "ACTIVE" as const,
       };
+      let savedId = editingId;
       if (editingId) {
         await updatePartyApi(editingId, payload);
         toast.success(`${label} updated.`);
       } else {
-        await createPartyApi(payload);
+        const created = await createPartyApi(payload);
+        savedId = created.id;
         toast.success(`${label} created.`);
+      }
+      if (pinCertFile && savedId) {
+        try {
+          await uploadPartyPinCertificateApi(savedId, pinCertFile);
+          toast.success("PIN certificate uploaded.");
+        } catch {
+          toast.error("Party saved but PIN certificate upload failed. You can retry from the edit drawer.");
+        }
+        setPinCertFile(null);
       }
       setDrawerOpen(false);
       await refreshParties();
@@ -699,6 +718,40 @@ export default function MasterPartiesPage() {
                   value={formTaxId}
                   onChange={(e) => setFormTaxId(e.target.value)}
                   autoComplete="off"
+                />
+              </div>
+              <div className="space-y-2 pt-2">
+                <Label>PIN certificate <span className="text-muted-foreground text-xs">(optional, PDF or image)</span></Label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pinCertInputRef.current?.click()}
+                    className="shrink-0"
+                  >
+                    <Icons.Paperclip className="h-4 w-4 mr-1.5" />
+                    {pinCertFile ? "Change file" : "Attach file"}
+                  </Button>
+                  {pinCertFile && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[180px]">{pinCertFile.name}</span>
+                  )}
+                  {!pinCertFile && pinCertExistingUrl && (
+                    <span className="text-xs text-emerald-600 flex items-center gap-1">
+                      <Icons.CheckCircle2 className="h-3 w-3" /> Certificate on file
+                    </span>
+                  )}
+                </div>
+                <input
+                  ref={pinCertInputRef}
+                  type="file"
+                  accept="application/pdf,image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setPinCertFile(f);
+                    e.target.value = "";
+                  }}
                 />
               </div>
             </div>

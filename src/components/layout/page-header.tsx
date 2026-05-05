@@ -77,7 +77,7 @@ export function PageHeader({
         <div className="min-w-0 flex-1">
           <h1
             className={cn(
-              "font-semibold text-foreground tracking-tight",
+              "font-bold text-foreground tracking-tight",
               dense ? "text-xl" : "text-2xl",
             )}
           >

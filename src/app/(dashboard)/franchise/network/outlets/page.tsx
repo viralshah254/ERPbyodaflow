@@ -107,6 +107,7 @@ export default function FranchiseOutletsPage() {
         initialPassword: form.initialPassword,
         territory: form.territory?.trim() || undefined,
         managerName: form.managerName?.trim() || undefined,
+        managerPhone: managerPhone.trim() ? `${managerPhonePrefix}${managerPhone.trim()}` : undefined,
       });
       setAddOpen(false);
       setForm(emptyForm);

@@ -134,6 +134,7 @@ export type CreateFranchiseOutletPayload = {
   territory?: string;
   storeFormat?: string;
   managerName?: string;
+  managerPhone?: string;
   firstName?: string;
   lastName?: string;
 };

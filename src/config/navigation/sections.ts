@@ -283,7 +283,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
           },
         ],
       },
-      { key: "franchise-outlet-workspace", label: "Outlet Workspace", href: "/franchise/outlet", icon: "Store", moduleKey: "franchise", requiresFlags: ["franchiseLightErp"], requiresPermissions: ["sales.read"] },
+      { key: "franchise-outlet-workspace", label: "Outlet Workspace", href: "/franchise/outlet", icon: "Store", moduleKey: "franchise", requiresFlags: ["franchiseLightErp"], requiresPermissions: ["sales.read"], requiresOrgRole: "FRANCHISEE" },
       { key: "franchise-commission", label: "Commission & Rebates", href: "/franchise/commission", icon: "Percent", moduleKey: "franchise", termKey: "commission", requiresFlags: ["commissionEngine", "franchiseSettlement"], requiresPermissions: ["franchise.commission.read"] },
       { key: "franchise-royalties", label: "Royalty billing", href: "/franchise/royalties", icon: "Banknote", moduleKey: "franchise", requiresFlags: ["commissionEngine", "franchiseSettlement"], requiresPermissions: ["franchise.commission.read"] },
       { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment", "franchiseNetworkMonitoring"], requiresPermissions: ["inventory.read"] },
