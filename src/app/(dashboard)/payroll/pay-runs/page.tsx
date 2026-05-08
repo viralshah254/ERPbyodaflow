@@ -211,7 +211,7 @@ export default function PayRunsPage() {
         header: "Branch",
         accessor: (r: PayRun) => branchNameById.get(r.branch ?? "") ?? r.branch ?? "—",
       },
-      { id: "totalGross", header: "Gross", accessor: (r: PayRun) => formatMoney(r.totalGross, r.currency) },
+      { id: "totalGross", header: "Period gross", accessor: (r: PayRun) => formatMoney(r.totalGross, r.currency) },
       { id: "totalNet", header: "Net", accessor: (r: PayRun) => formatMoney(r.totalNet, r.currency) },
       {
         id: "employerNssf",
@@ -233,7 +233,7 @@ export default function PayRunsPage() {
     <PageShell>
       <PageHeader
         title="Pay runs"
-        description="Create a pay run with auto-calculated Kenya & Uganda statutory deductions."
+        description="Create a pay run with auto-calculated Kenya & Uganda statutory deductions. Gross pay is the amount for that calendar month, prorated when someone joins or leaves mid-month (Employees shows full monthly contract)."
         breadcrumbs={[
           { label: "Payroll", href: "/payroll/overview" },
           { label: "Pay runs" },
@@ -274,7 +274,7 @@ export default function PayRunsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Pay runs</CardTitle>
-            <CardDescription>Statutory taxes auto-calculated per jurisdiction. Click a run to view / approve / post.</CardDescription>
+            <CardDescription>Statutory taxes auto-calculated per jurisdiction. “Period gross” may be lower than the employee’s monthly contract if they were not employed for the full month. Click a run to view / approve / post.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<PayRun>

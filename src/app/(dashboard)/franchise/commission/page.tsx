@@ -210,7 +210,7 @@ export default function FranchiseCommissionPage() {
     { id: "franchisee", header: "Franchisee", accessor: (r: CommissionSummaryRow) => r.franchiseeName || r.franchiseeCode, sticky: true },
     { id: "runs", header: "Runs", accessor: (r: CommissionSummaryRow) => r.runs },
     { id: "sales", header: "Sales", accessor: (r: CommissionSummaryRow) => formatMoney(r.salesAmount, "KES") },
-    { id: "commission", header: "Outlet earnings", accessor: (r: CommissionSummaryRow) => formatMoney(r.commissionAmount, "KES") },
+    { id: "commission", header: "Franchise earnings", accessor: (r: CommissionSummaryRow) => formatMoney(r.commissionAmount, "KES") },
     { id: "topup", header: "Top-up", accessor: (r: CommissionSummaryRow) => formatMoney(r.topUpAmount, "KES") },
     { id: "payout", header: "Total payout", accessor: (r: CommissionSummaryRow) => formatMoney(r.totalPayout, "KES") },
   ];
@@ -219,7 +219,7 @@ export default function FranchiseCommissionPage() {
     <PageShell>
       <PageHeader
         title="Commission & Rebates"
-        description="Outlet retail commission runs (per-product economics + HQ rules), and margin guarantee top-ups"
+        description="Franchise outlet earnings (per-product economics + HQ rules), margin guarantee top-ups, and WHT deductions"
         breadcrumbs={[
           { label: "Franchise", href: "/franchise/commission" },
           { label: "Commission & Rebates" },

@@ -63,6 +63,8 @@ export default function CommissionRunDetailPage() {
         minFloor?: number | null;
         topUpAmount?: number;
         royaltyWithheldKes?: number;
+        withholdingTaxKes?: number;
+        netCommissionPayoutKes?: number;
       };
       const fid = row.franchiseeId;
       const minFloor = typeof row.minFloor === "number" ? row.minFloor : null;
@@ -82,6 +84,8 @@ export default function CommissionRunDetailPage() {
         minFloor,
         topUpAmount: row.topUpAmount ?? 0,
         royaltyWithheldKes: row.royaltyWithheldKes,
+        withholdingTaxKes: row.withholdingTaxKes,
+        netCommissionPayoutKes: row.netCommissionPayoutKes,
         status,
       };
     }) ?? [];
@@ -96,13 +100,13 @@ export default function CommissionRunDetailPage() {
     { id: "sales", header: "Retail sales", accessor: (r: CommissionRunLineRow) => formatMoney(r.salesAmount, "KES") },
     {
       id: "contract",
-      header: "Contract",
+      header: "Guaranteed commission",
       accessor: (r: CommissionRunLineRow) =>
         r.contractCommissionAmount != null ? formatMoney(r.contractCommissionAmount, "KES") : "—",
     },
     {
       id: "margin",
-      header: "Extra margin",
+      header: "Extra earnings above guide",
       accessor: (r: CommissionRunLineRow) =>
         r.extraRetailMarginAmount != null ? formatMoney(r.extraRetailMarginAmount, "KES") : "—",
     },
@@ -114,7 +118,7 @@ export default function CommissionRunDetailPage() {
     },
     {
       id: "commission",
-      header: "Total earnings",
+      header: "Gross franchise earnings",
       accessor: (r: CommissionRunLineRow) => formatMoney(r.commissionAmount, "KES"),
     },
     { id: "topUp", header: "Top-up", accessor: (r: CommissionRunLineRow) => formatMoney(r.topUpAmount ?? 0, "KES") },
@@ -123,6 +127,22 @@ export default function CommissionRunDetailPage() {
       header: "Royalty withheld",
       accessor: (r: CommissionRunLineRow) =>
         r.royaltyWithheldKes != null ? formatMoney(r.royaltyWithheldKes, "KES") : "—",
+    },
+    {
+      id: "wht",
+      header: "WHT (5% > KES 24k)",
+      accessor: (r: CommissionRunLineRow) =>
+        r.withholdingTaxKes != null
+          ? formatMoney(r.withholdingTaxKes, "KES")
+          : "—",
+    },
+    {
+      id: "netPayout",
+      header: "Net payout",
+      accessor: (r: CommissionRunLineRow) =>
+        r.netCommissionPayoutKes != null
+          ? formatMoney(r.netCommissionPayoutKes, "KES")
+          : "—",
     },
     {
       id: "status",
@@ -194,7 +214,7 @@ export default function CommissionRunDetailPage() {
           <CardContent className="text-sm text-muted-foreground">
             <p>Period: {String(run.periodStart)} – {String(run.periodEnd)}</p>
             <p>
-              Net total payout (after royalty withholding): {formatMoney(run.totalPayout, "KES")} ·{" "}
+              Net franchise payout (after royalty withholding & WHT): {formatMoney(run.totalPayout, "KES")} ·{" "}
               {(run.lineCount ?? run.lines?.length ?? 0) as number}{" "}
               franchisee(s)
             </p>

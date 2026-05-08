@@ -74,6 +74,7 @@ interface ReverseBom {
   code: string;
   productId: string;
   direction: string;
+  isActive: boolean;
   items: BomItem[];
 }
 
@@ -87,11 +88,17 @@ interface PreviewLine {
 }
 
 interface ProcessingBatch {
+  batchUid: string;
   lineIndex: number;
   productId?: string;
   productName: string;
   sku: string;
-  receivedWeightKg: number;
+  /** Physical weight recorded on GRN receipt line */
+  lineTotalWeightKg: number;
+  /** Unallocated subcontract weight on server (opening this dialog) — shared by duplicate rows split from same line */
+  remainingWeightKg: number;
+  /** Weight to send with this subcontract order — same session splits share one line's remainder */
+  inputWeightKg: number;
   species: Species | "";
   processType: ProcessType | "";
   workCenterId: string;
@@ -102,6 +109,17 @@ interface ProcessingBatch {
   alreadyProcessed: boolean;
   unavailableReason?: string;
   previewExpanded: boolean;
+}
+
+function maxInputKgForBatch(batches: ProcessingBatch[], batchIdx: number): number {
+  const b = batches[batchIdx];
+  if (!b || b.alreadyProcessed) return 0;
+  const others = batches
+    .filter(
+      (x, i) => i !== batchIdx && x.lineIndex === b.lineIndex && x.enabled && !x.alreadyProcessed
+    )
+    .reduce((s, x) => s + x.inputWeightKg, 0);
+  return Math.max(0, Math.round((b.remainingWeightKg - others) * 1000) / 1000);
 }
 
 function detectSpecies(productName: string, sku: string): Species | "" {
@@ -116,6 +134,10 @@ function detectSpecies(productName: string, sku: string): Species | "" {
  * 1. BOM whose productId matches the raw input product AND name hints match species/process.
  * 2. BOM matching species + process by name keywords only.
  * 3. No match → empty string (user must pick).
+ *
+ * Tie-break rule: when multiple BOMs satisfy the same tier, prefer workbook-backed reverse
+ * BOMs — those whose code starts with "RBOM-" (case-insensitive) or whose name contains
+ * "(Reverse BOM)". This ensures the full-output disassembly BOM wins over legacy short BOMs.
  */
 function findBom(
   reverseBoms: ReverseBom[],
@@ -138,38 +160,50 @@ function findBom(
     return pt === "FILLETING" ? n.includes("fillet") : n.includes("gutt");
   }
 
-  // Priority 1: product ID match + process/species name match
+  /** Among a set of candidates, prefer RBOM-* codes then "(Reverse BOM)" names. */
+  function preferRbom(candidates: ReverseBom[]): ReverseBom | undefined {
+    if (candidates.length === 0) return undefined;
+    if (candidates.length === 1) return candidates[0];
+    const rbom = candidates.find((b) => /^rbom-/i.test(b.code));
+    if (rbom) return rbom;
+    const byName = candidates.find((b) => b.name.toLowerCase().includes("(reverse bom)"));
+    return byName ?? candidates[0];
+  }
+
+  // Priority 1: product ID match + species + process name match
   if (inputProductId && processType) {
-    const p1 = reverseBoms.find(
-      (b) =>
-        b.productId === inputProductId &&
-        (!species || nameMatchesSpecies(b.name, species)) &&
-        nameMatchesProcess(b.name, processType)
+    const p1 = preferRbom(
+      reverseBoms.filter(
+        (b) =>
+          b.productId === inputProductId &&
+          (!species || nameMatchesSpecies(b.name, species)) &&
+          nameMatchesProcess(b.name, processType)
+      )
     );
     if (p1) return p1.id;
 
-    // Priority 1b: product ID match + process name match only (no species filter yet)
-    const p1b = reverseBoms.find(
-      (b) => b.productId === inputProductId && nameMatchesProcess(b.name, processType)
+    // Priority 1b: product ID + process keyword only (no species filter)
+    const p1b = preferRbom(
+      reverseBoms.filter((b) => b.productId === inputProductId && nameMatchesProcess(b.name, processType))
     );
     if (p1b) return p1b.id;
 
     // Priority 1c: product ID match only
-    const p1c = reverseBoms.find((b) => b.productId === inputProductId);
+    const p1c = preferRbom(reverseBoms.filter((b) => b.productId === inputProductId));
     if (p1c) return p1c.id;
   }
 
   // Priority 2: species + process by name keywords
   if (species && processType) {
-    const p2 = reverseBoms.find(
-      (b) => nameMatchesSpecies(b.name, species) && nameMatchesProcess(b.name, processType)
+    const p2 = preferRbom(
+      reverseBoms.filter((b) => nameMatchesSpecies(b.name, species) && nameMatchesProcess(b.name, processType))
     );
     if (p2) return p2.id;
   }
 
   // Priority 3: process only
   if (processType) {
-    const p3 = reverseBoms.find((b) => nameMatchesProcess(b.name, processType));
+    const p3 = preferRbom(reverseBoms.filter((b) => nameMatchesProcess(b.name, processType)));
     if (p3) return p3.id;
   }
 
@@ -382,6 +416,28 @@ export default function SubcontractingPage() {
     }
   };
 
+  const splitProcessingBatch = (idx: number) => {
+    setProcessingBatches((prev) => {
+      const cur = prev[idx];
+      if (!cur || cur.alreadyProcessed || !cur.available) return prev;
+      const cap = maxInputKgForBatch(prev, idx);
+      if (cap <= 1e-6) return prev;
+      const half = Math.round((cur.inputWeightKg / 2) * 1000) / 1000;
+      const first = Math.min(Math.max(half, 1e-6), cap);
+      const second = Math.round((cur.inputWeightKg - first) * 1000) / 1000;
+      if (second <= 1e-6) return prev;
+      const dup: ProcessingBatch = {
+        ...cur,
+        batchUid: globalThis.crypto.randomUUID(),
+        inputWeightKg: second,
+        enabled: true,
+        previewExpanded: false,
+      };
+      const next = prev.map((b, i) => (i === idx ? { ...b, inputWeightKg: first, previewExpanded: false } : b));
+      return [...next.slice(0, idx + 1), dup, ...next.slice(idx + 1)];
+    });
+  };
+
   const resetOrderForm = () => {
     setOrderGrnId("");
     setProcessingBatches([]);
@@ -393,10 +449,10 @@ export default function SubcontractingPage() {
       return;
     }
     const toCreate = processingBatches.filter(
-      (b) => b.enabled && !b.alreadyProcessed && b.receivedWeightKg > 0
+      (b) => b.enabled && !b.alreadyProcessed && b.inputWeightKg > 1e-6
     );
     if (!toCreate.length) {
-      toast.error("No eligible batches selected. Enable at least one line with recorded received weight.");
+      toast.error("No eligible batches selected. Enable batches with a positive send quantity (kg).");
       return;
     }
     const missing = toCreate.find((b) => !b.workCenterId || !b.processType);
@@ -411,6 +467,32 @@ export default function SubcontractingPage() {
       );
       return;
     }
+    const EPS = 1e-4;
+    const lineTotals = new Map<number, number>();
+    for (const b of toCreate) {
+      const prev = lineTotals.get(b.lineIndex) ?? 0;
+      lineTotals.set(b.lineIndex, Math.round((prev + b.inputWeightKg) * 1000) / 1000);
+    }
+    const over = [...lineTotals.entries()].find(([lineIdx, sum]) => {
+      const ref = toCreate.find((b) => b.lineIndex === lineIdx);
+      const cap = ref?.remainingWeightKg ?? 0;
+      return sum > cap + EPS;
+    });
+    if (over) {
+      toast.error(
+        `Send quantities for one receipt line exceed remaining kilograms (${over[1]} kg > cap). Adjust inputs or remove a split.`
+      );
+      return;
+    }
+    for (let bi = 0; bi < processingBatches.length; bi++) {
+      const b = processingBatches[bi];
+      if (!b.enabled || b.alreadyProcessed) continue;
+      const cap = maxInputKgForBatch(processingBatches, bi);
+      if (b.inputWeightKg > cap + EPS) {
+        toast.error(`"${b.productName}": send quantity exceeds remaining allowed for that line (${cap} kg max).`);
+        return;
+      }
+    }
     setSavingOrder(true);
     let created = 0;
     const errors: string[] = [];
@@ -423,6 +505,7 @@ export default function SubcontractingPage() {
           processType: batch.processType || undefined,
           grnId: orderGrnId,
           grnLineIndex: batch.lineIndex,
+          inputWeightKg: batch.inputWeightKg,
         });
         created++;
       } catch (e) {
@@ -483,10 +566,20 @@ export default function SubcontractingPage() {
       id: "poGrn", header: "PO / GRN",
       accessor: (r: SubcontractOrderRow) => {
         if (!r.purchaseOrderId && !r.grnId) return "—";
+        const poLabel = r.purchaseOrderNumber ?? (r.purchaseOrderId?.length ? r.purchaseOrderId.slice(-8) : "");
+        const grnLabel = r.grnNumber ?? (r.grnId?.length ? r.grnId.slice(-8) : "");
         return (
           <div className="text-xs space-y-0.5">
-            {r.purchaseOrderId && <div className="text-muted-foreground">PO: <span className="font-medium">{r.purchaseOrderId.slice(-8)}</span></div>}
-            {r.grnId && <div className="text-muted-foreground">GRN: <span className="font-medium">{r.grnId.slice(-8)}</span></div>}
+            {r.purchaseOrderId && poLabel ? (
+              <div className="text-muted-foreground">
+                PO: <span className="font-medium font-sans">{poLabel}</span>
+              </div>
+            ) : null}
+            {r.grnId && grnLabel ? (
+              <div className="text-muted-foreground">
+                GRN: <span className="font-medium font-sans">{grnLabel}</span>
+              </div>
+            ) : null}
           </div>
         );
       },
@@ -573,9 +666,9 @@ export default function SubcontractingPage() {
               <SheetHeader>
                 <SheetTitle>Send to processor</SheetTitle>
                 <SheetDescription>
-                  Choose a goods receipt (GRN). Input weight comes only from receipt lines — not from purchase orders.
-                  Each product line can become one processing batch (work center, species, process, BOM).
-                  Receipts with no eligible lines left are omitted from this list.
+                  Choose a goods receipt (GRN). Recorded receipt weight sets the line ceiling; you may send a portion
+                  now and return for the rest, or split one line into multiple batches (e.g. half filleting / half
+                  gutting) before creating orders. Each batch uses the work center rate card for processing fees.
                 </SheetDescription>
               </SheetHeader>
 
@@ -583,8 +676,9 @@ export default function SubcontractingPage() {
 
                 {!grnsLoading && availableGrns.length === 0 && (
                   <p className="text-sm text-muted-foreground rounded-md border border-dashed px-3 py-2">
-                    No posted GRNs have open receipt lines for subcontracting right now. Lines already sent to a processor
-                    (or receipts with no weight) are excluded.
+                    No posted GRNs have open receipt kilograms for subcontracting right now. Lines with no weight, or where
+                    every kilogram is already allocated to subcontract orders, are excluded — you can partial-send a line
+                    and return later while weight remains.
                   </p>
                 )}
 
@@ -599,12 +693,25 @@ export default function SubcontractingPage() {
                       const lines = grn?.lineAvailability ?? [];
                       const batches: ProcessingBatch[] = lines.map((l) => {
                         const sp = detectSpecies(l.productName, l.sku);
+                        const lineTotal =
+                          typeof l.receivedWeightKg === "number"
+                            ? l.receivedWeightKg
+                            : typeof l.remainingWeightKg === "number"
+                              ? l.remainingWeightKg
+                              : 0;
+                        const remaining =
+                          typeof l.remainingWeightKg === "number"
+                            ? l.remainingWeightKg
+                            : lineTotal;
                         return {
+                          batchUid: globalThis.crypto.randomUUID(),
                           lineIndex: l.lineIndex,
                           productId: l.productId,
                           productName: l.productName,
                           sku: l.sku,
-                          receivedWeightKg: l.receivedWeightKg,
+                          lineTotalWeightKg: lineTotal,
+                          remainingWeightKg: remaining,
+                          inputWeightKg: Math.max(0, remaining),
                           species: sp,
                           processType: "",
                           workCenterId: "",
@@ -668,7 +775,7 @@ export default function SubcontractingPage() {
                     <p className="text-sm font-medium">
                       Processing batches
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        ({processingBatches.filter((b) => b.enabled && !b.alreadyProcessed && b.receivedWeightKg > 0).length}{" "}
+                        ({processingBatches.filter((b) => b.enabled && !b.alreadyProcessed && b.inputWeightKg > 0).length}{" "}
                         selected · {processingBatches.filter((b) => b.available).length} actionable line(s) on this GRN ·{" "}
                         {processingBatches.length} line(s) total shown)
                       </span>
@@ -676,11 +783,12 @@ export default function SubcontractingPage() {
                     {processingBatches.map((batch, idx) => {
                       const batchWc = workCenters.find((w) => w.id === batch.workCenterId) ?? null;
                       const batchBom = reverseBoms.find((b) => b.id === batch.bomId) ?? null;
-                      const batchPreview = buildPreviewLines(batchBom, batch.receivedWeightKg, batchWc, batch.processType, batch.species);
+                      const maxKg = maxInputKgForBatch(processingBatches, idx);
+                      const batchPreview = buildPreviewLines(batchBom, batch.inputWeightKg, batchWc, batch.processType, batch.species);
                       const batchFee = batchPreview.reduce((s, l) => s + (l.amount ?? 0), 0);
                       return (
                         <div
-                          key={batch.lineIndex}
+                          key={batch.batchUid}
                           className={`border rounded-lg p-4 space-y-3 transition-opacity ${batch.alreadyProcessed ? "opacity-50" : !batch.enabled ? "opacity-60" : ""}`}
                         >
                           {/* Card header */}
@@ -706,9 +814,14 @@ export default function SubcontractingPage() {
                                     : "Already sent to processor"}
                                 </Badge>
                               ) : (
-                                <div className="flex items-center gap-1 text-sm font-semibold">
-                                  <Icons.Weight className="h-3.5 w-3.5 text-muted-foreground" />
-                                  {batch.receivedWeightKg.toLocaleString()} kg
+                                <div className="text-right leading-tight">
+                                  <div className="flex items-center justify-end gap-1 text-sm font-semibold">
+                                    <Icons.Weight className="h-3.5 w-3.5 text-muted-foreground" />
+                                    Line {batch.lineTotalWeightKg.toLocaleString()} kg
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    {batch.remainingWeightKg.toLocaleString()} kg open for subcontract
+                                  </p>
                                 </div>
                               )}
                             </div>
@@ -717,6 +830,41 @@ export default function SubcontractingPage() {
                           {/* Config fields (only when enabled + not already processed) */}
                           {!batch.alreadyProcessed && batch.enabled && (
                             <div className="space-y-3 pt-1">
+                              <div className="flex flex-wrap items-end gap-2">
+                                <div className="space-y-1 flex-1 min-w-[140px]">
+                                  <Label className="text-xs">Send quantity (kg) *</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.001"
+                                    min={0}
+                                    className="h-8 text-xs"
+                                    value={Number.isFinite(batch.inputWeightKg) ? batch.inputWeightKg : ""}
+                                    onChange={(e) => {
+                                      const raw = Number(e.target.value);
+                                      const cap = maxInputKgForBatch(processingBatches, idx);
+                                      if (!Number.isFinite(raw)) return;
+                                      const next = Math.min(Math.max(raw, 0), cap);
+                                      updateBatch(idx, {
+                                        inputWeightKg: Math.round(next * 1000) / 1000,
+                                      });
+                                    }}
+                                  />
+                                  <p className="text-[11px] text-muted-foreground">Max now: {maxKg.toLocaleString()} kg</p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 shrink-0"
+                                  disabled={
+                                    batch.alreadyProcessed || batch.inputWeightKg <= 2
+                                  }
+                                  onClick={() => splitProcessingBatch(idx)}
+                                >
+                                  Split batch
+                                </Button>
+                              </div>
+
                               {/* Work center */}
                               <div className="space-y-1">
                                 <Label className="text-xs">Work center *</Label>
@@ -825,7 +973,7 @@ export default function SubcontractingPage() {
                 </Button>
                 {(() => {
                   const eligibleCount = processingBatches.filter(
-                    (b) => b.enabled && !b.alreadyProcessed && b.receivedWeightKg > 0
+                    (b) => b.enabled && !b.alreadyProcessed && b.inputWeightKg > 0
                   ).length;
                   return (
                     <Button

@@ -9,6 +9,9 @@ export type UserRow = {
   roleNames: string[];
   /** True when a Firebase account exists (admin can set password). */
   hasSignIn?: boolean;
+  phoneNumber?: string | null;
+  jobTitle?: string | null;
+  employeeCode?: string | null;
   stagedForCheckout?: boolean;
   checkout?: {
     id: string | null;

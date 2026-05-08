@@ -570,3 +570,77 @@ export async function fetchLeaveCalendarApi(params: { year: number; month?: numb
     }[];
   }>("/api/payroll/leave/calendar", { params: toQueryParams(params) });
 }
+
+// ─── P9 Tax Deduction Cards ───────────────────────────────────────────────────
+
+export interface P9MonthRow {
+  month: number;
+  basicSalary: number;
+  benefitsInKind: number;
+  valueOfQuarters: number;
+  totalGross: number;
+  pension: number;
+  prmf: number;
+  ahl: number;
+  shif: number;
+  ownerOccupiedInterest: number;
+  chargeablePay: number;
+  personalRelief: number;
+  insuranceRelief: number;
+  taxBeforeRelief: number;
+  netPaye: number;
+}
+
+export interface P9CertRow {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeePin: string;
+  taxYear: number;
+  monthsCovered: number;
+  totalChargeablePay: number;
+  totalTax: number;
+  generatedAt: string;
+  lastUpdatedByPayRunId: string;
+}
+
+export interface P9CertDetail extends P9CertRow {
+  employerName: string;
+  employerPin: string;
+  months: P9MonthRow[];
+}
+
+export async function fetchP9ListApi(year?: number): Promise<{ year: number; items: P9CertRow[] }> {
+  requireLiveApi("P9 tax certificates");
+  return apiRequest<{ year: number; items: P9CertRow[] }>("/api/payroll/p9", {
+    params: year ? { year: String(year) } : undefined,
+  });
+}
+
+export async function fetchP9ByEmployeeApi(employeeId: string, year?: number): Promise<P9CertDetail> {
+  requireLiveApi("P9 certificate detail");
+  return apiRequest<P9CertDetail>(`/api/payroll/p9/${encodeURIComponent(employeeId)}`, {
+    params: year ? { year: String(year) } : undefined,
+  });
+}
+
+export async function generateP9Api(year?: number): Promise<{ year: number; generated: number }> {
+  requireLiveApi("P9 regeneration");
+  return apiRequest<{ year: number; generated: number }>("/api/payroll/p9/generate", {
+    method: "POST",
+    body: year ? { year } : {},
+  });
+}
+
+export async function regenerateP9ForEmployeeApi(employeeId: string, year?: number): Promise<{ generated: boolean }> {
+  requireLiveApi("P9 regeneration");
+  return apiRequest<{ generated: boolean }>(
+    `/api/payroll/p9/${encodeURIComponent(employeeId)}/regenerate`,
+    { method: "POST", body: {}, params: year ? { year: String(year) } : undefined }
+  );
+}
+
+/** Returns the URL string for downloading a P9 PDF — use with downloadFile() or as href. */
+export function p9PdfUrl(employeeId: string, year: number): string {
+  return `/api/payroll/p9/${encodeURIComponent(employeeId)}/pdf?year=${year}`;
+}

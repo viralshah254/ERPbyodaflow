@@ -29,6 +29,7 @@ import {
   fetchWhatsAppIntegrationApi,
   getWhatsAppWebhookUrlFromFrontend,
   updateWhatsAppIntegrationApi,
+  syncWhatsAppCatalogApi,
 } from "@/lib/api/whatsapp-integration";
 import type { WhatsAppIntegrationApiResponse } from "@/lib/api/whatsapp-integration";
 
@@ -56,6 +57,14 @@ export default function WhatsAppIntegrationSettingsPage() {
   const [orderCurrency, setOrderCurrency] = React.useState("");
   const [autoApprove, setAutoApprove] = React.useState(false);
   const [integrationUserId, setIntegrationUserId] = React.useState<string>("");
+  // Meta Graph API (catalog sync)
+  const [metaAccessToken, setMetaAccessToken] = React.useState("");
+  const [metaCatalogId, setMetaCatalogId] = React.useState("");
+  const [metaBusinessAccountId, setMetaBusinessAccountId] = React.useState("");
+  const [metaTokenConfigured, setMetaTokenConfigured] = React.useState(false);
+  const [catalogLastSyncedAt, setCatalogLastSyncedAt] = React.useState<string | undefined>(undefined);
+  const [catalogLastSyncError, setCatalogLastSyncError] = React.useState<string | undefined>(undefined);
+  const [syncing, setSyncing] = React.useState(false);
 
   const applyResponse = React.useCallback((data: WhatsAppIntegrationApiResponse) => {
     setEnabled(!!data.enabled);
@@ -67,6 +76,11 @@ export default function WhatsAppIntegrationSettingsPage() {
     setIntegrationUserId(data.integrationUserId ?? "");
     setPlatform(data.platformHints);
     setCallbackUrl(data.webhookCallbackUrl ?? getWhatsAppWebhookUrlFromFrontend());
+    setMetaTokenConfigured(!!data.metaAccessTokenConfigured);
+    setMetaCatalogId(data.metaCatalogId ?? "");
+    setMetaBusinessAccountId(data.metaBusinessAccountId ?? "");
+    setCatalogLastSyncedAt(data.catalogLastSyncedAt);
+    setCatalogLastSyncError(data.catalogLastSyncError);
   }, []);
 
   const load = React.useCallback(async () => {
@@ -106,6 +120,9 @@ export default function WhatsAppIntegrationSettingsPage() {
         orderCurrency: orderCurrency.trim().toUpperCase() || undefined,
         autoApproveSalesOrders: autoApprove,
         integrationUserId: integrationUserId || undefined,
+        ...(metaAccessToken.trim() ? { metaAccessToken: metaAccessToken.trim() } : {}),
+        metaCatalogId: metaCatalogId.trim() || undefined,
+        metaBusinessAccountId: metaBusinessAccountId.trim() || undefined,
       });
       applyResponse(data);
       toast.success("WhatsApp integration settings saved.");
@@ -306,15 +323,187 @@ export default function WhatsAppIntegrationSettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Meta Catalog Sync */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Meta checklist</CardTitle>
-            <CardDescription>Typical steps in Meta Developer Console</CardDescription>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Icons.RefreshCw className="h-4 w-4 text-muted-foreground" />
+              Meta Commerce catalog sync
+            </CardTitle>
+            <CardDescription>
+              Push your ERP product catalog to Meta Commerce so retail customers see your products in WhatsApp
+              shopping. Product SKU / code must match the <code className="text-xs bg-muted px-1 rounded">retailer_id</code>{" "}
+              in your Meta catalog for order parsing to work.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground space-y-2 list-disc pl-5">
-            <li>WhatsApp product → Configuration → Webhook: paste the callback URL and subscribe to messages.</li>
-            <li>Use the verify token configured on your ERP server (shared for all tenants on this deployment).</li>
-            <li>Copy the phone number ID for this business number into the field above and save.</li>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="meta-token">Meta System User access token</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-1">
+                Long-lived token from Meta Business Manager → System Users → Generate token (scoped to{" "}
+                <code className="text-xs bg-muted px-0.5 rounded">catalog_management</code>,{" "}
+                <code className="text-xs bg-muted px-0.5 rounded">business_management</code>). Written once and stored
+                securely — never returned.
+              </p>
+              <Input
+                id="meta-token"
+                type="password"
+                className="mt-1 font-mono text-sm"
+                value={metaAccessToken}
+                onChange={(e) => setMetaAccessToken(e.target.value)}
+                placeholder={metaTokenConfigured ? "●●●●●●●●  (already configured — leave blank to keep)" : "Paste token here"}
+                disabled={!canSave}
+              />
+              {metaTokenConfigured && !metaAccessToken && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                  <Icons.CheckCircle className="h-3 w-3" /> Token configured
+                </p>
+              )}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="meta-catalog">Catalog ID</Label>
+                <Input
+                  id="meta-catalog"
+                  className="mt-1 font-mono text-sm"
+                  value={metaCatalogId}
+                  onChange={(e) => setMetaCatalogId(e.target.value)}
+                  placeholder="e.g. 1234567890123456"
+                  disabled={!canSave}
+                />
+              </div>
+              <div>
+                <Label htmlFor="meta-biz">Business Account ID</Label>
+                <Input
+                  id="meta-biz"
+                  className="mt-1 font-mono text-sm"
+                  value={metaBusinessAccountId}
+                  onChange={(e) => setMetaBusinessAccountId(e.target.value)}
+                  placeholder="e.g. 9876543210"
+                  disabled={!canSave}
+                />
+              </div>
+            </div>
+            {(catalogLastSyncedAt || catalogLastSyncError) && (
+              <div className="text-xs space-y-1">
+                {catalogLastSyncedAt && (
+                  <p className="text-muted-foreground flex items-center gap-1">
+                    <Icons.Clock className="h-3 w-3" />
+                    Last synced: {new Date(catalogLastSyncedAt).toLocaleString()}
+                  </p>
+                )}
+                {catalogLastSyncError && (
+                  <p className="text-destructive flex items-center gap-1">
+                    <Icons.AlertCircle className="h-3 w-3" />
+                    Last error: {catalogLastSyncError}
+                  </p>
+                )}
+              </div>
+            )}
+            {canSave && (
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={syncing || !metaTokenConfigured || !metaCatalogId}
+                  onClick={async () => {
+                    setSyncing(true);
+                    try {
+                      const r = await syncWhatsAppCatalogApi();
+                      toast.success(`Catalog synced — ${r.synced} product(s) pushed to Meta.`);
+                      void load();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Sync failed.");
+                    } finally {
+                      setSyncing(false);
+                    }
+                  }}
+                >
+                  {syncing ? (
+                    <><Icons.RefreshCw className="mr-2 h-3.5 w-3.5 animate-spin" /> Syncing…</>
+                  ) : (
+                    <><Icons.RefreshCw className="mr-2 h-3.5 w-3.5" /> Sync catalog now</>
+                  )}
+                </Button>
+                {(!metaTokenConfigured || !metaCatalogId) && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Save a Meta access token and Catalog ID first to enable sync.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Onboarding Checklist */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Icons.ListChecks className="h-4 w-4 text-muted-foreground" />
+              Setup checklist
+            </CardTitle>
+            <CardDescription>Complete all steps for seamless WhatsApp retail commerce.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {[
+              {
+                done: enabled && parsePhoneIdsBlock(phoneIdsText).length > 0,
+                label: "WhatsApp ingestion enabled with at least one phone number ID",
+                href: undefined,
+              },
+              {
+                done: platform?.verifyTokenConfigured ?? false,
+                label: "WEBHOOK_VERIFY_TOKEN configured on the server",
+                href: undefined,
+              },
+              {
+                done: !!callbackUrl,
+                label: (
+                  <span>
+                    Webhook registered in Meta Developer Console:{" "}
+                    {callbackUrl ? (
+                      <code className="text-xs bg-muted px-1 rounded break-all">{callbackUrl}</code>
+                    ) : (
+                      <span className="text-muted-foreground">not yet resolved</span>
+                    )}
+                  </span>
+                ),
+              },
+              {
+                done: metaTokenConfigured,
+                label: "Meta System User access token stored (for catalog sync)",
+              },
+              {
+                done: !!metaCatalogId,
+                label: "Meta Catalog ID configured",
+              },
+              {
+                done: !!catalogLastSyncedAt && !catalogLastSyncError,
+                label: "ERP catalog synced to Meta Commerce at least once",
+              },
+              {
+                done: branches.some((b) => b.latitude != null && b.longitude != null),
+                label: (
+                  <span>
+                    At least one branch has GPS coordinates (for nearest-outlet routing).{" "}
+                    <Link href="/settings/branches" className="underline text-primary">
+                      Manage branches
+                    </Link>
+                  </span>
+                ),
+              },
+            ].map((item, i) => (
+              <div key={i} className="flex items-start gap-2.5">
+                {item.done ? (
+                  <Icons.CheckCircle className="h-4 w-4 mt-0.5 shrink-0 text-emerald-500" />
+                ) : (
+                  <Icons.Circle className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className={item.done ? "text-foreground" : "text-muted-foreground"}>
+                  {item.label}
+                </span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

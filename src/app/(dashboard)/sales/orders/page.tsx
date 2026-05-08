@@ -255,7 +255,17 @@ export default function SalesOrdersPage() {
       {
         id: "status",
         header: "Status",
-        accessor: (r: SalesDocRow) => <StatusBadge status={r.status} />,
+        accessor: (r: SalesDocRow) => (
+          <div className="flex items-center gap-2">
+            <StatusBadge status={r.status} />
+            {(r.orderChannel === "WHATSAPP" || r.reference?.startsWith("WA:")) && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 text-green-700 border-green-300 dark:text-green-400 dark:border-green-700">
+                <Icons.MessageCircle className="h-2.5 w-2.5" />
+                WhatsApp
+              </Badge>
+            )}
+          </div>
+        ),
       },
       {
         id: "actions",

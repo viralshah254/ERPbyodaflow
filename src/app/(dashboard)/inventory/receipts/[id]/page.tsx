@@ -440,7 +440,7 @@ export default function ReceiptDetailPage() {
                   </TooltipTrigger>
                   {!hasAnyCosts && (
                     <TooltipContent>
-                      Apply other costs before posting
+                      Apply additional costs before posting
                     </TooltipContent>
                   )}
                 </Tooltip>
@@ -490,7 +490,7 @@ export default function ReceiptDetailPage() {
             )}
             {hasLandedCostMultiCurrency && (
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/inventory/costing?sourceId=${id}`}>Add other costs</Link>
+                <Link href={`/inventory/costing?sourceId=${id}`}>Add additional costs</Link>
               </Button>
             )}
             {putawayLink ? (
@@ -524,7 +524,7 @@ export default function ReceiptDetailPage() {
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
                   {hasAnyCosts
                     ? "This GRN is a draft — post it to update inventory."
-                    : "Apply other costs before posting this GRN."}
+                    : "Apply additional costs before posting this GRN."}
                 </span>
                 {hasAnyCosts ? (
                   <Button
@@ -597,7 +597,7 @@ export default function ReceiptDetailPage() {
                 <Button size="sm" variant="outline" asChild>
                   <Link href={`/inventory/costing?sourceId=${grn.id}`}>
                     <Icons.TrendingUp className="mr-1.5 h-3.5 w-3.5" />
-                    Apply other costs
+                    Apply additional costs
                   </Link>
                 </Button>
                 {hasCashWeightAudit && (
@@ -880,7 +880,7 @@ export default function ReceiptDetailPage() {
             {(() => {
               const costCentreLabels: Record<string, string> = {
                 currency_conversion: "FX conversion",
-                permits: "Permits & customs",
+                permits: "Additional costs",
                 inbound_logistics: "Inbound logistics",
                 other: "Other charges",
               };
@@ -928,13 +928,13 @@ export default function ReceiptDetailPage() {
                     quantityKg={totalReceivedWeight || totalQty}
                     lines={[
                       { label: "Goods value", amount: grn.totalAmount ?? 0 },
-                      { label: "Other costs (not yet allocated)", amount: 0 },
+                      { label: "Additional costs (not yet allocated)", amount: 0 },
                     ]}
                   />
                   <p className="text-xs text-muted-foreground px-1">
-                    Cost per kg above excludes other costs.{" "}
+                    Cost per kg above excludes additional costs.{" "}
                     <Link href={`/inventory/costing?sourceId=${id}`} className="underline underline-offset-2 text-primary">
-                      Allocate other costs
+                      Allocate additional costs
                     </Link>{" "}
                     to get the true cost per kg.
                   </p>
@@ -970,7 +970,7 @@ export default function ReceiptDetailPage() {
                 { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "completed" : "upcoming" },
                 {
                   id: "landed",
-                  label: "Other costs allocated",
+                  label: "Additional costs allocated",
                   status: (landedAllocation || processingAllocation) ? "completed" : ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "current" : "upcoming",
                   detail: (landedAllocation || processingAllocation)
                     ? [

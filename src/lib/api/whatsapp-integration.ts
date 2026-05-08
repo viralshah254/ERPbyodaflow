@@ -13,6 +13,12 @@ export type WhatsAppIntegrationDto = {
   orderCurrency?: string;
   autoApproveSalesOrders: boolean;
   integrationUserId?: string;
+  /** True when a Meta access token is stored (token itself is never returned). */
+  metaAccessTokenConfigured?: boolean;
+  metaCatalogId?: string;
+  metaBusinessAccountId?: string;
+  catalogLastSyncedAt?: string;
+  catalogLastSyncError?: string;
 };
 
 export type WhatsAppIntegrationApiResponse = WhatsAppIntegrationDto & {
@@ -35,12 +41,20 @@ export function getWhatsAppWebhookUrlFromFrontend(): string {
 
 export async function updateWhatsAppIntegrationApi(
   patch: Partial<
-    Omit<WhatsAppIntegrationApiResponse, "webhookCallbackUrl" | "webhookPath" | "platformHints">
+    Omit<WhatsAppIntegrationApiResponse, "webhookCallbackUrl" | "webhookPath" | "platformHints" | "metaAccessTokenConfigured"> & { metaAccessToken?: string }
   >
 ): Promise<WhatsAppIntegrationApiResponse> {
   requireLiveApi("WhatsApp integration settings");
   return apiRequest<WhatsAppIntegrationApiResponse>("/api/settings/integrations/whatsapp", {
     method: "PATCH",
     body: patch,
+  });
+}
+
+export async function syncWhatsAppCatalogApi(): Promise<{ ok: boolean; synced: number }> {
+  requireLiveApi("WhatsApp catalog sync");
+  return apiRequest<{ ok: boolean; synced: number }>("/api/settings/integrations/whatsapp/sync-catalog", {
+    method: "POST",
+    body: {},
   });
 }

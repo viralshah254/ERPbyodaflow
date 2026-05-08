@@ -120,6 +120,12 @@ export default function SubcontractOrderDetailPage() {
     []
   );
   const [lineActualKg, setLineActualKg] = React.useState<string[]>([]);
+  // packingMode per line index: "STANDARD" | "CUSTOM"
+  const [linePackingMode, setLinePackingMode] = React.useState<Record<number, "STANDARD" | "CUSTOM">>({});
+  // Custom packing params per line index
+  const [linePackagingType, setLinePackagingType] = React.useState<Record<number, string>>({});
+  const [linePackUnitCount, setLinePackUnitCount] = React.useState<Record<number, string>>({});
+  const [linePackCostPerUnit, setLinePackCostPerUnit] = React.useState<Record<number, string>>({});
 
   const reload = React.useCallback(async () => {
     const [r, logs, yields] = await Promise.allSettled([
@@ -190,7 +196,27 @@ export default function SubcontractOrderDetailPage() {
 
   const openReceiveSheet = () => {
     if (!order || order.status !== "WIP") return;
+    // Initialize from planned kg (plannedQuantity), not quantity which may already be in boxes
     setLineActualKg((order.lines ?? []).map((l) => String(l.plannedQuantity ?? l.quantity)));
+    // Default all output lines to STANDARD packing
+    const defaultModes: Record<number, "STANDARD" | "CUSTOM"> = {};
+    const defaultTypes: Record<number, string> = {};
+    const defaultCounts: Record<number, string> = {};
+    const defaultCosts: Record<number, string> = {};
+    (order.lines ?? []).forEach((l, i) => {
+      if (l.type === "OUTPUT_PRIMARY" || l.type === "OUTPUT_SECONDARY") {
+        defaultModes[i] = "STANDARD";
+        defaultTypes[i] = "BOX";
+        const packSize = (l as any).packSizeKg;
+        const planned = l.plannedQuantity ?? l.quantity;
+        defaultCounts[i] = packSize && packSize > 0 ? String(Math.floor(planned / packSize)) : String(planned);
+        defaultCosts[i] = String((l as any).packagingCostPerUnit ?? 0);
+      }
+    });
+    setLinePackingMode(defaultModes);
+    setLinePackagingType(defaultTypes);
+    setLinePackUnitCount(defaultCounts);
+    setLinePackCostPerUnit(defaultCosts);
     setReceiveSheetOpen(true);
   };
 
@@ -201,11 +227,31 @@ export default function SubcontractOrderDetailPage() {
     try {
       const actualLineQuantities = (order.lines ?? []).map((_, i) => ({
         lineIndex: i,
-        quantity: Math.max(0, Number.parseFloat(lineActualKg[i] ?? "0") || 0),
+        // send quantityKg so the backend knows we're providing actual kg (not boxes)
+        quantityKg: Math.max(0, Number.parseFloat(lineActualKg[i] ?? "0") || 0),
       }));
+      // Build packing overrides for OUTPUT lines
+      type PackingOverrideItem =
+        | { lineIndex: number; packingMode: "STANDARD" }
+        | { lineIndex: number; packingMode: "CUSTOM"; packagingType: "BOX" | "SACK" | "MANUAL"; packUnitCount: number; packagingCostPerUnit: number };
+      const packingOverrides: PackingOverrideItem[] = (order.lines ?? []).flatMap((l, i) => {
+        if (l.type !== "OUTPUT_PRIMARY" && l.type !== "OUTPUT_SECONDARY") return [] as PackingOverrideItem[];
+        const mode = linePackingMode[i] ?? "STANDARD";
+        if (mode === "STANDARD") {
+          return [{ lineIndex: i, packingMode: "STANDARD" as const }] as PackingOverrideItem[];
+        }
+        return [{
+          lineIndex: i,
+          packingMode: "CUSTOM" as const,
+          packagingType: (linePackagingType[i] ?? "BOX") as "BOX" | "SACK" | "MANUAL",
+          packUnitCount: Math.max(0, parseInt(linePackUnitCount[i] ?? "0", 10) || 0),
+          packagingCostPerUnit: Math.max(0, parseFloat(linePackCostPerUnit[i] ?? "0") || 0),
+        }] as PackingOverrideItem[];
+      });
       await receiveSubcontractOrder(order.id, {
         ...(wid ? { warehouseId: wid } : {}),
         actualLineQuantities,
+        packingOverrides,
       });
       toast.success("Order received with actual weights. Stock and fees updated.");
       setReceiveSheetOpen(false);
@@ -220,32 +266,119 @@ export default function SubcontractOrderDetailPage() {
 
   const lineColumns = React.useMemo(
     () => {
+      const isReceived = order?.status === "RECEIVED";
       const cols: Array<{
         id: string;
         header: string;
         accessor: (r: SubcontractOrderLineRow) => React.ReactNode;
         sticky?: boolean;
       }> = [
-        { id: "type", header: "Type", accessor: (r: SubcontractOrderLineRow) => r.type, sticky: true },
-        { id: "sku", header: "SKU", accessor: (r: SubcontractOrderLineRow) => r.sku },
-        { id: "product", header: "Product", accessor: (r: SubcontractOrderLineRow) => r.productName },
-    ];
-      if (order?.status === "RECEIVED") {
+        {
+          id: "type",
+          header: "Type",
+          accessor: (r) => (
+            <span className={
+              r.type === "INPUT" ? "text-muted-foreground" :
+              r.type === "OUTPUT_PRIMARY" ? "text-green-700 font-medium dark:text-green-400" :
+              r.type === "OUTPUT_SECONDARY" ? "text-blue-700 dark:text-blue-400" :
+              "text-orange-600"
+            }>
+              {r.type.replace("OUTPUT_", "").replace("_", " ")}
+            </span>
+          ),
+          sticky: true,
+        },
+        { id: "product", header: "Product", accessor: (r) => r.productName },
+      ];
+
+      // Planned kg column for received orders
+      if (isReceived) {
         cols.push({
           id: "planned",
           header: "Planned kg",
-          accessor: (r: SubcontractOrderLineRow) =>
-            `${(r.plannedQuantity ?? r.quantity).toLocaleString()} ${r.uom}`,
+          accessor: (r) => {
+            const planned = r.plannedQuantity ?? r.quantity;
+            return r.type === "INPUT" ? `${planned.toLocaleString()} kg` :
+              r.type !== "WASTE" ? `${planned.toLocaleString()} kg` : "—";
+          },
         });
       }
+
+      // Actual kg (always shown, label differs by status)
+      cols.push({
+        id: "quantity_kg",
+        header: isReceived ? "Actual kg" : "Planned kg",
+        accessor: (r) => {
+          const kg = isReceived
+            ? (r.quantityKg ?? (r.packSizeKg && r.packSizeKg > 0 ? r.quantity * r.packSizeKg : r.quantity))
+            : (r.plannedQuantity ?? r.quantity);
+          return `${kg.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`;
+        },
+      });
+
+      // Stock units (boxes/sacks) column for packed outputs
+      cols.push({
+        id: "stock_units",
+        header: isReceived ? "Stock units" : "Planned units",
+        accessor: (r) => {
+          if (r.type === "INPUT" || r.type === "WASTE") return "—";
+          const packSize = r.packSizeKg;
+          if (!packSize || packSize <= 0) return "kg tracked";
+          const units = isReceived
+            ? (r.stockUnits ?? r.quantity)
+            : (r.plannedStockUnits ?? Math.floor((r.plannedQuantity ?? r.quantity) / packSize));
+          const uomLabel = r.uom && r.uom !== "KG" ? r.uom : "box";
+          return (
+            <span className="font-medium">
+              {units.toLocaleString()} {units === 1 ? uomLabel : `${uomLabel}es`}
+              <span className="text-muted-foreground font-normal"> @ {packSize}kg</span>
+            </span>
+          );
+        },
+      });
+
+      // Cost columns for received orders
+      if (isReceived) {
+        cols.push(
+          {
+            id: "cost_per_kg",
+            header: "Cost/kg",
+            accessor: (r) => r.costPerKg != null ? formatMoney(r.costPerKg, "KES") : "—",
+          },
+          {
+            id: "cost_per_unit",
+            header: "Cost/box",
+            accessor: (r) =>
+              r.costPerStockUnit != null ? formatMoney(r.costPerStockUnit, "KES") :
+              r.packSizeKg == null && r.costPerKg != null ? formatMoney(r.costPerKg, "KES") :
+              "—",
+          }
+        );
+      }
+
       cols.push(
         {
-          id: "quantity",
-          header: order?.status === "RECEIVED" ? "Actual kg" : "Qty",
-          accessor: (r: SubcontractOrderLineRow) => `${r.quantity.toLocaleString()} ${r.uom}`,
-        },
-        { id: "fee", header: "Fee/unit", accessor: (r: SubcontractOrderLineRow) => r.processingFeePerUnit != null ? formatMoney(r.processingFeePerUnit, "KES") : "—" },
-        { id: "amount", header: "Amount", accessor: (r: SubcontractOrderLineRow) => r.amount != null ? formatMoney(r.amount, "KES") : "—" }
+          id: "amount",
+          header: isReceived ? "Output cost" : "Fee + packaging",
+          accessor: (r) => {
+            const totalCost = (r as any).totalOutputCost ?? r.amount;
+            if (totalCost == null) return "—";
+            if (isReceived && (r as any).processingFeeShare != null) {
+              const feeShare = (r as any).processingFeeShare ?? 0;
+              const packTotal = (r as any).packagingTotal ?? 0;
+              const parts = [
+                feeShare > 0 ? `Fee: ${formatMoney(feeShare, "KES")}` : null,
+                packTotal > 0 ? `Pack: ${formatMoney(packTotal, "KES")}` : null,
+              ].filter(Boolean);
+              return (
+                <span title={parts.join(" + ")} className="tabular-nums">
+                  {formatMoney(totalCost, "KES")}
+                </span>
+              );
+            }
+            return formatMoney(totalCost, "KES");
+          },
+        }
       );
       return cols;
     },
@@ -279,7 +412,11 @@ export default function SubcontractOrderDetailPage() {
   const sumByType = (type: SubcontractOrderLineRow["type"], usePlanned: boolean) =>
     lines
       .filter((l) => l.type === type)
-      .reduce((a, l) => a + (usePlanned ? (l.plannedQuantity ?? l.quantity) : l.quantity), 0);
+      .reduce((a, l) => {
+        if (usePlanned) return a + (l.plannedQuantity ?? l.quantity);
+        // For actual: use quantityKg when available (actual kg, not boxes)
+        return a + (l.quantityKg ?? (l.packSizeKg && l.packSizeKg > 0 ? l.quantity * l.packSizeKg : l.quantity));
+      }, 0);
 
   const plannedInputQty = sumByType("INPUT", true);
   const plannedPrimaryQty = sumByType("OUTPUT_PRIMARY", true);
@@ -355,16 +492,16 @@ export default function SubcontractOrderDetailPage() {
                 <div>
                   <p className="text-muted-foreground">Linked PO</p>
                   {order.purchaseOrderId ? (
-                    <Link href={`/purchasing/orders/${order.purchaseOrderId}`} className="font-medium font-mono text-xs text-primary underline-offset-2 hover:underline">
-                      {order.purchaseOrderId.slice(-12)}
+                    <Link href={`/purchasing/orders/${order.purchaseOrderId}`} className="font-medium text-sm text-primary underline-offset-2 hover:underline">
+                      {order.purchaseOrderNumber ?? order.purchaseOrderId.slice(-12)}
                     </Link>
                   ) : <p className="font-medium">—</p>}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Linked GRN</p>
                   {order.grnId ? (
-                    <Link href={`/inventory/receipts/${order.grnId}`} className="font-medium font-mono text-xs text-primary underline-offset-2 hover:underline">
-                      {order.grnId.slice(-12)}
+                    <Link href={`/inventory/receipts/${order.grnId}`} className="font-medium text-sm text-primary underline-offset-2 hover:underline">
+                      {order.grnNumber ?? order.grnId.slice(-12)}
                     </Link>
                   ) : <p className="font-medium">—</p>}
                 </div>
@@ -420,15 +557,34 @@ export default function SubcontractOrderDetailPage() {
               </Card>
             )}
 
-            <CostImpactPanel
-              title="Processor Cost Impact"
-              currency="KES"
-              quantityKg={order.status === "RECEIVED" ? actualInputQty : plannedInputQty}
-              lines={[
-                { label: "Primary processing fees", amount: feeLines.filter((line) => line.type === "OUTPUT_PRIMARY").reduce((a, line) => a + (line.amount ?? 0), 0) },
-                { label: "Secondary/byproduct fees", amount: feeLines.filter((line) => line.type !== "OUTPUT_PRIMARY").reduce((a, line) => a + (line.amount ?? 0), 0) },
-              ]}
-            />
+            {(() => {
+              const inputQtyForCost = order.status === "RECEIVED" ? actualInputQty : plannedInputQty;
+              const primaryOutputLines = lines.filter((l) => l.type === "OUTPUT_PRIMARY");
+              const secondaryOutputLines = lines.filter((l) => l.type === "OUTPUT_SECONDARY");
+              // Total fee + packaging (stored in amount post-receive)
+              const primaryTotal = primaryOutputLines.reduce((a, l) => a + (l.amount ?? 0), 0);
+              const secondaryTotal = secondaryOutputLines.reduce((a, l) => a + (l.amount ?? 0), 0);
+              // For received orders, show cost-per-kg / cost-per-box summary
+              const primaryKgActual = order.status === "RECEIVED" ? actualPrimaryQty : 0;
+              const primaryCostPerKg = primaryKgActual > 0 ? Math.round(primaryTotal / primaryKgActual * 100) / 100 : 0;
+              const primaryPackSize = primaryOutputLines[0]?.packSizeKg;
+              const primaryCostPerBox = primaryCostPerKg > 0 && primaryPackSize ? Math.round(primaryCostPerKg * primaryPackSize * 100) / 100 : 0;
+              return (
+                <CostImpactPanel
+                  title="Processor Cost Impact"
+                  currency="KES"
+                  quantityKg={inputQtyForCost}
+                  lines={[
+                    { label: "Primary outputs (fee + packaging)", amount: primaryTotal },
+                    ...(secondaryTotal > 0 ? [{ label: "Secondary/byproduct", amount: secondaryTotal }] : []),
+                    ...(order.status === "RECEIVED" && primaryCostPerKg > 0 ? [
+                      { label: `Cost/kg (primary)`, amount: primaryCostPerKg },
+                      ...(primaryCostPerBox > 0 ? [{ label: `Cost/box (${primaryPackSize}kg)`, amount: primaryCostPerBox }] : []),
+                    ] : []),
+                  ]}
+                />
+              );
+            })()}
             {drilldown && (
               <Card>
                 <CardHeader>
@@ -586,33 +742,183 @@ export default function SubcontractOrderDetailPage() {
                     </div>
                   ) : null}
                   {primaryRows.length > 0 ? (
-                    <div className="grid gap-3">
+                    <div className="grid gap-4">
                       <h3 className="text-sm font-semibold tracking-tight">Primary output</h3>
-                      {primaryRows.map(({ line, i }) => (
-                        <ReceiveWeightRow
-                          key={line.id}
-                          line={line}
-                          lineIndex={i}
-                          editable
-                          lineActualKg={lineActualKg}
-                          setLineActualKg={setLineActualKg}
-                        />
-                      ))}
+                      {primaryRows.map(({ line, i }) => {
+                        const mode = linePackingMode[i] ?? "STANDARD";
+                        const rawKg = Number.parseFloat(lineActualKg[i] ?? "") || 0;
+                        const packSize = (line as any).packSizeKg;
+                        const standardUnits = packSize && packSize > 0 ? Math.floor(rawKg / packSize) : rawKg;
+                        const customCount = parseInt(linePackUnitCount[i] ?? "0", 10) || 0;
+                        const customCost = parseFloat(linePackCostPerUnit[i] ?? "0") || 0;
+                        const packTotal = mode === "CUSTOM"
+                          ? Math.round(customCount * customCost * 100) / 100
+                          : (packSize && packSize > 0 && standardUnits > 0 ? Math.round(standardUnits * ((line as any).packagingCostPerUnit ?? 0) * 100) / 100 : 0);
+                        return (
+                          <div key={line.id} className="rounded-lg border p-3 space-y-3">
+                            <ReceiveWeightRow
+                              line={line}
+                              lineIndex={i}
+                              editable
+                              lineActualKg={lineActualKg}
+                              setLineActualKg={(next) => {
+                                const newArr = typeof next === "function" ? next(lineActualKg) : next;
+                                setLineActualKg(newArr);
+                                // Auto-update standard pack count when kg changes
+                                if ((linePackingMode[i] ?? "STANDARD") === "STANDARD" && packSize && packSize > 0) {
+                                  const newKg = Number.parseFloat(newArr[i] ?? "") || 0;
+                                  setLinePackUnitCount((prev) => ({ ...prev, [i]: String(Math.floor(newKg / packSize)) }));
+                                }
+                              }}
+                            />
+                            <div className="space-y-2">
+                              <Label className="text-xs font-medium text-muted-foreground">Packing method</Label>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={mode === "STANDARD" ? "default" : "outline"}
+                                  className="h-7 text-xs"
+                                  onClick={() => setLinePackingMode((prev) => ({ ...prev, [i]: "STANDARD" }))}
+                                >
+                                  Standard
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={mode === "CUSTOM" ? "default" : "outline"}
+                                  className="h-7 text-xs"
+                                  onClick={() => setLinePackingMode((prev) => ({ ...prev, [i]: "CUSTOM" }))}
+                                >
+                                  Custom
+                                </Button>
+                              </div>
+                              {mode === "STANDARD" && packSize && packSize > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {standardUnits.toLocaleString()} units @ {packSize}kg each
+                                  {(line as any).packagingCostPerUnit > 0 ? ` · KES ${packTotal.toLocaleString("en-KE", { minimumFractionDigits: 2 })} packaging` : ""}
+                                </p>
+                              ) : mode === "STANDARD" ? (
+                                <p className="text-xs text-muted-foreground">Tracked in kg (no pack size set)</p>
+                              ) : null}
+                              {mode === "CUSTOM" && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Pack type</Label>
+                                    <Select
+                                      value={linePackagingType[i] ?? "BOX"}
+                                      onValueChange={(v) => setLinePackagingType((prev) => ({ ...prev, [i]: v }))}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="BOX">Box</SelectItem>
+                                        <SelectItem value="SACK">Sack</SelectItem>
+                                        <SelectItem value="MANUAL">Manual</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Count</Label>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      className="h-8 text-xs"
+                                      value={linePackUnitCount[i] ?? ""}
+                                      onChange={(e) => setLinePackUnitCount((prev) => ({ ...prev, [i]: e.target.value }))}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">KES/unit</Label>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      step="0.01"
+                                      className="h-8 text-xs"
+                                      value={linePackCostPerUnit[i] ?? ""}
+                                      onChange={(e) => setLinePackCostPerUnit((prev) => ({ ...prev, [i]: e.target.value }))}
+                                    />
+                                  </div>
+                                  {customCount > 0 && customCost > 0 && (
+                                    <p className="col-span-3 text-xs text-muted-foreground">
+                                      Packaging total: KES {packTotal.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : null}
                   {secondaryRows.length > 0 ? (
-                    <div className="grid gap-3">
+                    <div className="grid gap-4">
                       <h3 className="text-sm font-semibold tracking-tight">Secondary output</h3>
-                      {secondaryRows.map(({ line, i }) => (
-                        <ReceiveWeightRow
-                          key={line.id}
-                          line={line}
-                          lineIndex={i}
-                          editable
-                          lineActualKg={lineActualKg}
-                          setLineActualKg={setLineActualKg}
-                        />
-                      ))}
+                      {secondaryRows.map(({ line, i }) => {
+                        const mode = linePackingMode[i] ?? "STANDARD";
+                        const rawKg = Number.parseFloat(lineActualKg[i] ?? "") || 0;
+                        const packSize = (line as any).packSizeKg;
+                        const standardUnits = packSize && packSize > 0 ? Math.floor(rawKg / packSize) : rawKg;
+                        const customCount = parseInt(linePackUnitCount[i] ?? "0", 10) || 0;
+                        const customCost = parseFloat(linePackCostPerUnit[i] ?? "0") || 0;
+                        const packTotal = mode === "CUSTOM"
+                          ? Math.round(customCount * customCost * 100) / 100
+                          : 0;
+                        return (
+                          <div key={line.id} className="rounded-lg border p-3 space-y-3">
+                            <ReceiveWeightRow
+                              line={line}
+                              lineIndex={i}
+                              editable
+                              lineActualKg={lineActualKg}
+                              setLineActualKg={setLineActualKg}
+                            />
+                            {(packSize && packSize > 0) || mode === "CUSTOM" ? (
+                              <div className="space-y-2">
+                                <Label className="text-xs font-medium text-muted-foreground">Packing method</Label>
+                                <div className="flex gap-2">
+                                  <Button type="button" size="sm" variant={mode === "STANDARD" ? "default" : "outline"} className="h-7 text-xs"
+                                    onClick={() => setLinePackingMode((prev) => ({ ...prev, [i]: "STANDARD" }))}>Standard</Button>
+                                  <Button type="button" size="sm" variant={mode === "CUSTOM" ? "default" : "outline"} className="h-7 text-xs"
+                                    onClick={() => setLinePackingMode((prev) => ({ ...prev, [i]: "CUSTOM" }))}>Custom</Button>
+                                </div>
+                                {mode === "STANDARD" && packSize && packSize > 0 && (
+                                  <p className="text-xs text-muted-foreground">{standardUnits.toLocaleString()} units @ {packSize}kg each</p>
+                                )}
+                                {mode === "CUSTOM" && (
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Pack type</Label>
+                                      <Select value={linePackagingType[i] ?? "BOX"} onValueChange={(v) => setLinePackagingType((prev) => ({ ...prev, [i]: v }))}>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="BOX">Box</SelectItem>
+                                          <SelectItem value="SACK">Sack</SelectItem>
+                                          <SelectItem value="MANUAL">Manual</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Count</Label>
+                                      <Input type="number" min={0} step={1} className="h-8 text-xs" value={linePackUnitCount[i] ?? ""} onChange={(e) => setLinePackUnitCount((prev) => ({ ...prev, [i]: e.target.value }))} />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">KES/unit</Label>
+                                      <Input type="number" min={0} step="0.01" className="h-8 text-xs" value={linePackCostPerUnit[i] ?? ""} onChange={(e) => setLinePackCostPerUnit((prev) => ({ ...prev, [i]: e.target.value }))} />
+                                    </div>
+                                    {customCount > 0 && customCost > 0 && (
+                                      <p className="col-span-3 text-xs text-muted-foreground">Packaging total: KES {packTotal.toLocaleString("en-KE", { minimumFractionDigits: 2 })}</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : null}
                   {wasteRows.length > 0 ? (

@@ -17,6 +17,7 @@ import {
   fetchManufacturingBom,
   fetchManufacturingRoutes,
   updateManufacturingBom,
+  deleteManufacturingBom,
   type ManufacturingBom,
   type ManufacturingBomItem,
   type ManufacturingRoute,
@@ -25,12 +26,14 @@ import { listProducts } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function BomDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const products = React.useMemo(() => listProducts(), []);
@@ -39,6 +42,9 @@ export default function BomDetailPage() {
   const [routes, setRoutes] = React.useState<ManufacturingRoute[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [togglingActive, setTogglingActive] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingItem, setEditingItem] = React.useState<ManufacturingBomItem | null>(null);
 
@@ -81,6 +87,35 @@ export default function BomDetailPage() {
     }
   }
 
+  async function handleToggleActive() {
+    if (!bom) return;
+    setTogglingActive(true);
+    try {
+      const updated = await updateManufacturingBom(bom.id, { isActive: !bom.isActive });
+      setBom(updated);
+      toast.success(updated.isActive ? "BOM activated." : "BOM deactivated — it will no longer appear in the subcontracting picker.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update BOM status.");
+    } finally {
+      setTogglingActive(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!bom) return;
+    setDeleting(true);
+    try {
+      await deleteManufacturingBom(bom.id);
+      toast.success(`BOM ${bom.code} deleted.`);
+      router.push("/manufacturing/boms");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cannot delete BOM.");
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
   if (loading && !bom) {
     return (
       <PageShell>
@@ -115,10 +150,50 @@ export default function BomDetailPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant={bom.type === "formula" ? "secondary" : bom.type === "disassembly" ? "default" : "outline"}>
               {bom.type === "disassembly" ? "Disassembly" : bom.type === "formula" ? "Formula" : "BOM"}
             </Badge>
+            <Badge variant={bom.isActive ? "outline" : "secondary"}>
+              {bom.isActive ? "Active" : "Inactive"}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={togglingActive}
+              onClick={handleToggleActive}
+            >
+              {togglingActive
+                ? "Saving…"
+                : bom.isActive
+                ? "Deactivate"
+                : "Activate"}
+            </Button>
+            {confirmDelete ? (
+              <>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deleting}
+                  onClick={handleDelete}
+                >
+                  {deleting ? "Deleting…" : "Confirm delete"}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Icons.Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/boms">Back to list</Link>
             </Button>

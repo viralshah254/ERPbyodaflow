@@ -238,6 +238,7 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       "masters",
       "inventory",
       "warehouse",
+      "logistics",
       "sales",
       "purchasing",
       "distribution",
@@ -260,6 +261,7 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       routesPromotionsPos: false,
       deliveries: true,
       collections: true,
+      logisticsTrips: true,
     },
     terminology: {
       customer: "Outlet / Customer",

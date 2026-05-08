@@ -26,14 +26,32 @@ export interface SubcontractOrderLineRow {
   productId?: string;
   productName: string;
   type: "INPUT" | "OUTPUT_PRIMARY" | "OUTPUT_SECONDARY" | "WASTE";
-  /** BOM/GRN planned kg (same as quantity until receive overwrites quantity with actual). */
+  /** BOM/GRN planned kg (immutable reference). */
   plannedQuantity?: number;
+  /** Planned stock units (boxes/sacks) derived from plannedQuantity / packSizeKg at creation. */
+  plannedStockUnits?: number | null;
+  /**
+   * Stock units (boxes/sacks) in the line. For non-packed outputs this equals quantityKg.
+   * After receive, packed outputs use floor(quantityKg / packSizeKg).
+   */
   quantity: number;
+  /** Actual received weight in kg (always set on receive). Before receive, mirrors plannedQuantity. */
+  quantityKg?: number | null;
+  /** Derived stock unit count for display (quantity for packed, null for kg-tracked). */
+  stockUnits?: number | null;
   uom: string;
-  /** Kg per box; receive converts kg → boxes for stock when set. */
+  /** Kg per box/sack; snapshotted at order creation from product catalog. */
   packSizeKg?: number | null;
+  /** Material cost per packed unit (KES), snapshotted from product or processing model. */
+  packagingCostPerUnit?: number | null;
+  /** Yield fraction from the processing model at creation. */
+  yieldFraction?: number | null;
   processingFeePerUnit: number | null;
   amount: number | null;
+  /** Cost per kg for this output line (fee + packaging, allocated). Set after receive. */
+  costPerKg?: number | null;
+  /** Cost per stock unit (box/sack). costPerKg * packSizeKg. */
+  costPerStockUnit?: number | null;
 }
 
 export interface SubcontractOrderRow {
@@ -46,8 +64,11 @@ export interface SubcontractOrderRow {
   bomName: string | null;
   /** Linked Purchase Order */
   purchaseOrderId?: string | null;
+  /** Human-readable PO number (from purchasing document); prefer over truncating IDs in UI */
+  purchaseOrderNumber?: string | null;
   /** Linked GRN (Goods Receipt Note) */
   grnId?: string | null;
+  grnNumber?: string | null;
   /** Fish species being processed */
   species?: "TILAPIA" | "NILE_PERCH" | null;
   /** Processing operation type */

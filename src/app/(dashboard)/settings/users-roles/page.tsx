@@ -29,6 +29,7 @@ import type { PermissionCatalogGroupDto, UserRow } from "@/lib/types/users-roles
 import {
   createRoleApi,
   createUserApi,
+  deleteUserApi,
   fetchPermissionCatalogApi,
   fetchRolesApi,
   fetchUsersApi,
@@ -54,6 +55,7 @@ export default function UsersRolesPage() {
   const [passwordConfirm, setPasswordConfirm] = React.useState("");
   const [passwordMustChange, setPasswordMustChange] = React.useState(true);
   const [settingPassword, setSettingPassword] = React.useState(false);
+  const [deletingUser, setDeletingUser] = React.useState(false);
 
   const sortedRoles = React.useMemo(
     () => [...roles].sort((a, b) => a.name.localeCompare(b.name)),
@@ -78,6 +80,9 @@ export default function UsersRolesPage() {
     status: "ACTIVE" as "ACTIVE" | "INACTIVE" | "SUSPENDED",
     copilotEnabled: false,
     roleIds: [] as string[],
+    phoneNumber: "",
+    jobTitle: "",
+    employeeCode: "",
   });
   const [roleForm, setRoleForm] = React.useState({ name: "", description: "", permissions: [] as string[] });
 
@@ -99,7 +104,7 @@ export default function UsersRolesPage() {
 
   const openCreateUser = () => {
     setEditingUser(null);
-    setUserForm({ email: "", firstName: "", lastName: "", status: "ACTIVE", copilotEnabled: false, roleIds: [] });
+    setUserForm({ email: "", firstName: "", lastName: "", status: "ACTIVE", copilotEnabled: false, roleIds: [], phoneNumber: "", jobTitle: "", employeeCode: "" });
     setPasswordNew("");
     setPasswordConfirm("");
     setPasswordMustChange(true);
@@ -115,6 +120,9 @@ export default function UsersRolesPage() {
       status: u.status ?? "ACTIVE",
       copilotEnabled: u.copilotEnabled === true,
       roleIds: [...u.roleIds],
+      phoneNumber: u.phoneNumber ?? "",
+      jobTitle: u.jobTitle ?? "",
+      employeeCode: u.employeeCode ?? "",
     });
     setPasswordNew("");
     setPasswordConfirm("");
@@ -138,14 +146,25 @@ export default function UsersRolesPage() {
     setRoleSheetOpen(true);
   };
 
-  const toggleUserRole = (roleId: string) => {
+  // Single-role selection: replaces any current assignment with the new role.
+  // If the same role is selected again it acts as a deselect (clear assignment).
+  const selectUserRole = (roleId: string) => {
     setUserForm((p) => ({
       ...p,
-      roleIds: p.roleIds.includes(roleId)
-        ? p.roleIds.filter((id) => id !== roleId)
-        : [...p.roleIds, roleId],
+      roleIds: p.roleIds[0] === roleId ? [] : [roleId],
     }));
   };
+
+  // Owner role IDs are any role named "Owner" in the current role list.
+  const ownerRoleIds = React.useMemo(
+    () => roles.filter((r) => r.name === "Owner").map((r) => r.id),
+    [roles]
+  );
+
+  // Is the user being edited currently an Owner?
+  const editingUserIsOwner = editingUser
+    ? editingUser.roleIds.some((id) => ownerRoleIds.includes(id))
+    : false;
 
   const toggleRolePermission = (perm: string) => {
     setRoleForm((p) => ({
@@ -237,9 +256,9 @@ export default function UsersRolesPage() {
                 <div>
                   <CardTitle>Roles</CardTitle>
                   <CardDescription>
-                    {roles.length} role(s). Includes standard catalogue: Procurement Officer/Manager, Finance Officer,
-                    Accounts (AP/AR), Sales, Warehouse, and more—use &quot;Provision standard roles&quot; if you only see
-                    Owner.
+                    {roles.length} role(s). Standard catalogue: Owner, IT / Org Admin, Finance, Procurement, Dispatch,
+                    Logistics Coordinator, Sales, Franchise Network Manager — use &quot;Provision standard roles&quot; to seed
+                    them.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -375,27 +394,60 @@ export default function UsersRolesPage() {
               ) : null}
             </div>
             <div className="space-y-2">
-              <Label>Roles</Label>
-              <div className="max-h-52 overflow-y-auto rounded-md border p-3 flex flex-wrap gap-x-4 gap-y-2">
-                {sortedRoles.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No roles yet. Open the Roles tab and run &quot;Provision standard roles&quot;.
-                  </p>
-                ) : (
-                  sortedRoles.map((r) => (
-                    <label key={r.id} className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox
-                        checked={userForm.roleIds.includes(r.id)}
-                        onCheckedChange={() => toggleUserRole(r.id)}
-                      />
-                      <span className="text-sm">{r.name}</span>
-                    </label>
-                  ))
-                )}
-              </div>
+              <Label>Role</Label>
+              {sortedRoles.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No roles yet. Open the Roles tab and run &quot;Provision standard roles&quot; first.
+                </p>
+              ) : (
+                <select
+                  value={userForm.roleIds[0] ?? ""}
+                  onChange={(e) => selectUserRole(e.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">— No role assigned —</option>
+                  {sortedRoles
+                    .filter((r) => {
+                      // Only Owners can assign the Owner role
+                      if (r.name === "Owner") return editingUserIsOwner || ownerRoleIds.length === 0;
+                      return true;
+                    })
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                </select>
+              )}
               <p className="text-xs text-muted-foreground">
-                New users are staged for checkout first. Nothing is activated or billed until you confirm the pending checkout from Billing.
+                One role per user. New users are staged for checkout first. Nothing is activated or billed until you confirm the pending checkout from Billing.
               </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Phone number</Label>
+                <Input
+                  value={userForm.phoneNumber}
+                  onChange={(e) => setUserForm((p) => ({ ...p, phoneNumber: e.target.value }))}
+                  placeholder="+254 7XX XXX XXX"
+                  type="tel"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Job title / team</Label>
+                <Input
+                  value={userForm.jobTitle}
+                  onChange={(e) => setUserForm((p) => ({ ...p, jobTitle: e.target.value }))}
+                  placeholder="e.g. Warehouse Supervisor"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Employee code <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                value={userForm.employeeCode}
+                onChange={(e) => setUserForm((p) => ({ ...p, employeeCode: e.target.value }))}
+                placeholder="e.g. EMP-001"
+              />
             </div>
 
             {editingUser ? (
@@ -462,6 +514,11 @@ export default function UsersRolesPage() {
                       toast.success("Password updated.");
                       setPasswordNew("");
                       setPasswordConfirm("");
+                      // Refetch so hasSignIn reflects the newly provisioned Firebase account.
+                      const refreshed = await fetchUsersApi();
+                      setUsers(refreshed);
+                      const updated = refreshed.find((u) => u.id === editingUser.id);
+                      if (updated) setEditingUser(updated);
                     } catch (error) {
                       toast.error(error instanceof Error ? error.message : "Failed to set password.");
                     } finally {
@@ -474,14 +531,45 @@ export default function UsersRolesPage() {
               </div>
             ) : null}
           </div>
-          <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setUserSheetOpen(false)}>Cancel</Button>
-            <Button
-              disabled={savingUser}
-              onClick={async () => {
-                try {
-                  setSavingUser(true);
-                  if (editingUser) {
+          <SheetFooter className="mt-6 flex flex-col gap-2">
+            {editingUser && !editingUserIsOwner && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="w-full"
+                disabled={deletingUser}
+                onClick={async () => {
+                  if (!confirm(`Permanently delete ${editingUser.email}? This cannot be undone.`)) return;
+                  try {
+                    setDeletingUser(true);
+                    await deleteUserApi(editingUser.id);
+                    toast.success(`${editingUser.email} deleted.`);
+                    setUserSheetOpen(false);
+                    await refreshUsers();
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Failed to delete user.");
+                  } finally {
+                    setDeletingUser(false);
+                  }
+                }}
+              >
+                {deletingUser ? "Deleting…" : "Delete user permanently"}
+              </Button>
+            )}
+            {editingUser && editingUserIsOwner && (
+              <p className="text-xs text-amber-700 dark:text-amber-500 text-center">
+                Owner users cannot be deleted. Remove the Owner role first (while keeping at least one other owner).
+              </p>
+            )}
+            <div className="flex gap-2 w-full">
+              <Button variant="outline" className="flex-1" onClick={() => setUserSheetOpen(false)}>Cancel</Button>
+              <Button
+                className="flex-1"
+                disabled={savingUser}
+                onClick={async () => {
+                  try {
+                    setSavingUser(true);
+                    if (editingUser) {
                     const updated = await updateUserApi(editingUser.id, {
                       email: userForm.email,
                       firstName: userForm.firstName,
@@ -489,16 +577,19 @@ export default function UsersRolesPage() {
                       status: userForm.status,
                       copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
+                      phoneNumber: userForm.phoneNumber || undefined,
+                      jobTitle: userForm.jobTitle || undefined,
+                      employeeCode: userForm.employeeCode || undefined,
                     });
-                    toast.success("User updated.");
-                    if (updated.billingImpact?.invoiceId) {
-                      toast.info(
-                        updated.billingImpact.lineItems?.length
-                          ? `Billing updated: ${updated.billingImpact.lineItems.map((line) => line.description).join(", ")}`
-                          : `Billing linked: invoice ${updated.billingImpact.invoiceId.slice(0, 8)}…`
-                      );
-                    }
-                  } else {
+                      toast.success("User updated.");
+                      if (updated.billingImpact?.invoiceId) {
+                        toast.info(
+                          updated.billingImpact.lineItems?.length
+                            ? `Billing updated: ${updated.billingImpact.lineItems.map((line) => line.description).join(", ")}`
+                            : `Billing linked: invoice ${updated.billingImpact.invoiceId.slice(0, 8)}…`
+                        );
+                      }
+                    } else {
                     const created = await createUserApi({
                       email: userForm.email,
                       firstName: userForm.firstName,
@@ -506,29 +597,33 @@ export default function UsersRolesPage() {
                       status: userForm.status,
                       copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
+                      phoneNumber: userForm.phoneNumber || undefined,
+                      jobTitle: userForm.jobTitle || undefined,
+                      employeeCode: userForm.employeeCode || undefined,
                     });
-                    toast.success("User staged for checkout.");
-                    if (created.checkout) {
-                      toast.info(
-                        `Checkout updated: ${created.checkout.items.length} staged item(s), ${new Intl.NumberFormat("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                          minimumFractionDigits: 2,
-                        }).format(created.checkout.quoteTotalCents / 100)} due at checkout.`
-                      );
+                      toast.success("User staged for checkout.");
+                      if (created.checkout) {
+                        toast.info(
+                          `Checkout updated: ${created.checkout.items.length} staged item(s), ${new Intl.NumberFormat("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                            minimumFractionDigits: 2,
+                          }).format(created.checkout.quoteTotalCents / 100)} due at checkout.`
+                        );
+                      }
                     }
+                    setUserSheetOpen(false);
+                    await refreshUsers();
+                  } catch (error) {
+                    toast.error((error as Error).message || "Failed to save user.");
+                  } finally {
+                    setSavingUser(false);
                   }
-                  setUserSheetOpen(false);
-                  await refreshUsers();
-                } catch (error) {
-                  toast.error((error as Error).message || "Failed to save user.");
-                } finally {
-                  setSavingUser(false);
-                }
-              }}
-            >
-              {savingUser ? "Saving..." : editingUser ? "Save" : "Add to checkout"}
-            </Button>
+                }}
+              >
+                {savingUser ? "Saving..." : editingUser ? "Save" : "Add to checkout"}
+              </Button>
+            </div>
           </SheetFooter>
         </SheetContent>
       </Sheet>

@@ -978,7 +978,7 @@ export default function DocViewPage() {
         {type === "bill" && landedAllocation && (() => {
           const centreLabels: Record<string, string> = {
             currency_conversion: "FX conversion",
-            permits: "Permits & customs",
+            permits: "Additional costs",
             inbound_logistics: "Inbound logistics",
             other: "Other charges",
           };
@@ -997,7 +997,7 @@ export default function DocViewPage() {
               : (document?.total ?? 0);
           return (
             <CostImpactPanel
-              title="Other costs breakdown"
+              title="Additional costs breakdown"
               currency="KES"
               lines={[
                 { label: "Invoice value (KES)", amount: billKes },

@@ -153,7 +153,7 @@ export default function APBillsPage() {
       },
       {
         id: "landedAllocated",
-        header: "Other costs",
+        header: "Additional costs",
         accessor: (r: APBillRow) => {
           // API returns landedAllocated in base currency (KES) from GRN allocation lines
           const breakdown = r.landedBreakdown ?? [];

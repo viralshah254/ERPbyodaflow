@@ -658,20 +658,20 @@ export default function PurchaseOrderDetailPage() {
             {otherCostsLoading ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Other costs</CardTitle>
+                  <CardTitle>Additional costs</CardTitle>
                   <CardDescription>Loading allocation from GRN…</CardDescription>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">Please wait.</CardContent>
               </Card>
             ) : (
               <CostImpactPanel
-                title={otherCostsAlloc ? "Other costs" : "Other costs (estimate)"}
+                title={otherCostsAlloc ? "Additional costs" : "Additional costs (estimate)"}
                 cardDescription={
                   otherCostsAlloc && costSourceGrn
                     ? `Actual charges allocated on GRN ${costSourceGrn.number}. Manage in Inventory → Costing.`
                     : linkedGrns.length
-                      ? "No other-cost allocation on the GRN yet. Add charges in Inventory → Costing, or use estimates below until posted."
-                      : "Estimated add-ons before goods are received. Replace with actual other costs after GRN allocation."
+                      ? "No additional-cost allocation on the GRN yet. Add charges in Inventory → Costing, or use estimates below until posted."
+                      : "Estimated add-ons before goods are received. Replace with actual additional costs after GRN allocation."
                 }
                 currency={order.currency}
                 quantityKg={orderedWeight}

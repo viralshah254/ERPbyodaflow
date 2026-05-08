@@ -26,6 +26,12 @@ export interface CommissionRunLineRow {
   minFloor: number | null;
   topUpAmount: number;
   royaltyWithheldKes?: number;
+  /** Kenya WHT: 5% on franchise earnings above KES 24,000. */
+  withholdingTaxKes?: number;
+  withholdingTaxRate?: number;
+  withholdingTaxThresholdKes?: number;
+  /** Net cash payout after royalty withholding and WHT. */
+  netCommissionPayoutKes?: number;
   status?: "OK" | "TOPUP";
 }
 

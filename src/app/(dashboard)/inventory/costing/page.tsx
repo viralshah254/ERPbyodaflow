@@ -108,7 +108,7 @@ const LANDED_COST_TYPE_LABELS: Record<string, string> = {
   insurance: "Insurance",
   duty: "Import duty",
   other: "Other",
-  permit: "Permits",
+  permit: "Permit / licence",
   border: "Border / customs",
   inbound_freight: "Inbound freight",
   outbound_freight: "Outbound freight",
@@ -178,7 +178,7 @@ function CostBreakdownPopover({
         }
       } else {
         rows.push({
-          label: "Other landed costs",
+          label: "Additional landed costs",
           value: breakdown.otherLanded,
           icon: <Icons.PackagePlus className="h-3.5 w-3.5 text-muted-foreground" />,
         });
@@ -219,7 +219,7 @@ function CostBreakdownPopover({
       <PopoverContent className="w-[min(22rem,calc(100vw-2rem))] max-w-[22rem] p-0 text-sm" align="end">
         <div className="px-3 py-2 border-b bg-muted/40 rounded-t-md">
           <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
-            {isFinal ? "Final batch cost breakdown" : "Other costs breakdown"}
+            {isFinal ? "Final batch cost breakdown" : "Additional costs breakdown"}
           </p>
         </div>
         {rows.length === 0 ? (
@@ -236,7 +236,7 @@ function CostBreakdownPopover({
               </div>
             ))}
             <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 font-semibold rounded-b-md">
-              <span className="text-xs">{isFinal ? "Final batch cost" : "Total other costs"}</span>
+              <span className="text-xs">{isFinal ? "Final batch cost" : "Total additional costs"}</span>
               <span className="tabular-nums font-mono text-xs text-primary">KES {fmt(amount)}</span>
             </div>
           </div>
@@ -838,7 +838,7 @@ function StepSummary({
       <div>
         <h3 className="font-semibold text-base">Step 4: Summary &amp; confirm</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Review the complete other costs breakdown before posting to inventory.
+          Review the complete additional costs breakdown before posting to inventory.
         </p>
       </div>
 
@@ -1071,7 +1071,7 @@ function StepSummary({
             <tfoot className="border-t bg-emerald-50 dark:bg-emerald-950/30">
               <tr>
                 <td className="px-4 py-3 font-bold text-emerald-700 dark:text-emerald-400">
-                  Cost per kg (incl. other costs)
+                  Cost per kg (incl. additional costs)
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-mono text-muted-foreground">
                   {formatMoney(totalLanded, "KES")}
@@ -1150,7 +1150,7 @@ function StepSummary({
           {saving ? (
             <><Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> Posting…</>
           ) : (
-            <><Icons.Check className="mr-2 h-4 w-4" /> Post other costs</>
+            <><Icons.Check className="mr-2 h-4 w-4" /> Post additional costs</>
           )}
         </Button>
       </div>
@@ -1375,12 +1375,12 @@ function LandedCostWizard({
         landedLines.reduce((s, l) => s + parseCostLineAmount(l.amount), 0) +
         processingLinesValid.reduce((s, l) => s + l.amount, 0);
       toast.success(
-        `Other costs saved for ${source.number} — KES ${totalOtherCosts.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total. Run costing to update valuations.`,
+        `Additional costs saved for ${source.number} — KES ${totalOtherCosts.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total. Run costing to update valuations.`,
         { duration: 6000 }
       );
       onDone();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save other costs.");
+      toast.error(e instanceof Error ? e.message : "Failed to save additional costs.");
     } finally {
       setSaving(false);
     }
@@ -1629,7 +1629,7 @@ export default function InventoryCostingPage() {
     <PageShell>
       <PageHeader
         title="Inventory costing"
-        description="Apply other costs and run inventory valuation"
+        description="Apply additional costs and run inventory valuation"
         breadcrumbs={[
           { label: "Inventory", href: "/inventory/products" },
           { label: "Costing" },
@@ -1700,7 +1700,7 @@ export default function InventoryCostingPage() {
                 <Icons.CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-emerald-800">
-                    All {allocatedCount} document{allocatedCount !== 1 ? "s" : ""} have other costs allocated
+                    All {allocatedCount} document{allocatedCount !== 1 ? "s" : ""} have additional costs allocated
                   </p>
                   <p className="text-xs text-emerald-700 mt-0.5">
                     {canEditAllocated
@@ -1735,7 +1735,7 @@ export default function InventoryCostingPage() {
               <CardDescription className="space-y-1 max-w-3xl">
                 <span className="block">
                   By warehouse from the last <strong className="font-medium">Run costing</strong>. Posting GRNs,
-                  allocating other costs, or changing stock does <strong className="font-medium">not</strong> update this
+                  allocating additional costs, or changing stock does <strong className="font-medium">not</strong> update this
                   automatically—click <strong className="font-medium">Run costing</strong> to refresh after changes.
                 </span>
                 <span className="block text-muted-foreground text-xs">
@@ -1798,9 +1798,9 @@ export default function InventoryCostingPage() {
         {/* Landed cost allocation sources */}
         <Card>
           <CardHeader>
-            <CardTitle>Other costs allocation</CardTitle>
+            <CardTitle>Additional costs allocation</CardTitle>
             <CardDescription>
-              Select a GRN or Bill and use the guided wizard to allocate currency conversion, permits, and inbound
+              Select a GRN or Bill and use the guided wizard to allocate currency conversion, additional costs, and inbound
               logistics. Costs are distributed by weight and posted to GL automatically.
             </CardDescription>
           </CardHeader>
@@ -1813,7 +1813,7 @@ export default function InventoryCostingPage() {
                   <TableHead>Supplier</TableHead>
                   <TableHead>Currency</TableHead>
                   <TableHead className="text-right">Goods value</TableHead>
-                  <TableHead className="text-right">Other costs</TableHead>
+                  <TableHead className="text-right">Additional costs</TableHead>
                   <TableHead className="text-right">Final batch cost</TableHead>
                   <TableHead className="text-right">Cost / kg</TableHead>
                   <TableHead />
@@ -2013,7 +2013,7 @@ export default function InventoryCostingPage() {
             <div className="flex items-start gap-2 rounded-md border bg-amber-50 border-amber-200 px-3 py-2 mb-2 mx-0">
               <Icons.AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-800">
-                <strong>Admin edit:</strong> This document already has other costs allocated. Saving will replace the existing allocation and re-post the GL entries.
+                <strong>Admin edit:</strong> This document already has additional costs allocated. Saving will replace the existing allocation and re-post the GL entries.
               </p>
             </div>
           )}
@@ -2033,7 +2033,7 @@ export default function InventoryCostingPage() {
                     selectedSource.currency ?? "KES"
                   )}
                 </span>
-                <span className="text-muted-foreground">Other costs (KES)</span>
+                <span className="text-muted-foreground">Additional costs (KES)</span>
                 <span className="text-right tabular-nums font-medium">
                   {formatMoney((selectedSource as { otherCostsKes?: number }).otherCostsKes ?? 0, "KES")}
                 </span>

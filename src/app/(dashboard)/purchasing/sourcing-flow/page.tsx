@@ -114,7 +114,7 @@ function LandedCostCentrePanel() {
         <div className="flex items-start gap-2 rounded-md bg-background border p-3">
           <Icons.FileCheck className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
           <div>
-            <p className="text-xs font-semibold">Permits &amp; customs</p>
+            <p className="text-xs font-semibold">Additional costs</p>
             <p className="text-xs text-muted-foreground">Fishing licences, border clearance</p>
           </div>
         </div>

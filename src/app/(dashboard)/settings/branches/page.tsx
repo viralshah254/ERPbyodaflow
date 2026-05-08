@@ -41,6 +41,8 @@ export default function BranchesPage() {
     city: "",
     region: "",
     country: "",
+    latitude: "",
+    longitude: "",
   });
 
   const refresh = React.useCallback(async () => {
@@ -66,7 +68,7 @@ export default function BranchesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", code: "", line1: "", city: "", region: "", country: "" });
+    setForm({ name: "", code: "", line1: "", city: "", region: "", country: "", latitude: "", longitude: "" });
     setDrawerOpen(true);
   };
 
@@ -79,6 +81,8 @@ export default function BranchesPage() {
       city: row.address?.city ?? "",
       region: row.address?.region ?? "",
       country: row.address?.country ?? "",
+      latitude: row.latitude != null ? String(row.latitude) : "",
+      longitude: row.longitude != null ? String(row.longitude) : "",
     });
     setDrawerOpen(true);
   };
@@ -88,6 +92,19 @@ export default function BranchesPage() {
       { id: "code", header: "Code", accessor: (row: BranchRow) => row.code || "—" },
       { id: "name", header: "Name", accessor: (row: BranchRow) => <span className="font-medium">{row.name}</span> },
       { id: "city", header: "City", accessor: (row: BranchRow) => row.address?.city || "—" },
+      {
+        id: "gps",
+        header: "GPS",
+        accessor: (row: BranchRow) =>
+          row.latitude != null && row.longitude != null ? (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Icons.MapPin className="h-3 w-3 text-green-600" />
+              {row.latitude.toFixed(4)}, {row.longitude.toFixed(4)}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
+      },
       {
         id: "default",
         header: "Default",
@@ -194,6 +211,35 @@ export default function BranchesPage() {
               <Label>Country</Label>
               <Input value={form.country} onChange={(event) => setForm((prev) => ({ ...prev, country: event.target.value }))} placeholder="Kenya" />
             </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Icons.MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                GPS coordinates
+                <span className="text-xs text-muted-foreground font-normal">(for WhatsApp nearest-outlet routing)</span>
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Latitude</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.latitude}
+                    onChange={(event) => setForm((prev) => ({ ...prev, latitude: event.target.value }))}
+                    placeholder="-1.286389"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Longitude</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.longitude}
+                    onChange={(event) => setForm((prev) => ({ ...prev, longitude: event.target.value }))}
+                    placeholder="36.817223"
+                  />
+                </div>
+              </div>
+            </div>
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => setDrawerOpen(false)}>
                 Cancel
@@ -202,6 +248,18 @@ export default function BranchesPage() {
                 onClick={async () => {
                   if (!form.name.trim()) {
                     toast.error("Branch name is required.");
+                    return;
+                  }
+                  const latVal = form.latitude.trim();
+                  const lngVal = form.longitude.trim();
+                  const parsedLat = latVal !== "" ? parseFloat(latVal) : null;
+                  const parsedLng = lngVal !== "" ? parseFloat(lngVal) : null;
+                  if (parsedLat !== null && (isNaN(parsedLat) || parsedLat < -90 || parsedLat > 90)) {
+                    toast.error("Latitude must be between -90 and 90.");
+                    return;
+                  }
+                  if (parsedLng !== null && (isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180)) {
+                    toast.error("Longitude must be between -180 and 180.");
                     return;
                   }
                   const payload = {
@@ -213,6 +271,8 @@ export default function BranchesPage() {
                       region: form.region.trim() || undefined,
                       country: form.country.trim() || undefined,
                     },
+                    latitude: parsedLat,
+                    longitude: parsedLng,
                   };
                   try {
                     if (editing) {

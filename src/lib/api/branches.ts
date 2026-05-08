@@ -11,6 +11,9 @@ export type BranchRow = {
     region?: string;
     country?: string;
   };
+  /** GPS coordinates for nearest-outlet routing (WhatsApp commerce). */
+  latitude?: number;
+  longitude?: number;
 };
 
 export async function fetchBranchesApi(): Promise<BranchRow[]> {
@@ -33,7 +36,7 @@ export async function createBranchApi(payload: {
 
 export async function updateBranchApi(
   id: string,
-  payload: Partial<{ name: string; code: string; address: BranchRow["address"]; isDefault: boolean }>
+  payload: Partial<{ name: string; code: string; address: BranchRow["address"]; isDefault: boolean; latitude: number | null; longitude: number | null }>
 ): Promise<BranchRow> {
   requireLiveApi("Update branch");
   return apiRequest<BranchRow>(`/api/settings/branches/${encodeURIComponent(id)}`, {

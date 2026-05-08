@@ -17,6 +17,9 @@ type BackendUser = {
   roleIds?: string[];
   roleNames?: string[];
   hasSignIn?: boolean;
+  phoneNumber?: string | null;
+  jobTitle?: string | null;
+  employeeCode?: string | null;
   stagedForCheckout?: boolean;
   checkout?: {
     id: string | null;
@@ -52,6 +55,9 @@ function mapUser(user: BackendUser): UserRow {
     roleIds: user.roleIds ?? [],
     roleNames: user.roleNames ?? [],
     hasSignIn: user.hasSignIn,
+    phoneNumber: user.phoneNumber ?? null,
+    jobTitle: user.jobTitle ?? null,
+    employeeCode: user.employeeCode ?? null,
     stagedForCheckout: user.stagedForCheckout ?? false,
     checkout: user.checkout,
     billingImpact: user.billingImpact,
@@ -77,7 +83,12 @@ export async function fetchUsersApi(search?: string): Promise<UserRow[]> {
   return payload.items.map(mapUser);
 }
 
-export async function createUserApi(body: Omit<UserRow, "id" | "roleNames">): Promise<UserRow> {
+export type StagedUserResponse = Omit<UserRow, "id"> & {
+  /** Absent on staged users — a real id is assigned only after billing checkout is confirmed. */
+  id?: string;
+};
+
+export async function createUserApi(body: Omit<UserRow, "id" | "roleNames">): Promise<StagedUserResponse> {
   requireLiveApi("Create user");
   const payload = await apiRequest<BackendUser>("/api/settings/users", {
     method: "POST",
@@ -161,5 +172,12 @@ export async function setUserPasswordApi(
   await apiRequest(`/api/settings/users/${encodeURIComponent(userId)}/password`, {
     method: "POST",
     body,
+  });
+}
+
+export async function deleteUserApi(userId: string): Promise<void> {
+  requireLiveApi("Delete user");
+  await apiRequest(`/api/settings/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
   });
 }

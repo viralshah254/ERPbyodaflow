@@ -35,6 +35,7 @@ import {
   fetchOutletStock,
   fetchOutletSummaryRange,
   fetchOutletInvoiceDetail,
+  updateOutletGeoApi,
   type OutletSummary,
   type FranchiseCustomerRow,
   type CustomerHistoryItem,
@@ -64,6 +65,8 @@ import {
   Receipt,
   Boxes,
   Cpu,
+  MapPin,
+  Settings2,
 } from "lucide-react";
 
 // ─── KPI Cards ───────────────────────────────────────────────────────────────
@@ -791,6 +794,108 @@ function PriceListTab({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// ─── Geo Settings Tab ─────────────────────────────────────────────────────────
+
+function GeoSettingsTab({
+  outletOrgId,
+  initialLat,
+  initialLng,
+}: {
+  outletOrgId: string;
+  initialLat?: number;
+  initialLng?: number;
+}) {
+  const [lat, setLat] = React.useState(initialLat != null ? String(initialLat) : "");
+  const [lng, setLng] = React.useState(initialLng != null ? String(initialLng) : "");
+  const [saving, setSaving] = React.useState(false);
+
+  // Sync if parent reloads
+  React.useEffect(() => {
+    setLat(initialLat != null ? String(initialLat) : "");
+    setLng(initialLng != null ? String(initialLng) : "");
+  }, [initialLat, initialLng]);
+
+  const handleSave = async () => {
+    const parsedLat = lat.trim() !== "" ? parseFloat(lat) : null;
+    const parsedLng = lng.trim() !== "" ? parseFloat(lng) : null;
+    if (parsedLat !== null && (isNaN(parsedLat) || parsedLat < -90 || parsedLat > 90)) {
+      toast.error("Latitude must be between -90 and 90.");
+      return;
+    }
+    if (parsedLng !== null && (isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180)) {
+      toast.error("Longitude must be between -180 and 180.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateOutletGeoApi(outletOrgId, { latitude: parsedLat, longitude: parsedLng });
+      toast.success("GPS coordinates saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save GPS coordinates.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasCoords = lat.trim() !== "" && lng.trim() !== "";
+  const mapsUrl = hasCoords
+    ? `https://www.google.com/maps?q=${encodeURIComponent(lat)},${encodeURIComponent(lng)}`
+    : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin size={16} />
+          GPS coordinates
+        </CardTitle>
+        <CardDescription>
+          Used for nearest-outlet routing in WhatsApp commerce. When a retail customer shares their location,
+          the system finds the closest outlet with valid coordinates.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4 max-w-sm">
+          <div className="space-y-1.5">
+            <Label htmlFor="geo-lat">Latitude</Label>
+            <Input
+              id="geo-lat"
+              type="number"
+              step="any"
+              value={lat}
+              onChange={(e) => setLat(e.target.value)}
+              placeholder="-1.286389"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="geo-lng">Longitude</Label>
+            <Input
+              id="geo-lng"
+              type="number"
+              step="any"
+              value={lng}
+              onChange={(e) => setLng(e.target.value)}
+              placeholder="36.817223"
+            />
+          </div>
+        </div>
+        {mapsUrl && (
+          <p className="text-xs text-muted-foreground">
+            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-1">
+              <MapPin size={11} /> View on Google Maps
+            </a>
+          </p>
+        )}
+        <div>
+          <Button onClick={() => void handleSave()} disabled={saving}>
+            {saving ? "Saving…" : "Save coordinates"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function OutletDetailPage() {
   const params = useParams();
   const outletOrgId = params.id as string;
@@ -799,12 +904,23 @@ export default function OutletDetailPage() {
   const [loadingSummary, setLoadingSummary] = React.useState(true);
   const [outletName, setOutletName] = React.useState("Outlet");
   const [refreshing, setRefreshing] = React.useState(false);
+  const [outletLat, setOutletLat] = React.useState<number | undefined>(undefined);
+  const [outletLng, setOutletLng] = React.useState<number | undefined>(undefined);
 
   const loadSummary = React.useCallback(async () => {
     try {
-      const s = await fetchOutletSummary(outletOrgId);
-      setSummary(s);
-      if (s.outletName) setOutletName(s.outletName);
+      const [s, networkRow] = await Promise.allSettled([
+        fetchOutletSummary(outletOrgId),
+        import("@/lib/api/cool-catch").then((m) => m.fetchFranchiseNetworkOutletById(outletOrgId)),
+      ]);
+      if (s.status === "fulfilled") {
+        setSummary(s.value);
+        if (s.value.outletName) setOutletName(s.value.outletName);
+      }
+      if (networkRow.status === "fulfilled" && networkRow.value) {
+        setOutletLat(networkRow.value.latitude);
+        setOutletLng(networkRow.value.longitude);
+      }
     } catch {
       // summary may fail if no permissions — silently degrade
     } finally {
@@ -863,6 +979,10 @@ export default function OutletDetailPage() {
               Equipment
             </TabsTrigger>
             <TabsTrigger value="pricelist">Price List</TabsTrigger>
+            <TabsTrigger value="settings" className="gap-1.5">
+              <Settings2 size={14} />
+              Settings
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -895,6 +1015,10 @@ export default function OutletDetailPage() {
               assignedPriceListId={summary?.priceListId ?? null}
               onAssigned={() => void loadSummary()}
             />
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <GeoSettingsTab outletOrgId={outletOrgId} initialLat={outletLat} initialLng={outletLng} />
           </TabsContent>
         </Tabs>
       </div>

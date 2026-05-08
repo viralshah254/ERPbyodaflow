@@ -134,6 +134,10 @@ export async function updateManufacturingBom(id: string, payload: Partial<Manufa
   return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}`, { method: "PATCH", body: payload });
 }
 
+export async function deleteManufacturingBom(id: string): Promise<{ deleted: boolean }> {
+  return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function fetchManufacturingRoutes(): Promise<ManufacturingRoute[]> {
   requireLiveApi("Manufacturing routes");
   const payload = await apiRequest<{ items: ManufacturingRoute[] }>("/api/manufacturing/routing");

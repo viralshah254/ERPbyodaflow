@@ -153,7 +153,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     label: "Logistics",
     /** Fleet / outbound trip costing uses distribution module + API routes; reuse module gate. */
     moduleKey: "distribution",
-    tier: "secondary",
+    tier: "primary",
     requiresOrgTypes: ["DISTRIBUTOR"],
     order: 7.5,
     items: [
@@ -386,6 +386,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
           { key: "payroll-leave", label: "Leave", href: "/payroll/leave", icon: "Palmtree", moduleKey: "finance", requiresPermissions: ["finance.read"] },
           { key: "payroll-payruns", label: "Pay runs", href: "/payroll/pay-runs", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.read"] },
           { key: "payroll-payslips", label: "Payslips", href: "/payroll/payslips", icon: "FileText", moduleKey: "finance", requiresPermissions: ["finance.read"] },
+          { key: "payroll-p9", label: "P9 Forms", href: "/payroll/p9", icon: "ClipboardList", moduleKey: "finance", requiresPermissions: ["finance.read"] },
           { key: "payroll-statutories", label: "Statutories", href: "/payroll/statutories", icon: "ShieldCheck", moduleKey: "finance", requiresPermissions: ["finance.read"] },
         ],
       },

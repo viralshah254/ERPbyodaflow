@@ -68,6 +68,9 @@ export interface FranchiseNetworkOutletRow {
   securityDepositPaidAt?: string | null;
   /** HQ franchisee registry id for commission economics / rules */
   franchiseeRegistryId?: string;
+  /** GPS coordinates for nearest-outlet routing (WhatsApp commerce). */
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface FranchiseNetworkSummary {
@@ -124,6 +127,17 @@ export async function fetchFranchiseNetworkOutletById(outletRef: string): Promis
   } catch {
     return null;
   }
+}
+
+export async function updateOutletGeoApi(
+  outletOrgId: string,
+  payload: { latitude?: number | null; longitude?: number | null }
+): Promise<{ id: string; latitude?: number; longitude?: number }> {
+  requireLiveApi("Update outlet GPS");
+  return apiRequest(`/api/franchise/network/outlets/${encodeURIComponent(outletOrgId)}/geo`, {
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export type CreateFranchiseOutletPayload = {
@@ -665,7 +679,8 @@ export async function fetchSubcontractOrders(params?: {
 }
 
 /** Create subcontract order (send stock to processor).
- * Requires a GRN line: `grnId` + `grnLineIndex`; input kg comes from the receipt line only.
+ * Requires a GRN line: `grnId` + `grnLineIndex`; input kg defaults to unallocated weight on that line, or pass `inputWeightKg` for partial sends.
+ * Multiple active orders may reference the same line as long as total INPUT kg never exceeds the receipt line.
  * Use `bomId` with species/process for outputs/fees. Linked PO is resolved server-side from the GRN.
  */
 export async function createSubcontractOrder(body: {
@@ -675,8 +690,10 @@ export async function createSubcontractOrder(body: {
   species?: "TILAPIA" | "NILE_PERCH";
   processType?: "FILLETING" | "GUTTING";
   grnId: string;
-  /** Zero-based GRN receipt line — one subcontract order per line */
+  /** Zero-based GRN receipt line index */
   grnLineIndex: number;
+  /** Partial send: kg to allocate from this line (omit to use remaining line balance). */
+  inputWeightKg?: number;
 }): Promise<SubcontractOrderRow> {
   requireLiveApi("Create subcontract order");
   const res = await apiRequest<SubcontractOrderRow>("/api/manufacturing/subcontract-orders", {
@@ -686,11 +703,13 @@ export async function createSubcontractOrder(body: {
   return res;
 }
 
-/** Fetch all reverse BOMs for the dropdown in subcontract order creation */
-export async function fetchReverseBoms(): Promise<Array<{ id: string; name: string; code: string; productId: string; direction: string; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>> {
+/** Fetch active reverse BOMs for the subcontract order creation picker.
+ *  Only active BOMs are returned (activeOnly=true) so deactivated legacy BOMs
+ *  are excluded from auto-selection without requiring a hard delete. */
+export async function fetchReverseBoms(): Promise<Array<{ id: string; name: string; code: string; productId: string; direction: string; isActive: boolean; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>> {
   requireLiveApi("Reverse BOMs");
   const res = await apiRequest<{ items: Array<Record<string, any>> }>("/api/manufacturing/boms", {
-    params: { direction: "REVERSE" },
+    params: { direction: "REVERSE", activeOnly: "true" },
   });
   return (res.items ?? []) as any[];
 }
@@ -756,13 +775,22 @@ export async function receiveSubcontractOrder(
   body?: {
     warehouseId?: string;
     /** Per-line actual kg at receive; indices match order.lines */
-    actualLineQuantities?: Array<{ lineIndex: number; quantity: number }>;
+    actualLineQuantities?: Array<{ lineIndex: number; quantity?: number; quantityKg?: number }>;
+    /** Optional packing overrides per output line */
+    packingOverrides?: Array<{
+      lineIndex: number;
+      packingMode: "STANDARD" | "CUSTOM";
+      packagingType?: "BOX" | "SACK" | "MANUAL";
+      packUnitCount?: number;
+      packagingCostPerUnit?: number;
+    }>;
   }
 ): Promise<SubcontractOrderRow> {
   requireLiveApi("Receive subcontract order");
   const payload: Record<string, unknown> = {};
   if (body?.warehouseId?.trim()) payload.warehouseId = body.warehouseId.trim();
   if (body?.actualLineQuantities?.length) payload.actualLineQuantities = body.actualLineQuantities;
+  if (body?.packingOverrides?.length) payload.packingOverrides = body.packingOverrides;
   const res = await apiRequest<SubcontractOrderRow>(
     `/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}/receive`,
     { method: "POST", body: Object.keys(payload).length ? payload : {} }

@@ -100,7 +100,11 @@ export default function BomsPage() {
     {
       id: "status",
       header: "Status",
-      accessor: (r: BomRow) => (r.isActive ? "Active" : "Inactive"),
+      accessor: (r: BomRow) => (
+        <Badge variant={r.isActive ? "outline" : "secondary"} className={!r.isActive ? "opacity-60" : ""}>
+          {r.isActive ? "Active" : "Inactive"}
+        </Badge>
+      ),
     },
   ];
 

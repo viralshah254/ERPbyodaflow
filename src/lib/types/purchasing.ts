@@ -24,7 +24,12 @@ export type PurchasingDocRow = {
     productId?: string;
     productName: string;
     sku: string;
+    /** Total weight on the receipt line (kg). */
     receivedWeightKg: number;
+    /** Weight already tied to subcontract orders from this line (kg). */
+    allocatedWeightKg?: number;
+    /** receivedWeightKg − allocatedWeightKg (kg). */
+    remainingWeightKg?: number;
     available: boolean;
     /** Why this line is unavailable: "already_processed" | "no_weight" */
     unavailableReason?: string;

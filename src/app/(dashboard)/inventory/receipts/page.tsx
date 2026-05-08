@@ -188,7 +188,7 @@ export default function InventoryReceiptsPage() {
       },
       {
         id: "landedCost",
-        header: "Other costs",
+        header: "Additional costs",
         accessor: (r: PurchasingDocRow) =>
           r.hasLandedCost ? (
             <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs gap-1">
@@ -236,7 +236,7 @@ export default function InventoryReceiptsPage() {
                 </TooltipTrigger>
                 {!r.hasLandedCost && (
                   <TooltipContent side="left">
-                    Apply other costs before posting
+                    Apply additional costs before posting
                   </TooltipContent>
                 )}
               </Tooltip>
