@@ -22,6 +22,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** 400 from pick-pack action may include shortLines (same shape as dispatch). */
+function toastPickPackInsufficientError(e: unknown) {
+  const err = e as Error & {
+    status?: number;
+    body?: {
+      error?: string;
+      shortLines?: Array<{ sku?: string; productId: string; need: number; available: number }>;
+    };
+  };
+  if (err.status === 400 && err.body?.shortLines?.length) {
+    const detail = err.body.shortLines
+      .map((s) => `${s.sku ?? s.productId}: need ${s.need}, here ${s.available}`)
+      .join(" · ");
+    toast.error(err.body.error ?? "Insufficient stock.", { description: detail, duration: 14000 });
+    return;
+  }
+  toast.error(e instanceof Error ? e.message : "Action failed.");
+}
+
 function pickPackStockHintMessage(hint: string | undefined): string | null {
   switch (hint) {
     case "no_stock_levels_for_line_product_ids":
@@ -265,6 +284,44 @@ export default function PickPackDetailPage() {
       return "Task complete — customer receipt is recorded separately: open the delivery note and complete Record POD to mark it delivered.";
     return null;
   })();
+
+  /** Mirrors server-side getPickPackDispatchShortfalls — block confirm pick/pack when fulfilment qty is insufficient. */
+  const fulfilmentPickPackBlock = React.useMemo(() => {
+    type Row = { sku?: string; productName?: string; need: number; available: number };
+    if (!task) return { blocked: false, missingWarehouse: false, shortfalls: [] as Row[] };
+    const missingWarehouse = !(task.warehouseId ?? "").trim();
+    if (missingWarehouse) return { blocked: true, missingWarehouse: true, shortfalls: [] as Row[] };
+
+    const shortfalls: Row[] = [];
+    for (const line of task.lines) {
+      const need =
+        taskStatusUpper === "PENDING" ? line.quantity : (line.pickedQty ?? line.quantity);
+      if (!(need > 1e-9)) continue;
+      const available = line.onHandWarehouse ?? 0;
+      if (available + 1e-9 < need) {
+        shortfalls.push({
+          sku: line.sku,
+          productName: line.productName,
+          need,
+          available,
+        });
+      }
+    }
+    return {
+      blocked: shortfalls.length > 0,
+      missingWarehouse: false,
+      shortfalls,
+    };
+  }, [task, taskStatusUpper]);
+
+  const canConfirmPickStockOk =
+    canConfirmPick &&
+    !fulfilmentPickPackBlock.missingWarehouse &&
+    fulfilmentPickPackBlock.shortfalls.length === 0;
+  const canConfirmPackStockOk =
+    canConfirmPack &&
+    !fulfilmentPickPackBlock.missingWarehouse &&
+    fulfilmentPickPackBlock.shortfalls.length === 0;
 
   return (
     <PageShell>
@@ -558,37 +615,89 @@ export default function PickPackDetailPage() {
 
         <div className="flex flex-col gap-2">
           {workflowHint ? <p className="text-xs text-muted-foreground">{workflowHint}</p> : null}
+          {fulfilmentPickPackBlock.missingWarehouse && canConfirmPick ? (
+            <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
+              Select a fulfilment warehouse before you can confirm pick or pack.
+            </p>
+          ) : null}
+          {fulfilmentPickPackBlock.shortfalls.length ? (
+            <div className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
+              <p className="font-medium">Insufficient stock at fulfilment warehouse — confirm pick / pack disabled.</p>
+              <ul className="mt-2 list-disc pl-5 space-y-1">
+                {fulfilmentPickPackBlock.shortfalls.map((s, idx) => (
+                  <li key={`${s.sku ?? s.productName ?? idx}-${idx}`}>
+                    {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · need{" "}
+                    <span className="tabular-nums font-medium">{s.need}</span>, available{" "}
+                    <span className="tabular-nums font-medium">{s.available}</span>
+                  </li>
+                ))}
+              </ul>
+              {showStageStockCta ? (
+                <p className="mt-2 text-xs opacity-95">
+                  If stock exists at another warehouse, use <strong>Stage stock to fulfilment warehouse</strong> below.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
           <Button
-            disabled={!canConfirmPick}
-            title={!canConfirmPick ? "Pick already confirmed or task is not pending." : undefined}
+            disabled={!canConfirmPickStockOk}
+            title={
+              !canConfirmPick
+                ? "Pick already confirmed or task is not pending."
+                : fulfilmentPickPackBlock.missingWarehouse
+                  ? "Select a fulfilment warehouse first."
+                  : fulfilmentPickPackBlock.shortfalls.length
+                    ? "Not enough available stock here for the requested quantities."
+                    : undefined
+            }
             onClick={() =>
-              void runWarehouseAction("Pick confirmed.", () =>
-                runPickPackAction(task.id, {
-                  action: "pick",
-                  lines: task.lines.map((line) => ({
-                    lineId: line.id,
-                    pickedQty: line.quantity,
-                    locationId: line.locationId,
-                  })),
-                })
-              )
+              void (async () => {
+                try {
+                  await runPickPackAction(task.id, {
+                    action: "pick",
+                    lines: task.lines.map((line) => ({
+                      lineId: line.id,
+                      pickedQty: line.quantity,
+                      locationId: line.locationId,
+                    })),
+                  });
+                  toast.success("Pick confirmed.");
+                  await refresh();
+                } catch (e) {
+                  toastPickPackInsufficientError(e);
+                }
+              })()
             }
           >
             Confirm pick
           </Button>
           <Button
             variant="secondary"
-            disabled={!canConfirmPack}
-            title={!canConfirmPack ? "Confirm pick first (or task is past packing)." : undefined}
+            disabled={!canConfirmPackStockOk}
+            title={
+              !canConfirmPack
+                ? "Confirm pick first (or task is past packing)."
+                : fulfilmentPickPackBlock.missingWarehouse
+                  ? "Select a fulfilment warehouse first."
+                  : fulfilmentPickPackBlock.shortfalls.length
+                    ? "Not enough available stock for these picked quantities."
+                    : undefined
+            }
             onClick={() =>
-              void runWarehouseAction("Pack confirmed.", () =>
-                runPickPackAction(task.id, {
-                  action: "pack",
-                  cartonsCount: Math.max(1, Number(cartons) || 1),
-                  packingNote,
-                })
-              )
+              void (async () => {
+                try {
+                  await runPickPackAction(task.id, {
+                    action: "pack",
+                    cartonsCount: Math.max(1, Number(cartons) || 1),
+                    packingNote,
+                  });
+                  toast.success("Pack confirmed.");
+                  await refresh();
+                } catch (e) {
+                  toastPickPackInsufficientError(e);
+                }
+              })()
             }
           >
             Confirm pack
@@ -608,21 +717,7 @@ export default function PickPackDetailPage() {
                   toast.success("Dispatch recorded.");
                   await refresh();
                 } catch (e) {
-                  const err = e as Error & {
-                    status?: number;
-                    body?: {
-                      error?: string;
-                      shortLines?: Array<{ sku?: string; productId: string; need: number; available: number }>;
-                    };
-                  };
-                  if (err.status === 400 && err.body?.shortLines?.length) {
-                    const detail = err.body.shortLines
-                      .map((s) => `${s.sku ?? s.productId}: need ${s.need}, here ${s.available}`)
-                      .join(" · ");
-                    toast.error(err.body.error ?? "Cannot dispatch.", { description: detail, duration: 14000 });
-                  } else {
-                    toast.error(err instanceof Error ? err.message : "Dispatch failed.");
-                  }
+                  toastPickPackInsufficientError(e);
                 }
               })();
             }}

@@ -89,6 +89,23 @@ async function applyFreshFirebaseBearerIfAvailable(): Promise<void> {
   }
 }
 
+function apiUrl(path: string): string {
+  const base = getApiBase();
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** Authenticated binary GET (e.g. org logo preview). Returns null if not ok or API disabled. */
+export async function fetchApiBinary(path: string): Promise<Blob | null> {
+  if (!getApiBase()) return null;
+  await applyFreshFirebaseBearerIfAvailable();
+  const res = await fetch(apiUrl(path), {
+    method: "GET",
+    headers: { ...getAuthHeaders(), Accept: "*/*" },
+  });
+  if (!res.ok) return null;
+  return res.blob();
+}
+
 /**
  * GET and download as file (PDF, CSV, etc.). On 200, triggers browser download; on 501/404 shows toast.
  */
@@ -207,12 +224,6 @@ export async function uploadFile(
   } catch (e) {
     onError(e instanceof Error ? e.message : "Network error.");
   }
-}
-
-/** Build full URL for API. Path should start with / (e.g. /api/franchise/franchisees). */
-function apiUrl(path: string): string {
-  const base = getApiBase();
-  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export type ApiRequestOptions = {

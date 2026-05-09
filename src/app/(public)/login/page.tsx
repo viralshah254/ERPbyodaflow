@@ -12,9 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppFrame } from "@/components/marketing/app-frame";
+import { LoginHeroPreview } from "@/components/marketing/login-hero-preview";
 import { OdaLogo } from "@/components/brand/OdaLogo";
 import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
-import { ODA_BRAND } from "@/lib/brand";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 import { isFirebaseConfigured, signInAndGetIdToken, setRememberMeUntil, clearRememberMeUntil } from "@/lib/firebase";
@@ -258,20 +258,10 @@ function LoginContent() {
             </p>
           </div>
 
-          {/* Right: Visual */}
+          {/* Right: product preview */}
           <div className="hidden lg:block">
             <AppFrame>
-              <div
-                className="flex min-h-[500px] items-center justify-center p-8"
-                style={{ backgroundColor: ODA_BRAND.navy }}
-              >
-                <div className="max-w-sm space-y-4 text-center">
-                  <OdaLogo height={56} className="mx-auto max-w-[min(100%,280px)]" />
-                  <p className="text-sm text-white/85">
-                    Manage inventory, orders, finance, and more—all in one place.
-                  </p>
-                </div>
-              </div>
+              <LoginHeroPreview />
             </AppFrame>
           </div>
         </div>

@@ -62,9 +62,19 @@ import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execu
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
+import { useUIStore } from "@/stores/ui-store";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
+
+/**
+ * Proof of delivery (signatures, received weights) is intentional mobile-app only —
+ * dispatch / outlet apps. Web ERP stays view-coordination; do not expose the POD form here.
+ */
+const DELIVERY_NOTE_POD_WEB_ENABLED = false;
+
+/** Pick-pack tasks past these states mean warehouse issue already happened — do not link again from the DN. */
+const PICK_PACK_ACTIONABLE_STATUSES = new Set(["PENDING", "PICKED", "PACKED"]);
 
 /** Match backend invoice posting readiness for linked delivery notes. */
 function deliveryNoteSatisfiedForInvoicePost(status: string | undefined): boolean {
@@ -90,9 +100,6 @@ function computePodLineEvidenceNeeded(row: {
   }
   return qtyVariance || weightVariance;
 }
-import { useAuthStore } from "@/stores/auth-store";
-import { useUIStore } from "@/stores/ui-store";
-import { hasAnyPermission, Permissions } from "@/lib/permissions";
 
 function humanizeDocTypeKey(key: string) {
   return key.replace(/-/g, " ");
@@ -106,7 +113,6 @@ export default function DocViewPage() {
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
-  const user = useAuthStore((s) => s.user);
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
@@ -118,7 +124,11 @@ export default function DocViewPage() {
   const [applyAmount, setApplyAmount] = React.useState("");
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
-  const [loading, setLoading] = React.useState(true);
+  /** True only for the very first fetch when document is still null — drives skeleton vs empty-state decisions. */
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  /** True when re-fetching after an action; existing document stays visible. */
+  const [refreshing, setRefreshing] = React.useState(false);
+  const loading = initialLoading;
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
   const [notesDraft, setNotesDraft] = React.useState("");
   const [notesSaving, setNotesSaving] = React.useState(false);
@@ -165,13 +175,6 @@ export default function DocViewPage() {
     const raw = document?.availableConversionTargets ?? [];
     return [...new Set(raw)];
   }, [document?.availableConversionTargets]);
-  const canRecordPod = React.useMemo(() => {
-    if (type !== "delivery-note" || !document?.lines?.length) return false;
-    if (document.podConfirmation?.confirmedAt) return false;
-    const st = (document.status ?? "").toUpperCase();
-    if (!["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) return false;
-    return hasAnyPermission(user, [Permissions.SALES_DELIVERIES_POD, Permissions.SALES_WRITE]);
-  }, [type, document, user]);
 
   React.useEffect(() => {
     if (!podSheetOpen || !document?.lines?.length) return;
@@ -255,24 +258,29 @@ export default function DocViewPage() {
     [type, id, label, document, displayPartyName]
   );
 
-  const refreshDocument = React.useCallback(async () => {
-    setLoading(true);
+  const refreshDocument = React.useCallback(async (isBackground = false) => {
+    if (isBackground) {
+      setRefreshing(true);
+    } else {
+      setInitialLoading(true);
+    }
     try {
       setDocument(await fetchDocumentDetailApi(type as DocTypeKey, id));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setRefreshing(false);
     }
   }, [type, id]);
 
   React.useEffect(() => {
-    void refreshDocument();
+    void refreshDocument(false);
   }, [refreshDocument]);
 
   React.useEffect(() => {
-    if (!loading && document) setNotesDraft(document.notes ?? "");
-  }, [loading, document?.id, document?.notes]);
+    if (!initialLoading && document) setNotesDraft(document.notes ?? "");
+  }, [initialLoading, document?.id, document?.notes]);
 
   // For bills: fetch the GRN's landed cost allocation so we can show the breakdown card
   React.useEffect(() => {
@@ -309,7 +317,14 @@ export default function DocViewPage() {
         if (type === "delivery-note") {
           const items = await fetchPickPackTasks({ sourceDocumentId: id });
           if (!active) return;
-          setWarehouseTaskLink(items[0] ? { label: `Open pick-pack ${items[0].number}`, href: `/warehouse/pick-pack/${items[0].id}` } : null);
+          const actionable = items.find((t) =>
+            PICK_PACK_ACTIONABLE_STATUSES.has(String(t.status ?? "").trim().toUpperCase())
+          );
+          setWarehouseTaskLink(
+            actionable
+              ? { label: `Open pick-pack ${actionable.number}`, href: `/warehouse/pick-pack/${actionable.id}` }
+              : null
+          );
           return;
         }
         if (type === "grn") {
@@ -428,14 +443,19 @@ export default function DocViewPage() {
         setActionLoading(true);
         try {
           await documentActionApi(type as DocTypeKey, id, action as "approve" | "post" | "cancel");
-          await refreshDocument();
-          toast.success(`Document ${action}d.`);
+          if (action === "post") {
+            setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
+            toast.success("Document posted.");
+            void refreshDocument(true);
+          } else {
+            await refreshDocument(true);
+            toast.success(`Document ${action}d.`);
+          }
         } catch (e) { toast.error((e as Error).message); }
         finally { setActionLoading(false); }
       }}
       onConvert={openConvertSheet}
       onSendEmail={() => { setEmailTo(""); setEmailDialogOpen(true); }}
-      onRecordPod={canRecordPod ? () => setPodSheetOpen(true) : undefined}
     />
   );
 
@@ -479,6 +499,13 @@ export default function DocViewPage() {
   );
 
   return (
+    <>
+    {refreshing && (
+      <div className="fixed top-0 left-0 right-0 z-50 h-[2px] overflow-hidden">
+        <div className="h-full w-full animate-pulse bg-primary/70" style={{ animation: "indeterminate 1.4s linear infinite" }} />
+        <style>{`@keyframes indeterminate { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }`}</style>
+      </div>
+    )}
     <DocumentPageShell
       title={displayTitle}
       breadcrumbs={[
@@ -512,12 +539,6 @@ export default function DocViewPage() {
                 </Link>
               </Button>
             )}
-          {canRecordPod && (
-            <Button size="sm" variant="secondary" onClick={() => setPodSheetOpen(true)}>
-              <Icons.ClipboardCheck className="mr-2 h-4 w-4" />
-              Record POD
-            </Button>
-          )}
           {convertTargets.length === 1 ? (
             <Button
               size="sm"
@@ -554,7 +575,7 @@ export default function DocViewPage() {
                 setActionLoading(true);
                 try {
                   await requestDocumentApprovalApi(type as DocTypeKey, id);
-                  await refreshDocument();
+                  await refreshDocument(true);
                   toast.success("Approval requested.");
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -584,7 +605,7 @@ export default function DocViewPage() {
                   setActionLoading(true);
                   try {
                     await documentActionApi(type as DocTypeKey, id, "approve");
-                    await refreshDocument();
+                    await refreshDocument(true);
                     toast.success(type === "bill" ? "Bill approved." : "Document approved.");
                   } catch (e) {
                     toast.error((e as Error).message);
@@ -605,8 +626,11 @@ export default function DocViewPage() {
                   setActionLoading(true);
                   try {
                     await documentActionApi(type as DocTypeKey, id, "post");
-                    await refreshDocument();
+                    // Optimistically mark as POSTED so the UI updates immediately while the
+                    // background refresh fills in the rest of the detail.
+                    setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
                     toast.success("Document posted.");
+                    void refreshDocument(true);
                   } catch (e) {
                     toast.error((e as Error).message);
                   } finally {
@@ -629,7 +653,7 @@ export default function DocViewPage() {
                 setActionLoading(true);
                 try {
                   await documentActionApi(type as DocTypeKey, id, "cancel");
-                  await refreshDocument();
+                  await refreshDocument(true);
                   toast.success("Document cancelled.");
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -651,7 +675,7 @@ export default function DocViewPage() {
                 setActionLoading(true);
                 try {
                   await documentActionApi(type as DocTypeKey, id, "reverse");
-                  await refreshDocument();
+                  await refreshDocument(true);
                   toast.success("Reversal created.");
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -794,7 +818,7 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
-                      Draft lines are editable via Edit below. Once this delivery note is approved and dispatched, you cannot amend shipped quantities here; record what the customer received with Proof of delivery (POD)—that becomes the invoicing basis.
+                      Draft lines are editable via Edit below. Once this delivery note is approved and dispatched, you cannot amend shipped quantities here; POD (what the customer received) is recorded in the Odaflow mobile app and becomes the invoicing basis.
                     </p>
                   </div>
                 ) : null}
@@ -806,7 +830,7 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-blue-300/70 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
-                      Shipped quantities are frozen from warehouse issue. Capture customer-side variances with Record POD; invoices follow POD-received quantities when recorded.
+                      Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app only; invoices follow POD-received quantities once recorded there.
                     </p>
                   </div>
                 ) : null}
@@ -896,7 +920,7 @@ export default function DocViewPage() {
                           await patchDocumentApi(type as DocTypeKey, id, {
                             notes: notesDraft.trim() || undefined,
                           });
-                          await refreshDocument();
+                          await refreshDocument(true);
                           toast.success("Notes saved.");
                         } catch (e) {
                           toast.error((e as Error).message);
@@ -1011,7 +1035,18 @@ export default function DocViewPage() {
           lines={
             <Card>
               <CardContent className="pt-4">
-                {(document?.lines ?? []).length === 0 ? (
+                {initialLoading && !document ? (
+                  <div className="space-y-2 py-2">
+                    {[1, 2, 3].map((n) => (
+                      <div key={n} className="flex gap-3 animate-pulse">
+                        <div className="h-4 flex-1 rounded bg-muted" />
+                        <div className="h-4 w-12 rounded bg-muted" />
+                        <div className="h-4 w-16 rounded bg-muted" />
+                        <div className="h-4 w-20 rounded bg-muted" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (document?.lines ?? []).length === 0 ? (
                   <div className="rounded border border-dashed py-12 text-center">
                     <p className="text-muted-foreground mb-1">No line items</p>
                     {document?.status === "DRAFT" ? (
@@ -1102,7 +1137,7 @@ export default function DocViewPage() {
               files={document?.attachments}
               onUpload={async (file) => {
                 await uploadDocumentAttachmentApi(type as DocTypeKey, id, file);
-                await refreshDocument();
+                await refreshDocument(true);
                 toast.success(`Attachment ${file.name} uploaded.`);
               }}
               onDownload={(file) => {
@@ -1119,7 +1154,7 @@ export default function DocViewPage() {
                   comments={document?.comments}
                   onAddComment={async (body) => {
                     await addDocumentCommentApi(type as DocTypeKey, id, body);
-                    await refreshDocument();
+                    await refreshDocument(true);
                   }}
                 />
               </CardContent>
@@ -1263,7 +1298,7 @@ export default function DocViewPage() {
                     router.push(`/docs/${convertType}/${created.id}`);
                     return;
                   }
-                  await refreshDocument();
+                  await refreshDocument(true);
                 } catch (e) {
                   toast.error((e as Error).message);
                 } finally {
@@ -1278,6 +1313,7 @@ export default function DocViewPage() {
         </SheetContent>
       </Sheet>
 
+      {DELIVERY_NOTE_POD_WEB_ENABLED ? (
       <Sheet open={podSheetOpen} onOpenChange={setPodSheetOpen} modal={false}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
@@ -1531,7 +1567,7 @@ export default function DocViewPage() {
                   });
                   toast.success("Proof of delivery saved.");
                   setPodSheetOpen(false);
-                  await refreshDocument();
+                  await refreshDocument(true);
                 } catch (e) {
                   toast.error((e as Error).message);
                 } finally {
@@ -1545,6 +1581,7 @@ export default function DocViewPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+      ) : null}
 
       {/* Apply credit note to invoice dialog */}
       {applyDialogOpen && (
@@ -1609,7 +1646,7 @@ export default function DocViewPage() {
                     }
                     toast.success("Credit note applied to invoice.");
                     setApplyDialogOpen(false);
-                    await refreshDocument();
+                    await refreshDocument(true);
                   } catch (e) {
                     toast.error((e as Error).message);
                   } finally {
@@ -1673,7 +1710,7 @@ export default function DocViewPage() {
                     const result = await resp.json() as { to?: string };
                     toast.success(`Invoice sent to ${result.to ?? "customer"}`);
                     setEmailDialogOpen(false);
-                    await refreshDocument();
+                    await refreshDocument(true);
                   } catch (e) {
                     toast.error((e as Error).message);
                   } finally {
@@ -1689,6 +1726,7 @@ export default function DocViewPage() {
         </div>
       )}
     </DocumentPageShell>
+    </>
   );
 }
 
@@ -1703,7 +1741,6 @@ function DynamicNextStepsPanel({
   onAction,
   onConvert,
   onSendEmail,
-  onRecordPod,
 }: {
   type: string;
   document: DocumentDetailRecord | null;
@@ -1713,7 +1750,6 @@ function DynamicNextStepsPanel({
   onAction: (action: string) => Promise<void>;
   onConvert: (target: DocTypeKey) => void | Promise<void>;
   onSendEmail: () => void;
-  onRecordPod?: () => void;
 }) {
   const [notesPreviewOpen, setNotesPreviewOpen] = React.useState(false);
 
@@ -1757,13 +1793,11 @@ function DynamicNextStepsPanel({
         });
       }
     } else if (["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) {
-      if (!hasPod && onRecordPod) {
+      if (!hasPod) {
         steps.push({
-          icon: <Icons.ClipboardCheck className="h-4 w-4 text-amber-600" />,
-          text: "Record proof of delivery with received quantities — required before invoicing.",
-          action: onRecordPod,
-          actionLabel: "Record POD",
-          variant: "default",
+          icon: <Icons.Smartphone className="h-4 w-4 text-amber-600" />,
+          text:
+            "Proof of delivery is recorded only in the Odaflow mobile app (dispatch/driver or outlet). After POD, create the invoice here from acknowledged quantities.",
         });
       }
       if (hasPod && convertTargets.includes("invoice")) {
@@ -1776,7 +1810,10 @@ function DynamicNextStepsPanel({
         });
       }
     }
-    if (warehouseTaskLink) {
+    // Only surface the pick-pack link when the DN still needs fulfilment (DRAFT/APPROVED).
+    // Once CONVERTED, IN_TRANSIT, DELIVERED, or POSTED the pick-pack task is no longer actionable here.
+    const dnNeedsFulfilment = ["DRAFT", "APPROVED"].includes(st);
+    if (warehouseTaskLink && dnNeedsFulfilment) {
       steps.push({ icon: <Icons.Warehouse className="h-4 w-4" />, text: warehouseTaskLink.label, href: warehouseTaskLink.href });
     }
   } else if (type === "invoice") {

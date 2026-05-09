@@ -20,6 +20,7 @@ import {
   downloadOrgComplianceDoc,
   type OrgComplianceDocKindSlug,
 } from "@/lib/api/org";
+import { fetchApiBinary } from "@/lib/api/client";
 import type { OrgComplianceAttachmentSummary } from "@/lib/types/org";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -48,12 +49,16 @@ export default function OrganizationPage() {
   const [registrationNumber, setRegistrationNumber] = React.useState("");
   const [taxPinAttachment, setTaxPinAttachment] = React.useState<OrgComplianceAttachmentSummary | null>(null);
   const [coiAttachment, setCoiAttachment] = React.useState<OrgComplianceAttachmentSummary | null>(null);
+  const [logoAttachment, setLogoAttachment] = React.useState<OrgComplianceAttachmentSummary | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = React.useState<string | null>(null);
 
   const [uploadingTax, setUploadingTax] = React.useState(false);
   const [uploadingCoi, setUploadingCoi] = React.useState(false);
+  const [uploadingLogo, setUploadingLogo] = React.useState(false);
 
   const taxFileRef = React.useRef<HTMLInputElement>(null);
   const coiFileRef = React.useRef<HTMLInputElement>(null);
+  const logoFileRef = React.useRef<HTMLInputElement>(null);
 
   const refreshProfile = React.useCallback(async () => {
     const profile = await fetchOrgProfileApi();
@@ -63,6 +68,7 @@ export default function OrganizationPage() {
     setRegistrationNumber(profile.registrationNumber);
     setTaxPinAttachment(profile.taxPinAttachment);
     setCoiAttachment(profile.certificateOfIncorporationAttachment);
+    setLogoAttachment(profile.logoAttachment);
     return profile;
   }, []);
 
@@ -79,6 +85,7 @@ export default function OrganizationPage() {
         setRegistrationNumber(profile.registrationNumber);
         setTaxPinAttachment(profile.taxPinAttachment);
         setCoiAttachment(profile.certificateOfIncorporationAttachment);
+        setLogoAttachment(profile.logoAttachment);
       } catch (e) {
         if (!cancelled) toast.error((e as Error).message);
       } finally {
@@ -91,6 +98,26 @@ export default function OrganizationPage() {
     };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    const clear = () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    setLogoPreviewUrl(null);
+    if (!logoAttachment?.id) return clear;
+
+    void (async () => {
+      const blob = await fetchApiBinary("/api/org/compliance-docs/logo");
+      if (cancelled || !blob?.size) return;
+      objectUrl = URL.createObjectURL(blob);
+      if (!cancelled) setLogoPreviewUrl(objectUrl);
+    })();
+
+    return clear;
+  }, [logoAttachment?.id]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -102,6 +129,7 @@ export default function OrganizationPage() {
       setOrgId(profile.id);
       setTaxPinAttachment(profile.taxPinAttachment);
       setCoiAttachment(profile.certificateOfIncorporationAttachment);
+      setLogoAttachment(profile.logoAttachment);
       toast.success("Organization saved.");
     } catch (e) {
       toast.error((e as Error).message);
@@ -123,7 +151,8 @@ export default function OrganizationPage() {
       toast.error("File too large — max 12 MB.");
       return;
     }
-    const setBusy = kind === "tax-pin" ? setUploadingTax : setUploadingCoi;
+    const setBusy =
+      kind === "tax-pin" ? setUploadingTax : kind === "certificate-of-incorporation" ? setUploadingCoi : setUploadingLogo;
     setBusy(true);
     try {
       await uploadOrgComplianceDocApi(kind, file);
@@ -135,6 +164,7 @@ export default function OrganizationPage() {
       setBusy(false);
       if (kind === "tax-pin" && taxFileRef.current) taxFileRef.current.value = "";
       if (kind === "certificate-of-incorporation" && coiFileRef.current) coiFileRef.current.value = "";
+      if (kind === "logo" && logoFileRef.current) logoFileRef.current.value = "";
     }
   };
 
@@ -146,7 +176,8 @@ export default function OrganizationPage() {
             <CardTitle>Organization Information</CardTitle>
             <CardDescription>
               Visible to users with organisation settings access. Compliance scans are PDF or image (JPEG, PNG,
-              WEBP).
+              WEBP). Upload a company logo (image only) — it appears on PDFs for invoices, purchase orders, and
+              other exported documents.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -196,6 +227,23 @@ export default function OrganizationPage() {
             </div>
 
             <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2">
+              <ComplianceDocSlot
+                label="Company logo"
+                description="Shown in the header of PDF exports (invoices, quotations, purchase orders, delivery notes, etc.). Square or wide logos work best."
+                attachment={logoAttachment}
+                disabled={loading}
+                uploading={uploadingLogo}
+                canManage={canManageOrg}
+                fileInputRef={logoFileRef}
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                imagePreviewUrl={logoPreviewUrl}
+                onFileChange={(fl) => void handleCompliancePick("logo", fl)}
+                onDownload={() =>
+                  downloadOrgComplianceDoc("logo", logoAttachment?.fileName ?? "company-logo.png", (m) =>
+                    toast.error(m)
+                  )
+                }
+              />
               <ComplianceDocSlot
                 label="Tax PIN (scan / photo)"
                 description="Government-issued taxpayer PIN document or stamped letter."
@@ -293,6 +341,8 @@ function ComplianceDocSlot({
   uploading,
   canManage,
   fileInputRef,
+  accept = "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif",
+  imagePreviewUrl = null,
   onFileChange,
   onDownload,
 }: {
@@ -302,7 +352,9 @@ function ComplianceDocSlot({
   disabled: boolean;
   uploading: boolean;
   canManage: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  accept?: string;
+  imagePreviewUrl?: string | null;
   onFileChange: (files: FileList | null) => void;
   onDownload: () => void;
 }) {
@@ -313,12 +365,17 @@ function ComplianceDocSlot({
         <p className="text-xs text-muted-foreground mt-1">{description}</p>
       </div>
       <input
-        ref={fileInputRef}
+        ref={fileInputRef as React.RefObject<HTMLInputElement>}
         type="file"
-        accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif"
+        accept={accept}
         className="hidden"
         onChange={(e) => onFileChange(e.target.files)}
       />
+      {imagePreviewUrl ? (
+        <div className="rounded-md border bg-muted/30 p-3 flex justify-center items-center max-h-[120px]">
+          <img src={imagePreviewUrl} alt="" className="max-h-[100px] w-auto max-w-full object-contain" />
+        </div>
+      ) : null}
       {attachment ? (
         <div className="text-xs rounded-md bg-muted/50 border px-3 py-2 space-y-1">
           <div className="font-medium truncate" title={attachment.fileName}>

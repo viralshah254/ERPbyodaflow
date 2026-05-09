@@ -26,6 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { PermissionCatalogGroupDto, UserRow } from "@/lib/types/users-roles";
+import { MOBILE_PERSONA_LABELS } from "@/lib/types/users-roles";
+import { Badge } from "@/components/ui/badge";
 import {
   createRoleApi,
   createUserApi,
@@ -217,6 +219,7 @@ export default function UsersRolesPage() {
                       <TableHead>Status</TableHead>
                       {copilotProductEnabled ? <TableHead>Copilot</TableHead> : null}
                       <TableHead>Roles</TableHead>
+                      <TableHead>Mobile</TableHead>
                       <TableHead className="w-24" />
                     </TableRow>
                   </TableHeader>
@@ -237,6 +240,13 @@ export default function UsersRolesPage() {
                           <TableCell>{u.copilotEnabled ? "On" : "Off"}</TableCell>
                         ) : null}
                         <TableCell className="text-muted-foreground">{u.roleNames.join(", ")}</TableCell>
+                        <TableCell>
+                          {u.effectiveMobilePersona ? (
+                            <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
+                              {MOBILE_PERSONA_LABELS[u.effectiveMobilePersona] ?? u.effectiveMobilePersona}
+                            </Badge>
+                          ) : null}
+                        </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
                             Edit
@@ -296,6 +306,7 @@ export default function UsersRolesPage() {
                       <TableHead>Name</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Permissions</TableHead>
+                      <TableHead>Mobile shell</TableHead>
                       <TableHead className="w-24" />
                     </TableRow>
                   </TableHeader>
@@ -309,9 +320,23 @@ export default function UsersRolesPage() {
                     ) : null}
                     {roles.map((r) => (
                       <TableRow key={r.id}>
-                        <TableCell className="font-medium">{r.name}</TableCell>
+                        <TableCell className="font-medium">
+                          <span>{r.name}</span>
+                          {r.templateKey ? (
+                            <span className="ml-1.5 text-xs text-muted-foreground">(standard)</span>
+                          ) : null}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{r.description ?? "—"}</TableCell>
                         <TableCell>{r.permissionCount === 999 ? "All" : `${r.permissionCount}`}</TableCell>
+                        <TableCell>
+                          {r.mobileShell ? (
+                            <Badge variant="secondary" className="text-xs font-normal whitespace-nowrap">
+                              {MOBILE_PERSONA_LABELS[r.mobileShell] ?? r.mobileShell}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => openEditRole(r)}>
                             Edit

@@ -14,4 +14,5 @@ export interface OrgProfileRecord {
   registrationNumber: string;
   taxPinAttachment: OrgComplianceAttachmentSummary | null;
   certificateOfIncorporationAttachment: OrgComplianceAttachmentSummary | null;
+  logoAttachment: OrgComplianceAttachmentSummary | null;
 }

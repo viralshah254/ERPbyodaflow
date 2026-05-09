@@ -2,7 +2,7 @@ import type { OrgProfileRecord, OrgComplianceAttachmentSummary } from "@/lib/typ
 import { apiRequest, downloadFile, requireLiveApi, uploadFormData } from "./client";
 
 /** URL segment for multipart upload + GET binary download. */
-export type OrgComplianceDocKindSlug = "tax-pin" | "certificate-of-incorporation";
+export type OrgComplianceDocKindSlug = "tax-pin" | "certificate-of-incorporation" | "logo";
 
 type BackendOrg = {
   id: string;
@@ -11,6 +11,7 @@ type BackendOrg = {
   registrationNumber?: string;
   taxPinAttachment?: OrgComplianceAttachmentSummary | null;
   certificateOfIncorporationAttachment?: OrgComplianceAttachmentSummary | null;
+  logoAttachment?: OrgComplianceAttachmentSummary | null;
 };
 
 function mapOrg(org: BackendOrg): OrgProfileRecord {
@@ -22,6 +23,7 @@ function mapOrg(org: BackendOrg): OrgProfileRecord {
     taxPinAttachment: org.taxPinAttachment ?? null,
     certificateOfIncorporationAttachment:
       org.certificateOfIncorporationAttachment ?? null,
+    logoAttachment: org.logoAttachment ?? null,
   };
 }
 

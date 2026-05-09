@@ -1,9 +1,11 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { PermissionCatalogGroupDto, RoleRow, UserRow } from "@/lib/types/users-roles";
+import type { MobilePersona, PermissionCatalogGroupDto, RoleRow, UserRow } from "@/lib/types/users-roles";
 
 export interface RoleDetailRow extends RoleRow {
   scope?: "ORG" | "BRANCH" | "DEPARTMENT";
   permissions: string[];
+  templateKey?: string | null;
+  mobileShell?: MobilePersona | null;
 }
 
 type BackendUser = {
@@ -20,6 +22,7 @@ type BackendUser = {
   phoneNumber?: string | null;
   jobTitle?: string | null;
   employeeCode?: string | null;
+  effectiveMobilePersona?: string;
   stagedForCheckout?: boolean;
   checkout?: {
     id: string | null;
@@ -42,6 +45,8 @@ type BackendRole = {
   scope?: "ORG" | "BRANCH" | "DEPARTMENT";
   permissions?: string[];
   permissionCount?: number;
+  templateKey?: string | null;
+  mobileShell?: string | null;
 };
 
 function mapUser(user: BackendUser): UserRow {
@@ -58,6 +63,7 @@ function mapUser(user: BackendUser): UserRow {
     phoneNumber: user.phoneNumber ?? null,
     jobTitle: user.jobTitle ?? null,
     employeeCode: user.employeeCode ?? null,
+    effectiveMobilePersona: user.effectiveMobilePersona as MobilePersona | undefined,
     stagedForCheckout: user.stagedForCheckout ?? false,
     checkout: user.checkout,
     billingImpact: user.billingImpact,
@@ -72,6 +78,8 @@ function mapRole(role: BackendRole): RoleDetailRow {
     scope: role.scope,
     permissions: role.permissions ?? [],
     permissionCount: role.permissionCount ?? role.permissions?.length ?? 0,
+    templateKey: role.templateKey ?? null,
+    mobileShell: (role.mobileShell ?? null) as MobilePersona | null,
   };
 }
 
