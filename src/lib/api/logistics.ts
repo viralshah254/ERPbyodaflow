@@ -40,6 +40,41 @@ export type FuelEventRow = {
   note?: string;
 };
 
+export async function createDistributionVehicle(body: {
+  code: string;
+  name?: string;
+  type: "LEASED" | "SPOT";
+  registration?: string;
+  monthlyCost?: number;
+  assumedTripsPerMonth?: number;
+  currency?: string;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create vehicle");
+  return apiRequest("/api/distribution/vehicles", { method: "POST", body });
+}
+
+export async function updateDistributionVehicle(
+  id: string,
+  patch: Partial<{
+    code: string;
+    name: string;
+    type: "LEASED" | "SPOT";
+    registration: string;
+    monthlyCost: number;
+    assumedTripsPerMonth: number;
+    currency: string;
+    isActive: boolean;
+  }>
+): Promise<DistributionVehicleRow> {
+  requireLiveApi("Update vehicle");
+  return apiRequest(`/api/distribution/vehicles/${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+}
+
+export async function deleteDistributionVehicle(id: string): Promise<void> {
+  requireLiveApi("Delete vehicle");
+  await apiRequest(`/api/distribution/vehicles/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function fetchFuelEvents(params?: {
   vehicleId?: string;
   tripId?: string;

@@ -120,7 +120,7 @@ export default function DistributionTripsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Trips</CardTitle>
-            <CardDescription>Farm → hub (inbound), hub → franchisee (outbound). Monthly leased truck or spot-hire per trip.</CardDescription>
+            <CardDescription>Farm → hub (inbound), hub → customer (outbound). Monthly leased truck or spot-hire per trip.</CardDescription>
             <div className="flex gap-2 mt-2">
               <Select value={typeFilter || "ALL"} onValueChange={(v) => setTypeFilter(v === "ALL" ? "" : v)}>
                 <SelectTrigger className="w-40">

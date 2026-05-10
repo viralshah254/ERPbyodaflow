@@ -167,6 +167,15 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresPermissions: ["distribution.trips.read"],
       },
       {
+        key: "logistics-fleet",
+        label: "Manage fleet",
+        href: "/distribution/logistics/fleet",
+        icon: "Truck",
+        moduleKey: "distribution",
+        requiresFlags: ["logisticsTrips"],
+        requiresPermissions: ["distribution.trips.write"],
+      },
+      {
         key: "logistics-outbound-logistics-dn",
         label: "DN outbound freight",
         href: "/distribution/logistics/delivery-note",
