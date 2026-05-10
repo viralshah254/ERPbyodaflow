@@ -84,9 +84,22 @@ export default function FleetPage() {
     load();
   }, [load]);
 
+  function nextCode(type: "LEASED" | "SPOT"): string {
+    const prefix = type === "LEASED" ? "LSE" : "SPT";
+    const existing = vehicles
+      .map((v) => {
+        const m = v.code?.match(/^([A-Z]+)-(\d+)$/);
+        return m?.[1] === prefix ? parseInt(m[2], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const next = existing.length ? Math.max(...existing) + 1 : 1;
+    return `${prefix}-${String(next).padStart(3, "0")}`;
+  }
+
   function openCreate() {
     setEditingId(null);
-    setForm(emptyForm());
+    const defaultType: "LEASED" | "SPOT" = "SPOT";
+    setForm({ ...emptyForm(), code: nextCode(defaultType), type: defaultType });
     setSheetOpen(true);
   }
 
@@ -246,16 +259,19 @@ export default function FleetPage() {
           <div className="space-y-4 py-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Code *</Label>
-                <Input
-                  placeholder="e.g. TRK-001"
-                  value={form.code}
-                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
                 <Label>Type *</Label>
-                <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v as "LEASED" | "SPOT" }))}>
+                <Select
+                  value={form.type}
+                  onValueChange={(v) => {
+                    const t = v as "LEASED" | "SPOT";
+                    setForm((f) => ({
+                      ...f,
+                      type: t,
+                      // Refresh auto-generated code only when not editing
+                      ...(!editingId ? { code: nextCode(t) } : {}),
+                    }));
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -264,6 +280,14 @@ export default function FleetPage() {
                     <SelectItem value="SPOT">Spot hire</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Code</Label>
+                <Input
+                  value={form.code}
+                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+                  placeholder="Auto-generated"
+                />
               </div>
             </div>
 

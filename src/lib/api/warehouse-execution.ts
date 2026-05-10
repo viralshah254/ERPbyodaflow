@@ -14,6 +14,10 @@ export type WarehousePickPackRow = {
   packingNote?: string;
   courier?: string;
   trackingRef?: string;
+  vehicleId?: string;
+  vehicleCode?: string;
+  vehicleMode?: "LEASED" | "SPOT_HIRE";
+  outboundTripId?: string;
   /** When true, fulfilment warehouse is main stock only (Cool Catch); PATCH pick-pack warehouse is rejected. */
   coolCatchFulfilmentLocked?: boolean;
   /** Server hint when pick lines do not align with StockLevel data (see copy in UI). */
@@ -142,6 +146,9 @@ export async function runPickPackAction(
     courier?: string;
     trackingRef?: string;
     lines?: Array<{ lineId: string; pickedQty?: number; locationId?: string }>;
+    vehicleId?: string;
+    vehicleMode?: "LEASED" | "SPOT_HIRE";
+    carrier?: string;
   }
 ): Promise<void> {
   await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}/action`, {

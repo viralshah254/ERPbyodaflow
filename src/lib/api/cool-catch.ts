@@ -761,6 +761,46 @@ export async function fetchWIPBalances(workCenterId?: string): Promise<WIPBalanc
   return res.items ?? [];
 }
 
+export async function patchSubcontractOrder(
+  id: string,
+  patch: { outboundTripId?: string | null }
+): Promise<{ id: string; outboundTripId?: string }> {
+  requireLiveApi("Patch subcontract order");
+  return apiRequest(`/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+
+export type SubcontractBatchCost = {
+  orderId: string;
+  number: string;
+  status: string;
+  rawMaterialCost: number | null;
+  processingFee: number;
+  transport: {
+    tripId?: string;
+    tripStatus: string | null;
+    provisional: number;
+    final: number | null;
+    finalized: boolean;
+    cost: number;
+  };
+  totalEstimate: number;
+  currency: string;
+};
+
+export async function fetchSubcontractBatchCost(id: string): Promise<SubcontractBatchCost | null> {
+  requireLiveApi("Subcontract batch cost");
+  try {
+    return await apiRequest<SubcontractBatchCost>(
+      `/api/manufacturing/subcontract-orders/${encodeURIComponent(id)}/batch-cost`
+    );
+  } catch {
+    return null;
+  }
+}
+
 export async function dispatchSubcontractOrder(id: string): Promise<SubcontractOrderRow> {
   requireLiveApi("Dispatch subcontract order");
   const res = await apiRequest<SubcontractOrderRow>(

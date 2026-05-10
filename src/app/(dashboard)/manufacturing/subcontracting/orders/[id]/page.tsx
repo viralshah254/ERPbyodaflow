@@ -31,7 +31,9 @@ import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimelin
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocationBadge";
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
-import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, receiveSubcontractOrder, dispatchSubcontractOrder } from "@/lib/api/cool-catch";
+import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, dispatchSubcontractOrder, patchSubcontractOrder, fetchSubcontractBatchCost, type SubcontractBatchCost } from "@/lib/api/cool-catch";
+import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
+import { apiRequest } from "@/lib/api/client";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { fetchYieldRecords } from "@/lib/api/yield";
 import { fetchWarehousesApi } from "@/lib/api/warehouses";
@@ -109,23 +111,16 @@ export default function SubcontractOrderDetailPage() {
   const areaLabel = manufacturingAreaLabel(terminology);
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchSubcontractOrderById>>>(null);
   const [loading, setLoading] = React.useState(true);
-  const [receiving, setReceiving] = React.useState(false);
   const [dispatching, setDispatching] = React.useState(false);
   const [drilldown, setDrilldown] = React.useState<Awaited<ReturnType<typeof fetchSubcontractCostingDrilldown>>>(null);
+  const [batchCost, setBatchCost] = React.useState<SubcontractBatchCost | null>(null);
   const [auditEntries, setAuditEntries] = React.useState<Array<{ id: string; action: string; user: string; timestamp: string; detail?: string }>>([]);
   const [yieldRecords, setYieldRecords] = React.useState<Awaited<ReturnType<typeof fetchYieldRecords>>>([]);
-  const [receiveSheetOpen, setReceiveSheetOpen] = React.useState(false);
-  const [receiveWarehouseId, setReceiveWarehouseId] = React.useState("");
-  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; name: string; code?: string; status?: string }>>(
-    []
-  );
-  const [lineActualKg, setLineActualKg] = React.useState<string[]>([]);
-  // packingMode per line index: "STANDARD" | "CUSTOM"
-  const [linePackingMode, setLinePackingMode] = React.useState<Record<number, "STANDARD" | "CUSTOM">>({});
-  // Custom packing params per line index
-  const [linePackagingType, setLinePackagingType] = React.useState<Record<number, string>>({});
-  const [linePackUnitCount, setLinePackUnitCount] = React.useState<Record<number, string>>({});
-  const [linePackCostPerUnit, setLinePackCostPerUnit] = React.useState<Record<number, string>>({});
+  // Trip-link state
+  const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
+  const [availableTrips, setAvailableTrips] = React.useState<Array<{ id: string; reference?: string; status: string }>>([]);
+  const [linkingTrip, setLinkingTrip] = React.useState(false);
+  const [tripSelectValue, setTripSelectValue] = React.useState<string>("");
 
   const reload = React.useCallback(async () => {
     const [r, logs, yields] = await Promise.allSettled([
@@ -153,32 +148,19 @@ export default function SubcontractOrderDetailPage() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     fetchSubcontractCostingDrilldown(id).then((r) => { setDrilldown(r); }).catch(() => {});
+    fetchSubcontractBatchCost(id).then((r) => { setBatchCost(r); }).catch(() => {});
     return () => { cancelled = true; };
   }, [id, reload]);
 
   React.useEffect(() => {
-    if (!receiveSheetOpen) return;
-    void fetchWarehousesApi()
-      .then((items) => {
-        const rows = items
-          .filter((w) => (w.status ?? "ACTIVE").toUpperCase() !== "INACTIVE")
-          .map((w) => ({ id: w.id, name: w.name, code: w.code, status: w.status }))
-          .sort((a, b) => {
-            const rank = (x: { code?: string }) => ((x.code ?? "").toUpperCase() === "MAIN" ? 0 : 1);
-            const d = rank(a) - rank(b);
-            if (d !== 0) return d;
-            return a.name.localeCompare(b.name);
-          });
-        setWarehouses(rows);
-        setReceiveWarehouseId((prev) => {
-          if (prev && rows.some((r) => r.id === prev)) return prev;
-          const main = rows.find((r) => (r.code ?? "").toUpperCase() === "MAIN");
-          if (main) return main.id;
-          return rows.length === 1 ? rows[0]!.id : "";
-        });
-      })
-      .catch(() => toast.error("Could not load warehouses."));
-  }, [receiveSheetOpen]);
+    void fetchDistributionVehicles({ active: true }).then(setVehicles).catch(() => {});
+    // Fetch PLANNED/IN_TRANSIT OUTBOUND trips for linking
+    void apiRequest<{ items: Array<{ id: string; reference?: string; status: string }> }>("/api/distribution/trips", {
+      params: { type: "OUTBOUND", status: "IN_TRANSIT,PLANNED" },
+    })
+      .then((res) => setAvailableTrips(res?.items ?? []))
+      .catch(() => {});
+  }, []);
 
   const handleDispatch = async () => {
     if (!order || order.status !== "SENT") return;
@@ -194,73 +176,18 @@ export default function SubcontractOrderDetailPage() {
     }
   };
 
-  const openReceiveSheet = () => {
-    if (!order || order.status !== "WIP") return;
-    // Initialize from planned kg (plannedQuantity), not quantity which may already be in boxes
-    setLineActualKg((order.lines ?? []).map((l) => String(l.plannedQuantity ?? l.quantity)));
-    // Default all output lines to STANDARD packing
-    const defaultModes: Record<number, "STANDARD" | "CUSTOM"> = {};
-    const defaultTypes: Record<number, string> = {};
-    const defaultCounts: Record<number, string> = {};
-    const defaultCosts: Record<number, string> = {};
-    (order.lines ?? []).forEach((l, i) => {
-      if (l.type === "OUTPUT_PRIMARY" || l.type === "OUTPUT_SECONDARY") {
-        defaultModes[i] = "STANDARD";
-        defaultTypes[i] = "BOX";
-        const packSize = (l as any).packSizeKg;
-        const planned = l.plannedQuantity ?? l.quantity;
-        defaultCounts[i] = packSize && packSize > 0 ? String(Math.floor(planned / packSize)) : String(planned);
-        defaultCosts[i] = String((l as any).packagingCostPerUnit ?? 0);
-      }
-    });
-    setLinePackingMode(defaultModes);
-    setLinePackagingType(defaultTypes);
-    setLinePackUnitCount(defaultCounts);
-    setLinePackCostPerUnit(defaultCosts);
-    setReceiveSheetOpen(true);
-  };
-
-  const handleConfirmReceive = async () => {
-    if (!order || order.status !== "WIP") return;
-    const wid = receiveWarehouseId.trim();
-    setReceiving(true);
+  const handleLinkTrip = async () => {
+    if (!order || !tripSelectValue) return;
+    setLinkingTrip(true);
     try {
-      const actualLineQuantities = (order.lines ?? []).map((_, i) => ({
-        lineIndex: i,
-        // send quantityKg so the backend knows we're providing actual kg (not boxes)
-        quantityKg: Math.max(0, Number.parseFloat(lineActualKg[i] ?? "0") || 0),
-      }));
-      // Build packing overrides for OUTPUT lines
-      type PackingOverrideItem =
-        | { lineIndex: number; packingMode: "STANDARD" }
-        | { lineIndex: number; packingMode: "CUSTOM"; packagingType: "BOX" | "SACK" | "MANUAL"; packUnitCount: number; packagingCostPerUnit: number };
-      const packingOverrides: PackingOverrideItem[] = (order.lines ?? []).flatMap((l, i) => {
-        if (l.type !== "OUTPUT_PRIMARY" && l.type !== "OUTPUT_SECONDARY") return [] as PackingOverrideItem[];
-        const mode = linePackingMode[i] ?? "STANDARD";
-        if (mode === "STANDARD") {
-          return [{ lineIndex: i, packingMode: "STANDARD" as const }] as PackingOverrideItem[];
-        }
-        return [{
-          lineIndex: i,
-          packingMode: "CUSTOM" as const,
-          packagingType: (linePackagingType[i] ?? "BOX") as "BOX" | "SACK" | "MANUAL",
-          packUnitCount: Math.max(0, parseInt(linePackUnitCount[i] ?? "0", 10) || 0),
-          packagingCostPerUnit: Math.max(0, parseFloat(linePackCostPerUnit[i] ?? "0") || 0),
-        }] as PackingOverrideItem[];
-      });
-      await receiveSubcontractOrder(order.id, {
-        ...(wid ? { warehouseId: wid } : {}),
-        actualLineQuantities,
-        packingOverrides,
-      });
-      toast.success("Order received with actual weights. Stock and fees updated.");
-      setReceiveSheetOpen(false);
+      await patchSubcontractOrder(order.id, { outboundTripId: tripSelectValue || null });
+      toast.success("Outbound trip linked.");
       await reload();
-      fetchSubcontractCostingDrilldown(id).then((r) => { setDrilldown(r); }).catch(() => {});
+      fetchSubcontractBatchCost(id).then((r) => { setBatchCost(r); }).catch(() => {});
     } catch (e) {
-      toast.error((e as Error)?.message ?? "Receive failed");
+      toast.error((e as Error)?.message ?? "Could not link trip.");
     } finally {
-      setReceiving(false);
+      setLinkingTrip(false);
     }
   };
 
@@ -450,11 +377,6 @@ export default function SubcontractOrderDetailPage() {
                 {dispatching ? "Dispatching…" : "Mark as In Processing"}
               </Button>
             )}
-            {order.status === "WIP" && (
-              <Button size="sm" disabled={receiving} onClick={openReceiveSheet}>
-                Receive
-              </Button>
-            )}
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/subcontracting">Back to list</Link>
             </Button>
@@ -515,6 +437,75 @@ export default function SubcontractOrderDetailPage() {
                 ) : null}
               </CardContent>
             </Card>
+
+            {order.status === "WIP" && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200 dark:border-amber-500/30">
+                <p className="font-semibold">Receive from the mobile app</p>
+                <p className="mt-0.5 text-xs opacity-80">
+                  Goods receipt (weighing outputs, entering actual kg) is done on the mobile app. Open the app → Processing → and tap this order to receive.
+                </p>
+              </div>
+            )}
+
+            {order.status === "WIP" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Link outbound trip</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Link the distribution trip carrying finished goods from the processor. This connects fuel and transport costs to this batch.
+                  </p>
+                  {order.outboundTripId ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Linked trip:</span>
+                      <span className="font-medium">{availableTrips.find((t) => t.id === order.outboundTripId)?.reference ?? order.outboundTripId.slice(-12)}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-destructive hover:text-destructive"
+                        disabled={linkingTrip}
+                        onClick={() => {
+                          void (async () => {
+                            setLinkingTrip(true);
+                            try {
+                              await patchSubcontractOrder(order.id, { outboundTripId: null });
+                              toast.success("Trip unlinked.");
+                              await reload();
+                              fetchSubcontractBatchCost(id).then((r) => { setBatchCost(r); }).catch(() => {});
+                            } catch (e) {
+                              toast.error((e as Error)?.message ?? "Could not unlink trip.");
+                            } finally {
+                              setLinkingTrip(false);
+                            }
+                          })();
+                        }}
+                      >
+                        Unlink
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Select value={tripSelectValue} onValueChange={setTripSelectValue}>
+                        <SelectTrigger className="flex-1" aria-label="Outbound trip">
+                          <SelectValue placeholder={availableTrips.length ? "Select trip…" : "No active trips found"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTrips.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.reference ?? t.id.slice(-12)} — {t.status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" disabled={!tripSelectValue || linkingTrip} onClick={handleLinkTrip}>
+                        {linkingTrip ? "Linking…" : "Link"}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {order.status === "RECEIVED" ? (
               <YieldBreakdownCard
@@ -585,6 +576,61 @@ export default function SubcontractOrderDetailPage() {
                 />
               );
             })()}
+            {batchCost && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Batch cost chain</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="divide-y">
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground">Raw material (PO)</span>
+                      <span className="font-medium tabular-nums">
+                        {batchCost.rawMaterialCost != null
+                          ? `${batchCost.currency} ${batchCost.rawMaterialCost.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground">Processing fee</span>
+                      <span className="font-medium tabular-nums">
+                        {batchCost.currency} {batchCost.processingFee.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground">
+                        Outbound transport
+                        {batchCost.transport.tripStatus
+                          ? ` (${batchCost.transport.finalized ? "final" : "provisional"})`
+                          : ""}
+                      </span>
+                      <span className="font-medium tabular-nums">
+                        {batchCost.transport.tripId
+                          ? `${batchCost.currency} ${batchCost.transport.cost.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`
+                          : <span className="text-muted-foreground text-xs">No trip linked</span>}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2 font-semibold">
+                      <span>Total estimate</span>
+                      <span className="tabular-nums">
+                        {batchCost.currency} {batchCost.totalEstimate.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  {!batchCost.transport.tripId && (
+                    <p className="text-xs text-muted-foreground">
+                      Link an outbound trip above to include fuel / transport in the batch cost.
+                    </p>
+                  )}
+                  {batchCost.transport.tripId && !batchCost.transport.finalized && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      Transport cost is provisional — finalized when the trip is completed.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {drilldown && (
               <Card>
                 <CardHeader>
@@ -688,7 +734,9 @@ export default function SubcontractOrderDetailPage() {
         </div>
       </div>
 
-      <Sheet open={receiveSheetOpen} onOpenChange={setReceiveSheetOpen}>
+      {/* Receive sheet removed — receive is done on the mobile app only */}
+      {false && (
+        <Sheet open={false} onOpenChange={() => {}}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Receive — enter actual weights</SheetTitle>
@@ -941,15 +989,12 @@ export default function SubcontractOrderDetailPage() {
             })()}
           </div>
           <SheetFooter className="gap-2">
-            <Button variant="outline" onClick={() => setReceiveSheetOpen(false)} disabled={receiving}>
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmReceive} disabled={receiving}>
-              {receiving ? "Receiving…" : "Confirm receive"}
-            </Button>
+            <Button variant="outline" onClick={() => {}} disabled={false}>Cancel</Button>
+            <Button onClick={() => {}} disabled={false}>Confirm receive</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+      )}
     </PageShell>
   );
 }

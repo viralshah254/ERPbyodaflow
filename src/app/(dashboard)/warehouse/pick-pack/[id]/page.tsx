@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { fetchPickPackTask, patchPickPackWarehouse, runPickPackAction, stagePickPackStock, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { patchDocumentApi } from "@/lib/api/documents";
+import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
 import { toast } from "sonner";
 import {
   Select,
@@ -91,6 +92,9 @@ export default function PickPackDetailPage() {
   const [packingNote, setPackingNote] = React.useState("");
   const [courier, setCourier] = React.useState("");
   const [trackingRef, setTrackingRef] = React.useState("");
+  const [vehicleMode, setVehicleMode] = React.useState<"LEASED" | "SPOT_HIRE">("LEASED");
+  const [selectedVehicleId, setSelectedVehicleId] = React.useState<string>("");
+  const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
 
   const [warehouseOptions, setWarehouseOptions] = React.useState<LookupOption[]>([]);
   const [warehouseSaving, setWarehouseSaving] = React.useState(false);
@@ -129,6 +133,14 @@ export default function PickPackDetailPage() {
       .then(setWarehouseOptions)
       .catch(() => {
         toast.error("Failed to load warehouses.");
+      });
+  }, []);
+
+  React.useEffect(() => {
+    void fetchDistributionVehicles({ active: true })
+      .then(setVehicles)
+      .catch(() => {
+        /* Non-critical; fleet vehicles are optional */
       });
   }, []);
 
@@ -599,15 +611,62 @@ export default function PickPackDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>Dispatch</CardTitle>
+              <CardDescription>Select a fleet vehicle or provide spot-hire carrier details.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Courier</Label>
-                <Input value={courier} onChange={(e) => setCourier(e.target.value)} />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setVehicleMode("LEASED")}
+                  className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                    vehicleMode === "LEASED"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  Fleet vehicle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVehicleMode("SPOT_HIRE")}
+                  className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                    vehicleMode === "SPOT_HIRE"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  Spot hire
+                </button>
               </div>
+
+              {vehicleMode === "LEASED" ? (
+                <div className="space-y-2">
+                  <Label>Vehicle</Label>
+                  <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                    <SelectTrigger className="w-full" aria-label="Fleet vehicle">
+                      <SelectValue placeholder={vehicles.length ? "Select vehicle…" : "No fleet vehicles found"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.code}
+                          {v.name ? ` — ${v.name}` : ""}
+                          {v.registration ? ` (${v.registration})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Carrier name</Label>
+                  <Input value={courier} onChange={(e) => setCourier(e.target.value)} placeholder="Carrier / driver name" />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Tracking reference</Label>
-                <Input value={trackingRef} onChange={(e) => setTrackingRef(e.target.value)} />
+                <Input value={trackingRef} onChange={(e) => setTrackingRef(e.target.value)} placeholder="Optional" />
               </div>
             </CardContent>
           </Card>
@@ -711,7 +770,10 @@ export default function PickPackDetailPage() {
                 try {
                   await runPickPackAction(task.id, {
                     action: "dispatch",
-                    courier,
+                    vehicleMode,
+                    vehicleId: vehicleMode === "LEASED" && selectedVehicleId ? selectedVehicleId : undefined,
+                    carrier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
+                    courier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
                     trackingRef,
                   });
                   toast.success("Dispatch recorded.");

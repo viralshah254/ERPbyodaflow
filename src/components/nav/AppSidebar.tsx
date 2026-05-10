@@ -128,7 +128,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     <div
       className={cn(
         "flex h-screen flex-col border-r bg-card transition-all",
-        sidebarCollapsed ? "w-16" : "w-64",
+        sidebarCollapsed ? "w-16" : "w-[17.5rem] min-w-[17.5rem]",
         className
       )}
     >
@@ -169,8 +169,8 @@ export function AppSidebar({ className }: AppSidebarProps) {
         </Button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <nav className="p-2 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        <nav className="p-3 pb-6 space-y-0">
           {primarySections.map((section) => (
             <NavSection
               key={section.id}
@@ -180,7 +180,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
           ))}
 
           {!sidebarCollapsed && secondarySections.length > 0 && (
-            <div className="px-3 pt-1 pb-1">
+            <div className="mx-2 my-5">
               <div className="flex items-center gap-2">
                 <div className="h-px flex-1 bg-border" />
                 <span className="text-xs text-muted-foreground">More</span>

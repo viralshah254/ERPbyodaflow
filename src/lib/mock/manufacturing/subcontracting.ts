@@ -79,6 +79,8 @@ export interface SubcontractOrderRow {
   /** Warehouse stock was posted to on receive. */
   receiveWarehouseId?: string | null;
   receiveWarehouseName?: string | null;
+  /** Outbound distribution trip that moved finished goods from processor. */
+  outboundTripId?: string | null;
   createdAt: string;
   lines?: SubcontractOrderLineRow[];
 }
