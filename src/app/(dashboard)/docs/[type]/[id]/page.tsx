@@ -11,6 +11,7 @@ import { DocumentAttachments } from "@/components/docs/DocumentAttachments";
 import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
 import { PodSignaturePad } from "@/components/docs/PodSignaturePad";
+import { SignatureAttachmentViewButton } from "@/components/docs/SignatureAttachmentViewButton";
 import { PrintPreviewDrawer } from "@/components/docs/PrintPreviewDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -834,66 +835,136 @@ export default function DocViewPage() {
                     </p>
                   </div>
                 ) : null}
-                {type === "delivery-note" && document?.podConfirmation?.confirmedAt && (
-                  <div className="mt-4 pt-4 border-t space-y-2 text-sm">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Proof of delivery</p>
-                    <p>
-                      Confirmed{" "}
-                      {new Date(document.podConfirmation.confirmedAt).toLocaleString(undefined, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                      {document.podConfirmation.receiverName
-                        ? ` · Received by ${document.podConfirmation.receiverName}`
-                        : ""}
-                    </p>
-                    {document.podConfirmation.note ? (
-                      <p className="text-muted-foreground whitespace-pre-wrap">{document.podConfirmation.note}</p>
-                    ) : null}
-                    <p className="text-muted-foreground">
-                      Receiver signature:&nbsp;
-                      {document.podConfirmation.receiverSignatureAttachmentId ? (
-                        <button
-                          type="button"
-                          className="text-primary underline-offset-4 hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer"
-                          onClick={() => {
-                            const attId = document.podConfirmation?.receiverSignatureAttachmentId;
-                            if (!attId) return;
-                            downloadDocumentAttachmentApi(
-                              "delivery-note",
-                              id,
-                              attId,
-                              "receiver-signature.png",
-                              (msg) => toast.info(msg || "Download started.")
-                            );
-                          }}
-                        >
-                          Download PNG
-                        </button>
-                      ) : (
-                        "—"
-                      )}
-                    </p>
-                    <div className="rounded border divide-y max-w-3xl">
-                      {(document.podConfirmation.lines ?? []).map((ln) => {
-                        const docLine = document.lines.find((l) => l.id === ln.lineId);
-                        return (
-                          <div key={ln.lineId} className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs">
-                            <span className="min-w-0">{docLine?.description ?? ln.lineId}</span>
-                            <span className="shrink-0 text-muted-foreground">
-                              Received {ln.qtyReceived} of {ln.qtyShipped}
-                              {typeof ln.receivedWeightKg === "number" ? ` · ${ln.receivedWeightKg} kg` : ""}
-                              {ln.varianceReason ? ` — ${ln.varianceReason}` : ""}
-                              {(ln.varianceEvidenceAttachmentIds?.length ?? 0) > 0
-                                ? ` · ${ln.varianceEvidenceAttachmentIds!.length} variance photo(s)`
-                                : ""}
-                            </span>
+                {type === "delivery-note" &&
+                  document &&
+                  (document.dispatchPickup || document.podConfirmation?.confirmedAt) && (
+                    <div className="mt-4 pt-4 border-t space-y-6 text-sm">
+                      {document.dispatchPickup ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Pickup / collection
+                          </p>
+                          <p>
+                            Dispatched{" "}
+                            {new Date(document.dispatchPickup.dispatchedAt).toLocaleString(undefined, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                            {document.dispatchPickup.dispatcherName
+                              ? ` · ${document.dispatchPickup.dispatcherName}`
+                              : ""}
+                          </p>
+                          <p className="text-muted-foreground">
+                            Driver signature (pickup):{" "}
+                            {document.dispatchPickup.signatureAttachmentId ? (
+                              <SignatureAttachmentViewButton
+                                docType="delivery-note"
+                                documentId={id}
+                                attachmentId={document.dispatchPickup.signatureAttachmentId}
+                              />
+                            ) : (
+                              "—"
+                            )}
+                          </p>
+                          <div className="rounded border divide-y max-w-3xl">
+                            {(document.dispatchPickup.lines ?? []).map((pl) => {
+                              const docLine = document.lines.find((l) => l.id === pl.lineId);
+                              const shippedW = docLine?.weightKg;
+                              return (
+                                <div
+                                  key={pl.lineId}
+                                  className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs"
+                                >
+                                  <span className="min-w-0">{docLine?.description ?? pl.lineId}</span>
+                                  <span className="shrink-0 text-muted-foreground text-right">
+                                    {typeof shippedW === "number"
+                                      ? `Shipped weight ${shippedW} kg · `
+                                      : ""}
+                                    Loaded at pickup {pl.loadedWeightKg} kg
+                                    {pl.varianceReason ? ` — ${pl.varianceReason}` : ""}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
-                        );
-                      })}
+                        </div>
+                      ) : null}
+
+                      {document.podConfirmation?.confirmedAt ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Proof of delivery
+                          </p>
+                          <p>
+                            Confirmed{" "}
+                            {new Date(document.podConfirmation.confirmedAt).toLocaleString(undefined, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                            {document.podConfirmation.receiverName
+                              ? ` · Received by ${document.podConfirmation.receiverName}`
+                              : ""}
+                          </p>
+                          {document.podConfirmation.note ? (
+                            <p className="text-muted-foreground whitespace-pre-wrap">{document.podConfirmation.note}</p>
+                          ) : null}
+                          <p className="text-muted-foreground">
+                            Customer / receiver signature:&nbsp;
+                            {document.podConfirmation.receiverSignatureAttachmentId ? (
+                              <SignatureAttachmentViewButton
+                                docType="delivery-note"
+                                documentId={id}
+                                attachmentId={document.podConfirmation.receiverSignatureAttachmentId}
+                              />
+                            ) : (
+                              "—"
+                            )}
+                          </p>
+                          {(document.podConfirmation.dispatcherName ||
+                            document.podConfirmation.dispatcherSignatureAttachmentId) && (
+                            <p className="text-muted-foreground">
+                              Delivery person (drop-off)
+                              {document.podConfirmation.dispatcherName
+                                ? ` · ${document.podConfirmation.dispatcherName}`
+                                : ""}
+                              :{" "}
+                              {document.podConfirmation.dispatcherSignatureAttachmentId ? (
+                                <SignatureAttachmentViewButton
+                                  docType="delivery-note"
+                                  documentId={id}
+                                  attachmentId={document.podConfirmation.dispatcherSignatureAttachmentId}
+                                />
+                              ) : (
+                                "—"
+                              )}
+                            </p>
+                          )}
+                          <div className="rounded border divide-y max-w-3xl">
+                            {(document.podConfirmation.lines ?? []).map((ln) => {
+                              const docLine = document.lines.find((l) => l.id === ln.lineId);
+                              const pickupLine = document.dispatchPickup?.lines?.find((p) => p.lineId === ln.lineId);
+                              const shippedW = docLine?.weightKg;
+                              const parts: string[] = [];
+                              parts.push(`Received ${ln.qtyReceived} of ${ln.qtyShipped}`);
+                              if (typeof shippedW === "number") parts.push(`shipped ${shippedW} kg`);
+                              if (pickupLine) parts.push(`loaded at pickup ${pickupLine.loadedWeightKg} kg`);
+                              if (typeof ln.receivedWeightKg === "number") parts.push(`received ${ln.receivedWeightKg} kg`);
+                              if (ln.varianceReason) parts.push(ln.varianceReason);
+                              if ((ln.varianceEvidenceAttachmentIds?.length ?? 0) > 0) {
+                                parts.push(`${ln.varianceEvidenceAttachmentIds!.length} variance photo(s)`);
+                              }
+                              return (
+                                <div key={ln.lineId} className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs">
+                                  <span className="min-w-0">{docLine?.description ?? ln.lineId}</span>
+                                  <span className="shrink-0 text-muted-foreground text-right">{parts.join(" · ")}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
-                )}
+                  )}
                 {/* Invoice payment status bar */}
                 {document?.status === "DRAFT" && (
                   <div className="mt-4 pt-4 border-t space-y-2">

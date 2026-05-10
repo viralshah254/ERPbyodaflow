@@ -205,6 +205,35 @@ export default function PickPackDetailPage() {
     [task, refresh, fulfilmentWarehouseUi.changeViaDn, fulfilmentWarehouseUi.coolCatchLocked]
   );
 
+  /** Mirrors server-side getPickPackDispatchShortfalls — block confirm pick/pack when fulfilment qty is insufficient. */
+  const fulfilmentPickPackBlock = React.useMemo(() => {
+    type Row = { sku?: string; productName?: string; need: number; available: number };
+    if (!task) return { blocked: false, missingWarehouse: false, shortfalls: [] as Row[] };
+    const missingWarehouse = !(task.warehouseId ?? "").trim();
+    if (missingWarehouse) return { blocked: true, missingWarehouse: true, shortfalls: [] as Row[] };
+
+    const statusUpper = (task.status ?? "").trim().toUpperCase();
+    const shortfalls: Row[] = [];
+    for (const line of task.lines) {
+      const need = statusUpper === "PENDING" ? line.quantity : (line.pickedQty ?? line.quantity);
+      if (!(need > 1e-9)) continue;
+      const available = line.onHandWarehouse ?? 0;
+      if (available + 1e-9 < need) {
+        shortfalls.push({
+          sku: line.sku,
+          productName: line.productName,
+          need,
+          available,
+        });
+      }
+    }
+    return {
+      blocked: shortfalls.length > 0,
+      missingWarehouse: false,
+      shortfalls,
+    };
+  }, [task]);
+
   if (!task && loading) {
     return <PageShell><PageHeader title="Loading task..." /></PageShell>;
   }
@@ -284,35 +313,6 @@ export default function PickPackDetailPage() {
       return "Task complete — customer receipt is recorded separately: open the delivery note and complete Record POD to mark it delivered.";
     return null;
   })();
-
-  /** Mirrors server-side getPickPackDispatchShortfalls — block confirm pick/pack when fulfilment qty is insufficient. */
-  const fulfilmentPickPackBlock = React.useMemo(() => {
-    type Row = { sku?: string; productName?: string; need: number; available: number };
-    if (!task) return { blocked: false, missingWarehouse: false, shortfalls: [] as Row[] };
-    const missingWarehouse = !(task.warehouseId ?? "").trim();
-    if (missingWarehouse) return { blocked: true, missingWarehouse: true, shortfalls: [] as Row[] };
-
-    const shortfalls: Row[] = [];
-    for (const line of task.lines) {
-      const need =
-        taskStatusUpper === "PENDING" ? line.quantity : (line.pickedQty ?? line.quantity);
-      if (!(need > 1e-9)) continue;
-      const available = line.onHandWarehouse ?? 0;
-      if (available + 1e-9 < need) {
-        shortfalls.push({
-          sku: line.sku,
-          productName: line.productName,
-          need,
-          available,
-        });
-      }
-    }
-    return {
-      blocked: shortfalls.length > 0,
-      missingWarehouse: false,
-      shortfalls,
-    };
-  }, [task, taskStatusUpper]);
 
   const canConfirmPickStockOk =
     canConfirmPick &&

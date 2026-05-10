@@ -70,8 +70,26 @@ export type PodConfirmationRecord = {
   receiverName?: string;
   /** Attachment on the delivery note (signature image). */
   receiverSignatureAttachmentId?: string;
+  /** Delivery driver at drop-off (mobile POD). */
+  dispatcherName?: string;
+  dispatcherSignatureAttachmentId?: string;
   note?: string;
   lines: PodConfirmationLineRecord[];
+};
+
+/** Driver pickup at collection / processing (before IN_TRANSIT). */
+export type DispatchPickupLineRecord = {
+  lineId: string;
+  loadedWeightKg: number;
+  varianceReason?: string;
+};
+
+export type DispatchPickupRecord = {
+  dispatchedAt: string;
+  dispatchedByUserId?: string;
+  dispatcherName: string;
+  signatureAttachmentId: string;
+  lines: DispatchPickupLineRecord[];
 };
 
 export type DocumentDetailRecord = {
@@ -152,6 +170,8 @@ export type DocumentDetailRecord = {
   documentChain?: DocumentChainNode[];
   /** Proof of delivery (delivery-note only). */
   podConfirmation?: PodConfirmationRecord;
+  /** Driver pickup / collection weights (delivery-note only). */
+  dispatchPickup?: DispatchPickupRecord;
 };
 
 export type DocumentChainNode = {

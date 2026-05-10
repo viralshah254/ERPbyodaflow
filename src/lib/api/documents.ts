@@ -72,8 +72,24 @@ type BackendPodConfirmation = {
   confirmedByUserId?: string;
   receiverName?: string;
   receiverSignatureAttachmentId?: string;
+  dispatcherName?: string;
+  dispatcherSignatureAttachmentId?: string;
   note?: string;
   lines: BackendPodConfirmationLine[];
+};
+
+type BackendDispatchPickupLine = {
+  lineId: string;
+  loadedWeightKg: number;
+  varianceReason?: string;
+};
+
+type BackendDispatchPickup = {
+  dispatchedAt: string | Date;
+  dispatchedByUserId?: string;
+  dispatcherName: string;
+  signatureAttachmentId: string;
+  lines: BackendDispatchPickupLine[];
 };
 
 type BackendDocumentDetail = {
@@ -123,6 +139,7 @@ type BackendDocumentDetail = {
   isOverdue?: boolean;
   documentChain?: ChainNode[];
   podConfirmation?: BackendPodConfirmation;
+  dispatchPickup?: BackendDispatchPickup;
 };
 
 type ChainNode = {
@@ -356,6 +373,8 @@ function mapDocumentDetail(
           confirmedByUserId: payload.podConfirmation.confirmedByUserId,
           receiverName: payload.podConfirmation.receiverName,
           receiverSignatureAttachmentId: payload.podConfirmation.receiverSignatureAttachmentId,
+          dispatcherName: payload.podConfirmation.dispatcherName,
+          dispatcherSignatureAttachmentId: payload.podConfirmation.dispatcherSignatureAttachmentId,
           note: payload.podConfirmation.note,
           lines: (payload.podConfirmation.lines ?? []).map((ln) => ({
             lineId: ln.lineId,
@@ -366,6 +385,22 @@ function mapDocumentDetail(
             ...(ln.varianceEvidenceAttachmentIds?.length
               ? { varianceEvidenceAttachmentIds: ln.varianceEvidenceAttachmentIds }
               : {}),
+          })),
+        }
+      : undefined,
+    dispatchPickup: payload.dispatchPickup
+      ? {
+          dispatchedAt:
+            typeof payload.dispatchPickup.dispatchedAt === "string"
+              ? payload.dispatchPickup.dispatchedAt
+              : new Date(payload.dispatchPickup.dispatchedAt).toISOString(),
+          dispatchedByUserId: payload.dispatchPickup.dispatchedByUserId,
+          dispatcherName: payload.dispatchPickup.dispatcherName,
+          signatureAttachmentId: payload.dispatchPickup.signatureAttachmentId,
+          lines: (payload.dispatchPickup.lines ?? []).map((ln) => ({
+            lineId: ln.lineId,
+            loadedWeightKg: ln.loadedWeightKg,
+            ...(ln.varianceReason ? { varianceReason: ln.varianceReason } : {}),
           })),
         }
       : undefined,
