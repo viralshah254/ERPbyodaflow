@@ -22,16 +22,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   fetchDistributionVehicles,
   createDistributionVehicle,
@@ -346,27 +337,15 @@ export default function FleetPage() {
       </Sheet>
 
       {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove {deleteTarget?.code}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove the vehicle from your fleet. Existing trips that reference it will not be
-              affected.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting ? "Removing…" : "Remove"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title={`Remove ${deleteTarget?.code ?? "vehicle"}?`}
+        description="This will permanently remove the vehicle from your fleet. Existing trips that reference it will not be affected."
+        confirmLabel={deleting ? "Removing…" : "Remove"}
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </PageLayout>
   );
 }
