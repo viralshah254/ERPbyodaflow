@@ -15,6 +15,10 @@ export type WhatsAppIntegrationDto = {
   integrationUserId?: string;
   /** True when a Meta access token is stored (token itself is never returned). */
   metaAccessTokenConfigured?: boolean;
+  /** True when org supplied Meta App Secret for webhook signature verification (BYO Meta app). */
+  metaAppSecretConfigured?: boolean;
+  /** True when org supplied webhook verify token for Meta GET verification (BYO Meta app). */
+  metaWebhookVerifyTokenConfigured?: boolean;
   metaCatalogId?: string;
   metaBusinessAccountId?: string;
   catalogLastSyncedAt?: string;
@@ -41,7 +45,11 @@ export function getWhatsAppWebhookUrlFromFrontend(): string {
 
 export async function updateWhatsAppIntegrationApi(
   patch: Partial<
-    Omit<WhatsAppIntegrationApiResponse, "webhookCallbackUrl" | "webhookPath" | "platformHints" | "metaAccessTokenConfigured"> & { metaAccessToken?: string }
+    Omit<WhatsAppIntegrationApiResponse, "webhookCallbackUrl" | "webhookPath" | "platformHints" | "metaAccessTokenConfigured" | "metaAppSecretConfigured" | "metaWebhookVerifyTokenConfigured"> & {
+      metaAccessToken?: string;
+      metaAppSecret?: string;
+      metaWebhookVerifyToken?: string;
+    }
   >
 ): Promise<WhatsAppIntegrationApiResponse> {
   requireLiveApi("WhatsApp integration settings");

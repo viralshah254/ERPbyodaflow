@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { hasRuntimePermission } from "@/lib/settings/hub-permissions";
 import { fetchBranchesApi, type BranchRow } from "@/lib/api/branches";
 import { fetchUsersApi } from "@/lib/api/users-roles";
@@ -39,6 +40,7 @@ function parsePhoneIdsBlock(text: string): string[] {
 
 export default function WhatsAppIntegrationSettingsPage() {
   const permissions = useAuthStore((s) => s.permissions ?? []);
+  const orgRole = useOrgContextStore((s) => s.orgRole);
   const canSave = hasRuntimePermission(permissions, "admin.settings");
 
   const [loading, setLoading] = React.useState(true);
@@ -62,6 +64,10 @@ export default function WhatsAppIntegrationSettingsPage() {
   const [metaCatalogId, setMetaCatalogId] = React.useState("");
   const [metaBusinessAccountId, setMetaBusinessAccountId] = React.useState("");
   const [metaTokenConfigured, setMetaTokenConfigured] = React.useState(false);
+  const [metaAppSecret, setMetaAppSecret] = React.useState("");
+  const [metaWebhookVerifyToken, setMetaWebhookVerifyToken] = React.useState("");
+  const [metaAppSecretConfigured, setMetaAppSecretConfigured] = React.useState(false);
+  const [metaWebhookVerifyTokenConfigured, setMetaWebhookVerifyTokenConfigured] = React.useState(false);
   const [catalogLastSyncedAt, setCatalogLastSyncedAt] = React.useState<string | undefined>(undefined);
   const [catalogLastSyncError, setCatalogLastSyncError] = React.useState<string | undefined>(undefined);
   const [syncing, setSyncing] = React.useState(false);
@@ -77,6 +83,11 @@ export default function WhatsAppIntegrationSettingsPage() {
     setPlatform(data.platformHints);
     setCallbackUrl(data.webhookCallbackUrl ?? getWhatsAppWebhookUrlFromFrontend());
     setMetaTokenConfigured(!!data.metaAccessTokenConfigured);
+    setMetaAppSecretConfigured(!!data.metaAppSecretConfigured);
+    setMetaWebhookVerifyTokenConfigured(!!data.metaWebhookVerifyTokenConfigured);
+    setMetaAccessToken("");
+    setMetaAppSecret("");
+    setMetaWebhookVerifyToken("");
     setMetaCatalogId(data.metaCatalogId ?? "");
     setMetaBusinessAccountId(data.metaBusinessAccountId ?? "");
     setCatalogLastSyncedAt(data.catalogLastSyncedAt);
@@ -121,6 +132,8 @@ export default function WhatsAppIntegrationSettingsPage() {
         autoApproveSalesOrders: autoApprove,
         integrationUserId: integrationUserId || undefined,
         ...(metaAccessToken.trim() ? { metaAccessToken: metaAccessToken.trim() } : {}),
+        ...(metaAppSecret.trim() ? { metaAppSecret: metaAppSecret.trim() } : {}),
+        ...(metaWebhookVerifyToken.trim() ? { metaWebhookVerifyToken: metaWebhookVerifyToken.trim() } : {}),
         metaCatalogId: metaCatalogId.trim() || undefined,
         metaBusinessAccountId: metaBusinessAccountId.trim() || undefined,
       });
@@ -167,13 +180,35 @@ export default function WhatsAppIntegrationSettingsPage() {
           </p>
         )}
 
+        {orgRole === "FRANCHISOR" && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-50">
+            <strong className="font-medium">Franchise network:</strong> these settings apply only to the{" "}
+            <em>current</em> organisation in your session (typically HQ). Each outlet must configure WhatsApp{" "}
+            separately — sign in as an admin for <strong>that outlet&apos;s</strong> organisation and open this same
+            page there. Use the deployment playbook{" "}
+            <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-900/80">docs/WHATSAPP_FRANCHISE_IT_MANUAL.md</code>{" "}
+            for a full IT checklist.
+          </div>
+        )}
+        {orgRole === "FRANCHISEE" && (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-50">
+            <strong className="font-medium">Outlet organisation:</strong> you are configuring WhatsApp for{" "}
+            <strong>this outlet only</strong>. Product ranges usually follow head-office catalogue rules; stock and outlet
+            pricing drive catalog availability here.
+          </div>
+        )}
+
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Meta webhook</CardTitle>
+            <CardTitle className="text-base">Webhook callback (shared URL)</CardTitle>
             <CardDescription>
-              One callback URL is used for all organizations. Your tenant is identified by the WhatsApp{" "}
-              <strong>phone number id</strong> from Meta (see below). The verify token and app secret are
-              configured on the server for the whole product, not per organization.
+              Odaflow exposes <strong>one</strong> HTTPS endpoint for every tenant. Meta still sends events only for{" "}
+              <strong>your</strong> phone numbers; we route by <strong>Phone number ID</strong> below.
+              <br />
+              <span className="text-muted-foreground">
+                You can either rely on Odaflow&apos;s optional platform verify token / app secret (server env),{" "}
+                <strong>or</strong> paste your own Meta <strong>Webhook verify token</strong> and <strong>App secret</strong> here if you created your own Meta Developer app (full self-service).
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -198,16 +233,62 @@ export default function WhatsAppIntegrationSettingsPage() {
                     </Button>
                   </div>
                 </div>
-                {platform && (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Badge variant={platform.verifyTokenConfigured ? "default" : "secondary"}>
-                      Verify token {platform.verifyTokenConfigured ? "configured" : "missing (server)"}
-                    </Badge>
-                    <Badge variant={platform.metaAppSecretConfigured ? "default" : "secondary"}>
-                      App secret {platform.metaAppSecretConfigured ? "configured" : "optional / missing"}
-                    </Badge>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {platform && (
+                    <>
+                      <Badge variant={platform.verifyTokenConfigured ? "default" : "secondary"}>
+                        Platform verify token {platform.verifyTokenConfigured ? "configured" : "not set"}
+                      </Badge>
+                      <Badge variant={platform.metaAppSecretConfigured ? "default" : "secondary"}>
+                        Platform app secret {platform.metaAppSecretConfigured ? "configured" : "not set"}
+                      </Badge>
+                    </>
+                  )}
+                  <Badge variant={metaWebhookVerifyTokenConfigured ? "default" : "secondary"}>
+                    Your webhook verify token {metaWebhookVerifyTokenConfigured ? "saved" : "not set"}
+                  </Badge>
+                  <Badge variant={metaAppSecretConfigured ? "default" : "secondary"}>
+                    Your Meta app secret {metaAppSecretConfigured ? "saved" : "not set"}
+                  </Badge>
+                </div>
+                <div className="space-y-4 pt-4 border-t mt-4">
+                  <p className="text-xs text-muted-foreground">
+                    If you use your own Meta Developer app: invent a random <strong>Verify token</strong>, save it here first,
+                    then paste the same value in Meta → WhatsApp → Configuration → Webhook. Copy the <strong>App secret</strong> from Meta → App settings → Basic into the field below so Odaflow can validate webhook signatures.
+                  </p>
+                  <div>
+                    <Label htmlFor="wa-hub-verify">Your webhook verify token (optional)</Label>
+                    <Input
+                      id="wa-hub-verify"
+                      type="password"
+                      className="mt-1 font-mono text-sm"
+                      value={metaWebhookVerifyToken}
+                      onChange={(e) => setMetaWebhookVerifyToken(e.target.value)}
+                      placeholder={
+                        metaWebhookVerifyTokenConfigured
+                          ? "●●●●●●●●  (saved — leave blank to keep)"
+                          : "Random secret — match Meta webhook verify token"
+                      }
+                      disabled={!canSave}
+                      autoComplete="off"
+                    />
                   </div>
-                )}
+                  <div>
+                    <Label htmlFor="wa-app-secret">Your Meta App secret (optional)</Label>
+                    <Input
+                      id="wa-app-secret"
+                      type="password"
+                      className="mt-1 font-mono text-sm"
+                      value={metaAppSecret}
+                      onChange={(e) => setMetaAppSecret(e.target.value)}
+                      placeholder={
+                        metaAppSecretConfigured ? "●●●●●●●●  (saved — leave blank to keep)" : "From Meta Developer → App → Basic"
+                      }
+                      disabled={!canSave}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
               </>
             )}
           </CardContent>
