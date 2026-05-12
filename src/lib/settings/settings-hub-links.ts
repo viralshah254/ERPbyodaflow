@@ -103,6 +103,13 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
         icon: "MessageCircle",
         requiresPermissions: ["settings.org.read"],
       },
+      {
+        href: "/settings/integrations/coolcatch-bot",
+        label: "Coolcatch bot (WhatsApp)",
+        description: "External bot API keys, shop registry, and webhook URLs",
+        icon: "Bot",
+        requiresPermissions: ["settings.org.read"],
+      },
     ],
   },
   {

@@ -47,6 +47,20 @@ const STATUS_OPTIONS = [
   { label: "Fulfilled", value: "FULFILLED" },
 ];
 
+const CHANNEL_OPTIONS = [
+  { label: "All channels", value: "" },
+  { label: "WhatsApp", value: "whatsapp" },
+];
+
+/** WhatsApp-native and Coolcatch WhatsApp bot — same list UX (badge + channel filter). */
+function isWhatsAppStyleSalesOrder(r: SalesDocRow): boolean {
+  return (
+    r.orderChannel === "WHATSAPP" ||
+    r.orderChannel === "COOLCATCH_WA" ||
+    (r.reference?.startsWith("WA:") ?? false)
+  );
+}
+
 const scope = "sales-orders";
 
 // ─── Franchise Inbound Orders panel ──────────────────────────────────────────
@@ -184,6 +198,7 @@ export default function SalesOrdersPage() {
     franchiseRowsCount !== null ? franchiseRowsCount : (navCounts["franchise-inbound-orders"] ?? 0);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
+  const [channelFilter, setChannelFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
@@ -214,8 +229,9 @@ export default function SalesOrdersPage() {
       );
     }
     if (statusFilter) out = out.filter((r) => r.status === statusFilter);
+    if (channelFilter === "whatsapp") out = out.filter((r) => isWhatsAppStyleSalesOrder(r));
     return out;
-  }, [allRows, search, statusFilter]);
+  }, [allRows, search, statusFilter, channelFilter]);
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -223,9 +239,10 @@ export default function SalesOrdersPage() {
       const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
+    if (channelFilter === "whatsapp") chips.push({ id: "channel", label: "Channel", value: "WhatsApp" });
     if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
     return chips;
-  }, [statusFilter, search]);
+  }, [statusFilter, channelFilter, search]);
 
   const columns = React.useMemo(
     () => [
@@ -258,7 +275,7 @@ export default function SalesOrdersPage() {
         accessor: (r: SalesDocRow) => (
           <div className="flex items-center gap-2">
             <StatusBadge status={r.status} />
-            {(r.orderChannel === "WHATSAPP" || r.reference?.startsWith("WA:")) && (
+            {isWhatsAppStyleSalesOrder(r) && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 text-green-700 border-green-300 dark:text-green-400 dark:border-green-700">
                 <Icons.MessageCircle className="h-2.5 w-2.5" />
                 WhatsApp
@@ -311,16 +328,18 @@ export default function SalesOrdersPage() {
 
   const handleClearFilters = () => {
     setStatusFilter("");
+    setChannelFilter("");
     setSearch("");
   };
   const handleRemoveFilterChip = (id: string) => {
     if (id === "status") setStatusFilter("");
+    if (id === "channel") setChannelFilter("");
     if (id === "q") setSearch("");
   };
   const handleSaveView = () => {
     const v = saveView(scope, {
       name: `View ${savedViews.length + 1}`,
-      filters: { q: search, status: statusFilter },
+      filters: { q: search, status: statusFilter, channel: channelFilter },
     });
     setSavedViews(getSavedViews(scope));
     setCurrentViewId(v.id);
@@ -330,6 +349,7 @@ export default function SalesOrdersPage() {
     if (v?.filters) {
       setSearch((v.filters.q as string) ?? "");
       setStatusFilter((v.filters.status as string) ?? "");
+      setChannelFilter((v.filters.channel as string) ?? "");
     }
     setCurrentViewId(id);
   };
@@ -384,6 +404,7 @@ export default function SalesOrdersPage() {
                 onSearchChange={setSearch}
                 filters={[
                   { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
+                  { id: "channel", label: "Channel", options: CHANNEL_OPTIONS, value: channelFilter, onChange: (v) => setChannelFilter(v) },
                 ]}
                 activeFiltersCount={filterChips.length}
                 onClearFilters={handleClearFilters}
@@ -424,6 +445,13 @@ export default function SalesOrdersPage() {
                   options: STATUS_OPTIONS,
                   value: statusFilter,
                   onChange: (v) => setStatusFilter(v),
+                },
+                {
+                  id: "channel",
+                  label: "Channel",
+                  options: CHANNEL_OPTIONS,
+                  value: channelFilter,
+                  onChange: (v) => setChannelFilter(v),
                 },
               ]}
               activeFiltersCount={filterChips.length}
