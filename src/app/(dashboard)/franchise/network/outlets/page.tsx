@@ -25,16 +25,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
   fetchFranchiseNetworkOutlets,
   createFranchiseOutletApi,
   fetchNextOutletCodeApi,
   repairFranchiseeRegistryApi,
   patchOutletTargets,
+  patchFranchiseNetworkOutletApi,
+  deleteFranchiseNetworkOutletApi,
   type FranchiseNetworkOutletRow,
   type CreateFranchiseOutletPayload,
 } from "@/lib/api/cool-catch";
 import { useAuthStore } from "@/stores/auth-store";
-import { Loader2, Plus, Wrench, Target, CheckCircle2, Clock, AlertTriangle, Minus } from "lucide-react";
+import { Loader2, Plus, Wrench, Target, CheckCircle2, Clock, AlertTriangle, Minus, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 const emptyForm: CreateFranchiseOutletPayload = {
@@ -61,6 +70,17 @@ export default function FranchiseOutletsPage() {
   const [targetValueKes, setTargetValueKes] = React.useState("");
   const [targetKg, setTargetKg] = React.useState("");
   const [savingTargets, setSavingTargets] = React.useState(false);
+  const [editOutlet, setEditOutlet] = React.useState<FranchiseNetworkOutletRow | null>(null);
+  const [editForm, setEditForm] = React.useState({
+    name: "",
+    outletCode: "",
+    territory: "",
+    storeFormat: "",
+    managerName: "",
+ });
+  const [savingEdit, setSavingEdit] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState<FranchiseNetworkOutletRow | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
   const permissions = useAuthStore((s) => s.permissions);
   const canView =
     permissions.includes("franchise.network.read") ||
@@ -177,6 +197,65 @@ export default function FranchiseOutletsPage() {
     }
   };
 
+  const openEditOutlet = (o: FranchiseNetworkOutletRow) => {
+    setEditOutlet(o);
+    setEditForm({
+      name: o.name ?? "",
+      outletCode: o.code ?? "",
+      territory: o.territory ?? "",
+      storeFormat: o.storeFormat ?? "",
+      managerName: o.managerName ?? "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editOutlet) return;
+    if (!editForm.name.trim()) {
+      toast.error("Name is required.");
+      return;
+    }
+    if (!editForm.outletCode.trim()) {
+      toast.error("Outlet code is required.");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const res = await patchFranchiseNetworkOutletApi(editOutlet.id, {
+        name: editForm.name.trim(),
+        outletCode: editForm.outletCode.trim(),
+        territory: editForm.territory.trim() || undefined,
+        storeFormat: editForm.storeFormat.trim() || undefined,
+        managerName: editForm.managerName.trim() || undefined,
+      });
+      if (res && typeof res === "object" && "deactivated" in res && res.deactivated) {
+        toast.success("Outlet deactivated.");
+      } else {
+        toast.success("Franchise outlet updated.");
+      }
+      setEditOutlet(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update outlet.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleConfirmDeleteOutlet = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteFranchiseNetworkOutletApi(deleteTarget.id);
+      toast.success(`${deleteTarget.name} removed from the active network. Users can no longer sign in.`);
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove outlet.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -225,7 +304,7 @@ export default function FranchiseOutletsPage() {
                   <TableHead>Revenue</TableHead>
                   <TableHead>Weekly targets</TableHead>
                   <TableHead>Stock take</TableHead>
-                  <TableHead className="w-[80px]"></TableHead>
+                  <TableHead className="w-[56px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -309,9 +388,38 @@ export default function FranchiseOutletsPage() {
                       <StockTakeBadge status={o.weeklyStockTakeStatus} submittedAt={o.lastStockTakeSubmittedAt} />
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/franchise/${o.id}`}>View</Link>
-                      </Button>
+                      {canView ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              aria-label="Outlet actions"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/franchise/${o.id}`}>View</Link>
+                            </DropdownMenuItem>
+                            {canAdd ? (
+                              <>
+                                <DropdownMenuItem onClick={() => openEditOutlet(o)}>Edit details</DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteTarget(o)}
+                                >
+                                  Remove from network…
+                                </DropdownMenuItem>
+                              </>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -478,6 +586,79 @@ export default function FranchiseOutletsPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <Sheet open={!!editOutlet} onOpenChange={(open) => { if (!open) setEditOutlet(null); }}>
+        <SheetContent className="overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Edit franchisee</SheetTitle>
+            <SheetDescription>
+              Update outlet name, code, territory, format, and manager. HQ billing and commission registry stay linked.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid gap-4 py-6">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Outlet / franchisee name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-code">Outlet code</Label>
+              <Input
+                id="edit-code"
+                value={editForm.outletCode}
+                onChange={(e) => setEditForm((p) => ({ ...p, outletCode: e.target.value }))}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-territory">Territory</Label>
+              <Input
+                id="edit-territory"
+                value={editForm.territory}
+                onChange={(e) => setEditForm((p) => ({ ...p, territory: e.target.value }))}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-format">Store format</Label>
+              <Input
+                id="edit-format"
+                value={editForm.storeFormat}
+                onChange={(e) => setEditForm((p) => ({ ...p, storeFormat: e.target.value }))}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-manager">Manager name</Label>
+              <Input
+                id="edit-manager"
+                value={editForm.managerName}
+                onChange={(e) => setEditForm((p) => ({ ...p, managerName: e.target.value }))}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setEditOutlet(null)}>Cancel</Button>
+            <Button onClick={() => void handleSaveEdit()} disabled={savingEdit}>
+              {savingEdit ? "Saving…" : "Save changes"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title={deleteTarget ? `Remove “${deleteTarget.name}” from the network?` : "Remove outlet?"}
+        description="This does not erase their org or documents. The outlet drops from the active list, agreement is marked exited, and all users in that org are suspended. You can contact support if you need a full data purge."
+        confirmLabel={deleting ? "Removing…" : "Remove from network"}
+        variant="destructive"
+        onConfirm={() => void handleConfirmDeleteOutlet()}
+      />
     </PageShell>
   );
 }

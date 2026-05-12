@@ -2,26 +2,45 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   fetchFranchiseeStock,
   fetchFranchiseNetworkOutletById,
   fetchVMIReplenishmentOrders,
   fetchTopUps,
+  patchFranchiseNetworkOutletApi,
+  deleteFranchiseNetworkOutletApi,
   type FranchiseNetworkOutletRow,
 } from "@/lib/api/cool-catch";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { formatMoney } from "@/lib/money";
 import { FranchiseProductEconomicsSection } from "@/components/franchise/franchise-product-economics-section";
+import { useAuthStore } from "@/stores/auth-store";
+import { toast } from "sonner";
 
 export default function FranchiseDetailPage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const routeRef = String(params?.id ?? "");
+  const permissions = useAuthStore((s) => s.permissions);
+  const canManage =
+    permissions.includes("franchise.network.write") || permissions.includes("admin.users");
   const [name, setName] = React.useState(routeRef);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState<{ territory?: string; storeFormat?: string; revenue: number; arOverdue: number } | null>(null);
@@ -29,78 +48,133 @@ export default function FranchiseDetailPage() {
   const [replenishments, setReplenishments] = React.useState<Array<{ number: string; status: string; totalQty: number; createdAt: string }>>([]);
   const [topUps, setTopUps] = React.useState<Array<{ runNumber: string; amount: number; reason: string; status: string }>>([]);
   const [outletMeta, setOutletMeta] = React.useState<FranchiseNetworkOutletRow | null>(null);
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editForm, setEditForm] = React.useState({
+    name: "",
+    outletCode: "",
+    territory: "",
+    storeFormat: "",
+    managerName: "",
+  });
+  const [savingEdit, setSavingEdit] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const openEdit = () => {
+    if (!outletMeta) return;
+    setEditForm({
+      name: outletMeta.name ?? "",
+      outletCode: outletMeta.code ?? "",
+      territory: outletMeta.territory ?? "",
+      storeFormat: outletMeta.storeFormat ?? "",
+      managerName: outletMeta.managerName ?? "",
+    });
+    setEditOpen(true);
+  };
+
+  const loadAll = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const outletMetaRow = await fetchFranchiseNetworkOutletById(routeRef);
+      setOutletMeta(outletMetaRow);
+      const outletOrgId = outletMetaRow?.id ?? routeRef;
+      const franchiseeRegistryId = outletMetaRow?.franchiseeRegistryId;
+      const vmiKey = franchiseeRegistryId ?? outletOrgId;
+      setSummary(
+        outletMetaRow
+          ? {
+              territory: outletMetaRow.territory,
+              storeFormat: outletMetaRow.storeFormat,
+              revenue: outletMetaRow.revenue,
+              arOverdue: outletMetaRow.arOverdue,
+            }
+          : null
+      );
+      setName(outletMetaRow?.name ?? routeRef);
+      const [stock, orders, topupRows] = await Promise.all([
+        fetchFranchiseeStock(vmiKey),
+        fetchVMIReplenishmentOrders({ franchiseeId: vmiKey }),
+        fetchTopUps({ franchiseeId: vmiKey }),
+      ]);
+      setName(
+        outletMetaRow?.name ?? stock[0]?.franchiseeName ?? orders[0]?.franchiseeName ?? routeRef
+      );
+      setStockRows(
+        stock.map((s) => ({
+          sku: s.sku,
+          productName: s.productName,
+          qty: s.qty,
+          reorderPoint: s.reorderPoint,
+          suggestedOrder: s.suggestedOrder,
+        }))
+      );
+      setReplenishments(
+        orders.map((o) => ({
+          number: o.number,
+          status: o.status,
+          totalQty: o.totalQty,
+          createdAt: o.createdAt,
+        }))
+      );
+      setTopUps(
+        topupRows.map((t) => ({
+          runNumber: t.runNumber,
+          amount: t.amount,
+          reason: t.reason,
+          status: t.status,
+        }))
+      );
+    } catch {
+      setOutletMeta(null);
+      setSummary(null);
+      setName(routeRef);
+    } finally {
+      setLoading(false);
+    }
+  }, [routeRef]);
 
   React.useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setLoading(true);
-      try {
-        const outletMetaRow = await fetchFranchiseNetworkOutletById(routeRef);
-        if (cancelled) return;
-        setOutletMeta(outletMetaRow);
-        const outletOrgId = outletMetaRow?.id ?? routeRef;
-        const franchiseeRegistryId = outletMetaRow?.franchiseeRegistryId;
-        const vmiKey = franchiseeRegistryId ?? outletOrgId;
-        setSummary(
-          outletMetaRow
-            ? {
-                territory: outletMetaRow.territory,
-                storeFormat: outletMetaRow.storeFormat,
-                revenue: outletMetaRow.revenue,
-                arOverdue: outletMetaRow.arOverdue,
-              }
-            : null
-        );
-        setName(outletMetaRow?.name ?? routeRef);
-        const [stock, orders, topupRows] = await Promise.all([
-          fetchFranchiseeStock(vmiKey),
-          fetchVMIReplenishmentOrders({ franchiseeId: vmiKey }),
-          fetchTopUps({ franchiseeId: vmiKey }),
-        ]);
-        if (cancelled) return;
-        setName(
-          outletMetaRow?.name ?? stock[0]?.franchiseeName ?? orders[0]?.franchiseeName ?? routeRef
-        );
-        setStockRows(
-          stock.map((s) => ({
-            sku: s.sku,
-            productName: s.productName,
-            qty: s.qty,
-            reorderPoint: s.reorderPoint,
-            suggestedOrder: s.suggestedOrder,
-          }))
-        );
-        setReplenishments(
-          orders.map((o) => ({
-            number: o.number,
-            status: o.status,
-            totalQty: o.totalQty,
-            createdAt: o.createdAt,
-          }))
-        );
-        setTopUps(
-          topupRows.map((t) => ({
-            runNumber: t.runNumber,
-            amount: t.amount,
-            reason: t.reason,
-            status: t.status,
-          }))
-        );
-      } catch {
-        if (!cancelled) {
-          setOutletMeta(null);
-          setSummary(null);
-          setName(routeRef);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [routeRef]);
+    void loadAll();
+  }, [loadAll]);
+
+  const handleSaveEdit = async () => {
+    if (!outletMeta) return;
+    if (!editForm.name.trim() || !editForm.outletCode.trim()) {
+      toast.error("Name and outlet code are required.");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await patchFranchiseNetworkOutletApi(outletMeta.id, {
+        name: editForm.name.trim(),
+        outletCode: editForm.outletCode.trim(),
+        territory: editForm.territory.trim() || undefined,
+        storeFormat: editForm.storeFormat.trim() || undefined,
+        managerName: editForm.managerName.trim() || undefined,
+      });
+      toast.success("Franchise updated.");
+      setEditOpen(false);
+      await loadAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteOutlet = async () => {
+    if (!outletMeta) return;
+    setDeleting(true);
+    try {
+      await deleteFranchiseNetworkOutletApi(outletMeta.id);
+      toast.success("Outlet removed from the active network.");
+      router.push("/franchise/network/outlets");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove outlet.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const stockColumns = [
     { id: "sku", header: "SKU", accessor: (r: (typeof stockRows)[number]) => r.sku, sticky: true },
@@ -137,7 +211,17 @@ export default function FranchiseDetailPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {canManage && outletMeta ? (
+              <>
+                <Button type="button" variant="outline" onClick={openEdit}>
+                  Edit franchise
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
+                  Remove from network
+                </Button>
+              </>
+            ) : null}
             <Button variant="outline" asChild>
               <Link href="/franchise/vmi">Open VMI</Link>
             </Button>
@@ -263,6 +347,70 @@ export default function FranchiseDetailPage() {
           </Card>
         </div>
       </div>
+
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent className="overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Edit franchisee</SheetTitle>
+            <SheetDescription>Name, code, territory, format, and manager appear across the network and HQ billing.</SheetDescription>
+          </SheetHeader>
+          <div className="grid gap-4 py-6">
+            <div className="space-y-2">
+              <Label htmlFor="fd-name">Outlet / franchisee name</Label>
+              <Input id="fd-name" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fd-code">Outlet code</Label>
+              <Input
+                id="fd-code"
+                className="font-mono text-sm"
+                value={editForm.outletCode}
+                onChange={(e) => setEditForm((p) => ({ ...p, outletCode: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fd-territory">Territory</Label>
+              <Input
+                id="fd-territory"
+                value={editForm.territory}
+                onChange={(e) => setEditForm((p) => ({ ...p, territory: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fd-format">Store format</Label>
+              <Input
+                id="fd-format"
+                value={editForm.storeFormat}
+                onChange={(e) => setEditForm((p) => ({ ...p, storeFormat: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fd-manager">Manager name</Label>
+              <Input
+                id="fd-manager"
+                value={editForm.managerName}
+                onChange={(e) => setEditForm((p) => ({ ...p, managerName: e.target.value }))}
+              />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleSaveEdit()} disabled={savingEdit}>
+              {savingEdit ? "Saving…" : "Save"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={outletMeta ? `Remove “${outletMeta.name}” from the network?` : "Remove outlet?"}
+        description="Suspends outlet users and exits the franchise agreement. Org data and documents are kept on file."
+        confirmLabel={deleting ? "Removing…" : "Remove from network"}
+        variant="destructive"
+        onConfirm={() => void handleDeleteOutlet()}
+      />
     </PageShell>
   );
 }

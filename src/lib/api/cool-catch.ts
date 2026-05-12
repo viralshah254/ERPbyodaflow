@@ -181,6 +181,41 @@ export async function createFranchiseOutletApi(body: CreateFranchiseOutletPayloa
   });
 }
 
+export type PatchFranchiseNetworkOutletPayload = {
+  name?: string;
+  outletCode?: string;
+  territory?: string;
+  storeFormat?: string;
+  managerName?: string;
+  isActive?: boolean;
+};
+
+export type PatchFranchiseNetworkOutletResult =
+  | FranchiseNetworkOutletRow
+  | { id: string; deactivated: boolean; message?: string };
+
+export async function patchFranchiseNetworkOutletApi(
+  outletOrgId: string,
+  body: PatchFranchiseNetworkOutletPayload
+): Promise<PatchFranchiseNetworkOutletResult> {
+  requireLiveApi("Update franchise outlet");
+  return apiRequest<PatchFranchiseNetworkOutletResult>(
+    `/api/franchise/network/outlets/${encodeURIComponent(outletOrgId)}`,
+    { method: "PATCH", body }
+  );
+}
+
+export async function deleteFranchiseNetworkOutletApi(outletOrgId: string): Promise<{
+  id: string;
+  deactivated: boolean;
+  message?: string;
+}> {
+  requireLiveApi("Remove franchise outlet");
+  return apiRequest(`/api/franchise/network/outlets/${encodeURIComponent(outletOrgId)}`, {
+    method: "DELETE",
+  });
+}
+
 export type RepairFranchiseeRegistryItem = {
   childOrgId: string;
   outletCode: string | null;
