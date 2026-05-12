@@ -34,6 +34,7 @@ import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard"
 import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, dispatchSubcontractOrder, patchSubcontractOrder, fetchSubcontractBatchCost, type SubcontractBatchCost } from "@/lib/api/cool-catch";
 import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
 import { apiRequest } from "@/lib/api/client";
+import { NewTripSheet } from "@/app/(dashboard)/distribution/trips/page";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { fetchYieldRecords } from "@/lib/api/yield";
 import { fetchWarehousesApi } from "@/lib/api/warehouses";
@@ -121,6 +122,7 @@ export default function SubcontractOrderDetailPage() {
   const [availableTrips, setAvailableTrips] = React.useState<Array<{ id: string; reference?: string; status: string }>>([]);
   const [linkingTrip, setLinkingTrip] = React.useState(false);
   const [tripSelectValue, setTripSelectValue] = React.useState<string>("");
+  const [newTripSheetOpen, setNewTripSheetOpen] = React.useState(false);
 
   const reload = React.useCallback(async () => {
     const [r, logs, yields] = await Promise.allSettled([
@@ -450,16 +452,19 @@ export default function SubcontractOrderDetailPage() {
             {order.status === "WIP" && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Link outbound trip</CardTitle>
+                  <CardTitle className="text-base">Outbound trip</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                    Link the distribution trip carrying finished goods from the processor. This connects fuel and transport costs to this batch.
+                    Link the distribution trip that carries finished goods from the processor. Fuel and transport costs are allocated to this batch through the trip.
                   </p>
+
                   {order.outboundTripId ? (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-muted-foreground">Linked trip:</span>
-                      <span className="font-medium">{availableTrips.find((t) => t.id === order.outboundTripId)?.reference ?? order.outboundTripId.slice(-12)}</span>
+                    /* ── Trip already linked ── */
+                    <div className="flex items-center gap-3 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-sm">
+                      <span className="font-medium text-primary flex-1">
+                        {availableTrips.find((t) => t.id === order.outboundTripId)?.reference ?? order.outboundTripId.slice(-12)}
+                      </span>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -485,22 +490,44 @@ export default function SubcontractOrderDetailPage() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <Select value={tripSelectValue} onValueChange={setTripSelectValue}>
-                        <SelectTrigger className="flex-1" aria-label="Outbound trip">
-                          <SelectValue placeholder={availableTrips.length ? "Select trip…" : "No active trips found"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableTrips.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              {t.reference ?? t.id.slice(-12)} — {t.status}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button size="sm" disabled={!tripSelectValue || linkingTrip} onClick={handleLinkTrip}>
-                        {linkingTrip ? "Linking…" : "Link"}
+                    /* ── No trip linked yet ── */
+                    <div className="space-y-3">
+                      {/* Primary action: create a new trip tied to this order */}
+                      <Button
+                        className="w-full"
+                        onClick={() => setNewTripSheetOpen(true)}
+                      >
+                        Create trip for this order
                       </Button>
+
+                      {/* Secondary: link an existing trip */}
+                      <div className="relative flex items-center gap-2">
+                        <div className="flex-1 h-px bg-border" />
+                        <span className="text-xs text-muted-foreground shrink-0">or link existing trip</span>
+                        <div className="flex-1 h-px bg-border" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Select value={tripSelectValue} onValueChange={setTripSelectValue}>
+                          <SelectTrigger className="flex-1" aria-label="Existing outbound trip">
+                            <SelectValue placeholder={availableTrips.length ? "Select trip…" : "No active trips found"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTrips.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>
+                                {t.reference ?? t.id.slice(-12)} — {t.status}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!tripSelectValue || linkingTrip}
+                          onClick={handleLinkTrip}
+                        >
+                          {linkingTrip ? "Linking…" : "Link"}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -994,6 +1021,32 @@ export default function SubcontractOrderDetailPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+      )}
+
+      {/* New trip sheet — opened from "Create trip for this order" button */}
+      {order && (
+        <NewTripSheet
+          open={newTripSheetOpen}
+          onOpenChange={setNewTripSheetOpen}
+          defaultType="OUTBOUND"
+          onCreated={async (tripId) => {
+            // Auto-link the newly created trip to this subcontract order
+            try {
+              await patchSubcontractOrder(order.id, { outboundTripId: tripId });
+              toast.success("Trip created and linked to this batch.");
+            } catch {
+              toast.error("Trip created, but failed to auto-link — please link it manually.");
+            }
+            await reload();
+            fetchSubcontractBatchCost(id).then((r) => { setBatchCost(r); }).catch(() => {});
+            // Refresh available trips list
+            void apiRequest<{ items: Array<{ id: string; reference?: string; status: string }> }>("/api/distribution/trips", {
+              params: { type: "OUTBOUND", status: "IN_TRANSIT,PLANNED" },
+            })
+              .then((res) => setAvailableTrips(res?.items ?? []))
+              .catch(() => {});
+          }}
+        />
       )}
     </PageShell>
   );

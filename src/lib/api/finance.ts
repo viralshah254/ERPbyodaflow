@@ -46,11 +46,29 @@ export type FinancePeriod = {
   status: "OPEN" | "CLOSED";
 };
 
+export type FinanceStatementAccountLine = {
+  accountId: string;
+  code: string;
+  name: string;
+  /** Normalized net amount in the natural direction for the account type. */
+  amount: number;
+};
+
+export type FinanceStatementSection = {
+  key: string;
+  label: string;
+  amount: number;
+  /** Per-account breakdown within this section (empty for computed totals like net-income). */
+  lines: FinanceStatementAccountLine[];
+};
+
 export type FinanceStatement = {
   type: "pnl" | "balance-sheet" | "cash-flow";
-  periodId?: string;
-  sections: Array<{ key: string; label: string; amount: number }>;
-  summary: Record<string, number>;
+  periodId?: string | null;
+  sections: FinanceStatementSection[];
+  /** Methodological notes for display in statement footer. */
+  notes?: string[];
+  summary: Record<string, number | boolean>;
 };
 
 export type FinanceStatementDrilldownItem = {
@@ -207,6 +225,20 @@ export async function reopenFinancePeriodApi(periodId: string): Promise<void> {
   });
 }
 
+/** Create one posting period (typically used when seeding monthly periods for a FY). Requires finance.close.write. */
+export async function createFinancePeriodApi(payload: {
+  fiscalYear: string;
+  periodNumber: number;
+  startDate: string;
+  endDate: string;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create finance period");
+  return apiRequest<{ id: string }>("/api/finance/periods", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function fetchFinancialStatementApi(
   type: "pnl" | "balance-sheet" | "cash-flow",
   periodId?: string
@@ -220,11 +252,13 @@ export async function fetchFinancialStatementApi(
 export async function fetchFinancialStatementDrilldownApi(
   type: "pnl" | "balance-sheet" | "cash-flow",
   sectionKey: string,
-  periodId?: string
+  periodId?: string,
+  accountId?: string
 ): Promise<FinanceStatementDrilldownItem[]> {
   requireLiveApi("Financial statement drilldown");
   const params = new URLSearchParams();
   if (periodId) params.set("periodId", periodId);
+  if (accountId) params.set("accountId", accountId);
   const payload = await apiRequest<{ items: FinanceStatementDrilldownItem[] }>(
     `/api/finance/statements/${encodeURIComponent(type)}/drilldown/${encodeURIComponent(sectionKey)}`,
     { params }

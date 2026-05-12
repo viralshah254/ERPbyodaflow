@@ -71,6 +71,11 @@ export interface FranchiseNetworkOutletRow {
   /** GPS coordinates for nearest-outlet routing (WhatsApp commerce). */
   latitude?: number;
   longitude?: number;
+  weeklySalesTargetValueKes?: number | null;
+  weeklySalesTargetKg?: number | null;
+  /** Smart stock-take compliance for the current ISO week. */
+  weeklyStockTakeStatus?: "ok" | "due" | "overdue" | "none";
+  lastStockTakeSubmittedAt?: string | null;
 }
 
 export interface FranchiseNetworkSummary {
@@ -988,16 +993,21 @@ export interface InboundOrderRow {
   outletName: string;
   total: number;
   currency: string;
+  /** Present when HQ spawned a sales order from this outlet PR. */
+  linkedHqSalesOrder?: { id: string; number: string; status: string } | null;
   lines: InboundOrderLine[];
 }
 
 export async function fetchInboundOrders(params?: {
   status?: string;
   outletOrgId?: string;
+  /** When true, include CONVERTED / CANCELLED PRs (e.g. outlet “Orders to HQ” history). */
+  includeHistorical?: boolean;
 }): Promise<{ items: InboundOrderRow[] }> {
   const p = new URLSearchParams();
   if (params?.status) p.set("status", params.status);
   if (params?.outletOrgId) p.set("outletOrgId", params.outletOrgId);
+  if (params?.includeHistorical) p.set("includeHistorical", "1");
   const qs = p.toString();
   return apiRequest(`/api/franchise/network/inbound-orders${qs ? `?${qs}` : ""}`);
 }
@@ -1044,6 +1054,46 @@ export interface OutletStockRow {
 
 export async function fetchOutletStock(outletOrgId: string): Promise<{ items: OutletStockRow[] }> {
   return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock`);
+}
+
+// ─── Outlet targets ──────────────────────────────────────────────────────────
+
+export async function patchOutletTargets(
+  outletOrgId: string,
+  targets: { weeklySalesTargetValueKes?: number; weeklySalesTargetKg?: number }
+): Promise<{ id: string; weeklySalesTargetValueKes?: number | null; weeklySalesTargetKg?: number | null }> {
+  requireLiveApi("Patch outlet targets");
+  return apiRequest(`/api/franchise/network/outlets/${encodeURIComponent(outletOrgId)}/targets`, {
+    method: "PATCH",
+    body: targets,
+  });
+}
+
+// ─── Outlet weekly stock takes (HQ view) ─────────────────────────────────────
+
+export interface OutletStockTakeRow {
+  id: string;
+  weekStart: string;
+  status: "DRAFT" | "SUBMITTED";
+  warehouseId: string;
+  submittedAt?: string | null;
+  lines: Array<{
+    lineId: string;
+    productId: string;
+    sku?: string;
+    productName?: string;
+    systemQty: number;
+    countedQty: number;
+    variance: number;
+  }>;
+}
+
+export async function fetchOutletStockTakes(outletOrgId: string): Promise<OutletStockTakeRow[]> {
+  requireLiveApi("Outlet stock takes");
+  const res = await apiRequest<{ items: OutletStockTakeRow[] }>(
+    `/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock-takes`
+  );
+  return res?.items ?? [];
 }
 
 // ─── Franchise Network Sales Analytics ───────────────────────────────────────

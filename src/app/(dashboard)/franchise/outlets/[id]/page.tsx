@@ -33,6 +33,7 @@ import {
   fetchCustomerNetworkHistory,
   assignOutletPriceList,
   fetchOutletStock,
+  fetchOutletStockTakes,
   fetchOutletSummaryRange,
   fetchOutletInvoiceDetail,
   updateOutletGeoApi,
@@ -40,6 +41,7 @@ import {
   type FranchiseCustomerRow,
   type CustomerHistoryItem,
   type OutletStockRow,
+  type OutletStockTakeRow,
   type OutletInvoiceRow,
   type OutletInvoiceDetail,
   type OutletInvoiceLineDetailRow,
@@ -211,14 +213,43 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
   const [rows, setRows] = React.useState<OutletStockRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [latestTake, setLatestTake] = React.useState<OutletStockTakeRow | null>(null);
 
   React.useEffect(() => {
+    let cancelled = false;
     setLoading(true);
+    setRows([]);
     fetchOutletStock(outletOrgId)
-      .then((r) => setRows(r.items))
+      .then((stockRes) => {
+        if (!cancelled) setRows(stockRes.items ?? []);
+      })
       .catch(() => toast.error("Could not load outlet stock"))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    fetchOutletStockTakes(outletOrgId)
+      .then((takes) => {
+        if (!cancelled) {
+          const submitted = takes.filter((t) => t.status === "SUBMITTED");
+          setLatestTake(submitted[0] ?? null);
+        }
+      })
+      .catch(() => {
+        /* Last count column is optional; HQ stock table should still render. */
+        if (!cancelled) setLatestTake(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [outletOrgId]);
+
+  // Build map of productId → latest counted qty from the most recent submitted take.
+  const lastCountByProduct = React.useMemo(() => {
+    if (!latestTake) return new Map<string, number>();
+    return new Map(latestTake.lines.map((l) => [l.productId, l.countedQty]));
+  }, [latestTake]);
 
   const filtered = search.trim()
     ? rows.filter((r) => r.productName.toLowerCase().includes(search.toLowerCase()) || r.sku.toLowerCase().includes(search.toLowerCase()))
@@ -233,10 +264,36 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
     { id: "available", header: "Available", accessor: (r: OutletStockRow) => (
       <span className={r.available <= 0 ? "text-destructive font-medium" : ""}>{r.available.toLocaleString()}</span>
     )},
+    {
+      id: "lastCount",
+      header: latestTake ? `Last count (${latestTake.weekStart})` : "Last count",
+      accessor: (r: OutletStockRow) => {
+        const counted = lastCountByProduct.get(r.productId);
+        if (counted == null) return <span className="text-muted-foreground">—</span>;
+        const diff = counted - r.quantity;
+        return (
+          <span className="flex items-center gap-1.5">
+            <span>{counted.toLocaleString()}</span>
+            {diff !== 0 && (
+              <span className={`text-xs ${diff < 0 ? "text-red-500" : "text-amber-500"}`}>
+                {diff > 0 ? `+${diff}` : diff}
+              </span>
+            )}
+          </span>
+        );
+      },
+    },
   ];
 
   return (
     <div className="space-y-4">
+      {latestTake && (
+        <div className="flex items-center gap-2 text-xs rounded-md border border-emerald-500/25 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2 text-emerald-700 dark:text-emerald-400">
+          <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
+          Stock take submitted for week of <span className="font-medium">{latestTake.weekStart}</span>
+          {latestTake.submittedAt ? ` on ${new Date(latestTake.submittedAt).toLocaleDateString()}` : ""}. Last count column shows counted vs current system quantity.
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <input
           type="search"
@@ -249,6 +306,14 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
       </div>
       <DataTable data={filtered} columns={columns} emptyMessage={loading ? "Loading stock…" : "No stock records for this outlet."} />
     </div>
+  );
+}
+
+function CheckCircle2Icon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
   );
 }
 
@@ -469,36 +534,87 @@ function ReceiptsTab({ outletOrgId }: { outletOrgId: string }) {
 // ─── Orders to HQ tab ─────────────────────────────────────────────────────────
 
 function OrdersToHqTab({ outletOrgId }: { outletOrgId: string }) {
+  const router = useRouter();
   const [rows, setRows] = React.useState<InboundOrderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     setLoading(true);
-    fetchInboundOrders({ outletOrgId })
+    fetchInboundOrders({ outletOrgId, includeHistorical: true })
       .then((r) => setRows(r.items))
       .catch(() => toast.error("Could not load orders to HQ"))
       .finally(() => setLoading(false));
   }, [outletOrgId]);
 
+  const inboundPrDetailHref = React.useCallback(
+    (r: InboundOrderRow) =>
+      `/sales/orders/franchise-inbound/${encodeURIComponent(outletOrgId)}/${encodeURIComponent(r.id)}`,
+    [outletOrgId]
+  );
+
   const columns = [
-    { id: "number", header: "PR Number", accessor: (r: InboundOrderRow) => <span className="font-medium">{r.number}</span> },
+    {
+      id: "number",
+      header: "PR Number",
+      accessor: (r: InboundOrderRow) => (
+        <span className="font-medium text-primary">{r.number}</span>
+      ),
+    },
     { id: "date", header: "Date", accessor: (r: InboundOrderRow) => r.date ?? "—" },
-    { id: "products", header: "Products", accessor: (r: InboundOrderRow) => (
-      <span className="text-xs text-muted-foreground">
-        {r.lines.slice(0, 2).map((l) => l.productName ?? l.sku ?? "—").join(", ")}
-        {r.lines.length > 2 ? ` +${r.lines.length - 2} more` : ""}
-      </span>
-    )},
-    { id: "total", header: "Total", accessor: (r: InboundOrderRow) => `${r.currency} ${r.total.toLocaleString()}` },
+    {
+      id: "hqSo",
+      header: "HQ Sales order",
+      accessor: (r: InboundOrderRow) =>
+        r.linkedHqSalesOrder ? (
+          <span onClick={(e) => e.stopPropagation()}>
+            <Link
+              href={`/docs/sales-order/${encodeURIComponent(r.linkedHqSalesOrder.id)}`}
+              className="font-mono text-sm text-primary hover:underline"
+            >
+              {r.linkedHqSalesOrder.number}
+            </Link>
+            <span className="ml-2 text-xs text-muted-foreground">({r.linkedHqSalesOrder.status})</span>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+    {
+      id: "products",
+      header: "Products",
+      accessor: (r: InboundOrderRow) => (
+        <span className="text-xs text-muted-foreground">
+          {r.lines.slice(0, 2).map((l) => l.productName ?? l.sku ?? "—").join(", ")}
+          {r.lines.length > 2 ? ` +${r.lines.length - 2} more` : ""}
+        </span>
+      ),
+    },
+    {
+      id: "total",
+      header: "Total",
+      accessor: (r: InboundOrderRow) => `${r.currency} ${Number(r.total ?? 0).toLocaleString()}`,
+    },
     { id: "status", header: "Status", accessor: (r: InboundOrderRow) => <StatusBadge status={r.status} /> },
   ];
 
   return (
-    <DataTable
-      data={rows}
-      columns={columns}
-      emptyMessage={loading ? "Loading orders…" : "No purchase requests sent to HQ yet."}
-    />
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Purchase requests raised by this outlet. Open the linked HQ sales order to see fulfilment, delivery, and invoicing. Rows without an SO yet open the inbound review screen.
+      </p>
+      <DataTable
+        data={rows}
+        columns={columns}
+        onRowClick={(r) => {
+          if (r.linkedHqSalesOrder?.id) {
+            router.push(`/docs/sales-order/${encodeURIComponent(r.linkedHqSalesOrder.id)}`);
+          } else {
+            router.push(inboundPrDetailHref(r));
+          }
+        }}
+        emptyMessage={loading ? "Loading orders…" : "No purchase requests sent to HQ yet."}
+      />
+    </div>
   );
 }
 

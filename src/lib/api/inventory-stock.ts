@@ -105,6 +105,50 @@ export async function createStockAdjustmentApi(payload: {
   });
 }
 
+// ─── Franchise network stock aggregate ───────────────────────────────────────
+
+export type FranchiseOutletStockRow = {
+  childOrgId: string;
+  outletName: string;
+  warehouseId: string;
+  warehouseName: string;
+  qty: number;
+  reserved: number;
+  available: number;
+};
+
+export type FranchiseNetworkStockItem = {
+  productId: string;
+  sku: string;
+  productName: string;
+  totalQty: number;
+  totalReserved: number;
+  totalAvailable: number;
+  unitCostKes: number;
+  networkValueKes: number;
+  byOutlet: FranchiseOutletStockRow[];
+};
+
+export type FranchiseNetworkStockAggregate = {
+  items: FranchiseNetworkStockItem[];
+  costingRanAt: string | null;
+};
+
+export async function fetchFranchiseNetworkStockAggregate(filters?: {
+  search?: string;
+  productId?: string;
+}): Promise<FranchiseNetworkStockAggregate> {
+  requireLiveApi("Franchise network stock aggregate");
+  const params = new URLSearchParams();
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.productId) params.set("productId", filters.productId);
+  return apiRequest<FranchiseNetworkStockAggregate>("/api/franchise/network/stock-aggregate", {
+    params,
+  });
+}
+
+// ─── Inventory movements ──────────────────────────────────────────────────────
+
 type BackendInventoryMovement = {
   id: string;
   date: string;

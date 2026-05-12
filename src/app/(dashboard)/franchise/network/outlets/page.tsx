@@ -29,11 +29,12 @@ import {
   createFranchiseOutletApi,
   fetchNextOutletCodeApi,
   repairFranchiseeRegistryApi,
+  patchOutletTargets,
   type FranchiseNetworkOutletRow,
   type CreateFranchiseOutletPayload,
 } from "@/lib/api/cool-catch";
 import { useAuthStore } from "@/stores/auth-store";
-import { Loader2, Plus, Wrench } from "lucide-react";
+import { Loader2, Plus, Wrench, Target, CheckCircle2, Clock, AlertTriangle, Minus } from "lucide-react";
 import { toast } from "sonner";
 
 const emptyForm: CreateFranchiseOutletPayload = {
@@ -55,6 +56,11 @@ export default function FranchiseOutletsPage() {
   const [repairing, setRepairing] = React.useState(false);
   const [managerPhone, setManagerPhone] = React.useState("");
   const [managerPhonePrefix, setManagerPhonePrefix] = React.useState("+254");
+  // Target editing
+  const [targetOutlet, setTargetOutlet] = React.useState<FranchiseNetworkOutletRow | null>(null);
+  const [targetValueKes, setTargetValueKes] = React.useState("");
+  const [targetKg, setTargetKg] = React.useState("");
+  const [savingTargets, setSavingTargets] = React.useState(false);
   const permissions = useAuthStore((s) => s.permissions);
   const canView =
     permissions.includes("franchise.network.read") ||
@@ -128,6 +134,30 @@ export default function FranchiseOutletsPage() {
     }
   };
 
+  const openTargetSheet = (o: FranchiseNetworkOutletRow) => {
+    setTargetOutlet(o);
+    setTargetValueKes(o.weeklySalesTargetValueKes != null ? String(o.weeklySalesTargetValueKes) : "");
+    setTargetKg(o.weeklySalesTargetKg != null ? String(o.weeklySalesTargetKg) : "");
+  };
+
+  const handleSaveTargets = async () => {
+    if (!targetOutlet) return;
+    setSavingTargets(true);
+    try {
+      await patchOutletTargets(targetOutlet.id, {
+        ...(targetValueKes.trim() ? { weeklySalesTargetValueKes: Number(targetValueKes) } : {}),
+        ...(targetKg.trim() ? { weeklySalesTargetKg: Number(targetKg) } : {}),
+      });
+      toast.success("Targets updated.");
+      setTargetOutlet(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save targets.");
+    } finally {
+      setSavingTargets(false);
+    }
+  };
+
   const handleRepairRegistry = async () => {
     setRepairing(true);
     try {
@@ -193,7 +223,9 @@ export default function FranchiseOutletsPage() {
                   <TableHead>Territory</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Revenue</TableHead>
-                  <TableHead className="w-[100px]"></TableHead>
+                  <TableHead>Weekly targets</TableHead>
+                  <TableHead>Stock take</TableHead>
+                  <TableHead className="w-[80px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -241,6 +273,41 @@ export default function FranchiseOutletsPage() {
                   <TableCell>{o.territory ?? "—"}</TableCell>
                     <TableCell>{o.isActive ? "Active" : "Inactive"}</TableCell>
                     <TableCell>KES {Number(o.revenue ?? 0).toLocaleString()}</TableCell>
+                    <TableCell>
+                      {canAdd ? (
+                        <button
+                          type="button"
+                          onClick={() => openTargetSheet(o)}
+                          className="flex flex-col gap-0.5 text-left hover:opacity-70 transition-opacity"
+                          title="Edit weekly targets"
+                        >
+                          {o.weeklySalesTargetValueKes ? (
+                            <span className="text-xs font-medium tabular-nums">
+                              KES {Number(o.weeklySalesTargetValueKes).toLocaleString()}
+                            </span>
+                          ) : null}
+                          {o.weeklySalesTargetKg ? (
+                            <span className="text-xs text-muted-foreground tabular-nums">
+                              {Number(o.weeklySalesTargetKg).toLocaleString()} kg
+                            </span>
+                          ) : null}
+                          {!o.weeklySalesTargetValueKes && !o.weeklySalesTargetKg ? (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Target className="h-3 w-3" /> Set targets
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {o.weeklySalesTargetValueKes
+                            ? `KES ${Number(o.weeklySalesTargetValueKes).toLocaleString()}`
+                            : "—"}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StockTakeBadge status={o.weeklyStockTakeStatus} submittedAt={o.lastStockTakeSubmittedAt} />
+                    </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="sm" asChild>
                         <Link href={`/franchise/${o.id}`}>View</Link>
@@ -366,6 +433,83 @@ export default function FranchiseOutletsPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Targets editing sheet */}
+      <Sheet open={!!targetOutlet} onOpenChange={(open) => { if (!open) setTargetOutlet(null); }}>
+        <SheetContent className="sm:max-w-sm">
+          <SheetHeader>
+            <SheetTitle>Weekly targets — {targetOutlet?.name}</SheetTitle>
+            <SheetDescription>
+              Set the outlet&apos;s weekly targets. These appear on the franchise mobile dashboard as progress cards.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid gap-4 py-6">
+            <div className="space-y-2">
+              <Label htmlFor="tgt-value">Weekly sales target (KES)</Label>
+              <Input
+                id="tgt-value"
+                type="number"
+                min={0}
+                placeholder="e.g. 100000"
+                value={targetValueKes}
+                onChange={(e) => setTargetValueKes(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tgt-kg">Weekly weight target (kg)</Label>
+              <Input
+                id="tgt-kg"
+                type="number"
+                min={0}
+                placeholder="e.g. 500"
+                value={targetKg}
+                onChange={(e) => setTargetKg(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Only kg-UOM product lines count toward the weight actual on the app.
+              </p>
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setTargetOutlet(null)}>Cancel</Button>
+            <Button onClick={() => void handleSaveTargets()} disabled={savingTargets}>
+              {savingTargets ? "Saving…" : "Save targets"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
+  );
+}
+
+function StockTakeBadge({
+  status,
+  submittedAt,
+}: {
+  status?: "ok" | "due" | "overdue" | "none";
+  submittedAt?: string | null;
+}) {
+  if (!status || status === "none") {
+    return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" /> None</span>;
+  }
+  if (status === "ok") {
+    return (
+      <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        {submittedAt ? `Done ${submittedAt.slice(0, 10)}` : "This week"}
+      </span>
+    );
+  }
+  if (status === "due") {
+    return (
+      <span className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+        <Clock className="h-3.5 w-3.5" /> Due
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400">
+      <AlertTriangle className="h-3.5 w-3.5" /> Overdue
+    </span>
   );
 }

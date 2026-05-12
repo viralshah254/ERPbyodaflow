@@ -44,16 +44,59 @@ export interface CreateTripRequest {
   type: TripType;
   vehicleMode: "LEASED" | "SPOT_HIRE";
   vehicleId?: string;
+  carrier?: string;
   reference?: string;
   plannedAt: string;
+  deliveryNoteIds?: string[];
 }
 
-export async function createTrip(body: CreateTripRequest): Promise<{ id: string }> {
+export async function createTrip(body: CreateTripRequest): Promise<{ id: string; reference: string }> {
   requireLiveApi("Create distribution trip");
-  return apiRequest<{ id: string }>("/api/distribution/trips", {
+  return apiRequest<{ id: string; reference: string }>("/api/distribution/trips", {
     method: "POST",
     body,
   });
+}
+
+export async function patchTrip(
+  id: string,
+  patch: Partial<{ status: TripStatus; deliveryNoteIds: string[]; vehicleId: string; carrier: string; reference: string }>
+): Promise<TripRow> {
+  requireLiveApi("Patch distribution trip");
+  return apiRequest<TripRow>(`/api/distribution/trips/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+
+export async function fetchNextTripReference(): Promise<string> {
+  requireLiveApi("Next trip reference");
+  const res = await apiRequest<{ reference: string }>("/api/distribution/trips/next-reference");
+  return res.reference;
+}
+
+export type OpenDeliveryNoteRow = {
+  id: string;
+  number: string;
+  customer?: string;
+  status: string;
+  total?: number;
+  currency?: string;
+};
+
+export async function fetchOpenDeliveryNotes(): Promise<OpenDeliveryNoteRow[]> {
+  requireLiveApi("Open delivery notes");
+  const res = await apiRequest<{ items: Array<{ id: string; number: string; party?: string; status: string; total?: number; currency?: string }> }>("/api/docs/delivery-note", {
+    params: { status: "APPROVED,IN_TRANSIT", limit: "100" },
+  });
+  return (res?.items ?? []).map((d) => ({
+    id: d.id,
+    number: d.number,
+    customer: d.party,
+    status: d.status,
+    total: d.total,
+    currency: d.currency,
+  }));
 }
 
 export interface AddTripCostRequest {

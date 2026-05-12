@@ -11,6 +11,7 @@ import {
   closeFinancePeriodApi,
   fetchCloseChecklistApi,
   fetchFinancePeriodsApi,
+  formatFinancePeriodLoadError,
   reopenFinancePeriodApi,
   type CloseChecklistItem,
 } from "@/lib/api/finance";
@@ -43,7 +44,9 @@ function ChecklistRow({ item }: { item: CloseChecklistItem }) {
       <div className="flex items-center gap-2">
         {!isOk && (
           <Badge variant={item.severity === "error" ? "destructive" : "outline"} className="text-xs">
-            {item.count} pending
+            {item.key === "no_open_fiscal_period"
+              ? "Blocked"
+              : `${item.count} pending`}
           </Badge>
         )}
         {isOk ? (
@@ -63,11 +66,14 @@ function ChecklistRow({ item }: { item: CloseChecklistItem }) {
 export default function PeriodClosePage() {
   const [loading, setLoading] = React.useState<"close" | "reopen" | null>(null);
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number; status: "OPEN" | "CLOSED" }>>([]);
+  const [periodsLoadFailed, setPeriodsLoadFailed] = React.useState(false);
   const [checklist, setChecklist] = React.useState<CloseChecklistItem[]>([]);
   const [checklistLoading, setChecklistLoading] = React.useState(false);
 
-  const currentPeriodId = React.useMemo(() => periods.find((p) => p.status === "OPEN")?.id, [periods]);
+  const openPeriodRow = React.useMemo(() => periods.find((p) => p.status === "OPEN"), [periods]);
+  const currentPeriodId = openPeriodRow?.id;
   const closedPeriodId = React.useMemo(() => periods.find((p) => p.status === "CLOSED")?.id, [periods]);
+  const hasOpenPeriod = Boolean(currentPeriodId);
 
   const hasBlockers = checklist.some((item) => item.count > 0 && item.severity === "error");
   const hasWarnings = checklist.some((item) => item.count > 0 && item.severity === "warning");
@@ -75,14 +81,30 @@ export default function PeriodClosePage() {
   const refreshAll = React.useCallback(async () => {
     setChecklistLoading(true);
     try {
-      const [periodsData, checklistData] = await Promise.all([
+      const [periodRes, checklistRes] = await Promise.allSettled([
         fetchFinancePeriodsApi(),
         fetchCloseChecklistApi(),
       ]);
-      setPeriods(periodsData);
-      setChecklist(checklistData.items);
-    } catch {
-      // Non-fatal: checklist might not be available in demo mode
+
+      if (periodRes.status === "fulfilled") {
+        setPeriods(periodRes.value);
+        setPeriodsLoadFailed(false);
+      } else {
+        setPeriods([]);
+        setPeriodsLoadFailed(true);
+        toast.error(formatFinancePeriodLoadError(periodRes.reason));
+      }
+
+      if (checklistRes.status === "fulfilled") {
+        setChecklist(checklistRes.value.items);
+      } else {
+        setChecklist([]);
+        toast.error(
+          checklistRes.reason instanceof Error
+            ? checklistRes.reason.message
+            : "Failed to load period close checklist."
+        );
+      }
     } finally {
       setChecklistLoading(false);
     }
@@ -98,19 +120,49 @@ export default function PeriodClosePage() {
       description="Close accounting periods and lock transactions"
     >
       <div className="space-y-6 max-w-2xl">
-        {/* Status summary */}
-        {periods.length > 0 && (
-          <div className="flex items-center gap-3 p-3 rounded-lg border bg-card text-sm">
-            <Icons.Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span>
-              {periods.filter((p) => p.status === "OPEN").length} open period(s) ·{" "}
-              {periods.filter((p) => p.status === "CLOSED").length} closed
-            </span>
-            <span className="ml-auto text-muted-foreground">
-              Current: {periods.find((p) => p.status === "OPEN")?.fiscalYear ?? "None"}
-            </span>
+        {/* Status summary — always visible so “no periods” isn't hidden */}
+        <div className="flex flex-wrap items-start gap-3 p-3 rounded-lg border bg-card text-sm">
+          <Icons.Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1 space-y-1">
+            {periodsLoadFailed ? (
+              <p className="text-destructive">
+                Could not load fiscal periods. Use refresh above or check your connection and permissions, then try again.
+              </p>
+            ) : periods.length === 0 ? (
+              <p>
+                No fiscal periods are configured yet.{" "}
+                <Link href="/settings/financial/fiscal-years" className="font-medium text-primary underline underline-offset-4">
+                  Create periods in Fiscal years
+                </Link>{" "}
+                before you can close one.
+              </p>
+            ) : (
+              <p className="text-foreground">
+                {periods.filter((p) => p.status === "OPEN").length} open ·{" "}
+                {periods.filter((p) => p.status === "CLOSED").length} closed
+                {!hasOpenPeriod && periods.length > 0 ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · All periods are closed. Use <strong className="font-medium">Reopen period</strong> below or{" "}
+                    <Link href="/settings/financial/fiscal-years" className="font-medium text-primary underline underline-offset-4">
+                      Fiscal years
+                    </Link>{" "}
+                    to add a new open period.
+                  </span>
+                ) : null}
+              </p>
+            )}
+            {periods.length > 0 && (
+              <p className="text-muted-foreground text-xs">
+                Current open FY:{" "}
+                <span className="text-foreground font-medium tabular-nums">
+                  {openPeriodRow?.fiscalYear ?? "None"}
+                  {openPeriodRow ? ` · P${openPeriodRow.periodNumber}` : ""}
+                </span>
+              </p>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Live checklist */}
         <Card>
@@ -151,11 +203,14 @@ export default function PeriodClosePage() {
             <Button
               className="w-full"
               size="lg"
-              disabled={loading !== null || hasBlockers}
+              disabled={loading !== null || hasBlockers || !hasOpenPeriod}
               onClick={async () => {
                 setLoading("close");
                 try {
-                  if (!currentPeriodId) throw new Error("No open fiscal period found.");
+                  if (!currentPeriodId) {
+                    toast.error("No open fiscal period to close.");
+                    return;
+                  }
                   await closeFinancePeriodApi(currentPeriodId);
                   await refreshAll();
                   toast.success("Period closed.");
@@ -167,17 +222,24 @@ export default function PeriodClosePage() {
               }}
             >
               <Icons.Lock className="mr-2 h-4 w-4" />
-              {hasBlockers ? "Resolve blockers to close" : "Close period"}
+              {hasBlockers
+                ? "Resolve blockers to close"
+                : !hasOpenPeriod
+                  ? "No open period to close"
+                  : "Close period"}
             </Button>
             <Button
               variant="outline"
               className="w-full"
               size="lg"
-              disabled={loading !== null}
+              disabled={loading !== null || !closedPeriodId}
               onClick={async () => {
                 setLoading("reopen");
                 try {
-                  if (!closedPeriodId) throw new Error("No closed fiscal period found.");
+                  if (!closedPeriodId) {
+                    toast.error("No closed fiscal period to reopen.");
+                    return;
+                  }
                   await reopenFinancePeriodApi(closedPeriodId);
                   await refreshAll();
                   toast.success("Period reopened.");
@@ -189,7 +251,7 @@ export default function PeriodClosePage() {
               }}
             >
               <Icons.Unlock className="mr-2 h-4 w-4" />
-              Reopen period
+              {closedPeriodId ? "Reopen period" : "No closed period to reopen"}
             </Button>
             <p className="text-xs text-muted-foreground mt-2 text-center">
               Closing a period prevents any transactions from being posted to it. Only users with{" "}

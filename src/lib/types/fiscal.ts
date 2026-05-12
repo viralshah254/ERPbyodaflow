@@ -12,4 +12,6 @@ export type FiscalYearRow = {
   startDate: string;
   endDate: string;
   periods: FiscalPeriodRow[];
+  /** True when this row was synthesized from FiscalPeriod docs only (no FiscalYear settings record yet). */
+  derivedFromPostingPeriodsOnly?: boolean;
 };

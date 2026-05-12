@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageLayout } from "@/components/layout/page-layout";
 import { DataTable } from "@/components/ui/data-table";
@@ -22,40 +23,64 @@ import { Label } from "@/components/ui/label";
 import {
   createStockAdjustmentApi,
   fetchStockLevelsApi,
+  fetchFranchiseNetworkStockAggregate,
   type InventoryStockRow,
+  type FranchiseNetworkStockItem,
+  type FranchiseOutletStockRow,
 } from "@/lib/api/inventory-stock";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function StockLevelsPage() {
   const router = useRouter();
+  const orgRole = useOrgContextStore((s) => s.orgRole);
+  const isFranchisor = orgRole === "FRANCHISOR";
+
   const [searchQuery, setSearchQuery] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState<string>("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [stockItems, setStockItems] = React.useState<InventoryStockRow[]>([]);
+  const [networkAgg, setNetworkAgg] = React.useState<FranchiseNetworkStockItem[]>([]);
+  const [networkAggByProduct, setNetworkAggByProduct] = React.useState<Map<string, FranchiseNetworkStockItem>>(new Map());
   const [loading, setLoading] = React.useState(true);
+
+  // Stock adjustment state
   const [savingAdjustment, setSavingAdjustment] = React.useState(false);
   const [adjusting, setAdjusting] = React.useState<InventoryStockRow | null>(null);
   const [adjustDelta, setAdjustDelta] = React.useState<string>("");
   const [adjustReason, setAdjustReason] = React.useState("");
   const [adjustMode, setAdjustMode] = React.useState<"INCREASE" | "DECREASE">("DECREASE");
 
+  // Franchise drill-down sheet state
+  const [franchiseDrillRow, setFranchiseDrillRow] = React.useState<FranchiseNetworkStockItem | null>(null);
+
   const refreshStock = React.useCallback(async () => {
     setLoading(true);
     try {
-      setStockItems(
-        await fetchStockLevelsApi({
+      const requests: [Promise<InventoryStockRow[]>, Promise<{ items: FranchiseNetworkStockItem[] } | null>] = [
+        fetchStockLevelsApi({
           warehouseId: warehouseFilter === "all" ? undefined : warehouseFilter,
           status: statusFilter as "In Stock" | "Low Stock" | "Out of Stock" | "all",
           search: searchQuery,
-        })
-      );
+        }),
+        isFranchisor
+          ? fetchFranchiseNetworkStockAggregate({ search: searchQuery })
+          : Promise.resolve(null),
+      ];
+
+      const [hqItems, aggResult] = await Promise.all(requests);
+      setStockItems(hqItems);
+
+      const aggItems = aggResult?.items ?? [];
+      setNetworkAgg(aggItems);
+      setNetworkAggByProduct(new Map(aggItems.map((i) => [i.productId, i])));
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, statusFilter, warehouseFilter]);
+  }, [searchQuery, statusFilter, warehouseFilter, isFranchisor]);
 
   React.useEffect(() => {
     void refreshStock();
@@ -74,6 +99,7 @@ export default function StockLevelsPage() {
     });
     return arr;
   }, [stockItems]);
+
   const warehouseOptions = React.useMemo(() => {
     const options = new Map<string, string>();
     stockItems.forEach((item) => {
@@ -121,6 +147,15 @@ export default function StockLevelsPage() {
       setSavingAdjustment(false);
     }
   };
+
+  const franchiseNetworkTotalQty = React.useMemo(
+    () => networkAgg.reduce((s, i) => s + i.totalAvailable, 0),
+    [networkAgg]
+  );
+  const franchiseNetworkTotalValue = React.useMemo(
+    () => networkAgg.reduce((s, i) => s + i.networkValueKes, 0),
+    [networkAgg]
+  );
 
   const columns = [
     {
@@ -173,6 +208,42 @@ export default function StockLevelsPage() {
         <div className="text-right font-semibold">{row.available}</div>
       ),
     },
+    ...(isFranchisor
+      ? [
+          {
+            id: "franchiseNetwork",
+            header: "Franchise network",
+            accessor: (row: InventoryStockRow) => {
+              const agg = row.productId ? networkAggByProduct.get(row.productId) : undefined;
+              if (!agg) {
+                return <div className="text-right text-muted-foreground text-xs">—</div>;
+              }
+              return (
+                <button
+                  type="button"
+                  className="text-right w-full group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFranchiseDrillRow(agg);
+                  }}
+                >
+                  <div className="font-semibold tabular-nums group-hover:underline">
+                    {agg.totalAvailable.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {agg.byOutlet.length} outlet{agg.byOutlet.length !== 1 ? "s" : ""}
+                    {agg.networkValueKes > 0 && (
+                      <span className="ml-1">
+                        · KES {Math.round(agg.networkValueKes).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            },
+          },
+        ]
+      : []),
     {
       id: "reorderLevel",
       header: "Reorder Level",
@@ -233,6 +304,24 @@ export default function StockLevelsPage() {
         </>
       }
     >
+      {isFranchisor && networkAgg.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-3">
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm">
+            <Icons.Store className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground">Franchise network total available:</span>
+            <span className="font-semibold tabular-nums">
+              {franchiseNetworkTotalQty.toLocaleString()}
+            </span>
+            {franchiseNetworkTotalValue > 0 && (
+              <span className="text-muted-foreground">
+                · KES {Math.round(franchiseNetworkTotalValue).toLocaleString()} at HQ cost
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">(management — not HQ GL inventory)</span>
+          </div>
+        </div>
+      )}
+
       <Card>
         <FiltersBar
           searchPlaceholder="Search by SKU or product name..."
@@ -271,7 +360,9 @@ export default function StockLevelsPage() {
             <div>
               <CardTitle>Stock Levels</CardTitle>
               <CardDescription>
-                {loading ? "Loading stock..." : `${filteredItems.length} items across all locations`}
+                {loading
+                  ? "Loading stock..."
+                  : `${filteredItems.length} items across all locations${isFranchisor && networkAgg.length > 0 ? " · Franchise network column shows totals across all outlets" : ""}`}
               </CardDescription>
             </div>
           </div>
@@ -290,6 +381,99 @@ export default function StockLevelsPage() {
         </CardContent>
       </Card>
 
+      {/* Franchise network drill-down sheet */}
+      {franchiseDrillRow && (
+        <Sheet open onOpenChange={(open) => !open && setFranchiseDrillRow(null)}>
+          <SheetContent side="right" className="w-full sm:max-w-lg">
+            <SheetHeader>
+              <SheetTitle>
+                <span className="font-mono">{franchiseDrillRow.sku}</span>
+                {" "}— franchise stock
+              </SheetTitle>
+              <SheetDescription>
+                {franchiseDrillRow.productName} · {franchiseDrillRow.byOutlet.length} outlet
+                {franchiseDrillRow.byOutlet.length !== 1 ? "s" : ""}
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="py-4 space-y-4">
+              {/* Network totals summary */}
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div className="rounded-md border bg-muted/30 px-3 py-2">
+                  <div className="text-xs text-muted-foreground uppercase">Total on hand</div>
+                  <div className="text-lg font-semibold tabular-nums">
+                    {franchiseDrillRow.totalQty.toLocaleString()}
+                  </div>
+                </div>
+                <div className="rounded-md border bg-muted/30 px-3 py-2">
+                  <div className="text-xs text-muted-foreground uppercase">Available</div>
+                  <div className="text-lg font-semibold tabular-nums">
+                    {franchiseDrillRow.totalAvailable.toLocaleString()}
+                  </div>
+                </div>
+                <div className="rounded-md border bg-muted/30 px-3 py-2">
+                  <div className="text-xs text-muted-foreground uppercase">Value (KES)</div>
+                  <div className="text-lg font-semibold tabular-nums">
+                    {franchiseDrillRow.networkValueKes > 0
+                      ? Math.round(franchiseDrillRow.networkValueKes).toLocaleString()
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+
+              {franchiseDrillRow.unitCostKes > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Valued at HQ unit cost of KES {franchiseDrillRow.unitCostKes.toLocaleString()} from latest
+                  costing snapshot. Management figure — not HQ general-ledger inventory after intercompany sale.
+                </p>
+              )}
+
+              {/* Per-outlet breakdown */}
+              <div>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  By outlet
+                </div>
+                <div className="divide-y rounded-md border overflow-hidden">
+                  {franchiseDrillRow.byOutlet.map((outlet: FranchiseOutletStockRow) => (
+                    <div
+                      key={`${outlet.childOrgId}-${outlet.warehouseId}`}
+                      className="flex items-center justify-between px-3 py-2.5 text-sm bg-card"
+                    >
+                      <div className="min-w-0">
+                        <Link
+                          href={`/franchise/outlets/${outlet.childOrgId}?tab=stock`}
+                          className="font-medium hover:underline truncate block"
+                          onClick={() => setFranchiseDrillRow(null)}
+                        >
+                          {outlet.outletName}
+                        </Link>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {outlet.warehouseName}
+                        </div>
+                      </div>
+                      <div className="text-right tabular-nums shrink-0 ml-4">
+                        <div className="font-semibold">{outlet.available.toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">
+                          on hand {outlet.qty.toLocaleString()}
+                          {outlet.reserved > 0 && <span> · rsvd {outlet.reserved}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setFranchiseDrillRow(null)}>
+                Close
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {/* Stock adjustment sheet */}
       {adjusting && (
         <Sheet open onOpenChange={(open) => !open && setAdjusting(null)}>
           <SheetContent side="right" className="w-full sm:max-w-md">

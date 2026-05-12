@@ -20,7 +20,10 @@ export interface TripRow {
   reference: string;
   type: TripType;
   vehicleMode: VehicleMode;
+  vehicleId?: string;
   vehicleCode?: string;
+  carrier?: string;
+  deliveryNoteIds?: string[];
   plannedAt: string;
   completedAt?: string;
   status: TripStatus;

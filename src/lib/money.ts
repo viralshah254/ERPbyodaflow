@@ -8,6 +8,8 @@ export function formatMoney(
   options?: { decimals?: number }
 ): string {
   const decimals = options?.decimals ?? 2;
+  const raw = (currencyCode ?? "KES").trim().toUpperCase();
+  const code = raw === "KSH" ? "KES" : raw;
   const symbols: Record<string, string> = {
     KES: "KES ",
     UGX: "UGX ",
@@ -15,7 +17,7 @@ export function formatMoney(
     EUR: "€",
     GBP: "£",
   };
-  const prefix = symbols[currencyCode] ?? `${currencyCode} `;
+  const prefix = symbols[code] ?? `${code} `;
   const safeAmount = typeof amount === "number" && !Number.isNaN(amount) ? amount : 0;
   return `${prefix}${safeAmount.toLocaleString(undefined, {
     minimumFractionDigits: decimals,

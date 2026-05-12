@@ -7,6 +7,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { fetchInventoryValuation } from "@/lib/api/inventory-costing";
+import {
+  fetchFranchiseNetworkStockAggregate,
+  type FranchiseNetworkStockItem,
+} from "@/lib/api/inventory-stock";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +27,9 @@ type ValuationRow = {
 };
 
 export default function InventoryValuationPage() {
+  const orgRole = useOrgContextStore((s) => s.orgRole);
+  const isFranchisor = orgRole === "FRANCHISOR";
+
   const [valuationRows, setValuationRows] = React.useState<ValuationRow[]>([]);
   const [summary, setSummary] = React.useState<
     Array<{
@@ -36,6 +44,10 @@ export default function InventoryValuationPage() {
   const [method, setMethod] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
+
+  const [franchiseRows, setFranchiseRows] = React.useState<FranchiseNetworkStockItem[]>([]);
+  const [franchiseLoading, setFranchiseLoading] = React.useState(false);
+  const [franchiseCostingRanAt, setFranchiseCostingRanAt] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -71,7 +83,87 @@ export default function InventoryValuationPage() {
     };
   }, []);
 
+  React.useEffect(() => {
+    if (!isFranchisor) return;
+    let cancelled = false;
+    setFranchiseLoading(true);
+    void fetchFranchiseNetworkStockAggregate()
+      .then((result) => {
+        if (cancelled) return;
+        setFranchiseRows(result.items);
+        setFranchiseCostingRanAt(result.costingRanAt);
+      })
+      .catch(() => {
+        // Non-fatal — franchise section silently omitted if endpoint unavailable
+      })
+      .finally(() => {
+        if (!cancelled) setFranchiseLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isFranchisor]);
+
   const totalDisplayValue = valuationRows.reduce((s, r) => s + r.stockValue, 0);
+  const franchiseTotalQty = React.useMemo(
+    () => franchiseRows.reduce((s, r) => s + r.totalAvailable, 0),
+    [franchiseRows]
+  );
+  const franchiseTotalValue = React.useMemo(
+    () => franchiseRows.reduce((s, r) => s + r.networkValueKes, 0),
+    [franchiseRows]
+  );
+
+  const franchiseColumns = [
+    {
+      id: "sku",
+      header: "SKU",
+      accessor: (r: FranchiseNetworkStockItem) => (
+        <span className="font-mono text-sm">{r.sku}</span>
+      ),
+    },
+    {
+      id: "name",
+      header: "Product",
+      accessor: (r: FranchiseNetworkStockItem) => r.productName,
+    },
+    {
+      id: "outlets",
+      header: "Outlets",
+      accessor: (r: FranchiseNetworkStockItem) => (
+        <div className="text-right tabular-nums text-muted-foreground">
+          {r.byOutlet.length}
+        </div>
+      ),
+    },
+    {
+      id: "qty",
+      header: "Available qty",
+      accessor: (r: FranchiseNetworkStockItem) => (
+        <div className="text-right tabular-nums font-medium">
+          {r.totalAvailable.toLocaleString()}
+        </div>
+      ),
+    },
+    {
+      id: "unitCost",
+      header: "HQ unit cost",
+      accessor: (r: FranchiseNetworkStockItem) => (
+        <div className="text-right tabular-nums text-muted-foreground">
+          {r.unitCostKes > 0 ? `KES ${r.unitCostKes.toLocaleString()}` : "—"}
+        </div>
+      ),
+    },
+    {
+      id: "value",
+      header: "Value (KES)",
+      accessor: (r: FranchiseNetworkStockItem) => (
+        <div className="text-right tabular-nums font-semibold">
+          {r.networkValueKes > 0 ? Math.round(r.networkValueKes).toLocaleString() : "—"}
+        </div>
+      ),
+    },
+  ];
 
   const columns = [
     { id: "sku", header: "SKU", accessor: (r: ValuationRow) => r.sku, sticky: true },
@@ -179,6 +271,67 @@ export default function InventoryValuationPage() {
             <DataTable data={valuationRows} columns={columns} emptyMessage={emptyMessage} />
           </CardContent>
         </Card>
+
+        {isFranchisor && (
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Icons.Store className="h-4 w-4 text-muted-foreground" />
+                    Franchise network — stock at outlets
+                  </CardTitle>
+                  <CardDescription className="space-y-1 max-w-3xl">
+                    <span className="block">
+                      Per-SKU quantities currently held across all active franchise outlets, valued at the latest
+                      HQ unit cost from the costing snapshot.{" "}
+                      <strong className="font-medium">Management figure only</strong> — under the intercompany sale
+                      model, HQ recognized revenue and COGS when goods were invoiced to the franchise; this stock
+                      is on the franchisee&apos;s balance sheet and does not form part of HQ general-ledger inventory.
+                    </span>
+                    {franchiseCostingRanAt && (
+                      <span className="block text-xs text-muted-foreground">
+                        Unit costs from costing snapshot: {new Date(franchiseCostingRanAt).toLocaleString()}.
+                        Products without a costing run show zero value.
+                      </span>
+                    )}
+                  </CardDescription>
+                </div>
+                {!franchiseLoading && franchiseRows.length > 0 && (
+                  <div className="text-right text-sm tabular-nums">
+                    <div className="text-muted-foreground">Network total available qty</div>
+                    <div className="text-lg font-semibold">{franchiseTotalQty.toLocaleString()}</div>
+                    {franchiseTotalValue > 0 && (
+                      <>
+                        <div className="text-muted-foreground mt-1">at HQ cost (KES)</div>
+                        <div className="text-base font-semibold">
+                          {Math.round(franchiseTotalValue).toLocaleString()}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {franchiseLoading ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  Loading franchise stock...
+                </div>
+              ) : franchiseRows.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  No franchise stock found. Outlets must have posted GRNs to show stock here.
+                </div>
+              ) : (
+                <DataTable
+                  data={franchiseRows}
+                  columns={franchiseColumns}
+                  emptyMessage="No franchise stock data."
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </PageShell>
   );
