@@ -334,7 +334,7 @@ export async function searchPartyLookupOptionsApi(filters?: {
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  if (filters?.limit) params.set("limit", String(filters.limit));
+  if (filters?.limit) params.set("limit", String(Math.min(Math.max(filters.limit, 1), 100)));
   const data = await apiRequest<{ items: BackendParty[] }>("/api/parties", {
     params,
   });

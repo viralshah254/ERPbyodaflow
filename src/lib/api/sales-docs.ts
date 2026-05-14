@@ -33,6 +33,16 @@ function mapSalesDoc(item: BackendSalesDoc): SalesDocRow {
   };
 }
 
+export type SalesDocumentsPageResult = {
+  items: SalesDocRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+const SALES_AGGREGATE_CAP = 2000;
+
 function endpointFor(type: SalesDocType): string {
   if (type === "quote") return "/api/sales/quotes";
   if (type === "sales-order") return "/api/sales/orders";
@@ -40,8 +50,51 @@ function endpointFor(type: SalesDocType): string {
   return "/api/sales/invoices";
 }
 
-export async function fetchSalesDocumentsApi(type: SalesDocType): Promise<SalesDocRow[]> {
+export async function fetchSalesDocumentsPageApi(
+  type: SalesDocType,
+  opts?: { limit?: number; cursor?: string }
+): Promise<SalesDocumentsPageResult> {
   requireLiveApi("Sales documents");
-  const payload = await apiRequest<{ items: BackendSalesDoc[] }>(endpointFor(type));
-  return (payload.items ?? []).map(mapSalesDoc);
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 50;
+  params.set("limit", String(lim));
+  if (opts?.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);
+  const payload = await apiRequest<{
+    items: BackendSalesDoc[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>(endpointFor(type), { params });
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const offset =
+    typeof payload.offset === "number"
+      ? payload.offset
+      : opts?.cursor != null && opts.cursor !== ""
+        ? Number(opts.cursor) || 0
+        : 0;
+  const items = (payload.items ?? []).map(mapSalesDoc);
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (payload.nextCursor !== undefined && payload.nextCursor !== null && String(payload.nextCursor) !== "") {
+    nextCursor = String(payload.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(offset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset, hasMore, nextCursor };
+}
+
+export async function fetchSalesDocumentsApi(type: SalesDocType): Promise<SalesDocRow[]> {
+  const rows: SalesDocRow[] = [];
+  let cursor: string | undefined;
+  while (rows.length < SALES_AGGREGATE_CAP) {
+    const page = await fetchSalesDocumentsPageApi(type, { limit: 100, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }

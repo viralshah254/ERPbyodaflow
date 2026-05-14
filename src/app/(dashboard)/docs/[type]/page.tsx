@@ -18,7 +18,7 @@ import { downloadCsv } from "@/lib/export/csv";
 import {
   bulkDocumentActionApi,
   exportDocumentListApi,
-  fetchDocumentListApi,
+  fetchDocumentListPageApi,
 } from "@/lib/api/documents";
 import { isApiConfigured } from "@/lib/api/client";
 import {
@@ -117,42 +117,55 @@ export default function DocTypeListPage() {
   );
   const [allRows, setAllRows] = React.useState<DocListRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [hasMoreList, setHasMoreList] = React.useState(false);
+  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
 
-  const refreshRows = React.useCallback(async () => {
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadFirstPage = React.useCallback(async () => {
     if (!DOC_TYPES.includes(type as DocTypeKey)) return;
     setLoading(true);
     try {
-      setAllRows(await fetchDocumentListApi(type as DocTypeKey));
+      const page = await fetchDocumentListPageApi(type as DocTypeKey, {
+        limit: 50,
+        status: statusFilter || undefined,
+        search: debouncedSearch.trim() || undefined,
+      });
+      setAllRows(page.items);
+      setHasMoreList(page.hasMore);
+      setNextCursor(page.nextCursor);
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [type]);
+  }, [type, statusFilter, debouncedSearch]);
 
-  React.useEffect(() => {
-    setSelectedIds([]);
-    void refreshRows();
-  }, [refreshRows]);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.party?.toLowerCase().includes(q)) ||
-          (r.reference?.toLowerCase().includes(q)) ||
-          (r.poRef?.toLowerCase().includes(q))
-      );
+  const loadMore = React.useCallback(async () => {
+    if (!DOC_TYPES.includes(type as DocTypeKey) || !nextCursor || !hasMoreList || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await fetchDocumentListPageApi(type as DocTypeKey, {
+        limit: 50,
+        cursor: nextCursor,
+        status: statusFilter || undefined,
+        search: debouncedSearch.trim() || undefined,
+      });
+      setAllRows((prev) => [...prev, ...page.items]);
+      setHasMoreList(page.hasMore);
+      setNextCursor(page.nextCursor);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setLoadingMore(false);
     }
-    if (statusFilter) {
-      out = out.filter((r) => r.status === statusFilter);
-    }
-    return out;
-  }, [allRows, search, statusFilter]);
+  }, [type, statusFilter, debouncedSearch, nextCursor, hasMoreList, loadingMore]);
 
-  const columns = React.useMemo(
     () => buildColumns(type, terminology),
     [type, terminology]
   );
@@ -208,7 +221,7 @@ export default function DocTypeListPage() {
 
   const handleExport = () => {
     const fileName = `${type}-${new Date().toISOString().slice(0, 10)}.csv`;
-    if (filtered.length === 0) {
+    if (allRows.length === 0) {
       toast.error(`No ${label.toLowerCase()}s to export.`);
       return;
     }
@@ -218,7 +231,7 @@ export default function DocTypeListPage() {
     }
     downloadCsv(
       fileName,
-      filtered.map((row) => ({
+      allRows.map((row) => ({
         number: row.number,
         date: row.date,
         party: row.party ?? "",
@@ -257,7 +270,7 @@ export default function DocTypeListPage() {
     try {
       const { results } = await bulkDocumentActionApi(type as DocTypeKey, "approve", approveIds);
       const { succeeded, failed } = partitionBulkDocResults(results);
-      await refreshRows();
+      await loadFirstPage();
       if (succeeded.length) {
         toast.success(
           `${succeeded.length} ${label.toLowerCase()} record(s) approved.`
@@ -294,7 +307,7 @@ export default function DocTypeListPage() {
     try {
       const { results } = await bulkDocumentActionApi(type as DocTypeKey, "post", postIds);
       const { succeeded, failed } = partitionBulkDocResults(results);
-      await refreshRows();
+      await loadFirstPage();
       if (succeeded.length) {
         toast.success(`${succeeded.length} ${label.toLowerCase()} record(s) posted.`);
       }
@@ -392,15 +405,24 @@ export default function DocTypeListPage() {
             Loading {label.toLowerCase()}s...
           </div>
         ) : (
-          <DataTable<DocListRow>
-            data={filtered}
-            columns={columns}
-            onRowClick={(row) => router.push(`/docs/${type}/${row.id}`)}
-            emptyMessage={`No ${label.toLowerCase()}s found.`}
-            selectable
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-          />
+          <>
+            <DataTable<DocListRow>
+              data={allRows}
+              columns={columns}
+              onRowClick={(row) => router.push(`/docs/${type}/${row.id}`)}
+              emptyMessage={`No ${label.toLowerCase()}s found.`}
+              selectable
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+            />
+            {hasMoreList ? (
+              <div className="flex justify-center pt-2">
+                <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
+                  {loadingMore ? "Loading…" : "Load more"}
+                </Button>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </PageShell>

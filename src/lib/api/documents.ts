@@ -175,6 +175,10 @@ type BackendDocumentListItem = {
 
 type BackendDocumentListResponse = {
   items: BackendDocumentListItem[];
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+  nextCursor?: string | null;
 };
 
 export type DocumentDraftPayload = {
@@ -454,10 +458,98 @@ export async function fetchDocumentDetailApi(
   return mapDocumentDetail(type, payload);
 }
 
-export async function fetchDocumentListApi(type: DocTypeKey): Promise<DocListRow[]> {
+export type FetchDocumentListOpts = {
+  limit?: number;
+  offset?: number;
+  /** Server offset alias (same as parties / products). */
+  cursor?: string;
+  status?: string;
+  search?: string;
+  branchId?: string;
+  partyId?: string;
+  warehouseId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+export type FetchDocumentListPageResult = {
+  items: DocListRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+/** Default cap when aggregating pages for legacy callers (prevents unbounded downloads). */
+export const FETCH_DOCUMENT_LIST_AGGREGATE_CAP = 2000;
+
+export async function fetchDocumentListPageApi(
+  type: DocTypeKey,
+  opts?: FetchDocumentListOpts
+): Promise<FetchDocumentListPageResult> {
   requireLiveApi("Document list");
-  const payload = await apiRequest<BackendDocumentListResponse>(`/api/documents/${type}`);
-  return payload.items.map(mapDocumentListItem);
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 50;
+  params.set("limit", String(lim));
+  if (opts?.cursor != null && opts.cursor !== "") {
+    params.set("cursor", opts.cursor);
+  } else if (opts?.offset != null && opts.offset > 0) {
+    params.set("offset", String(opts.offset));
+  }
+  if (opts?.status?.trim()) params.set("status", opts.status.trim());
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.branchId?.trim()) params.set("branchId", opts.branchId.trim());
+  if (opts?.partyId?.trim()) params.set("partyId", opts.partyId.trim());
+  if (opts?.warehouseId?.trim()) params.set("warehouseId", opts.warehouseId.trim());
+  if (opts?.dateFrom?.trim()) params.set("dateFrom", opts.dateFrom.trim());
+  if (opts?.dateTo?.trim()) params.set("dateTo", opts.dateTo.trim());
+
+  const payload = await apiRequest<BackendDocumentListResponse>(`/api/documents/${encodeURIComponent(type)}`, {
+    params,
+  });
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number"
+      ? payload.offset
+      : opts?.cursor != null && opts.cursor !== ""
+        ? Number(opts.cursor) || 0
+        : opts?.offset != null && opts.offset > 0
+          ? opts.offset
+          : 0;
+  const items = (payload.items ?? []).map(mapDocumentListItem);
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (payload.nextCursor !== undefined && payload.nextCursor !== null && String(payload.nextCursor) !== "") {
+    nextCursor = String(payload.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return {
+    items,
+    limit,
+    offset: parsedOffset,
+    hasMore,
+    nextCursor,
+  };
+}
+
+export async function fetchDocumentListApi(
+  type: DocTypeKey,
+  opts?: Omit<FetchDocumentListOpts, "offset" | "cursor">
+): Promise<DocListRow[]> {
+  requireLiveApi("Document list");
+  const rows: DocListRow[] = [];
+  let cursor: string | undefined;
+  while (rows.length < FETCH_DOCUMENT_LIST_AGGREGATE_CAP) {
+    const page = await fetchDocumentListPageApi(type, { ...opts, limit: 100, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 export async function bulkDocumentActionApi(
