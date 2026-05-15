@@ -71,6 +71,7 @@ type BackendPodConfirmation = {
   confirmedAt: string | Date;
   confirmedByUserId?: string;
   receiverName?: string;
+  receiverPhone?: string;
   receiverSignatureAttachmentId?: string;
   dispatcherName?: string;
   dispatcherSignatureAttachmentId?: string;
@@ -376,6 +377,7 @@ function mapDocumentDetail(
               : new Date(payload.podConfirmation.confirmedAt).toISOString(),
           confirmedByUserId: payload.podConfirmation.confirmedByUserId,
           receiverName: payload.podConfirmation.receiverName,
+          receiverPhone: payload.podConfirmation.receiverPhone,
           receiverSignatureAttachmentId: payload.podConfirmation.receiverSignatureAttachmentId,
           dispatcherName: payload.podConfirmation.dispatcherName,
           dispatcherSignatureAttachmentId: payload.podConfirmation.dispatcherSignatureAttachmentId,
@@ -614,8 +616,9 @@ export async function convertDocumentApi(
 export async function confirmDeliveryPodApi(
   deliveryNoteId: string,
   payload: {
-    receiverName: string;
-    receiverSignatureAttachmentId: string;
+    receiverName?: string;
+    receiverPhone?: string;
+    receiverSignatureAttachmentId?: string;
     note?: string;
     lines: Array<{
       lineId: string;
@@ -627,9 +630,18 @@ export async function confirmDeliveryPodApi(
   }
 ): Promise<void> {
   requireLiveApi("Proof of delivery");
+  const receiverName = payload.receiverName?.trim();
+  const receiverPhone = payload.receiverPhone?.trim();
+  const sigId = payload.receiverSignatureAttachmentId?.trim();
   await apiRequest(`/api/documents/delivery-note/${deliveryNoteId}/pod`, {
     method: "POST",
-    body: payload,
+    body: {
+      ...(receiverName ? { receiverName } : {}),
+      ...(receiverPhone ? { receiverPhone } : {}),
+      ...(sigId ? { receiverSignatureAttachmentId: sigId } : {}),
+      ...(payload.note?.trim() ? { note: payload.note.trim() } : {}),
+      lines: payload.lines,
+    },
   });
 }
 

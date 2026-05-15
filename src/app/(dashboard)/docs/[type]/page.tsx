@@ -74,7 +74,7 @@ function buildColumns(
     if (accessor === "total") {
       acc = (r) =>
         r.total != null ? `KES ${Number(r.total).toLocaleString()}` : "—";
-    } else     if (accessor === "status") {
+    } else if (accessor === "status") {
       acc = (r) => (
         <div className="flex flex-col gap-1">
           <StatusBadge status={r.status} />
@@ -166,6 +166,7 @@ export default function DocTypeListPage() {
     }
   }, [type, statusFilter, debouncedSearch, nextCursor, hasMoreList, loadingMore]);
 
+  const columns = React.useMemo(
     () => buildColumns(type, terminology),
     [type, terminology]
   );

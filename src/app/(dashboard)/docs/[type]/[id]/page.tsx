@@ -145,6 +145,7 @@ export default function DocViewPage() {
   const [deliveryNoteWarehouseLabel, setDeliveryNoteWarehouseLabel] = React.useState<string | null>(null);
   const [podSheetOpen, setPodSheetOpen] = React.useState(false);
   const [podReceiverName, setPodReceiverName] = React.useState("");
+  const [podReceiverPhone, setPodReceiverPhone] = React.useState("");
   const [podNote, setPodNote] = React.useState("");
   const [podLineRows, setPodLineRows] = React.useState<
     Array<{
@@ -180,6 +181,7 @@ export default function DocViewPage() {
   React.useEffect(() => {
     if (!podSheetOpen || !document?.lines?.length) return;
     setPodReceiverName("");
+    setPodReceiverPhone("");
     setPodNote("");
     setPodLineRows(
       document.lines.map((l) => ({
@@ -904,6 +906,9 @@ export default function DocViewPage() {
                             {document.podConfirmation.receiverName
                               ? ` · Received by ${document.podConfirmation.receiverName}`
                               : ""}
+                            {document.podConfirmation.receiverPhone
+                              ? ` · ${document.podConfirmation.receiverPhone}`
+                              : ""}
                           </p>
                           {document.podConfirmation.note ? (
                             <p className="text-muted-foreground whitespace-pre-wrap">{document.podConfirmation.note}</p>
@@ -961,6 +966,65 @@ export default function DocViewPage() {
                               );
                             })}
                           </div>
+                          {(document.podConfirmation.extraReceiptLines?.length ?? 0) > 0 ? (
+                            <div className="mt-4 space-y-2">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Extra receipt (not on delivery note)
+                              </p>
+                              <div className="rounded border divide-y max-w-3xl">
+                                {(document.podConfirmation.extraReceiptLines ?? []).map((row) => (
+                                  <div
+                                    key={row.lineId}
+                                    className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs"
+                                  >
+                                    <span className="min-w-0">
+                                      {row.description ?? row.productId ?? row.lineId}
+                                      {row.productId ? ` · ${row.productId}` : ""}
+                                    </span>
+                                    <span className="shrink-0 text-muted-foreground text-right">
+                                      {typeof row.receivedWeightKg === "number"
+                                        ? `${row.receivedWeightKg} kg`
+                                        : ""}
+                                      {row.qtyReceived != null ? ` · qty ${row.qtyReceived}` : ""}
+                                      {row.note ? ` — ${row.note}` : ""}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {document.podConfirmation.franchiseeWeightSplit ? (
+                            <div className="mt-4 space-y-2">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Outlet weight split
+                              </p>
+                              <p className="text-muted-foreground text-xs">
+                                Reference total{" "}
+                                {document.podConfirmation.franchiseeWeightSplit.referenceTotalWeightKg} kg
+                                {document.podConfirmation.franchiseeWeightSplit.splitNote
+                                  ? ` — ${document.podConfirmation.franchiseeWeightSplit.splitNote}`
+                                  : ""}
+                              </p>
+                              <div className="rounded border divide-y max-w-3xl">
+                                {(document.podConfirmation.franchiseeWeightSplit.lines ?? []).map(
+                                  (sl, i) => (
+                                    <div
+                                      key={`${sl.description}-${i}`}
+                                      className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs"
+                                    >
+                                      <span className="min-w-0">
+                                        {sl.description}
+                                        {sl.productId ? ` · ${sl.productId}` : ""}
+                                      </span>
+                                      <span className="shrink-0 text-muted-foreground text-right">
+                                        {sl.weightKg} kg{sl.note ? ` · ${sl.note}` : ""}
+                                      </span>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -1533,19 +1597,30 @@ export default function DocViewPage() {
               })}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pod-receiver">Receiver name</Label>
+              <Label htmlFor="pod-receiver">Receiver name (optional)</Label>
               <Input
                 id="pod-receiver"
                 value={podReceiverName}
                 onChange={(e) => setPodReceiverName(e.target.value)}
-                placeholder="Who signed / confirmed receipt"
+                placeholder="Who took delivery, if known"
                 autoComplete="name"
               />
             </div>
             <div className="space-y-2">
-              <Label>Receiver signature</Label>
+              <Label htmlFor="pod-receiver-phone">Phone (optional)</Label>
+              <Input
+                id="pod-receiver-phone"
+                value={podReceiverPhone}
+                onChange={(e) => setPodReceiverPhone(e.target.value)}
+                placeholder="Contact number"
+                type="tel"
+                autoComplete="tel"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Receiver signature (optional)</Label>
               <p className="text-xs text-muted-foreground">
-                Draw the signature below. It will be uploaded and stored with this delivery note.
+                Draw a signature if someone is available to sign; otherwise leave blank and save.
               </p>
               <PodSignaturePad ref={podSigRef} />
               <Button type="button" variant="outline" size="sm" onClick={() => podSigRef.current?.clear()}>
@@ -1558,21 +1633,9 @@ export default function DocViewPage() {
               Cancel
             </Button>
             <Button
-              disabled={
-                podSaving ||
-                podEvidenceUploadBusy ||
-                !podReceiverName.trim()
-              }
+              disabled={podSaving || podEvidenceUploadBusy}
               onClick={async () => {
-                if (!podReceiverName.trim()) {
-                  toast.error("Receiver name is required.");
-                  return;
-                }
                 const sigCanvas = podSigRef.current;
-                if (!sigCanvas || sigCanvas.isEmpty()) {
-                  toast.error("Receiver signature is required.");
-                  return;
-                }
                 for (let i = 0; i < podLineRows.length; i++) {
                   const row = podLineRows[i];
                   const q = Number(row.qtyReceived.replace(",", "."));
@@ -1602,21 +1665,30 @@ export default function DocViewPage() {
                 }
                 setPodSaving(true);
                 try {
-                  const blob = await new Promise<Blob>((resolve, reject) => {
-                    sigCanvas.getCanvas().toBlob(
-                      (b) => (b ? resolve(b) : reject(new Error("Could not capture signature."))),
-                      "image/png"
+                  let receiverSignatureAttachmentId: string | undefined;
+                  if (sigCanvas && !sigCanvas.isEmpty()) {
+                    const blob = await new Promise<Blob>((resolve, reject) => {
+                      sigCanvas.getCanvas().toBlob(
+                        (b) => (b ? resolve(b) : reject(new Error("Could not capture signature."))),
+                        "image/png"
+                      );
+                    });
+                    const file = new File([blob], "receiver-signature.png", { type: "image/png" });
+                    const { id: attId } = await uploadDocumentAttachmentApi(
+                      "delivery-note",
+                      id,
+                      file
                     );
-                  });
-                  const file = new File([blob], "receiver-signature.png", { type: "image/png" });
-                  const { id: receiverSignatureAttachmentId } = await uploadDocumentAttachmentApi(
-                    "delivery-note",
-                    id,
-                    file
-                  );
+                    receiverSignatureAttachmentId = attId;
+                  }
+                  const nameTrim = podReceiverName.trim();
+                  const phoneTrim = podReceiverPhone.trim();
                   await confirmDeliveryPodApi(id, {
-                    receiverName: podReceiverName.trim(),
-                    receiverSignatureAttachmentId,
+                    ...(nameTrim ? { receiverName: nameTrim } : {}),
+                    ...(phoneTrim ? { receiverPhone: phoneTrim } : {}),
+                    ...(receiverSignatureAttachmentId
+                      ? { receiverSignatureAttachmentId }
+                      : {}),
                     note: podNote.trim() || undefined,
                     lines: podLineRows.map((r) => {
                       const needsEv = computePodLineEvidenceNeeded(r);

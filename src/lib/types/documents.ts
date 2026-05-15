@@ -64,10 +64,35 @@ export type PodConfirmationLineRecord = {
   varianceEvidenceAttachmentIds?: string[];
 };
 
+export type FranchiseeExtraReceiptLineRecord = {
+  lineId: string;
+  productId?: string;
+  description?: string;
+  qtyReceived?: number;
+  receivedWeightKg: number;
+  note: string;
+};
+
+export type FranchiseeWeightSplitLineRecord = {
+  productId?: string;
+  variantId?: string;
+  description: string;
+  weightKg: number;
+  note?: string;
+};
+
+export type FranchiseeWeightSplitReportRecord = {
+  referenceTotalWeightKg: number;
+  lines: FranchiseeWeightSplitLineRecord[];
+  splitNote?: string;
+};
+
 export type PodConfirmationRecord = {
   confirmedAt: string;
   confirmedByUserId?: string;
   receiverName?: string;
+  /** Optional contact captured at delivery (e.g. mobile POD). */
+  receiverPhone?: string;
   /** Attachment on the delivery note (signature image). */
   receiverSignatureAttachmentId?: string;
   /** Delivery driver at drop-off (mobile POD). */
@@ -75,6 +100,8 @@ export type PodConfirmationRecord = {
   dispatcherSignatureAttachmentId?: string;
   note?: string;
   lines: PodConfirmationLineRecord[];
+  extraReceiptLines?: FranchiseeExtraReceiptLineRecord[];
+  franchiseeWeightSplit?: FranchiseeWeightSplitReportRecord;
 };
 
 /** Driver pickup at collection / processing (before IN_TRANSIT). */
