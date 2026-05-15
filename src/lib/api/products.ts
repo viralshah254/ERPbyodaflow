@@ -61,6 +61,8 @@ export type FetchProductsOptions = {
   limit?: number;
   /** Pagination offset (server skip). Omit for first page. */
   cursor?: string;
+  /** Restrict to these product ids (max 100 on the server). */
+  ids?: string[];
   /**
    * Whether to include on-hand stock totals in each row.
    * Pass false for document line pickers that don't display stock — this skips
@@ -87,6 +89,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions): Promise<
   const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 100;
   params.set("limit", String(lim));
   if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);
+  if (opts.ids?.length) params.set("ids", opts.ids.slice(0, 100).join(","));
   const data = await apiRequest<{ items: BackendProduct[]; nextCursor?: string | null }>("/api/products", { params });
   return {
     items: data.items.map(mapProduct),

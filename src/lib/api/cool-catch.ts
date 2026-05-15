@@ -371,14 +371,34 @@ export type FranchiseeProductEconomicsRow = {
   supplyBasePrice: number;
   commissionPerUnit: number;
   guideRetail: number;
+  sku?: string | null;
+  productName?: string | null;
 };
 
-export async function fetchFranchiseeProductEconomicsApi(franchiseeId: string): Promise<FranchiseeProductEconomicsRow[]> {
+export type FetchFranchiseeProductEconomicsParams = {
+  productIds?: string[];
+  limit?: number;
+  cursor?: string;
+  includeProductDetails?: boolean;
+  /** HQ product text search; only applied when fetching paged assigned rows (`limit` without `productIds`). */
+  search?: string;
+};
+
+export async function fetchFranchiseeProductEconomicsApi(
+  franchiseeId: string,
+  params?: FetchFranchiseeProductEconomicsParams
+): Promise<{ items: FranchiseeProductEconomicsRow[]; nextCursor: string | null }> {
   requireLiveApi("Franchisee product economics");
-  const res = await apiRequest<{ items: FranchiseeProductEconomicsRow[] }>(
-    `/api/franchise/franchisees/${encodeURIComponent(franchiseeId)}/product-economics`
-  );
-  return res.items ?? [];
+  const sp = new URLSearchParams();
+  if (params?.productIds?.length) sp.set("productIds", params.productIds.slice(0, 100).join(","));
+  if (params?.limit != null && params.limit > 0) sp.set("limit", String(params.limit));
+  if (params?.cursor != null && params.cursor !== "") sp.set("cursor", params.cursor);
+  if (params?.includeProductDetails) sp.set("includeProductDetails", "true");
+  if (params?.search?.trim()) sp.set("search", params.search.trim());
+  const qs = sp.toString();
+  const path = `/api/franchise/franchisees/${encodeURIComponent(franchiseeId)}/product-economics${qs ? `?${qs}` : ""}`;
+  const res = await apiRequest<{ items: FranchiseeProductEconomicsRow[]; nextCursor?: string | null }>(path);
+  return { items: res.items ?? [], nextCursor: res.nextCursor ?? null };
 }
 
 export async function putFranchiseeProductEconomicsApi(
