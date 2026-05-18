@@ -75,10 +75,16 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       {sidebarOpen && <AppSidebar />}
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-y-auto flex flex-col">
-          <TutorialProgressTracker />
-          <FirstVisitBanner />
-          <div className="flex-1 min-w-0 p-6">{children}</div>
+        <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          {/* shrink-0: banner height never affects the scrollport below */}
+          <div className="shrink-0">
+            <TutorialProgressTracker />
+            <FirstVisitBanner />
+          </div>
+          {/* flex-1 min-h-0: fills exactly the remaining viewport height, no more */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="box-border w-full min-w-0 p-6">{children}</div>
+          </div>
         </main>
       </div>
       <CommandPalette />

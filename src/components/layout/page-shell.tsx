@@ -11,24 +11,26 @@ interface PageShellProps {
   className?: string;
 }
 
-/** Outer container for app pages: full height, flex column, overflow handling. Supports optional right panel. */
+/** Outer container for app pages: flex column inside dashboard scroll area (see MainLayout). Supports optional right panel. */
 export function PageShell({ children, rightSlot, className }: PageShellProps) {
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
 
+  if (rightSlot == null) {
+    return <div className={cn("flex w-full min-w-0 flex-col", className)}>{children}</div>;
+  }
+
   return (
-    <div className={cn("flex flex-col h-full min-h-0", className)}>
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="flex-1 min-w-0 overflow-auto">{children}</div>
-        {rightSlot != null && (
-          <div
-            className={cn(
-              "shrink-0 border-l bg-card transition-all overflow-auto",
-              rightPanelOpen ? "w-[min(100%,16rem)] lg:w-[18rem] max-w-[18rem]" : "w-0 border-0 overflow-hidden"
-            )}
-          >
-            {rightPanelOpen ? rightSlot : null}
-          </div>
-        )}
+    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
+      <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">{children}</div>
+        <div
+          className={cn(
+            "shrink-0 border-l bg-card transition-all overflow-auto",
+            rightPanelOpen ? "w-[min(100%,16rem)] lg:w-[18rem] max-w-[18rem]" : "w-0 border-0 overflow-hidden"
+          )}
+        >
+          {rightPanelOpen ? rightSlot : null}
+        </div>
       </div>
     </div>
   );
