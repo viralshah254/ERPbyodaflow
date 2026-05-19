@@ -95,3 +95,9 @@
   }
 }
 
+/* Spotlight tours (driver.js) above app header (z-40) and sticky page headers */
+.driver-active .driver-overlay,
+.driver-active .driver-popover {
+  z-index: 10050 !important;
+}
+

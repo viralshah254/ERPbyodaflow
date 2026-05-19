@@ -1,16 +1,21 @@
 /**
- * Firebase Auth client — used for sign-in and ID token.
- * Requires NEXT_PUBLIC_FIREBASE_* env vars from Firebase Console → Project settings.
- * Uses dynamic import so the firebase package is only loaded in the browser.
+ * Firebase client (Auth + optional Analytics).
+ * Values from Firebase Console → Project settings → Your apps → Web app (`erp-odaflow`).
+ * Set NEXT_PUBLIC_FIREBASE_* in erp-odaflow/.env (see .env.example).
  */
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+export function getFirebaseConfig() {
+  return {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  };
+}
+
+const firebaseConfig = getFirebaseConfig();
 
 const REMEMBER_ME_UNTIL_KEY = "odaflow_remember_me_until";
 const REMEMBER_ME_DAYS = 30;
@@ -59,6 +64,22 @@ export function isFirebaseConfigured(): boolean {
     firebaseConfig.apiKey &&
     firebaseConfig.projectId
   );
+}
+
+/** Optional Google Analytics (requires NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID). */
+export async function initFirebaseAnalytics(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const config = getFirebaseConfig();
+  if (!config.apiKey || !config.measurementId) return;
+  try {
+    const { isSupported, getAnalytics } = await import("firebase/analytics");
+    const { getApp, getApps, initializeApp } = await import("firebase/app");
+    if (!(await isSupported())) return;
+    const app = getApps().length === 0 ? initializeApp(config) : getApp();
+    getAnalytics(app);
+  } catch {
+    // Ad blockers / SSR — ignore
+  }
 }
 
 /**

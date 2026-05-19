@@ -83,7 +83,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </div>
           {/* flex-1 min-h-0: fills exactly the remaining viewport height, no more */}
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="box-border w-full min-w-0 p-6">{children}</div>
+            <div className="box-border w-full min-w-0 px-6 pb-6 pt-0">{children}</div>
           </div>
         </main>
       </div>

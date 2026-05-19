@@ -125,6 +125,113 @@ export async function fetchFranchiseNetworkOutlets(): Promise<FranchiseNetworkOu
   return payload.items ?? [];
 }
 
+export type FranchisePerformanceGroupBy = "day" | "week" | "month";
+
+export type FranchisePerformanceChannel =
+  | "WHATSAPP"
+  | "COOLCATCH_WA"
+  | "POS"
+  | "WEB"
+  | "MANUAL"
+  | "UNKNOWN";
+
+export interface FranchiseNetworkPerformance {
+  from: string;
+  to: string;
+  previousFrom: string;
+  previousTo: string;
+  groupBy: FranchisePerformanceGroupBy;
+  kpis: {
+    postedRevenue: number;
+    postedOrderCount: number;
+    whatsappRevenue: number;
+    whatsappOrderCount: number;
+    normalRevenue: number;
+    normalOrderCount: number;
+    salesOrderRevenue: number;
+    salesOrderCount: number;
+    totalStockQty: number;
+    lowStockSkus: number;
+    stockRiskOutlets: number;
+    activeOutlets: number;
+    revenueGrowthPct: number | null;
+    orderGrowthPct: number | null;
+    averageOrderValue: number;
+  };
+  channels: Array<{
+    channel: FranchisePerformanceChannel;
+    label: string;
+    revenue: number;
+    orderCount: number;
+    unitsKg: number;
+    sharePct: number;
+  }>;
+  series: Array<{
+    period: string;
+    outletOrgId: string;
+    outletName: string;
+    channel: FranchisePerformanceChannel;
+    channelLabel: string;
+    revenue: number;
+    orderCount: number;
+  }>;
+  outlets: Array<{
+    outletOrgId: string;
+    outletName: string;
+    territory?: string;
+    postedRevenue: number;
+    postedOrderCount: number;
+    whatsappRevenue: number;
+    whatsappOrderCount: number;
+    normalRevenue: number;
+    normalOrderCount: number;
+    salesOrderRevenue: number;
+    salesOrderCount: number;
+    totalStockQty: number;
+    lowStockCount: number;
+    arOverdue: number;
+    revenueGrowthPct: number | null;
+    whatsappSharePct: number;
+  }>;
+  stockByOutlet: Array<{
+    outletOrgId: string;
+    outletName: string;
+    totalStockQty: number;
+    lowStockCount: number;
+    sharePct: number;
+  }>;
+  stockByProduct: Array<{
+    productId: string;
+    sku: string;
+    productName: string;
+    totalQty: number;
+    totalReserved: number;
+    totalAvailable: number;
+    outletCount: number;
+  }>;
+}
+
+export type FetchFranchiseNetworkPerformanceParams = {
+  from?: string;
+  to?: string;
+  outletOrgId?: string;
+  groupBy?: FranchisePerformanceGroupBy;
+};
+
+export async function fetchFranchiseNetworkPerformance(
+  params?: FetchFranchiseNetworkPerformanceParams
+): Promise<FranchiseNetworkPerformance> {
+  requireLiveApi("Franchise network performance");
+  return apiRequest<FranchiseNetworkPerformance>("/api/franchise/network/performance", {
+    params: listParams({
+      from: params?.from,
+      to: params?.to,
+      outletOrgId: params?.outletOrgId,
+      groupBy: params?.groupBy,
+    }),
+  });
+}
+
 export async function fetchFranchiseNetworkOutletById(outletRef: string): Promise<FranchiseNetworkOutletRow | null> {
   requireLiveApi("Franchise network outlet");
   try {

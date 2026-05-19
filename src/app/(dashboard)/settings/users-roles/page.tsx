@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { UserFormFields, type UserFormState } from "@/components/settings/user-form-fields";
 import type { PermissionCatalogGroupDto, UserRow } from "@/lib/types/users-roles";
 import { MOBILE_PERSONA_LABELS } from "@/lib/types/users-roles";
 import { Badge } from "@/components/ui/badge";
@@ -75,17 +76,17 @@ export default function UsersRolesPage() {
   const [roleSheetOpen, setRoleSheetOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<UserRow | null>(null);
   const [editingRole, setEditingRole] = React.useState<RoleDetailRow | null>(null);
-  const [userForm, setUserForm] = React.useState({
+  const emptyUserForm = (): UserFormState => ({
     email: "",
     firstName: "",
     lastName: "",
-    status: "ACTIVE" as "ACTIVE" | "INACTIVE" | "SUSPENDED",
+    status: "ACTIVE",
     copilotEnabled: false,
-    roleIds: [] as string[],
+    roleIds: [],
     phoneNumber: "",
-    jobTitle: "",
     employeeCode: "",
   });
+  const [userForm, setUserForm] = React.useState<UserFormState>(emptyUserForm);
   const [roleForm, setRoleForm] = React.useState({ name: "", description: "", permissions: [] as string[] });
 
   const [permissionCatalog, setPermissionCatalog] = React.useState<PermissionCatalogGroupDto[]>([]);
@@ -106,7 +107,7 @@ export default function UsersRolesPage() {
 
   const openCreateUser = () => {
     setEditingUser(null);
-    setUserForm({ email: "", firstName: "", lastName: "", status: "ACTIVE", copilotEnabled: false, roleIds: [], phoneNumber: "", jobTitle: "", employeeCode: "" });
+    setUserForm(emptyUserForm());
     setPasswordNew("");
     setPasswordConfirm("");
     setPasswordMustChange(true);
@@ -123,7 +124,6 @@ export default function UsersRolesPage() {
       copilotEnabled: u.copilotEnabled === true,
       roleIds: [...u.roleIds],
       phoneNumber: u.phoneNumber ?? "",
-      jobTitle: u.jobTitle ?? "",
       employeeCode: u.employeeCode ?? "",
     });
     setPasswordNew("");
@@ -148,15 +148,6 @@ export default function UsersRolesPage() {
     setRoleSheetOpen(true);
   };
 
-  // Single-role selection: replaces any current assignment with the new role.
-  // If the same role is selected again it acts as a deselect (clear assignment).
-  const selectUserRole = (roleId: string) => {
-    setUserForm((p) => ({
-      ...p,
-      roleIds: p.roleIds[0] === roleId ? [] : [roleId],
-    }));
-  };
-
   // Owner role IDs are any role named "Owner" in the current role list.
   const ownerRoleIds = React.useMemo(
     () => roles.filter((r) => r.name === "Owner").map((r) => r.id),
@@ -167,6 +158,8 @@ export default function UsersRolesPage() {
   const editingUserIsOwner = editingUser
     ? editingUser.roleIds.some((id) => ownerRoleIds.includes(id))
     : false;
+
+  const canAssignOwnerRole = editingUserIsOwner || ownerRoleIds.length === 0;
 
   const toggleRolePermission = (perm: string) => {
     setRoleForm((p) => ({
@@ -361,119 +354,14 @@ export default function UsersRolesPage() {
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                value={userForm.email}
-                onChange={(e) => setUserForm((p) => ({ ...p, email: e.target.value }))}
-                placeholder="user@acme.com"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>First name</Label>
-                <Input
-                  value={userForm.firstName}
-                  onChange={(e) => setUserForm((p) => ({ ...p, firstName: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Last name</Label>
-                <Input
-                  value={userForm.lastName}
-                  onChange={(e) => setUserForm((p) => ({ ...p, lastName: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className={copilotProductEnabled ? "grid grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <select
-                  value={userForm.status}
-                  onChange={(e) =>
-                    setUserForm((p) => ({
-                      ...p,
-                      status: e.target.value as "ACTIVE" | "INACTIVE" | "SUSPENDED",
-                    }))
-                  }
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="SUSPENDED">Suspended</option>
-                </select>
-              </div>
-              {copilotProductEnabled ? (
-                <div className="space-y-2">
-                  <Label>Billing add-ons</Label>
-                  <label className="flex items-center gap-2 rounded-md border px-3 py-2">
-                    <Checkbox
-                      checked={userForm.copilotEnabled}
-                      onCheckedChange={(checked) =>
-                        setUserForm((p) => ({ ...p, copilotEnabled: checked === true }))
-                      }
-                    />
-                    <span className="text-sm">Enable Copilot for this user</span>
-                  </label>
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              {sortedRoles.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No roles yet. Open the Roles tab and run &quot;Provision standard roles&quot; first.
-                </p>
-              ) : (
-                <select
-                  value={userForm.roleIds[0] ?? ""}
-                  onChange={(e) => selectUserRole(e.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">— No role assigned —</option>
-                  {sortedRoles
-                    .filter((r) => {
-                      // Only Owners can assign the Owner role
-                      if (r.name === "Owner") return editingUserIsOwner || ownerRoleIds.length === 0;
-                      return true;
-                    })
-                    .map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                </select>
-              )}
-              <p className="text-xs text-muted-foreground">
-                One role per user. New users are staged for checkout first. Nothing is activated or billed until you confirm the pending checkout from Billing.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Phone number</Label>
-                <Input
-                  value={userForm.phoneNumber}
-                  onChange={(e) => setUserForm((p) => ({ ...p, phoneNumber: e.target.value }))}
-                  placeholder="+254 7XX XXX XXX"
-                  type="tel"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Job title / team</Label>
-                <Input
-                  value={userForm.jobTitle}
-                  onChange={(e) => setUserForm((p) => ({ ...p, jobTitle: e.target.value }))}
-                  placeholder="e.g. Warehouse Supervisor"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Employee code <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input
-                value={userForm.employeeCode}
-                onChange={(e) => setUserForm((p) => ({ ...p, employeeCode: e.target.value }))}
-                placeholder="e.g. EMP-001"
-              />
-            </div>
+            <UserFormFields
+              form={userForm}
+              onChange={setUserForm}
+              sortedRoles={sortedRoles}
+              copilotProductEnabled={copilotProductEnabled}
+              canAssignOwnerRole={canAssignOwnerRole}
+              isEdit={Boolean(editingUser)}
+            />
 
             {editingUser ? (
               <div className="space-y-3 rounded-lg border p-4">
@@ -603,7 +491,6 @@ export default function UsersRolesPage() {
                       copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
                       phoneNumber: userForm.phoneNumber || undefined,
-                      jobTitle: userForm.jobTitle || undefined,
                       employeeCode: userForm.employeeCode || undefined,
                     });
                       toast.success("User updated.");
@@ -623,7 +510,6 @@ export default function UsersRolesPage() {
                       copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
                       phoneNumber: userForm.phoneNumber || undefined,
-                      jobTitle: userForm.jobTitle || undefined,
                       employeeCode: userForm.employeeCode || undefined,
                     });
                       toast.success("User staged for checkout.");

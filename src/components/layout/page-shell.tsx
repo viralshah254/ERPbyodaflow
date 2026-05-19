@@ -22,11 +22,13 @@ export function PageShell({ children, rightSlot, className }: PageShellProps) {
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">{children}</div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-0">
+          {children}
+        </div>
         <div
           className={cn(
             "shrink-0 border-l bg-card transition-all overflow-auto",
-            rightPanelOpen ? "w-[min(100%,16rem)] lg:w-[18rem] max-w-[18rem]" : "w-0 border-0 overflow-hidden"
+            rightPanelOpen ? "w-[min(100%,16rem)] lg:w-[18rem] max-w-[18rem]" : "w-0 border-0 overflow-hidden",
           )}
         >
           {rightPanelOpen ? rightSlot : null}
