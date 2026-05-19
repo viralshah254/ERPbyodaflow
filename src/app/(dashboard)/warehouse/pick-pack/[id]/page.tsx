@@ -56,6 +56,14 @@ function pickPackStockHintMessage(hint: string | undefined): string | null {
   }
 }
 
+function parsePickedQtyInput(raw: string | undefined, fallback: number): number {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return fallback;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return n;
+}
+
 function AvailWithPickDelta({
   value,
   pickedQty,
@@ -100,7 +108,10 @@ export default function PickPackDetailPage() {
   const [warehouseOptions, setWarehouseOptions] = React.useState<LookupOption[]>([]);
   const [warehouseSaving, setWarehouseSaving] = React.useState(false);
   const [stagingLoading, setStagingLoading] = React.useState(false);
+  const [pickPackLoading, setPickPackLoading] = React.useState(false);
   const [loadError, setLoadError] = React.useState<"not_found" | null>(null);
+  /** Editable picked qty per line while task is PENDING (keyed by line.id). */
+  const [linePickedDraft, setLinePickedDraft] = React.useState<Record<string, string>>({});
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -128,6 +139,18 @@ export default function PickPackDetailPage() {
   React.useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  React.useEffect(() => {
+    if (!task) return;
+    const statusUpper = (task.status ?? "").trim().toUpperCase();
+    if (statusUpper !== "PENDING") return;
+    const next: Record<string, string> = {};
+    for (const line of task.lines) {
+      const initial = line.pickedQty != null && line.pickedQty > 0 ? line.pickedQty : line.quantity;
+      next[line.id] = String(initial);
+    }
+    setLinePickedDraft(next);
+  }, [task?.id, task?.status, task?.lines]);
 
   React.useEffect(() => {
     void fetchWarehouseOptions()
@@ -228,7 +251,10 @@ export default function PickPackDetailPage() {
     const statusUpper = (task.status ?? "").trim().toUpperCase();
     const shortfalls: Row[] = [];
     for (const line of task.lines) {
-      const need = statusUpper === "PENDING" ? line.quantity : (line.pickedQty ?? line.quantity);
+      const need =
+        statusUpper === "PENDING"
+          ? parsePickedQtyInput(linePickedDraft[line.id], line.quantity)
+          : (line.pickedQty ?? line.quantity);
       if (!(need > 1e-9)) continue;
       const available = line.onHandWarehouse ?? 0;
       if (available + 1e-9 < need) {
@@ -245,7 +271,24 @@ export default function PickPackDetailPage() {
       missingWarehouse: false,
       shortfalls,
     };
-  }, [task]);
+  }, [task, linePickedDraft]);
+
+  const buildPickLinesPayload = React.useCallback(() => {
+    if (!task) return [];
+    return task.lines.map((line) => ({
+      lineId: line.id,
+      pickedQty: parsePickedQtyInput(linePickedDraft[line.id], line.quantity),
+      locationId: line.locationId,
+    }));
+  }, [task, linePickedDraft]);
+
+  const pickedDraftInvalid = React.useMemo(() => {
+    if (!task || (task.status ?? "").trim().toUpperCase() !== "PENDING") return false;
+    return task.lines.some((line) => {
+      const pq = parsePickedQtyInput(linePickedDraft[line.id], line.quantity);
+      return !(pq > 1e-9);
+    });
+  }, [task, linePickedDraft]);
 
   if (!task && loading) {
     return <PageShell><PageHeader title="Loading task..." /></PageShell>;
@@ -290,8 +333,7 @@ export default function PickPackDetailPage() {
   const dispatchedOrComplete = ["DISPATCHED", "COMPLETED"].includes(taskStatusUpper);
   const isCancelled = taskStatusUpper === "CANCELLED";
   const canConfirmPick = taskStatusUpper === "PENDING" && !isCancelled;
-  const canConfirmPack =
-    (taskStatusUpper === "PICKED" || taskStatusUpper === "PACKED") && !dispatchedOrComplete && !isCancelled;
+  const canConfirmPackOnly = taskStatusUpper === "PICKED" && !dispatchedOrComplete && !isCancelled;
   const canDispatch = taskStatusUpper === "PACKED" && !isCancelled;
   const canComplete = taskStatusUpper === "DISPATCHED" && !isCancelled;
   const picklistCardTone =
@@ -304,7 +346,7 @@ export default function PickPackDetailPage() {
           : "";
   const picklistStatusLabel =
     taskStatusUpper === "PICKED"
-      ? "Picked — ready to pack"
+      ? "Picked — confirm pack if needed"
       : taskStatusUpper === "PACKED"
         ? "Packed — ready to dispatch"
         : dispatchedOrComplete
@@ -317,7 +359,8 @@ export default function PickPackDetailPage() {
   const showAvailPickDelta = taskStatusUpper === "PICKED" || taskStatusUpper === "PACKED";
   const workflowHint = (() => {
     if (isCancelled) return "This task was cancelled.";
-    if (taskStatusUpper === "PENDING") return "Start by confirming pick when line quantities are correct.";
+    if (taskStatusUpper === "PENDING")
+      return "Edit picked quantities if needed, set cartons, then confirm pick & pack in one step.";
     if (taskStatusUpper === "PICKED") return "Pick saved — adjust cartons if needed, then confirm pack.";
     if (taskStatusUpper === "PACKED") return "Packed — add courier/tracking and mark dispatched to issue stock from the fulfilment warehouse.";
     if (taskStatusUpper === "DISPATCHED")
@@ -327,12 +370,13 @@ export default function PickPackDetailPage() {
     return null;
   })();
 
-  const canConfirmPickStockOk =
+  const canConfirmPickAndPackStockOk =
     canConfirmPick &&
+    !pickedDraftInvalid &&
     !fulfilmentPickPackBlock.missingWarehouse &&
     fulfilmentPickPackBlock.shortfalls.length === 0;
-  const canConfirmPackStockOk =
-    canConfirmPack &&
+  const canConfirmPackOnlyStockOk =
+    canConfirmPackOnly &&
     !fulfilmentPickPackBlock.missingWarehouse &&
     fulfilmentPickPackBlock.shortfalls.length === 0;
 
@@ -506,7 +550,11 @@ export default function PickPackDetailPage() {
                   const pm = line.onHandPrimaryWarehouse;
                   const ow = line.onHandOrgWide;
                   const atBin = line.onHandBin;
-                  const pickedForDelta = line.pickedQty ?? 0;
+                  const pickedForDelta =
+                    taskStatusUpper === "PENDING"
+                      ? parsePickedQtyInput(linePickedDraft[line.id], line.quantity)
+                      : (line.pickedQty ?? 0);
+                  const canEditPicked = canConfirmPick;
                   const shortage =
                     typeof wh === "number" && Number.isFinite(wh) && wh < line.quantity;
                   const binShort =
@@ -525,14 +573,14 @@ export default function PickPackDetailPage() {
                         <AvailWithPickDelta
                           value={wh}
                           pickedQty={pickedForDelta}
-                          showDelta={showAvailPickDelta}
+                          showDelta={showAvailPickDelta || (taskStatusUpper === "PENDING" && pickedForDelta > 0)}
                         />
                       </TableCell>
                       <TableCell className={`text-right tabular-nums ${typeof pm === "number" && pm >= line.quantity ? "text-emerald-600/90" : ""}`}>
                         <AvailWithPickDelta
                           value={pm}
                           pickedQty={pickedForDelta}
-                          showDelta={showAvailPickDelta}
+                          showDelta={showAvailPickDelta || (taskStatusUpper === "PENDING" && pickedForDelta > 0)}
                         />
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">
@@ -544,7 +592,24 @@ export default function PickPackDetailPage() {
                         {line.locationId != null && typeof atBin === "number" ? atBin : "—"}
                       </TableCell>
                       <TableCell>{line.suggestedBin ?? "—"}</TableCell>
-                      <TableCell>{line.pickedQty ?? 0}</TableCell>
+                      <TableCell className="min-w-[7rem]">
+                        {canEditPicked ? (
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step="any"
+                            className="h-8 tabular-nums"
+                            aria-label={`Picked quantity for ${line.productName ?? line.sku ?? line.productId}`}
+                            value={linePickedDraft[line.id] ?? String(line.quantity)}
+                            onChange={(e) =>
+                              setLinePickedDraft((prev) => ({ ...prev, [line.id]: e.target.value }))
+                            }
+                          />
+                        ) : (
+                          <span className="tabular-nums">{line.pickedQty ?? 0}</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -601,7 +666,9 @@ export default function PickPackDetailPage() {
               <div className="space-y-2">
                 <Label>Cartons count</Label>
                 <Input value={cartons} onChange={(e) => setCartons(e.target.value)} />
-                <p className="text-[11px] text-muted-foreground">Leave as 0 or empty to default to 1 when you confirm pack.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Leave as 0 or empty to default to 1 when you confirm pick &amp; pack.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Packing note</Label>
@@ -675,14 +742,19 @@ export default function PickPackDetailPage() {
 
         <div className="flex flex-col gap-2">
           {workflowHint ? <p className="text-xs text-muted-foreground">{workflowHint}</p> : null}
+          {pickedDraftInvalid && canConfirmPick ? (
+            <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
+              Each line needs a picked quantity greater than zero.
+            </p>
+          ) : null}
           {fulfilmentPickPackBlock.missingWarehouse && canConfirmPick ? (
             <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-              Select a fulfilment warehouse before you can confirm pick or pack.
+              Select a fulfilment warehouse before you can confirm pick &amp; pack.
             </p>
           ) : null}
           {fulfilmentPickPackBlock.shortfalls.length ? (
             <div className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-              <p className="font-medium">Insufficient stock at fulfilment warehouse — confirm pick / pack disabled.</p>
+              <p className="font-medium">Insufficient stock at fulfilment warehouse — pick &amp; pack disabled.</p>
               <ul className="mt-2 list-disc pl-5 space-y-1">
                 {fulfilmentPickPackBlock.shortfalls.map((s, idx) => (
                   <li key={`${s.sku ?? s.productName ?? idx}-${idx}`}>
@@ -700,68 +772,78 @@ export default function PickPackDetailPage() {
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={!canConfirmPickStockOk}
-            title={
-              !canConfirmPick
-                ? "Pick already confirmed or task is not pending."
-                : fulfilmentPickPackBlock.missingWarehouse
-                  ? "Select a fulfilment warehouse first."
-                  : fulfilmentPickPackBlock.shortfalls.length
-                    ? "Not enough available stock here for the requested quantities."
-                    : undefined
-            }
-            onClick={() =>
-              void (async () => {
-                try {
-                  await runPickPackAction(task.id, {
-                    action: "pick",
-                    lines: task.lines.map((line) => ({
-                      lineId: line.id,
-                      pickedQty: line.quantity,
-                      locationId: line.locationId,
-                    })),
-                  });
-                  toast.success("Pick confirmed.");
-                  await refresh();
-                } catch (e) {
-                  toastPickPackInsufficientError(e);
-                }
-              })()
-            }
-          >
-            Confirm pick
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={!canConfirmPackStockOk}
-            title={
-              !canConfirmPack
-                ? "Confirm pick first (or task is past packing)."
-                : fulfilmentPickPackBlock.missingWarehouse
+          {canConfirmPick ? (
+            <Button
+              disabled={!canConfirmPickAndPackStockOk || pickPackLoading}
+              title={
+                pickedDraftInvalid
+                  ? "Enter a picked quantity greater than zero on each line."
+                  : fulfilmentPickPackBlock.missingWarehouse
+                    ? "Select a fulfilment warehouse first."
+                    : fulfilmentPickPackBlock.shortfalls.length
+                      ? "Not enough available stock here for the picked quantities."
+                      : undefined
+              }
+              onClick={() =>
+                void (async () => {
+                  setPickPackLoading(true);
+                  try {
+                    await runPickPackAction(task.id, {
+                      action: "pick",
+                      lines: buildPickLinesPayload(),
+                    });
+                    await runPickPackAction(task.id, {
+                      action: "pack",
+                      cartonsCount: Math.max(1, Number(cartons) || 1),
+                      packingNote,
+                    });
+                    toast.success("Pick and pack confirmed.");
+                    await refresh();
+                  } catch (e) {
+                    toastPickPackInsufficientError(e);
+                    await refresh();
+                  } finally {
+                    setPickPackLoading(false);
+                  }
+                })()
+              }
+            >
+              {pickPackLoading ? "Saving…" : "Confirm pick & pack"}
+            </Button>
+          ) : null}
+          {canConfirmPackOnly ? (
+            <Button
+              variant="secondary"
+              disabled={!canConfirmPackOnlyStockOk || pickPackLoading}
+              title={
+                fulfilmentPickPackBlock.missingWarehouse
                   ? "Select a fulfilment warehouse first."
                   : fulfilmentPickPackBlock.shortfalls.length
                     ? "Not enough available stock for these picked quantities."
                     : undefined
-            }
-            onClick={() =>
-              void (async () => {
-                try {
-                  await runPickPackAction(task.id, {
-                    action: "pack",
-                    cartonsCount: Math.max(1, Number(cartons) || 1),
-                    packingNote,
-                  });
-                  toast.success("Pack confirmed.");
-                  await refresh();
-                } catch (e) {
-                  toastPickPackInsufficientError(e);
-                }
-              })()
-            }
-          >
-            Confirm pack
-          </Button>
+              }
+              onClick={() =>
+                void (async () => {
+                  setPickPackLoading(true);
+                  try {
+                    await runPickPackAction(task.id, {
+                      action: "pack",
+                      cartonsCount: Math.max(1, Number(cartons) || 1),
+                      packingNote,
+                    });
+                    toast.success("Pack confirmed.");
+                    await refresh();
+                  } catch (e) {
+                    toastPickPackInsufficientError(e);
+                  } finally {
+                    setPickPackLoading(false);
+                  }
+                })()
+              }
+            >
+              {pickPackLoading ? "Saving…" : "Confirm pack"}
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             disabled={!canDispatch}

@@ -1922,7 +1922,7 @@ function DynamicNextStepsPanel({
       if (warehouseTaskLink) {
         steps.push({
           icon: <Icons.Package className="h-4 w-4" />,
-          text: "Use Open pick-pack (header or below) to confirm pick, pack, and dispatch.",
+          text: "Use Open pick-pack (header or below) to confirm pick & pack, then dispatch.",
         });
       } else if (!document?.warehouseId?.trim()) {
         steps.push({
