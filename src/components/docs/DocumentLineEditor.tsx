@@ -228,7 +228,17 @@ export function DocumentLineEditor({
     let cancelled = false;
     fetchProductsForDocumentLines(productFilter)
       .then((rows) => {
-        if (!cancelled) setFilteredProducts(rows);
+        if (!cancelled) {
+          const sorted =
+            mode === "purchasing"
+              ? rows.slice().sort((a, b) => {
+                  const scoreA = a.name.toLowerCase().includes("sourcing") ? 0 : a.productType === "RAW" ? 1 : a.productType === "BOTH" ? 2 : 3;
+                  const scoreB = b.name.toLowerCase().includes("sourcing") ? 0 : b.productType === "RAW" ? 1 : b.productType === "BOTH" ? 2 : 3;
+                  return scoreA !== scoreB ? scoreA - scoreB : a.name.localeCompare(b.name);
+                })
+              : rows;
+          setFilteredProducts(sorted);
+        }
       })
       .catch(() => {
         if (!cancelled) setFilteredProducts([]);
@@ -247,7 +257,17 @@ export function DocumentLineEditor({
         );
         const sorted =
           q.length === 0
-            ? [...filtered].sort((a, b) => a.sku.localeCompare(b.sku)).slice(0, 100)
+            ? [...filtered].sort((a, b) => {
+                if (mode === "purchasing") {
+                  const aS = a.name.toLowerCase().includes("sourcing") ? 0 : 1;
+                  const bS = b.name.toLowerCase().includes("sourcing") ? 0 : 1;
+                  if (aS !== bS) return aS - bS;
+                  const rA = a.productType === "RAW" ? 0 : 1;
+                  const rB = b.productType === "RAW" ? 0 : 1;
+                  if (rA !== rB) return rA - rB;
+                }
+                return a.sku.localeCompare(b.sku);
+              }).slice(0, 100)
             : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
         return sorted.map((p) => ({
           id: p.id,
@@ -279,9 +299,14 @@ export function DocumentLineEditor({
     return [...keys].sort((a, b) => {
       if (a === UNCATEGORIZED_FAMILY) return 1;
       if (b === UNCATEGORIZED_FAMILY) return -1;
+      if (mode === "purchasing") {
+        const hasRawA = products.some((p) => productFamilyKey(p) === a && p.productType === "RAW") ? 0 : 1;
+        const hasRawB = products.some((p) => productFamilyKey(p) === b && p.productType === "RAW") ? 0 : 1;
+        if (hasRawA !== hasRawB) return hasRawA - hasRawB;
+      }
       return a.localeCompare(b);
     });
-  }, [products]);
+  }, [products, mode]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
@@ -451,7 +476,17 @@ export function DocumentLineEditor({
     if (!line) return;
     const candidates = products
       .filter((p) => productFamilyKey(p) === newKey)
-      .sort((a, b) => a.sku.localeCompare(b.sku));
+      .sort((a, b) => {
+        if (mode === "purchasing") {
+          const aS = a.name.toLowerCase().includes("sourcing") ? 0 : 1;
+          const bS = b.name.toLowerCase().includes("sourcing") ? 0 : 1;
+          if (aS !== bS) return aS - bS;
+          const rA = a.productType === "RAW" ? 0 : 1;
+          const rB = b.productType === "RAW" ? 0 : 1;
+          if (rA !== rB) return rA - rB;
+        }
+        return a.sku.localeCompare(b.sku);
+      });
     if (candidates.length === 0) {
       toast.error("No SKUs in this product family.");
       return;
