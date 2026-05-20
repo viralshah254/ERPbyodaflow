@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +57,7 @@ const emptyForm: CreateFranchiseOutletPayload = {
 };
 
 export default function FranchiseOutletsPage() {
+  const router = useRouter();
   const [outlets, setOutlets] = React.useState<FranchiseNetworkOutletRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [addOpen, setAddOpen] = React.useState(false);
@@ -139,10 +141,9 @@ export default function FranchiseOutletsPage() {
       setForm(emptyForm);
       setManagerPhone("");
       setManagerPhonePrefix("+254");
-      load();
-      toast.success(
-        "Franchisee created and activated. HQ royalty and commission registry (customer party + franchisee row) is set up automatically."
-      );
+      toast.success("Franchise outlet staged for billing approval.");
+      toast.info("Redirecting to Billing — confirm payment to activate the outlet.");
+      router.push("/settings/billing");
     } catch (err) {
       const msg =
         err && typeof err === "object" && "message" in err

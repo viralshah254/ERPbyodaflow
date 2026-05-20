@@ -189,3 +189,31 @@ export async function deleteUserApi(userId: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+// ---------------------------------------------------------------------------
+// Franchise outlet users (Franchisees tab on Users & Roles)
+// ---------------------------------------------------------------------------
+
+export interface FranchiseOutletUserRow {
+  outletId: string;
+  name: string;
+  code: string | null;
+  territory: string | null;
+  managerName: string | null;
+  isActive: boolean;
+  agreementStatus: string;
+  adminEmail: string | null;
+  adminStatus: string | null;
+  adminHasSignIn: boolean;
+  adminRoleNames: string[];
+  adminMobilePersona: MobilePersona | null;
+  adminLastLoginAt: string | null;
+}
+
+export async function fetchFranchiseOutletUsersApi(): Promise<FranchiseOutletUserRow[]> {
+  requireLiveApi("Franchise outlets");
+  const payload = await apiRequest<{ items: FranchiseOutletUserRow[] }>(
+    "/api/settings/franchise-outlets"
+  );
+  return payload.items;
+}

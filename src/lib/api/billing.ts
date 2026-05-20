@@ -25,6 +25,10 @@ export type BillingUsagePreview = {
   pendingProrationCents: number;
   projectedTotalCents: number;
   lineBreakdown: BillingLineItem[];
+  /** Count of active child franchise outlet orgs (present for HQ/franchisor orgs). */
+  activeFranchiseOutletCount: number;
+  /** Custom contracted flat rate per user per month (USD), if a rate override is active. */
+  customFlatRatePerUserPerMonth?: number;
 };
 
 export type BillingInvoiceRow = {
@@ -104,9 +108,45 @@ export async function confirmBillingCheckoutApi(): Promise<{
   invoiceId: string;
   quoteTotalCents: number;
   lineItems: BillingLineItem[];
+  stripe: {
+    charged: boolean;
+    paymentIntentId?: string;
+    reason?: string;
+  };
 }> {
   requireLiveApi("Confirm billing checkout");
   return apiRequest("/api/billing/checkout/confirm", { method: "POST" });
+}
+
+export type BillingPaymentMethod = {
+  paymentMethodId: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+} | null;
+
+export async function fetchBillingPaymentMethodApi(): Promise<{
+  configured: boolean;
+  paymentMethod: BillingPaymentMethod;
+}> {
+  requireLiveApi("Billing payment method");
+  return apiRequest("/api/billing/payment-method");
+}
+
+export async function createBillingSetupIntentApi(): Promise<{ clientSecret: string }> {
+  requireLiveApi("Billing setup intent");
+  return apiRequest("/api/billing/setup-intent", { method: "POST" });
+}
+
+export async function saveBillingPaymentMethodApi(
+  paymentMethodId: string
+): Promise<{ ok: boolean; paymentMethod: BillingPaymentMethod }> {
+  requireLiveApi("Save billing payment method");
+  return apiRequest("/api/billing/payment-method", {
+    method: "POST",
+    body: { paymentMethodId },
+  });
 }
 
 export async function cancelBillingCheckoutApi(): Promise<BillingCheckout> {

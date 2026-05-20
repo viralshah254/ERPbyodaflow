@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -41,6 +42,8 @@ import {
   updateUserApi,
   seedStandardRolesApi,
   setUserPasswordApi,
+  fetchFranchiseOutletUsersApi,
+  type FranchiseOutletUserRow,
 } from "@/lib/api/users-roles";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -48,9 +51,12 @@ import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 
 export default function UsersRolesPage() {
   const copilotProductEnabled = useCopilotFeatureEnabled();
+  const router = useRouter();
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleDetailRow[]>([]);
+  const [franchiseOutlets, setFranchiseOutlets] = React.useState<FranchiseOutletUserRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [franchiseLoading, setFranchiseLoading] = React.useState(false);
   const [savingUser, setSavingUser] = React.useState(false);
   const [savingRole, setSavingRole] = React.useState(false);
   const [seedingRoles, setSeedingRoles] = React.useState(false);
@@ -103,6 +109,23 @@ export default function UsersRolesPage() {
         toast.error((error as Error).message || "Failed to load users and roles.");
       })
       .finally(() => setLoading(false));
+  }, []);
+
+  // Lazy-load franchisees when tab is first opened
+  const franchiseLoaded = React.useRef(false);
+  const loadFranchiseOutlets = React.useCallback(() => {
+    if (franchiseLoaded.current) return;
+    franchiseLoaded.current = true;
+    setFranchiseLoading(true);
+    fetchFranchiseOutletUsersApi()
+      .then(setFranchiseOutlets)
+      .catch((err) => {
+        // Silently ignore permission errors — org may not have franchise network enabled
+        if (!(err as Error).message?.includes("403") && !(err as Error).message?.includes("permission")) {
+          toast.error((err as Error).message || "Failed to load franchise outlets.");
+        }
+      })
+      .finally(() => setFranchiseLoading(false));
   }, []);
 
   const openCreateUser = () => {
@@ -187,6 +210,9 @@ export default function UsersRolesPage() {
           <TabsList>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
+            <TabsTrigger value="franchisees" onClick={loadFranchiseOutlets}>
+              Franchisees
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="space-y-4">
@@ -337,6 +363,117 @@ export default function UsersRolesPage() {
                         </TableCell>
                       </TableRow>
                     ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── Franchisees tab ─────────────────────────────────────── */}
+          <TabsContent value="franchisees" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Franchise Outlets</CardTitle>
+                  <CardDescription>
+                    {franchiseOutlets.length} outlet(s). Each outlet has its own admin login account.
+                  </CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={franchiseLoading}
+                  onClick={() => {
+                    franchiseLoaded.current = false;
+                    loadFranchiseOutlets();
+                  }}
+                >
+                  <Icons.RefreshCw className={`mr-2 h-4 w-4 ${franchiseLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Outlet</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Territory</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Admin email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Mobile</TableHead>
+                      <TableHead>Last login</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {franchiseLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-muted-foreground">
+                          Loading franchise outlets…
+                        </TableCell>
+                      </TableRow>
+                    ) : franchiseOutlets.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-muted-foreground">
+                          No franchise outlets found. Add outlets via Franchise → Outlets.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      franchiseOutlets.map((outlet) => (
+                        <TableRow key={outlet.outletId}>
+                          <TableCell className="font-medium">{outlet.name}</TableCell>
+                          <TableCell className="text-muted-foreground font-mono text-xs">
+                            {outlet.code ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {outlet.territory ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={outlet.isActive && outlet.agreementStatus === "ACTIVE" ? "default" : "secondary"}
+                              className="text-xs font-normal"
+                            >
+                              {outlet.isActive ? outlet.agreementStatus : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {outlet.adminEmail ? (
+                              <span className="text-sm">{outlet.adminEmail}</span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">No admin user</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {outlet.adminRoleNames.length > 0
+                              ? outlet.adminRoleNames.join(", ")
+                              : "—"}
+                          </TableCell>
+                          <TableCell>
+                            {outlet.adminMobilePersona ? (
+                              <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
+                                {MOBILE_PERSONA_LABELS[outlet.adminMobilePersona as keyof typeof MOBILE_PERSONA_LABELS] ?? outlet.adminMobilePersona}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                            {outlet.adminLastLoginAt
+                              ? new Intl.DateTimeFormat("en-GB", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }).format(new Date(outlet.adminLastLoginAt))
+                              : outlet.adminEmail
+                              ? "Never"
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -512,16 +649,15 @@ export default function UsersRolesPage() {
                       phoneNumber: userForm.phoneNumber || undefined,
                       employeeCode: userForm.employeeCode || undefined,
                     });
-                      toast.success("User staged for checkout.");
+                      toast.success("User staged for billing approval.");
                       if (created.checkout) {
                         toast.info(
-                          `Checkout updated: ${created.checkout.items.length} staged item(s), ${new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: "USD",
-                            minimumFractionDigits: 2,
-                          }).format(created.checkout.quoteTotalCents / 100)} due at checkout.`
+                          `${created.checkout.items.length} item(s) pending — confirm payment in Billing.`
                         );
                       }
+                      setUserSheetOpen(false);
+                      router.push("/settings/billing");
+                      return;
                     }
                     setUserSheetOpen(false);
                     await refreshUsers();
@@ -532,7 +668,7 @@ export default function UsersRolesPage() {
                   }
                 }}
               >
-                {savingUser ? "Saving..." : editingUser ? "Save" : "Add to checkout"}
+                {savingUser ? "Saving..." : editingUser ? "Save" : "Add to billing"}
               </Button>
             </div>
           </SheetFooter>
