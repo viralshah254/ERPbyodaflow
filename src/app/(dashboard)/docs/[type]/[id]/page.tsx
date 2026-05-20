@@ -1196,11 +1196,18 @@ export default function DocViewPage() {
                   </div>
                 ) : (
                   <div className="rounded border overflow-x-auto">
-                    <div className="min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div
+                      className={
+                        isPurchaseDoc
+                          ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                          : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      }
+                    >
                       <span>Description</span>
                       <span className="text-right">UOM</span>
                       <span className="text-right">Qty</span>
                       <span className="text-right">Remaining</span>
+                      {isPurchaseDoc ? <span className="text-right">Unit price</span> : null}
                       <span>Tax</span>
                       <span className="text-right">Amount</span>
                     </div>
@@ -1214,10 +1221,19 @@ export default function DocViewPage() {
                       const taxTitle = line.taxCodeName
                         ? `${line.taxCodeName}${line.taxCodeCode ? ` (${line.taxCodeCode})` : ""}`
                         : undefined;
+                      const unitPrice =
+                        line.unitPrice ??
+                        (line.qty && line.qty > 0 && line.amount != null
+                          ? line.amount / line.qty
+                          : undefined);
                       return (
                         <div
                           key={line.id ?? line.description}
-                          className="min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                          className={
+                            isPurchaseDoc
+                              ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                              : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                          }
                         >
                           <div className="min-w-0">
                             <span>
@@ -1241,6 +1257,15 @@ export default function DocViewPage() {
                           <span className="text-right">
                             {line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}
                           </span>
+                          {isPurchaseDoc ? (
+                            <span className="text-right">
+                              {unitPrice != null ? (
+                                formatMoney(unitPrice, document?.currency ?? "KES")
+                              ) : (
+                                "—"
+                              )}
+                            </span>
+                          ) : null}
                           <span className="text-xs text-muted-foreground truncate" title={taxTitle}>
                             {taxLabel}
                           </span>
