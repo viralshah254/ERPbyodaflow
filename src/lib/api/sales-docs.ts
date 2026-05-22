@@ -50,15 +50,27 @@ function endpointFor(type: SalesDocType): string {
   return "/api/sales/invoices";
 }
 
+export type FetchSalesDocumentsPageOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  status?: string;
+  /** Comma-separated channel codes, e.g. WHATSAPP,COOLCATCH_WA */
+  orderChannels?: string;
+};
+
 export async function fetchSalesDocumentsPageApi(
   type: SalesDocType,
-  opts?: { limit?: number; cursor?: string }
+  opts?: FetchSalesDocumentsPageOpts
 ): Promise<SalesDocumentsPageResult> {
   requireLiveApi("Sales documents");
   const params = new URLSearchParams();
   const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 50;
   params.set("limit", String(lim));
   if (opts?.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.status?.trim()) params.set("status", opts.status.trim());
+  if (opts?.orderChannels?.trim()) params.set("orderChannels", opts.orderChannels.trim());
   const payload = await apiRequest<{
     items: BackendSalesDoc[];
     limit?: number;

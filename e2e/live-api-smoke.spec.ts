@@ -15,6 +15,7 @@ test.describe("Live API smoke", () => {
     await page.goto("/docs/invoice/new");
     await expect(page.locator("body")).toBeVisible();
 
+    
     // Step 1: ensure wizard is present
     const hasWizard = await page.locator("text=Invoice").first().isVisible().catch(() => false);
     expect(hasWizard).toBeTruthy();

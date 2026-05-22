@@ -9,9 +9,12 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { fetchSalesDocumentsPageApi } from "@/lib/api/sales-docs";
 import type { SalesDocRow } from "@/lib/types/sales";
 import { downloadCsv } from "@/lib/export/csv";
+import { exportDocumentListApi } from "@/lib/api/documents";
+import { isApiConfigured } from "@/lib/api/client";
 import {
   getSavedViews,
   saveView,
@@ -22,6 +25,7 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import { bulkDocumentActionApi } from "@/lib/api/documents";
 import * as Icons from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -31,42 +35,67 @@ const STATUS_OPTIONS = [
 ];
 
 const scope = "sales-deliveries";
+const PAGE_SIZE = 25;
 
 export default function SalesDeliveriesPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
-  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    getSavedViews(scope)
-  );
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(scope));
 
-  const [allRows, setAllRows] = React.useState<SalesDocRow[]>([]);
-
-  const refreshRows = React.useCallback(async () => {
-    const items = await fetchSalesDocumentsApi("delivery-note");
-    setAllRows(items);
-  }, []);
+  const [rows, setRows] = React.useState<SalesDocRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
 
   React.useEffect(() => {
-    void refreshRows().catch((error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to load deliveries.");
-    });
-  }, [refreshRows]);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.party?.toLowerCase().includes(q))
-      );
-    }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    return out;
-  }, [allRows, search, statusFilter]);
+    const id = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      setLoading(true);
+      try {
+        const page = await fetchSalesDocumentsPageApi("delivery-note", {
+          limit: PAGE_SIZE,
+          cursor: String(offset),
+          search: debouncedSearch.trim() || undefined,
+          status: statusFilter || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setSelectedIds([]);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load deliveries.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [debouncedSearch, statusFilter]
+  );
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
+
+  const handleRefresh = React.useCallback(() => {
+    void loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || loading) return;
+    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || loading) return;
+    void loadPage(pageOffset + PAGE_SIZE);
+  };
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -133,6 +162,10 @@ export default function SalesDeliveriesPage() {
     if (currentViewId === id) setCurrentViewId(null);
   };
 
+  const pageNumber = Math.floor(pageOffset / PAGE_SIZE) + 1;
+  const rangeStart = rows.length > 0 ? pageOffset + 1 : 0;
+  const rangeEnd = pageOffset + rows.length;
+
   return (
     <PageShell>
       <PageHeader
@@ -176,18 +209,29 @@ export default function SalesDeliveriesPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() =>
+          actions={
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+              <Icons.RefreshCw className={cn("h-4 w-4 mr-1.5", loading && "animate-spin")} />
+              Refresh
+            </Button>
+          }
+          onExport={() => {
+            const fileName = `deliveries-${new Date().toISOString().slice(0, 10)}.csv`;
+            if (isApiConfigured()) {
+              exportDocumentListApi("delivery-note", fileName, (msg) => toast.error(msg));
+              return;
+            }
             downloadCsv(
-              `deliveries-${new Date().toISOString().slice(0, 10)}.csv`,
-              filtered.map((row) => ({
+              fileName,
+              rows.map((row) => ({
                 number: row.number,
                 date: row.date,
                 party: row.party ?? "",
                 total: row.total ?? 0,
                 status: row.status,
               }))
-            )
-          }
+            );
+          }}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
@@ -200,9 +244,8 @@ export default function SalesDeliveriesPage() {
                   onClick={async () => {
                     try {
                       await bulkDocumentActionApi("delivery-note", "post", selectedIds);
-                      await refreshRows();
+                      await loadPage(pageOffset);
                       toast.success("Delivery note(s) posted.");
-                      setSelectedIds([]);
                     } catch (error) {
                       toast.error(error instanceof Error ? error.message : "Failed to post delivery notes.");
                     }
@@ -216,7 +259,7 @@ export default function SalesDeliveriesPage() {
                   onClick={() =>
                     downloadCsv(
                       `deliveries-selected-${new Date().toISOString().slice(0, 10)}.csv`,
-                      filtered
+                      rows
                         .filter((row) => selectedIds.includes(row.id))
                         .map((row) => ({
                           number: row.number,
@@ -234,15 +277,38 @@ export default function SalesDeliveriesPage() {
             ) : undefined
           }
         />
-        <DataTable<SalesDocRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/delivery-note/${row.id}`)}
-          emptyMessage="No deliveries yet."
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+        {loading ? (
+          <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-20", "w-24", "w-36", "w-28", "w-24"]} />
+        ) : (
+          <DataTable<SalesDocRow>
+            data={rows}
+            columns={columns}
+            onRowClick={(row) => router.push(`/docs/delivery-note/${row.id}`)}
+            emptyMessage="No deliveries yet."
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {loading
+              ? "Loading deliveries…"
+              : rows.length === 0
+                ? "No deliveries match your filters."
+                : `Showing ${rangeStart}–${rangeEnd}`}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={loading || pageOffset <= 0} onClick={goToPreviousPage}>
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground tabular-nums px-1">Page {pageNumber}</span>
+            <Button variant="outline" size="sm" disabled={loading || !hasMore} onClick={goToNextPage}>
+              Next
+            </Button>
+            <span className="text-xs text-muted-foreground tabular-nums">{PAGE_SIZE} per page</span>
+          </div>
+        </div>
       </div>
     </PageShell>
   );

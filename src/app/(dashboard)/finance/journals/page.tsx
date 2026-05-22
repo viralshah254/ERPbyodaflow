@@ -10,13 +10,21 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DocumentNumber } from "@/components/docs/document-number";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { format } from "date-fns";
 import { downloadCsv } from "@/lib/export/csv";
 import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
-import { fetchDocumentListApi } from "@/lib/api/documents";
+import { fetchDocumentListPageApi } from "@/lib/api/documents";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE = 25;
 
 interface JournalEntry {
   id: string;
@@ -27,57 +35,93 @@ interface JournalEntry {
   totalDebit: number;
   totalCredit: number;
   status: string;
-  postedBy?: string;
+}
+
+function mapJournalRow(doc: {
+  id: string;
+  number: string;
+  date: string;
+  reference?: string;
+  total?: number;
+  status: string;
+}): JournalEntry {
+  return {
+    id: doc.id,
+    journalNumber: doc.number,
+    date: doc.date,
+    memo: doc.reference,
+    reference: doc.reference,
+    totalDebit: doc.total ?? 0,
+    totalCredit: doc.total ?? 0,
+    status: doc.status,
+  };
 }
 
 export default function JournalEntriesPage() {
   const baseCurrency = useBaseCurrency();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
-  const [loading, setLoading] = React.useState(true);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
   const [rows, setRows] = React.useState<JournalEntry[]>([]);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
   const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
-
-  const refresh = React.useCallback(async () => {
-    const docs = await fetchDocumentListApi("journal");
-    setRows(
-      docs.map((doc) => ({
-        id: doc.id,
-        journalNumber: doc.number,
-        date: doc.date,
-        memo: doc.reference,
-        reference: doc.reference,
-        totalDebit: doc.total ?? 0,
-        totalCredit: doc.total ?? 0,
-        status: doc.status,
-      }))
-    );
-  }, []);
+  const hasLoadedOnce = React.useRef(false);
 
   React.useEffect(() => {
-    setLoading(true);
-    refresh()
-      .catch((error) => toast.error((error as Error).message || "Failed to load journals."))
-      .finally(() => setLoading(false));
-  }, [refresh]);
+    const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [search]);
 
-  const filtered = React.useMemo(() => {
-    let out = rows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (j) =>
-          j.journalNumber.toLowerCase().includes(q) ||
-          (j.memo ?? "").toLowerCase().includes(q) ||
-          (j.reference ?? "").toLowerCase().includes(q)
-      );
-    }
-    if (statusFilter) {
-      out = out.filter((j) => j.status === statusFilter);
-    }
-    return out;
-  }, [search, statusFilter]);
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchDocumentListPageApi("journal", {
+          limit: PAGE_SIZE,
+          cursor: String(offset),
+          status: statusFilter || undefined,
+          search: debouncedSearch.trim() || undefined,
+        });
+        setRows(page.items.map(mapJournalRow));
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error((error as Error).message || "Failed to load journals.");
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, statusFilter]
+  );
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
+
+  const handleRefresh = React.useCallback(() => {
+    void loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + PAGE_SIZE);
+  };
+
+  const searchPending = search.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
 
   const columns = React.useMemo(
     () => [
@@ -85,10 +129,7 @@ export default function JournalEntriesPage() {
         id: "journalNumber",
         header: "Number",
         accessor: (row: JournalEntry) => (
-          <div>
-            <span className="font-medium">{row.journalNumber}</span>
-            <div className="text-xs text-muted-foreground">{row.reference}</div>
-          </div>
+          <DocumentNumber value={row.journalNumber} className="font-medium" />
         ),
         sticky: true,
       },
@@ -97,12 +138,23 @@ export default function JournalEntriesPage() {
         header: "Date",
         accessor: (row: JournalEntry) => format(new Date(row.date), "MMM dd, yyyy"),
       },
-      { id: "memo", header: "Memo", accessor: (row: JournalEntry) => row.memo || "—" },
+      {
+        id: "reference",
+        header: "Reference",
+        accessor: (row: JournalEntry) =>
+          row.reference ? (
+            <span className="block max-w-[min(320px,40vw)] truncate font-mono text-xs" title={row.reference}>
+              {row.reference}
+            </span>
+          ) : (
+            "—"
+          ),
+      },
       {
         id: "debit",
         header: "Debit",
         accessor: (row: JournalEntry) => (
-          <span className="font-medium">
+          <span className="font-medium tabular-nums">
             {formatMoney(row.totalDebit, baseCurrency)}
           </span>
         ),
@@ -111,7 +163,7 @@ export default function JournalEntriesPage() {
         id: "credit",
         header: "Credit",
         accessor: (row: JournalEntry) => (
-          <span className="font-medium">
+          <span className="font-medium tabular-nums">
             {formatMoney(row.totalCredit, baseCurrency)}
           </span>
         ),
@@ -125,10 +177,14 @@ export default function JournalEntriesPage() {
         id: "posting",
         header: "",
         accessor: (row: JournalEntry) => (
-          <Button variant="ghost" size="sm" onClick={(event) => {
-            event.stopPropagation();
-            setPostingSource({ sourceType: "journal", sourceId: row.id });
-          }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              setPostingSource({ sourceType: "journal", sourceId: row.id });
+            }}
+          >
             Posting
           </Button>
         ),
@@ -157,11 +213,17 @@ export default function JournalEntriesPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
         <DataTableToolbar
-          searchPlaceholder="Search by number, memo, reference..."
+          className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+          searchPlaceholder="Search by number or reference…"
           searchValue={search}
           onSearchChange={setSearch}
+          searchInputProps={{
+            spellCheck: false,
+            autoComplete: "off",
+            className: "font-mono text-sm tracking-tight",
+          }}
           filters={[
             {
               id: "status",
@@ -175,10 +237,21 @@ export default function JournalEntriesPage() {
               onChange: (v) => setStatusFilter(v),
             },
           ]}
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={initialLoading || fetching}
+              onClick={handleRefresh}
+            >
+              <Icons.RefreshCw className={cn("h-4 w-4 mr-1.5", (initialLoading || fetching) && "animate-spin")} />
+              Refresh
+            </Button>
+          }
           onExport={() =>
             downloadCsv(
               `journal-entries-${new Date().toISOString().slice(0, 10)}.csv`,
-              filtered.map((row) => ({
+              rows.map((row) => ({
                 journalNumber: row.journalNumber,
                 date: row.date,
                 memo: row.memo,
@@ -190,16 +263,41 @@ export default function JournalEntriesPage() {
             )
           }
         />
-        {loading ? (
-          <div className="rounded border p-6 text-sm text-muted-foreground">Loading journal entries...</div>
-        ) : (
-          <DataTable<JournalEntry>
-            data={filtered}
-            columns={columns}
-            onRowClick={(row) => router.push(`/docs/journal/${row.id}`)}
-            emptyMessage="No journal entries. Create one to get started."
+        {initialLoading ? (
+          <SkeletonDataTable
+            rows={PAGE_SIZE}
+            columnWidths={["w-20", "w-24", "w-40", "w-24", "w-24", "w-20", "w-16"]}
           />
+        ) : (
+          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+            <TableLinearProgress active={tableBusy} />
+            <div
+              className={cn(
+                "transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60"
+              )}
+            >
+              <DataTable<JournalEntry>
+                data={rows}
+                columns={columns}
+                onRowClick={(row) => router.push(`/docs/journal/${row.id}`)}
+                emptyMessage="No journal entries. Create one to get started."
+              />
+            </div>
+          </div>
         )}
+        <TablePagination
+          sticky
+          pageOffset={pageOffset}
+          pageSize={PAGE_SIZE}
+          itemCount={initialLoading ? 0 : rows.length}
+          hasMore={hasMore}
+          loading={initialLoading || fetching}
+          busy={searchPending}
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+          entityLabel="journal entries"
+        />
       </div>
       <PostingBatchSheet
         open={!!postingSource}

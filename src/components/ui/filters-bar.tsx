@@ -76,10 +76,10 @@ export function FiltersBar({
         <Input
           type="search"
           placeholder={searchPlaceholder}
-          className="pl-9"
           value={searchValue}
           onChange={(e) => handleSearchChange(e.target.value)}
           {...searchInputProps}
+          className={cn("pl-9", searchInputProps?.className)}
         />
       </div>
 

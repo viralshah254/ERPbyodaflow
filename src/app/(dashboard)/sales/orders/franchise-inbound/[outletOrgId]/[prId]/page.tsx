@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Skeleton, SkeletonCard } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -24,6 +25,37 @@ import {
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+function FranchiseInboundDetailSkeleton() {
+  return (
+    <PageShell>
+      <div className="p-6 space-y-6 max-w-5xl">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <SkeletonCard />
+        <Card>
+          <CardHeader className="pb-2">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-4 w-40" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex gap-4">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </PageShell>
+  );
+}
 
 export default function FranchiseInboundOrderDetailPage() {
   const params = useParams();
@@ -66,14 +98,7 @@ export default function FranchiseInboundOrderDetailPage() {
   };
 
   if (loading) {
-    return (
-      <PageShell>
-        <div className="p-6 flex items-center gap-2 text-muted-foreground text-sm">
-          <Icons.Loader2 className="h-4 w-4 animate-spin shrink-0" />
-          Loading purchase request…
-        </div>
-      </PageShell>
-    );
+    return <FranchiseInboundDetailSkeleton />;
   }
 
   if (!doc) {
@@ -158,6 +183,20 @@ export default function FranchiseInboundOrderDetailPage() {
               <div className="text-muted-foreground">Total</div>
               <div className="font-medium">{formatMoney(doc.total, doc.currency, { decimals: 0 })}</div>
             </div>
+            {doc.linkedHqSalesOrder ? (
+              <div className="sm:col-span-2">
+                <div className="text-muted-foreground">HQ sales order</div>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <Link
+                    href={`/docs/sales-order/${doc.linkedHqSalesOrder.id}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {doc.linkedHqSalesOrder.number}
+                  </Link>
+                  <StatusBadge status={doc.linkedHqSalesOrder.status} />
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

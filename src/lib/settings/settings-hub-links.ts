@@ -104,6 +104,13 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
         requiresPermissions: ["settings.org.read"],
       },
       {
+        href: "/settings/integrations/odaflow",
+        label: "Odaflow SFA connector",
+        description: "API keys and inbound URLs for Odaflow order sync",
+        icon: "Plug",
+        requiresPermissions: ["settings.org.read"],
+      },
+      {
         href: "/settings/integrations/coolcatch-bot",
         label: "Coolcatch bot (WhatsApp)",
         description: "External bot API keys, shop registry, and webhook URLs",

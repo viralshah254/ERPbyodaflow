@@ -458,12 +458,22 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+/** Detail include groups — `core` skips attachments, comments, and audit for faster first paint. */
+export type DocumentDetailInclude = "core" | "attachments" | "comments" | "audit" | "all";
+
 export async function fetchDocumentDetailApi(
   type: DocTypeKey,
-  id: string
+  id: string,
+  opts?: { include?: DocumentDetailInclude[] }
 ): Promise<DocumentDetailRecord | null> {
   requireLiveApi("Document detail");
-  const payload = await apiRequest<BackendDocumentDetail>(`/api/documents/${type}/${id}`);
+  const params = new URLSearchParams();
+  if (opts?.include?.length) {
+    params.set("include", opts.include.join(","));
+  }
+  const payload = await apiRequest<BackendDocumentDetail>(`/api/documents/${type}/${id}`, {
+    params: params.toString() ? params : undefined,
+  });
   return mapDocumentDetail(type, payload);
 }
 

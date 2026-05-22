@@ -808,10 +808,94 @@ export function exportCashWeightAuditCsv(
 
 // ——— Subcontracting ———
 
-export async function fetchExternalWorkCenters(): Promise<ExternalWorkCenterRow[]> {
-  requireLiveApi("External work centers");
-  const res = await apiRequest<{ items: ExternalWorkCenterRow[] }>("/api/manufacturing/work-centers/external");
+export type WorkCenterFilterOption = {
+  id: string;
+  code: string;
+  name: string;
+  type: ExternalWorkCenterRow["type"];
+  isActive: boolean;
+};
+
+export async function fetchWorkCenterFilterOptions(opts?: {
+  activeOnly?: boolean;
+  withWipOnly?: boolean;
+}): Promise<WorkCenterFilterOption[]> {
+  requireLiveApi("Work center filter options");
+  const params: Record<string, string> = {};
+  if (opts?.activeOnly === false) params.activeOnly = "false";
+  if (opts?.withWipOnly) params.withWipOnly = "true";
+  const res = await apiRequest<{ items: WorkCenterFilterOption[] }>(
+    "/api/manufacturing/work-centers/external/filter-options",
+    { params }
+  );
   return res.items ?? [];
+}
+
+export type FetchExternalWorkCentersOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  type?: "" | "FACTORY" | "GROUP";
+  activeOnly?: boolean;
+};
+
+export type FetchExternalWorkCentersPageResult = {
+  items: ExternalWorkCenterRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchExternalWorkCentersPage(
+  opts?: FetchExternalWorkCentersOpts
+): Promise<FetchExternalWorkCentersPageResult> {
+  requireLiveApi("External work centers");
+  const params: Record<string, string> = {};
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.limit = String(lim);
+  if (opts?.cursor) params.cursor = opts.cursor;
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+  if (opts?.type === "FACTORY" || opts?.type === "GROUP") params.type = opts.type;
+  if (opts?.activeOnly === false) params.activeOnly = "false";
+
+  const payload = await apiRequest<{
+    items: ExternalWorkCenterRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/work-centers/external", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+/** Loads all pages — prefer fetchExternalWorkCentersPage for list UIs. */
+export async function fetchExternalWorkCenters(
+  opts?: FetchExternalWorkCentersOpts
+): Promise<ExternalWorkCenterRow[]> {
+  const rows: ExternalWorkCenterRow[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchExternalWorkCentersPage({ ...opts, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 /** Create external work center (factory, women's group). */
@@ -830,19 +914,80 @@ export async function createExternalWorkCenter(body: {
   return res;
 }
 
-export async function fetchSubcontractOrders(params?: {
+export type FetchSubcontractOrdersOpts = {
   workCenterId?: string;
   status?: string;
   species?: string;
   processType?: string;
   purchaseOrderId?: string;
   grnId?: string;
-}): Promise<SubcontractOrderRow[]> {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+};
+
+export type FetchSubcontractOrdersPageResult = {
+  items: SubcontractOrderRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchSubcontractOrdersPage(
+  opts?: FetchSubcontractOrdersOpts
+): Promise<FetchSubcontractOrdersPageResult> {
   requireLiveApi("Subcontract orders");
-  const res = await apiRequest<{ items: SubcontractOrderRow[] }>("/api/manufacturing/subcontract-orders", {
-    params: listParams(params),
-  });
-  return res.items ?? [];
+  const params: Record<string, string> = {
+    ...listParams({
+      workCenterId: opts?.workCenterId,
+      status: opts?.status,
+      species: opts?.species,
+      processType: opts?.processType,
+      purchaseOrderId: opts?.purchaseOrderId,
+      grnId: opts?.grnId,
+    }),
+  };
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.limit = String(lim);
+  if (opts?.cursor) params.cursor = opts.cursor;
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+
+  const payload = await apiRequest<{
+    items: SubcontractOrderRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/subcontract-orders", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+/** Loads all pages (cap ~1000 rows) — prefer fetchSubcontractOrdersPage for list UIs. */
+export async function fetchSubcontractOrders(params?: FetchSubcontractOrdersOpts): Promise<SubcontractOrderRow[]> {
+  const rows: SubcontractOrderRow[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchSubcontractOrdersPage({ ...params, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 /** Create subcontract order (send stock to processor).
@@ -876,7 +1021,7 @@ export async function createSubcontractOrder(body: {
 export async function fetchReverseBoms(): Promise<Array<{ id: string; name: string; code: string; productId: string; direction: string; isActive: boolean; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>> {
   requireLiveApi("Reverse BOMs");
   const res = await apiRequest<{ items: Array<Record<string, any>> }>("/api/manufacturing/boms", {
-    params: { direction: "REVERSE", activeOnly: "true" },
+    params: { direction: "REVERSE", activeOnly: "true", includeItems: "true", limit: "100" },
   });
   return (res.items ?? []) as any[];
 }
@@ -920,12 +1065,65 @@ export async function fetchSubcontractCostingDrilldown(id: string): Promise<Subc
   }
 }
 
-export async function fetchWIPBalances(workCenterId?: string): Promise<WIPBalanceRow[]> {
+export type FetchWIPBalancesOpts = {
+  workCenterId?: string;
+  search?: string;
+  hideZero?: boolean;
+  limit?: number;
+  cursor?: string;
+};
+
+export type FetchWIPBalancesPageResult = {
+  items: WIPBalanceRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchWIPBalancesPage(opts?: FetchWIPBalancesOpts): Promise<FetchWIPBalancesPageResult> {
   requireLiveApi("Subcontract WIP balances");
-  const res = await apiRequest<{ items: WIPBalanceRow[] }>("/api/manufacturing/subcontract-orders/wip", {
-    params: listParams({ workCenterId }),
-  });
-  return res.items ?? [];
+  const params: Record<string, string> = listParams({ workCenterId: opts?.workCenterId });
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.limit = String(lim);
+  if (opts?.cursor) params.cursor = opts.cursor;
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+  if (opts?.hideZero === false) params.hideZero = "false";
+
+  const payload = await apiRequest<{
+    items: WIPBalanceRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/subcontract-orders/wip", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+export async function fetchWIPBalances(opts?: FetchWIPBalancesOpts): Promise<WIPBalanceRow[]> {
+  const rows: WIPBalanceRow[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchWIPBalancesPage({ ...opts, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 export async function patchSubcontractOrder(
@@ -1155,23 +1353,75 @@ export interface InboundOrderRow {
   outletName: string;
   total: number;
   currency: string;
+  /** Total line count on the PR (list may only include a preview in `lines`). */
+  lineCount?: number;
   /** Present when HQ spawned a sales order from this outlet PR. */
   linkedHqSalesOrder?: { id: string; number: string; status: string } | null;
   lines: InboundOrderLine[];
 }
 
-export async function fetchInboundOrders(params?: {
+export type InboundOrdersPageResult = {
+  items: InboundOrderRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export type FetchInboundOrdersParams = {
   status?: string;
   outletOrgId?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string;
   /** When true, include CONVERTED / CANCELLED PRs (e.g. outlet “Orders to HQ” history). */
   includeHistorical?: boolean;
-}): Promise<{ items: InboundOrderRow[] }> {
+};
+
+export async function fetchInboundOrdersPage(
+  params?: FetchInboundOrdersParams
+): Promise<InboundOrdersPageResult> {
   const p = new URLSearchParams();
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 25;
+  p.set("limit", String(lim));
+  if (params?.cursor != null && params.cursor !== "") p.set("cursor", params.cursor);
   if (params?.status) p.set("status", params.status);
   if (params?.outletOrgId) p.set("outletOrgId", params.outletOrgId);
+  if (params?.search?.trim()) p.set("search", params.search.trim());
   if (params?.includeHistorical) p.set("includeHistorical", "1");
   const qs = p.toString();
-  return apiRequest(`/api/franchise/network/inbound-orders${qs ? `?${qs}` : ""}`);
+  const payload = await apiRequest<{
+    items: InboundOrderRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>(`/api/franchise/network/inbound-orders${qs ? `?${qs}` : ""}`);
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const offset =
+    typeof payload.offset === "number"
+      ? payload.offset
+      : params?.cursor != null && params.cursor !== ""
+        ? Number(params.cursor) || 0
+        : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (payload.nextCursor !== undefined && payload.nextCursor !== null && String(payload.nextCursor) !== "") {
+    nextCursor = String(payload.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(offset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset, hasMore, nextCursor };
+}
+
+/** Legacy helper — fetches up to 100 rows (single page). Prefer fetchInboundOrdersPage for lists. */
+export async function fetchInboundOrders(params?: Omit<FetchInboundOrdersParams, "limit" | "cursor">): Promise<{ items: InboundOrderRow[] }> {
+  const page = await fetchInboundOrdersPage({ ...params, limit: 100, cursor: "0" });
+  return { items: page.items };
 }
 
 export type FranchiseInboundOrderDetail = Omit<InboundOrderRow, "lines"> & {

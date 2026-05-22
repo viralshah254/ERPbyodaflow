@@ -45,6 +45,8 @@ interface DataTableToolbarProps {
   actions?: React.ReactNode;
   /** Optional data-tutorial-hint value for search input wrapper */
   searchInputDataHint?: string;
+  /** Optional extra props for the search input */
+  searchInputProps?: React.InputHTMLAttributes<HTMLInputElement>;
   /** Optional data-tutorial-hint value for export button */
   exportButtonDataHint?: string;
   className?: string;
@@ -69,6 +71,7 @@ export function DataTableToolbar({
   bulkActions,
   actions,
   searchInputDataHint,
+  searchInputProps,
   exportButtonDataHint,
   className,
   children,
@@ -81,6 +84,7 @@ export function DataTableToolbar({
           searchValue={searchValue}
           onSearchChange={onSearchChange}
           searchInputDataHint={searchInputDataHint}
+          searchInputProps={searchInputProps}
           filters={filters.map((f) => ({
             id: f.id,
             label: f.label,

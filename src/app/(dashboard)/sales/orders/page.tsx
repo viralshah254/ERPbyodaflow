@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
+import { fetchSalesDocumentsPageApi } from "@/lib/api/sales-docs";
 import type { SalesDocRow } from "@/lib/types/sales";
 import { downloadCsv } from "@/lib/export/csv";
 import { exportDocumentListApi } from "@/lib/api/documents";
@@ -24,8 +24,8 @@ import {
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
-import { bulkDocumentActionApi, documentActionApi } from "@/lib/api/documents";
-import { fetchInboundOrders, acceptInboundOrder, type InboundOrderRow } from "@/lib/api/cool-catch";
+import { documentActionApi } from "@/lib/api/documents";
+import { fetchInboundOrdersPage, acceptInboundOrder, type InboundOrderRow } from "@/lib/api/cool-catch";
 import { useNavCounts } from "@/lib/use-nav-counts";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
@@ -38,6 +38,9 @@ import {
 import { formatMoney } from "@/lib/money";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -62,33 +65,79 @@ function isWhatsAppStyleSalesOrder(r: SalesDocRow): boolean {
 }
 
 const scope = "sales-orders";
+const PAGE_SIZE = 25;
 
 // ─── Franchise Inbound Orders panel ──────────────────────────────────────────
+
+const FRANCHISE_STATUS_OPTIONS = [
+  { label: "All open", value: "" },
+  { label: "Approved", value: "APPROVED" },
+  { label: "Draft", value: "DRAFT" },
+  { label: "Pending", value: "PENDING_APPROVAL" },
+  { label: "Converted", value: "CONVERTED" },
+  { label: "Cancelled", value: "CANCELLED" },
+];
 
 function franchiseInboundDetailHref(r: InboundOrderRow) {
   return `/sales/orders/franchise-inbound/${encodeURIComponent(r.outletOrgId)}/${encodeURIComponent(r.id)}`;
 }
 
-function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) => void }) {
+function FranchiseOrdersTab() {
   const router = useRouter();
+  const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("");
   const [rows, setRows] = React.useState<InboundOrderRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
   const [acceptingId, setAcceptingId] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchInboundOrders();
-      setRows(data.items);
-      onRowsChange?.(data.items.length);
-    } catch (e) {
-      toast.error((e as Error).message ?? "Failed to load franchise orders.");
-    } finally {
-      setLoading(false);
-    }
-  }, [onRowsChange]);
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(id);
+  }, [search]);
 
-  React.useEffect(() => { void load(); }, [load]);
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      setLoading(true);
+      try {
+        const page = await fetchInboundOrdersPage({
+          limit: PAGE_SIZE,
+          cursor: String(offset),
+          search: debouncedSearch.trim() || undefined,
+          status: statusFilter || undefined,
+          includeHistorical: statusFilter === "CONVERTED" || statusFilter === "CANCELLED",
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+      } catch (e) {
+        toast.error((e as Error).message ?? "Failed to load franchise orders.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [debouncedSearch, statusFilter]
+  );
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
+
+  const handleRefresh = React.useCallback(() => {
+    void loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || loading) return;
+    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || loading) return;
+    void loadPage(pageOffset + PAGE_SIZE);
+  };
 
   const handleAccept = async (row: InboundOrderRow) => {
     setAcceptingId(row.id);
@@ -118,12 +167,15 @@ function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) =
     {
       id: "products",
       header: "Products",
-      accessor: (r: InboundOrderRow) => (
-        <span className="text-xs text-muted-foreground">
-          {r.lines.slice(0, 2).map((l) => l.productName ?? l.sku ?? l.productId ?? "—").join(", ")}
-          {r.lines.length > 2 ? ` +${r.lines.length - 2} more` : ""}
-        </span>
-      ),
+      accessor: (r: InboundOrderRow) => {
+        const totalLines = r.lineCount ?? r.lines.length;
+        return (
+          <span className="text-xs text-muted-foreground">
+            {r.lines.slice(0, 2).map((l) => l.productName ?? l.sku ?? l.productId ?? "—").join(", ")}
+            {totalLines > 2 ? ` +${totalLines - 2} more` : ""}
+          </span>
+        );
+      },
     },
     {
       id: "total",
@@ -164,74 +216,143 @@ function FranchiseOrdersTab({ onRowsChange }: { onRowsChange?: (count: number) =
     },
   ];
 
+  const pageNumber = Math.floor(pageOffset / PAGE_SIZE) + 1;
+  const rangeStart = rows.length > 0 ? pageOffset + 1 : 0;
+  const rangeEnd = pageOffset + rows.length;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           Purchase requests from franchise outlets — accept to create a sales order on HQ side.
         </p>
-        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-          <Icons.RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading} className="shrink-0 self-start sm:self-auto">
+          <Icons.RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
           Refresh
         </Button>
       </div>
-      <DataTable<InboundOrderRow>
-        data={rows}
-        columns={columns}
-        emptyMessage={loading ? "Loading franchise orders…" : "No inbound orders from franchise outlets."}
-        onRowClick={(r) => router.push(franchiseInboundDetailHref(r))}
-      />
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <Input
+          className="max-w-sm"
+          placeholder="Search outlet or PR number…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search franchise orders"
+        />
+        <select
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
+        >
+          {FRANCHISE_STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value || "all"} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {loading ? (
+        <SkeletonDataTable
+          rows={PAGE_SIZE}
+          columnWidths={["w-28", "w-20", "w-24", "w-40", "w-24", "w-20", "w-24"]}
+        />
+      ) : (
+        <DataTable<InboundOrderRow>
+          data={rows}
+          columns={columns}
+          emptyMessage="No inbound orders from franchise outlets."
+          onRowClick={(r) => router.push(franchiseInboundDetailHref(r))}
+        />
+      )}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground tabular-nums">
+          {loading
+            ? "Loading franchise orders…"
+            : rows.length === 0
+              ? "No franchise orders match your filters."
+              : `Showing ${rangeStart}–${rangeEnd}`}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={loading || pageOffset <= 0} onClick={goToPreviousPage}>
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground tabular-nums px-1">Page {pageNumber}</span>
+          <Button variant="outline" size="sm" disabled={loading || !hasMore} onClick={goToNextPage}>
+            Next
+          </Button>
+          <span className="text-xs text-muted-foreground tabular-nums">{PAGE_SIZE} per page</span>
+        </div>
+      </div>
     </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Sales Orders list (paginated) ───────────────────────────────────────────
 
-export default function SalesOrdersPage() {
+function SalesOrdersPanel() {
   const router = useRouter();
   const baseCurrency = useBaseCurrency();
-  const navCounts = useNavCounts();
-  const orgRole = useOrgContextStore((s) => s.orgRole);
-  const isFranchisor = orgRole === "FRANCHISOR";
-  const [franchiseRowsCount, setFranchiseRowsCount] = React.useState<number | null>(null);
-  const franchiseOrdersBadge =
-    franchiseRowsCount !== null ? franchiseRowsCount : (navCounts["franchise-inbound-orders"] ?? 0);
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [channelFilter, setChannelFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
-  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    getSavedViews(scope)
-  );
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(scope));
 
-  const [allRows, setAllRows] = React.useState<SalesDocRow[]>([]);
+  const [rows, setRows] = React.useState<SalesDocRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
 
-  const refreshRows = React.useCallback(async () => {
-    const items = await fetchSalesDocumentsApi("sales-order");
-    setAllRows(items);
-  }, []);
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      setLoading(true);
+      try {
+        const page = await fetchSalesDocumentsPageApi("sales-order", {
+          limit: PAGE_SIZE,
+          cursor: String(offset),
+          search: debouncedSearch.trim() || undefined,
+          status: statusFilter || undefined,
+          orderChannels: channelFilter === "whatsapp" ? "WHATSAPP,COOLCATCH_WA" : undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setSelectedIds([]);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load sales orders.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [debouncedSearch, statusFilter, channelFilter]
+  );
 
   React.useEffect(() => {
-    void refreshRows().catch((error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to load sales orders.");
-    });
-  }, [refreshRows]);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.party?.toLowerCase().includes(q))
-      );
-    }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    if (channelFilter === "whatsapp") out = out.filter((r) => isWhatsAppStyleSalesOrder(r));
-    return out;
-  }, [allRows, search, statusFilter, channelFilter]);
+    void loadPage(0);
+  }, [loadPage]);
+
+  const handleRefresh = React.useCallback(() => {
+    void loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || loading) return;
+    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || loading) return;
+    void loadPage(pageOffset + PAGE_SIZE);
+  };
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -308,10 +429,13 @@ export default function SalesOrdersPage() {
                     setActionLoadingId(r.id);
                     try {
                       await documentActionApi("sales-order", r.id, "approve");
-                      await refreshRows();
+                      await loadPage(pageOffset);
                       toast.success(`${r.number} approved.`);
-                    } catch (e) { toast.error((e as Error).message); }
-                    finally { setActionLoadingId(null); }
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    } finally {
+                      setActionLoadingId(null);
+                    }
                   }}
                 >
                   <Icons.Check className="mr-2 h-4 w-4 text-emerald-500" />
@@ -323,7 +447,7 @@ export default function SalesOrdersPage() {
         ),
       },
     ],
-    [actionLoadingId, refreshRows, baseCurrency]
+    [actionLoadingId, baseCurrency, loadPage, pageOffset]
   );
 
   const handleClearFilters = () => {
@@ -358,6 +482,97 @@ export default function SalesOrdersPage() {
     setSavedViews(getSavedViews(scope));
     if (currentViewId === id) setCurrentViewId(null);
   };
+
+  const pageNumber = Math.floor(pageOffset / PAGE_SIZE) + 1;
+  const rangeStart = rows.length > 0 ? pageOffset + 1 : 0;
+  const rangeEnd = pageOffset + rows.length;
+
+  return (
+    <div className="space-y-4">
+      <DataTableToolbar
+        searchPlaceholder="Search by number, customer..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        filters={[
+          { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
+          { id: "channel", label: "Channel", options: CHANNEL_OPTIONS, value: channelFilter, onChange: (v) => setChannelFilter(v) },
+        ]}
+        activeFiltersCount={filterChips.length}
+        onClearFilters={handleClearFilters}
+        filterChips={filterChips}
+        onRemoveFilterChip={handleRemoveFilterChip}
+        savedViews={savedViews}
+        currentViewId={currentViewId}
+        onSelectView={handleSelectView}
+        onSaveCurrentView={handleSaveView}
+        onDeleteView={handleDeleteView}
+        actions={
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+            <Icons.RefreshCw className={cn("h-4 w-4 mr-1.5", loading && "animate-spin")} />
+            Refresh
+          </Button>
+        }
+        onExport={() => {
+          const fileName = `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+          if (isApiConfigured()) {
+            exportDocumentListApi("sales-order", fileName, (msg) => toast.error(msg));
+            return;
+          }
+          downloadCsv(
+            fileName,
+            rows.map((row) => ({
+              number: row.number,
+              date: row.date,
+              party: row.party ?? "",
+              total: row.total ?? 0,
+              status: row.status,
+            }))
+          );
+        }}
+      />
+      {loading ? (
+        <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-20", "w-24", "w-36", "w-28", "w-24", "w-8"]} />
+      ) : (
+        <DataTable<SalesDocRow>
+          data={rows}
+          columns={columns}
+          onRowClick={(row) => router.push(`/docs/sales-order/${row.id}`)}
+          emptyMessage="No sales orders yet."
+          selectable
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
+      )}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground tabular-nums">
+          {loading
+            ? "Loading sales orders…"
+            : rows.length === 0
+              ? "No sales orders match your filters."
+              : `Showing ${rangeStart}–${rangeEnd}`}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={loading || pageOffset <= 0} onClick={goToPreviousPage}>
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground tabular-nums px-1">Page {pageNumber}</span>
+          <Button variant="outline" size="sm" disabled={loading || !hasMore} onClick={goToNextPage}>
+            Next
+          </Button>
+          <span className="text-xs text-muted-foreground tabular-nums">{PAGE_SIZE} per page</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function SalesOrdersPage() {
+  const navCounts = useNavCounts();
+  const orgRole = useOrgContextStore((s) => s.orgRole);
+  const isFranchisor = orgRole === "FRANCHISOR";
+  const franchiseOrdersBadge = navCounts["franchise-inbound-orders"] ?? 0;
 
   return (
     <PageShell>
@@ -395,99 +610,14 @@ export default function SalesOrdersPage() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="franchise-orders" className="mt-4">
-              <FranchiseOrdersTab onRowsChange={setFranchiseRowsCount} />
+              <FranchiseOrdersTab />
             </TabsContent>
-            <TabsContent value="orders" className="mt-4 space-y-4">
-              <DataTableToolbar
-                searchPlaceholder="Search by number, customer..."
-                searchValue={search}
-                onSearchChange={setSearch}
-                filters={[
-                  { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
-                  { id: "channel", label: "Channel", options: CHANNEL_OPTIONS, value: channelFilter, onChange: (v) => setChannelFilter(v) },
-                ]}
-                activeFiltersCount={filterChips.length}
-                onClearFilters={handleClearFilters}
-                filterChips={filterChips}
-                onRemoveFilterChip={handleRemoveFilterChip}
-                savedViews={savedViews}
-                currentViewId={currentViewId}
-                onSelectView={handleSelectView}
-                onSaveCurrentView={handleSaveView}
-                onDeleteView={handleDeleteView}
-                onExport={() => {
-                  const fileName = `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`;
-                  if (isApiConfigured()) { exportDocumentListApi("sales-order", fileName, (msg) => toast.error(msg)); return; }
-                  downloadCsv(fileName, filtered.map((row) => ({ number: row.number, date: row.date, party: row.party ?? "", total: row.total ?? 0, status: row.status })));
-                }}
-              />
-              <DataTable<SalesDocRow>
-                data={filtered}
-                columns={columns}
-                onRowClick={(row) => router.push(`/docs/sales-order/${row.id}`)}
-                emptyMessage="No sales orders yet."
-                selectable
-                selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
-              />
+            <TabsContent value="orders" className="mt-4">
+              <SalesOrdersPanel />
             </TabsContent>
           </Tabs>
         ) : (
-          <>
-            <DataTableToolbar
-              searchPlaceholder="Search by number, customer..."
-              searchValue={search}
-              onSearchChange={setSearch}
-              filters={[
-                {
-                  id: "status",
-                  label: "Status",
-                  options: STATUS_OPTIONS,
-                  value: statusFilter,
-                  onChange: (v) => setStatusFilter(v),
-                },
-                {
-                  id: "channel",
-                  label: "Channel",
-                  options: CHANNEL_OPTIONS,
-                  value: channelFilter,
-                  onChange: (v) => setChannelFilter(v),
-                },
-              ]}
-              activeFiltersCount={filterChips.length}
-              onClearFilters={handleClearFilters}
-              filterChips={filterChips}
-              onRemoveFilterChip={handleRemoveFilterChip}
-              savedViews={savedViews}
-              currentViewId={currentViewId}
-              onSelectView={handleSelectView}
-              onSaveCurrentView={handleSaveView}
-              onDeleteView={handleDeleteView}
-              onExport={() => {
-                const fileName = `sales-orders-${new Date().toISOString().slice(0, 10)}.csv`;
-                if (isApiConfigured()) {
-                  exportDocumentListApi("sales-order", fileName, (msg) => toast.error(msg));
-                  return;
-                }
-                downloadCsv(fileName, filtered.map((row) => ({
-                  number: row.number,
-                  date: row.date,
-                  party: row.party ?? "",
-                  total: row.total ?? 0,
-                  status: row.status,
-                })));
-              }}
-            />
-            <DataTable<SalesDocRow>
-              data={filtered}
-              columns={columns}
-              onRowClick={(row) => router.push(`/docs/sales-order/${row.id}`)}
-              emptyMessage="No sales orders yet."
-              selectable
-              selectedIds={selectedIds}
-              onSelectionChange={setSelectedIds}
-            />
-          </>
+          <SalesOrdersPanel />
         )}
       </div>
     </PageShell>
