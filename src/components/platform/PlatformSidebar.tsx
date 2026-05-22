@@ -42,7 +42,7 @@ export function PlatformSidebar() {
   }, [permissions]);
 
   return (
-    <div className="flex h-screen w-64 flex-col border-r bg-card">
+    <div className="flex h-full min-h-0 w-64 shrink-0 flex-col border-r bg-card">
       <div className="flex h-16 min-w-0 items-center gap-2 border-b px-3">
         <Link href="/platform" className="flex min-w-0 flex-1 items-center gap-2">
           <OdaLogo height={28} />

@@ -4,8 +4,6 @@ import {
 } from "@/lib/types/inventory";
 import { apiRequest, requireLiveApi } from "./client";
 
-export type InventoryStockRow = StockRow & { productId?: string };
-
 type BackendStockLevel = {
   id: string;
   productId: string;
@@ -24,6 +22,9 @@ type BackendStockLevel = {
   available: number;
   reorderLevel: number;
   status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+  ownership?: "CoolCatch" | "Franchise";
+  ageDays?: number;
+  lastMovementAt?: string;
 };
 
 function mapStatus(status: BackendStockLevel["status"]): StockRow["status"] {
@@ -49,18 +50,44 @@ function mapStock(item: BackendStockLevel): InventoryStockRow {
     status: mapStatus(item.status),
     uom: item.uom,
     packSizeKg: item.packSizeKg ?? null,
+    ownership: item.ownership,
+    ageDays: item.ageDays,
+    lastMovementAt: item.lastMovementAt,
   };
 }
 
-export async function fetchStockLevelsApi(filters?: {
+export type InventoryStockRow = StockRow & {
+  productId?: string;
+  ownership?: "CoolCatch" | "Franchise";
+  ageDays?: number;
+  lastMovementAt?: string;
+};
+
+export type FetchStockLevelsPageOpts = {
+  limit?: number;
+  cursor?: string;
   warehouseId?: string;
   productId?: string;
   status?: "In Stock" | "Low Stock" | "Out of Stock" | "all";
   search?: string;
-  /** Server caps at 100; default 50 when omitted. */
-  limit?: number;
-}): Promise<InventoryStockRow[]> {
-  requireLiveApi("Inventory stock levels");
+  ownership?: "all" | "CoolCatch" | "Franchise";
+  minOnHand?: number;
+  maxOnHand?: number;
+  minAvailable?: number;
+  maxAvailable?: number;
+  minAgeDays?: number;
+  maxAgeDays?: number;
+};
+
+export type FetchStockLevelsPageResult = {
+  items: InventoryStockRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+function stockLevelQueryParams(filters?: FetchStockLevelsPageOpts): URLSearchParams {
   const statusMap: Record<string, string | undefined> = {
     "In Stock": "IN_STOCK",
     "Low Stock": "LOW_STOCK",
@@ -68,6 +95,11 @@ export async function fetchStockLevelsApi(filters?: {
     all: undefined,
   };
   const params = new URLSearchParams();
+  const lim = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 25;
+  params.set("limit", String(lim));
+  if (filters?.cursor != null && filters.cursor !== "") {
+    params.set("cursor", filters.cursor);
+  }
   if (filters?.warehouseId) params.set("warehouseId", filters.warehouseId);
   if (filters?.productId) params.set("productId", filters.productId);
   if (filters?.status) {
@@ -75,13 +107,75 @@ export async function fetchStockLevelsApi(filters?: {
     if (mappedStatus) params.set("status", mappedStatus);
   }
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  if (filters?.limit != null && filters.limit > 0) {
-    params.set("limit", String(Math.min(filters.limit, 100)));
+  if (filters?.ownership && filters.ownership !== "all") {
+    params.set("ownership", filters.ownership);
   }
-  const data = await apiRequest<{ items: BackendStockLevel[] }>("/api/inventory/stock-levels", {
-    params,
-  });
-  return data.items.map(mapStock);
+  if (filters?.minOnHand != null) params.set("minOnHand", String(filters.minOnHand));
+  if (filters?.maxOnHand != null) params.set("maxOnHand", String(filters.maxOnHand));
+  if (filters?.minAvailable != null) params.set("minAvailable", String(filters.minAvailable));
+  if (filters?.maxAvailable != null) params.set("maxAvailable", String(filters.maxAvailable));
+  if (filters?.minAgeDays != null) params.set("minAgeDays", String(filters.minAgeDays));
+  if (filters?.maxAgeDays != null) params.set("maxAgeDays", String(filters.maxAgeDays));
+  return params;
+}
+
+export async function fetchStockLevelsPageApi(
+  filters?: FetchStockLevelsPageOpts,
+): Promise<FetchStockLevelsPageResult> {
+  requireLiveApi("Inventory stock levels");
+  const lim = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 25;
+  const params = stockLevelQueryParams(filters);
+  const data = await apiRequest<{
+    items: BackendStockLevel[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/inventory/stock-levels", { params });
+  const limit = typeof data.limit === "number" ? data.limit : lim;
+  const parsedOffset =
+    typeof data.offset === "number"
+      ? data.offset
+      : filters?.cursor != null && filters.cursor !== ""
+        ? Number(filters.cursor) || 0
+        : 0;
+  const items = (data.items ?? []).map(mapStock);
+  const hasMore =
+    typeof data.hasMore === "boolean"
+      ? data.hasMore
+      : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (
+    data.nextCursor !== undefined &&
+    data.nextCursor !== null &&
+    String(data.nextCursor) !== ""
+  ) {
+    nextCursor = String(data.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+export async function fetchStockLevelsApi(filters?: {
+  warehouseId?: string;
+  productId?: string;
+  status?: "In Stock" | "Low Stock" | "Out of Stock" | "all";
+  search?: string;
+  limit?: number;
+}): Promise<InventoryStockRow[]> {
+  const rows: InventoryStockRow[] = [];
+  let cursor: string | undefined;
+  const pageLimit = filters?.limit != null ? Math.min(filters.limit, 100) : 100;
+  while (rows.length < 500) {
+    const page = await fetchStockLevelsPageApi({ ...filters, limit: pageLimit, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 export async function fetchStockLevelApi(id: string): Promise<InventoryStockRow | null> {

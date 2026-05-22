@@ -6,7 +6,6 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
 
 const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   MANUFACTURER: "fmcg-manufacturer",
@@ -50,19 +49,21 @@ export default function DashboardLayout({
     }
   }, [org, templateId, applyTemplate]);
 
-  if (isLoading) {
-    return <AppSplashScreen message="Restoring session…" variant="fullscreen" />;
-  }
-
   return (
-    <MainLayout>
-      {!isApiConfigured() ? (
-        <div className="w-full bg-amber-500/15 border-b border-amber-500/40 px-4 py-2 text-xs text-amber-200">
-          Non-live mode: API is not configured. Critical finance/accounting actions are disabled.
+    <div className="flex h-full min-h-0 w-full flex-col">
+      <MainLayout>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {!isApiConfigured() ? (
+            <div className="shrink-0 w-full rounded-md border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-xs text-amber-200">
+              Non-live mode: API is not configured. Critical finance/accounting
+              actions are disabled.
+            </div>
+          ) : null}
+          {isLoading ? null : (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+          )}
         </div>
-      ) : null}
-      {children}
-    </MainLayout>
+      </MainLayout>
+    </div>
   );
 }
-

@@ -6,8 +6,15 @@ import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { type ResolvedNavSection, type ResolvedNavItem } from "@/config/navigation";
-import { applySidebarLayout, splitSectionsMainAndMore, type SidebarLayout } from "@/config/navigation/sidebar-layout";
+import {
+  type ResolvedNavSection,
+  type ResolvedNavItem,
+} from "@/config/navigation";
+import {
+  applySidebarLayout,
+  splitSectionsMainAndMore,
+  type SidebarLayout,
+} from "@/config/navigation/sidebar-layout";
 import {
   computeDashboardSidebarModules,
   computeDashboardSidebarSections,
@@ -25,14 +32,16 @@ import * as Icons from "lucide-react";
 function applyCountsToItems(
   items: ResolvedNavItem[],
   counts: NavCounts,
-  franchisorInboundMerge: boolean
+  franchisorInboundMerge: boolean,
 ): ResolvedNavItem[] {
   return items.map((item) => {
     let count = counts[item.key] ?? 0;
     if (franchisorInboundMerge && item.key === "sales-orders") {
       count += counts["franchise-inbound-orders"] ?? 0;
     }
-    const children = item.children ? applyCountsToItems(item.children, counts, franchisorInboundMerge) : undefined;
+    const children = item.children
+      ? applyCountsToItems(item.children, counts, franchisorInboundMerge)
+      : undefined;
     const badge =
       count > 0
         ? { type: "count" as const, value: String(count) }
@@ -48,7 +57,8 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ className }: AppSidebarProps) {
-  const { sidebarCollapsed, setSidebarCollapsed, sidebarPreferencesRevision } = useUIStore();
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarPreferencesRevision } =
+    useUIStore();
   const { user, org, permissions } = useAuthStore();
   const {
     orgType: ctxOrgType,
@@ -60,7 +70,9 @@ export function AppSidebar({ className }: AppSidebarProps) {
   } = useOrgContextStore();
   const navCounts = useNavCounts();
 
-  const [sidebarLayout, setSidebarLayout] = React.useState<SidebarLayout | null | undefined>(undefined);
+  const [sidebarLayout, setSidebarLayout] = React.useState<
+    SidebarLayout | null | undefined
+  >(undefined);
 
   React.useEffect(() => {
     if (!isApiConfigured()) {
@@ -92,7 +104,17 @@ export function AppSidebar({ className }: AppSidebarProps) {
       orgRole,
       franchisePersona,
     }),
-    [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]
+    [
+      ctxOrgType,
+      org?.orgType,
+      enabledModules,
+      featureFlags,
+      template,
+      user,
+      permissions,
+      orgRole,
+      franchisePersona,
+    ],
   );
 
   const visibleSections = React.useMemo((): ResolvedNavSection[] => {
@@ -102,47 +124,63 @@ export function AppSidebar({ className }: AppSidebarProps) {
       dashboardEnabled: modules.includes("dashboard"),
       manufacturingEnabled: modules.includes("manufacturing"),
     };
-    return applySidebarLayout(base, sidebarLayout === undefined ? undefined : sidebarLayout ?? undefined, pins);
+    return applySidebarLayout(
+      base,
+      sidebarLayout === undefined ? undefined : (sidebarLayout ?? undefined),
+      pins,
+    );
   }, [navParams, sidebarLayout]);
 
   const franchisorInboundMerge =
-    orgRole === "FRANCHISOR" && featureFlags?.franchiseNetworkMonitoring === true;
+    orgRole === "FRANCHISOR" &&
+    featureFlags?.franchiseNetworkMonitoring === true;
 
   const sectionsWithCounts = React.useMemo(
     () =>
       visibleSections.map((section) => ({
         ...section,
-        items: applyCountsToItems(section.items, navCounts, franchisorInboundMerge),
+        items: applyCountsToItems(
+          section.items,
+          navCounts,
+          franchisorInboundMerge,
+        ),
       })),
-    [visibleSections, navCounts, franchisorInboundMerge]
+    [visibleSections, navCounts, franchisorInboundMerge],
   );
 
   const layoutForRails = sidebarLayout === undefined ? null : sidebarLayout;
 
   const { main: primarySections, more: secondarySections } = React.useMemo(
     () => splitSectionsMainAndMore(sectionsWithCounts, layoutForRails),
-    [sectionsWithCounts, layoutForRails]
+    [sectionsWithCounts, layoutForRails],
   );
 
   return (
     <div
       className={cn(
-        "flex h-screen flex-col border-r bg-card transition-all",
+        "flex h-full min-h-0 shrink-0 flex-col border-r bg-card transition-all",
         sidebarCollapsed ? "w-16" : "w-[17.5rem] min-w-[17.5rem]",
-        className
+        className,
       )}
     >
       <div
         className={cn(
           "flex h-16 items-center border-b px-1 gap-0.5",
-          sidebarCollapsed ? "flex-col justify-center py-1.5" : "justify-between px-2"
+          sidebarCollapsed
+            ? "flex-col justify-center py-1.5"
+            : "justify-between px-2",
         )}
       >
         {!sidebarCollapsed ? (
-          <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-2 pr-1">
+          <Link
+            href="/dashboard"
+            className="flex min-w-0 flex-1 items-center gap-2 pr-1"
+          >
             <OdaLogo height={30} className="min-w-0 shrink" />
             <span className="truncate text-sm font-semibold">
-              {franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE" ? "Outlet" : "OdaFlow"}
+              {franchisePersona === "LIGHT_ERP" || orgRole === "FRANCHISEE"
+                ? "Outlet"
+                : "OdaFlow"}
             </span>
           </Link>
         ) : (
@@ -152,7 +190,11 @@ export function AppSidebar({ className }: AppSidebarProps) {
             className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md"
             style={{ backgroundColor: ODA_BRAND.navy }}
           >
-            <img src={ODA_BRAND.logoSrc} alt="" className="h-7 w-12 max-w-none object-contain object-left" />
+            <img
+              src={ODA_BRAND.logoSrc}
+              alt=""
+              className="h-7 w-12 max-w-none object-contain object-left"
+            />
           </Link>
         )}
         <Button

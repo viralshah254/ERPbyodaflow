@@ -72,15 +72,100 @@ export async function fetchLandedCostSources(params?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<LandedCostSourceRow[]> {
+  const rows: LandedCostSourceRow[] = [];
+  let cursor: string | undefined;
+  while (rows.length < 500) {
+    const page = await fetchLandedCostSourcesPageApi({ ...params, limit: 100, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
+}
+
+export type FetchLandedCostSourcesPageOpts = {
+  limit?: number;
+  cursor?: string;
+  type?: "grn" | "bill";
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  allocationStatus?: "all" | "pending" | "allocated";
+};
+
+export type LandedCostSourcesSummary = {
+  pendingCount: number;
+  allocatedCount: number;
+};
+
+export type FetchLandedCostSourcesPageResult = {
+  items: LandedCostSourceRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  summary?: LandedCostSourcesSummary;
+};
+
+export async function fetchLandedCostSourcesPageApi(
+  opts?: FetchLandedCostSourcesPageOpts,
+): Promise<FetchLandedCostSourcesPageResult> {
   requireLiveApi("Landed cost sources");
-  const q: Record<string, string> = {};
-  if (params?.type) q.type = params.type;
-  if (params?.dateFrom) q.dateFrom = params.dateFrom;
-  if (params?.dateTo) q.dateTo = params.dateTo;
-  const res = await apiRequest<{ items: LandedCostSourceRow[] }>("/api/inventory/landed-cost/sources", {
-    params: Object.keys(q).length ? q : undefined,
-  });
-  return res?.items ?? [];
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.set("limit", String(lim));
+  if (opts?.cursor != null && opts.cursor !== "") {
+    params.set("cursor", opts.cursor);
+  }
+  if (opts?.type) params.set("type", opts.type);
+  if (opts?.dateFrom) params.set("dateFrom", opts.dateFrom);
+  if (opts?.dateTo) params.set("dateTo", opts.dateTo);
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.allocationStatus && opts.allocationStatus !== "all") {
+    params.set("allocationStatus", opts.allocationStatus);
+  }
+
+  const payload = await apiRequest<{
+    items: LandedCostSourceRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+    summary?: LandedCostSourcesSummary;
+  }>("/api/inventory/landed-cost/sources", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number"
+      ? payload.offset
+      : opts?.cursor != null && opts.cursor !== ""
+        ? Number(opts.cursor) || 0
+        : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean"
+      ? payload.hasMore
+      : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (
+    payload.nextCursor !== undefined &&
+    payload.nextCursor !== null &&
+    String(payload.nextCursor) !== ""
+  ) {
+    nextCursor = String(payload.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return {
+    items,
+    limit,
+    offset: parsedOffset,
+    hasMore,
+    nextCursor,
+    summary: payload.summary,
+  };
 }
 
 export async function fetchLandedCostSourceById(id: string): Promise<LandedCostSourceRow | null> {

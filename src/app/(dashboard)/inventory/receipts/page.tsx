@@ -3,22 +3,40 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { fetchGRNs, postGRN, exportGRNsCsv, type GrnPostError } from "@/lib/api/grn";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import {
+  exportGRNsCsv,
+  fetchInventoryReceiptsPageApi,
+  postGRN,
+  type GrnPostError,
+} from "@/lib/api/grn";
 import { fetchSubcontractOrders } from "@/lib/api/cool-catch";
+import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -29,9 +47,6 @@ const STATUS_OPTIONS = [
   { label: "Cancelled", value: "CANCELLED" },
 ];
 
-/** Friendly label + badge for the GRN status column.
- * CONVERTED means the GRN was posted AND a supplier bill has been created from it.
- */
 function GrnStatusCell({ status }: { status: string }) {
   if (status === "CONVERTED") {
     return (
@@ -49,47 +64,99 @@ const scope = "inventory-receipts";
 export default function InventoryReceiptsPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState("");
+  const [warehouseOptions, setWarehouseOptions] = React.useState<{ label: string; value: string }[]>(
+    [],
+  );
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
-  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    getSavedViews(scope)
-  );
-
-  const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>([]);
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(scope));
+  const [rows, setRows] = React.useState<PurchasingDocRow[]>([]);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(25);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
   const [subcontractedGrnIds, setSubcontractedGrnIds] = React.useState<Set<string>>(new Set());
-  const [loading, setLoading] = React.useState(true);
   const [postingId, setPostingId] = React.useState<string | null>(null);
+  const hasLoadedOnce = React.useRef(false);
+
   React.useEffect(() => {
-    Promise.all([fetchGRNs(), fetchSubcontractOrders({}).catch(() => [])])
-      .then(([grns, scos]) => {
-        setAllRows(grns);
-        const grnIds = new Set(scos.filter((s: any) => s.grnId).map((s: any) => s.grnId as string));
+    fetchWarehouseOptions()
+      .then((opts) =>
+        setWarehouseOptions(opts.map((o) => ({ label: o.label, value: o.id }))),
+      )
+      .catch(() => {});
+    fetchSubcontractOrders({})
+      .then((scos) => {
+        const grnIds = new Set(
+          scos.filter((s: { grnId?: string }) => s.grnId).map((s: { grnId?: string }) => s.grnId as string),
+        );
         setSubcontractedGrnIds(grnIds);
       })
-      .finally(() => setLoading(false));
+      .catch(() => {});
   }, []);
-  const warehouses = React.useMemo(
-    () => Array.from(new Set(allRows.map((r) => r.warehouse).filter(Boolean))) as string[],
-    [allRows]
+
+  React.useEffect(() => {
+    const id = window.setTimeout(
+      () => setDebouncedSearch(search),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchInventoryReceiptsPageApi({
+          limit: pageSize,
+          cursor: String(offset),
+          status: statusFilter || undefined,
+          search: debouncedSearch.trim() || undefined,
+          warehouseId: warehouseFilter || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setSelectedIds([]);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to load goods receipts.",
+        );
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, statusFilter, warehouseFilter, pageSize],
   );
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.poRef?.toLowerCase().includes(q)) ||
-          (r.warehouse?.toLowerCase().includes(q)) ||
-          (r.party?.toLowerCase().includes(q))
-      );
-    }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    if (warehouseFilter) out = out.filter((r) => r.warehouse === warehouseFilter);
-    return out;
-  }, [allRows, search, statusFilter, warehouseFilter]);
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - pageSize));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + pageSize);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+  };
+
+  const searchPending = search.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -97,41 +164,50 @@ export default function InventoryReceiptsPage() {
       const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
-    if (warehouseFilter) chips.push({ id: "wh", label: "Warehouse", value: warehouseFilter });
+    if (warehouseFilter) {
+      const wh = warehouseOptions.find((o) => o.value === warehouseFilter);
+      chips.push({ id: "wh", label: "Warehouse", value: wh?.label ?? warehouseFilter });
+    }
     if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
     return chips;
-  }, [statusFilter, warehouseFilter, search]);
+  }, [statusFilter, warehouseFilter, search, warehouseOptions]);
 
-  const handlePostRow = React.useCallback(async (row: PurchasingDocRow, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPostingId(row.id);
-    try {
-      await postGRN(row.id);
-      toast.success(`${row.number} posted.`);
-      setAllRows(await fetchGRNs());
-    } catch (raw) {
-      const err = raw as GrnPostError;
-      const msg = err.message ?? "Failed to post GRN.";
-      if (err.code === "GRN_OPEN_VARIANCE") {
-        const auditUrl = err.poId
-          ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(err.poId)}`
-          : "/purchasing/cash-weight-audit";
-        toast.error(msg, {
-          action: { label: "Go to audit", onClick: () => { window.location.href = auditUrl; } },
-          duration: 8000,
-        });
-      } else if (err.code === "GRN_MISSING_WEIGHT") {
-        toast.error(msg, {
-          action: { label: "Open GRN", onClick: () => { window.location.href = `/inventory/receipts/${row.id}`; } },
-          duration: 8000,
-        });
-      } else {
-        toast.error(msg);
+  const handlePostRow = React.useCallback(
+    async (row: PurchasingDocRow, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setPostingId(row.id);
+      try {
+        await postGRN(row.id);
+        toast.success(`${row.number} posted.`);
+        await loadPage(pageOffset);
+      } catch (raw) {
+        const err = raw as GrnPostError;
+        const msg = err.message ?? "Failed to post GRN.";
+        if (err.code === "GRN_OPEN_VARIANCE") {
+          const auditUrl = err.poId
+            ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(err.poId)}`
+            : "/purchasing/cash-weight-audit";
+          toast.error(msg, {
+            action: { label: "Go to audit", onClick: () => { window.location.href = auditUrl; } },
+            duration: 8000,
+          });
+        } else if (err.code === "GRN_MISSING_WEIGHT") {
+          toast.error(msg, {
+            action: {
+              label: "Open GRN",
+              onClick: () => { window.location.href = `/inventory/receipts/${row.id}`; },
+            },
+            duration: 8000,
+          });
+        } else {
+          toast.error(msg);
+        }
+      } finally {
+        setPostingId(null);
       }
-    } finally {
-      setPostingId(null);
-    }
-  }, []);
+    },
+    [loadPage, pageOffset],
+  );
 
   const columns = React.useMemo(
     () => [
@@ -155,34 +231,39 @@ export default function InventoryReceiptsPage() {
         header: "VAS",
         accessor: (r: PurchasingDocRow) => {
           const badges: React.ReactNode[] = [];
-
           if (subcontractedGrnIds.has(r.id)) {
             badges.push(
               <Badge key="sub" variant="secondary" className="text-xs gap-1 whitespace-nowrap">
                 <Icons.Factory className="h-3 w-3" />
                 Subcontracted
-              </Badge>
+              </Badge>,
             );
           }
-
           if (r.workOrderId && r.workOrderStatus !== "CANCELLED") {
             if (r.workOrderStatus === "COMPLETED") {
               badges.push(
-                <Badge key="wo" variant="outline" className="text-emerald-600 border-emerald-300 text-xs gap-1 whitespace-nowrap">
+                <Badge
+                  key="wo"
+                  variant="outline"
+                  className="text-emerald-600 border-emerald-300 text-xs gap-1 whitespace-nowrap"
+                >
                   <Icons.CheckCircle2 className="h-3 w-3" />
                   Processed
-                </Badge>
+                </Badge>,
               );
             } else {
               badges.push(
-                <Badge key="wo" variant="outline" className="text-amber-600 border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-xs gap-1 whitespace-nowrap">
+                <Badge
+                  key="wo"
+                  variant="outline"
+                  className="text-amber-600 border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 text-xs gap-1 whitespace-nowrap"
+                >
                   <Icons.Settings2 className="h-3 w-3" />
                   {r.workOrderNumber ?? "In work order"}
-                </Badge>
+                </Badge>,
               );
             }
           }
-
           return badges.length > 0 ? <div className="flex flex-wrap gap-1">{badges}</div> : null;
         },
       },
@@ -214,7 +295,7 @@ export default function InventoryReceiptsPage() {
         id: "rowActions",
         header: "",
         accessor: (r: PurchasingDocRow) =>
-          (r.status === "DRAFT" || r.status === "APPROVED") ? (
+          r.status === "DRAFT" || r.status === "APPROVED" ? (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -244,7 +325,7 @@ export default function InventoryReceiptsPage() {
           ) : null,
       },
     ],
-    [subcontractedGrnIds, postingId, handlePostRow]
+    [subcontractedGrnIds, postingId, handlePostRow],
   );
 
   const handleClearFilters = () => {
@@ -281,7 +362,7 @@ export default function InventoryReceiptsPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Goods Receipt (GRN)"
         description="Canonical GRN operations queue: post receipts, complete landed costs, and move to putaway."
@@ -289,7 +370,6 @@ export default function InventoryReceiptsPage() {
           { label: "Inventory", href: "/inventory/products" },
           { label: "Receipts" },
         ]}
-        sticky
         showCommandHint
         actions={
           <div className="flex items-center gap-2">
@@ -305,9 +385,10 @@ export default function InventoryReceiptsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         <DataTableToolbar
-          searchPlaceholder="Search by number, PO, warehouse..."
+          className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+          searchPlaceholder="Search by number, PO, supplier, warehouse..."
           searchValue={search}
           onSearchChange={setSearch}
           filters={[
@@ -321,10 +402,7 @@ export default function InventoryReceiptsPage() {
             {
               id: "warehouse",
               label: "Warehouse",
-              options: [
-                { label: "All", value: "" },
-                ...warehouses.map((w) => ({ label: w, value: w })),
-              ],
+              options: [{ label: "All", value: "" }, ...warehouseOptions],
               value: warehouseFilter,
               onChange: (v) => setWarehouseFilter(v),
             },
@@ -338,34 +416,46 @@ export default function InventoryReceiptsPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() => exportGRNsCsv(filtered)}
+          onExport={() => exportGRNsCsv(rows)}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.length} selected
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    const selectedRows = allRows.filter((r) => selectedIds.includes(r.id));
-                    const postable = selectedRows.filter((r) => r.status === "DRAFT" || r.status === "APPROVED");
+                    const selectedRows = rows.filter((r) => selectedIds.includes(r.id));
+                    const postable = selectedRows.filter(
+                      (r) => r.status === "DRAFT" || r.status === "APPROVED",
+                    );
                     const skipped = selectedRows.length - postable.length;
                     if (!postable.length) {
-                      toast.warning("No selected GRNs are eligible to post. Only draft GRNs can be posted.");
+                      toast.warning(
+                        "No selected GRNs are eligible to post. Only draft GRNs can be posted.",
+                      );
                       return;
                     }
                     const results = await Promise.allSettled(postable.map((r) => postGRN(r.id)));
                     const succeeded = results.filter((r) => r.status === "fulfilled").length;
                     const failedResults = results
-                      .map((r, i) => r.status === "rejected" ? { row: postable[i], reason: r.reason as GrnPostError } : null)
-                      .filter((x): x is { row: typeof postable[number]; reason: GrnPostError } => x !== null);
-                    setAllRows(await fetchGRNs());
+                      .map((r, i) =>
+                        r.status === "rejected"
+                          ? { row: postable[i], reason: r.reason as GrnPostError }
+                          : null,
+                      )
+                      .filter(
+                        (x): x is { row: (typeof postable)[number]; reason: GrnPostError } =>
+                          x !== null,
+                      );
                     setSelectedIds([]);
+                    await loadPage(pageOffset);
                     const parts: string[] = [];
                     if (succeeded) parts.push(`${succeeded} GRN(s) posted.`);
                     if (skipped) parts.push(`${skipped} skipped (already posted or bill linked).`);
                     if (failedResults.length) parts.push(`${failedResults.length} failed.`);
-                    // For a single failure surface a targeted shortcut
                     if (failedResults.length === 1) {
                       const { row, reason } = failedResults[0];
                       if (reason.code === "GRN_OPEN_VARIANCE") {
@@ -373,17 +463,30 @@ export default function InventoryReceiptsPage() {
                           ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(reason.poId)}`
                           : "/purchasing/cash-weight-audit";
                         toast.error(parts.join(" "), {
-                          action: { label: "Go to cash-weight audit", onClick: () => { window.location.href = auditUrl; } },
+                          action: {
+                            label: "Go to cash-weight audit",
+                            onClick: () => { window.location.href = auditUrl; },
+                          },
                           duration: 8000,
                         });
                       } else if (reason.code === "GRN_MISSING_WEIGHT") {
                         toast.error(parts.join(" "), {
-                          action: { label: `Open ${row.number}`, onClick: () => { window.location.href = `/inventory/receipts/${row.id}`; } },
+                          action: {
+                            label: `Open ${row.number}`,
+                            onClick: () => {
+                              window.location.href = `/inventory/receipts/${row.id}`;
+                            },
+                          },
                           duration: 8000,
                         });
                       } else {
                         toast.error(parts.join(" "), {
-                          action: { label: `Open ${row.number}`, onClick: () => { window.location.href = `/inventory/receipts/${row.id}`; } },
+                          action: {
+                            label: `Open ${row.number}`,
+                            onClick: () => {
+                              window.location.href = `/inventory/receipts/${row.id}`;
+                            },
+                          },
                           duration: 8000,
                         });
                       }
@@ -401,7 +504,9 @@ export default function InventoryReceiptsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => exportGRNsCsv(filtered.filter((row) => selectedIds.includes(row.id)))}
+                  onClick={() =>
+                    exportGRNsCsv(rows.filter((row) => selectedIds.includes(row.id)))
+                  }
                 >
                   Export
                 </Button>
@@ -409,19 +514,48 @@ export default function InventoryReceiptsPage() {
             ) : undefined
           }
         />
-        {loading ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">Loading receipts…</div>
-        ) : (
-          <DataTable<PurchasingDocRow>
-            data={filtered}
-            columns={columns}
-            onRowClick={(row) => router.push(`/inventory/receipts/${row.id}`)}
-            emptyMessage="No GRNs yet."
-            selectable
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
+        {initialLoading ? (
+          <SkeletonDataTable
+            rows={pageSize}
+            columnWidths={["w-20", "w-24", "w-32", "w-24", "w-24", "w-20", "w-24", "w-28", "w-16"]}
           />
+        ) : (
+          <div className={LIST_TABLE_STATIC_CLASS}>
+            <TableLinearProgress active={tableBusy} />
+            <div
+              className={cn(
+                "transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60",
+              )}
+            >
+              <DataTable<PurchasingDocRow>
+                data={rows}
+                columns={columns}
+                scrollMode="natural"
+                className="border-0 shadow-none"
+                onRowClick={(row) => router.push(`/inventory/receipts/${row.id}`)}
+                emptyMessage="No GRNs match your filters."
+                selectable
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+              />
+            </div>
+          </div>
         )}
+        <TablePagination
+          className="shrink-0"
+          pageOffset={pageOffset}
+          pageSize={pageSize}
+          itemCount={initialLoading ? 0 : rows.length}
+          hasMore={hasMore}
+          loading={initialLoading}
+          busy={tableBusy}
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+          entityLabel="receipts"
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </div>
     </PageShell>
   );

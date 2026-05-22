@@ -25,11 +25,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <Providers>{children}</Providers>
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <body
+        className={`${inter.className} h-full min-h-0 overflow-hidden antialiased`}
+      >
+        <div
+          id="app-root"
+          className="flex h-full min-h-0 w-full flex-col overflow-hidden"
+        >
+          <Providers>{children}</Providers>
+        </div>
       </body>
     </html>
   );
 }
-

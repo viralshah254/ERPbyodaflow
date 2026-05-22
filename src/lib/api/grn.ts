@@ -8,6 +8,77 @@ import { type GrnDetailRow, type PurchasingDocRow } from "@/lib/types/purchasing
 
 export type { GrnDetailRow };
 
+type BackendGrnListItem = PurchasingDocRow & {
+  warehouseId?: string;
+  partyId?: string;
+};
+
+type BackendGrnListPage = {
+  items: BackendGrnListItem[];
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+};
+
+export type FetchInventoryReceiptsPageOpts = {
+  limit?: number;
+  cursor?: string;
+  status?: string;
+  search?: string;
+  warehouseId?: string;
+};
+
+export type FetchInventoryReceiptsPageResult = {
+  items: PurchasingDocRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchInventoryReceiptsPageApi(
+  opts?: FetchInventoryReceiptsPageOpts,
+): Promise<FetchInventoryReceiptsPageResult> {
+  requireLiveApi("Goods receipts");
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.set("limit", String(lim));
+  if (opts?.cursor != null && opts.cursor !== "") {
+    params.set("cursor", opts.cursor);
+  }
+  if (opts?.status?.trim()) params.set("status", opts.status.trim());
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.warehouseId?.trim()) params.set("warehouseId", opts.warehouseId.trim());
+
+  const payload = await apiRequest<BackendGrnListPage>("/api/inventory/receipts", { params });
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number"
+      ? payload.offset
+      : opts?.cursor != null && opts.cursor !== ""
+        ? Number(opts.cursor) || 0
+        : 0;
+  const items = (payload.items ?? []) as PurchasingDocRow[];
+  const hasMore =
+    typeof payload.hasMore === "boolean"
+      ? payload.hasMore
+      : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (
+    payload.nextCursor !== undefined &&
+    payload.nextCursor !== null &&
+    String(payload.nextCursor) !== ""
+  ) {
+    nextCursor = String(payload.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
 export async function fetchGRNs(opts?: { availableForProcessing?: boolean }): Promise<PurchasingDocRow[]> {
   requireLiveApi("Goods receipts");
   try {

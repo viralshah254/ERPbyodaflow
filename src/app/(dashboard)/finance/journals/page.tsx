@@ -3,7 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -68,11 +73,17 @@ export default function JournalEntriesPage() {
   const [rows, setRows] = React.useState<JournalEntry[]>([]);
   const [pageOffset, setPageOffset] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(false);
-  const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
+  const [postingSource, setPostingSource] = React.useState<{
+    sourceType: string;
+    sourceId: string;
+  } | null>(null);
   const hasLoadedOnce = React.useRef(false);
 
   React.useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    const id = window.setTimeout(
+      () => setDebouncedSearch(search),
+      SEARCH_DEBOUNCE_MS,
+    );
     return () => window.clearTimeout(id);
   }, [search]);
 
@@ -99,7 +110,7 @@ export default function JournalEntriesPage() {
         setFetching(false);
       }
     },
-    [debouncedSearch, statusFilter]
+    [debouncedSearch, statusFilter],
   );
 
   React.useEffect(() => {
@@ -136,14 +147,18 @@ export default function JournalEntriesPage() {
       {
         id: "date",
         header: "Date",
-        accessor: (row: JournalEntry) => format(new Date(row.date), "MMM dd, yyyy"),
+        accessor: (row: JournalEntry) =>
+          format(new Date(row.date), "MMM dd, yyyy"),
       },
       {
         id: "reference",
         header: "Reference",
         accessor: (row: JournalEntry) =>
           row.reference ? (
-            <span className="block max-w-[min(320px,40vw)] truncate font-mono text-xs" title={row.reference}>
+            <span
+              className="block max-w-[min(320px,40vw)] truncate font-mono text-xs"
+              title={row.reference}
+            >
               {row.reference}
             </span>
           ) : (
@@ -190,11 +205,11 @@ export default function JournalEntriesPage() {
         ),
       },
     ],
-    [baseCurrency]
+    [baseCurrency],
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Journal Entries"
         description="Create and manage journal entries"
@@ -213,7 +228,7 @@ export default function JournalEntriesPage() {
           </Button>
         }
       />
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar
           className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search by number or reference…"
@@ -244,7 +259,12 @@ export default function JournalEntriesPage() {
               disabled={initialLoading || fetching}
               onClick={handleRefresh}
             >
-              <Icons.RefreshCw className={cn("h-4 w-4 mr-1.5", (initialLoading || fetching) && "animate-spin")} />
+              <Icons.RefreshCw
+                className={cn(
+                  "h-4 w-4 mr-1.5",
+                  (initialLoading || fetching) && "animate-spin",
+                )}
+              />
               Refresh
             </Button>
           }
@@ -259,27 +279,36 @@ export default function JournalEntriesPage() {
                 totalDebit: row.totalDebit,
                 totalCredit: row.totalCredit,
                 status: row.status,
-              }))
+              })),
             )
           }
         />
         {initialLoading ? (
           <SkeletonDataTable
             rows={PAGE_SIZE}
-            columnWidths={["w-20", "w-24", "w-40", "w-24", "w-24", "w-20", "w-16"]}
+            columnWidths={[
+              "w-20",
+              "w-24",
+              "w-40",
+              "w-24",
+              "w-24",
+              "w-20",
+              "w-16",
+            ]}
           />
         ) : (
-          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className={LIST_TABLE_SURFACE_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
-                "transition-opacity duration-200",
-                tableBusy && "pointer-events-none opacity-60"
+                "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60",
               )}
             >
               <DataTable<JournalEntry>
                 data={rows}
                 columns={columns}
+                scrollMode="fill"
                 onRowClick={(row) => router.push(`/docs/journal/${row.id}`)}
                 emptyMessage="No journal entries. Create one to get started."
               />
@@ -287,7 +316,6 @@ export default function JournalEntriesPage() {
           </div>
         )}
         <TablePagination
-          sticky
           pageOffset={pageOffset}
           pageSize={PAGE_SIZE}
           itemCount={initialLoading ? 0 : rows.length}

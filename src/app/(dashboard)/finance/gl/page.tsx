@@ -76,12 +76,12 @@ export default function GeneralLedgerPage() {
         </Button>
       }
     >
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Ledger Entries</CardTitle>
-            <div className="flex gap-2">
-              <Input placeholder="Search..." className="w-64" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <CardTitle className="shrink-0">Ledger Entries</CardTitle>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <Input placeholder="Search..." className="w-full min-w-[12rem] sm:w-64" value={search} onChange={(e) => setSearch(e.target.value)} />
               <Select value={accountId || "__all_accounts"} onValueChange={(value) => setAccountId(value === "__all_accounts" ? "" : value)}>
                 <SelectTrigger className="w-52"><SelectValue placeholder="All accounts" /></SelectTrigger>
                 <SelectContent>

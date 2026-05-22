@@ -633,7 +633,7 @@ export default function ManufacturingYieldPage() {
   );
 
   return (
-    <PageShell className="grid min-h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+    <PageShell className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
       <PageHeader
         title="Yield / Mass balance"
         description="Record actual outputs per batch; compare to BOM-expected. Process loss = input − primary − secondary."

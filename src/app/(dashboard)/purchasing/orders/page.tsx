@@ -3,7 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -11,17 +16,29 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
-import { fetchPurchaseOrders, approvePurchaseOrders, exportPurchaseOrdersCsv } from "@/lib/api/purchasing";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import {
+  approvePurchaseOrders,
+  exportPurchaseOrdersCsv,
+  fetchPurchaseOrdersPageApi,
+  type PurchaseOrdersSummary,
+} from "@/lib/api/purchasing";
 import { exportDocumentListApi } from "@/lib/api/documents";
 import { isApiConfigured } from "@/lib/api/client";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 const STATUS_OPTIONS = [
   { label: "Open (Active)", value: "OPEN" },
@@ -33,64 +50,87 @@ const STATUS_OPTIONS = [
   { label: "Cancelled", value: "CANCELLED" },
 ];
 
-const OPEN_STATUSES = ["DRAFT", "PENDING_APPROVAL", "APPROVED"];
-
 const scope = "purchasing-orders";
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
   const baseCurrency = useBaseCurrency();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("OPEN");
+  const [pageSize, setPageSize] = React.useState<number>(25);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    getSavedViews(scope)
+    getSavedViews(scope),
   );
-  const [allRows, setAllRows] = React.useState<PurchasingDocRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = React.useState<PurchasingDocRow[]>([]);
+  const [summary, setSummary] = React.useState<PurchaseOrdersSummary | null>(null);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
   const [approvingId, setApprovingId] = React.useState<string | null>(null);
-
-  const reload = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      setAllRows(await fetchPurchaseOrders());
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const hasLoadedOnce = React.useRef(false);
 
   React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchPurchaseOrders()
-      .then((rows) => {
-        if (!cancelled) setAllRows(rows);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.party?.toLowerCase().includes(q))
-      );
-    }
-    if (statusFilter === "OPEN") {
-      out = out.filter((r) => OPEN_STATUSES.includes(r.status));
-    } else if (statusFilter) {
-      out = out.filter((r) => r.status === statusFilter);
-    }
-    return out;
-  }, [allRows, search, statusFilter]);
+    const id = window.setTimeout(
+      () => setDebouncedSearch(search),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchPurchaseOrdersPageApi({
+          limit: pageSize,
+          cursor: String(offset),
+          status: statusFilter || undefined,
+          search: debouncedSearch.trim() || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        if (page.summary) setSummary(page.summary);
+        setSelectedIds([]);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to load purchase orders.",
+        );
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, statusFilter, pageSize],
+  );
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - pageSize));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + pageSize);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+  };
+
+  const searchPending = search.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -107,7 +147,9 @@ export default function PurchaseOrdersPage() {
       {
         id: "number",
         header: "Number",
-        accessor: (r: PurchasingDocRow) => <span className="font-medium">{r.number}</span>,
+        accessor: (r: PurchasingDocRow) => (
+          <span className="font-medium">{r.number}</span>
+        ),
         sticky: true,
       },
       { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
@@ -125,7 +167,9 @@ export default function PurchaseOrdersPage() {
               align="right"
               size="sm"
             />
-          ) : "—",
+          ) : (
+            "—"
+          ),
       },
       {
         id: "status",
@@ -148,19 +192,23 @@ export default function PurchaseOrdersPage() {
                 try {
                   await approvePurchaseOrders([r.id]);
                   toast.success(`${r.number} approved.`);
-                  await reload();
+                  await loadPage(pageOffset);
                 } finally {
                   setApprovingId(null);
                 }
               }}
             >
-              {approvingId === r.id ? <Icons.Loader2 className="h-3 w-3 animate-spin" /> : <Icons.CheckCircle className="h-3 w-3 mr-1" />}
+              {approvingId === r.id ? (
+                <Icons.Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Icons.CheckCircle className="h-3 w-3 mr-1" />
+              )}
               Approve
             </Button>
           ) : null,
       },
     ],
-    [approvingId, reload, baseCurrency]
+    [approvingId, loadPage, pageOffset, baseCurrency],
   );
 
   const handleClearFilters = () => {
@@ -193,8 +241,13 @@ export default function PurchaseOrdersPage() {
     if (currentViewId === id) setCurrentViewId(null);
   };
 
+  const kpiTotal = summary?.total ?? 0;
+  const kpiPending = summary?.pendingApproval ?? 0;
+  const kpiApproved = summary?.approved ?? 0;
+  const kpiReceived = summary?.received ?? 0;
+
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Purchase Orders"
         description="Manage supplier orders"
@@ -202,7 +255,6 @@ export default function PurchaseOrdersPage() {
           { label: "Purchasing", href: "/purchasing/orders" },
           { label: "Purchase Orders" },
         ]}
-        sticky
         showCommandHint
         actions={
           <Button asChild>
@@ -213,19 +265,38 @@ export default function PurchaseOrdersPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         <ExceptionBanner
           type="info"
           title="Procurement workspace"
           description="Use this worklist to control approvals, cash-heavy sourcing, and drill into PO-level audit and landed-cost context."
         />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <OperationalKpiCard title="Total POs" value={allRows.length} subtitle="Current dataset" />
-          <OperationalKpiCard title="Pending Approval" value={allRows.filter((r) => r.status === "PENDING_APPROVAL").length} subtitle="Needs action now" severity="warning" />
-          <OperationalKpiCard title="Approved" value={allRows.filter((r) => r.status === "APPROVED").length} subtitle="Ready for receiving" />
-          <OperationalKpiCard title="Received" value={allRows.filter((r) => r.status === "RECEIVED").length} subtitle="Already fulfilled" severity="success" />
+        <div className="grid shrink-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <OperationalKpiCard
+            title="Total POs"
+            value={initialLoading ? "—" : kpiTotal}
+            subtitle="All purchase orders"
+          />
+          <OperationalKpiCard
+            title="Pending Approval"
+            value={initialLoading ? "—" : kpiPending}
+            subtitle="Needs action now"
+            severity="warning"
+          />
+          <OperationalKpiCard
+            title="Approved"
+            value={initialLoading ? "—" : kpiApproved}
+            subtitle="Ready for receiving"
+          />
+          <OperationalKpiCard
+            title="Received"
+            value={initialLoading ? "—" : kpiReceived}
+            subtitle="Already fulfilled"
+            severity="success"
+          />
         </div>
         <DataTableToolbar
+          className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search by number, supplier..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -253,18 +324,20 @@ export default function PurchaseOrdersPage() {
               exportDocumentListApi("purchase-order", fileName, (msg) => toast.error(msg));
               return;
             }
-            exportPurchaseOrdersCsv(filtered);
+            exportPurchaseOrdersCsv(rows);
           }}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.length} selected
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={async () => {
                     const pendingIds = selectedIds.filter(
-                      (sid) => allRows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL"
+                      (sid) => rows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL",
                     );
                     if (pendingIds.length === 0) {
                       toast.info("No pending-approval POs in selection.");
@@ -273,31 +346,72 @@ export default function PurchaseOrdersPage() {
                     await approvePurchaseOrders(pendingIds);
                     toast.success(`${pendingIds.length} purchase order(s) approved.`);
                     setSelectedIds([]);
-                    await reload();
+                    await loadPage(pageOffset);
                   }}
                 >
-                  Approve ({selectedIds.filter((sid) => allRows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL").length})
+                  Approve (
+                  {
+                    selectedIds.filter(
+                      (sid) => rows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL",
+                    ).length
+                  }
+                  )
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => exportPurchaseOrdersCsv(filtered.filter((r) => selectedIds.includes(r.id)))}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    exportPurchaseOrdersCsv(rows.filter((r) => selectedIds.includes(r.id)))
+                  }
+                >
                   Export
                 </Button>
               </div>
             ) : undefined
           }
         />
-        {loading ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">Loading purchase orders…</div>
-        ) : (
-          <DataTable<PurchasingDocRow>
-            data={filtered}
-            columns={columns}
-            onRowClick={(row) => router.push(`/purchasing/orders/${row.id}`)}
-            emptyMessage="No purchase orders yet."
-            selectable
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
+        {initialLoading ? (
+          <SkeletonDataTable
+            rows={pageSize}
+            columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
           />
+        ) : (
+          <div className={LIST_TABLE_STATIC_CLASS}>
+            <TableLinearProgress active={tableBusy} />
+            <div
+              className={cn(
+                "transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60",
+              )}
+            >
+              <DataTable<PurchasingDocRow>
+                data={rows}
+                columns={columns}
+                scrollMode="natural"
+                className="border-0 shadow-none"
+                onRowClick={(row) => router.push(`/purchasing/orders/${row.id}`)}
+                emptyMessage="No purchase orders match your filters."
+                selectable
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+              />
+            </div>
+          </div>
         )}
+        <TablePagination
+          className="shrink-0"
+          pageOffset={pageOffset}
+          pageSize={pageSize}
+          itemCount={initialLoading ? 0 : rows.length}
+          hasMore={hasMore}
+          loading={initialLoading}
+          busy={tableBusy}
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+          entityLabel="purchase orders"
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </div>
     </PageShell>
   );

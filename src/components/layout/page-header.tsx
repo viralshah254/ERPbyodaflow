@@ -35,7 +35,7 @@ export function PageHeader({
   description,
   breadcrumbs,
   actions,
-  sticky = true,
+  sticky = false,
   showCommandHint = true,
   showRightPanelToggle = false,
   dense = false,
@@ -48,11 +48,7 @@ export function PageHeader({
       className={cn(
         "shrink-0 border-b bg-card",
         dense ? "px-4 py-2.5" : "px-6 py-4",
-        sticky &&
-          cn(
-            "sticky top-0 z-30 -mx-6 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/95",
-            dense ? "px-4" : "px-6",
-          ),
+        sticky && "sticky top-0 z-30 bg-card shadow-sm",
         className
       )}
     >

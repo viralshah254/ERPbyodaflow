@@ -3,27 +3,40 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { fetchPurchaseRequestsApi } from "@/lib/api/purchase-requests";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { fetchPurchaseRequestsPageApi } from "@/lib/api/purchase-requests";
 import { downloadCsv } from "@/lib/export/csv";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
   { label: "Draft", value: "DRAFT" },
   { label: "Pending", value: "PENDING_APPROVAL" },
   { label: "Approved", value: "APPROVED" },
+  { label: "Converted", value: "CONVERTED" },
 ];
 
 const scope = "purchasing-requests";
@@ -31,44 +44,78 @@ const scope = "purchasing-requests";
 export default function PurchaseRequestsPage() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
+  const [pageSize, setPageSize] = React.useState<number>(25);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [rows, setRows] = React.useState<PurchasingDocRow[]>([]);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    getSavedViews(scope)
+    getSavedViews(scope),
+  );
+  const hasLoadedOnce = React.useRef(false);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(
+      () => setDebouncedSearch(search),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchPurchaseRequestsPageApi({
+          limit: pageSize,
+          cursor: String(offset),
+          status: statusFilter || undefined,
+          search: debouncedSearch.trim() || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setSelectedIds([]);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to load purchase requests.",
+        );
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, statusFilter, pageSize],
   );
 
   React.useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const items = await fetchPurchaseRequestsApi();
-        if (!cancelled) setRows(items);
-      } catch (error) {
-        if (!cancelled) {
-          toast.error(error instanceof Error ? error.message : "Failed to load purchase requests.");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void loadPage(0);
+  }, [loadPage]);
 
-  const filtered = React.useMemo(() => {
-    let out = rows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.party?.toLowerCase().includes(q))
-      );
-    }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    return out;
-  }, [rows, search, statusFilter]);
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - pageSize));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + pageSize);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+  };
+
+  const searchPending = search.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -85,7 +132,9 @@ export default function PurchaseRequestsPage() {
       {
         id: "number",
         header: "Number",
-        accessor: (r: PurchasingDocRow) => <span className="font-medium">{r.number}</span>,
+        accessor: (r: PurchasingDocRow) => (
+          <span className="font-medium">{r.number}</span>
+        ),
         sticky: true,
       },
       { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
@@ -102,7 +151,9 @@ export default function PurchaseRequestsPage() {
               align="right"
               size="sm"
             />
-          ) : "—",
+          ) : (
+            "—"
+          ),
       },
       {
         id: "status",
@@ -129,7 +180,7 @@ export default function PurchaseRequestsPage() {
           ) : null,
       },
     ],
-    []
+    [],
   );
 
   const handleClearFilters = () => {
@@ -163,7 +214,7 @@ export default function PurchaseRequestsPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Purchase Requests"
         description="Requisitions and approval flow"
@@ -171,7 +222,6 @@ export default function PurchaseRequestsPage() {
           { label: "Purchasing", href: "/purchasing/orders" },
           { label: "Purchase Requests" },
         ]}
-        sticky
         showCommandHint
         actions={
           <Button asChild>
@@ -182,21 +232,22 @@ export default function PurchaseRequestsPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         <DataTableToolbar
+          className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search by number, requester..."
           searchValue={search}
           onSearchChange={setSearch}
           onExport={() =>
             downloadCsv(
               `purchase-requests-${new Date().toISOString().slice(0, 10)}.csv`,
-              filtered.map((row) => ({
+              rows.map((row) => ({
                 number: row.number,
                 date: row.date,
                 party: row.party ?? "",
                 total: row.total ?? "",
                 status: row.status,
-              }))
+              })),
             )
           }
           filters={[
@@ -219,28 +270,68 @@ export default function PurchaseRequestsPage() {
           onDeleteView={handleDeleteView}
           bulkActions={
             selectedIds.length > 0 ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                {filtered.some((r) => selectedIds.includes(r.id) && r.status === "APPROVED") && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedIds.length} selected
+                </span>
+                {rows.some((r) => selectedIds.includes(r.id) && r.status === "APPROVED") && (
                   <span className="text-xs text-muted-foreground">
-                    {'Approved requests can be converted to POs individually using the "Create PO" button on each row.'}
+                    Approved requests can be converted to POs individually using the
+                    &quot;Create PO&quot; button on each row.
                   </span>
                 )}
-                <Button variant="outline" size="sm" onClick={() => router.push("/purchasing/orders")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push("/purchasing/orders")}
+                >
                   Open orders
                 </Button>
               </div>
             ) : undefined
           }
         />
-        <DataTable<PurchasingDocRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/purchase-request/${row.id}`)}
-          emptyMessage="No purchase requests yet."
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
+        {initialLoading ? (
+          <SkeletonDataTable
+            rows={pageSize}
+            columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
+          />
+        ) : (
+          <div className={LIST_TABLE_STATIC_CLASS}>
+            <TableLinearProgress active={tableBusy} />
+            <div
+              className={cn(
+                "transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60",
+              )}
+            >
+              <DataTable<PurchasingDocRow>
+                data={rows}
+                columns={columns}
+                scrollMode="natural"
+                className="border-0 shadow-none"
+                onRowClick={(row) => router.push(`/docs/purchase-request/${row.id}`)}
+                emptyMessage="No purchase requests match your filters."
+                selectable
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+              />
+            </div>
+          </div>
+        )}
+        <TablePagination
+          className="shrink-0"
+          pageOffset={pageOffset}
+          pageSize={pageSize}
+          itemCount={initialLoading ? 0 : rows.length}
+          hasMore={hasMore}
+          loading={initialLoading}
+          busy={tableBusy}
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+          entityLabel="purchase requests"
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+          onPageSizeChange={handlePageSizeChange}
         />
       </div>
     </PageShell>

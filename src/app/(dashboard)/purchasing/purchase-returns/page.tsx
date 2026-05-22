@@ -1,26 +1,42 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { downloadCsv } from "@/lib/export/csv";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import {
   approvePurchaseReturnApi,
   createPurchaseReturnApi,
   exportPurchaseReturnsApi,
-  fetchPurchaseReturns,
+  fetchPurchaseReturnsPageApi,
   type PurchaseReturnRow,
 } from "@/lib/api/purchase-returns";
+import { formatMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -33,7 +49,9 @@ const STATUS_OPTIONS = [
 const scope = "purchasing-returns";
 
 export default function PurchaseReturnsPage() {
-  const [search, setSearch] = React.useState("");
+  const baseCurrency = useBaseCurrency();
+  const [searchInput, setSearchInput] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [creating, setCreating] = React.useState(false);
@@ -41,46 +59,54 @@ export default function PurchaseReturnsPage() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selectedReturn, setSelectedReturn] = React.useState<PurchaseReturnRow | null>(null);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
-  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    getSavedViews(scope)
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(scope));
+
+  const [rows, setRows] = React.useState<PurchaseReturnRow[]>([]);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(25);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchPurchaseReturnsPageApi({
+          limit: pageSize,
+          cursor: String(offset),
+          status: statusFilter || undefined,
+          search: debouncedSearch || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setSelectedIds([]);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load purchase returns.");
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, statusFilter, pageSize],
   );
 
-  const [allRows, setAllRows] = React.useState<PurchaseReturnRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  const refreshRows = React.useCallback(() => {
-    setLoading(true);
-    void fetchPurchaseReturns(statusFilter || undefined)
-      .then((items) => {
-        setAllRows(
-          items.map((item) => ({
-            ...item,
-            party: item.party ?? item.supplierName ?? item.supplierId,
-          }))
-        );
-      })
-      .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Failed to load purchase returns.");
-      })
-      .finally(() => setLoading(false));
-  }, [statusFilter]);
   React.useEffect(() => {
-    refreshRows();
-  }, [refreshRows, statusFilter]);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.party?.toLowerCase().includes(q)) ||
-          (r.grnRef?.toLowerCase().includes(q))
-      );
-    }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    return out;
-  }, [allRows, search, statusFilter]);
+    void loadPage(0);
+  }, [loadPage]);
+
+  const searchPending = searchInput.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -88,71 +114,129 @@ export default function PurchaseReturnsPage() {
       const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
-    if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
+    if (searchInput.trim()) chips.push({ id: "q", label: "Search", value: searchInput.trim() });
     return chips;
-  }, [statusFilter, search]);
+  }, [statusFilter, searchInput]);
 
   const columns = React.useMemo(
     () => [
       {
         id: "number",
         header: "Number",
-        accessor: (r: PurchaseReturnRow) => <span className="font-medium">{r.number}</span>,
+        accessor: (r: PurchaseReturnRow) => (
+          <div className="flex items-center gap-2 min-w-[6rem]">
+            <Icons.Undo2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="font-mono text-sm font-medium">{r.number}</span>
+          </div>
+        ),
         sticky: true,
+        sortable: true,
+        sortValue: (r: PurchaseReturnRow) => r.number.toLowerCase(),
       },
-      { id: "date", header: "Date", accessor: "date" as keyof PurchaseReturnRow },
-      { id: "party", header: "Supplier", accessor: "party" as keyof PurchaseReturnRow },
-      { id: "poRef", header: "GRN Ref", accessor: "grnRef" as keyof PurchaseReturnRow },
+      {
+        id: "date",
+        header: "Date",
+        accessor: (r: PurchaseReturnRow) => <span className="tabular-nums text-sm">{r.date}</span>,
+        sortable: true,
+        sortValue: (r: PurchaseReturnRow) => r.date,
+      },
+      {
+        id: "party",
+        header: "Supplier",
+        accessor: (r: PurchaseReturnRow) => (
+          <div className="flex items-center gap-1.5 min-w-[8rem]">
+            <Icons.Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="font-medium">{r.party ?? "—"}</span>
+          </div>
+        ),
+        sortable: true,
+        sortValue: (r: PurchaseReturnRow) => (r.party ?? "").toLowerCase(),
+      },
+      {
+        id: "grnRef",
+        header: "GRN Ref",
+        accessor: (r: PurchaseReturnRow) =>
+          r.grnRef ? (
+            <Badge variant="outline" className="font-mono text-xs font-normal">
+              {r.grnRef}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          ),
+        sortable: true,
+        sortValue: (r: PurchaseReturnRow) => r.grnRef ?? "",
+      },
       {
         id: "total",
         header: "Total",
         accessor: (r: PurchaseReturnRow) =>
-          r.total != null ? `KES ${r.total.toLocaleString()}` : "—",
+          r.total != null ? (
+            <DualCurrencyAmount
+              amount={r.total}
+              currency={r.currency ?? baseCurrency}
+              baseCurrency={baseCurrency}
+              align="right"
+              size="sm"
+            />
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          ),
+        sortable: true,
+        sortValue: (r: PurchaseReturnRow) => r.total ?? 0,
       },
       {
         id: "status",
         header: "Status",
         accessor: (r: PurchaseReturnRow) => <StatusBadge status={r.status} />,
+        sortable: true,
+        sortValue: (r: PurchaseReturnRow) => r.status.toLowerCase(),
       },
     ],
-    []
+    [baseCurrency],
   );
 
   const handleClearFilters = () => {
     setStatusFilter("");
-    setSearch("");
+    setSearchInput("");
+    setDebouncedSearch("");
   };
+
   const handleRemoveFilterChip = (id: string) => {
     if (id === "status") setStatusFilter("");
-    if (id === "q") setSearch("");
+    if (id === "q") setSearchInput("");
   };
+
   const handleSaveView = () => {
     const v = saveView(scope, {
       name: `View ${savedViews.length + 1}`,
-      filters: { q: search, status: statusFilter },
+      filters: { q: searchInput, status: statusFilter },
     });
     setSavedViews(getSavedViews(scope));
     setCurrentViewId(v.id);
   };
+
   const handleSelectView = (id: string) => {
     const v = savedViews.find((x) => x.id === id);
     if (v?.filters) {
-      setSearch((v.filters.q as string) ?? "");
+      setSearchInput((v.filters.q as string) ?? "");
       setStatusFilter((v.filters.status as string) ?? "");
     }
     setCurrentViewId(id);
   };
+
   const handleDeleteView = (id: string) => {
     deleteSavedView(scope, id);
     setSavedViews(getSavedViews(scope));
     if (currentViewId === id) setCurrentViewId(null);
   };
 
+  const refreshCurrentPage = () => void loadPage(pageOffset);
+
   const handleCreateReturn = async () => {
     setCreating(true);
     try {
       await createPurchaseReturnApi();
-      refreshRows();
+      await loadPage(0);
       toast.success("Purchase return created.");
     } catch (e) {
       toast.error((e as Error).message);
@@ -165,14 +249,15 @@ export default function PurchaseReturnsPage() {
     exportPurchaseReturnsApi((message) => {
       downloadCsv(
         `purchase-returns-${new Date().toISOString().slice(0, 10)}.csv`,
-        filtered.map((row) => ({
+        rows.map((row) => ({
           number: row.number,
           date: row.date,
           supplier: row.party ?? "",
           grnRef: row.grnRef ?? "",
           total: row.total ?? 0,
+          currency: row.currency ?? baseCurrency,
           status: row.status,
-        }))
+        })),
       );
       if (message) toast.message(message);
     });
@@ -185,7 +270,7 @@ export default function PurchaseReturnsPage() {
       for (const returnId of selectedIds) {
         await approvePurchaseReturnApi(returnId);
       }
-      refreshRows();
+      await refreshCurrentPage();
       toast.success(`Approved ${selectedIds.length} return(s).`);
       setSelectedIds([]);
     } catch (e) {
@@ -195,8 +280,18 @@ export default function PurchaseReturnsPage() {
     }
   };
 
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - pageSize));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + pageSize);
+  };
+
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Purchase Returns"
         description="Manage returns to suppliers"
@@ -204,85 +299,147 @@ export default function PurchaseReturnsPage() {
           { label: "Purchasing", href: "/purchasing/orders" },
           { label: "Purchase Returns" },
         ]}
-        sticky
         showCommandHint
         actions={
-          <Button disabled={creating} onClick={handleCreateReturn}>
+          <Button disabled={creating} onClick={() => void handleCreateReturn()}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create Return
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
-          searchPlaceholder="Search by number, supplier, PO..."
-          searchValue={search}
-          onSearchChange={setSearch}
-          filters={[
-            {
-              id: "status",
-              label: "Status",
-              options: STATUS_OPTIONS,
-              value: statusFilter,
-              onChange: (v) => setStatusFilter(v),
-            },
-          ]}
-          activeFiltersCount={filterChips.length}
-          onClearFilters={handleClearFilters}
-          filterChips={filterChips}
-          onRemoveFilterChip={handleRemoveFilterChip}
-          savedViews={savedViews}
-          currentViewId={currentViewId}
-          onSelectView={handleSelectView}
-          onSaveCurrentView={handleSaveView}
-          onDeleteView={handleDeleteView}
-          onExport={handleExport}
-          bulkActions={
-            selectedIds.length > 0 ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" size="sm" disabled={approving} onClick={handleBulkApprove}>
-                  Approve
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExport}>
-                  Export
-                </Button>
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="shrink-0 p-4 pb-0">
+            <DataTableToolbar
+              className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+              searchPlaceholder="Search by number, supplier, GRN ref…"
+              searchValue={searchInput}
+              onSearchChange={setSearchInput}
+              filters={[
+                {
+                  id: "status",
+                  label: "Status",
+                  options: STATUS_OPTIONS,
+                  value: statusFilter,
+                  onChange: (v) => setStatusFilter(v),
+                },
+              ]}
+              activeFiltersCount={filterChips.length}
+              onClearFilters={handleClearFilters}
+              filterChips={filterChips}
+              onRemoveFilterChip={handleRemoveFilterChip}
+              savedViews={savedViews}
+              currentViewId={currentViewId}
+              onSelectView={handleSelectView}
+              onSaveCurrentView={handleSaveView}
+              onDeleteView={handleDeleteView}
+              onExport={handleExport}
+              bulkActions={
+                selectedIds.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
+                    <Button variant="outline" size="sm" disabled={approving} onClick={() => void handleBulkApprove()}>
+                      Approve
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExport}>
+                      Export
+                    </Button>
+                  </div>
+                ) : undefined
+              }
+            />
+          </div>
+
+          {initialLoading ? (
+            <div className="p-4">
+              <SkeletonDataTable
+                rows={pageSize}
+                columnWidths={["w-24", "w-20", "w-28", "w-20", "w-20", "w-16"]}
+              />
+            </div>
+          ) : (
+            <div
+              className={cn(
+                LIST_TABLE_STATIC_CLASS,
+                "min-h-0 flex-1 border-0 border-t rounded-none shadow-none",
+              )}
+            >
+              <TableLinearProgress active={tableBusy} />
+              <div
+                className={cn(
+                  "transition-opacity duration-200",
+                  tableBusy && "pointer-events-none opacity-60",
+                )}
+              >
+                <DataTable<PurchaseReturnRow>
+                  data={rows}
+                  columns={columns}
+                  scrollMode="natural"
+                  className="border-0 shadow-none"
+                  onRowClick={(row) => {
+                    setSelectedReturn(row);
+                    setDetailOpen(true);
+                  }}
+                  emptyMessage="No purchase returns match your filters."
+                  selectable
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                />
               </div>
-            ) : undefined
-          }
-        />
-        <DataTable<PurchaseReturnRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => {
-            setSelectedReturn(row);
-            setDetailOpen(true);
-          }}
-          emptyMessage={loading ? "Loading purchase returns..." : "No purchase returns yet."}
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-        />
+            </div>
+          )}
+
+          <TablePagination
+            className="border-t px-4"
+            pageOffset={pageOffset}
+            pageSize={pageSize}
+            itemCount={initialLoading ? 0 : rows.length}
+            hasMore={hasMore}
+            loading={initialLoading}
+            busy={tableBusy}
+            onPrevious={goToPreviousPage}
+            onNext={goToNextPage}
+            entityLabel="returns"
+            pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
       </div>
+
       <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
         <SheetContent side="right">
           <SheetHeader>
             <SheetTitle>{selectedReturn?.number ?? "Purchase return"}</SheetTitle>
-            <SheetDescription>Return-to-vendor summary, approval state, and linked PO reference.</SheetDescription>
+            <SheetDescription>
+              Return-to-vendor summary, approval state, and linked GRN reference.
+            </SheetDescription>
           </SheetHeader>
           {selectedReturn && (
             <div className="mt-6 space-y-2 text-sm">
-              <p><span className="text-muted-foreground">Supplier:</span> {selectedReturn.party ?? "—"}</p>
-              <p><span className="text-muted-foreground">Date:</span> {selectedReturn.date}</p>
-              <p><span className="text-muted-foreground">GRN ref:</span> {selectedReturn.grnRef ?? "—"}</p>
-              <p><span className="text-muted-foreground">Total:</span> KES {(selectedReturn.total ?? 0).toLocaleString()}</p>
-              <p><span className="text-muted-foreground">Status:</span> {selectedReturn.status}</p>
+              <p>
+                <span className="text-muted-foreground">Supplier:</span> {selectedReturn.party ?? "—"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Date:</span> {selectedReturn.date}
+              </p>
+              <p>
+                <span className="text-muted-foreground">GRN ref:</span> {selectedReturn.grnRef ?? "—"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Total:</span>{" "}
+                {formatMoney(selectedReturn.total ?? 0, selectedReturn.currency ?? baseCurrency)}
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="text-muted-foreground">Status:</span>
+                <StatusBadge status={selectedReturn.status} />
+              </p>
               <div className="pt-4">
                 <Button
                   size="sm"
                   onClick={async () => {
                     await approvePurchaseReturnApi(selectedReturn.id);
-                    refreshRows();
+                    await refreshCurrentPage();
+                    setDetailOpen(false);
                     toast.success("Return approved.");
                   }}
                 >

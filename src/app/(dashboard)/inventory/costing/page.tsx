@@ -3,8 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { PageShell, LIST_PAGE_BODY_PAGINATED_CLASS, LIST_PAGE_SHELL_CLASS } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import type { FilterChip } from "@/components/ui/filter-chips";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +45,8 @@ import { Label } from "@/components/ui/label";
 import { parseDecimalString } from "@/lib/decimal-input";
 import { Badge } from "@/components/ui/badge";
 import {
-  fetchLandedCostSources,
+  fetchLandedCostSourcesPageApi,
+  fetchLandedCostSourceById,
   fetchLandedCostTemplates,
   fetchLandedCostAllocation,
   postLandedCostAllocation,
@@ -1499,20 +1505,37 @@ function LandedCostWizard({
   );
 }
 
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+
+const ALLOCATION_STATUS_OPTIONS = [
+  { label: "All", value: "all" },
+  { label: "Pending allocation", value: "pending" },
+  { label: "Allocated", value: "allocated" },
+];
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function InventoryCostingPage() {
   const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
   const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
   const authPermissions = useAuthStore((s) => s.permissions);
-  // Admin = platform operator or any user with admin.settings permission
   const canEditAllocated = isPlatformOperator || authPermissions.includes("admin.settings");
   const [warehouseFilter, setWarehouseFilter] = React.useState("ALL");
   const [allocationOpen, setAllocationOpen] = React.useState(false);
   const [selectedSource, setSelectedSource] = React.useState<LandedCostSourceRow | null>(null);
   const [sources, setSources] = React.useState<LandedCostSourceRow[]>([]);
   const [templates, setTemplates] = React.useState<LandedCostTemplateRow[]>([]);
-  const [sourcesLoading, setSourcesLoading] = React.useState(true);
+  const [sourceSearch, setSourceSearch] = React.useState("");
+  const [debouncedSourceSearch, setDebouncedSourceSearch] = React.useState("");
+  const [allocationStatusFilter, setAllocationStatusFilter] = React.useState("all");
+  const [pageSize, setPageSize] = React.useState<number>(25);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [allocationSummary, setAllocationSummary] = React.useState<{ pendingCount: number; allocatedCount: number } | null>(null);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [sourcesFetching, setSourcesFetching] = React.useState(false);
+  const [valuationLoading, setValuationLoading] = React.useState(true);
   const [runCostingLoading, setRunCostingLoading] = React.useState(false);
   const [costingSnapshot, setCostingSnapshot] = React.useState<{
     ranAt: string | null;
@@ -1524,6 +1547,7 @@ export default function InventoryCostingPage() {
     Array<{ warehouseId: string; warehouse: string; skuCount: number; totalQty: number; totalValue: number }>
   >([]);
   const [allocations, setAllocations] = React.useState(() => listLandedCostAllocations());
+  const hasLoadedOnce = React.useRef(false);
 
   const summary = React.useMemo(
     () => valuationSummary.filter((row) => warehouseFilter === "ALL" || row.warehouseId === warehouseFilter),
@@ -1543,43 +1567,62 @@ export default function InventoryCostingPage() {
   }, [valuationSummary]);
 
   const searchParams = useSearchParams();
-  // Accept either ?sourceId= or ?grnId= (GRN list uses grnId, detail uses sourceId)
   const sourceIdFromUrl = searchParams.get("sourceId") ?? searchParams.get("grnId");
 
-  /** Refresh GRN source rows + templates after saving allocation (lighter than full page reload). */
-  const reloadSources = React.useCallback(async () => {
-    setSourcesLoading(true);
-    try {
-      const [srcList, tplList] = await Promise.all([
-        fetchLandedCostSources({ type: "grn" }),
-        fetchLandedCostTemplates(),
-      ]);
-      setSources(srcList);
-      setTemplates(tplList);
-    } catch {
-      setSources([]);
-    } finally {
-      setSourcesLoading(false);
-    }
-  }, []);
+  React.useEffect(() => {
+    const id = window.setTimeout(
+      () => setDebouncedSourceSearch(sourceSearch),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [sourceSearch]);
 
-  /**
-   * Initial load: one parallel batch (was two effects + a loadSources() that returned a cleanup
-   * from inside useCallback — React Strict Mode could cancel in-flight requests without clearing loading).
-   */
+  const loadSourcesPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setSourcesFetching(true);
+      try {
+        const page = await fetchLandedCostSourcesPageApi({
+          limit: pageSize,
+          cursor: String(offset),
+          type: "grn",
+          search: debouncedSourceSearch.trim() || undefined,
+          allocationStatus:
+            allocationStatusFilter === "pending" || allocationStatusFilter === "allocated"
+              ? allocationStatusFilter
+              : "all",
+        });
+        setSources(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        if (page.summary) setAllocationSummary(page.summary);
+        hasLoadedOnce.current = true;
+      } catch {
+        toast.error("Failed to load allocation sources.");
+      } finally {
+        setInitialLoading(false);
+        setSourcesFetching(false);
+      }
+    },
+    [debouncedSourceSearch, allocationStatusFilter, pageSize],
+  );
+
+  React.useEffect(() => {
+    void loadSourcesPage(0);
+  }, [loadSourcesPage]);
+
   React.useEffect(() => {
     let alive = true;
     void (async () => {
-      setSourcesLoading(true);
+      setValuationLoading(true);
       try {
-        const [srcList, tplList, valuation, snapshot] = await Promise.all([
-          fetchLandedCostSources({ type: "grn" }),
+        const [tplList, valuation, snapshot] = await Promise.all([
           fetchLandedCostTemplates(),
           fetchInventoryValuation(),
           fetchLatestInventoryCosting(),
         ]);
         if (!alive) return;
-        setSources(srcList);
         setTemplates(tplList);
         setValuationSummary(valuation.summary);
         setCostingSnapshot({
@@ -1589,12 +1632,9 @@ export default function InventoryCostingPage() {
           totalValue: snapshot.totalValue,
         });
       } catch {
-        if (alive) {
-          setSources([]);
-          setValuationSummary([]);
-        }
+        if (alive) setValuationSummary([]);
       } finally {
-        if (alive) setSourcesLoading(false);
+        if (alive) setValuationLoading(false);
       }
     })();
     return () => {
@@ -1603,15 +1643,42 @@ export default function InventoryCostingPage() {
   }, []);
 
   React.useEffect(() => {
-    if (sourceIdFromUrl && sources.length > 0) {
-      const src = sources.find((s) => s.id === sourceIdFromUrl);
+    if (!sourceIdFromUrl) return;
+    void fetchLandedCostSourceById(sourceIdFromUrl).then((src) => {
       if (src) {
         setSelectedSource(src);
         setAllocationOpen(true);
         window.history.replaceState({}, "", "/inventory/costing");
       }
+    });
+  }, [sourceIdFromUrl]);
+
+  const searchPending = sourceSearch.trim() !== debouncedSourceSearch.trim();
+  const sourcesBusy = sourcesFetching || searchPending;
+
+  const sourceFilterChips: FilterChip[] = React.useMemo(() => {
+    const chips: FilterChip[] = [];
+    if (allocationStatusFilter !== "all") {
+      const opt = ALLOCATION_STATUS_OPTIONS.find((o) => o.value === allocationStatusFilter);
+      chips.push({ id: "allocation", label: "Status", value: opt?.label ?? allocationStatusFilter });
     }
-  }, [sourceIdFromUrl, sources]);
+    if (sourceSearch.trim()) chips.push({ id: "q", label: "Search", value: sourceSearch.trim() });
+    return chips;
+  }, [allocationStatusFilter, sourceSearch]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || sourcesFetching) return;
+    void loadSourcesPage(Math.max(0, pageOffset - pageSize));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || sourcesFetching) return;
+    void loadSourcesPage(pageOffset + pageSize);
+  };
+
+  const reloadSources = React.useCallback(async () => {
+    await loadSourcesPage(pageOffset);
+  }, [loadSourcesPage, pageOffset]);
 
   const openAllocation = (src: LandedCostSourceRow) => {
     setSelectedSource(src);
@@ -1626,7 +1693,7 @@ export default function InventoryCostingPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Inventory costing"
         description="Apply additional costs and run inventory valuation"
@@ -1634,7 +1701,6 @@ export default function InventoryCostingPage() {
           { label: "Inventory", href: "/inventory/products" },
           { label: "Costing" },
         ]}
-        sticky
         showCommandHint
         actions={
           <div className="flex items-center gap-2 flex-wrap">
@@ -1689,11 +1755,11 @@ export default function InventoryCostingPage() {
         }
       />
 
-      <div className="p-6 space-y-6">
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         {/* Guidance banner */}
-        {sources.length > 0 && (() => {
-          const pendingCount = sources.filter((s) => !s.isAllocated).length;
-          const allocatedCount = sources.filter((s) => s.isAllocated).length;
+        {!initialLoading && allocationSummary && (() => {
+          const pendingCount = allocationSummary.pendingCount;
+          const allocatedCount = allocationSummary.allocatedCount;
           if (pendingCount === 0 && allocatedCount > 0) {
             return (
               <div className="flex items-start gap-3 rounded-lg border bg-emerald-50 border-emerald-200 px-4 py-3">
@@ -1728,7 +1794,7 @@ export default function InventoryCostingPage() {
         })()}
 
         {/* Stock valuation summary */}
-        <Card>
+        <Card className="shrink-0">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Stock valuation summary</CardTitle>
@@ -1764,7 +1830,13 @@ export default function InventoryCostingPage() {
               </SelectContent>
             </Select>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 relative">
+            <TableLinearProgress active={valuationLoading} />
+            {valuationLoading ? (
+              <div className="p-4">
+                <SkeletonDataTable rows={3} columnWidths={["w-32", "w-16", "w-20", "w-28"]} />
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1792,11 +1864,12 @@ export default function InventoryCostingPage() {
                 )}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
 
         {/* Landed cost allocation sources */}
-        <Card>
+        <Card className="shrink-0">
           <CardHeader>
             <CardTitle>Additional costs allocation</CardTitle>
             <CardDescription>
@@ -1804,7 +1877,44 @@ export default function InventoryCostingPage() {
               logistics. Costs are distributed by weight and posted to GL automatically.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 space-y-0">
+            <div className="border-b px-4 py-3">
+              <DataTableToolbar
+                className="border-0 bg-transparent p-0 shadow-none"
+                searchPlaceholder="Search by GRN number, PO, supplier..."
+                searchValue={sourceSearch}
+                onSearchChange={setSourceSearch}
+                filters={[
+                  {
+                    id: "allocation",
+                    label: "Allocation",
+                    options: ALLOCATION_STATUS_OPTIONS,
+                    value: allocationStatusFilter,
+                    onChange: setAllocationStatusFilter,
+                  },
+                ]}
+                activeFiltersCount={sourceFilterChips.length}
+                onClearFilters={() => {
+                  setSourceSearch("");
+                  setAllocationStatusFilter("all");
+                }}
+                filterChips={sourceFilterChips}
+                onRemoveFilterChip={(id) => {
+                  if (id === "allocation") setAllocationStatusFilter("all");
+                  if (id === "q") setSourceSearch("");
+                }}
+              />
+            </div>
+            <div className="relative">
+              <TableLinearProgress active={sourcesBusy && !initialLoading} />
+              {initialLoading ? (
+                <div className="p-4">
+                  <SkeletonDataTable
+                    rows={pageSize}
+                    columnWidths={["w-20", "w-24", "w-28", "w-16", "w-24", "w-24", "w-24", "w-20", "w-24"]}
+                  />
+                </div>
+              ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1933,28 +2043,38 @@ export default function InventoryCostingPage() {
                 ))}
               </TableBody>
             </Table>
-            {sourcesLoading && (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                <Icons.Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-                Loading sources…
-              </div>
-            )}
-            {!sourcesLoading && sources.length === 0 && (
+              )}
+            {!initialLoading && sources.length === 0 && (
               <div className="py-10 text-center space-y-2">
                 <Icons.Package className="h-8 w-8 mx-auto text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  No goods receipts pending other cost allocation.
+                  No goods receipts match your filters.
                 </p>
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/inventory/receipts">View all GRNs</Link>
                 </Button>
               </div>
             )}
+            </div>
+            <TablePagination
+              className="border-t px-4"
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={initialLoading ? 0 : sources.length}
+              hasMore={hasMore}
+              loading={initialLoading}
+              busy={sourcesBusy}
+              onPrevious={goToPreviousPage}
+              onNext={goToNextPage}
+              entityLabel="receipts"
+              pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+              onPageSizeChange={setPageSize}
+            />
           </CardContent>
         </Card>
 
         {/* Costing activity */}
-        <Card>
+        <Card className="shrink-0">
           <CardHeader>
             <CardTitle>Costing activity</CardTitle>
             <CardDescription>Recent other cost allocations and costing runs.</CardDescription>
@@ -2001,7 +2121,7 @@ export default function InventoryCostingPage() {
             <SheetTitle className="flex items-center gap-2">
               <Icons.Sparkles className="h-5 w-5 text-primary" />
               {selectedSource?.isAllocated ? "Edit input costs" : "Input costs"}
-            </SheetTitle>ZZZ
+            </SheetTitle>
             <SheetDescription>
               {selectedSource?.isAllocated
                 ? "You are amending an existing allocation. Changes will overwrite the previously posted costs."
@@ -2056,7 +2176,7 @@ export default function InventoryCostingPage() {
                 onCancel={() => { setAllocationOpen(false); setSelectedSource(null); }}
               />
             </div>
-          ) : selectedSource && !sourcesLoading ? (
+          ) : selectedSource && !initialLoading ? (
             <div className="py-10 text-center space-y-3">
               <Icons.AlertCircle className="h-8 w-8 mx-auto text-amber-500" />
               <p className="text-sm text-muted-foreground">No cost templates found.</p>

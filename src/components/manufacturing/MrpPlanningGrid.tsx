@@ -38,7 +38,7 @@ export function MrpPlanningGrid({
   }, [items, itemFilter]);
 
   return (
-    <div className={cn("overflow-auto max-h-[calc(100vh-22rem)] rounded-md border", className)}>
+    <div className={cn("overflow-auto max-h-[min(28rem,calc(100dvh-14rem))] rounded-md border", className)}>
       <Table>
         <TableHeader className="sticky top-0 z-30 bg-muted/95 backdrop-blur [&_tr]:bg-muted/95">
             <TableRow className="bg-muted/50">

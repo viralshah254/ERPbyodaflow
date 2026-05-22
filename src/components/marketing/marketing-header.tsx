@@ -26,7 +26,7 @@ export function MarketingHeader() {
   const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="relative z-50 w-full shrink-0 border-b bg-background">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <OdaLogo href="/" height={36} />

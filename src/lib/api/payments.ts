@@ -88,6 +88,10 @@ type BackendApBill = {
   currency?: string;
   exchangeRate?: number;
   status: string;
+  allocated?: number;
+  outstanding?: number;
+  poRef?: string;
+  grnNumber?: string;
 };
 
 type BackendPartyOption = {
@@ -138,9 +142,79 @@ export type ApSupplierSummary = {
   code?: string;
   taxId?: string;
   paymentTermsId?: string;
+  paymentTermsName?: string;
   status?: string;
   currency?: string;
 };
+
+export type FetchApSuppliersPageOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  status?: "ACTIVE" | "INACTIVE" | "all";
+};
+
+export type FetchApSuppliersPageResult = {
+  items: ApSupplierSummary[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+function apSuppliersQueryParams(filters?: FetchApSuppliersPageOpts): URLSearchParams {
+  const params = new URLSearchParams();
+  const lim = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 25;
+  params.set("limit", String(lim));
+  if (filters?.cursor != null && filters.cursor !== "") {
+    params.set("cursor", filters.cursor);
+  }
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.status && filters.status !== "all") {
+    params.set("status", filters.status);
+  }
+  return params;
+}
+
+export async function fetchApSuppliersPageApi(
+  filters?: FetchApSuppliersPageOpts,
+): Promise<FetchApSuppliersPageResult> {
+  requireLiveApi("AP suppliers");
+  const lim = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 25;
+  const params = apSuppliersQueryParams(filters);
+  const data = await apiRequest<{
+    items: ApSupplierSummary[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/ap/suppliers", { params });
+  const limit = typeof data.limit === "number" ? data.limit : lim;
+  const parsedOffset =
+    typeof data.offset === "number"
+      ? data.offset
+      : filters?.cursor != null && filters.cursor !== ""
+        ? Number(filters.cursor) || 0
+        : 0;
+  const items = data.items ?? [];
+  const hasMore =
+    typeof data.hasMore === "boolean"
+      ? data.hasMore
+      : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (
+    data.nextCursor !== undefined &&
+    data.nextCursor !== null &&
+    String(data.nextCursor) !== ""
+  ) {
+    nextCursor = String(data.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
 
 export async function fetchArPaymentsApi(): Promise<PaymentRow[]> {
   requireLiveApi("AR payments");
@@ -265,12 +339,24 @@ export async function fetchApPaymentsApi(): Promise<APPaymentRow[]> {
   }));
 }
 
-export async function fetchApBillsApi(search?: string): Promise<APBillRow[]> {
-  requireLiveApi("AP bills");
-  const params = new URLSearchParams();
-  if (search?.trim()) params.set("search", search.trim());
-  const payload = await apiRequest<{ items: BackendApBill[] }>("/api/ap/bills", { params });
-  return payload.items.map((item) => ({
+export type FetchApBillsPageOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  status?: string;
+  partyId?: string;
+};
+
+export type FetchApBillsPageResult = {
+  items: APBillRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+function mapApBillItem(item: BackendApBill): APBillRow {
+  return {
     id: item.id,
     number: item.number,
     date: item.date?.slice(0, 10) ?? "",
@@ -283,31 +369,103 @@ export async function fetchApBillsApi(search?: string): Promise<APBillRow[]> {
     exchangeRate: item.exchangeRate,
     status: item.status ?? "DRAFT",
     dueDate: item.dueDate?.slice(0, 10),
-  }));
+    allocated: item.allocated,
+    outstanding: item.outstanding,
+    poRef: item.poRef,
+    grnNumber: item.grnNumber,
+  };
+}
+
+export async function fetchApBillsPageApi(
+  filters?: FetchApBillsPageOpts,
+): Promise<FetchApBillsPageResult> {
+  requireLiveApi("AP bills");
+  const lim = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 25;
+  const params = new URLSearchParams();
+  params.set("limit", String(lim));
+  if (filters?.cursor != null && filters.cursor !== "") {
+    params.set("cursor", filters.cursor);
+  }
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.status?.trim()) params.set("status", filters.status.trim());
+  if (filters?.partyId?.trim()) params.set("partyId", filters.partyId.trim());
+  const data = await apiRequest<{
+    items: BackendApBill[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/ap/bills", { params });
+  const limit = typeof data.limit === "number" ? data.limit : lim;
+  const parsedOffset =
+    typeof data.offset === "number"
+      ? data.offset
+      : filters?.cursor != null && filters.cursor !== ""
+        ? Number(filters.cursor) || 0
+        : 0;
+  const items = (data.items ?? []).map(mapApBillItem);
+  const hasMore =
+    typeof data.hasMore === "boolean"
+      ? data.hasMore
+      : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (
+    data.nextCursor !== undefined &&
+    data.nextCursor !== null &&
+    String(data.nextCursor) !== ""
+  ) {
+    nextCursor = String(data.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+export async function fetchApBillsApi(search?: string): Promise<APBillRow[]> {
+  requireLiveApi("AP bills");
+  const all: APBillRow[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const result = await fetchApBillsPageApi({ search, limit: 100, cursor });
+    all.push(...result.items);
+    if (!result.hasMore || !result.nextCursor) break;
+    cursor = result.nextCursor;
+  }
+  return all;
 }
 
 export async function fetchApSuppliersApi(search?: string): Promise<Array<{ id: string; name: string }>> {
   requireLiveApi("AP suppliers");
-  const params = new URLSearchParams();
-  if (search?.trim()) params.set("search", search.trim());
+  const params = apSuppliersQueryParams({ search, limit: 100, status: "all" });
   const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ap/suppliers", { params });
   return payload.items.map((item) => ({ id: item.id ?? item.partyId ?? "", name: item.name }));
 }
 
 export async function searchApSupplierOptionsApi(search?: string): Promise<PartyLookupOption[]> {
   requireLiveApi("AP supplier lookup");
-  const params = new URLSearchParams();
-  if (search?.trim()) params.set("search", search.trim());
+  const params = apSuppliersQueryParams({ search, limit: 100, status: "all" });
   const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ap/suppliers", { params });
   return sortPartyLookupOptions(payload.items.map((item) => toPartyLookupOption(item)), search ?? "");
 }
 
 export async function fetchApSupplierSummariesApi(search?: string): Promise<ApSupplierSummary[]> {
   requireLiveApi("AP supplier summaries");
-  const params = new URLSearchParams();
-  if (search?.trim()) params.set("search", search.trim());
-  const payload = await apiRequest<{ items: ApSupplierSummary[] }>("/api/ap/suppliers", { params });
-  return payload.items ?? [];
+  const all: ApSupplierSummary[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const result = await fetchApSuppliersPageApi({
+      search,
+      limit: 100,
+      cursor,
+      status: "all",
+    });
+    all.push(...result.items);
+    if (!result.hasMore || !result.nextCursor) break;
+    cursor = result.nextCursor;
+  }
+  return all;
 }
 
 export async function fetchOpenBillsApi(supplierId?: string): Promise<OpenBillRow[]> {

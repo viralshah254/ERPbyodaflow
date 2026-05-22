@@ -20,6 +20,10 @@ export type APBillRow = {
   exchangeRate?: number;
   status: string;
   dueDate?: string;
+  allocated?: number;
+  outstanding?: number;
+  poRef?: string;
+  grnNumber?: string;
 };
 
 export type APPaymentRow = {

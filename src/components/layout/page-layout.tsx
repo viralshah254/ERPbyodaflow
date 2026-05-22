@@ -23,9 +23,9 @@ export function PageLayout({
   className,
 }: PageLayoutProps) {
   return (
-    <div className={cn("flex flex-col h-full", className)}>
+    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       {/* Header */}
-      <div className="border-b bg-card px-6 py-4">
+      <div className="shrink-0 border-b bg-card px-6 py-4">
         {breadcrumbs && breadcrumbs.length > 0 && (
           <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             {breadcrumbs.map((crumb, i) => (
@@ -55,8 +55,12 @@ export function PageLayout({
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
       </div>
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-6">{children}</div>
+      {/* Content — scroll inside page card/sections, not the app chrome */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+          {children}
+        </div>
+      </div>
     </div>
   );
 }

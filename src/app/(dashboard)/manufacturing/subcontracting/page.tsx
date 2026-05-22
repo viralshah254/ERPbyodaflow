@@ -868,7 +868,7 @@ export default function SubcontractingPage() {
   ];
 
   return (
-    <PageShell className="grid min-h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+    <PageShell className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
       <PageHeader
         title="Subcontracting / Job Work"
         description="WIP at external work centers — factories and women's groups. Processing fees auto-post to GL on receive."

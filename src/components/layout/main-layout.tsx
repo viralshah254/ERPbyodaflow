@@ -25,7 +25,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     if (panel !== null) setRightPanelOpen(panel === "true");
     const compact = localStorage.getItem("odaflow_compact_mode");
     if (compact !== null) setCompactMode(compact === "true");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const copilotEnabled = useCopilotFeatureEnabled();
   const {
@@ -49,8 +49,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
     const insightId = pendingAction.id;
     const actionId =
-      "payload" in pendingAction && pendingAction.payload && "recommendationKey" in pendingAction.payload
-        ? (pendingAction.payload as { recommendationKey?: string }).recommendationKey ?? insightId
+      "payload" in pendingAction &&
+      pendingAction.payload &&
+      "recommendationKey" in pendingAction.payload
+        ? ((pendingAction.payload as { recommendationKey?: string })
+            .recommendationKey ?? insightId)
         : insightId;
     if (isApiConfigured()) {
       automationInsightApply(insightId, actionId)
@@ -71,19 +74,21 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-full min-h-0 w-full overflow-hidden">
       {sidebarOpen && <AppSidebar />}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Header />
-        <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* shrink-0: banner height never affects the scrollport below */}
           <div className="shrink-0">
             <TutorialProgressTracker />
             <FirstVisitBanner />
           </div>
-          {/* flex-1 min-h-0: fills exactly the remaining viewport height, no more */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="box-border w-full min-w-0 px-6 pb-6 pt-0">{children}</div>
+          {/* flex-1 min-h-0: page fills viewport; tables scroll inside, not the whole shell */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="box-border flex min-h-0 flex-1 w-full min-w-0 flex-col overflow-hidden px-6 pb-6 pt-0">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+            </div>
           </div>
         </main>
       </div>
@@ -103,4 +108,3 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-

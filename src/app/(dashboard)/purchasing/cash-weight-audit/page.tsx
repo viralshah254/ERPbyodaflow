@@ -3,8 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -60,6 +68,10 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { Permissions } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 type NotesMode = "investigate" | "resolve";
 
@@ -180,12 +192,17 @@ export default function CashWeightAuditPage() {
     permissions.includes("*");
 
   const [statusFilter, setStatusFilter] = React.useState<string>("");
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchInput, setSearchInput] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(25);
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [auditLines, setAuditLines] = React.useState<CashWeightAuditLineRow[]>([]);
   const [exceptions, setExceptions] = React.useState<CashWeightAuditLineRow[]>([]);
   const [disbursements, setDisbursements] = React.useState<CashDisbursementRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
   const [landedCostPerGrn, setLandedCostPerGrn] = React.useState<Map<string, number>>(new Map());
   const [reconcilingId, setReconcilingId] = React.useState<string | null>(null);
 
@@ -246,22 +263,35 @@ export default function CashWeightAuditPage() {
   const [notesValue, setNotesValue] = React.useState("");
   const [savingNotes, setSavingNotes] = React.useState(false);
 
-  const load = React.useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetchCashWeightAuditLines(statusFilter ? { status: statusFilter } : undefined).then(setAuditLines),
-      fetchCashDisbursements().then(setDisbursements),
-      fetchCashWeightExceptions().then(setExceptions),
-    ])
-      .then(() => setLoading(false))
-      .catch((e) => {
-        setLoading(false);
-        toast.error(e?.message ?? "Failed to load data");
-      });
-  }, [statusFilter]);
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  const load = React.useCallback(async () => {
+    const isFirstLoad = !hasLoadedOnce.current;
+    if (isFirstLoad) setInitialLoading(true);
+    else setFetching(true);
+    try {
+      const [lines, disbs, exs] = await Promise.all([
+        fetchCashWeightAuditLines(),
+        fetchCashDisbursements(),
+        fetchCashWeightExceptions(),
+      ]);
+      setAuditLines(lines);
+      setDisbursements(disbs);
+      setExceptions(exs);
+      hasLoadedOnce.current = true;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load data");
+    } finally {
+      setInitialLoading(false);
+      setFetching(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   React.useEffect(() => {
@@ -669,12 +699,29 @@ export default function CashWeightAuditPage() {
   const filteredPoRows = React.useMemo(() => {
     let rows = poRows;
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      rows = rows.filter((r) => r.poNumber.toLowerCase().includes(q));
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          r.poNumber.toLowerCase().includes(q) ||
+          r.disbursements.some((d) => (d.reference ?? d.id).toLowerCase().includes(q)),
+      );
     }
     return rows;
-  }, [poRows, statusFilter, searchQuery]);
+  }, [poRows, statusFilter, debouncedSearch]);
+
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [statusFilter, debouncedSearch, pageSize]);
+
+  const paginatedPoRows = React.useMemo(
+    () => filteredPoRows.slice(pageOffset, pageOffset + pageSize),
+    [filteredPoRows, pageOffset, pageSize],
+  );
+
+  const hasMore = pageOffset + pageSize < filteredPoRows.length;
+  const searchPending = searchInput.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
 
   const totalVariancePOs = poRows.filter((r) => r.status === "VARIANCE").length;
   const totalMatchedPOs = poRows.filter((r) => r.status === "MATCHED").length;
@@ -686,13 +733,19 @@ export default function CashWeightAuditPage() {
       id: "po",
       header: "Purchase Order",
       accessor: (r: PoAuditRow) => (
-        <div>
-          <p className="font-medium">{r.poNumber}</p>
-          <p className="text-xs text-muted-foreground">
+        <div className="min-w-[7rem]">
+          <div className="flex items-center gap-2">
+            <Icons.FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="font-mono text-sm font-medium">{r.poNumber}</p>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5 pl-5">
             {r.lines.length} product{r.lines.length !== 1 ? "s" : ""}
           </p>
         </div>
       ),
+      sticky: true,
+      sortable: true,
+      sortValue: (r: PoAuditRow) => r.poNumber.toLowerCase(),
     },
     {
       id: "disbursements",
@@ -719,6 +772,8 @@ export default function CashWeightAuditPage() {
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
+      sortable: true,
+      sortValue: (r: PoAuditRow) => r.totalPaidKg,
     },
     {
       id: "received",
@@ -729,6 +784,8 @@ export default function CashWeightAuditPage() {
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
+      sortable: true,
+      sortValue: (r: PoAuditRow) => r.totalReceivedKg,
     },
     {
       id: "variance",
@@ -739,20 +796,36 @@ export default function CashWeightAuditPage() {
         const isNeg = r.totalVarianceKg < 0;
         const isPos = r.totalVarianceKg > 0;
         return (
-          <span
-            className={`tabular-nums font-medium ${
-              isNeg
-                ? "text-destructive"
-                : isPos
-                ? "text-green-600 dark:text-green-400"
-                : "text-muted-foreground"
-            }`}
-          >
-            {r.totalVarianceKg >= 0 ? "+" : ""}
-            {r.totalVarianceKg.toFixed(2)}
-          </span>
+          <div className="min-w-[5rem]">
+            <span
+              className={cn(
+                "tabular-nums font-semibold",
+                isNeg && "text-destructive",
+                isPos && "text-green-600 dark:text-green-400",
+                !isNeg && !isPos && "text-muted-foreground",
+              )}
+            >
+              {r.totalVarianceKg >= 0 ? "+" : ""}
+              {r.totalVarianceKg.toFixed(2)}
+            </span>
+            {r.totalPaidKg > 0 && (
+              <div className="mt-1 h-1.5 w-full max-w-[4.5rem] rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    isNeg ? "bg-red-500" : isPos ? "bg-emerald-500" : "bg-muted-foreground/40",
+                  )}
+                  style={{
+                    width: `${Math.min(100, Math.round((Math.abs(r.totalVarianceKg) / r.totalPaidKg) * 100))}%`,
+                  }}
+                />
+              </div>
+            )}
+          </div>
         );
       },
+      sortable: true,
+      sortValue: (r: PoAuditRow) => r.totalVarianceKg ?? 0,
     },
     {
       id: "status",
@@ -996,7 +1069,7 @@ export default function CashWeightAuditPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Cash-to-Weight Audit"
         description="Track every farm-gate procurement — compare what was paid vs what was received."
@@ -1004,7 +1077,6 @@ export default function CashWeightAuditPage() {
           { label: "Purchasing", href: "/purchasing/orders" },
           { label: "Cash-to-Weight Audit" },
         ]}
-        sticky
         showCommandHint
         actions={
           <div className="flex gap-2">
@@ -1463,14 +1535,14 @@ export default function CashWeightAuditPage() {
         }
       />
 
-      <div className="p-6 space-y-5">
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         {/* ── Stat chips ─────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
           <Card className="p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">
               Total procurements
             </p>
-            <p className="text-2xl font-bold mt-1">{loading ? "—" : poRows.length}</p>
+            <p className="text-2xl font-bold mt-1">{initialLoading ? "—" : poRows.length}</p>
           </Card>
           <Card className={`p-4 ${totalVariancePOs > 0 ? "border-destructive/50" : ""}`}>
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Have variance</p>
@@ -1479,25 +1551,25 @@ export default function CashWeightAuditPage() {
                 totalVariancePOs > 0 ? "text-destructive" : ""
               }`}
             >
-              {loading ? "—" : totalVariancePOs}
+              {initialLoading ? "—" : totalVariancePOs}
             </p>
           </Card>
           <Card className="p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Fully matched</p>
             <p className="text-2xl font-bold mt-1 text-green-600 dark:text-green-400">
-              {loading ? "—" : totalMatchedPOs}
+              {initialLoading ? "—" : totalMatchedPOs}
             </p>
           </Card>
           <Card className="p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending GRN</p>
             <p className="text-2xl font-bold mt-1 text-muted-foreground">
-              {loading ? "—" : totalPendingPOs}
+              {initialLoading ? "—" : totalPendingPOs}
             </p>
           </Card>
         </div>
 
         {/* ── How it works (collapsible toggle) ──────────────────────────────── */}
-        <div>
+        <div className="shrink-0">
           <button
             type="button"
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -1577,7 +1649,7 @@ export default function CashWeightAuditPage() {
         </div>
 
         {/* ── Master PO table ─────────────────────────────────────────────────── */}
-        <Card>
+        <Card className="shrink-0 overflow-hidden">
           <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
             <div>
               <CardTitle>Procurement Audits</CardTitle>
@@ -1597,21 +1669,21 @@ export default function CashWeightAuditPage() {
             </Button>
           </CardHeader>
 
-          <div className="px-6 pb-3 flex items-center gap-2">
-            <div className="relative flex-1 max-w-xs">
+          <div className="px-6 pb-3 flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[12rem] max-w-xs">
               <Icons.Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search by PO number…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-8 text-sm"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-8 h-9 text-sm"
               />
             </div>
             <Select
               value={statusFilter || "ALL"}
               onValueChange={(v) => setStatusFilter(v === "ALL" ? "" : v)}
             >
-              <SelectTrigger className="w-36 h-8 text-sm">
+              <SelectTrigger className="w-36 h-9 text-sm">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -1623,19 +1695,53 @@ export default function CashWeightAuditPage() {
             </Select>
           </div>
 
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                Loading procurement audits…
-              </div>
-            ) : (
-              <DataTable
-                data={filteredPoRows}
-                columns={poColumns}
-                emptyMessage="No procurements found. Record a disbursement and create a GRN to start auditing."
+          {initialLoading ? (
+            <div className="px-4 pb-4">
+              <SkeletonDataTable
+                rows={pageSize}
+                columnWidths={["w-28", "w-24", "w-16", "w-16", "w-20", "w-24", "w-20"]}
               />
-            )}
-          </CardContent>
+            </div>
+          ) : (
+            <div className={cn(LIST_TABLE_STATIC_CLASS, "mx-4 mb-0 border-x-0 border-b-0 shadow-none rounded-none")}>
+              <TableLinearProgress active={tableBusy} />
+              <div
+                className={cn(
+                  "transition-opacity duration-200",
+                  tableBusy && "pointer-events-none opacity-60",
+                )}
+              >
+                <DataTable
+                  data={paginatedPoRows}
+                  columns={poColumns}
+                  scrollMode="natural"
+                  className="border-0 shadow-none"
+                  emptyMessage="No procurements found. Record a disbursement and create a GRN to start auditing."
+                />
+              </div>
+            </div>
+          )}
+
+          <TablePagination
+            className="border-t px-4"
+            pageOffset={pageOffset}
+            pageSize={pageSize}
+            itemCount={initialLoading ? 0 : paginatedPoRows.length}
+            hasMore={hasMore}
+            loading={initialLoading}
+            busy={tableBusy}
+            onPrevious={() => {
+              if (pageOffset <= 0 || initialLoading || fetching) return;
+              setPageOffset(Math.max(0, pageOffset - pageSize));
+            }}
+            onNext={() => {
+              if (!hasMore || initialLoading || fetching) return;
+              setPageOffset(pageOffset + pageSize);
+            }}
+            entityLabel="procurements"
+            pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+            onPageSizeChange={setPageSize}
+          />
         </Card>
       </div>
 

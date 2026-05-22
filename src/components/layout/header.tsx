@@ -40,7 +40,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background px-4">
+    <header className="relative z-40 flex h-16 shrink-0 items-center gap-4 border-b bg-background px-4">
       {/* Command palette trigger / Search */}
       <div className="flex-1 max-w-md">
         <button

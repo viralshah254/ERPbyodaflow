@@ -3,7 +3,12 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -21,11 +26,7 @@ import {
   fetchDocumentListPageApi,
 } from "@/lib/api/documents";
 import { isApiConfigured } from "@/lib/api/client";
-import {
-  getSavedViews,
-  saveView,
-  deleteSavedView,
-} from "@/lib/saved-views";
+import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
@@ -71,7 +72,9 @@ const DEFAULT_STATUS_OPTIONS = [
   { label: "Delivered", value: "DELIVERED" },
 ];
 
-const STATUS_OPTIONS_BY_TYPE: Partial<Record<DocTypeKey, { label: string; value: string }[]>> = {
+const STATUS_OPTIONS_BY_TYPE: Partial<
+  Record<DocTypeKey, { label: string; value: string }[]>
+> = {
   journal: [
     { label: "All", value: "" },
     { label: "Draft", value: "DRAFT" },
@@ -81,8 +84,13 @@ const STATUS_OPTIONS_BY_TYPE: Partial<Record<DocTypeKey, { label: string; value:
 
 function buildColumns(
   type: string,
-  _terminology: ReturnType<typeof useTerminology>
-): { id: string; header: string; accessor: keyof DocListRow | ((r: DocListRow) => React.ReactNode); sticky?: boolean }[] {
+  _terminology: ReturnType<typeof useTerminology>,
+): {
+  id: string;
+  header: string;
+  accessor: keyof DocListRow | ((r: DocListRow) => React.ReactNode);
+  sticky?: boolean;
+}[] {
   const config = getDocTypeConfig(type);
   if (!config) return [];
   return config.listColumns.map((col) => {
@@ -117,7 +125,10 @@ function buildColumns(
         const text = ref(r);
         if (!text) return "—";
         return (
-          <span className="block max-w-[min(320px,40vw)] truncate font-mono text-xs" title={text}>
+          <span
+            className="block max-w-[min(320px,40vw)] truncate font-mono text-xs"
+            title={text}
+          >
             {text}
           </span>
         );
@@ -139,7 +150,19 @@ export default function DocTypeListPage() {
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const labelKey = (config?.termKey ?? TYPE_LABELS[type]) as string;
-  const label = t(labelKey as "salesOrder" | "quote" | "deliveryNote" | "invoice" | "journalEntry" | "purchaseOrder" | "purchaseRequest" | "bill" | "goodsReceipt", terminology);
+  const label = t(
+    labelKey as
+      | "salesOrder"
+      | "quote"
+      | "deliveryNote"
+      | "invoice"
+      | "journalEntry"
+      | "purchaseOrder"
+      | "purchaseRequest"
+      | "bill"
+      | "goodsReceipt",
+    terminology,
+  );
   const scope = `doc-${type}`;
 
   const [search, setSearch] = React.useState("");
@@ -147,7 +170,7 @@ export default function DocTypeListPage() {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    getSavedViews(scope)
+    getSavedViews(scope),
   );
   const [rows, setRows] = React.useState<DocListRow[]>([]);
   const [initialLoading, setInitialLoading] = React.useState(true);
@@ -165,7 +188,10 @@ export default function DocTypeListPage() {
   }, [type]);
 
   React.useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    const id = window.setTimeout(
+      () => setDebouncedSearch(search),
+      SEARCH_DEBOUNCE_MS,
+    );
     return () => window.clearTimeout(id);
   }, [search]);
 
@@ -197,7 +223,7 @@ export default function DocTypeListPage() {
         setFetching(false);
       }
     },
-    [type, statusFilter, debouncedSearch]
+    [type, statusFilter, debouncedSearch],
   );
 
   React.useEffect(() => {
@@ -220,19 +246,23 @@ export default function DocTypeListPage() {
 
   const columns = React.useMemo(
     () => buildColumns(type, terminology),
-    [type, terminology]
+    [type, terminology],
   );
 
   const statusOptions = React.useMemo(
     () => STATUS_OPTIONS_BY_TYPE[type as DocTypeKey] ?? DEFAULT_STATUS_OPTIONS,
-    [type]
+    [type],
   );
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
     if (statusFilter) {
       const opt = statusOptions.find((o) => o.value === statusFilter);
-      chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
+      chips.push({
+        id: "status",
+        label: "Status",
+        value: opt?.label ?? statusFilter,
+      });
     }
     if (search.trim()) {
       chips.push({ id: "q", label: "Search", value: search.trim() });
@@ -284,7 +314,9 @@ export default function DocTypeListPage() {
       return;
     }
     if (isApiConfigured()) {
-      exportDocumentListApi(type as DocTypeKey, fileName, (message) => toast.error(message));
+      exportDocumentListApi(type as DocTypeKey, fileName, (message) =>
+        toast.error(message),
+      );
       return;
     }
     downloadCsv(
@@ -296,46 +328,53 @@ export default function DocTypeListPage() {
         reference: row.reference ?? row.poRef ?? "",
         total: row.total ?? 0,
         status: row.status,
-      }))
+      })),
     );
   };
 
   const selectedRows = React.useMemo(
     () => rows.filter((r) => selectedIds.includes(r.id)),
-    [rows, selectedIds]
+    [rows, selectedIds],
   );
 
   const showBulkApprove =
     selectedIds.length > 0 &&
     selectedRows.some((r) => r.status === "PENDING_APPROVAL");
   const showBulkPost =
-    selectedIds.length > 0 && DOC_BULK_POST_RULES[type as DocTypeKey]?.canPost === true;
+    selectedIds.length > 0 &&
+    DOC_BULK_POST_RULES[type as DocTypeKey]?.canPost === true;
 
   const handleBulkApprove = async () => {
     const approveIds = filterIdsForBulkApprove(selectedRows, selectedIds);
     if (!approveIds.length) {
       if (type === "invoice") {
         toast.info(
-          "Approve only applies to items pending approval (e.g. credit policy). For draft invoices, use Post."
+          "Approve only applies to items pending approval (e.g. credit policy). For draft invoices, use Post.",
         );
       } else {
         toast.info(
-          "None of the selected items are pending approval. Submit for approval first where required."
+          "None of the selected items are pending approval. Submit for approval first where required.",
         );
       }
       return;
     }
     try {
-      const { results } = await bulkDocumentActionApi(type as DocTypeKey, "approve", approveIds);
+      const { results } = await bulkDocumentActionApi(
+        type as DocTypeKey,
+        "approve",
+        approveIds,
+      );
       const { succeeded, failed } = partitionBulkDocResults(results);
       await loadPage(pageOffset);
       if (succeeded.length) {
         toast.success(
-          `${succeeded.length} ${label.toLowerCase()} record(s) approved.`
+          `${succeeded.length} ${label.toLowerCase()} record(s) approved.`,
         );
       }
       if (failed.length) {
-        toast.error(`${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`);
+        toast.error(
+          `${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`,
+        );
       }
       setSelectedIds([]);
     } catch (error) {
@@ -344,7 +383,11 @@ export default function DocTypeListPage() {
   };
 
   const handleBulkPost = async () => {
-    const postIds = filterIdsForBulkPost(type as DocTypeKey, selectedRows, selectedIds);
+    const postIds = filterIdsForBulkPost(
+      type as DocTypeKey,
+      selectedRows,
+      selectedIds,
+    );
     const rule = DOC_BULK_POST_RULES[type as DocTypeKey];
     if (!rule?.canPost) {
       toast.info("This document type cannot be posted from the list.");
@@ -353,24 +396,32 @@ export default function DocTypeListPage() {
     if (!postIds.length) {
       if (rule.postOnlyWhenApproved) {
         toast.info(
-          "Select approved items only. Draft documents must be submitted and approved before posting."
+          "Select approved items only. Draft documents must be submitted and approved before posting.",
         );
       } else {
         toast.info(
-          "None of the selected items can be posted. Choose drafts or approved documents that are not already posted or cancelled."
+          "None of the selected items can be posted. Choose drafts or approved documents that are not already posted or cancelled.",
         );
       }
       return;
     }
     try {
-      const { results } = await bulkDocumentActionApi(type as DocTypeKey, "post", postIds);
+      const { results } = await bulkDocumentActionApi(
+        type as DocTypeKey,
+        "post",
+        postIds,
+      );
       const { succeeded, failed } = partitionBulkDocResults(results);
       await loadPage(pageOffset);
       if (succeeded.length) {
-        toast.success(`${succeeded.length} ${label.toLowerCase()} record(s) posted.`);
+        toast.success(
+          `${succeeded.length} ${label.toLowerCase()} record(s) posted.`,
+        );
       }
       if (failed.length) {
-        toast.error(`${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`);
+        toast.error(
+          `${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`,
+        );
       }
       setSelectedIds([]);
     } catch (error) {
@@ -403,7 +454,10 @@ export default function DocTypeListPage() {
   if (!isValidType) {
     return (
       <PageShell>
-        <PageHeader title="Documents" breadcrumbs={[{ label: "Documents", href: "/docs" }]} />
+        <PageHeader
+          title="Documents"
+          breadcrumbs={[{ label: "Documents", href: "/docs" }]}
+        />
         <div className="p-6">
           <p className="text-muted-foreground">Unknown document type.</p>
         </div>
@@ -412,15 +466,11 @@ export default function DocTypeListPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={label}
         description={`List and manage ${label.toLowerCase()}s`}
-        breadcrumbs={[
-          { label: "Documents", href: "/docs" },
-          { label },
-        ]}
-        sticky
+        breadcrumbs={[{ label: "Documents", href: "/docs" }, { label }]}
         showCommandHint
         actions={
           <Button asChild>
@@ -431,9 +481,9 @@ export default function DocTypeListPage() {
           </Button>
         }
       />
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar
-          className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+          className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder={searchPlaceholder}
           searchValue={search}
           onSearchChange={setSearch}
@@ -469,7 +519,10 @@ export default function DocTypeListPage() {
               onClick={handleRefresh}
             >
               <Icons.RefreshCw
-                className={cn("h-4 w-4 mr-1.5", (initialLoading || fetching) && "animate-spin")}
+                className={cn(
+                  "h-4 w-4 mr-1.5",
+                  (initialLoading || fetching) && "animate-spin",
+                )}
               />
               Refresh
             </Button>
@@ -481,7 +534,11 @@ export default function DocTypeListPage() {
                   {selectedIds.length} selected
                 </span>
                 {showBulkApprove ? (
-                  <Button variant="outline" size="sm" onClick={handleBulkApprove}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkApprove}
+                  >
                     Approve
                   </Button>
                 ) : null}
@@ -498,19 +555,25 @@ export default function DocTypeListPage() {
           }
         />
         {initialLoading ? (
-          <SkeletonDataTable rows={PAGE_SIZE} columnWidths={skeletonColumnWidths} />
+          <SkeletonDataTable
+            rows={PAGE_SIZE}
+            columnWidths={skeletonColumnWidths}
+          />
         ) : (
-          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className={LIST_TABLE_SURFACE_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
-                "transition-opacity duration-200",
-                tableBusy && "pointer-events-none opacity-60"
+                "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60",
               )}
             >
               <DataTable<DocListRow>
                 data={rows}
                 columns={columns}
+                scrollMode="fill"
+                maxVisibleRows={PAGE_SIZE}
+                className="min-h-0 flex-1 border-0"
                 onRowClick={(row) => router.push(`/docs/${type}/${row.id}`)}
                 emptyMessage={`No ${label.toLowerCase()}s found.`}
                 selectable
@@ -521,7 +584,7 @@ export default function DocTypeListPage() {
           </div>
         )}
         <TablePagination
-          sticky
+          className="shrink-0"
           pageOffset={pageOffset}
           pageSize={PAGE_SIZE}
           itemCount={initialLoading ? 0 : rows.length}
