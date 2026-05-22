@@ -1,0 +1,528 @@
+"use client";
+
+import * as React from "react";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { CoolcatchSupplierKind, PartyRole } from "@/lib/types/masters";
+import { LocationPickerField, type ResolvedLocation } from "@/components/location/LocationPickerField";
+import * as Icons from "lucide-react";
+
+export type SupplierMasterFormValues = {
+  coolcatchSupplierKind: CoolcatchSupplierKind;
+  name: string;
+  contactPersonFirstName: string;
+  contactPersonLastName: string;
+  email: string;
+  phone: string;
+  locationFormattedAddress: string;
+  addressLine1: string;
+  addressCity: string;
+  addressRegion: string;
+  addressCountry: string;
+  latitude?: number;
+  longitude?: number;
+  paymentTermsId: string;
+  defaultCurrency: string;
+  taxId: string;
+  supplierBankAccountName: string;
+  supplierBankAccountNumber: string;
+  supplierBankBranchName: string;
+};
+
+export const emptySupplierMasterForm = (defaultCurrency = "KES"): SupplierMasterFormValues => ({
+  coolcatchSupplierKind: "FARM",
+  name: "",
+  contactPersonFirstName: "",
+  contactPersonLastName: "",
+  email: "",
+  phone: "",
+  locationFormattedAddress: "",
+  addressLine1: "",
+  addressCity: "",
+  addressRegion: "",
+  addressCountry: "",
+  paymentTermsId: "",
+  defaultCurrency,
+  taxId: "",
+  supplierBankAccountName: "",
+  supplierBankAccountNumber: "",
+  supplierBankBranchName: "",
+});
+
+type SupplierMasterFormFieldsProps = {
+  form: SupplierMasterFormValues;
+  onChange: (next: SupplierMasterFormValues) => void;
+  errors?: Record<string, string>;
+  onClearError?: (key: string) => void;
+  terms: Array<{ id: string; name: string }>;
+  currencies: Array<{ id: string; code: string; name: string }>;
+  pinCertFile: File | null;
+  onPinCertFileChange: (file: File | null) => void;
+  pinCertExistingUrl?: string | null;
+  companyRegFile: File | null;
+  onCompanyRegFileChange: (file: File | null) => void;
+  companyRegExistingUrl?: string | null;
+  showPaymentFields?: boolean;
+};
+
+export function SupplierMasterFormFields({
+  form,
+  onChange,
+  errors = {},
+  onClearError,
+  terms,
+  currencies,
+  pinCertFile,
+  onPinCertFileChange,
+  pinCertExistingUrl,
+  companyRegFile,
+  onCompanyRegFileChange,
+  companyRegExistingUrl,
+  showPaymentFields = true,
+}: SupplierMasterFormFieldsProps) {
+  const pinCertInputRef = React.useRef<HTMLInputElement>(null);
+  const companyRegInputRef = React.useRef<HTMLInputElement>(null);
+  const isFarm = form.coolcatchSupplierKind === "FARM";
+
+  const locationValue: ResolvedLocation | null = form.locationFormattedAddress
+    ? {
+        formattedAddress: form.locationFormattedAddress,
+        line1: form.addressLine1 || form.locationFormattedAddress,
+        city: form.addressCity || undefined,
+        region: form.addressRegion || undefined,
+        country: form.addressCountry || undefined,
+        latitude: form.latitude,
+        longitude: form.longitude,
+      }
+    : null;
+
+  const patch = (partial: Partial<SupplierMasterFormValues>) => {
+    onChange({ ...form, ...partial });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Supplier kind</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {(["FARM", "BROKER"] as const).map((kind) => (
+            <Button
+              key={kind}
+              type="button"
+              variant={form.coolcatchSupplierKind === kind ? "default" : "outline"}
+              onClick={() => patch({ coolcatchSupplierKind: kind })}
+            >
+              {kind === "FARM" ? "Farm" : "Broker / wholesaler"}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>
+          {isFarm ? "Farm name" : "Company name"} <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          value={form.name}
+          onChange={(e) => {
+            patch({ name: e.target.value });
+            onClearError?.("name");
+          }}
+          placeholder={isFarm ? "e.g. Lakeview Tilapia Farm" : "e.g. Coastline Traders Ltd"}
+        />
+        {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>
+            Contact first name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            value={form.contactPersonFirstName}
+            onChange={(e) => {
+              patch({ contactPersonFirstName: e.target.value });
+              onClearError?.("contactPersonFirstName");
+            }}
+          />
+          {errors.contactPersonFirstName ? (
+            <p className="text-xs text-destructive">{errors.contactPersonFirstName}</p>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <Label>
+            Contact last name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            value={form.contactPersonLastName}
+            onChange={(e) => {
+              patch({ contactPersonLastName: e.target.value });
+              onClearError?.("contactPersonLastName");
+            }}
+          />
+          {errors.contactPersonLastName ? (
+            <p className="text-xs text-destructive">{errors.contactPersonLastName}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>
+          Email <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          type="email"
+          value={form.email}
+          onChange={(e) => {
+            patch({ email: e.target.value });
+            onClearError?.("email");
+          }}
+        />
+        {errors.email ? <p className="text-xs text-destructive">{errors.email}</p> : null}
+      </div>
+
+      <div className="space-y-2">
+        <Label>
+          Contact number <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          type="tel"
+          value={form.phone}
+          onChange={(e) => {
+            patch({ phone: e.target.value });
+            onClearError?.("phone");
+          }}
+          placeholder="e.g. +254712345678"
+        />
+        {errors.phone ? <p className="text-xs text-destructive">{errors.phone}</p> : null}
+      </div>
+
+      <LocationPickerField
+        label="Location"
+        required={isFarm}
+        value={locationValue}
+        error={errors.addressCity}
+        onChange={(next) => {
+          if (!next) {
+            patch({
+              locationFormattedAddress: "",
+              addressLine1: "",
+              addressCity: "",
+              addressRegion: "",
+              addressCountry: "",
+              latitude: undefined,
+              longitude: undefined,
+            });
+          } else {
+            patch({
+              locationFormattedAddress: next.formattedAddress,
+              addressLine1: next.line1 ?? next.formattedAddress,
+              addressCity: next.city ?? "",
+              addressRegion: next.region ?? "",
+              addressCountry: next.country ?? "",
+              latitude: next.latitude,
+              longitude: next.longitude,
+            });
+          }
+          onClearError?.("addressCity");
+        }}
+      />
+
+      <div className="space-y-2">
+        <Label>
+          KRA PIN <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          value={form.taxId}
+          onChange={(e) => {
+            patch({ taxId: e.target.value });
+            onClearError?.("taxId");
+          }}
+          placeholder="e.g. P051234567X"
+          autoComplete="off"
+        />
+        {errors.taxId ? <p className="text-xs text-destructive">{errors.taxId}</p> : null}
+      </div>
+
+      {showPaymentFields ? (
+        <>
+          <div className="space-y-2">
+            <Label>Payment terms</Label>
+            <Select
+              value={form.paymentTermsId || "__none__"}
+              onValueChange={(value) =>
+                patch({ paymentTermsId: value === "__none__" ? "" : value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select payment term" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {terms.map((term) => (
+                  <SelectItem key={term.id} value={term.id}>
+                    {term.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Currency preference</Label>
+            <Select
+              value={
+                form.defaultCurrency && currencies.some((c) => c.code === form.defaultCurrency)
+                  ? form.defaultCurrency
+                  : (currencies[0]?.code ?? form.defaultCurrency ?? "")
+              }
+              onValueChange={(value) => {
+                patch({ defaultCurrency: value });
+                onClearError?.("defaultCurrency");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent>
+                {currencies.map((c) => (
+                  <SelectItem key={c.id} value={c.code}>
+                    {c.code} {c.name && c.name !== c.code ? `- ${c.name}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.defaultCurrency ? (
+              <p className="text-xs text-destructive">{errors.defaultCurrency}</p>
+            ) : null}
+          </div>
+          <div className="space-y-3 rounded-lg border p-4">
+            <p className="text-sm font-medium">Payment details</p>
+            <p className="text-xs text-muted-foreground">
+              Bank account where this supplier receives payments (used by finance for AP).
+            </p>
+            <div className="space-y-2">
+              <Label>
+                Bank account name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={form.supplierBankAccountName}
+                onChange={(e) => {
+                  patch({ supplierBankAccountName: e.target.value });
+                  onClearError?.("supplierBankAccountName");
+                }}
+                placeholder="e.g. Lakeview Tilapia Farm"
+              />
+              {errors.supplierBankAccountName ? (
+                <p className="text-xs text-destructive">{errors.supplierBankAccountName}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Account number <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={form.supplierBankAccountNumber}
+                onChange={(e) => {
+                  patch({ supplierBankAccountNumber: e.target.value });
+                  onClearError?.("supplierBankAccountNumber");
+                }}
+                placeholder="e.g. 0123456789"
+                autoComplete="off"
+              />
+              {errors.supplierBankAccountNumber ? (
+                <p className="text-xs text-destructive">{errors.supplierBankAccountNumber}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Branch name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={form.supplierBankBranchName}
+                onChange={(e) => {
+                  patch({ supplierBankBranchName: e.target.value });
+                  onClearError?.("supplierBankBranchName");
+                }}
+                placeholder="e.g. Nairobi Main"
+              />
+              {errors.supplierBankBranchName ? (
+                <p className="text-xs text-destructive">{errors.supplierBankBranchName}</p>
+              ) : null}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      <div className="space-y-2">
+        <Label>
+          KRA PIN certificate{" "}
+          <span className="text-muted-foreground text-xs">(optional, PDF or image)</span>
+        </Label>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => pinCertInputRef.current?.click()}
+            className="shrink-0"
+          >
+            <Icons.Paperclip className="h-4 w-4 mr-1.5" />
+            {pinCertFile ? "Change file" : "Attach file"}
+          </Button>
+          {pinCertFile ? (
+            <span className="text-xs text-muted-foreground truncate max-w-[180px]">{pinCertFile.name}</span>
+          ) : null}
+          {!pinCertFile && pinCertExistingUrl ? (
+            <span className="text-xs text-emerald-600 flex items-center gap-1">
+              <Icons.CheckCircle2 className="h-3 w-3" /> Certificate on file
+            </span>
+          ) : null}
+        </div>
+        <input
+          ref={pinCertInputRef}
+          type="file"
+          accept="application/pdf,image/*"
+          className="hidden"
+          onChange={(e) => {
+            onPinCertFileChange(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>
+          Company registration{" "}
+          <span className="text-muted-foreground text-xs">(optional, PDF or image)</span>
+        </Label>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => companyRegInputRef.current?.click()}
+            className="shrink-0"
+          >
+            <Icons.Paperclip className="h-4 w-4 mr-1.5" />
+            {companyRegFile ? "Change file" : "Attach file"}
+          </Button>
+          {companyRegFile ? (
+            <span className="text-xs text-muted-foreground truncate max-w-[180px]">{companyRegFile.name}</span>
+          ) : null}
+          {!companyRegFile && companyRegExistingUrl ? (
+            <span className="text-xs text-emerald-600 flex items-center gap-1">
+              <Icons.CheckCircle2 className="h-3 w-3" /> Document on file
+            </span>
+          ) : null}
+        </div>
+        <input
+          ref={companyRegInputRef}
+          type="file"
+          accept="application/pdf,image/*"
+          className="hidden"
+          onChange={(e) => {
+            onCompanyRegFileChange(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function locationFieldsFromParty(party: {
+  address?: {
+    line1?: string;
+    city?: string;
+    region?: string;
+    country?: string;
+  };
+  lastKnownLatitude?: number;
+  lastKnownLongitude?: number;
+}) {
+  const formatted =
+    party.address?.line1?.trim() ||
+    [party.address?.city, party.address?.region, party.address?.country].filter(Boolean).join(", ");
+  return {
+    locationFormattedAddress: formatted ?? "",
+    addressLine1: party.address?.line1 ?? "",
+    addressCity: party.address?.city ?? "",
+    addressRegion: party.address?.region ?? "",
+    addressCountry: party.address?.country ?? "",
+    latitude: party.lastKnownLatitude,
+    longitude: party.lastKnownLongitude,
+  };
+}
+
+export function validateSupplierMasterForm(form: SupplierMasterFormValues): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.name.trim()) errors.name = "Name is required.";
+  if (!form.contactPersonFirstName.trim()) errors.contactPersonFirstName = "First name is required.";
+  if (!form.contactPersonLastName.trim()) errors.contactPersonLastName = "Last name is required.";
+  const email = form.email.trim();
+  if (!email) errors.email = "Email is required.";
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
+  if (!form.phone.trim()) errors.phone = "Contact number is required.";
+  if (form.coolcatchSupplierKind === "FARM" && !form.locationFormattedAddress.trim()) {
+    errors.addressCity = "Location is required for farms.";
+  }
+  if (!form.taxId.trim()) errors.taxId = "KRA PIN is required.";
+  if (!form.supplierBankAccountName.trim()) {
+    errors.supplierBankAccountName = "Bank account name is required.";
+  }
+  if (!form.supplierBankAccountNumber.trim()) {
+    errors.supplierBankAccountNumber = "Account number is required.";
+  }
+  if (!form.supplierBankBranchName.trim()) {
+    errors.supplierBankBranchName = "Branch name is required.";
+  }
+  const currency = form.defaultCurrency.trim().toUpperCase();
+  if (currency && !/^[A-Z]{3}$/.test(currency)) {
+    errors.defaultCurrency = "Currency must be a 3-letter code (e.g. KES).";
+  }
+  return errors;
+}
+
+export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
+  const address =
+    form.locationFormattedAddress.trim() ||
+    form.addressCity.trim() ||
+    form.addressRegion.trim() ||
+    form.addressLine1.trim()
+      ? {
+          line1: form.addressLine1.trim() || form.locationFormattedAddress.trim() || undefined,
+          city: form.addressCity.trim() || undefined,
+          region: form.addressRegion.trim() || undefined,
+          country: form.addressCountry.trim() || undefined,
+        }
+      : undefined;
+
+  return {
+    name: form.name.trim(),
+    roles: ["supplier"] as PartyRole[],
+    coolcatchSupplierKind: form.coolcatchSupplierKind,
+    contactPersonFirstName: form.contactPersonFirstName.trim(),
+    contactPersonLastName: form.contactPersonLastName.trim(),
+    email: form.email.trim(),
+    phone: form.phone.trim(),
+    paymentTermsId: form.paymentTermsId || undefined,
+    defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,
+    taxId: form.taxId.trim(),
+    supplierBankAccountName: form.supplierBankAccountName.trim(),
+    supplierBankAccountNumber: form.supplierBankAccountNumber.trim(),
+    supplierBankBranchName: form.supplierBankBranchName.trim(),
+    address,
+    lastKnownLatitude: form.latitude,
+    lastKnownLongitude: form.longitude,
+    supplierType: form.coolcatchSupplierKind === "FARM" ? ("RAW_MATERIAL" as const) : ("OTHER" as const),
+    status: "ACTIVE" as const,
+  };
+}

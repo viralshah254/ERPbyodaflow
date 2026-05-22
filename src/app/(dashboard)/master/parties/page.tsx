@@ -31,7 +31,16 @@ import {
   fetchNextSupplierCodeApi,
   fetchNextCustomerCodeApi,
   uploadPartyPinCertificateApi,
+  uploadPartyCompanyRegistrationApi,
 } from "@/lib/api/parties";
+import {
+  emptySupplierMasterForm,
+  locationFieldsFromParty,
+  SupplierMasterFormFields,
+  supplierMasterFormToPayload,
+  validateSupplierMasterForm,
+  type SupplierMasterFormValues,
+} from "@/components/suppliers/SupplierMasterFormFields";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
 import { t } from "@/lib/terminology";
@@ -76,9 +85,12 @@ export default function MasterPartiesPage() {
   const [customerCodeLoading, setCustomerCodeLoading] = React.useState(false);
   const [formPhonePrefix, setFormPhonePrefix] = React.useState("+254");
   const [formTaxId, setFormTaxId] = React.useState("");
+  const [supplierForm, setSupplierForm] = React.useState<SupplierMasterFormValues>(() => emptySupplierMasterForm());
+  const [supplierFormErrors, setSupplierFormErrors] = React.useState<Record<string, string>>({});
   const [pinCertFile, setPinCertFile] = React.useState<File | null>(null);
   const [pinCertExistingUrl, setPinCertExistingUrl] = React.useState<string | null>(null);
-  const pinCertInputRef = React.useRef<HTMLInputElement>(null);
+  const [companyRegFile, setCompanyRegFile] = React.useState<File | null>(null);
+  const [companyRegExistingUrl, setCompanyRegExistingUrl] = React.useState<string | null>(null);
 
   const label =
     tab === "customers"
@@ -212,8 +224,12 @@ export default function MasterPartiesPage() {
     setFormPhone("");
     setFormPhonePrefix("+254");
     setFormTaxId("");
+    setSupplierForm(emptySupplierMasterForm());
+    setSupplierFormErrors({});
     setPinCertFile(null);
     setPinCertExistingUrl(null);
+    setCompanyRegFile(null);
+    setCompanyRegExistingUrl(null);
     setFormCustomerType(tab === "franchisees" ? "FRANCHISEE" : customerType || "RETAILER");
     setFormSupplierType(supplierType || "RAW_MATERIAL");
     setFormCustomerCategoryId("");
@@ -254,8 +270,22 @@ export default function MasterPartiesPage() {
     setFormEmail(row.email ?? "");
     setFormPhone(row.phone ?? "");
     setFormTaxId(row.taxId ?? "");
+    setSupplierForm({
+      ...emptySupplierMasterForm(),
+      coolcatchSupplierKind: row.coolcatchSupplierKind ?? "BROKER",
+      name: row.name,
+      contactPersonFirstName: row.contactPersonFirstName ?? "",
+      contactPersonLastName: row.contactPersonLastName ?? "",
+      email: row.email ?? "",
+      phone: row.phone ?? "",
+      taxId: row.taxId ?? "",
+      ...locationFieldsFromParty(row),
+    });
+    setSupplierFormErrors({});
     setPinCertFile(null);
-    setPinCertExistingUrl((row as PartyRow & { pinCertificateUrl?: string }).pinCertificateUrl ?? null);
+    setPinCertExistingUrl(row.pinCertificateUrl ?? null);
+    setCompanyRegFile(null);
+    setCompanyRegExistingUrl(row.companyRegistrationUrl ?? null);
     setFormCustomerType(row.customerType ?? "RETAILER");
     setFormSupplierType(row.supplierType ?? "RAW_MATERIAL");
     setFormCustomerCategoryId(row.customerCategoryId ?? "");
@@ -267,6 +297,20 @@ export default function MasterPartiesPage() {
     try {
       const detail = await fetchPartyByIdApi(row.id);
       if (detail) {
+        setSupplierForm((prev) => ({
+          ...prev,
+          coolcatchSupplierKind: detail.coolcatchSupplierKind ?? prev.coolcatchSupplierKind,
+          contactPersonFirstName: detail.contactPersonFirstName ?? prev.contactPersonFirstName,
+          contactPersonLastName: detail.contactPersonLastName ?? prev.contactPersonLastName,
+          paymentTermsId: detail.paymentTermsId ?? prev.paymentTermsId,
+          defaultCurrency: detail.defaultCurrency ?? prev.defaultCurrency,
+          supplierBankAccountName: detail.supplierBankAccountName ?? prev.supplierBankAccountName,
+          supplierBankAccountNumber: detail.supplierBankAccountNumber ?? prev.supplierBankAccountNumber,
+          supplierBankBranchName: detail.supplierBankBranchName ?? prev.supplierBankBranchName,
+          ...locationFieldsFromParty(detail),
+        }));
+        setPinCertExistingUrl(detail.pinCertificateUrl ?? null);
+        setCompanyRegExistingUrl(detail.companyRegistrationUrl ?? null);
         // Only populate if the user hasn't already started typing (values are still empty/default)
         setFormPaymentTermsId((prev) => prev || (detail.paymentTermsId ?? ""));
         setFormCreditControlMode((prev) => prev || (detail.creditControlMode ?? ""));
@@ -283,28 +327,16 @@ export default function MasterPartiesPage() {
   };
 
   const handleSave = async () => {
-    if (!formName.trim()) {
+    if (tab === "suppliers") {
+      const nextErrors = validateSupplierMasterForm(supplierForm);
+      setSupplierFormErrors(nextErrors);
+      if (Object.keys(nextErrors).length > 0) {
+        toast.error("Please fix validation errors.");
+        return;
+      }
+    } else if (!formName.trim()) {
       toast.error("Name is required.");
       return;
-    }
-    if (tab === "suppliers") {
-      const email = formEmail.trim();
-      if (!email) {
-        toast.error("Email is required.");
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        toast.error("Enter a valid email address.");
-        return;
-      }
-      if (!formPhone.trim()) {
-        toast.error("Contact number is required.");
-        return;
-      }
-      if (!formTaxId.trim()) {
-        toast.error("KRA PIN is required.");
-        return;
-      }
     }
     setSaving(true);
     try {
@@ -319,7 +351,14 @@ export default function MasterPartiesPage() {
       const maxAgeDaysNum = formMaxOutstandingAgeDays ? parseInt(formMaxOutstandingAgeDays, 10) : undefined;
       const perInvoiceCapNum = formPerInvoiceDaysToPayCap ? parseInt(formPerInvoiceDaysToPayCap, 10) : undefined;
       const warningPctNum = formCreditWarningThresholdPct ? parseFloat(formCreditWarningThresholdPct) : undefined;
-      const payload = {
+      const supplierPayload = tab === "suppliers" ? supplierMasterFormToPayload(supplierForm) : null;
+      const payload = tab === "suppliers" && supplierPayload
+        ? {
+            ...supplierPayload,
+            code: editingId ? formCode.trim() || undefined : undefined,
+            phone: supplierForm.phone.trim(),
+          }
+        : {
         name: formName.trim(),
         code:
           tab === "suppliers" && !editingId
@@ -357,6 +396,15 @@ export default function MasterPartiesPage() {
           toast.error("Party saved but PIN certificate upload failed. You can retry from the edit drawer.");
         }
         setPinCertFile(null);
+      }
+      if (companyRegFile && savedId) {
+        try {
+          await uploadPartyCompanyRegistrationApi(savedId, companyRegFile);
+          toast.success("Company registration uploaded.");
+        } catch {
+          toast.error("Party saved but company registration upload failed. You can retry from the edit drawer.");
+        }
+        setCompanyRegFile(null);
       }
       setDrawerOpen(false);
       await refreshParties();
@@ -563,10 +611,12 @@ export default function MasterPartiesPage() {
         }
       >
         <div className="space-y-4 pr-4">
+          {tab !== "suppliers" ? (
           <div className="space-y-2">
             <Label>Name</Label>
             <Input placeholder="Party name" value={formName} onChange={(e) => setFormName(e.target.value)} />
           </div>
+          ) : null}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label>
@@ -616,18 +666,15 @@ export default function MasterPartiesPage() {
               </p>
             )}
           </div>
+          {tab !== "suppliers" ? (
           <div className="space-y-2">
-            <Label>
-              Email
-              {tab === "suppliers" ? <span className="text-destructive"> *</span> : null}
-            </Label>
+            <Label>Email</Label>
             <Input type="email" placeholder="email@example.com" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} />
           </div>
+          ) : null}
+          {tab !== "suppliers" ? (
           <div className="space-y-2">
-            <Label>
-              Phone
-              {tab === "suppliers" ? <span className="text-destructive"> *</span> : null}
-            </Label>
+            <Label>Phone</Label>
             <div className="flex gap-1">
               <Input
                 className="w-20 shrink-0 font-mono text-sm"
@@ -645,6 +692,7 @@ export default function MasterPartiesPage() {
               />
             </div>
           </div>
+          ) : null}
           {tab === "customers" && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -693,68 +741,20 @@ export default function MasterPartiesPage() {
             </div>
           )}
           {tab === "suppliers" && (
-            <div className="space-y-2">
-              <Label>Supplier type</Label>
-              <Select
-                value={formSupplierType}
-                onValueChange={(v) => setFormSupplierType(v as SupplierType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="RAW_MATERIAL">Raw material</SelectItem>
-                  <SelectItem value="SERVICE">Service</SelectItem>
-                  <SelectItem value="LOGISTICS">Logistics</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="space-y-2 pt-2">
-                <Label>
-                  KRA PIN <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  placeholder="e.g. P051234567X"
-                  value={formTaxId}
-                  onChange={(e) => setFormTaxId(e.target.value)}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="space-y-2 pt-2">
-                <Label>PIN certificate <span className="text-muted-foreground text-xs">(optional, PDF or image)</span></Label>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => pinCertInputRef.current?.click()}
-                    className="shrink-0"
-                  >
-                    <Icons.Paperclip className="h-4 w-4 mr-1.5" />
-                    {pinCertFile ? "Change file" : "Attach file"}
-                  </Button>
-                  {pinCertFile && (
-                    <span className="text-xs text-muted-foreground truncate max-w-[180px]">{pinCertFile.name}</span>
-                  )}
-                  {!pinCertFile && pinCertExistingUrl && (
-                    <span className="text-xs text-emerald-600 flex items-center gap-1">
-                      <Icons.CheckCircle2 className="h-3 w-3" /> Certificate on file
-                    </span>
-                  )}
-                </div>
-                <input
-                  ref={pinCertInputRef}
-                  type="file"
-                  accept="application/pdf,image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null;
-                    setPinCertFile(f);
-                    e.target.value = "";
-                  }}
-                />
-              </div>
-            </div>
+            <SupplierMasterFormFields
+              form={supplierForm}
+              onChange={setSupplierForm}
+              errors={supplierFormErrors}
+              onClearError={(key) => setSupplierFormErrors((prev) => ({ ...prev, [key]: "" }))}
+              terms={paymentTerms.map((term) => ({ id: term.id, name: term.name }))}
+              currencies={[{ id: "KES", code: "KES", name: "Kenyan Shilling" }]}
+              pinCertFile={pinCertFile}
+              onPinCertFileChange={setPinCertFile}
+              pinCertExistingUrl={pinCertExistingUrl}
+              companyRegFile={companyRegFile}
+              onCompanyRegFileChange={setCompanyRegFile}
+              companyRegExistingUrl={companyRegExistingUrl}
+            />
           )}
 
           {tab !== "suppliers" && (

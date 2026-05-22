@@ -23,29 +23,33 @@ import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EntityDrawer } from "@/components/masters/EntityDrawer";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   createPartyApi,
   fetchPartiesApi,
   fetchPartyByIdApi,
   updatePartyApi,
-  type PartyPayload,
+  uploadPartyCompanyRegistrationApi,
+  uploadPartyPinCertificateApi,
 } from "@/lib/api/parties";
 import type { FilterChip } from "@/components/ui/filter-chips";
-import type { SupplierType } from "@/lib/types/masters";
+import type { CoolcatchSupplierKind } from "@/lib/types/masters";
+import {
+  emptySupplierMasterForm,
+  locationFieldsFromParty,
+  SupplierMasterFormFields,
+  supplierMasterFormToPayload,
+  validateSupplierMasterForm,
+  type SupplierMasterFormValues,
+} from "@/components/suppliers/SupplierMasterFormFields";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
-const SUPPLIER_TYPE_LABELS: Record<SupplierType, string> = {
-  RAW_MATERIAL: "Raw material",
-  SERVICE: "Service",
-  LOGISTICS: "Logistics",
-  OTHER: "Other",
+const COOLCATCH_KIND_LABELS: Record<CoolcatchSupplierKind, string> = {
+  FARM: "Farm",
+  BROKER: "Broker",
 };
 
 type APSupplierRow = ApSupplierSummary & {
@@ -72,14 +76,11 @@ export default function APSuppliersPage() {
     Array<{ id: string; code: string; name: string; isBaseCurrency?: boolean }>
   >([]);
   const { settings: financialSettings } = useFinancialSettings();
-  const [form, setForm] = React.useState({
-    name: "",
-    email: "",
-    phone: "",
-    paymentTermsId: "",
-    defaultCurrency: "KES",
-    taxId: "",
-  });
+  const [form, setForm] = React.useState<SupplierMasterFormValues>(() => emptySupplierMasterForm());
+  const [pinCertFile, setPinCertFile] = React.useState<File | null>(null);
+  const [pinCertExistingUrl, setPinCertExistingUrl] = React.useState<string | null>(null);
+  const [companyRegFile, setCompanyRegFile] = React.useState<File | null>(null);
+  const [companyRegExistingUrl, setCompanyRegExistingUrl] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [duplicateWarning, setDuplicateWarning] = React.useState<string | undefined>(undefined);
 
@@ -156,14 +157,11 @@ export default function APSuppliersPage() {
         currencies.find((c) => c.isBaseCurrency)?.code ||
         currencies[0]?.code ||
         "KES";
-      setForm({
-        name: "",
-        email: "",
-        phone: "",
-        paymentTermsId: "",
-        defaultCurrency: baseCode,
-        taxId: "",
-      });
+      setForm(emptySupplierMasterForm(baseCode));
+      setPinCertFile(null);
+      setPinCertExistingUrl(null);
+      setCompanyRegFile(null);
+      setCompanyRegExistingUrl(null);
       setErrors({});
       setDuplicateWarning(undefined);
       return;
@@ -172,13 +170,25 @@ export default function APSuppliersPage() {
       .then((party) => {
         if (!party) return;
         setForm({
+          ...emptySupplierMasterForm(party.defaultCurrency ?? "KES"),
+          coolcatchSupplierKind: party.coolcatchSupplierKind ?? "BROKER",
           name: party.name ?? "",
+          contactPersonFirstName: party.contactPersonFirstName ?? "",
+          contactPersonLastName: party.contactPersonLastName ?? "",
           email: party.email ?? "",
           phone: party.phone ?? "",
           paymentTermsId: party.paymentTermsId ?? "",
           defaultCurrency: party.defaultCurrency ?? "KES",
           taxId: party.taxId ?? "",
+          supplierBankAccountName: party.supplierBankAccountName ?? "",
+          supplierBankAccountNumber: party.supplierBankAccountNumber ?? "",
+          supplierBankBranchName: party.supplierBankBranchName ?? "",
+          ...locationFieldsFromParty(party),
         });
+        setPinCertFile(null);
+        setPinCertExistingUrl(party.pinCertificateUrl ?? null);
+        setCompanyRegFile(null);
+        setCompanyRegExistingUrl(party.companyRegistrationUrl ?? null);
         setErrors({});
         setDuplicateWarning(undefined);
       })
@@ -208,20 +218,8 @@ export default function APSuppliersPage() {
     return () => clearTimeout(timer);
   }, [drawerOpen, form.name, editingId]);
 
-  const emailLooksValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-
   function validateForm(): boolean {
-    const nextErrors: Record<string, string> = {};
-    if (!form.name.trim()) nextErrors.name = "Name is required.";
-    const email = form.email.trim();
-    if (!email) nextErrors.email = "Email is required.";
-    else if (!emailLooksValid(email)) nextErrors.email = "Enter a valid email address.";
-    if (!form.phone.trim()) nextErrors.phone = "Contact number is required.";
-    if (!form.taxId.trim()) nextErrors.taxId = "KRA PIN is required.";
-    const currency = form.defaultCurrency.trim().toUpperCase();
-    if (currency && !/^[A-Z]{3}$/.test(currency)) {
-      nextErrors.defaultCurrency = "Currency must be a 3-letter code (e.g. KES).";
-    }
+    const nextErrors = validateSupplierMasterForm(form);
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }
@@ -235,27 +233,40 @@ export default function APSuppliersPage() {
       toast.error("Please fix validation errors.");
       return;
     }
-    const payload: PartyPayload = {
-      name: form.name.trim(),
-      roles: ["supplier"],
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      paymentTermsId: form.paymentTermsId || undefined,
-      defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,
-      taxId: form.taxId.trim(),
-      status: "ACTIVE",
-    };
+    const payload = supplierMasterFormToPayload(form);
     setSaving(true);
-    setDrawerOpen(false);
-    setEditingId(null);
     try {
+      let savedId = editingId;
       if (editingId) {
         await updatePartyApi(editingId, payload);
         toast.success("Supplier updated.");
       } else {
-        await createPartyApi(payload);
+        const created = await createPartyApi(payload);
+        savedId = created.id;
         toast.success("Supplier created.");
       }
+      if (savedId) {
+        if (pinCertFile) {
+          try {
+            await uploadPartyPinCertificateApi(savedId, pinCertFile);
+            toast.success("KRA PIN certificate uploaded.");
+          } catch {
+            toast.error("Supplier saved but KRA PIN certificate upload failed.");
+          }
+        }
+        if (companyRegFile) {
+          try {
+            await uploadPartyCompanyRegistrationApi(savedId, companyRegFile);
+            toast.success("Company registration uploaded.");
+          } catch {
+            toast.error("Supplier saved but company registration upload failed.");
+          }
+        }
+      }
+      setDrawerOpen(false);
+      setEditingId(null);
+      setPinCertFile(null);
+      setCompanyRegFile(null);
       await refreshCurrentPage();
     } catch (err) {
       await refreshCurrentPage();
@@ -347,12 +358,12 @@ export default function APSuppliersPage() {
       },
       {
         id: "meta",
-        header: "Type / currency",
+        header: "Kind / currency",
         accessor: (r: APSupplierRow) => (
           <div className="flex flex-wrap gap-1.5">
-            {r.supplierType ? (
+            {r.coolcatchSupplierKind ? (
               <Badge variant="outline" className="text-xs font-normal">
-                {SUPPLIER_TYPE_LABELS[r.supplierType] ?? r.supplierType}
+                {COOLCATCH_KIND_LABELS[r.coolcatchSupplierKind] ?? r.coolcatchSupplierKind}
               </Badge>
             ) : null}
             {r.currency ? (
@@ -363,7 +374,7 @@ export default function APSuppliersPage() {
           </div>
         ),
         sortable: true,
-        sortValue: (r: APSupplierRow) => `${r.supplierType ?? ""} ${r.currency ?? ""}`,
+        sortValue: (r: APSupplierRow) => `${r.coolcatchSupplierKind ?? ""} ${r.currency ?? ""}`,
       },
       {
         id: "status",
@@ -511,113 +522,20 @@ export default function APSuppliersPage() {
           </>
         }
       >
-        <div className="space-y-4 pr-4">
-          <div className="space-y-2">
-            <Label>
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              value={form.name}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, name: e.target.value }));
-                if (errors.name) setErrors((prev) => ({ ...prev, name: "" }));
-              }}
-            />
-            {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label>
-              Email <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, email: e.target.value }));
-                if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
-              }}
-            />
-            {errors.email ? <p className="text-xs text-destructive">{errors.email}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label>
-              Contact number <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              type="tel"
-              value={form.phone}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, phone: e.target.value }));
-                if (errors.phone) setErrors((prev) => ({ ...prev, phone: "" }));
-              }}
-              placeholder="e.g. +254712345678"
-            />
-            {errors.phone ? <p className="text-xs text-destructive">{errors.phone}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label>Payment terms</Label>
-            <Select
-              value={form.paymentTermsId || "__none__"}
-              onValueChange={(value) =>
-                setForm((prev) => ({ ...prev, paymentTermsId: value === "__none__" ? "" : value }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select payment term" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
-                {terms.map((term) => (
-                  <SelectItem key={term.id} value={term.id}>
-                    {term.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Currency preference</Label>
-            <Select
-              value={
-                form.defaultCurrency && currencies.some((c) => c.code === form.defaultCurrency)
-                  ? form.defaultCurrency
-                  : (currencies[0]?.code ?? form.defaultCurrency ?? "")
-              }
-              onValueChange={(value) => {
-                setForm((prev) => ({ ...prev, defaultCurrency: value }));
-                if (errors.defaultCurrency) setErrors((prev) => ({ ...prev, defaultCurrency: "" }));
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select currency" />
-              </SelectTrigger>
-              <SelectContent>
-                {currencies.map((c) => (
-                  <SelectItem key={c.id} value={c.code}>
-                    {c.code} {c.name && c.name !== c.code ? `- ${c.name}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.defaultCurrency ? (
-              <p className="text-xs text-destructive">{errors.defaultCurrency}</p>
-            ) : null}
-          </div>
-          <div className="space-y-2">
-            <Label>
-              KRA PIN <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              value={form.taxId}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, taxId: e.target.value }));
-                if (errors.taxId) setErrors((prev) => ({ ...prev, taxId: "" }));
-              }}
-              placeholder="e.g. P051234567X"
-            />
-            {errors.taxId ? <p className="text-xs text-destructive">{errors.taxId}</p> : null}
-          </div>
-        </div>
+        <SupplierMasterFormFields
+          form={form}
+          onChange={setForm}
+          errors={errors}
+          onClearError={(key) => setErrors((prev) => ({ ...prev, [key]: "" }))}
+          terms={terms}
+          currencies={currencies}
+          pinCertFile={pinCertFile}
+          onPinCertFileChange={setPinCertFile}
+          pinCertExistingUrl={pinCertExistingUrl}
+          companyRegFile={companyRegFile}
+          onCompanyRegFileChange={setCompanyRegFile}
+          companyRegExistingUrl={companyRegExistingUrl}
+        />
       </EntityDrawer>
     </PageShell>
   );

@@ -137,6 +137,7 @@ export type ApSupplierSummary = {
   partyId: string;
   name: string;
   supplierType?: import("@/lib/types/masters").SupplierType;
+  coolcatchSupplierKind?: import("@/lib/types/masters").CoolcatchSupplierKind;
   email?: string;
   phone?: string;
   code?: string;
@@ -145,6 +146,9 @@ export type ApSupplierSummary = {
   paymentTermsName?: string;
   status?: string;
   currency?: string;
+  supplierBankAccountName?: string;
+  supplierBankAccountNumber?: string;
+  supplierBankBranchName?: string;
 };
 
 export type FetchApSuppliersPageOpts = {

@@ -1,4 +1,4 @@
-import { type CustomerType, type PartyRole, type PartyRow, type SupplierType } from "@/lib/types/masters";
+import { type CustomerType, type CoolcatchSupplierKind, type PartyRole, type PartyRow, type SupplierType } from "@/lib/types/masters";
 import { apiRequest, requireLiveApi, uploadFormData } from "./client";
 
 type BackendParty = {
@@ -22,6 +22,24 @@ type BackendParty = {
   paymentTermsId?: string;
   defaultCurrency?: string;
   status?: string;
+  coolcatchSupplierKind?: CoolcatchSupplierKind;
+  contactPersonFirstName?: string;
+  contactPersonLastName?: string;
+  address?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    region?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  lastKnownLatitude?: number;
+  lastKnownLongitude?: number;
+  pinCertificateUrl?: string;
+  companyRegistrationUrl?: string;
+  supplierBankAccountName?: string;
+  supplierBankAccountNumber?: string;
+  supplierBankBranchName?: string;
 };
 
 export type PartyPayload = {
@@ -43,6 +61,22 @@ export type PartyPayload = {
   paymentTermsId?: string;
   defaultCurrency?: string;
   status?: "ACTIVE" | "INACTIVE";
+  coolcatchSupplierKind?: CoolcatchSupplierKind;
+  contactPersonFirstName?: string;
+  contactPersonLastName?: string;
+  address?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    region?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  lastKnownLatitude?: number;
+  lastKnownLongitude?: number;
+  supplierBankAccountName?: string;
+  supplierBankAccountNumber?: string;
+  supplierBankBranchName?: string;
 };
 
 export type PartyDetail = PartyRow & {
@@ -56,6 +90,14 @@ export type PartyDetail = PartyRow & {
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
   defaultCurrency?: string;
+  coolcatchSupplierKind?: CoolcatchSupplierKind;
+  contactPersonFirstName?: string;
+  contactPersonLastName?: string;
+  address?: PartyRow["address"];
+  pinCertificateUrl?: string;
+  companyRegistrationUrl?: string;
+  lastKnownLatitude?: number;
+  lastKnownLongitude?: number;
 };
 
 export type PartyLookupOption = {
@@ -183,10 +225,19 @@ function mapParty(item: BackendParty): PartyRow {
     roles,
     customerType: item.customerType,
     supplierType: item.supplierType,
+    coolcatchSupplierKind: item.coolcatchSupplierKind,
+    contactPersonFirstName: item.contactPersonFirstName,
+    contactPersonLastName: item.contactPersonLastName,
     customerCategoryId: item.customerCategoryId,
     email: item.email,
     phone: item.phone,
     taxId: item.taxId,
+    address: item.address,
+    pinCertificateUrl: item.pinCertificateUrl,
+    companyRegistrationUrl: item.companyRegistrationUrl,
+    supplierBankAccountName: item.supplierBankAccountName,
+    supplierBankAccountNumber: item.supplierBankAccountNumber,
+    supplierBankBranchName: item.supplierBankBranchName,
     status: item.status ?? "ACTIVE",
   };
 }
@@ -245,6 +296,9 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     roles: payload.roles,
     customerType: payload.customerType,
     supplierType: payload.supplierType,
+    coolcatchSupplierKind: payload.coolcatchSupplierKind,
+    contactPersonFirstName: payload.contactPersonFirstName,
+    contactPersonLastName: payload.contactPersonLastName,
     customerCategoryId: payload.customerCategoryId,
     email: payload.email,
     phone: payload.phone,
@@ -277,6 +331,17 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
     customerCategoryId: data.customerCategoryId,
     paymentTermsId: data.paymentTermsId,
     defaultCurrency: data.defaultCurrency,
+    coolcatchSupplierKind: data.coolcatchSupplierKind,
+    contactPersonFirstName: data.contactPersonFirstName,
+    contactPersonLastName: data.contactPersonLastName,
+    address: data.address,
+    pinCertificateUrl: data.pinCertificateUrl,
+    companyRegistrationUrl: data.companyRegistrationUrl,
+    lastKnownLatitude: data.lastKnownLatitude,
+    lastKnownLongitude: data.lastKnownLongitude,
+    supplierBankAccountName: data.supplierBankAccountName,
+    supplierBankAccountNumber: data.supplierBankAccountNumber,
+    supplierBankBranchName: data.supplierBankBranchName,
   };
 }
 
@@ -347,6 +412,19 @@ export async function uploadPartyPinCertificateApi(partyId: string, file: File):
   formData.append("file", file);
   return uploadFormData<{ storageKey: string; fileName: string }>(
     `/api/parties/${encodeURIComponent(partyId)}/pin-certificate`,
+    formData
+  );
+}
+
+export async function uploadPartyCompanyRegistrationApi(
+  partyId: string,
+  file: File,
+): Promise<{ storageKey: string; fileName: string }> {
+  requireLiveApi("Company registration upload");
+  const formData = new FormData();
+  formData.append("file", file);
+  return uploadFormData<{ storageKey: string; fileName: string }>(
+    `/api/parties/${encodeURIComponent(partyId)}/company-registration`,
     formData
   );
 }

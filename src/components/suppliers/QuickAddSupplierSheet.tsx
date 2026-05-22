@@ -14,15 +14,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { createPartyApi } from "@/lib/api/parties";
-import type { PartyRow } from "@/lib/types/masters";
+import type { CoolcatchSupplierKind, PartyRow } from "@/lib/types/masters";
+import { supplierMasterFormToPayload } from "@/components/suppliers/SupplierMasterFormFields";
 
 interface QuickAddSupplierSheetProps {
   open: boolean;
@@ -34,19 +28,14 @@ interface QuickAddSupplierSheetProps {
 }
 
 interface FormValues {
+  coolcatchSupplierKind: CoolcatchSupplierKind;
   name: string;
+  contactPersonFirstName: string;
+  contactPersonLastName: string;
   phone: string;
   email: string;
   taxId: string;
-  supplierType: string;
 }
-
-const SUPPLIER_TYPES = [
-  { value: "RAW_MATERIAL", label: "Raw Material" },
-  { value: "SERVICE", label: "Service" },
-  { value: "LOGISTICS", label: "Logistics" },
-  { value: "OTHER", label: "Other" },
-] as const;
 
 export function QuickAddSupplierSheet({
   open,
@@ -58,28 +47,55 @@ export function QuickAddSupplierSheet({
     register,
     handleSubmit,
     setValue,
+    watch,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
-    defaultValues: { name: "", phone: "", email: "", taxId: "", supplierType: "OTHER" },
+    defaultValues: {
+      coolcatchSupplierKind: "BROKER",
+      name: "",
+      contactPersonFirstName: "",
+      contactPersonLastName: "",
+      phone: "",
+      email: "",
+      taxId: "",
+    },
   });
+
+  const kind = watch("coolcatchSupplierKind");
 
   React.useEffect(() => {
     if (open) {
-      reset({ name: initialName ?? "", phone: "", email: "", taxId: "", supplierType: "OTHER" });
+      reset({
+        coolcatchSupplierKind: "BROKER",
+        name: initialName ?? "",
+        contactPersonFirstName: "",
+        contactPersonLastName: "",
+        phone: "",
+        email: "",
+        taxId: "",
+      });
     }
   }, [open, initialName, reset]);
 
   const onSubmit = async (values: FormValues) => {
-    const created = await createPartyApi({
-      name: values.name.trim(),
-      roles: ["supplier"],
-      supplierType: values.supplierType as PartyRow["supplierType"],
-      phone: values.phone.trim(),
-      email: values.email.trim(),
-      taxId: values.taxId.trim(),
-      status: "ACTIVE",
+    const payload = supplierMasterFormToPayload({
+      coolcatchSupplierKind: values.coolcatchSupplierKind,
+      name: values.name,
+      contactPersonFirstName: values.contactPersonFirstName,
+      contactPersonLastName: values.contactPersonLastName,
+      email: values.email,
+      phone: values.phone,
+      locationFormattedAddress: "",
+      addressLine1: "",
+      addressCity: "",
+      addressRegion: "",
+      addressCountry: "",
+      paymentTermsId: "",
+      defaultCurrency: "KES",
+      taxId: values.taxId,
     });
+    const created = await createPartyApi(payload);
     const descParts = [created.code, values.phone.trim(), values.email.trim(), values.taxId.trim()].filter(Boolean);
     onSuccess({
       ...created,
@@ -108,19 +124,63 @@ export function QuickAddSupplierSheet({
           onSubmit={handleSubmit(onSubmit)}
           className="flex-1 overflow-y-auto py-4 space-y-4"
         >
+          <div className="space-y-2">
+            <Label>Supplier kind</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["FARM", "BROKER"] as const).map((value) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={kind === value ? "default" : "outline"}
+                  onClick={() => setValue("coolcatchSupplierKind", value)}
+                >
+                  {value === "FARM" ? "Farm" : "Broker / wholesaler"}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="qas-name">
-              Name <span className="text-destructive">*</span>
+              {kind === "FARM" ? "Farm name" : "Company name"}{" "}
+              <span className="text-destructive">*</span>
             </Label>
             <Input
               id="qas-name"
               autoFocus
-              placeholder="Supplier name"
+              placeholder={kind === "FARM" ? "Farm name" : "Company name"}
               {...register("name", { required: "Name is required" })}
             />
             {errors.name && (
               <p className="text-xs text-destructive">{errors.name.message}</p>
             )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="qas-first-name">
+                Contact first name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="qas-first-name"
+                {...register("contactPersonFirstName", { required: "First name is required" })}
+              />
+              {errors.contactPersonFirstName && (
+                <p className="text-xs text-destructive">{errors.contactPersonFirstName.message}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="qas-last-name">
+                Contact last name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="qas-last-name"
+                {...register("contactPersonLastName", { required: "Last name is required" })}
+              />
+              {errors.contactPersonLastName && (
+                <p className="text-xs text-destructive">{errors.contactPersonLastName.message}</p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -171,25 +231,6 @@ export function QuickAddSupplierSheet({
             {errors.taxId && (
               <p className="text-xs text-destructive">{errors.taxId.message}</p>
             )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Supplier Type</Label>
-            <Select
-              defaultValue="OTHER"
-              onValueChange={(v) => setValue("supplierType", v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {SUPPLIER_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </form>
 

@@ -27,6 +27,9 @@ export type CustomerType =
 
 export type SupplierType = "RAW_MATERIAL" | "SERVICE" | "LOGISTICS" | "OTHER";
 
+/** CoolCatch: direct farm gate vs broker/aggregator supplier. */
+export type CoolcatchSupplierKind = "FARM" | "BROKER";
+
 export type PartyRow = {
   id: string;
   name: string;
@@ -35,10 +38,28 @@ export type PartyRow = {
   roles?: PartyRole[];
   customerType?: CustomerType;
   supplierType?: SupplierType;
+  coolcatchSupplierKind?: CoolcatchSupplierKind;
+  contactPersonFirstName?: string;
+  contactPersonLastName?: string;
   customerCategoryId?: string;
   email?: string;
   phone?: string;
   taxId?: string;
+  address?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    region?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  pinCertificateUrl?: string;
+  companyRegistrationUrl?: string;
+  supplierBankAccountName?: string;
+  supplierBankAccountNumber?: string;
+  supplierBankBranchName?: string;
+  lastKnownLatitude?: number;
+  lastKnownLongitude?: number;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
   creditLimitAmount?: number;
   maxOutstandingInvoiceAgeDays?: number;
