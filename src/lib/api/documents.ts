@@ -300,6 +300,13 @@ function mapDocumentDetail(
   type: DocTypeKey,
   payload: BackendDocumentDetail
 ): DocumentDetailRecord {
+  const lineTotal = (payload.lines ?? []).reduce((sum, line) => sum + (line.amount ?? 0), 0);
+  const resolvedTotal =
+    (typeof payload.total === "number" && payload.total > 0)
+      ? payload.total
+      : lineTotal > 0
+        ? lineTotal
+        : payload.total ?? 0;
   return {
     id: payload.id,
     type,
@@ -309,7 +316,7 @@ function mapDocumentDetail(
     party: payload.party,
     branchId: payload.branchId,
     warehouseId: payload.warehouseId,
-    total: payload.total,
+    total: resolvedTotal,
     currency: payload.currency ?? "KES",
     exchangeRate: payload.exchangeRate,
     status: payload.status,
