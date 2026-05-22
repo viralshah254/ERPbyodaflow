@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/ui/data-table";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { DocumentNumber } from "@/components/docs/document-number";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,8 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  fetchYieldRecords,
-  fetchMassBalanceReport,
+  fetchYieldRecordsPage,
+  fetchMassBalanceReportPage,
   createYieldRecord,
   type YieldRecordRow,
   type MassBalanceSummaryRow,
@@ -39,86 +41,264 @@ import {
   fetchSubcontractOrders,
   fetchReverseBoms,
   fetchExternalWorkCenters,
+  fetchWorkCenterFilterOptions,
   type SubcontractOrderRow,
-  type ExternalWorkCenterRow,
+  type WorkCenterFilterOption,
 } from "@/lib/api/cool-catch";
 import {
   fetchManufacturingWorkOrders,
   type ManufacturingWorkOrder,
 } from "@/lib/api/manufacturing";
+import type { FilterChip } from "@/components/ui/filter-chips";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { formatMoney } from "@/lib/money";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE = 25;
+
+const SPECIES_OPTIONS = [
+  { label: "All species", value: "" },
+  { label: "Tilapia", value: "TILAPIA" },
+  { label: "Nile Perch", value: "NILE_PERCH" },
+];
+
+const PROCESS_OPTIONS = [
+  { label: "All processes", value: "" },
+  { label: "Filleting", value: "FILLETING" },
+  { label: "Gutting", value: "GUTTING" },
+];
 
 interface BomOutputLine {
   productId: string;
   productName?: string;
   type: "OUTPUT_PRIMARY" | "OUTPUT_SECONDARY" | "WASTE";
   expectedKg: number;
-  actualKg: string; // controlled input
+  actualKg: string;
 }
 
 function lineTypeBadge(type: string) {
-  if (type === "OUTPUT_PRIMARY" || type === "PRIMARY") return <Badge variant="default" className="text-xs">Primary</Badge>;
-  if (type === "OUTPUT_SECONDARY" || type === "SECONDARY") return <Badge variant="secondary" className="text-xs">Secondary</Badge>;
+  if (type === "OUTPUT_PRIMARY" || type === "PRIMARY")
+    return <Badge variant="default" className="text-xs">Primary</Badge>;
+  if (type === "OUTPUT_SECONDARY" || type === "SECONDARY")
+    return <Badge variant="secondary" className="text-xs">Secondary</Badge>;
   return <Badge variant="destructive" className="text-xs">Waste</Badge>;
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+function speciesLabel(species?: string | null) {
+  if (species === "TILAPIA") return "Tilapia";
+  if (species === "NILE_PERCH") return "Nile Perch";
+  return null;
+}
+
+function formatKg(value?: number | null) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return (
+    <span className="tabular-nums font-medium">
+      {value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+    </span>
+  );
+}
+
+function yieldPctClass(pct?: number | null) {
+  if (pct == null) return "text-muted-foreground";
+  if (pct >= 85) return "text-green-600 dark:text-green-500 font-semibold";
+  if (pct >= 70) return "text-foreground font-medium";
+  return "text-amber-600 dark:text-amber-500 font-medium";
+}
+
+function sourceCell(row: { subcontractOrderNumber?: string; workOrderNumber?: string; workCenterName?: string | null }) {
+  const ref = row.subcontractOrderNumber ?? row.workOrderNumber;
+  if (!ref) return <span className="text-muted-foreground">—</span>;
+  return (
+    <div className="min-w-0 space-y-0.5">
+      <DocumentNumber value={ref} className="text-sm" />
+      {row.workCenterName ? (
+        <p className="truncate text-xs text-muted-foreground">{row.workCenterName}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function alertBadge(alert?: string) {
+  if (!alert || alert === "OK") return null;
+  return (
+    <Badge variant={alert === "ALERT" ? "destructive" : "secondary"} className="text-xs shrink-0">
+      {alert}
+    </Badge>
+  );
+}
 
 export default function ManufacturingYieldPage() {
   const router = useRouter();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
 
-  // List/report state
-  const [records, setRecords] = React.useState<YieldRecordRow[]>([]);
-  const [massBalance, setMassBalance] = React.useState<MassBalanceSummaryRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [tab, setTab] = React.useState<"records" | "mass-balance">("records");
+  const [workCenterOptions, setWorkCenterOptions] = React.useState<WorkCenterFilterOption[]>([]);
+
+  const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
-  const [mbSpeciesFilter, setMbSpeciesFilter] = React.useState("");
-  const [mbProcessFilter, setMbProcessFilter] = React.useState("");
-  const [mbWorkCenterFilter, setMbWorkCenterFilter] = React.useState("");
-  const [workCenters, setWorkCenters] = React.useState<ExternalWorkCenterRow[]>([]);
+  const [speciesFilter, setSpeciesFilter] = React.useState("");
+  const [processFilter, setProcessFilter] = React.useState("");
+  const [workCenterFilter, setWorkCenterFilter] = React.useState("");
 
-  // Sheet state
+  const [records, setRecords] = React.useState<YieldRecordRow[]>([]);
+  const [recordsInitialLoading, setRecordsInitialLoading] = React.useState(true);
+  const [recordsFetching, setRecordsFetching] = React.useState(false);
+  const [recordsPageOffset, setRecordsPageOffset] = React.useState(0);
+  const [recordsHasMore, setRecordsHasMore] = React.useState(false);
+  const recordsLoadedOnce = React.useRef(false);
+
+  const [massBalance, setMassBalance] = React.useState<MassBalanceSummaryRow[]>([]);
+  const [mbSummary, setMbSummary] = React.useState({ alertCount: 0, warningCount: 0 });
+  const [mbInitialLoading, setMbInitialLoading] = React.useState(false);
+  const [mbFetching, setMbFetching] = React.useState(false);
+  const [mbPageOffset, setMbPageOffset] = React.useState(0);
+  const [mbHasMore, setMbHasMore] = React.useState(false);
+  const mbLoadedOnce = React.useRef(false);
+
   const [recordYieldOpen, setRecordYieldOpen] = React.useState(false);
   const [yieldSaving, setYieldSaving] = React.useState(false);
-
-  // Smart form state
   const [subcontractOrders, setSubcontractOrders] = React.useState<SubcontractOrderRow[]>([]);
-  const [reverseBoms, setReverseBoms] = React.useState<Array<{ id: string; name: string; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>>([]);
+  const [reverseBoms, setReverseBoms] = React.useState<
+    Array<{ id: string; name: string; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>
+  >([]);
   const [workOrders, setWorkOrders] = React.useState<ManufacturingWorkOrder[]>([]);
-  const [selectedScoId, setSelectedScoId] = React.useState<string>("");
-  const [selectedWorkOrderId, setSelectedWorkOrderId] = React.useState<string>("");
-  const [inputKgOverride, setInputKgOverride] = React.useState<string>("");
+  const [selectedScoId, setSelectedScoId] = React.useState("");
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = React.useState("");
+  const [inputKgOverride, setInputKgOverride] = React.useState("");
   const [outputLines, setOutputLines] = React.useState<BomOutputLine[]>([]);
 
-  const loadData = React.useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetchYieldRecords(dateFrom || dateTo ? { dateFrom: dateFrom || undefined, dateTo: dateTo || undefined } : undefined),
-      fetchMassBalanceReport({
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
-        species: mbSpeciesFilter || undefined,
-        processType: mbProcessFilter || undefined,
-        workCenterId: mbWorkCenterFilter || undefined,
-      }),
-      fetchExternalWorkCenters().then(setWorkCenters).catch(() => {}),
-    ])
-      .then(([rec, mb]) => { setRecords(rec); setMassBalance(mb); })
-      .finally(() => setLoading(false));
-  }, [dateFrom, dateTo, mbSpeciesFilter, mbProcessFilter, mbWorkCenterFilter]);
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [search]);
 
-  React.useEffect(() => { loadData(); }, [loadData]);
+  React.useEffect(() => {
+    fetchWorkCenterFilterOptions({ activeOnly: true })
+      .then(setWorkCenterOptions)
+      .catch(() => toast.error("Failed to load work center filters."));
+  }, []);
 
-  // Load work orders, subcontract orders + BOMs when sheet opens
+  const listQuery = React.useMemo(
+    () => ({
+      search: debouncedSearch.trim() || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      workCenterId: workCenterFilter || undefined,
+      species: speciesFilter || undefined,
+      processType: processFilter || undefined,
+    }),
+    [debouncedSearch, dateFrom, dateTo, workCenterFilter, speciesFilter, processFilter]
+  );
+
+  const loadRecordsPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !recordsLoadedOnce.current;
+      if (isFirstLoad) setRecordsInitialLoading(true);
+      else setRecordsFetching(true);
+      try {
+        const page = await fetchYieldRecordsPage({ ...listQuery, limit: PAGE_SIZE, cursor: String(offset) });
+        setRecords(page.items);
+        setRecordsPageOffset(page.offset);
+        setRecordsHasMore(page.hasMore);
+        recordsLoadedOnce.current = true;
+      } catch (e) {
+        toast.error((e as Error)?.message ?? "Failed to load yield records.");
+      } finally {
+        setRecordsInitialLoading(false);
+        setRecordsFetching(false);
+      }
+    },
+    [listQuery]
+  );
+
+  const loadMassBalancePage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !mbLoadedOnce.current;
+      if (isFirstLoad) setMbInitialLoading(true);
+      else setMbFetching(true);
+      try {
+        const page = await fetchMassBalanceReportPage({ ...listQuery, limit: PAGE_SIZE, cursor: String(offset) });
+        setMassBalance(page.items);
+        setMbPageOffset(page.offset);
+        setMbHasMore(page.hasMore);
+        setMbSummary(page.summary ?? { alertCount: 0, warningCount: 0 });
+        mbLoadedOnce.current = true;
+      } catch (e) {
+        toast.error((e as Error)?.message ?? "Failed to load mass balance report.");
+      } finally {
+        setMbInitialLoading(false);
+        setMbFetching(false);
+      }
+    },
+    [listQuery]
+  );
+
+  React.useEffect(() => {
+    if (tab !== "records") return;
+    setRecordsPageOffset(0);
+    void loadRecordsPage(0);
+  }, [tab, loadRecordsPage]);
+
+  React.useEffect(() => {
+    if (tab !== "mass-balance") return;
+    setMbPageOffset(0);
+    void loadMassBalancePage(0);
+  }, [tab, loadMassBalancePage]);
+
+  const searchPending = search.trim() !== debouncedSearch.trim();
+  const recordsTableBusy = recordsFetching || searchPending;
+  const mbTableBusy = mbFetching || searchPending;
+
+  const filterChips: FilterChip[] = React.useMemo(() => {
+    const chips: FilterChip[] = [];
+    if (dateFrom) chips.push({ id: "from", label: "From", value: dateFrom });
+    if (dateTo) chips.push({ id: "to", label: "To", value: dateTo });
+    if (workCenterFilter) {
+      const wc = workCenterOptions.find((w) => w.id === workCenterFilter);
+      chips.push({ id: "wc", label: "Work center", value: wc?.name ?? workCenterFilter });
+    }
+    if (speciesFilter) {
+      const opt = SPECIES_OPTIONS.find((o) => o.value === speciesFilter);
+      chips.push({ id: "species", label: "Species", value: opt?.label ?? speciesFilter });
+    }
+    if (processFilter) {
+      const opt = PROCESS_OPTIONS.find((o) => o.value === processFilter);
+      chips.push({ id: "process", label: "Process", value: opt?.label ?? processFilter });
+    }
+    if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
+    return chips;
+  }, [dateFrom, dateTo, workCenterFilter, speciesFilter, processFilter, search, workCenterOptions]);
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setDateFrom("");
+    setDateTo("");
+    setWorkCenterFilter("");
+    setSpeciesFilter("");
+    setProcessFilter("");
+  };
+
+  const handleRemoveFilterChip = (id: string) => {
+    if (id === "from") setDateFrom("");
+    if (id === "to") setDateTo("");
+    if (id === "wc") setWorkCenterFilter("");
+    if (id === "species") setSpeciesFilter("");
+    if (id === "process") setProcessFilter("");
+    if (id === "q") setSearch("");
+  };
+
+  const refreshActiveTab = () => {
+    if (tab === "records") void loadRecordsPage(recordsPageOffset);
+    else void loadMassBalancePage(mbPageOffset);
+  };
+
   React.useEffect(() => {
     if (!recordYieldOpen) return;
     Promise.all([
@@ -127,90 +307,86 @@ export default function ManufacturingYieldPage() {
       fetchManufacturingWorkOrders().then((all) =>
         setWorkOrders(all.filter((wo) => ["released", "in_progress", "started", "completed"].includes(wo.status.toLowerCase())))
       ),
+      fetchExternalWorkCenters({ activeOnly: true }).catch(() => {}),
     ]).catch(() => {});
   }, [recordYieldOpen]);
 
-  // When an SCO is selected, auto-populate input weight + BOM output lines
   React.useEffect(() => {
-    if (!selectedScoId) { setOutputLines([]); return; }
+    if (!selectedScoId) {
+      setOutputLines([]);
+      return;
+    }
     const sco = subcontractOrders.find((s) => s.id === selectedScoId);
     if (!sco) return;
-
-    // Get input weight from the SCO's INPUT line
     const inputLine = (sco.lines ?? []).find((l) => l.type === "INPUT");
     const inputQty = inputLine?.quantity ?? 0;
     if (!inputKgOverride && inputQty > 0) setInputKgOverride(String(inputQty));
-
-    // Get BOM
     const bom = reverseBoms.find((b) => b.id === sco.bomId);
     if (!bom) {
-      // Fall back to using SCO output lines directly
-      const scoOutputs: BomOutputLine[] = (sco.lines ?? [])
-        .filter((l) => l.type === "OUTPUT_PRIMARY" || l.type === "OUTPUT_SECONDARY" || l.type === "WASTE")
-        .map((l) => ({
-          productId: l.productId ?? "",
-          productName: l.productName,
-          type: l.type as BomOutputLine["type"],
-          expectedKg: l.quantity,
-          actualKg: "",
-        }));
-      setOutputLines(scoOutputs);
+      setOutputLines(
+        (sco.lines ?? [])
+          .filter((l) => l.type === "OUTPUT_PRIMARY" || l.type === "OUTPUT_SECONDARY" || l.type === "WASTE")
+          .map((l) => ({
+            productId: l.productId ?? "",
+            productName: l.productName,
+            type: l.type as BomOutputLine["type"],
+            expectedKg: l.quantity,
+            actualKg: "",
+          }))
+      );
       return;
     }
-
-    const baseQty = 100;
-    const scale = inputQty > 0 ? inputQty / baseQty : 1;
-    // Build a productId → productName map from the SCO's own output lines (already resolved by the backend)
+    const scale = inputQty > 0 ? inputQty / 100 : 1;
     const scoNameMap = new Map<string, string>();
     (sco.lines ?? []).forEach((l) => {
       if (l.productId && l.productName) scoNameMap.set(l.productId, l.productName);
     });
-    const lines: BomOutputLine[] = bom.items.map((item) => {
-      const lineType: BomOutputLine["type"] =
-        item.type === "PRIMARY" ? "OUTPUT_PRIMARY" : item.type === "SECONDARY" ? "OUTPUT_SECONDARY" : "WASTE";
-      return {
-        productId: item.productId ?? "",
-        productName: scoNameMap.get(item.productId ?? "") ?? item.productName ?? (item.productId ?? "").slice(-12),
-        type: lineType,
-        expectedKg: Math.round(item.quantity * scale * 100) / 100,
-        actualKg: "",
-      };
-    });
-    setOutputLines(lines);
+    setOutputLines(
+      bom.items.map((item) => {
+        const lineType: BomOutputLine["type"] =
+          item.type === "PRIMARY" ? "OUTPUT_PRIMARY" : item.type === "SECONDARY" ? "OUTPUT_SECONDARY" : "WASTE";
+        return {
+          productId: item.productId ?? "",
+          productName: scoNameMap.get(item.productId ?? "") ?? item.productName ?? (item.productId ?? "").slice(-12),
+          type: lineType,
+          expectedKg: Math.round(item.quantity * scale * 100) / 100,
+          actualKg: "",
+        };
+      })
+    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedScoId, subcontractOrders, reverseBoms]);
 
-  // When a work order is selected, auto-populate input qty + BOM output lines
   React.useEffect(() => {
     if (!selectedWorkOrderId) return;
     const wo = workOrders.find((w) => w.id === selectedWorkOrderId);
     if (!wo) return;
-
     const inputQty = wo.quantity ?? wo.plannedQuantity ?? 0;
     if (!inputKgOverride && inputQty > 0) setInputKgOverride(String(inputQty));
-
     const bom = reverseBoms.find((b) => b.id === wo.bomId);
-    if (!bom) { setOutputLines([]); return; }
-
+    if (!bom) {
+      setOutputLines([]);
+      return;
+    }
     const scale = inputQty > 0 ? inputQty / 100 : 1;
-    const lines: BomOutputLine[] = bom.items.map((item) => {
-      const lineType: BomOutputLine["type"] =
-        item.type === "PRIMARY" ? "OUTPUT_PRIMARY" : item.type === "SECONDARY" ? "OUTPUT_SECONDARY" : "WASTE";
-      return {
-        productId: item.productId ?? "",
-        productName: item.productName ?? (item.productId ?? "").slice(-12),
-        type: lineType,
-        expectedKg: Math.round(item.quantity * scale * 100) / 100,
-        actualKg: "",
-      };
-    });
-    setOutputLines(lines);
+    setOutputLines(
+      bom.items.map((item) => {
+        const lineType: BomOutputLine["type"] =
+          item.type === "PRIMARY" ? "OUTPUT_PRIMARY" : item.type === "SECONDARY" ? "OUTPUT_SECONDARY" : "WASTE";
+        return {
+          productId: item.productId ?? "",
+          productName: item.productName ?? (item.productId ?? "").slice(-12),
+          type: lineType,
+          expectedKg: Math.round(item.quantity * scale * 100) / 100,
+          actualKg: "",
+        };
+      })
+    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWorkOrderId, workOrders, reverseBoms]);
 
   const currentInputKg = Number(inputKgOverride) || 0;
 
-  // Re-scale expected kg when input changes
   const scaledLines = React.useMemo(() => {
     if (!selectedScoId || !currentInputKg) return outputLines;
     const sco = subcontractOrders.find((s) => s.id === selectedScoId);
@@ -223,28 +399,35 @@ export default function ManufacturingYieldPage() {
     }));
   }, [outputLines, currentInputKg, selectedScoId, subcontractOrders, reverseBoms]);
 
-  const totalActualOutput = scaledLines.reduce((s, l) => {
-    if (l.type === "WASTE") return s;
-    return s + (Number(l.actualKg) || 0);
-  }, 0);
-  const processLossKg = currentInputKg > 0 ? currentInputKg - totalActualOutput - scaledLines.filter((l) => l.type === "WASTE").reduce((s, l) => s + (Number(l.actualKg) || 0), 0) : 0;
+  const processLossKg =
+    currentInputKg > 0
+      ? currentInputKg -
+        scaledLines.filter((l) => l.type !== "WASTE").reduce((s, l) => s + (Number(l.actualKg) || 0), 0) -
+        scaledLines.filter((l) => l.type === "WASTE").reduce((s, l) => s + (Number(l.actualKg) || 0), 0)
+      : 0;
 
   const handleUpdateActual = (index: number, value: string) => {
     setOutputLines((prev) => prev.map((l, i) => (i === index ? { ...l, actualKg: value } : l)));
   };
 
   const handleRecordYield = async () => {
-    if (!currentInputKg || currentInputKg <= 0) { toast.error("Enter a valid input weight (kg)."); return; }
-    if (scaledLines.length === 0) { toast.error("Select a subcontract order with output lines."); return; }
-
+    if (!currentInputKg || currentInputKg <= 0) {
+      toast.error("Enter a valid input weight (kg).");
+      return;
+    }
+    if (scaledLines.length === 0) {
+      toast.error("Select a subcontract order or work order with output lines.");
+      return;
+    }
     const lines = scaledLines.map((l) => ({
       skuId: l.productId,
-      type: l.type === "OUTPUT_PRIMARY" ? "PRIMARY" as const : l.type === "OUTPUT_SECONDARY" ? "SECONDARY" as const : "WASTE" as const,
+      type: l.type === "OUTPUT_PRIMARY" ? ("PRIMARY" as const) : l.type === "OUTPUT_SECONDARY" ? ("SECONDARY" as const) : ("WASTE" as const),
       quantityKg: Number(l.actualKg) || l.expectedKg,
     }));
-
-    if (lines.every((l) => l.quantityKg <= 0)) { toast.error("Enter at least one output quantity."); return; }
-
+    if (lines.every((l) => l.quantityKg <= 0)) {
+      toast.error("Enter at least one output quantity.");
+      return;
+    }
     setYieldSaving(true);
     try {
       await createYieldRecord({
@@ -259,7 +442,10 @@ export default function ManufacturingYieldPage() {
       setSelectedWorkOrderId("");
       setInputKgOverride("");
       setOutputLines([]);
-      loadData();
+      recordsLoadedOnce.current = false;
+      mbLoadedOnce.current = false;
+      if (tab === "records") void loadRecordsPage(0);
+      else void loadMassBalancePage(0);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save yield.");
     } finally {
@@ -267,29 +453,50 @@ export default function ManufacturingYieldPage() {
     }
   };
 
-  // ── Table columns ───────────────────────────────────────────────────────────
-
   const yieldColumns = React.useMemo(
     () => [
       {
         id: "recordedAt",
         header: "Recorded",
-        accessor: (r: YieldRecordRow) => new Date(r.recordedAt).toLocaleString(),
+        accessor: (r: YieldRecordRow) => (
+          <span className="text-sm tabular-nums">{new Date(r.recordedAt).toLocaleString()}</span>
+        ),
         sticky: true,
       },
       {
         id: "source",
         header: "Source",
-        accessor: (r: YieldRecordRow) => r.subcontractOrderNumber ?? r.workOrderNumber ?? r.subcontractOrderId ?? "—",
+        accessor: (r: YieldRecordRow) => sourceCell(r),
       },
-      { id: "inputKg", header: "Input (kg)", accessor: (r: YieldRecordRow) => r.inputWeightKg?.toFixed(2) ?? "—" },
-      { id: "primaryKg", header: "Primary (kg)", accessor: (r: YieldRecordRow) => r.outputPrimaryKg?.toFixed(2) ?? "—" },
-      { id: "secondaryKg", header: "Secondary (kg)", accessor: (r: YieldRecordRow) => r.outputSecondaryKg?.toFixed(2) ?? "—" },
-      { id: "wasteKg", header: "Process loss (kg)", accessor: (r: YieldRecordRow) => r.wasteKg?.toFixed(2) ?? "—" },
+      {
+        id: "species",
+        header: "Species / Process",
+        accessor: (r: YieldRecordRow) => {
+          const sp = speciesLabel(r.species);
+          if (!sp && !r.processType) return "—";
+          return (
+            <span className="text-sm">
+              {sp ?? "—"}
+              {r.processType ? <span className="text-muted-foreground"> · {r.processType}</span> : null}
+            </span>
+          );
+        },
+      },
+      { id: "inputKg", header: "Input (kg)", accessor: (r: YieldRecordRow) => formatKg(r.inputWeightKg) },
+      { id: "primaryKg", header: "Primary (kg)", accessor: (r: YieldRecordRow) => formatKg(r.outputPrimaryKg) },
+      { id: "secondaryKg", header: "Secondary (kg)", accessor: (r: YieldRecordRow) => formatKg(r.outputSecondaryKg) },
+      { id: "wasteKg", header: "Process loss (kg)", accessor: (r: YieldRecordRow) => formatKg(r.wasteKg) },
       {
         id: "yieldPct",
         header: "Yield %",
-        accessor: (r: YieldRecordRow) => (r.yieldPercent != null ? `${r.yieldPercent.toFixed(1)}%` : "—"),
+        accessor: (r: YieldRecordRow) =>
+          r.yieldPercent != null ? (
+            <span className={cn("tabular-nums text-sm", yieldPctClass(r.yieldPercent))}>
+              {r.yieldPercent.toFixed(1)}%
+            </span>
+          ) : (
+            "—"
+          ),
       },
     ],
     []
@@ -300,30 +507,37 @@ export default function ManufacturingYieldPage() {
       {
         id: "alert",
         header: "",
-        accessor: (r: MassBalanceSummaryRow) => {
-          if (!r.alert || r.alert === "OK") return null;
-          return (
-            <Badge variant={r.alert === "ALERT" ? "destructive" : "secondary"} className="text-xs">
-              {r.alert}
-            </Badge>
-          );
-        },
+        accessor: (r: MassBalanceSummaryRow) => alertBadge(r.alert),
+        className: "w-10",
       },
-      { id: "period", header: "Period", accessor: (r: MassBalanceSummaryRow) => r.period },
+      {
+        id: "period",
+        header: "Period",
+        accessor: (r: MassBalanceSummaryRow) => <span className="tabular-nums text-sm">{r.period}</span>,
+        sticky: true,
+      },
       {
         id: "source",
         header: "Work order / SCO",
-        accessor: (r: MassBalanceSummaryRow) => r.subcontractOrderNumber ?? r.workOrderNumber ?? "—",
+        accessor: (r: MassBalanceSummaryRow) => sourceCell(r),
       },
       {
         id: "species",
         header: "Species / Process",
-        accessor: (r: MassBalanceSummaryRow) =>
-          r.species ? `${r.species === "TILAPIA" ? "Tilapia" : "Nile Perch"}${r.processType ? ` · ${r.processType}` : ""}` : "—",
+        accessor: (r: MassBalanceSummaryRow) => {
+          const sp = speciesLabel(r.species);
+          if (!sp && !r.processType) return "—";
+          return (
+            <span className="text-sm">
+              {sp ?? "—"}
+              {r.processType ? <span className="text-muted-foreground"> · {r.processType}</span> : null}
+            </span>
+          );
+        },
       },
-      { id: "inputKg", header: "Input (kg)", accessor: (r: MassBalanceSummaryRow) => r.inputWeightKg?.toFixed(2) },
-      { id: "primaryKg", header: "Primary (kg)", accessor: (r: MassBalanceSummaryRow) => r.outputPrimaryKg?.toFixed(2) },
-      { id: "secondaryKg", header: "Secondary (kg)", accessor: (r: MassBalanceSummaryRow) => r.outputSecondaryKg?.toFixed(2) },
+      { id: "inputKg", header: "Input (kg)", accessor: (r: MassBalanceSummaryRow) => formatKg(r.inputWeightKg) },
+      { id: "primaryKg", header: "Primary (kg)", accessor: (r: MassBalanceSummaryRow) => formatKg(r.outputPrimaryKg) },
+      { id: "secondaryKg", header: "Secondary (kg)", accessor: (r: MassBalanceSummaryRow) => formatKg(r.outputSecondaryKg) },
       {
         id: "processLoss",
         header: "Process loss (kg)",
@@ -332,14 +546,24 @@ export default function ManufacturingYieldPage() {
           if (loss == null) return "—";
           const pct = r.inputWeightKg > 0 ? (loss / r.inputWeightKg) * 100 : null;
           return (
-            <span>
-              {loss.toFixed(2)}
-              {pct != null ? <span className="text-muted-foreground text-xs ml-1">({pct.toFixed(1)}%)</span> : null}
+            <span className="tabular-nums text-sm">
+              {formatKg(loss)}
+              {pct != null ? (
+                <span className="ml-1 text-xs text-muted-foreground">({pct.toFixed(1)}%)</span>
+              ) : null}
             </span>
           );
         },
       },
-      { id: "yieldPct", header: "Yield %", accessor: (r: MassBalanceSummaryRow) => `${r.yieldPercent?.toFixed(1) ?? "—"}%` },
+      {
+        id: "yieldPct",
+        header: "Yield %",
+        accessor: (r: MassBalanceSummaryRow) => (
+          <span className={cn("tabular-nums text-sm", yieldPctClass(r.yieldPercent))}>
+            {r.yieldPercent?.toFixed(1) ?? "—"}%
+          </span>
+        ),
+      },
       {
         id: "variance",
         header: "Primary variance vs BOM",
@@ -348,13 +572,17 @@ export default function ManufacturingYieldPage() {
           if (!v) return "—";
           const pct = v.primaryVariancePct;
           const color =
-            pct == null ? ""
-            : Math.abs(pct) > 10 ? "text-destructive font-medium"
-            : Math.abs(pct) > 5 ? "text-yellow-600 font-medium"
-            : "text-green-600";
+            pct == null
+              ? ""
+              : Math.abs(pct) > 10
+                ? "text-destructive font-semibold"
+                : Math.abs(pct) > 5
+                  ? "text-amber-600 dark:text-amber-500 font-medium"
+                  : "text-green-600 dark:text-green-500";
           return (
-            <span className={color}>
-              {v.primaryVarianceKg > 0 ? "+" : ""}{v.primaryVarianceKg.toFixed(2)} kg
+            <span className={cn("tabular-nums text-sm", color)}>
+              {v.primaryVarianceKg > 0 ? "+" : ""}
+              {v.primaryVarianceKg.toFixed(2)} kg
               {pct != null ? ` (${pct > 0 ? "+" : ""}${pct.toFixed(1)}%)` : ""}
             </span>
           );
@@ -364,8 +592,48 @@ export default function ManufacturingYieldPage() {
     []
   );
 
+  const toolbarFilters = [
+    {
+      id: "species",
+      label: "Species",
+      options: SPECIES_OPTIONS,
+      value: speciesFilter,
+      onChange: setSpeciesFilter,
+    },
+    {
+      id: "process",
+      label: "Process",
+      options: PROCESS_OPTIONS,
+      value: processFilter,
+      onChange: setProcessFilter,
+    },
+    {
+      id: "workCenter",
+      label: "Work center",
+      options: [
+        { label: "All work centers", value: "" },
+        ...workCenterOptions.map((w) => ({ label: w.name, value: w.id })),
+      ],
+      value: workCenterFilter,
+      onChange: setWorkCenterFilter,
+    },
+  ];
+
+  const dateFilterRow = (
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">From</Label>
+        <Input type="date" className="h-9 w-36" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">To</Label>
+        <Input type="date" className="h-9 w-36" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+      </div>
+    </div>
+  );
+
   return (
-    <PageShell>
+    <PageShell className="grid min-h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       <PageHeader
         title="Yield / Mass balance"
         description="Record actual outputs per batch; compare to BOM-expected. Process loss = input − primary − secondary."
@@ -383,146 +651,185 @@ export default function ManufacturingYieldPage() {
         }
       />
 
-      <div className="p-6 space-y-6">
-        {/* Date range filter */}
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="space-y-1">
-            <Label className="text-xs">From</Label>
-            <Input type="date" className="w-36" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">To</Label>
-            <Input type="date" className="w-36" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </div>
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <Icons.Search className="mr-2 h-3 w-3" />
-            Filter
-          </Button>
-          {(dateFrom || dateTo) && (
-            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); }}>Clear</Button>
-          )}
+      <div className="flex min-h-0 flex-col overflow-hidden px-6 pb-6">
+        <div className="flex shrink-0 gap-2 border-b pb-2">
+          {(["records", "mass-balance"] as const).map((t) => (
+            <Button key={t} variant={tab === t ? "secondary" : "ghost"} size="sm" onClick={() => setTab(t)}>
+              {t === "records" ? "Yield records" : "Mass balance report"}
+            </Button>
+          ))}
         </div>
 
-        <Tabs defaultValue="records">
-          <TabsList>
-            <TabsTrigger value="records">Yield records</TabsTrigger>
-            <TabsTrigger value="mass-balance">Mass balance report</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="records" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Yield records</CardTitle>
-                <CardDescription>
-                  Actual input weight and output by SKU (primary finished goods, secondary sellable byproducts, and process loss).
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {loading ? (
-                  <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
-                ) : (
-                  <DataTable
-                    data={records}
-                    columns={yieldColumns}
-                    onRowClick={(row) => router.push(`/manufacturing/yield/${row.id}`)}
-                    emptyMessage="No yield records. Click 'Record yield' to add one."
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="mass-balance" className="mt-4 space-y-4">
-            {/* Mass balance filters */}
-            <div className="flex flex-wrap gap-3">
-              <Select value={mbSpeciesFilter || "all"} onValueChange={(v) => setMbSpeciesFilter(v === "all" ? "" : v)}>
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="All species" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All species</SelectItem>
-                  <SelectItem value="TILAPIA">Tilapia</SelectItem>
-                  <SelectItem value="NILE_PERCH">Nile Perch</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={mbProcessFilter || "all"} onValueChange={(v) => setMbProcessFilter(v === "all" ? "" : v)}>
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="All processes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All processes</SelectItem>
-                  <SelectItem value="FILLETING">Filleting</SelectItem>
-                  <SelectItem value="GUTTING">Gutting</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={mbWorkCenterFilter || "all"} onValueChange={(v) => setMbWorkCenterFilter(v === "all" ? "" : v)}>
-                <SelectTrigger className="w-52">
-                  <SelectValue placeholder="All work centers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All work centers</SelectItem>
-                  {workCenters.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="sm" onClick={loadData}>
-                <Icons.Search className="mr-2 h-3 w-3" />
-                Apply
-              </Button>
+        {tab === "records" && (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-4">
+            <div className="shrink-0">
+              <h2 className="text-lg font-semibold tracking-tight">Yield records</h2>
+              <p className="text-sm text-muted-foreground">
+                Actual input weight and output by SKU — primary, secondary byproducts, and process loss.
+              </p>
             </div>
 
-            {/* Alert summary */}
-            {massBalance.some((r) => r.alert && r.alert !== "OK") && (
-              <div className="flex items-center gap-2 p-3 rounded-md border border-destructive/30 bg-destructive/5 text-sm">
-                <Icons.AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+            <DataTableToolbar
+              className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+              searchPlaceholder="Search order number or work center…"
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchInputProps={{ spellCheck: false, autoComplete: "off" }}
+              filters={toolbarFilters}
+              activeFiltersCount={filterChips.length}
+              onClearFilters={handleClearFilters}
+              filterChips={filterChips}
+              onRemoveFilterChip={handleRemoveFilterChip}
+              actions={
+                <Button variant="outline" size="sm" disabled={recordsInitialLoading || recordsFetching} onClick={refreshActiveTab}>
+                  <Icons.RefreshCw className={cn("h-4 w-4 mr-1.5", (recordsInitialLoading || recordsFetching) && "animate-spin")} />
+                  Refresh
+                </Button>
+              }
+            >
+              {dateFilterRow}
+            </DataTableToolbar>
+
+            {!recordsLoadedOnce.current && recordsInitialLoading ? (
+              <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-32", "w-36", "w-28", "w-20", "w-20", "w-20", "w-24", "w-16"]} />
+            ) : (
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+                <TableLinearProgress active={recordsTableBusy} />
+                <div className={cn("flex min-h-0 flex-1 flex-col transition-opacity duration-200", recordsTableBusy && "pointer-events-none opacity-60")}>
+                  <DataTable<YieldRecordRow>
+                    data={records}
+                    columns={yieldColumns}
+                    scrollMode="natural"
+                    size="comfortable"
+                    className="min-h-0 flex-1 border-0"
+                    onRowClick={(row) => router.push(`/manufacturing/yield/${row.id}`)}
+                    emptyMessage="No yield records match your filters. Record yield to add one."
+                  />
+                </div>
+              </div>
+            )}
+
+            <TablePagination
+              className="shrink-0"
+              pageOffset={recordsPageOffset}
+              pageSize={PAGE_SIZE}
+              itemCount={!recordsLoadedOnce.current && recordsInitialLoading ? 0 : records.length}
+              hasMore={recordsHasMore}
+              loading={recordsFetching || (!recordsLoadedOnce.current && recordsInitialLoading)}
+              busy={searchPending}
+              onPrevious={() => {
+                if (recordsPageOffset <= 0 || recordsFetching || recordsInitialLoading) return;
+                void loadRecordsPage(Math.max(0, recordsPageOffset - PAGE_SIZE));
+              }}
+              onNext={() => {
+                if (!recordsHasMore || recordsFetching || recordsInitialLoading) return;
+                void loadRecordsPage(recordsPageOffset + PAGE_SIZE);
+              }}
+              entityLabel="records"
+            />
+          </div>
+        )}
+
+        {tab === "mass-balance" && (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-4">
+            <div className="shrink-0">
+              <h2 className="text-lg font-semibold tracking-tight">Mass balance report</h2>
+              <p className="text-sm text-muted-foreground">
+                Input vs actual output per batch vs BOM-expected. Negative primary variance = yield below standard.
+              </p>
+            </div>
+
+            <DataTableToolbar
+              className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+              searchPlaceholder="Search order number or work center…"
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchInputProps={{ spellCheck: false, autoComplete: "off" }}
+              filters={toolbarFilters}
+              activeFiltersCount={filterChips.length}
+              onClearFilters={handleClearFilters}
+              filterChips={filterChips}
+              onRemoveFilterChip={handleRemoveFilterChip}
+              actions={
+                <Button variant="outline" size="sm" disabled={mbInitialLoading || mbFetching} onClick={refreshActiveTab}>
+                  <Icons.RefreshCw className={cn("h-4 w-4 mr-1.5", (mbInitialLoading || mbFetching) && "animate-spin")} />
+                  Refresh
+                </Button>
+              }
+            >
+              {dateFilterRow}
+            </DataTableToolbar>
+
+            {(mbSummary.alertCount > 0 || mbSummary.warningCount > 0) && (
+              <div className="flex shrink-0 items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+                <Icons.AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
                 <span>
-                  <span className="font-medium text-destructive">
-                    {massBalance.filter((r) => r.alert === "ALERT").length} alert(s)
-                  </span>
-                  {massBalance.filter((r) => r.alert === "WARNING").length > 0 && (
-                    <>, <span className="font-medium text-yellow-700">{massBalance.filter((r) => r.alert === "WARNING").length} warning(s)</span></>
+                  {mbSummary.alertCount > 0 && (
+                    <span className="font-medium text-destructive">
+                      {mbSummary.alertCount} alert{mbSummary.alertCount !== 1 ? "s" : ""}
+                    </span>
                   )}
-                  {" "}— primary yield deviating beyond tolerance ({">"}5% = warning, {">"}10% = alert).
+                  {mbSummary.alertCount > 0 && mbSummary.warningCount > 0 ? ", " : null}
+                  {mbSummary.warningCount > 0 && (
+                    <span className="font-medium text-amber-700 dark:text-amber-500">
+                      {mbSummary.warningCount} warning{mbSummary.warningCount !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  <span className="text-muted-foreground"> on this page — primary yield beyond tolerance.</span>
                 </span>
               </div>
             )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Mass balance report</CardTitle>
-                <CardDescription>
-                  Input vs actual output per SKU vs BOM-expected. Negative primary variance = yield below standard — investigate batch or processor.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {loading ? (
-                  <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
-                ) : (
-                  <DataTable
+            {!mbLoadedOnce.current && mbInitialLoading ? (
+              <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-8", "w-24", "w-36", "w-28", "w-20", "w-20", "w-20", "w-24", "w-16", "w-36"]} />
+            ) : (
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+                <TableLinearProgress active={mbTableBusy} />
+                <div className={cn("flex min-h-0 flex-1 flex-col transition-opacity duration-200", mbTableBusy && "pointer-events-none opacity-60")}>
+                  <DataTable<MassBalanceSummaryRow>
                     data={massBalance}
                     columns={massBalanceColumns}
-                    emptyMessage="No data. Record yield batches to populate the mass balance."
+                    scrollMode="natural"
+                    size="comfortable"
+                    className="min-h-0 flex-1 border-0"
+                    emptyMessage="No mass balance rows match your filters. Record yield batches to populate this report."
                   />
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                </div>
+              </div>
+            )}
+
+            <TablePagination
+              className="shrink-0"
+              pageOffset={mbPageOffset}
+              pageSize={PAGE_SIZE}
+              itemCount={!mbLoadedOnce.current && mbInitialLoading ? 0 : massBalance.length}
+              hasMore={mbHasMore}
+              loading={mbFetching || (!mbLoadedOnce.current && mbInitialLoading)}
+              busy={searchPending}
+              onPrevious={() => {
+                if (mbPageOffset <= 0 || mbFetching || mbInitialLoading) return;
+                void loadMassBalancePage(Math.max(0, mbPageOffset - PAGE_SIZE));
+              }}
+              onNext={() => {
+                if (!mbHasMore || mbFetching || mbInitialLoading) return;
+                void loadMassBalancePage(mbPageOffset + PAGE_SIZE);
+              }}
+              entityLabel="rows"
+            />
+          </div>
+        )}
       </div>
 
-      {/* ── Record Yield Sheet ── */}
       <Sheet open={recordYieldOpen} onOpenChange={setRecordYieldOpen}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Record yield</SheetTitle>
             <SheetDescription>
-              Link to a work order (batch) or WIP subcontract order. Output lines are pre-populated from the BOM — enter actual kg per product. Process loss is calculated automatically.
+              Link to a work order or WIP subcontract order. Output lines pre-populate from the BOM — enter actual kg per product.
             </SheetDescription>
           </SheetHeader>
 
           <div className="mt-6 space-y-5">
-            {/* Work order selector (primary source) */}
             <div className="space-y-2">
               <Label>Work order (batch)</Label>
               <Select
@@ -530,7 +837,7 @@ export default function ManufacturingYieldPage() {
                 onValueChange={(v) => {
                   const id = v === "__none_wo__" ? "" : v;
                   setSelectedWorkOrderId(id);
-                  if (id) { setSelectedScoId(""); }
+                  if (id) setSelectedScoId("");
                   setInputKgOverride("");
                   setOutputLines([]);
                 }}
@@ -553,7 +860,6 @@ export default function ManufacturingYieldPage() {
 
             <Separator />
 
-            {/* Subcontract order selector (secondary source) */}
             <div className="space-y-2">
               <Label className="text-muted-foreground">Or: subcontract order (WIP)</Label>
               <Select
@@ -561,20 +867,20 @@ export default function ManufacturingYieldPage() {
                 onValueChange={(v) => {
                   const id = v === "__none_sco__" ? "" : v;
                   setSelectedScoId(id);
-                  if (id) { setSelectedWorkOrderId(""); }
+                  if (id) setSelectedWorkOrderId("");
                   setInputKgOverride("");
                   setOutputLines([]);
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select subcontract order in WIP status" />
+                  <SelectValue placeholder="Select subcontract order in WIP" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none_sco__">— None —</SelectItem>
                   {subcontractOrders.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.number} · {s.workCenterName}
-                      {s.species ? ` · ${s.species === "TILAPIA" ? "Tilapia" : "Nile Perch"}` : ""}
+                      {s.species ? ` · ${speciesLabel(s.species)}` : ""}
                       {s.processType ? ` · ${s.processType}` : ""}
                     </SelectItem>
                   ))}
@@ -582,43 +888,36 @@ export default function ManufacturingYieldPage() {
               </Select>
             </div>
 
-            {/* Input weight */}
             <div className="space-y-2">
               <Label>Input weight (kg) *</Label>
               <Input
                 type="number"
                 min={0}
                 step="0.01"
-                placeholder="Weight received at processing facility"
+                placeholder="Weight at processing facility"
                 value={inputKgOverride}
                 onChange={(e) => setInputKgOverride(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                This is the GRN&apos;s received weight at facility — the authoritative input for the mass balance.
-              </p>
             </div>
 
-            {/* Output lines */}
             {scaledLines.length > 0 && (
               <>
                 <Separator />
                 <div className="space-y-3">
                   <p className="text-sm font-medium">Actual outputs</p>
-                  <p className="text-xs text-muted-foreground">Expected values from BOM shown — enter actual kg received per SKU.</p>
-
                   {scaledLines.map((line, i) => (
-                    <div key={i} className="border rounded-md p-3 space-y-2 bg-muted/30">
-                      <div className="flex items-center justify-between">
+                    <div key={i} className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                      <div className="flex items-center justify-between gap-2">
                         {lineTypeBadge(line.type)}
-                        <span className="text-xs text-muted-foreground font-mono">{line.productId.slice(-12)}</span>
+                        <span className="truncate text-xs text-muted-foreground">{line.productName}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
+                        <div>
                           <Label className="text-xs text-muted-foreground">Expected (kg)</Label>
-                          <div className="text-sm font-medium">{line.expectedKg.toFixed(2)}</div>
+                          <p className="tabular-nums text-sm font-medium">{line.expectedKg.toFixed(2)}</p>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Actual (kg) *</Label>
+                        <div>
+                          <Label className="text-xs">Actual (kg)</Label>
                           <Input
                             type="number"
                             min={0}
@@ -629,40 +928,13 @@ export default function ManufacturingYieldPage() {
                           />
                         </div>
                       </div>
-                      {line.actualKg && Number(line.actualKg) !== line.expectedKg && line.type !== "WASTE" && (
-                        <div className="text-xs">
-                          Variance:{" "}
-                          <span className={Number(line.actualKg) < line.expectedKg ? "text-destructive font-medium" : "text-green-600 font-medium"}>
-                            {(Number(line.actualKg) - line.expectedKg).toFixed(2)} kg
-                          </span>
-                        </div>
-                      )}
                     </div>
                   ))}
-
-                  {/* Process loss summary */}
                   {currentInputKg > 0 && (
-                    <div className="rounded-md border bg-background p-3 space-y-1 text-sm">
+                    <div className="rounded-lg border bg-background p-3 text-sm space-y-1">
                       <div className="flex justify-between">
-                        <span>Input weight</span>
-                        <span className="font-medium">{currentInputKg.toFixed(2)} kg</span>
-                      </div>
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Primary output</span>
-                        <span>{scaledLines.filter((l) => l.type === "OUTPUT_PRIMARY").reduce((s, l) => s + (Number(l.actualKg) || 0), 0).toFixed(2)} kg</span>
-                      </div>
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Secondary (byproduct)</span>
-                        <span>{scaledLines.filter((l) => l.type === "OUTPUT_SECONDARY").reduce((s, l) => s + (Number(l.actualKg) || 0), 0).toFixed(2)} kg</span>
-                      </div>
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Waste / Process loss</span>
-                        <span>{scaledLines.filter((l) => l.type === "WASTE").reduce((s, l) => s + (Number(l.actualKg) || 0), 0).toFixed(2)} kg</span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between font-medium">
                         <span>Unaccounted loss</span>
-                        <span className={processLossKg > 0 ? "text-destructive" : "text-green-600"}>
+                        <span className={cn("tabular-nums font-medium", processLossKg > 0 ? "text-destructive" : "text-green-600")}>
                           {Math.max(0, processLossKg).toFixed(2)} kg
                         </span>
                       </div>
@@ -672,17 +944,21 @@ export default function ManufacturingYieldPage() {
               </>
             )}
 
-            {/* Manual mode: no source selected */}
             {!selectedScoId && !selectedWorkOrderId && (
-              <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground text-center">
-                Select a work order or WIP subcontract order above to auto-populate output lines from BOM, or enter input weight and lines manually.
+              <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                Select a work order or WIP subcontract order to auto-populate output lines from the BOM.
               </div>
             )}
           </div>
 
           <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setRecordYieldOpen(false)} disabled={yieldSaving}>Cancel</Button>
-            <Button onClick={handleRecordYield} disabled={yieldSaving || !currentInputKg || (scaledLines.length === 0 && !selectedScoId && !selectedWorkOrderId)}>
+            <Button variant="outline" onClick={() => setRecordYieldOpen(false)} disabled={yieldSaving}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRecordYield}
+              disabled={yieldSaving || !currentInputKg || (scaledLines.length === 0 && !selectedScoId && !selectedWorkOrderId)}
+            >
               {yieldSaving ? "Saving…" : "Save yield"}
             </Button>
           </SheetFooter>

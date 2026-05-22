@@ -434,7 +434,6 @@ export default function SubcontractingPage() {
 
   React.useEffect(() => {
     if (tab !== "workcenters") return;
-    wcLoadedOnce.current = false;
     setWcPageOffset(0);
     void loadWorkCentersPage(0);
   }, [tab, loadWorkCentersPage]);
@@ -469,13 +468,11 @@ export default function SubcontractingPage() {
 
   const handleOrdersPageSizeChange = React.useCallback((size: number) => {
     setOrdersPageSize(size);
-    ordersLoadedOnce.current = false;
     setOrdersPageOffset(0);
   }, []);
 
   React.useEffect(() => {
     if (tab !== "orders") return;
-    ordersLoadedOnce.current = false;
     setOrdersPageOffset(0);
     void loadOrdersPage(0);
   }, [tab, loadOrdersPage]);
@@ -509,7 +506,6 @@ export default function SubcontractingPage() {
 
   React.useEffect(() => {
     if (tab !== "wip") return;
-    wipLoadedOnce.current = false;
     setWipPageOffset(0);
     void loadWipPage(0);
   }, [tab, loadWipPage]);
@@ -742,7 +738,6 @@ export default function SubcontractingPage() {
     if (created) {
       setSendSheetOpen(false);
       resetOrderForm();
-      ordersLoadedOnce.current = false;
       await loadOrdersPage(0);
       setTab("orders");
     }
@@ -1294,7 +1289,7 @@ export default function SubcontractingPage() {
                   }
                 />
 
-                {ordersInitialLoading ? (
+                {!ordersLoadedOnce.current && ordersInitialLoading ? (
                   <SkeletonDataTable
                     rows={ordersPageSize}
                     columnWidths={["w-28", "w-36", "w-32", "w-36", "w-28", "w-20", "w-24", "w-24", "w-32"]}
@@ -1327,16 +1322,16 @@ export default function SubcontractingPage() {
                   pageSize={ordersPageSize}
                   pageSizeOptions={[...ORDERS_PAGE_SIZE_OPTIONS]}
                   onPageSizeChange={handleOrdersPageSizeChange}
-                  itemCount={ordersInitialLoading ? 0 : orders.length}
+                  itemCount={!ordersLoadedOnce.current && ordersInitialLoading ? 0 : orders.length}
                   hasMore={ordersHasMore}
-                  loading={ordersInitialLoading || ordersFetching}
+                  loading={ordersFetching || (!ordersLoadedOnce.current && ordersInitialLoading)}
                   busy={orderSearchPending}
                   onPrevious={() => {
-                    if (ordersPageOffset <= 0 || ordersInitialLoading || ordersFetching) return;
+                    if (ordersPageOffset <= 0 || ordersFetching || ordersInitialLoading) return;
                     void loadOrdersPage(Math.max(0, ordersPageOffset - ordersPageSize));
                   }}
                   onNext={() => {
-                    if (!ordersHasMore || ordersInitialLoading || ordersFetching) return;
+                    if (!ordersHasMore || ordersFetching || ordersInitialLoading) return;
                     void loadOrdersPage(ordersPageOffset + ordersPageSize);
                   }}
                   entityLabel="orders"
@@ -1391,7 +1386,7 @@ export default function SubcontractingPage() {
                   }
                 />
 
-                {wipInitialLoading ? (
+                {!wipLoadedOnce.current && wipInitialLoading ? (
                   <SkeletonDataTable
                     rows={LIST_PAGE_SIZE}
                     columnWidths={["w-40", "w-24", "w-48", "w-28", "w-36"]}
@@ -1421,16 +1416,16 @@ export default function SubcontractingPage() {
                   className="shrink-0"
                   pageOffset={wipPageOffset}
                   pageSize={LIST_PAGE_SIZE}
-                  itemCount={wipInitialLoading ? 0 : wip.length}
+                  itemCount={!wipLoadedOnce.current && wipInitialLoading ? 0 : wip.length}
                   hasMore={wipHasMore}
-                  loading={wipInitialLoading || wipFetching}
+                  loading={wipFetching || (!wipLoadedOnce.current && wipInitialLoading)}
                   busy={wipSearchPending}
                   onPrevious={() => {
-                    if (wipPageOffset <= 0 || wipInitialLoading || wipFetching) return;
+                    if (wipPageOffset <= 0 || wipFetching || wipInitialLoading) return;
                     void loadWipPage(Math.max(0, wipPageOffset - LIST_PAGE_SIZE));
                   }}
                   onNext={() => {
-                    if (!wipHasMore || wipInitialLoading || wipFetching) return;
+                    if (!wipHasMore || wipFetching || wipInitialLoading) return;
                     void loadWipPage(wipPageOffset + LIST_PAGE_SIZE);
                   }}
                   entityLabel="balances"
@@ -1525,7 +1520,7 @@ export default function SubcontractingPage() {
                   }
                 />
 
-                {wcInitialLoading ? (
+                {!wcLoadedOnce.current && wcInitialLoading ? (
                   <SkeletonDataTable
                     rows={LIST_PAGE_SIZE}
                     columnWidths={["w-24", "w-40", "w-20", "w-36", "w-32", "w-16"]}
@@ -1559,16 +1554,16 @@ export default function SubcontractingPage() {
                   className="shrink-0"
                   pageOffset={wcPageOffset}
                   pageSize={LIST_PAGE_SIZE}
-                  itemCount={wcInitialLoading ? 0 : workCenterRows.length}
+                  itemCount={!wcLoadedOnce.current && wcInitialLoading ? 0 : workCenterRows.length}
                   hasMore={wcHasMore}
-                  loading={wcInitialLoading || wcFetching}
+                  loading={wcFetching || (!wcLoadedOnce.current && wcInitialLoading)}
                   busy={wcSearchPending}
                   onPrevious={() => {
-                    if (wcPageOffset <= 0 || wcInitialLoading || wcFetching) return;
+                    if (wcPageOffset <= 0 || wcFetching || wcInitialLoading) return;
                     void loadWorkCentersPage(Math.max(0, wcPageOffset - LIST_PAGE_SIZE));
                   }}
                   onNext={() => {
-                    if (!wcHasMore || wcInitialLoading || wcFetching) return;
+                    if (!wcHasMore || wcFetching || wcInitialLoading) return;
                     void loadWorkCentersPage(wcPageOffset + LIST_PAGE_SIZE);
                   }}
                   entityLabel="work centers"
