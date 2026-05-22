@@ -1,6 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
@@ -18,6 +25,9 @@ export interface TablePaginationProps {
   className?: string;
   /** Pin footer to bottom of scroll area for long tables */
   sticky?: boolean;
+  /** When set, shows a rows-per-page control and resets to page 0 on change. */
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (size: number) => void;
 }
 
 export function TablePagination({
@@ -32,6 +42,8 @@ export function TablePagination({
   entityLabel,
   className,
   sticky = false,
+  pageSizeOptions,
+  onPageSizeChange,
 }: TablePaginationProps) {
   const pageNumber = Math.floor(pageOffset / pageSize) + 1;
   const rangeStart = itemCount > 0 ? pageOffset + 1 : 0;
@@ -92,7 +104,29 @@ export function TablePagination({
             <ChevronRight className="ml-1 h-4 w-4" />
           )}
         </Button>
-        <span className="text-xs text-muted-foreground tabular-nums sm:ml-1">{pageSize} per page</span>
+        {pageSizeOptions?.length && onPageSizeChange ? (
+          <div className="flex items-center gap-2 sm:ml-1">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Rows</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => onPageSizeChange(Number(v))}
+              disabled={disabled}
+            >
+              <SelectTrigger className="h-8 w-[4.5rem] text-xs tabular-nums" aria-label="Rows per page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map((n) => (
+                  <SelectItem key={n} value={String(n)} className="text-xs tabular-nums">
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground tabular-nums sm:ml-1">{pageSize} per page</span>
+        )}
       </div>
     </div>
   );

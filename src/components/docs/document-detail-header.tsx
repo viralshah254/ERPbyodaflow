@@ -16,9 +16,12 @@ export type DocumentDetailHeaderField = {
 export function DocumentDetailHeader({
   fields,
   className,
+  compact = false,
 }: {
   fields: DocumentDetailHeaderField[];
   className?: string;
+  /** Tighter tiles for dense detail headers */
+  compact?: boolean;
 }) {
   const icons = [Hash, Calendar, Building2, Wallet];
 
@@ -32,12 +35,17 @@ export function DocumentDetailHeader({
       {fields.map((field, i) => {
         const Icon = icons[i % icons.length];
         const inner = (
-          <div className="rounded-xl border bg-gradient-to-b from-card to-muted/20 p-4 shadow-sm transition-shadow hover:shadow-md">
-            <div className="mb-2 flex items-center gap-2 text-muted-foreground">
+          <div
+            className={cn(
+              "rounded-lg border bg-gradient-to-b from-card to-muted/20 shadow-sm transition-shadow hover:shadow-md",
+              compact ? "p-3" : "rounded-xl p-4"
+            )}
+          >
+            <div className={cn("flex items-center gap-2 text-muted-foreground", compact ? "mb-1" : "mb-2")}>
               <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
               <span className="text-[11px] font-semibold uppercase tracking-wider">{field.label}</span>
             </div>
-            <div className={cn("text-sm font-semibold text-foreground", field.mono && "font-mono")}>
+            <div className={cn(compact ? "text-sm font-semibold" : "text-sm font-semibold", "text-foreground", field.mono && "font-mono")}>
               {field.value}
             </div>
           </div>

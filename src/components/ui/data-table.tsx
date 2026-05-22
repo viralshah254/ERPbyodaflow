@@ -33,6 +33,9 @@ function compareSortValues(a: unknown, b: unknown, dir: "asc" | "desc"): number 
   return String(a).localeCompare(String(b), undefined, { sensitivity: "base", numeric: true }) * mul;
 }
 
+export type DataTableScrollMode = "fixed" | "fill" | "auto" | "natural";
+export type DataTableSize = "default" | "comfortable";
+
 interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
@@ -43,6 +46,16 @@ interface DataTableProps<T> {
   selectable?: boolean;
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
+  /**
+   * fixed — legacy viewport-height scrollport (default).
+   * fill — flex child; scroll only inside parent flex column (parent needs min-h-0 flex-1).
+   * auto — height follows row count up to maxVisibleRows, then scrolls inside the table.
+   */
+  scrollMode?: DataTableScrollMode;
+  /** Cap visible body rows before scrolling (auto mode; defaults to 25). */
+  maxVisibleRows?: number;
+  /** Row/cell padding — comfortable for detail pages with few rows. */
+  size?: DataTableSize;
 }
 
 export function DataTable<T extends object>({
@@ -54,6 +67,9 @@ export function DataTable<T extends object>({
   selectable,
   selectedIds = [],
   onSelectionChange,
+  scrollMode = "fixed",
+  maxVisibleRows = 25,
+  size = "default",
 }: DataTableProps<T>) {
   const [sort, setSort] = React.useState<{ columnId: string; dir: "asc" | "desc" } | null>(null);
 
@@ -125,11 +141,44 @@ export function DataTable<T extends object>({
   const headerCell =
     "sticky top-0 z-10 bg-muted/95 backdrop-blur-sm";
 
+  const bodyRowCount = Math.max(displayData.length, 1);
+  const cappedRows = Math.min(bodyRowCount, Math.max(1, maxVisibleRows));
+  const autoMaxHeight =
+    scrollMode === "auto"
+      ? `min(70dvh, calc(2.75rem * ${cappedRows} + 3.25rem))`
+      : undefined;
+
+  const scrollClassName = cn(
+    "w-full min-w-0 max-w-full",
+    scrollMode === "natural" && "overflow-x-auto",
+    scrollMode !== "natural" && "overflow-auto",
+    scrollMode === "fixed" && "h-[min(28rem,70vh)] sm:h-[calc(100vh-22rem)]",
+    scrollMode === "fill" && "min-h-0 flex-1",
+    scrollMode === "auto" && "min-h-0"
+  );
+
+  const tableSizeClass =
+    size === "comfortable"
+      ? "[&_td]:py-3.5 [&_td]:px-4 [&_th]:py-3 [&_th]:px-4 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
+      : "";
+
   return (
-    <div className={cn("min-w-0 max-w-full rounded-md border", className)}>
-      <div className="h-[min(28rem,70vh)] w-full min-w-0 max-w-full overflow-auto sm:h-[calc(100vh-22rem)]">
+    <div
+      className={cn(
+        "min-w-0 max-w-full rounded-md border",
+        scrollMode === "fill" && "flex min-h-0 flex-1 flex-col",
+        className
+      )}
+    >
+      <div className={scrollClassName} style={autoMaxHeight ? { maxHeight: autoMaxHeight } : undefined}>
         {/* Native <table> — avoid Table component's inner overflow wrapper (breaks sticky columns). */}
-        <table className="w-max min-w-full caption-bottom text-sm">
+        <table
+          className={cn(
+            "caption-bottom text-sm",
+            scrollMode === "natural" ? "w-full min-w-full" : "w-max min-w-full",
+            tableSizeClass
+          )}
+        >
           <TableHeader>
             <TableRow>
               {selectable && (
@@ -153,7 +202,8 @@ export function DataTable<T extends object>({
                     !column.sticky && headerCell,
                     column.sticky && stickyHead,
                     column.sticky && (selectable ? "left-12" : "left-0"),
-                    column.className
+                    column.className,
+                    column.className?.includes("text-right") && "text-right"
                   )}
                 >
                   {column.sortable ? (

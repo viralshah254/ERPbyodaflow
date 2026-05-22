@@ -808,10 +808,94 @@ export function exportCashWeightAuditCsv(
 
 // ——— Subcontracting ———
 
-export async function fetchExternalWorkCenters(): Promise<ExternalWorkCenterRow[]> {
-  requireLiveApi("External work centers");
-  const res = await apiRequest<{ items: ExternalWorkCenterRow[] }>("/api/manufacturing/work-centers/external");
+export type WorkCenterFilterOption = {
+  id: string;
+  code: string;
+  name: string;
+  type: ExternalWorkCenterRow["type"];
+  isActive: boolean;
+};
+
+export async function fetchWorkCenterFilterOptions(opts?: {
+  activeOnly?: boolean;
+  withWipOnly?: boolean;
+}): Promise<WorkCenterFilterOption[]> {
+  requireLiveApi("Work center filter options");
+  const params: Record<string, string> = {};
+  if (opts?.activeOnly === false) params.activeOnly = "false";
+  if (opts?.withWipOnly) params.withWipOnly = "true";
+  const res = await apiRequest<{ items: WorkCenterFilterOption[] }>(
+    "/api/manufacturing/work-centers/external/filter-options",
+    { params }
+  );
   return res.items ?? [];
+}
+
+export type FetchExternalWorkCentersOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  type?: "" | "FACTORY" | "GROUP";
+  activeOnly?: boolean;
+};
+
+export type FetchExternalWorkCentersPageResult = {
+  items: ExternalWorkCenterRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchExternalWorkCentersPage(
+  opts?: FetchExternalWorkCentersOpts
+): Promise<FetchExternalWorkCentersPageResult> {
+  requireLiveApi("External work centers");
+  const params: Record<string, string> = {};
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.limit = String(lim);
+  if (opts?.cursor) params.cursor = opts.cursor;
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+  if (opts?.type === "FACTORY" || opts?.type === "GROUP") params.type = opts.type;
+  if (opts?.activeOnly === false) params.activeOnly = "false";
+
+  const payload = await apiRequest<{
+    items: ExternalWorkCenterRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/work-centers/external", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+/** Loads all pages — prefer fetchExternalWorkCentersPage for list UIs. */
+export async function fetchExternalWorkCenters(
+  opts?: FetchExternalWorkCentersOpts
+): Promise<ExternalWorkCenterRow[]> {
+  const rows: ExternalWorkCenterRow[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchExternalWorkCentersPage({ ...opts, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 /** Create external work center (factory, women's group). */
@@ -981,12 +1065,65 @@ export async function fetchSubcontractCostingDrilldown(id: string): Promise<Subc
   }
 }
 
-export async function fetchWIPBalances(workCenterId?: string): Promise<WIPBalanceRow[]> {
+export type FetchWIPBalancesOpts = {
+  workCenterId?: string;
+  search?: string;
+  hideZero?: boolean;
+  limit?: number;
+  cursor?: string;
+};
+
+export type FetchWIPBalancesPageResult = {
+  items: WIPBalanceRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchWIPBalancesPage(opts?: FetchWIPBalancesOpts): Promise<FetchWIPBalancesPageResult> {
   requireLiveApi("Subcontract WIP balances");
-  const res = await apiRequest<{ items: WIPBalanceRow[] }>("/api/manufacturing/subcontract-orders/wip", {
-    params: listParams({ workCenterId }),
-  });
-  return res.items ?? [];
+  const params: Record<string, string> = listParams({ workCenterId: opts?.workCenterId });
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.limit = String(lim);
+  if (opts?.cursor) params.cursor = opts.cursor;
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+  if (opts?.hideZero === false) params.hideZero = "false";
+
+  const payload = await apiRequest<{
+    items: WIPBalanceRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/subcontract-orders/wip", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+export async function fetchWIPBalances(opts?: FetchWIPBalancesOpts): Promise<WIPBalanceRow[]> {
+  const rows: WIPBalanceRow[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchWIPBalancesPage({ ...opts, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 export async function patchSubcontractOrder(

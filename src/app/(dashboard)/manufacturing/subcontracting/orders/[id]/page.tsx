@@ -26,24 +26,54 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { DocumentDetailHeader, DocumentNumberField } from "@/components/docs/document-detail-header";
 import { ActivityPanel } from "@/components/shared/ActivityPanel";
 import { BatchStatusTimeline } from "@/components/operational/BatchStatusTimeline";
-import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
-import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocationBadge";
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
+import { DeferredSection } from "@/components/ui/deferred-section";
+import { Skeleton, SkeletonCard, SkeletonDataTable } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import * as Icons from "lucide-react";
 import { fetchSubcontractOrderById, fetchSubcontractCostingDrilldown, dispatchSubcontractOrder, patchSubcontractOrder, fetchSubcontractBatchCost, type SubcontractBatchCost } from "@/lib/api/cool-catch";
 import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
 import { apiRequest } from "@/lib/api/client";
 import { NewTripSheet } from "@/app/(dashboard)/distribution/trips/new-trip-sheet";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { fetchYieldRecords } from "@/lib/api/yield";
-import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCard";
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+
+function SubcontractOrderDetailSkeleton() {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem]">
+      <div className="space-y-4 min-w-0">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl border bg-card p-4 animate-pulse space-y-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-5 w-32" />
+            </div>
+          ))}
+        </div>
+        <SkeletonDataTable
+          rows={3}
+          columnWidths={["w-16", "w-40", "w-20", "w-20", "w-28", "w-20", "w-20", "w-24"]}
+        />
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+      <div className="space-y-4 min-w-0">
+        <Skeleton className="h-56 w-full rounded-xl" />
+        <SkeletonCard />
+      </div>
+    </div>
+  );
+}
 
 function ReceiveWeightRow({
   line,
@@ -112,6 +142,9 @@ export default function SubcontractOrderDetailPage() {
   const areaLabel = manufacturingAreaLabel(terminology);
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchSubcontractOrderById>>>(null);
   const [loading, setLoading] = React.useState(true);
+  const [sidebarLoading, setSidebarLoading] = React.useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = React.useState(false);
+  const analyticsRequested = React.useRef(false);
   const [dispatching, setDispatching] = React.useState(false);
   const [drilldown, setDrilldown] = React.useState<Awaited<ReturnType<typeof fetchSubcontractCostingDrilldown>>>(null);
   const [batchCost, setBatchCost] = React.useState<SubcontractBatchCost | null>(null);
@@ -124,35 +157,81 @@ export default function SubcontractOrderDetailPage() {
   const [tripSelectValue, setTripSelectValue] = React.useState<string>("");
   const [newTripSheetOpen, setNewTripSheetOpen] = React.useState(false);
 
-  const reload = React.useCallback(async () => {
-    const [r, logs, yields] = await Promise.allSettled([
-      fetchSubcontractOrderById(id),
-      fetchAuditLogs({ sourceType: "subcontract-order", sourceId: id }),
-      fetchYieldRecords({ subcontractOrderId: id }),
-    ]);
-    if (r.status === "fulfilled") setOrder(r.value);
-    if (logs.status === "fulfilled") {
-      setAuditEntries((logs.value ?? []).map((e: any) => ({
-        id: e.id ?? e._id ?? String(Math.random()),
-        action: e.what ?? e.action ?? e.event ?? "Action",
-        user: e.who ?? e.actorName ?? e.actor ?? "System",
-        timestamp: e.when ? new Date(e.when).toLocaleString() : (e.createdAt ? new Date(e.createdAt).toLocaleString() : ""),
-        detail: e.detail ?? e.description ?? "",
-      })));
-    }
-    if (yields.status === "fulfilled") setYieldRecords(yields.value);
+  /** Core order + lines — one GET; drives KPI tiles, yield, and lines table. */
+  const loadCore = React.useCallback(async () => {
+    const r = await fetchSubcontractOrderById(id);
+    setOrder(r);
+    return r;
   }, [id]);
+
+  const loadSidebar = React.useCallback(async () => {
+    setSidebarLoading(true);
+    try {
+      const [logs, yields] = await Promise.allSettled([
+        fetchAuditLogs({ sourceType: "subcontract-order", sourceId: id }),
+        fetchYieldRecords({ subcontractOrderId: id }),
+      ]);
+      if (logs.status === "fulfilled") {
+        setAuditEntries((logs.value ?? []).map((e: Record<string, unknown>) => ({
+          id: String(e.id ?? e._id ?? Math.random()),
+          action: String(e.what ?? e.action ?? e.event ?? "Action"),
+          user: String(e.who ?? e.actorName ?? e.actor ?? "System"),
+          timestamp: e.when
+            ? new Date(String(e.when)).toLocaleString()
+            : e.createdAt
+              ? new Date(String(e.createdAt)).toLocaleString()
+              : "",
+          detail: String(e.detail ?? e.description ?? ""),
+        })));
+      }
+      if (yields.status === "fulfilled") setYieldRecords(yields.value);
+    } finally {
+      setSidebarLoading(false);
+    }
+  }, [id]);
+
+  const loadAnalytics = React.useCallback(async () => {
+    if (analyticsRequested.current) return;
+    analyticsRequested.current = true;
+    setAnalyticsLoading(true);
+    try {
+      const [dd, bc] = await Promise.allSettled([
+        fetchSubcontractCostingDrilldown(id),
+        fetchSubcontractBatchCost(id),
+      ]);
+      if (dd.status === "fulfilled") setDrilldown(dd.value);
+      if (bc.status === "fulfilled") setBatchCost(bc.value);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [id]);
+
+  const reload = React.useCallback(async () => {
+    analyticsRequested.current = false;
+    await loadCore();
+    void loadSidebar();
+    void loadAnalytics();
+  }, [loadCore, loadSidebar, loadAnalytics]);
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    reload()
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    fetchSubcontractCostingDrilldown(id).then((r) => { setDrilldown(r); }).catch(() => {});
-    fetchSubcontractBatchCost(id).then((r) => { setBatchCost(r); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [id, reload]);
+    setOrder(null);
+    analyticsRequested.current = false;
+    loadCore()
+      .catch(() => toast.error("Failed to load subcontract order."))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loadCore]);
+
+  React.useEffect(() => {
+    if (!order) return;
+    void loadSidebar();
+  }, [order, loadSidebar]);
 
   React.useEffect(() => {
     void fetchDistributionVehicles({ active: true }).then(setVehicles).catch(() => {});
@@ -220,11 +299,14 @@ export default function SubcontractOrderDetailPage() {
         { id: "product", header: "Product", accessor: (r) => r.productName },
       ];
 
+      const numCell = "text-right tabular-nums whitespace-nowrap";
+
       // Planned kg column for received orders
       if (isReceived) {
         cols.push({
           id: "planned",
           header: "Planned kg",
+          className: numCell,
           accessor: (r) => {
             const planned = r.plannedQuantity ?? r.quantity;
             return r.type === "INPUT" ? `${planned.toLocaleString()} kg` :
@@ -233,10 +315,10 @@ export default function SubcontractOrderDetailPage() {
         });
       }
 
-      // Actual kg (always shown, label differs by status)
       cols.push({
         id: "quantity_kg",
         header: isReceived ? "Actual kg" : "Planned kg",
+        className: numCell,
         accessor: (r) => {
           const kg = isReceived
             ? (r.quantityKg ?? (r.packSizeKg && r.packSizeKg > 0 ? r.quantity * r.packSizeKg : r.quantity))
@@ -245,10 +327,10 @@ export default function SubcontractOrderDetailPage() {
         },
       });
 
-      // Stock units (boxes/sacks) column for packed outputs
       cols.push({
         id: "stock_units",
         header: isReceived ? "Stock units" : "Planned units",
+        className: "text-right",
         accessor: (r) => {
           if (r.type === "INPUT" || r.type === "WASTE") return "—";
           const packSize = r.packSizeKg;
@@ -272,11 +354,13 @@ export default function SubcontractOrderDetailPage() {
           {
             id: "cost_per_kg",
             header: "Cost/kg",
+            className: numCell,
             accessor: (r) => r.costPerKg != null ? formatMoney(r.costPerKg, "KES") : "—",
           },
           {
             id: "cost_per_unit",
             header: "Cost/box",
+            className: numCell,
             accessor: (r) =>
               r.costPerStockUnit != null ? formatMoney(r.costPerStockUnit, "KES") :
               r.packSizeKg == null && r.costPerKg != null ? formatMoney(r.costPerKg, "KES") :
@@ -289,6 +373,7 @@ export default function SubcontractOrderDetailPage() {
         {
           id: "amount",
           header: isReceived ? "Output cost" : "Fee + packaging",
+          className: numCell,
           accessor: (r) => {
             const totalCost = (r as any).totalOutputCost ?? r.amount;
             if (totalCost == null) return "—";
@@ -317,8 +402,18 @@ export default function SubcontractOrderDetailPage() {
   if (loading) {
     return (
       <PageShell>
-        <PageHeader title="Subcontract order" breadcrumbs={[{ label: areaLabel, href: "/manufacturing/subcontracting" }, { label: "Subcontracting" }, { label: id }]} />
-        <div className="p-6"><p className="text-muted-foreground text-sm">Loading…</p></div>
+        <PageHeader
+          title="Subcontract order"
+          breadcrumbs={[
+            { label: areaLabel, href: "/manufacturing/subcontracting" },
+            { label: "Subcontracting", href: "/manufacturing/subcontracting" },
+            { label: "…" },
+          ]}
+          dense
+        />
+        <div className="px-4 pb-6 sm:px-6">
+          <SubcontractOrderDetailSkeleton />
+        </div>
       </PageShell>
     );
   }
@@ -360,20 +455,28 @@ export default function SubcontractOrderDetailPage() {
   const feeLines = lines.filter((line) => line.processingFeePerUnit != null);
   const feeTotal = feeLines.reduce((a, line) => a + (line.amount ?? 0), 0);
 
+  const speciesLabel = order.species
+    ? order.species === "TILAPIA"
+      ? "Tilapia"
+      : "Nile Perch"
+    : "—";
+  const processLabel = order.processType ?? "—";
+
   return (
     <PageShell>
       <PageHeader
         title={order.number}
-        description={`${order.workCenterName} · ${order.status}`}
+        description={`${order.workCenterName ?? "Work center"} · ${order.status}`}
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Subcontracting", href: "/manufacturing/subcontracting" },
           { label: order.number },
         ]}
         sticky
+        dense
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {order.status === "SENT" && (
               <Button size="sm" variant="secondary" disabled={dispatching} onClick={handleDispatch}>
                 {dispatching ? "Dispatching…" : "Mark as In Processing"}
@@ -385,60 +488,59 @@ export default function SubcontractOrderDetailPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-6">
-        <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">Subcontract Order Summary</CardTitle>
-                <Badge>{order.status}</Badge>
-              </CardHeader>
-              <CardContent className="grid gap-4 text-sm md:grid-cols-3 lg:grid-cols-6">
-                <div>
-                  <p className="text-muted-foreground">Work center</p>
-                  <p className="font-medium">{order.workCenterName}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Species / Process</p>
-                  <p className="font-medium">
-                    {order.species ? (order.species === "TILAPIA" ? "Tilapia" : "Nile Perch") : "—"}
-                    {order.processType ? ` · ${order.processType}` : ""}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">BOM</p>
-                  <p className="font-medium">{order.bomName ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Sent / Received</p>
-                  <p className="font-medium">{order.sentAt ?? "—"} / {order.receivedAt ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Linked PO</p>
-                  {order.purchaseOrderId ? (
-                    <Link href={`/purchasing/orders/${order.purchaseOrderId}`} className="font-medium text-sm text-primary underline-offset-2 hover:underline">
-                      {order.purchaseOrderNumber ?? order.purchaseOrderId.slice(-12)}
-                    </Link>
-                  ) : <p className="font-medium">—</p>}
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Linked GRN</p>
-                  {order.grnId ? (
-                    <Link href={`/inventory/receipts/${order.grnId}`} className="font-medium text-sm text-primary underline-offset-2 hover:underline">
-                      {order.grnNumber ?? order.grnId.slice(-12)}
-                    </Link>
-                  ) : <p className="font-medium">—</p>}
-                </div>
-                {order.status === "RECEIVED" && (order.receiveWarehouseName ?? order.receiveWarehouseId) ? (
-                  <div className="md:col-span-3 lg:col-span-6">
-                    <p className="text-muted-foreground">Outputs received into</p>
-                    <p className="font-medium">
-                      {order.receiveWarehouseName ?? order.receiveWarehouseId}
-                    </p>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
+      <div className="px-4 pb-6 sm:px-6">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem] xl:items-start">
+          <div className="space-y-4 min-w-0">
+            <DocumentDetailHeader
+              compact
+              className="sm:grid-cols-2 lg:grid-cols-4"
+              fields={[
+                { label: "Work center", value: order.workCenterName ?? "—" },
+                {
+                  label: "Species / process",
+                  value: `${speciesLabel} · ${processLabel}`,
+                },
+                { label: "BOM", value: order.bomName ?? "—" },
+                {
+                  label: "Sent / received",
+                  value: (
+                    <span className="tabular-nums">
+                      {order.sentAt ?? "—"} / {order.receivedAt ?? "—"}
+                    </span>
+                  ),
+                },
+                {
+                  label: "Linked PO",
+                  value: order.purchaseOrderId ? (
+                    <DocumentNumberField
+                      number={order.purchaseOrderNumber ?? order.purchaseOrderId.slice(-12)}
+                    />
+                  ) : (
+                    "—"
+                  ),
+                  href: order.purchaseOrderId
+                    ? `/purchasing/orders/${order.purchaseOrderId}`
+                    : undefined,
+                },
+                {
+                  label: "Linked GRN",
+                  value: order.grnId ? (
+                    <DocumentNumberField number={order.grnNumber ?? order.grnId.slice(-12)} />
+                  ) : (
+                    "—"
+                  ),
+                  href: order.grnId ? `/inventory/receipts/${order.grnId}` : undefined,
+                },
+                ...(order.status === "RECEIVED" && (order.receiveWarehouseName ?? order.receiveWarehouseId)
+                  ? [
+                      {
+                        label: "Received into",
+                        value: order.receiveWarehouseName ?? order.receiveWarehouseId ?? "—",
+                      },
+                    ]
+                  : []),
+              ]}
+            />
 
             {order.status === "WIP" && (
               <div className="rounded-lg border border-amber-500/40 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200 dark:border-amber-500/30">
@@ -534,6 +636,24 @@ export default function SubcontractOrderDetailPage() {
               </Card>
             )}
 
+            {order.lines && order.lines.length > 0 && (
+              <Card>
+                <CardHeader className="border-b bg-muted/30 px-4 py-3">
+                  <CardTitle className="text-base">Lines (input / output)</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <DataTable<SubcontractOrderLineRow>
+                    data={order.lines}
+                    columns={lineColumns}
+                    scrollMode="natural"
+                    size="comfortable"
+                    className="border-0 rounded-none shadow-none"
+                    emptyMessage="No lines."
+                  />
+                </CardContent>
+              </Card>
+            )}
+
             {order.status === "RECEIVED" ? (
               <YieldBreakdownCard
                 inputKg={actualInputQty}
@@ -564,159 +684,164 @@ export default function SubcontractOrderDetailPage() {
               />
             )}
 
-            {order.lines && order.lines.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Lines (input / output)</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable<SubcontractOrderLineRow> data={order.lines} columns={lineColumns} emptyMessage="No lines." />
-                </CardContent>
-              </Card>
-            )}
+            <DeferredSection
+              onShow={() => void loadAnalytics()}
+              fallback={
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
+              }
+            >
+              <div className="grid gap-4 lg:grid-cols-2">
+                {analyticsLoading && !batchCost ? (
+                  <SkeletonCard />
+                ) : batchCost ? (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Batch cost chain</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <div className="divide-y rounded-md border">
+                        <div className="flex justify-between gap-4 px-3 py-2">
+                          <span className="text-muted-foreground">Raw material (PO)</span>
+                          <span className="font-medium tabular-nums shrink-0">
+                            {batchCost.rawMaterialCost != null
+                              ? formatMoney(batchCost.rawMaterialCost, batchCost.currency)
+                              : "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-4 px-3 py-2">
+                          <span className="text-muted-foreground">Processing fee</span>
+                          <span className="font-medium tabular-nums shrink-0">
+                            {formatMoney(batchCost.processingFee, batchCost.currency)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-4 px-3 py-2">
+                          <span className="text-muted-foreground">
+                            Outbound transport
+                            {batchCost.transport.tripStatus
+                              ? ` (${batchCost.transport.finalized ? "final" : "provisional"})`
+                              : ""}
+                          </span>
+                          <span className="font-medium tabular-nums shrink-0 text-right">
+                            {batchCost.transport.tripId
+                              ? formatMoney(batchCost.transport.cost, batchCost.currency)
+                              : "No trip linked"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-4 px-3 py-2 font-semibold bg-muted/40">
+                          <span>Total estimate</span>
+                          <span className="tabular-nums shrink-0">
+                            {formatMoney(batchCost.totalEstimate, batchCost.currency)}
+                          </span>
+                        </div>
+                      </div>
+                      {!batchCost.transport.tripId && (
+                        <p className="text-xs text-muted-foreground">
+                          Link an outbound trip to include fuel and transport in this batch.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : null}
 
-            {(() => {
-              const inputQtyForCost = order.status === "RECEIVED" ? actualInputQty : plannedInputQty;
-              const primaryOutputLines = lines.filter((l) => l.type === "OUTPUT_PRIMARY");
-              const secondaryOutputLines = lines.filter((l) => l.type === "OUTPUT_SECONDARY");
-              // Total fee + packaging (stored in amount post-receive)
-              const primaryTotal = primaryOutputLines.reduce((a, l) => a + (l.amount ?? 0), 0);
-              const secondaryTotal = secondaryOutputLines.reduce((a, l) => a + (l.amount ?? 0), 0);
-              // For received orders, show cost-per-kg / cost-per-box summary
-              const primaryKgActual = order.status === "RECEIVED" ? actualPrimaryQty : 0;
-              const primaryCostPerKg = primaryKgActual > 0 ? Math.round(primaryTotal / primaryKgActual * 100) / 100 : 0;
-              const primaryPackSize = primaryOutputLines[0]?.packSizeKg;
-              const primaryCostPerBox = primaryCostPerKg > 0 && primaryPackSize ? Math.round(primaryCostPerKg * primaryPackSize * 100) / 100 : 0;
-              return (
-                <CostImpactPanel
-                  title="Processor Cost Impact"
-                  currency="KES"
-                  quantityKg={inputQtyForCost}
-                  lines={[
-                    { label: "Primary outputs (fee + packaging)", amount: primaryTotal },
-                    ...(secondaryTotal > 0 ? [{ label: "Secondary/byproduct", amount: secondaryTotal }] : []),
-                    ...(order.status === "RECEIVED" && primaryCostPerKg > 0 ? [
-                      { label: `Cost/kg (primary)`, amount: primaryCostPerKg },
-                      ...(primaryCostPerBox > 0 ? [{ label: `Cost/box (${primaryPackSize}kg)`, amount: primaryCostPerBox }] : []),
-                    ] : []),
-                  ]}
-                />
-              );
-            })()}
-            {batchCost && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Batch cost chain</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="divide-y">
-                    <div className="flex justify-between py-2">
-                      <span className="text-muted-foreground">Raw material (PO)</span>
-                      <span className="font-medium tabular-nums">
-                        {batchCost.rawMaterialCost != null
-                          ? `${batchCost.currency} ${batchCost.rawMaterialCost.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-muted-foreground">Processing fee</span>
-                      <span className="font-medium tabular-nums">
-                        {batchCost.currency} {batchCost.processingFee.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-muted-foreground">
-                        Outbound transport
-                        {batchCost.transport.tripStatus
-                          ? ` (${batchCost.transport.finalized ? "final" : "provisional"})`
-                          : ""}
-                      </span>
-                      <span className="font-medium tabular-nums">
-                        {batchCost.transport.tripId
-                          ? `${batchCost.currency} ${batchCost.transport.cost.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`
-                          : <span className="text-muted-foreground text-xs">No trip linked</span>}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2 font-semibold">
-                      <span>Total estimate</span>
-                      <span className="tabular-nums">
-                        {batchCost.currency} {batchCost.totalEstimate.toLocaleString("en-KE", { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  </div>
-                  {!batchCost.transport.tripId && (
-                    <p className="text-xs text-muted-foreground">
-                      Link an outbound trip above to include fuel / transport in the batch cost.
-                    </p>
-                  )}
-                  {batchCost.transport.tripId && !batchCost.transport.finalized && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      Transport cost is provisional — finalized when the trip is completed.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {drilldown && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Fee-to-COGS drilldown</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 text-sm md:grid-cols-3">
-                  <div>
-                    <p className="text-muted-foreground">Expected vs actual yield</p>
-                    <p className="font-medium">{(drilldown.expectedYield * 100).toFixed(2)}% vs {(drilldown.actualYield * 100).toFixed(2)}%</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Yield variance</p>
-                    <p className="font-medium">{(drilldown.yieldVariance * 100).toFixed(2)}%</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Service fee variance</p>
-                    <p className="font-medium">{formatMoney(drilldown.feeVariance, "KES")}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                {analyticsLoading && !drilldown ? (
+                  <SkeletonCard />
+                ) : drilldown ? (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Fee-to-COGS variance</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 sm:grid-cols-3 text-sm">
+                      <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                        <p className="text-xs text-muted-foreground">Expected vs actual yield</p>
+                        <p className="mt-1 font-semibold tabular-nums">
+                          {(drilldown.expectedYield * 100).toFixed(1)}% → {(drilldown.actualYield * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 px-3 py-2">
+                        <p className="text-xs text-muted-foreground">Yield variance</p>
+                        <p
+                          className={cn(
+                            "mt-1 font-semibold tabular-nums",
+                            drilldown.yieldVariance < 0 && "text-destructive"
+                          )}
+                        >
+                          {(drilldown.yieldVariance * 100).toFixed(2)}%
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 px-3 py-2 sm:col-span-1">
+                        <p className="text-xs text-muted-foreground">Service fee variance</p>
+                        <p className="mt-1 font-semibold tabular-nums">
+                          {formatMoney(drilldown.feeVariance, "KES")}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : !analyticsLoading && !batchCost && !drilldown ? (
+                  <p className="text-sm text-muted-foreground lg:col-span-2">Cost analytics unavailable.</p>
+                ) : null}
+              </div>
+            </DeferredSection>
 
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">Yield Batches</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+                <CardTitle className="text-base">Yield batches</CardTitle>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/manufacturing/yield?subcontractOrderId=${id}`}>Record yield</Link>
                 </Button>
               </CardHeader>
               <CardContent className="p-0">
-                {yieldRecords.length === 0 ? (
-                  <p className="text-muted-foreground text-sm p-4">No yield batches recorded yet.</p>
+                {sidebarLoading ? (
+                  <div className="space-y-2 px-4 py-6">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-4/5" />
+                  </div>
+                ) : yieldRecords.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                    <Icons.Layers className="h-8 w-8 text-muted-foreground/50" aria-hidden />
+                    <p className="text-sm text-muted-foreground">No yield batches recorded yet.</p>
+                    <Button variant="link" size="sm" className="h-auto p-0" asChild>
+                      <Link href={`/manufacturing/yield?subcontractOrderId=${id}`}>Record first yield</Link>
+                    </Button>
+                  </div>
                 ) : (
                   <div className="divide-y text-sm">
-                    {yieldRecords.map((yr: any) => (
-                      <div key={yr.id ?? yr._id} className="grid grid-cols-6 gap-2 px-4 py-3">
+                    {yieldRecords.map((yr: Record<string, unknown>) => (
+                      <div
+                        key={String(yr.id ?? yr._id)}
+                        className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-3 lg:grid-cols-6"
+                      >
                         <div>
                           <p className="text-muted-foreground text-xs">Date</p>
-                          <p>{yr.recordedAt ? new Date(yr.recordedAt).toLocaleDateString() : "—"}</p>
+                          <p className="tabular-nums">
+                            {yr.recordedAt ? new Date(String(yr.recordedAt)).toLocaleDateString() : "—"}
+                          </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Input kg</p>
-                          <p>{yr.inputKg ?? "—"}</p>
+                          <p className="tabular-nums">{String(yr.inputKg ?? "—")}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Primary kg</p>
-                          <p>{yr.primaryOutputKg ?? "—"}</p>
+                          <p className="tabular-nums">{String(yr.primaryOutputKg ?? "—")}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Secondary kg</p>
-                          <p>{yr.secondaryOutputKg ?? "—"}</p>
+                          <p className="tabular-nums">{String(yr.secondaryOutputKg ?? "—")}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Loss kg</p>
-                          <p>{yr.processLossKg ?? "—"}</p>
+                          <p className="tabular-nums">{String(yr.processLossKg ?? "—")}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Yield %</p>
-                          <p>{yr.primaryYieldPct != null ? `${(yr.primaryYieldPct * 100).toFixed(1)}%` : "—"}</p>
+                          <p className="tabular-nums">
+                            {yr.primaryYieldPct != null
+                              ? `${(Number(yr.primaryYieldPct) * 100).toFixed(1)}%`
+                              : "—"}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -724,17 +849,22 @@ export default function SubcontractOrderDetailPage() {
                 )}
               </CardContent>
             </Card>
+
             {order.grnId && (
-              <BatchLandedCostCard
-                grnId={order.grnId}
-                costingHref={`/inventory/costing?grnId=${order.grnId}`}
-              />
+              <DeferredSection
+                fallback={<SkeletonCard />}
+              >
+                <BatchLandedCostCard
+                  grnId={order.grnId}
+                  costingHref={`/inventory/costing?grnId=${order.grnId}`}
+                />
+              </DeferredSection>
             )}
           </div>
 
-          <div className="space-y-6">
+          <aside className="space-y-4 min-w-0 xl:sticky xl:top-[4.5rem]">
             <BatchStatusTimeline
-              title="Job Work Timeline"
+              title="Job work timeline"
               steps={[
                 { id: "create", label: "Order created", status: "completed", timestamp: order.createdAt },
                 { id: "dispatch", label: "Stock dispatched to processor", status: order.sentAt ? "completed" : "current", timestamp: order.sentAt ?? undefined },
@@ -743,21 +873,28 @@ export default function SubcontractOrderDetailPage() {
               ]}
             />
             <Card className="overflow-hidden">
-              <CardHeader>
-                <CardTitle>Activity & Audit</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Activity & audit</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <ActivityPanel
-                  auditEntries={
-                    auditEntries.length > 0
-                      ? auditEntries
-                      : [{ id: "init", action: "Subcontract order created", user: "System", timestamp: new Date(order.createdAt).toLocaleString(), detail: order.number }]
-                  }
-                  comments={[]}
-                />
+              <CardContent className="p-0 max-h-[min(20rem,40vh)] overflow-y-auto">
+                {sidebarLoading ? (
+                  <div className="space-y-3 p-4">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                  </div>
+                ) : (
+                  <ActivityPanel
+                    auditEntries={
+                      auditEntries.length > 0
+                        ? auditEntries
+                        : [{ id: "init", action: "Subcontract order created", user: "System", timestamp: new Date(order.createdAt).toLocaleString(), detail: order.number }]
+                    }
+                    comments={[]}
+                  />
+                )}
               </CardContent>
             </Card>
-          </div>
+          </aside>
         </div>
       </div>
 
