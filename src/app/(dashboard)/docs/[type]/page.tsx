@@ -166,6 +166,10 @@ export default function DocTypeListPage() {
     }
   }, [type, statusFilter, debouncedSearch, nextCursor, hasMoreList, loadingMore]);
 
+  React.useEffect(() => {
+    void loadFirstPage();
+  }, [loadFirstPage]);
+
   const columns = React.useMemo(
     () => buildColumns(type, terminology),
     [type, terminology]
@@ -378,6 +382,17 @@ export default function DocTypeListPage() {
           onSaveCurrentView={handleSaveCurrentView}
           onDeleteView={handleDeleteView}
           onExport={handleExport}
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => void loadFirstPage()}
+            >
+              <Icons.RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          }
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">

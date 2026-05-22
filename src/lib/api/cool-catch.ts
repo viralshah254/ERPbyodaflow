@@ -1155,23 +1155,75 @@ export interface InboundOrderRow {
   outletName: string;
   total: number;
   currency: string;
+  /** Total line count on the PR (list may only include a preview in `lines`). */
+  lineCount?: number;
   /** Present when HQ spawned a sales order from this outlet PR. */
   linkedHqSalesOrder?: { id: string; number: string; status: string } | null;
   lines: InboundOrderLine[];
 }
 
-export async function fetchInboundOrders(params?: {
+export type InboundOrdersPageResult = {
+  items: InboundOrderRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export type FetchInboundOrdersParams = {
   status?: string;
   outletOrgId?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string;
   /** When true, include CONVERTED / CANCELLED PRs (e.g. outlet “Orders to HQ” history). */
   includeHistorical?: boolean;
-}): Promise<{ items: InboundOrderRow[] }> {
+};
+
+export async function fetchInboundOrdersPage(
+  params?: FetchInboundOrdersParams
+): Promise<InboundOrdersPageResult> {
   const p = new URLSearchParams();
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 25;
+  p.set("limit", String(lim));
+  if (params?.cursor != null && params.cursor !== "") p.set("cursor", params.cursor);
   if (params?.status) p.set("status", params.status);
   if (params?.outletOrgId) p.set("outletOrgId", params.outletOrgId);
+  if (params?.search?.trim()) p.set("search", params.search.trim());
   if (params?.includeHistorical) p.set("includeHistorical", "1");
   const qs = p.toString();
-  return apiRequest(`/api/franchise/network/inbound-orders${qs ? `?${qs}` : ""}`);
+  const payload = await apiRequest<{
+    items: InboundOrderRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>(`/api/franchise/network/inbound-orders${qs ? `?${qs}` : ""}`);
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const offset =
+    typeof payload.offset === "number"
+      ? payload.offset
+      : params?.cursor != null && params.cursor !== ""
+        ? Number(params.cursor) || 0
+        : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (payload.nextCursor !== undefined && payload.nextCursor !== null && String(payload.nextCursor) !== "") {
+    nextCursor = String(payload.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(offset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset, hasMore, nextCursor };
+}
+
+/** Legacy helper — fetches up to 100 rows (single page). Prefer fetchInboundOrdersPage for lists. */
+export async function fetchInboundOrders(params?: Omit<FetchInboundOrdersParams, "limit" | "cursor">): Promise<{ items: InboundOrderRow[] }> {
+  const page = await fetchInboundOrdersPage({ ...params, limit: 100, cursor: "0" });
+  return { items: page.items };
 }
 
 export type FranchiseInboundOrderDetail = Omit<InboundOrderRow, "lines"> & {
