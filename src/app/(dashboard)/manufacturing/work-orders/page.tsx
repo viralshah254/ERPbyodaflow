@@ -1,24 +1,30 @@
 "use client";
 
 import * as React from "react";
-import { PageLayout } from "@/components/layout/page-layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { PageShell } from "@/components/layout/page-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { t } from "@/lib/terminology";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { t, manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import type { FilterChip } from "@/components/ui/filter-chips";
+import { cn } from "@/lib/utils";
 import {
   checkWorkOrderAvailability,
   createManufacturingWorkOrder,
   fetchManufacturingBoms,
   fetchManufacturingRoutes,
-  fetchManufacturingWorkOrders,
+  fetchManufacturingWorkOrdersPage,
   runManufacturingWorkOrderAction,
   type ManufacturingBom,
   type ManufacturingRoute,
@@ -32,16 +38,40 @@ import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE = 25;
+
+const STATUS_OPTIONS = [
+  { label: "All statuses", value: "" },
+  { label: "Draft", value: "DRAFT" },
+  { label: "Released", value: "RELEASED" },
+  { label: "In progress", value: "IN_PROGRESS" },
+  { label: "Completed", value: "COMPLETED" },
+  { label: "Cancelled", value: "CANCELLED" },
+];
+
 export default function WorkOrdersPage() {
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
+  const areaLabel = manufacturingAreaLabel(terminology);
+
   const [products, setProducts] = React.useState(() => listProducts());
   React.useEffect(() => subscribeProductsCache(() => setProducts(listProducts())), []);
+
+  const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("");
   const [rows, setRows] = React.useState<ManufacturingWorkOrder[]>([]);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
+
   const [boms, setBoms] = React.useState<ManufacturingBom[]>([]);
   const [routes, setRoutes] = React.useState<ManufacturingRoute[]>([]);
-  const [loading, setLoading] = React.useState(true);
   const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [sheetMetaLoading, setSheetMetaLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [bomId, setBomId] = React.useState("");
   const [productId, setProductId] = React.useState("");
@@ -55,30 +85,110 @@ export default function WorkOrdersPage() {
   const [availLoading, setAvailLoading] = React.useState(false);
   const availDebounce = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const refresh = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      await hydrateProductsFromApi();
-      const [nextRows, nextBoms, nextRoutes] = await Promise.all([
-        fetchManufacturingWorkOrders(),
-        fetchManufacturingBoms(),
-        fetchManufacturingRoutes(),
-      ]);
-      setRows(nextRows);
-      setBoms(nextBoms);
-      setRoutes(nextRoutes);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to load work orders.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchManufacturingWorkOrdersPage({
+          limit: PAGE_SIZE,
+          cursor: String(offset),
+          search: debouncedSearch.trim() || undefined,
+          status: statusFilter || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load work orders.");
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, statusFilter]
+  );
 
   React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    hasLoadedOnce.current = false;
+    setPageOffset(0);
+    void loadPage(0);
+  }, [loadPage]);
 
-  // Debounced availability check when BOM + quantity changes
+  const handleRefresh = React.useCallback(() => {
+    void loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + PAGE_SIZE);
+  };
+
+  const searchPending = search.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
+
+  const filterChips: FilterChip[] = React.useMemo(() => {
+    const chips: FilterChip[] = [];
+    if (statusFilter) {
+      const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
+      chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
+    }
+    if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
+    return chips;
+  }, [statusFilter, search]);
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setStatusFilter("");
+  };
+
+  const handleRemoveFilterChip = (id: string) => {
+    if (id === "status") setStatusFilter("");
+    if (id === "q") setSearch("");
+  };
+
+  const runAction = React.useCallback(
+    async (id: string, action: Parameters<typeof runManufacturingWorkOrderAction>[1]) => {
+      try {
+        await runManufacturingWorkOrderAction(id, action);
+        await loadPage(pageOffset);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Action failed.");
+      }
+    },
+    [loadPage, pageOffset]
+  );
+
+  React.useEffect(() => {
+    if (!sheetOpen) return;
+    setSheetMetaLoading(true);
+    void Promise.all([
+      fetchManufacturingBoms({ includeItems: true }),
+      fetchManufacturingRoutes({ includeOperations: true }),
+      hydrateProductsFromApi(),
+    ])
+      .then(([nextBoms, nextRoutes]) => {
+        setBoms(nextBoms);
+        setRoutes(nextRoutes);
+      })
+      .catch(() => {
+        toast.error("Failed to load BOMs and routing for the form.");
+      })
+      .finally(() => setSheetMetaLoading(false));
+  }, [sheetOpen]);
+
   React.useEffect(() => {
     if (availDebounce.current) clearTimeout(availDebounce.current);
     if (!bomId || !Number(quantity)) {
@@ -103,17 +213,12 @@ export default function WorkOrdersPage() {
 
   const hasShortfall = availLines.some((line) => line.shortfall > 0);
 
-  // When GRN or BOM changes:
-  // 1. Smart quantity: match BOM components to GRN lines; fall back to total received weight.
-  // 2. Auto-derive productId from BOM output, or from GRN's first input product line when no BOM.
-  //    (Finished product selector is hidden when GRN/BOM is set — no manual selection needed.)
   React.useEffect(() => {
     if (!grnId) return;
     const selectedGrn = availableGrns.find((g) => g.id === grnId);
     if (!selectedGrn) return;
     const selectedBom = boms.find((b) => b.id === bomId);
 
-    // Quantity pre-fill
     if (selectedBom && selectedBom.items.length > 0) {
       const bomProductIds = new Set(selectedBom.items.map((i) => i.productId).filter(Boolean));
       const matchedWeight = (selectedGrn.lineAvailability ?? [])
@@ -125,7 +230,6 @@ export default function WorkOrdersPage() {
       setQuantity(String(selectedGrn.receivedWeightKg));
     }
 
-    // Auto-derive productId: BOM takes precedence, then GRN's first available input line.
     if (!selectedBom) {
       const firstLine = (selectedGrn.lineAvailability ?? []).find((l) => l.available && l.productId);
       if (firstLine?.productId) setProductId(firstLine.productId);
@@ -133,73 +237,88 @@ export default function WorkOrdersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grnId, bomId]);
 
-  const columns = [
-    { id: "number", header: "Number", accessor: (r: ManufacturingWorkOrder) => <span className="font-medium">{r.number}</span>, sticky: true },
-    {
-      id: "product",
-      header: "Product",
-      accessor: (r: ManufacturingWorkOrder) => r.productSku ? `${r.productSku} - ${r.productName}` : r.productName ?? r.productId,
-    },
-    { id: "bom", header: "BOM", accessor: (r: ManufacturingWorkOrder) => r.bomName ?? "—" },
-    { id: "routing", header: "Routing", accessor: (r: ManufacturingWorkOrder) => r.routingName ?? "—" },
-    {
-      id: "grn",
-      header: "GRN batch",
-      accessor: (r: ManufacturingWorkOrder) =>
-        r.grnNumber ? (
-          <span className="text-xs font-medium text-primary">{r.grnNumber}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+  const columns = React.useMemo(
+    () => [
+      {
+        id: "number",
+        header: "Number",
+        accessor: (r: ManufacturingWorkOrder) => <span className="font-mono text-sm font-semibold">{r.number}</span>,
+        sticky: true,
+      },
+      {
+        id: "product",
+        header: "Product",
+        accessor: (r: ManufacturingWorkOrder) => (
+          <span className="block max-w-[min(360px,45vw)] truncate text-sm" title={r.productSku ? `${r.productSku} - ${r.productName}` : r.productName ?? r.productId}>
+            {r.productSku ? `${r.productSku} - ${r.productName}` : r.productName ?? r.productId}
+          </span>
         ),
-    },
-    { id: "qty", header: "Planned qty", accessor: (r: ManufacturingWorkOrder) => r.plannedQuantity },
-    { id: "produced", header: "Produced", accessor: (r: ManufacturingWorkOrder) => r.producedQuantity },
-    { id: "open", header: "Open", accessor: (r: ManufacturingWorkOrder) => r.openQuantity },
-    { id: "dueDate", header: "Due date", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" },
-    { id: "status", header: "Status", accessor: (r: ManufacturingWorkOrder) => <StatusBadge status={r.status} /> },
-    {
-      id: "actions",
-      header: "",
-      accessor: (r: ManufacturingWorkOrder) => (
-        <div className="flex gap-2">
-          {r.status === "DRAFT" && (
-            <Button size="sm" variant="ghost" onClick={async () => {
-              await runManufacturingWorkOrderAction(r.id, { action: "release" });
-              await refresh();
-            }}>
-              Release
-            </Button>
-          )}
-          {r.status === "RELEASED" && (
-            <Button size="sm" variant="ghost" onClick={async () => {
-              await runManufacturingWorkOrderAction(r.id, { action: "start" });
-              await refresh();
-            }}>
-              Start
-            </Button>
-          )}
-          {r.status === "IN_PROGRESS" && (
-            <Button size="sm" variant="ghost" onClick={async () => {
-              await runManufacturingWorkOrderAction(r.id, {
-                action: "complete",
-                producedQuantity: r.openQuantity > 0 ? r.quantity : r.producedQuantity,
-              });
-              await refresh();
-            }}>
-              Complete
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
+      },
+      { id: "bom", header: "BOM", accessor: (r: ManufacturingWorkOrder) => r.bomName ?? "—" },
+      { id: "routing", header: "Routing", accessor: (r: ManufacturingWorkOrder) => r.routingName ?? "—" },
+      {
+        id: "grn",
+        header: "GRN batch",
+        accessor: (r: ManufacturingWorkOrder) =>
+          r.grnNumber ? (
+            <span className="text-xs font-medium text-primary">{r.grnNumber}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "qty",
+        header: "Planned qty",
+        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.plannedQuantity}</span>,
+      },
+      {
+        id: "produced",
+        header: "Produced",
+        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.producedQuantity}</span>,
+      },
+      {
+        id: "open",
+        header: "Open",
+        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.openQuantity}</span>,
+      },
+      { id: "dueDate", header: "Due date", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" },
+      { id: "status", header: "Status", accessor: (r: ManufacturingWorkOrder) => <StatusBadge status={r.status} /> },
+      {
+        id: "actions",
+        header: "",
+        accessor: (r: ManufacturingWorkOrder) => (
+          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            {r.status === "DRAFT" && (
+              <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "release" })}>
+                Release
+              </Button>
+            )}
+            {r.status === "RELEASED" && (
+              <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "start" })}>
+                Start
+              </Button>
+            )}
+            {r.status === "IN_PROGRESS" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  void runAction(r.id, {
+                    action: "complete",
+                    producedQuantity: r.openQuantity > 0 ? r.quantity : r.producedQuantity,
+                  })
+                }
+              >
+                Complete
+              </Button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [runAction]
+  );
 
-  // Load available GRNs when sheet opens.
-  // Uses availableForProcessing=true: restricts to POSTED/CONVERTED status and returns
-  // lineAvailability per line for smart qty matching.
-  // We show ALL returned GRNs (including those already linked to a WO) so the dropdown
-  // is never unexpectedly empty. GRNs with an existing WO show a warning in the label;
-  // the backend 409 guard prevents actually creating a duplicate.
   const loadAvailableGrns = React.useCallback(async () => {
     if (!isApiConfigured()) return;
     setGrnsLoading(true);
@@ -224,25 +343,94 @@ export default function WorkOrdersPage() {
   }
 
   return (
-    <PageLayout
-      title={woLabel}
-      description="Create, issue, and receive work orders"
-      actions={
-        <Button onClick={() => setSheetOpen(true)}>
-          <Icons.Plus className="mr-2 h-4 w-4" />
-          New work order
-        </Button>
-      }
-    >
-      <Card>
-        <CardHeader>
-          <CardTitle>Work orders</CardTitle>
-          <CardDescription>Live production orders with release, start, and completion progress.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <DataTable data={rows} columns={columns} emptyMessage={loading ? "Loading work orders..." : "No work orders."} />
-        </CardContent>
-      </Card>
+    <PageShell>
+      <PageHeader
+        title={woLabel}
+        description="Create, issue, and receive work orders"
+        breadcrumbs={[{ label: areaLabel, href: "/manufacturing/work-orders" }, { label: woLabel }]}
+        sticky
+        actions={
+          <Button size="sm" onClick={() => setSheetOpen(true)}>
+            <Icons.Plus className="mr-2 h-4 w-4" />
+            New work order
+          </Button>
+        }
+      />
+
+      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+        <DataTableToolbar
+          className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+          searchPlaceholder="Search number, product, BOM, or GRN…"
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchInputProps={{
+            spellCheck: false,
+            autoComplete: "off",
+          }}
+          filters={[
+            {
+              id: "status",
+              label: "Status",
+              options: STATUS_OPTIONS,
+              value: statusFilter,
+              onChange: setStatusFilter,
+            },
+          ]}
+          activeFiltersCount={filterChips.length}
+          onClearFilters={handleClearFilters}
+          filterChips={filterChips}
+          onRemoveFilterChip={handleRemoveFilterChip}
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={initialLoading || fetching}
+              onClick={handleRefresh}
+            >
+              <Icons.RefreshCw
+                className={cn("h-4 w-4 mr-1.5", (initialLoading || fetching) && "animate-spin")}
+              />
+              Refresh
+            </Button>
+          }
+        />
+
+        {initialLoading ? (
+          <SkeletonDataTable
+            rows={PAGE_SIZE}
+            columnWidths={["w-24", "w-44", "w-32", "w-28", "w-20", "w-20", "w-20", "w-16", "w-24", "w-24", "w-28"]}
+          />
+        ) : (
+          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+            <TableLinearProgress active={tableBusy} />
+            <div
+              className={cn(
+                "transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60"
+              )}
+            >
+              <DataTable
+                data={rows}
+                columns={columns}
+                emptyMessage="No work orders match your filters."
+              />
+            </div>
+          </div>
+        )}
+
+        <TablePagination
+          sticky
+          pageOffset={pageOffset}
+          pageSize={PAGE_SIZE}
+          itemCount={initialLoading ? 0 : rows.length}
+          hasMore={hasMore}
+          loading={initialLoading || fetching}
+          busy={searchPending}
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+          entityLabel="work orders"
+        />
+      </div>
 
       <Sheet
         open={sheetOpen}
@@ -266,7 +454,6 @@ export default function WorkOrdersPage() {
           </SheetHeader>
 
           <div className="space-y-4 py-4">
-            {/* GRN batch link */}
             <div className="space-y-2">
               <Label>
                 GRN batch
@@ -277,7 +464,6 @@ export default function WorkOrdersPage() {
                 onValueChange={(value) => {
                   const next = value === "__none__" ? "" : value;
                   setGrnId(next);
-                  // Clear auto-derived productId when GRN is removed (unless BOM is set)
                   if (!next && !bomId) setProductId("");
                 }}
               >
@@ -322,7 +508,11 @@ export default function WorkOrdersPage() {
                     {hasWo && (
                       <div className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                         <Icons.AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                        <span>This GRN is already linked to <span className="font-medium">{grn.workOrderNumber ?? "a work order"}</span>. Creating another will be blocked.</span>
+                        <span>
+                          This GRN is already linked to{" "}
+                          <span className="font-medium">{grn.workOrderNumber ?? "a work order"}</span>. Creating another
+                          will be blocked.
+                        </span>
                       </div>
                     )}
                     <div className="rounded-md border bg-muted/30 px-3 py-2 space-y-1">
@@ -333,25 +523,23 @@ export default function WorkOrdersPage() {
                             <span className="font-medium tabular-nums">{l.receivedWeightKg.toLocaleString()} kg</span>
                           </div>
                         ))
-                      ) : (
-                        grn.receivedWeightKg ? (
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Total received</span>
-                            <span className="font-medium tabular-nums">{grn.receivedWeightKg.toLocaleString()} kg</span>
-                          </div>
-                        ) : null
-                      )}
+                      ) : grn.receivedWeightKg ? (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Total received</span>
+                          <span className="font-medium tabular-nums">{grn.receivedWeightKg.toLocaleString()} kg</span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );
               })()}
             </div>
 
-            {/* BOM */}
             <div className="space-y-2">
               <Label>BOM</Label>
               <Select
                 value={bomId || "__none__"}
+                disabled={sheetMetaLoading}
                 onValueChange={(value) => {
                   const nextBomId = value === "__none__" ? "" : value;
                   setBomId(nextBomId);
@@ -363,7 +551,11 @@ export default function WorkOrdersPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Optional BOM" />
+                  {sheetMetaLoading ? (
+                    <span className="text-muted-foreground text-sm">Loading BOMs…</span>
+                  ) : (
+                    <SelectValue placeholder="Optional BOM" />
+                  )}
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">No BOM</SelectItem>
@@ -376,16 +568,13 @@ export default function WorkOrdersPage() {
               </Select>
             </div>
 
-            {/* Finished product — only shown for standalone work orders (no GRN, no BOM).
-                When a GRN is linked, the input is the batch itself (multi-output processing).
-                When a BOM is selected, the output product is encoded in the BOM. */}
             {!grnId && !bomId && (
               <div className="space-y-2">
                 <Label>
                   Finished product
                   <span className="ml-1 text-xs text-destructive">*</span>
                 </Label>
-                <Select value={productId} onValueChange={setProductId}>
+                <Select value={productId} onValueChange={setProductId} disabled={sheetMetaLoading}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select product" />
                   </SelectTrigger>
@@ -400,10 +589,13 @@ export default function WorkOrdersPage() {
               </div>
             )}
 
-            {/* Routing */}
             <div className="space-y-2">
               <Label>Routing</Label>
-              <Select value={routingId || "__none__"} onValueChange={(v) => setRoutingId(v === "__none__" ? "" : v)}>
+              <Select
+                value={routingId || "__none__"}
+                disabled={sheetMetaLoading}
+                onValueChange={(v) => setRoutingId(v === "__none__" ? "" : v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Optional routing" />
                 </SelectTrigger>
@@ -418,7 +610,6 @@ export default function WorkOrdersPage() {
               </Select>
             </div>
 
-            {/* Quantity */}
             <div className="space-y-2">
               <Label>Quantity</Label>
               <Input
@@ -430,13 +621,11 @@ export default function WorkOrdersPage() {
               />
             </div>
 
-            {/* Due date */}
             <div className="space-y-2">
               <Label>Due date</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
 
-            {/* Material availability panel */}
             {bomId && (
               <div className="rounded-md border p-3 space-y-2">
                 <div className="flex items-center justify-between">
@@ -501,7 +690,7 @@ export default function WorkOrdersPage() {
               Cancel
             </Button>
             <Button
-              disabled={saving || (!productId && !grnId && !bomId)}
+              disabled={saving || sheetMetaLoading || (!productId && !grnId && !bomId)}
               onClick={async () => {
                 setSaving(true);
                 try {
@@ -516,11 +705,9 @@ export default function WorkOrdersPage() {
                   toast.success("Work order created.");
                   setSheetOpen(false);
                   resetForm();
-                  await refresh();
+                  await loadPage(0);
                 } catch (error) {
-                  const msg = error instanceof Error ? error.message : "Failed to create work order.";
-                  // 409 = GRN already linked to another work order
-                  toast.error(msg);
+                  toast.error(error instanceof Error ? error.message : "Failed to create work order.");
                 } finally {
                   setSaving(false);
                 }
@@ -532,6 +719,6 @@ export default function WorkOrdersPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-    </PageLayout>
+    </PageShell>
   );
 }

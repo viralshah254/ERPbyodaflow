@@ -57,7 +57,13 @@ import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchPartyByIdApi, type PartyLookupOption } from "@/lib/api/parties";
-import type { DocumentChainNode, DocumentDetailRecord } from "@/lib/types/documents";
+import type { DocumentDetailRecord } from "@/lib/types/documents";
+import {
+  DocumentDetailHeader,
+  DocumentDetailHeaderSkeleton,
+  DocumentNumberField,
+} from "@/components/docs/document-detail-header";
+import { DocumentChainTimeline } from "@/components/docs/document-chain-timeline";
 import { deliveryLinePrimaryLabel, deliveryLineSku } from "@/lib/documents/format-delivery-line";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
@@ -261,21 +267,53 @@ export default function DocViewPage() {
     [type, id, label, document, displayPartyName]
   );
 
-  const refreshDocument = React.useCallback(async (isBackground = false) => {
-    if (isBackground) {
-      setRefreshing(true);
-    } else {
-      setInitialLoading(true);
-    }
-    try {
-      setDocument(await fetchDocumentDetailApi(type as DocTypeKey, id));
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setInitialLoading(false);
-      setRefreshing(false);
-    }
-  }, [type, id]);
+  const refreshDocument = React.useCallback(
+    async (isBackground = false, fullPayload = true) => {
+      if (isBackground) {
+        setRefreshing(true);
+      } else {
+        setInitialLoading(true);
+      }
+      try {
+        const detail = await fetchDocumentDetailApi(type as DocTypeKey, id, {
+          include: fullPayload ? ["all"] : ["core"],
+        });
+        setDocument(detail);
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [type, id]
+  );
+
+  /** Load attachments, comments, and audit after core document renders. */
+  React.useEffect(() => {
+    if (initialLoading || !document?.id) return;
+    let cancelled = false;
+    void fetchDocumentDetailApi(type as DocTypeKey, id, {
+      include: ["attachments", "comments", "audit"],
+    })
+      .then((extra) => {
+        if (cancelled || !extra) return;
+        setDocument((prev) =>
+          prev
+            ? {
+                ...prev,
+                attachments: extra.attachments ?? prev.attachments,
+                comments: extra.comments ?? prev.comments,
+                auditHistory: extra.auditHistory ?? prev.auditHistory,
+              }
+            : extra
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [type, id, document?.id, initialLoading]);
 
   React.useEffect(() => {
     void refreshDocument(false);
@@ -766,57 +804,60 @@ export default function DocViewPage() {
       }
     >
       <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Header</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading document...</p>
-            ) : (
+        {loading ? (
+          <DocumentDetailHeaderSkeleton columns={type === "delivery-note" ? 5 : 4} />
+        ) : (
+          <DocumentDetailHeader
+            fields={[
+              {
+                label: "Number",
+                value: document?.number ? <DocumentNumberField number={document.number} /> : "—",
+                mono: true,
+              },
+              {
+                label: "Date",
+                value: document?.date
+                  ? new Date(document.date as string).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "—",
+              },
+              {
+                label: counterpartyLabel,
+                value: displayPartyName !== "—" ? displayPartyName : "Internal document",
+              },
+              {
+                label: "Total",
+                value: (
+                  <DualCurrencyAmount
+                    amount={document?.total ?? 0}
+                    currency={document?.currency ?? "KES"}
+                    exchangeRate={document?.exchangeRate}
+                    size="md"
+                    showAlternateCurrency={type !== "delivery-note"}
+                  />
+                ),
+              },
+              ...(type === "delivery-note"
+                ? [
+                    {
+                      label: "Warehouse",
+                      value:
+                        deliveryNoteWarehouseLabel ??
+                        document?.warehouseId ??
+                        "Default from branch after save",
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        )}
+        <Card className="border-0 shadow-none bg-transparent p-0">
+          <CardContent className="p-0 space-y-4">
+            {loading ? null : (
               <>
-                <div className={`grid gap-4 sm:grid-cols-2 ${type === "delivery-note" ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Number</p>
-                    <p className="font-medium">{document?.number ?? "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date</p>
-                    <p className="font-medium">
-                      {document?.date
-                        ? new Date(document.date as string).toLocaleDateString(undefined, {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })
-                        : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{counterpartyLabel}</p>
-                    <p className="font-medium">{displayPartyName !== "—" ? displayPartyName : "Internal document"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total</p>
-                    <DualCurrencyAmount
-                      amount={document?.total ?? 0}
-                      currency={document?.currency ?? "KES"}
-                      exchangeRate={document?.exchangeRate}
-                      size="md"
-                      showAlternateCurrency={type !== "delivery-note"}
-                    />
-                  </div>
-                  {type === "delivery-note" ? (
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Warehouse</p>
-                      <p className="font-medium">
-                        {deliveryNoteWarehouseLabel ??
-                          document?.warehouseId ??
-                          "Default from branch after save"}
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
                 {type === "delivery-note" && document?.status === "DRAFT" ? (
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
@@ -1125,15 +1166,20 @@ export default function DocViewPage() {
             )}
           </CardContent>
         </Card>
-        {(document?.sourceDocument || (document?.relatedDocuments?.length ?? 0) > 0 || (document?.documentChain?.length ?? 0) > 0) && (
-          <DocumentChainCard
-            sourceDocument={document?.sourceDocument}
-            documentChain={document?.documentChain ?? []}
-            currency={document?.currency ?? "KES"}
-            exchangeRate={document?.exchangeRate}
-            currentId={id}
+        {!loading && document ? (
+          <DocumentChainTimeline
+            sourceDocument={document.sourceDocument}
+            documentChain={document.documentChain ?? []}
+            currentDoc={{
+              id,
+              typeKey: type,
+              number: document.number ?? id,
+              status: document.status ?? "DRAFT",
+            }}
+            currency={document.currency ?? "KES"}
+            exchangeRate={document.exchangeRate}
           />
-        )}
+        ) : null}
         {type === "bill" && landedAllocation && (() => {
           const centreLabels: Record<string, string> = {
             currency_conversion: "FX conversion",
@@ -2180,120 +2226,3 @@ function DynamicNextStepsPanel({
   );
 }
 
-// ─── Document Chain Timeline ────────────────────────────────────────────────
-
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "border-gray-300 bg-gray-50 text-gray-600",
-  PENDING: "border-amber-400 bg-amber-50 text-amber-700",
-  PENDING_APPROVAL: "border-amber-400 bg-amber-50 text-amber-700",
-  APPROVED: "border-blue-400 bg-blue-50 text-blue-700",
-  POSTED: "border-emerald-400 bg-emerald-50 text-emerald-700",
-  PAID: "border-emerald-500 bg-emerald-100 text-emerald-800",
-  DELIVERED: "border-emerald-400 bg-emerald-50 text-emerald-700",
-  IN_TRANSIT: "border-blue-300 bg-blue-50 text-blue-600",
-  CONVERTED: "border-violet-400 bg-violet-50 text-violet-800",
-  CANCELLED: "border-red-300 bg-red-50 text-red-500",
-  REVERSED: "border-red-400 bg-red-50 text-red-600",
-};
-
-function ChainNode({
-  node,
-  currency,
-  exchangeRate,
-}: {
-  node: DocumentChainNode;
-  currency: string;
-  exchangeRate?: number;
-}) {
-  const colorClass = STATUS_COLORS[node.status] ?? "border-gray-300 bg-gray-50 text-gray-600";
-  const isBase = !currency || currency.toUpperCase() === "KES";
-  const kes = node.total != null ? (isBase ? node.total : (exchangeRate ? node.total * exchangeRate : null)) : null;
-  return (
-    <div className="flex items-start gap-1">
-      <div className={`flex flex-col items-center`}>
-        <Link
-          href={`/docs/${node.typeKey}/${node.id}`}
-          className={`inline-flex flex-col items-center border rounded-lg px-3 py-2 text-xs hover:opacity-80 transition-opacity cursor-pointer min-w-[90px] ${colorClass}`}
-        >
-          <span className="font-semibold truncate max-w-[80px]">{node.number}</span>
-          <span className="text-[10px] opacity-70 capitalize">{node.typeKey.replace(/-/g, " ")}</span>
-          <span className="text-[10px] font-medium mt-0.5">{node.status}</span>
-          {node.total != null && (
-            <span className="text-[10px] font-semibold mt-0.5">
-              {kes !== null ? `KES ${kes.toLocaleString()}` : `${currency} ${node.total.toLocaleString()}`}
-            </span>
-          )}
-          {node.total != null && !isBase && kes !== null && (
-            <span className="text-[10px] opacity-50">{currency} {node.total.toLocaleString()}</span>
-          )}
-        </Link>
-        {node.children.length > 0 && (
-          <div className="flex items-start gap-1 mt-2 pl-2 border-l-2 border-muted ml-6">
-            {node.children.map((child) => (
-              <ChainNode key={child.id} node={child} currency={currency} exchangeRate={exchangeRate} />
-            ))}
-          </div>
-        )}
-      </div>
-      {node.children.length > 0 && (
-        <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3 flex-shrink-0" />
-      )}
-    </div>
-  );
-}
-
-function DocumentChainCard({
-  sourceDocument,
-  documentChain,
-  currency,
-  exchangeRate,
-  currentId,
-}: {
-  sourceDocument?: { id: string; typeKey: string; number: string; status: string } | null;
-  documentChain: DocumentChainNode[];
-  currency: string;
-  exchangeRate?: number;
-  currentId: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <Icons.GitBranch className="h-4 w-4" />
-          Document chain
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-start gap-2 flex-wrap overflow-x-auto pb-2">
-          {sourceDocument && (
-            <>
-              <Link
-                href={`/docs/${sourceDocument.typeKey}/${sourceDocument.id}`}
-                className={`inline-flex flex-col items-center border rounded-lg px-3 py-2 text-xs hover:opacity-80 min-w-[90px] ${STATUS_COLORS[sourceDocument.status] ?? "border-gray-300 bg-gray-50 text-gray-600"}`}
-              >
-                <span className="font-semibold">{sourceDocument.number}</span>
-                <span className="text-[10px] opacity-70 capitalize">{sourceDocument.typeKey.replace(/-/g, " ")}</span>
-                <span className="text-[10px] font-medium">{sourceDocument.status}</span>
-              </Link>
-              <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3" />
-            </>
-          )}
-          {/* Current document marker */}
-          <div className="inline-flex flex-col items-center border-2 border-primary rounded-lg px-3 py-2 text-xs min-w-[90px] bg-primary/5">
-            <span className="font-bold text-primary">THIS DOC</span>
-            <span className="text-[10px] opacity-60">{currentId.slice(0, 8)}...</span>
-          </div>
-          {documentChain.length > 0 && (
-            <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3" />
-          )}
-          {documentChain.map((node, i) => (
-            <React.Fragment key={node.id}>
-              <ChainNode node={node} currency={currency} exchangeRate={exchangeRate} />
-              {i < documentChain.length - 1 && <Icons.ChevronRight className="h-4 w-4 text-muted-foreground mt-3" />}
-            </React.Fragment>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}

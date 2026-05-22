@@ -36,6 +36,15 @@ import {
   filterIdsForBulkPost,
   partitionBulkDocResults,
 } from "@/lib/documents/bulk-eligibility";
+import { DocumentNumber } from "@/components/docs/document-number";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { formatMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE = 25;
 
 const TYPE_LABELS: Record<string, string> = {
   quote: "quote",
@@ -49,7 +58,7 @@ const TYPE_LABELS: Record<string, string> = {
   journal: "journalEntry",
 };
 
-const STATUS_OPTIONS = [
+const DEFAULT_STATUS_OPTIONS = [
   { label: "All", value: "" },
   { label: "Draft", value: "DRAFT" },
   { label: "Pending", value: "PENDING_APPROVAL" },
@@ -62,6 +71,14 @@ const STATUS_OPTIONS = [
   { label: "Delivered", value: "DELIVERED" },
 ];
 
+const STATUS_OPTIONS_BY_TYPE: Partial<Record<DocTypeKey, { label: string; value: string }[]>> = {
+  journal: [
+    { label: "All", value: "" },
+    { label: "Draft", value: "DRAFT" },
+    { label: "Posted", value: "POSTED" },
+  ],
+};
+
 function buildColumns(
   type: string,
   _terminology: ReturnType<typeof useTerminology>
@@ -73,7 +90,11 @@ function buildColumns(
     let acc: keyof DocListRow | ((r: DocListRow) => React.ReactNode) = accessor;
     if (accessor === "total") {
       acc = (r) =>
-        r.total != null ? `KES ${Number(r.total).toLocaleString()}` : "—";
+        r.total != null
+          ? formatMoney(Number(r.total), r.currency ?? "KES", {
+              decimals: Number(r.total) % 1 === 0 ? 0 : 2,
+            })
+          : "—";
     } else if (accessor === "status") {
       acc = (r) => (
         <div className="flex flex-col gap-1">
@@ -87,7 +108,20 @@ function buildColumns(
         </div>
       );
     } else if (accessor === "number") {
-      acc = (r) => <span className="font-medium">{r.number}</span>;
+      acc = (r) => (
+        <DocumentNumber value={r.number ?? "—"} className="font-medium" />
+      );
+    } else if (accessor === "reference") {
+      const ref = (r: DocListRow) => r.reference ?? r.poRef ?? "";
+      acc = (r) => {
+        const text = ref(r);
+        if (!text) return "—";
+        return (
+          <span className="block max-w-[min(320px,40vw)] truncate font-mono text-xs" title={text}>
+            {text}
+          </span>
+        );
+      };
     }
     return {
       id: col.id,
@@ -115,77 +149,96 @@ export default function DocTypeListPage() {
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
     getSavedViews(scope)
   );
-  const [allRows, setAllRows] = React.useState<DocListRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [loadingMore, setLoadingMore] = React.useState(false);
-  const [hasMoreList, setHasMoreList] = React.useState(false);
-  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
+  const [rows, setRows] = React.useState<DocListRow[]>([]);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const hasLoadedOnce = React.useRef(false);
 
   React.useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedSearch(search), 350);
+    hasLoadedOnce.current = false;
+    setRows([]);
+    setPageOffset(0);
+    setInitialLoading(true);
+  }, [type]);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
   }, [search]);
 
-  const loadFirstPage = React.useCallback(async () => {
-    if (!DOC_TYPES.includes(type as DocTypeKey)) return;
-    setLoading(true);
-    try {
-      const page = await fetchDocumentListPageApi(type as DocTypeKey, {
-        limit: 50,
-        status: statusFilter || undefined,
-        search: debouncedSearch.trim() || undefined,
-      });
-      setAllRows(page.items);
-      setHasMoreList(page.hasMore);
-      setNextCursor(page.nextCursor);
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [type, statusFilter, debouncedSearch]);
-
-  const loadMore = React.useCallback(async () => {
-    if (!DOC_TYPES.includes(type as DocTypeKey) || !nextCursor || !hasMoreList || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const page = await fetchDocumentListPageApi(type as DocTypeKey, {
-        limit: 50,
-        cursor: nextCursor,
-        status: statusFilter || undefined,
-        search: debouncedSearch.trim() || undefined,
-      });
-      setAllRows((prev) => [...prev, ...page.items]);
-      setHasMoreList(page.hasMore);
-      setNextCursor(page.nextCursor);
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [type, statusFilter, debouncedSearch, nextCursor, hasMoreList, loadingMore]);
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      if (!DOC_TYPES.includes(type as DocTypeKey)) return;
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) {
+        setInitialLoading(true);
+      } else {
+        setFetching(true);
+      }
+      try {
+        const page = await fetchDocumentListPageApi(type as DocTypeKey, {
+          limit: PAGE_SIZE,
+          cursor: String(offset),
+          status: statusFilter || undefined,
+          search: debouncedSearch.trim() || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setSelectedIds([]);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error((error as Error).message);
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [type, statusFilter, debouncedSearch]
+  );
 
   React.useEffect(() => {
-    void loadFirstPage();
-  }, [loadFirstPage]);
+    void loadPage(0);
+  }, [loadPage]);
+
+  const handleRefresh = React.useCallback(() => {
+    void loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + PAGE_SIZE);
+  };
 
   const columns = React.useMemo(
     () => buildColumns(type, terminology),
     [type, terminology]
   );
 
+  const statusOptions = React.useMemo(
+    () => STATUS_OPTIONS_BY_TYPE[type as DocTypeKey] ?? DEFAULT_STATUS_OPTIONS,
+    [type]
+  );
+
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
     if (statusFilter) {
-      const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
+      const opt = statusOptions.find((o) => o.value === statusFilter);
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
     if (search.trim()) {
       chips.push({ id: "q", label: "Search", value: search.trim() });
     }
     return chips;
-  }, [statusFilter, search]);
+  }, [statusFilter, search, statusOptions]);
 
   const handleRemoveFilterChip = (id: string) => {
     if (id === "status") setStatusFilter("");
@@ -226,7 +279,7 @@ export default function DocTypeListPage() {
 
   const handleExport = () => {
     const fileName = `${type}-${new Date().toISOString().slice(0, 10)}.csv`;
-    if (allRows.length === 0) {
+    if (rows.length === 0) {
       toast.error(`No ${label.toLowerCase()}s to export.`);
       return;
     }
@@ -236,7 +289,7 @@ export default function DocTypeListPage() {
     }
     downloadCsv(
       fileName,
-      allRows.map((row) => ({
+      rows.map((row) => ({
         number: row.number,
         date: row.date,
         party: row.party ?? "",
@@ -248,8 +301,8 @@ export default function DocTypeListPage() {
   };
 
   const selectedRows = React.useMemo(
-    () => allRows.filter((r) => selectedIds.includes(r.id)),
-    [allRows, selectedIds]
+    () => rows.filter((r) => selectedIds.includes(r.id)),
+    [rows, selectedIds]
   );
 
   const showBulkApprove =
@@ -275,7 +328,7 @@ export default function DocTypeListPage() {
     try {
       const { results } = await bulkDocumentActionApi(type as DocTypeKey, "approve", approveIds);
       const { succeeded, failed } = partitionBulkDocResults(results);
-      await loadFirstPage();
+      await loadPage(pageOffset);
       if (succeeded.length) {
         toast.success(
           `${succeeded.length} ${label.toLowerCase()} record(s) approved.`
@@ -312,7 +365,7 @@ export default function DocTypeListPage() {
     try {
       const { results } = await bulkDocumentActionApi(type as DocTypeKey, "post", postIds);
       const { succeeded, failed } = partitionBulkDocResults(results);
-      await loadFirstPage();
+      await loadPage(pageOffset);
       if (succeeded.length) {
         toast.success(`${succeeded.length} ${label.toLowerCase()} record(s) posted.`);
       }
@@ -326,6 +379,26 @@ export default function DocTypeListPage() {
   };
 
   const isValidType = DOC_TYPES.includes(type as DocTypeKey);
+  const searchPending = search.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
+  const skeletonColumnWidths = React.useMemo(() => {
+    const widths = columns.map((col) => {
+      if (col.id === "number") return "w-24";
+      if (col.id === "date") return "w-20";
+      if (col.id === "party") return "w-36";
+      if (col.id === "total") return "w-28";
+      if (col.id === "status") return "w-24";
+      return "w-24";
+    });
+    return widths.length ? widths : ["w-24", "w-20", "w-36", "w-28", "w-24"];
+  }, [columns]);
+
+  const searchPlaceholder =
+    type === "purchase-order"
+      ? "Search PO number (letters O, digits 0) or supplier…"
+      : type === "journal"
+        ? "Search by number or reference…"
+        : `Search by number, party…`;
 
   if (!isValidType) {
     return (
@@ -358,16 +431,22 @@ export default function DocTypeListPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
         <DataTableToolbar
-          searchPlaceholder={`Search by number, party...`}
+          className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+          searchPlaceholder={searchPlaceholder}
           searchValue={search}
           onSearchChange={setSearch}
+          searchInputProps={{
+            spellCheck: false,
+            autoComplete: "off",
+            className: "font-mono text-sm tracking-tight",
+          }}
           filters={[
             {
               id: "status",
               label: "Status",
-              options: STATUS_OPTIONS,
+              options: statusOptions,
               value: statusFilter,
               onChange: (v) => setStatusFilter(v),
             },
@@ -386,10 +465,12 @@ export default function DocTypeListPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={loading}
-              onClick={() => void loadFirstPage()}
+              disabled={initialLoading || fetching}
+              onClick={handleRefresh}
             >
-              <Icons.RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+              <Icons.RefreshCw
+                className={cn("h-4 w-4 mr-1.5", (initialLoading || fetching) && "animate-spin")}
+              />
               Refresh
             </Button>
           }
@@ -416,30 +497,41 @@ export default function DocTypeListPage() {
             ) : undefined
           }
         />
-        {loading ? (
-          <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
-            Loading {label.toLowerCase()}s...
-          </div>
+        {initialLoading ? (
+          <SkeletonDataTable rows={PAGE_SIZE} columnWidths={skeletonColumnWidths} />
         ) : (
-          <>
-            <DataTable<DocListRow>
-              data={allRows}
-              columns={columns}
-              onRowClick={(row) => router.push(`/docs/${type}/${row.id}`)}
-              emptyMessage={`No ${label.toLowerCase()}s found.`}
-              selectable
-              selectedIds={selectedIds}
-              onSelectionChange={setSelectedIds}
-            />
-            {hasMoreList ? (
-              <div className="flex justify-center pt-2">
-                <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
-                  {loadingMore ? "Loading…" : "Load more"}
-                </Button>
-              </div>
-            ) : null}
-          </>
+          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+            <TableLinearProgress active={tableBusy} />
+            <div
+              className={cn(
+                "transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60"
+              )}
+            >
+              <DataTable<DocListRow>
+                data={rows}
+                columns={columns}
+                onRowClick={(row) => router.push(`/docs/${type}/${row.id}`)}
+                emptyMessage={`No ${label.toLowerCase()}s found.`}
+                selectable
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+              />
+            </div>
+          </div>
         )}
+        <TablePagination
+          sticky
+          pageOffset={pageOffset}
+          pageSize={PAGE_SIZE}
+          itemCount={initialLoading ? 0 : rows.length}
+          hasMore={hasMore}
+          loading={initialLoading || fetching}
+          busy={searchPending}
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+          entityLabel={`${label.toLowerCase()}s`}
+        />
       </div>
     </PageShell>
   );

@@ -35,6 +35,8 @@ export type ManufacturingRoute = {
   name: string;
   description?: string;
   productId?: string;
+  /** Set on list responses when operations are omitted */
+  operationCount?: number;
   operations: Array<{
     id: string;
     sequence: number;
@@ -88,20 +90,104 @@ export type ManufacturingMrpSuggestion = {
   bomId?: string;
 };
 
+export type ManufacturingMrpSummary = {
+  workOrderSuggestions: number;
+  purchaseSuggestions: number;
+  totalShortageQty: number;
+};
+
 export type ManufacturingMrpResponse = {
   items: ManufacturingMrpSuggestion[];
   suggestions: ManufacturingMrpSuggestion[];
-  summary: {
-    workOrderSuggestions: number;
-    purchaseSuggestions: number;
-    totalShortageQty: number;
-  };
+  summary: ManufacturingMrpSummary;
+  totalCount?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+  nextCursor?: string | null;
 };
 
-export async function fetchManufacturingBoms(): Promise<ManufacturingBom[]> {
+export type FetchManufacturingMrpOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  type?: "" | "WORK_ORDER" | "PURCHASE";
+};
+
+export type FetchManufacturingBomsOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  direction?: string;
+  type?: string;
+  status?: "" | "active" | "inactive";
+  activeOnly?: boolean;
+  includeItems?: boolean;
+};
+
+export type FetchManufacturingBomsPageResult = {
+  items: ManufacturingBom[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchManufacturingBomsPage(
+  opts?: FetchManufacturingBomsOpts
+): Promise<FetchManufacturingBomsPageResult> {
   requireLiveApi("Manufacturing BOMs");
-  const payload = await apiRequest<{ items: ManufacturingBom[] }>("/api/manufacturing/boms");
-  return payload.items ?? [];
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 200) : 25;
+  params.set("limit", String(lim));
+  if (opts?.cursor) params.set("cursor", opts.cursor);
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.direction) params.set("direction", opts.direction);
+  if (opts?.type) params.set("type", opts.type);
+  if (opts?.status === "active") params.set("status", "active");
+  if (opts?.status === "inactive") params.set("status", "inactive");
+  if (opts?.activeOnly) params.set("activeOnly", "true");
+  if (opts?.includeItems) params.set("includeItems", "true");
+
+  const payload = await apiRequest<{
+    items: ManufacturingBom[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/boms", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number"
+      ? payload.offset
+      : opts?.cursor
+        ? Number(opts.cursor) || 0
+        : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+/** Loads all pages (cap 500) — prefer fetchManufacturingBomsPage for list UIs. */
+export async function fetchManufacturingBoms(opts?: FetchManufacturingBomsOpts): Promise<ManufacturingBom[]> {
+  const rows: ManufacturingBom[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const page = await fetchManufacturingBomsPage({ ...opts, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 export async function fetchManufacturingBom(id: string): Promise<ManufacturingBom | null> {
@@ -138,10 +224,80 @@ export async function deleteManufacturingBom(id: string): Promise<{ deleted: boo
   return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export async function fetchManufacturingRoutes(): Promise<ManufacturingRoute[]> {
+export type FetchManufacturingRoutesOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  includeOperations?: boolean;
+};
+
+export type FetchManufacturingRoutesPageResult = {
+  items: ManufacturingRoute[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchManufacturingRoutesPage(
+  opts?: FetchManufacturingRoutesOpts
+): Promise<FetchManufacturingRoutesPageResult> {
   requireLiveApi("Manufacturing routes");
-  const payload = await apiRequest<{ items: ManufacturingRoute[] }>("/api/manufacturing/routing");
-  return payload.items ?? [];
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 200) : 25;
+  params.set("limit", String(lim));
+  if (opts?.cursor) params.set("cursor", opts.cursor);
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.includeOperations) params.set("includeOperations", "true");
+
+  const payload = await apiRequest<{
+    items: ManufacturingRoute[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/routing", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+export async function fetchManufacturingRouteById(id: string): Promise<ManufacturingRoute | null> {
+  requireLiveApi("Manufacturing route detail");
+  try {
+    return await apiRequest<ManufacturingRoute>(`/api/manufacturing/routing/${encodeURIComponent(id)}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchManufacturingRoutes(opts?: FetchManufacturingRoutesOpts): Promise<ManufacturingRoute[]> {
+  const rows: ManufacturingRoute[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const page = await fetchManufacturingRoutesPage({
+      ...opts,
+      limit: 50,
+      cursor,
+      includeOperations: opts?.includeOperations ?? true,
+    });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 export async function createManufacturingRoute(payload: {
@@ -157,10 +313,68 @@ export async function updateManufacturingRoute(id: string, payload: Partial<Manu
   return apiRequest(`/api/manufacturing/routing/${encodeURIComponent(id)}`, { method: "PATCH", body: payload });
 }
 
-export async function fetchManufacturingWorkOrders(): Promise<ManufacturingWorkOrder[]> {
+export type FetchManufacturingWorkOrdersOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  status?: string;
+};
+
+export type FetchManufacturingWorkOrdersPageResult = {
+  items: ManufacturingWorkOrder[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchManufacturingWorkOrdersPage(
+  opts?: FetchManufacturingWorkOrdersOpts
+): Promise<FetchManufacturingWorkOrdersPageResult> {
   requireLiveApi("Manufacturing work orders");
-  const payload = await apiRequest<{ items: ManufacturingWorkOrder[] }>("/api/manufacturing/work-orders");
-  return payload.items ?? [];
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.set("limit", String(lim));
+  if (opts?.cursor) params.set("cursor", opts.cursor);
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.status?.trim()) params.set("status", opts.status.trim());
+
+  const payload = await apiRequest<{
+    items: ManufacturingWorkOrder[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/work-orders", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+export async function fetchManufacturingWorkOrders(
+  opts?: FetchManufacturingWorkOrdersOpts
+): Promise<ManufacturingWorkOrder[]> {
+  const rows: ManufacturingWorkOrder[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchManufacturingWorkOrdersPage({ ...opts, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 export async function createManufacturingWorkOrder(payload: {
@@ -186,9 +400,65 @@ export async function runManufacturingWorkOrderAction(
   });
 }
 
-export async function fetchManufacturingMrp(): Promise<ManufacturingMrpResponse> {
+export async function fetchManufacturingMrpPage(
+  opts?: FetchManufacturingMrpOpts
+): Promise<ManufacturingMrpResponse> {
   requireLiveApi("Manufacturing MRP");
-  return apiRequest<ManufacturingMrpResponse>("/api/manufacturing/mrp");
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.set("limit", String(lim));
+  if (opts?.cursor) params.set("cursor", opts.cursor);
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.type === "WORK_ORDER" || opts?.type === "PURCHASE") params.set("type", opts.type);
+
+  const payload = await apiRequest<ManufacturingMrpResponse>("/api/manufacturing/mrp", { params });
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const suggestions = payload.suggestions ?? payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean"
+      ? payload.hasMore
+      : suggestions.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + suggestions.length)
+        : null;
+
+  return {
+    items: suggestions,
+    suggestions,
+    summary: payload.summary ?? {
+      workOrderSuggestions: 0,
+      purchaseSuggestions: 0,
+      totalShortageQty: 0,
+    },
+    totalCount: payload.totalCount,
+    limit,
+    offset: parsedOffset,
+    hasMore,
+    nextCursor,
+  };
+}
+
+export async function fetchManufacturingMrp(opts?: FetchManufacturingMrpOpts): Promise<ManufacturingMrpResponse> {
+  const rows: ManufacturingMrpSuggestion[] = [];
+  let cursor: string | undefined;
+  let summary: ManufacturingMrpSummary = {
+    workOrderSuggestions: 0,
+    purchaseSuggestions: 0,
+    totalShortageQty: 0,
+  };
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchManufacturingMrpPage({ ...opts, limit: 50, cursor });
+    rows.push(...(page.suggestions ?? []));
+    summary = page.summary;
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return { items: rows, suggestions: rows, summary, totalCount: rows.length };
 }
 
 export async function applyManufacturingMrp(suggestionIds?: string[]): Promise<{ applied: boolean; created: Array<{ id: string; number: string; productId: string }> }> {

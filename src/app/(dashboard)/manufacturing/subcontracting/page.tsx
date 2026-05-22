@@ -7,6 +7,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { DocumentNumber } from "@/components/docs/document-number";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -27,9 +32,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import type { FilterChip } from "@/components/ui/filter-chips";
+import { cn } from "@/lib/utils";
 import {
   fetchExternalWorkCenters,
-  fetchSubcontractOrders,
+  fetchSubcontractOrdersPage,
   fetchWIPBalances,
   receiveSubcontractOrder,
   dispatchSubcontractOrder,
@@ -57,6 +64,22 @@ const PROCESS_OPTIONS = [
   { value: "FILLETING", label: "Filleting" },
   { value: "GUTTING", label: "Gutting" },
 ] as const;
+
+const SEARCH_DEBOUNCE_MS = 400;
+const ORDERS_PAGE_SIZE = 25;
+
+const ORDER_STATUS_OPTIONS = [
+  { label: "All statuses", value: "" },
+  { label: "Sent", value: "SENT" },
+  { label: "WIP", value: "WIP" },
+  { label: "Received", value: "RECEIVED" },
+];
+
+const SPECIES_FILTER_OPTIONS = [
+  { label: "All species", value: "" },
+  { label: "Tilapia", value: "TILAPIA" },
+  { label: "Nile Perch", value: "NILE_PERCH" },
+];
 
 type Species = "TILAPIA" | "NILE_PERCH";
 type ProcessType = "FILLETING" | "GUTTING";
@@ -279,13 +302,21 @@ export default function SubcontractingPage() {
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const [tab, setTab] = React.useState<"orders" | "wip" | "workcenters">("orders");
+  const [orderSearch, setOrderSearch] = React.useState("");
+  const [debouncedOrderSearch, setDebouncedOrderSearch] = React.useState("");
   const [orderStatusFilter, setOrderStatusFilter] = React.useState<string>("");
   const [workCenterFilter, setWorkCenterFilter] = React.useState<string>("");
   const [speciesFilter, setSpeciesFilter] = React.useState<string>("");
   const [workCenters, setWorkCenters] = React.useState<ExternalWorkCenterRow[]>([]);
   const [orders, setOrders] = React.useState<SubcontractOrderRow[]>([]);
+  const [ordersInitialLoading, setOrdersInitialLoading] = React.useState(true);
+  const [ordersFetching, setOrdersFetching] = React.useState(false);
+  const [ordersPageOffset, setOrdersPageOffset] = React.useState(0);
+  const [ordersHasMore, setOrdersHasMore] = React.useState(false);
+  const ordersLoadedOnce = React.useRef(false);
   const [wip, setWip] = React.useState<WIPBalanceRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [wipLoading, setWipLoading] = React.useState(false);
+  const [workCentersLoading, setWorkCentersLoading] = React.useState(true);
   const [receivingId, setReceivingId] = React.useState<string | null>(null);
   const [dispatchingId, setDispatchingId] = React.useState<string | null>(null);
   const [sendSheetOpen, setSendSheetOpen] = React.useState(false);
@@ -321,27 +352,115 @@ export default function SubcontractingPage() {
   const [wcType, setWcType] = React.useState<ExternalWorkCenterRow["type"]>("FACTORY");
   const [wcAddress, setWcAddress] = React.useState("");
 
-  const load = React.useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      fetchExternalWorkCenters().then(setWorkCenters),
-      fetchSubcontractOrders({
-        ...(orderStatusFilter ? { status: orderStatusFilter } : {}),
-        ...(workCenterFilter ? { workCenterId: workCenterFilter } : {}),
-        ...(speciesFilter ? { species: speciesFilter } : {}),
-      }).then(setOrders),
-      fetchWIPBalances(workCenterFilter || undefined).then(setWip),
-    ])
-      .then(() => setLoading(false))
-      .catch((e) => {
-        setLoading(false);
-        toast.error(e?.message ?? "Failed to load data");
-      });
-  }, [orderStatusFilter, workCenterFilter, speciesFilter]);
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedOrderSearch(orderSearch), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [orderSearch]);
+
+  const loadWorkCenters = React.useCallback(async () => {
+    setWorkCentersLoading(true);
+    try {
+      setWorkCenters(await fetchExternalWorkCenters());
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to load work centers.");
+    } finally {
+      setWorkCentersLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    load();
-  }, [load]);
+    void loadWorkCenters();
+  }, [loadWorkCenters]);
+
+  const loadOrdersPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !ordersLoadedOnce.current;
+      if (isFirstLoad) setOrdersInitialLoading(true);
+      else setOrdersFetching(true);
+      try {
+        const page = await fetchSubcontractOrdersPage({
+          limit: ORDERS_PAGE_SIZE,
+          cursor: String(offset),
+          search: debouncedOrderSearch.trim() || undefined,
+          ...(orderStatusFilter ? { status: orderStatusFilter } : {}),
+          ...(workCenterFilter ? { workCenterId: workCenterFilter } : {}),
+          ...(speciesFilter ? { species: speciesFilter } : {}),
+        });
+        setOrders(page.items);
+        setOrdersPageOffset(page.offset);
+        setOrdersHasMore(page.hasMore);
+        ordersLoadedOnce.current = true;
+      } catch (e) {
+        toast.error((e as Error)?.message ?? "Failed to load subcontract orders.");
+      } finally {
+        setOrdersInitialLoading(false);
+        setOrdersFetching(false);
+      }
+    },
+    [debouncedOrderSearch, orderStatusFilter, workCenterFilter, speciesFilter]
+  );
+
+  React.useEffect(() => {
+    if (tab !== "orders") return;
+    ordersLoadedOnce.current = false;
+    setOrdersPageOffset(0);
+    void loadOrdersPage(0);
+  }, [tab, loadOrdersPage]);
+
+  const loadWip = React.useCallback(async () => {
+    setWipLoading(true);
+    try {
+      setWip(await fetchWIPBalances(workCenterFilter || undefined));
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Failed to load WIP balances.");
+    } finally {
+      setWipLoading(false);
+    }
+  }, [workCenterFilter]);
+
+  React.useEffect(() => {
+    if (tab !== "wip") return;
+    void loadWip();
+  }, [tab, loadWip]);
+
+  const orderSearchPending = orderSearch.trim() !== debouncedOrderSearch.trim();
+  const ordersTableBusy = ordersFetching || orderSearchPending;
+
+  const orderFilterChips: FilterChip[] = React.useMemo(() => {
+    const chips: FilterChip[] = [];
+    if (speciesFilter) {
+      const opt = SPECIES_FILTER_OPTIONS.find((o) => o.value === speciesFilter);
+      chips.push({ id: "species", label: "Species", value: opt?.label ?? speciesFilter });
+    }
+    if (workCenterFilter) {
+      const wc = workCenters.find((w) => w.id === workCenterFilter);
+      chips.push({ id: "wc", label: "Work center", value: wc?.name ?? workCenterFilter });
+    }
+    if (orderStatusFilter) {
+      const opt = ORDER_STATUS_OPTIONS.find((o) => o.value === orderStatusFilter);
+      chips.push({ id: "status", label: "Status", value: opt?.label ?? orderStatusFilter });
+    }
+    if (orderSearch.trim()) chips.push({ id: "q", label: "Search", value: orderSearch.trim() });
+    return chips;
+  }, [speciesFilter, workCenterFilter, orderStatusFilter, orderSearch, workCenters]);
+
+  const handleClearOrderFilters = () => {
+    setOrderSearch("");
+    setSpeciesFilter("");
+    setWorkCenterFilter("");
+    setOrderStatusFilter("");
+  };
+
+  const handleRemoveOrderFilterChip = (id: string) => {
+    if (id === "species") setSpeciesFilter("");
+    if (id === "wc") setWorkCenterFilter("");
+    if (id === "status") setOrderStatusFilter("");
+    if (id === "q") setOrderSearch("");
+  };
+
+  const refreshOrders = React.useCallback(() => {
+    void loadOrdersPage(ordersPageOffset);
+  }, [loadOrdersPage, ordersPageOffset]);
 
   // Load reverse BOMs and GRNs when sheet opens
   React.useEffect(() => {
@@ -394,7 +513,7 @@ export default function SubcontractingPage() {
     try {
       await dispatchSubcontractOrder(order.id);
       toast.success("Order marked as In Processing (WIP).");
-      await load();
+      await loadOrdersPage(ordersPageOffset);
     } catch (e) {
       toast.error((e as Error)?.message ?? "Dispatch failed");
     } finally {
@@ -408,7 +527,7 @@ export default function SubcontractingPage() {
     try {
       await receiveSubcontractOrder(order.id);
       toast.success("Order marked received. Processing fee posted to GL.");
-      await load();
+      await loadOrdersPage(ordersPageOffset);
     } catch (e) {
       toast.error((e as Error)?.message ?? "Receive failed");
     } finally {
@@ -518,7 +637,8 @@ export default function SubcontractingPage() {
     if (created) {
       setSendSheetOpen(false);
       resetOrderForm();
-      await load();
+      ordersLoadedOnce.current = false;
+      await loadOrdersPage(0);
       setTab("orders");
     }
   };
@@ -531,7 +651,7 @@ export default function SubcontractingPage() {
       toast.success("Work center created.");
       setWcCode(""); setWcName(""); setWcAddress(""); setWcType("FACTORY");
       setWorkCenterSheetOpen(false);
-      await load();
+      await loadWorkCenters();
       setWorkCenterFilter(created.id);
     } catch (e) {
       toast.error((e as Error)?.message ?? "Create failed");
@@ -572,12 +692,12 @@ export default function SubcontractingPage() {
           <div className="text-xs space-y-0.5">
             {r.purchaseOrderId && poLabel ? (
               <div className="text-muted-foreground">
-                PO: <span className="font-medium font-sans">{poLabel}</span>
+                PO: <DocumentNumber value={poLabel} className="text-xs" />
               </div>
             ) : null}
             {r.grnId && grnLabel ? (
               <div className="text-muted-foreground">
-                GRN: <span className="font-medium font-sans">{grnLabel}</span>
+                GRN: <DocumentNumber value={grnLabel} className="text-xs" />
               </div>
             ) : null}
           </div>
@@ -1001,64 +1121,113 @@ export default function SubcontractingPage() {
           ))}
         </div>
 
-        {loading ? (
-          <p className="text-muted-foreground text-sm">Loading…</p>
-        ) : (
-          <>
+        <>
             {tab === "orders" && (
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
-                  <div>
-                    <CardTitle>Subcontract orders</CardTitle>
-                    <CardDescription>Send material to processor; receive finished goods with processing fee and yield.</CardDescription>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Select value={speciesFilter || "ALL"} onValueChange={(v) => setSpeciesFilter(v === "ALL" ? "" : v)}>
-                      <SelectTrigger className="w-36">
-                        <SelectValue placeholder="Species" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All species</SelectItem>
-                        <SelectItem value="TILAPIA">Tilapia</SelectItem>
-                        <SelectItem value="NILE_PERCH">Nile Perch</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={workCenterFilter || "ALL"} onValueChange={(v) => setWorkCenterFilter(v === "ALL" ? "" : v)}>
-                      <SelectTrigger className="w-48">
-                        <SelectValue placeholder="Work center" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All work centers</SelectItem>
-                        {workCenters.map((w) => (
-                          <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={orderStatusFilter || "ALL"} onValueChange={(v) => setOrderStatusFilter(v === "ALL" ? "" : v)}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All</SelectItem>
-                        <SelectItem value="SENT">Sent</SelectItem>
-                        <SelectItem value="WIP">WIP</SelectItem>
-                        <SelectItem value="RECEIVED">Received</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="icon" onClick={load} title="Refresh">
-                      <Icons.RefreshCw className="h-4 w-4" />
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight">Subcontract orders</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Send material to processor; receive finished goods with processing fee and yield.
+                  </p>
+                </div>
+
+                <DataTableToolbar
+                  className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+                  searchPlaceholder="Search order, work center, BOM, PO, or GRN…"
+                  searchValue={orderSearch}
+                  onSearchChange={setOrderSearch}
+                  searchInputProps={{
+                    spellCheck: false,
+                    autoComplete: "off",
+                  }}
+                  filters={[
+                    {
+                      id: "species",
+                      label: "Species",
+                      options: SPECIES_FILTER_OPTIONS,
+                      value: speciesFilter,
+                      onChange: setSpeciesFilter,
+                    },
+                    {
+                      id: "workCenter",
+                      label: "Work center",
+                      options: [
+                        { label: "All work centers", value: "" },
+                        ...workCenters.map((w) => ({ label: w.name, value: w.id })),
+                      ],
+                      value: workCenterFilter,
+                      onChange: setWorkCenterFilter,
+                    },
+                    {
+                      id: "status",
+                      label: "Status",
+                      options: ORDER_STATUS_OPTIONS,
+                      value: orderStatusFilter,
+                      onChange: setOrderStatusFilter,
+                    },
+                  ]}
+                  activeFiltersCount={orderFilterChips.length}
+                  onClearFilters={handleClearOrderFilters}
+                  filterChips={orderFilterChips}
+                  onRemoveFilterChip={handleRemoveOrderFilterChip}
+                  actions={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={ordersInitialLoading || ordersFetching}
+                      onClick={refreshOrders}
+                    >
+                      <Icons.RefreshCw
+                        className={cn("h-4 w-4 mr-1.5", (ordersInitialLoading || ordersFetching) && "animate-spin")}
+                      />
+                      Refresh
                     </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable<SubcontractOrderRow>
-                    data={orders}
-                    columns={orderColumns}
-                    onRowClick={(r) => window.location.assign(`/manufacturing/subcontracting/orders/${r.id}`)}
-                    emptyMessage="No subcontract orders. Use 'Send to processor' to create one."
+                  }
+                />
+
+                {ordersInitialLoading ? (
+                  <SkeletonDataTable
+                    rows={ORDERS_PAGE_SIZE}
+                    columnWidths={["w-28", "w-36", "w-32", "w-36", "w-28", "w-20", "w-24", "w-24", "w-32"]}
                   />
-                </CardContent>
-              </Card>
+                ) : (
+                  <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <TableLinearProgress active={ordersTableBusy} />
+                    <div
+                      className={cn(
+                        "transition-opacity duration-200",
+                        ordersTableBusy && "pointer-events-none opacity-60"
+                      )}
+                    >
+                      <DataTable<SubcontractOrderRow>
+                        data={orders}
+                        columns={orderColumns}
+                        onRowClick={(r) => window.location.assign(`/manufacturing/subcontracting/orders/${r.id}`)}
+                        emptyMessage="No subcontract orders match your filters. Use Send to processor to create one."
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <TablePagination
+                  sticky
+                  pageOffset={ordersPageOffset}
+                  pageSize={ORDERS_PAGE_SIZE}
+                  itemCount={ordersInitialLoading ? 0 : orders.length}
+                  hasMore={ordersHasMore}
+                  loading={ordersInitialLoading || ordersFetching}
+                  busy={orderSearchPending}
+                  onPrevious={() => {
+                    if (ordersPageOffset <= 0 || ordersInitialLoading || ordersFetching) return;
+                    void loadOrdersPage(Math.max(0, ordersPageOffset - ORDERS_PAGE_SIZE));
+                  }}
+                  onNext={() => {
+                    if (!ordersHasMore || ordersInitialLoading || ordersFetching) return;
+                    void loadOrdersPage(ordersPageOffset + ORDERS_PAGE_SIZE);
+                  }}
+                  entityLabel="orders"
+                />
+              </div>
             )}
 
             {tab === "wip" && (
@@ -1081,11 +1250,15 @@ export default function SubcontractingPage() {
                   </Select>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <DataTable<WIPBalanceRow & { id?: string }>
-                    data={wip as (WIPBalanceRow & { id?: string })[]}
-                    columns={wipColumns}
-                    emptyMessage="No WIP balances."
-                  />
+                  {wipLoading ? (
+                    <p className="p-6 text-sm text-muted-foreground">Loading WIP balances…</p>
+                  ) : (
+                    <DataTable<WIPBalanceRow & { id?: string }>
+                      data={wip as (WIPBalanceRow & { id?: string })[]}
+                      columns={wipColumns}
+                      emptyMessage="No WIP balances."
+                    />
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -1140,17 +1313,20 @@ export default function SubcontractingPage() {
                   </Sheet>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <DataTable<ExternalWorkCenterRow>
-                    data={workCenters}
-                    columns={workCenterColumns}
-                    emptyMessage="No work centers."
-                    onRowClick={(row) => { setWorkCenterFilter(row.id); setTab("wip"); }}
-                  />
+                  {workCentersLoading ? (
+                    <p className="p-6 text-sm text-muted-foreground">Loading work centers…</p>
+                  ) : (
+                    <DataTable<ExternalWorkCenterRow>
+                      data={workCenters}
+                      columns={workCenterColumns}
+                      emptyMessage="No work centers."
+                      onRowClick={(row) => { setWorkCenterFilter(row.id); setTab("wip"); }}
+                    />
+                  )}
                 </CardContent>
               </Card>
             )}
-          </>
-        )}
+        </>
       </div>
     </PageShell>
   );

@@ -830,19 +830,80 @@ export async function createExternalWorkCenter(body: {
   return res;
 }
 
-export async function fetchSubcontractOrders(params?: {
+export type FetchSubcontractOrdersOpts = {
   workCenterId?: string;
   status?: string;
   species?: string;
   processType?: string;
   purchaseOrderId?: string;
   grnId?: string;
-}): Promise<SubcontractOrderRow[]> {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+};
+
+export type FetchSubcontractOrdersPageResult = {
+  items: SubcontractOrderRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchSubcontractOrdersPage(
+  opts?: FetchSubcontractOrdersOpts
+): Promise<FetchSubcontractOrdersPageResult> {
   requireLiveApi("Subcontract orders");
-  const res = await apiRequest<{ items: SubcontractOrderRow[] }>("/api/manufacturing/subcontract-orders", {
-    params: listParams(params),
-  });
-  return res.items ?? [];
+  const params: Record<string, string> = {
+    ...listParams({
+      workCenterId: opts?.workCenterId,
+      status: opts?.status,
+      species: opts?.species,
+      processType: opts?.processType,
+      purchaseOrderId: opts?.purchaseOrderId,
+      grnId: opts?.grnId,
+    }),
+  };
+  const lim = opts?.limit != null ? Math.min(Math.max(opts.limit, 1), 100) : 25;
+  params.limit = String(lim);
+  if (opts?.cursor) params.cursor = opts.cursor;
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+
+  const payload = await apiRequest<{
+    items: SubcontractOrderRow[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/manufacturing/subcontract-orders", { params });
+
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const parsedOffset =
+    typeof payload.offset === "number" ? payload.offset : opts?.cursor ? Number(opts.cursor) || 0 : 0;
+  const items = payload.items ?? [];
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : items.length === limit && limit > 0;
+  const nextCursor =
+    payload.nextCursor != null && String(payload.nextCursor) !== ""
+      ? String(payload.nextCursor)
+      : hasMore
+        ? String(parsedOffset + items.length)
+        : null;
+
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
+/** Loads all pages (cap ~1000 rows) — prefer fetchSubcontractOrdersPage for list UIs. */
+export async function fetchSubcontractOrders(params?: FetchSubcontractOrdersOpts): Promise<SubcontractOrderRow[]> {
+  const rows: SubcontractOrderRow[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const page = await fetchSubcontractOrdersPage({ ...params, limit: 50, cursor });
+    rows.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return rows;
 }
 
 /** Create subcontract order (send stock to processor).
@@ -876,7 +937,7 @@ export async function createSubcontractOrder(body: {
 export async function fetchReverseBoms(): Promise<Array<{ id: string; name: string; code: string; productId: string; direction: string; isActive: boolean; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>> {
   requireLiveApi("Reverse BOMs");
   const res = await apiRequest<{ items: Array<Record<string, any>> }>("/api/manufacturing/boms", {
-    params: { direction: "REVERSE", activeOnly: "true" },
+    params: { direction: "REVERSE", activeOnly: "true", includeItems: "true", limit: "100" },
   });
   return (res.items ?? []) as any[];
 }
