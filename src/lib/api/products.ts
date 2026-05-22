@@ -32,7 +32,7 @@ export type ProductPayload = {
   description?: string;
 };
 
-function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string }): ProductRow {
+function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string; updatedAt?: string }): ProductRow {
   const category = item.category ?? item.categoryId;
   const uom = item.unit ?? item.baseUom ?? item.uom;
   return {
@@ -48,6 +48,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string }
     status: item.status ?? "ACTIVE",
     description: item.description,
     currentStock: typeof item.currentStock === "number" ? item.currentStock : undefined,
+    updatedAt: item.updatedAt,
   };
 }
 
@@ -57,6 +58,8 @@ export type FetchProductsOptions = {
   purchasable?: boolean;
   sellable?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  categoryId?: string;
+  stockBand?: "low" | "out" | "in_stock";
   /** Server caps at 100; use for document line pickers. */
   limit?: number;
   /** Pagination offset (server skip). Omit for first page. */
@@ -74,10 +77,13 @@ export type FetchProductsOptions = {
 
 export type FetchProductsPageResult = {
   items: ProductRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
   nextCursor: string | null;
 };
 
-export async function fetchProductsPageApi(opts: FetchProductsOptions): Promise<FetchProductsPageResult> {
+export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Promise<FetchProductsPageResult> {
   requireLiveApi("Products");
   const params = new URLSearchParams();
   if (opts.search?.trim()) params.set("search", opts.search.trim());
@@ -85,16 +91,45 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions): Promise<
   if (opts.purchasable) params.set("purchasable", "true");
   if (opts.sellable) params.set("sellable", "true");
   if (opts.productType) params.set("productType", opts.productType);
+  if (opts.categoryId?.trim()) params.set("categoryId", opts.categoryId.trim());
+  if (opts.stockBand) params.set("stockBand", opts.stockBand);
   if (opts.includeStock !== undefined) params.set("includeStock", opts.includeStock ? "true" : "false");
-  const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 100;
+  const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 25;
   params.set("limit", String(lim));
   if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);
   if (opts.ids?.length) params.set("ids", opts.ids.slice(0, 100).join(","));
-  const data = await apiRequest<{ items: BackendProduct[]; nextCursor?: string | null }>("/api/products", { params });
-  return {
-    items: data.items.map(mapProduct),
-    nextCursor: data.nextCursor ?? null,
-  };
+  const data = await apiRequest<{
+    items: BackendProduct[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/products", { params });
+  const limit = typeof data.limit === "number" ? data.limit : lim;
+  const parsedOffset =
+    typeof data.offset === "number"
+      ? data.offset
+      : opts.cursor != null && opts.cursor !== ""
+        ? Number(opts.cursor) || 0
+        : 0;
+  const items = data.items.map(mapProduct);
+  const hasMore =
+    typeof data.hasMore === "boolean"
+      ? data.hasMore
+      : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (
+    data.nextCursor !== undefined &&
+    data.nextCursor !== null &&
+    String(data.nextCursor) !== ""
+  ) {
+    nextCursor = String(data.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
 }
 
 export async function fetchProductsApi(

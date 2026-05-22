@@ -13,6 +13,7 @@ export type ProductRow = {
   currentStock?: number;
   /** Internal notes / long description (not printed on docs unless configured). */
   description?: string;
+  updatedAt?: string;
 };
 
 export type PartyRole = "customer" | "supplier" | "franchisee";

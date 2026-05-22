@@ -3,18 +3,26 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PageLayout } from "@/components/layout/page-layout";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
-import { FiltersBar } from "@/components/ui/filters-bar";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
-  fetchProductsApi,
+  fetchProductsPageApi,
   deleteProductApi,
 } from "@/lib/api/products";
 import { fetchProductCategoriesApi, type ItemCategoryRow } from "@/lib/api/product-categories";
@@ -24,15 +32,22 @@ import {
   type InventoryCostingSnapshot,
   type ProductCostLayersResponse,
 } from "@/lib/api/inventory-costing";
-import { setProductsCache } from "@/lib/data/products.repo";
-import type { ProductRow } from "@/lib/types/masters";
 import type { ProductKind } from "@/lib/products/product-type";
-import { productTypeSortKey, rowMatchesProductTypeFilter } from "@/lib/products/product-type";
+import { productTypeSortKey } from "@/lib/products/product-type";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatMoney } from "@/lib/money";
+import { downloadCsv } from "@/lib/export/csv";
+import { formatDate, cn } from "@/lib/utils";
+import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+const LOW_STOCK_THRESHOLD = 20;
+
+type StockFilter = "all" | "ACTIVE" | "low" | "out";
 
 interface Product {
   id: string;
@@ -42,12 +57,9 @@ interface Product {
   productType?: ProductKind;
   category: string;
   stock: number;
-  /** Weighted average inventory unit cost from last costing run (book basis). */
   avgInventoryCost?: number | null;
   status: string;
   lastUpdated: string;
-  variantsCount: number;
-  packagingCount: number;
 }
 
 function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null): Map<string, number> {
@@ -68,39 +80,57 @@ function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null):
   return result;
 }
 
-function buildProductRow(row: ProductRow, avgCostMap: Map<string, number>): Product {
-  return {
-    id: row.id,
-    name: row.name,
-    sku: row.sku,
-    productFamily: row.productFamily,
-    productType: row.productType,
-    category: row.category ?? "",
-    stock: row.currentStock ?? 0,
-    avgInventoryCost: avgCostMap.has(row.id) ? avgCostMap.get(row.id)! : null,
-    status: row.status === "ACTIVE" ? "Active" : row.status,
-    lastUpdated: "",
-    variantsCount: 0,
-    packagingCount: 0,
-  };
+function StockLevelCell({ stock }: { stock: number }) {
+  const tone =
+    stock <= 0 ? "text-red-600 dark:text-red-400" : stock < LOW_STOCK_THRESHOLD ? "text-amber-600 dark:text-amber-400" : "";
+  const barPct =
+    stock <= 0 ? 0 : Math.min(100, Math.round((stock / LOW_STOCK_THRESHOLD) * 100));
+  const barTone =
+    stock <= 0 ? "bg-red-500" : stock < LOW_STOCK_THRESHOLD ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <div className="text-right min-w-[4.5rem]">
+      <div className={cn("font-semibold tabular-nums", tone)}>{stock.toLocaleString()}</div>
+      {stock > 0 && stock < LOW_STOCK_THRESHOLD ? (
+        <div className="text-[10px] text-amber-600 dark:text-amber-400">Low stock</div>
+      ) : null}
+      {stock <= 0 ? <div className="text-[10px] text-red-600 dark:text-red-400">Out of stock</div> : null}
+      <div className="mt-1 ml-auto max-w-[4.5rem] h-1.5 rounded-full bg-muted overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all", barTone)} style={{ width: `${barPct}%` }} />
+      </div>
+    </div>
+  );
 }
 
 export default function ProductsPage() {
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canDelete = permissions.includes("admin.settings");
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState<string>("all");
+
+  const [searchInput, setSearchInput] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState<StockFilter>("all");
   const [productTypeFilter, setProductTypeFilter] = React.useState<"all" | ProductKind>("all");
   const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
+
   const [rows, setRows] = React.useState<Product[]>([]);
   const [categories, setCategories] = React.useState<ItemCategoryRow[]>([]);
+  const [avgCostMap, setAvgCostMap] = React.useState<Map<string, number>>(new Map());
+  const avgCostMapRef = React.useRef(avgCostMap);
+  avgCostMapRef.current = avgCostMap;
   const [costingRanAt, setCostingRanAt] = React.useState<string | null>(null);
+
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(25);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
+
   const [batchSheetProductId, setBatchSheetProductId] = React.useState<string | null>(null);
   const [layersPayload, setLayersPayload] = React.useState<ProductCostLayersResponse | null>(null);
   const [layersLoading, setLayersLoading] = React.useState(false);
 
-  // Map categoryId → display name for the table column
   const categoryNameById = React.useMemo(() => {
     const m = new Map<string, string>();
     for (const c of categories) m.set(c.id, c.name);
@@ -108,27 +138,84 @@ export default function ProductsPage() {
   }, [categories]);
 
   React.useEffect(() => {
-    let active = true;
+    const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  React.useEffect(() => {
     void Promise.all([
-      fetchProductsApi(),
       fetchProductCategoriesApi().catch(() => [] as ItemCategoryRow[]),
       fetchLatestInventoryCosting().catch(() => null),
     ])
-      .then(([products, cats, costing]) => {
-        if (!active) return;
+      .then(([cats, costing]) => {
         setCategories(cats);
-        setProductsCache(products);
-        const avgMap = weightedAvgBookCostByProduct(costing);
+        setAvgCostMap(weightedAvgBookCostByProduct(costing));
         setCostingRanAt(costing?.ranAt ?? null);
-        setRows(products.map((p) => buildProductRow(p, avgMap)));
       })
       .catch((err) => {
-        toast.error(err instanceof Error ? err.message : "Failed to load products.");
+        toast.error(err instanceof Error ? err.message : "Failed to load product settings.");
       });
-    return () => {
-      active = false;
-    };
   }, []);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchProductsPageApi({
+          limit: pageSize,
+          cursor: String(offset),
+          search: debouncedSearch || undefined,
+          status: statusFilter === "ACTIVE" ? "ACTIVE" : undefined,
+          stockBand:
+            statusFilter === "low" ? "low" : statusFilter === "out" ? "out" : undefined,
+          productType: productTypeFilter !== "all" ? productTypeFilter : undefined,
+          categoryId: categoryFilter !== "all" ? categoryFilter : undefined,
+          includeStock: true,
+        });
+        setRows(
+          page.items.map((row) => ({
+            id: row.id,
+            name: row.name,
+            sku: row.sku,
+            productFamily: row.productFamily,
+            productType: row.productType,
+            category: row.category ?? "",
+            stock: row.currentStock ?? 0,
+            avgInventoryCost: avgCostMapRef.current.has(row.id)
+              ? avgCostMapRef.current.get(row.id)!
+              : null,
+            status: row.status === "ACTIVE" ? "Active" : row.status ?? "Active",
+            lastUpdated: row.updatedAt ? formatDate(row.updatedAt, "short") : "—",
+          })),
+        );
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load products.");
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [categoryFilter, debouncedSearch, pageSize, productTypeFilter, statusFilter],
+  );
+
+  React.useEffect(() => {
+    if (!hasLoadedOnce.current) return;
+    setRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        avgInventoryCost: avgCostMap.has(r.id) ? avgCostMap.get(r.id)! : null,
+      })),
+    );
+  }, [avgCostMap]);
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
 
   React.useEffect(() => {
     if (!batchSheetProductId) {
@@ -153,314 +240,377 @@ export default function ProductsPage() {
     };
   }, [batchSheetProductId]);
 
-  const filteredProducts = React.useMemo(() => {
-    return rows.filter((product) => {
-      const matchesSearch =
-        searchQuery === "" ||
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.sku.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || product.status === statusFilter;
-      const matchesCategory =
-        categoryFilter === "all" || product.category === categoryFilter;
-      const matchesType = rowMatchesProductTypeFilter(product.productType, productTypeFilter);
-      return matchesSearch && matchesStatus && matchesCategory && matchesType;
-    });
-  }, [rows, searchQuery, statusFilter, categoryFilter, productTypeFilter]);
+  const searchPending = searchInput.trim() !== debouncedSearch.trim();
+  const tableBusy = fetching || searchPending;
+
+  const filterChips: FilterChip[] = React.useMemo(() => {
+    const chips: FilterChip[] = [];
+    if (statusFilter !== "all") {
+      const label =
+        statusFilter === "ACTIVE"
+          ? "Active"
+          : statusFilter === "low"
+            ? "Low stock"
+            : "Out of stock";
+      chips.push({ id: "status", label: "Status", value: label });
+    }
+    if (productTypeFilter !== "all") {
+      chips.push({ id: "type", label: "Type", value: productTypeFilter });
+    }
+    if (categoryFilter !== "all") {
+      chips.push({
+        id: "category",
+        label: "Category",
+        value: categoryNameById.get(categoryFilter) ?? categoryFilter,
+      });
+    }
+    if (searchInput.trim()) chips.push({ id: "q", label: "Search", value: searchInput.trim() });
+    return chips;
+  }, [categoryFilter, categoryNameById, productTypeFilter, searchInput, statusFilter]);
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setProductTypeFilter("all");
+    setCategoryFilter("all");
+  };
+
+  const goToPreviousPage = () => {
+    if (pageOffset <= 0 || initialLoading || fetching) return;
+    void loadPage(Math.max(0, pageOffset - pageSize));
+  };
+
+  const goToNextPage = () => {
+    if (!hasMore || initialLoading || fetching) return;
+    void loadPage(pageOffset + pageSize);
+  };
+
+  const refreshCurrentPage = React.useCallback(async () => {
+    await loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
 
   const handleView = (id: string) => {
     router.push(`/master/products/${id}`);
   };
 
-  const handleEdit = (id: string) => {
-    router.push(`/master/products/${id}`);
-  };
-
-  const handleDuplicate = (id: string) => {
-    router.push(`/master/products/${id}`);
-  };
-
   const handleDelete = async (id: string) => {
-    setRows((prev) => prev.filter((p) => p.id !== id));
     try {
       await deleteProductApi(id);
       toast.success("Product deleted.");
+      await refreshCurrentPage();
     } catch (err) {
       toast.error((err as Error).message);
     }
   };
 
-  const columns = [
-    {
-      id: "name",
-      header: "Product Name",
-      sortable: true,
-      sortValue: (row: Product) => row.name.toLowerCase(),
-      accessor: (row: Product) => (
-        <div className="space-y-1">
-          <div className="font-medium">{row.name}</div>
-          <div className="text-xs text-muted-foreground font-mono">{row.sku}</div>
-          {row.productFamily?.trim() ? (
-            <div className="text-xs text-muted-foreground">{row.productFamily}</div>
-          ) : null}
-          <div className="flex flex-wrap gap-1">
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              {row.variantsCount} variants
-            </Badge>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-              {row.packagingCount} UOMs
-            </Badge>
+  const columns = React.useMemo(
+    () => [
+      {
+        id: "name",
+        header: "Product Name",
+        sortable: true,
+        sortValue: (row: Product) => row.name.toLowerCase(),
+        accessor: (row: Product) => (
+          <div className="space-y-1 min-w-[10rem]">
+            <div className="font-medium leading-snug">{row.name}</div>
+            <div className="text-xs text-muted-foreground font-mono">{row.sku}</div>
+            {row.productFamily?.trim() ? (
+              <div className="text-xs text-muted-foreground">{row.productFamily}</div>
+            ) : null}
           </div>
-        </div>
-      ),
-      sticky: true,
-    },
-    {
-      id: "productType",
-      header: "Product type",
-      sortable: true,
-      sortValue: (row: Product) => productTypeSortKey(row.productType),
-      accessor: (row: Product) => <ProductTypeBadge type={row.productType} />,
-    },
-    {
-      id: "category",
-      header: "Category",
-      sortable: true,
-      sortValue: (row: Product) =>
-        (categoryNameById.get(row.category) ?? row.category ?? "").toLowerCase(),
-      accessor: (row: Product) => {
-        const name = categoryNameById.get(row.category) ?? row.category;
-        return name ? (
-          <Badge variant="secondary" className="text-xs font-normal">{name}</Badge>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        );
-      },
-    },
-    {
-      id: "stock",
-      header: "Stock",
-      sortable: true,
-      sortValue: (row: Product) => row.stock,
-      accessor: (row: Product) => (
-        <div className="text-right">
-          <div className="font-medium">{row.stock}</div>
-          {row.stock < 20 && (
-            <div className="text-xs text-destructive">Low stock</div>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: "avgCost",
-      header: "Avg inventory cost",
-      sortable: true,
-      sortValue: (row: Product) => row.avgInventoryCost ?? -1,
-      accessor: (row: Product) => {
-        const v = row.avgInventoryCost;
-        if (v == null || Number.isNaN(v)) {
-          return <div className="text-right text-muted-foreground text-sm">—</div>;
-        }
-        return (
-          <div className="text-right">
-            <div className="font-medium tabular-nums">{formatMoney(v, "KES")}</div>
-            <div className="text-[11px] text-muted-foreground">Book avg / unit</div>
-          </div>
-        );
-      },
-    },
-    {
-      id: "batchDrilldown",
-      header: "",
-      accessor: (row: Product) =>
-        row.stock > 0 ? (
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  aria-label="View cost batches"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setBatchSheetProductId(row.id);
-                  }}
-                >
-                  <Icons.Layers className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">FIFO-style batches & average</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
         ),
-      className: "w-[48px]",
-    },
-    {
-      id: "status",
-      header: "Status",
-      sortable: true,
-      sortValue: (row: Product) => row.status.toLowerCase(),
-      accessor: (row: Product) => <StatusBadge status={row.status} />,
-    },
-    {
-      id: "lastUpdated",
-      header: "Last Updated",
-      sortable: true,
-      accessor: "lastUpdated" as keyof Product,
-    },
-    {
-      id: "actions",
-      header: "",
-      accessor: (row: Product) => (
-        <RowActions
-          actions={[
-            {
-              label: "View",
-              icon: "Eye",
-              onClick: () => handleView(row.id),
-            },
-            {
-              label: "Edit",
-              icon: "Edit",
-              onClick: () => handleEdit(row.id),
-            },
-            {
-              label: "Duplicate",
-              icon: "Copy",
-              onClick: () => handleDuplicate(row.id),
-            },
-            ...(canDelete
-              ? [
-                  {
-                    label: "Delete",
-                    icon: "Trash2" as const,
-                    onClick: () => handleDelete(row.id),
-                    variant: "destructive" as const,
-                  },
-                ]
-              : []),
-          ]}
-        />
-      ),
-      className: "w-[50px]",
-    },
-  ];
+        sticky: true,
+      },
+      {
+        id: "productType",
+        header: "Product type",
+        sortable: true,
+        sortValue: (row: Product) => productTypeSortKey(row.productType),
+        accessor: (row: Product) => <ProductTypeBadge type={row.productType} />,
+      },
+      {
+        id: "category",
+        header: "Category",
+        sortable: true,
+        sortValue: (row: Product) =>
+          (categoryNameById.get(row.category) ?? row.category ?? "").toLowerCase(),
+        accessor: (row: Product) => {
+          const name = categoryNameById.get(row.category) ?? row.category;
+          return name ? (
+            <Badge variant="secondary" className="text-xs font-normal">
+              {name}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground text-xs">—</span>
+          );
+        },
+      },
+      {
+        id: "stock",
+        header: "Stock",
+        sortable: true,
+        sortValue: (row: Product) => row.stock,
+        accessor: (row: Product) => <StockLevelCell stock={row.stock} />,
+      },
+      {
+        id: "avgCost",
+        header: "Avg inventory cost",
+        sortable: true,
+        sortValue: (row: Product) => row.avgInventoryCost ?? -1,
+        accessor: (row: Product) => {
+          const v = row.avgInventoryCost;
+          if (v == null || Number.isNaN(v)) {
+            return <div className="text-right text-muted-foreground text-sm">—</div>;
+          }
+          return (
+            <div className="text-right min-w-[5rem]">
+              <div className="font-medium tabular-nums">{formatMoney(v, "KES")}</div>
+              <div className="text-[11px] text-muted-foreground">Book avg / unit</div>
+            </div>
+          );
+        },
+      },
+      {
+        id: "batchDrilldown",
+        header: "",
+        accessor: (row: Product) =>
+          row.stock > 0 ? (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    aria-label="View cost batches"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBatchSheetProductId(row.id);
+                    }}
+                  >
+                    <Icons.Layers className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">FIFO-style batches & average</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <span className="text-muted-foreground text-xs">—</span>
+          ),
+        className: "w-[48px]",
+      },
+      {
+        id: "status",
+        header: "Status",
+        sortable: true,
+        sortValue: (row: Product) => row.status.toLowerCase(),
+        accessor: (row: Product) => <StatusBadge status={row.status} />,
+      },
+      {
+        id: "lastUpdated",
+        header: "Last updated",
+        sortable: true,
+        sortValue: (row: Product) => row.lastUpdated,
+        accessor: (row: Product) => (
+          <span className="text-sm text-muted-foreground whitespace-nowrap">{row.lastUpdated}</span>
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        accessor: (row: Product) => (
+          <RowActions
+            actions={[
+              {
+                label: "View",
+                icon: "Eye",
+                onClick: () => handleView(row.id),
+              },
+              {
+                label: "Edit",
+                icon: "Edit",
+                onClick: () => handleView(row.id),
+              },
+              {
+                label: "Duplicate",
+                icon: "Copy",
+                onClick: () => handleView(row.id),
+              },
+              ...(canDelete
+                ? [
+                    {
+                      label: "Delete",
+                      icon: "Trash2" as const,
+                      onClick: () => void handleDelete(row.id),
+                      variant: "destructive" as const,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ),
+        className: "w-[50px]",
+      },
+    ],
+    [canDelete, categoryNameById],
+  );
 
   return (
-    <PageLayout
-      title="Products"
-      description="Manage your product catalog"
-      actions={
-        <Button onClick={() => router.push("/master/products")}>
-          <Icons.Plus className="mr-2 h-4 w-4" />
-          Add Product
-        </Button>
-      }
-    >
-      <Card>
-        <FiltersBar
-          searchPlaceholder="Search products by name or SKU..."
-          onSearchChange={setSearchQuery}
-          filters={[
-            {
-              id: "status",
-              label: "Status",
-              options: [
-                { label: "All", value: "all" },
-                { label: "Active", value: "Active" },
-                { label: "Low Stock", value: "Low Stock" },
-                { label: "Out of Stock", value: "Out of Stock" },
-              ],
-              value: statusFilter,
-              onChange: setStatusFilter,
-            },
-            {
-              id: "productType",
-              label: "Product type",
-              options: [
-                { label: "All types", value: "all" },
-                { label: "Purchased product", value: "RAW" },
-                { label: "Finished product", value: "FINISHED" },
-                { label: "Stock product", value: "BOTH" },
-              ],
-              value: productTypeFilter,
-              onChange: (v) => setProductTypeFilter(v as "all" | ProductKind),
-            },
-            {
-              id: "category",
-              label: "Category",
-              options: [
-                { label: "All Categories", value: "all" },
-                ...categories.map((c) => ({ label: c.name, value: c.id })),
-              ],
-              value: categoryFilter,
-              onChange: setCategoryFilter,
-            },
-          ]}
-          activeFiltersCount={
-            (statusFilter !== "all" ? 1 : 0) +
-            (productTypeFilter !== "all" ? 1 : 0) +
-            (categoryFilter !== "all" ? 1 : 0)
-          }
-          onClearFilters={() => {
-            setStatusFilter("all");
-            setProductTypeFilter("all");
-            setCategoryFilter("all");
-          }}
-        />
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Products</CardTitle>
-              <CardDescription className="space-y-1 max-w-xl">
-                <span>
-                  {filteredProducts.length} of {rows.length} products
-                </span>
-                {costingRanAt ? (
-                  <span className="block text-xs text-muted-foreground">
-                    Avg inventory cost uses the last costing snapshot ({new Date(costingRanAt).toLocaleString()}
-                    ).{" "}
-                    <Link href="/inventory/costing" className="text-primary underline-offset-4 hover:underline">
-                      Run costing
-                    </Link>{" "}
-                    to refresh book values.
-                  </span>
-                ) : (
-                  <span className="block text-xs text-muted-foreground">
-                    Run{" "}
-                    <Link href="/inventory/costing" className="text-primary underline-offset-4 hover:underline">
-                      inventory costing
-                    </Link>{" "}
-                    first so average cost can populate from receipts.
-                  </span>
-                )}
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <Icons.Download className="mr-2 h-4 w-4" />
-                Export
-              </Button>
-              <Button variant="outline" size="sm">
-                <Icons.Upload className="mr-2 h-4 w-4" />
-                Import
-              </Button>
-            </div>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+      <PageHeader
+        title="Products"
+        description="Manage your product catalog"
+        breadcrumbs={[
+          { label: "Inventory", href: "/inventory/products" },
+          { label: "Products" },
+        ]}
+        showCommandHint
+        actions={
+          <Button onClick={() => router.push("/master/products")}>
+            <Icons.Plus className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
+        }
+      />
+
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="shrink-0 space-y-3 border-b px-4 py-4">
+            <DataTableToolbar
+              className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+              searchPlaceholder="Search products by name or SKU…"
+              searchValue={searchInput}
+              onSearchChange={setSearchInput}
+              filters={[
+                {
+                  id: "status",
+                  label: "Status",
+                  options: [
+                    { label: "All", value: "all" },
+                    { label: "Active", value: "ACTIVE" },
+                    { label: "Low stock", value: "low" },
+                    { label: "Out of stock", value: "out" },
+                  ],
+                  value: statusFilter,
+                  onChange: (v) => setStatusFilter(v as StockFilter),
+                },
+                {
+                  id: "productType",
+                  label: "Product type",
+                  options: [
+                    { label: "All types", value: "all" },
+                    { label: "Purchased product", value: "RAW" },
+                    { label: "Finished product", value: "FINISHED" },
+                    { label: "Stock product", value: "BOTH" },
+                  ],
+                  value: productTypeFilter,
+                  onChange: (v) => setProductTypeFilter(v as "all" | ProductKind),
+                },
+                {
+                  id: "category",
+                  label: "Category",
+                  options: [
+                    { label: "All categories", value: "all" },
+                    ...categories.map((c) => ({ label: c.name, value: c.id })),
+                  ],
+                  value: categoryFilter,
+                  onChange: setCategoryFilter,
+                },
+              ]}
+              activeFiltersCount={filterChips.length}
+              onClearFilters={clearFilters}
+              filterChips={filterChips}
+              onRemoveFilterChip={(id) => {
+                if (id === "status") setStatusFilter("all");
+                if (id === "type") setProductTypeFilter("all");
+                if (id === "category") setCategoryFilter("all");
+                if (id === "q") setSearchInput("");
+              }}
+              onExport={() =>
+                downloadCsv(
+                  `products-${new Date().toISOString().slice(0, 10)}.csv`,
+                  rows.map((r) => ({
+                    sku: r.sku,
+                    name: r.name,
+                    category: categoryNameById.get(r.category) ?? r.category,
+                    productType: r.productType ?? "",
+                    stock: r.stock,
+                    avgInventoryCost: r.avgInventoryCost ?? "",
+                    status: r.status,
+                    lastUpdated: r.lastUpdated,
+                  })),
+                )
+              }
+            />
+
+            <p className="text-xs text-muted-foreground max-w-2xl">
+              {costingRanAt ? (
+                <>
+                  Avg inventory cost uses the last costing snapshot (
+                  {formatDate(costingRanAt, "datetime")}).{" "}
+                  <Link href="/inventory/costing" className="text-primary underline-offset-4 hover:underline">
+                    Run costing
+                  </Link>{" "}
+                  to refresh book values.
+                </>
+              ) : (
+                <>
+                  Run{" "}
+                  <Link href="/inventory/costing" className="text-primary underline-offset-4 hover:underline">
+                    inventory costing
+                  </Link>{" "}
+                  first so average cost can populate from receipts.
+                </>
+              )}
+            </p>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <DataTable
-            data={filteredProducts}
-            columns={columns}
-            onRowClick={(row) => handleView(row.id)}
-            emptyMessage="No products found. Create your first product to get started."
+
+          {initialLoading ? (
+            <div className="p-4">
+              <SkeletonDataTable
+                rows={pageSize}
+                columnWidths={["w-40", "w-24", "w-24", "w-16", "w-24", "w-8", "w-20", "w-24", "w-8"]}
+              />
+            </div>
+          ) : (
+            <div className={cn(LIST_TABLE_STATIC_CLASS, "min-h-0 flex-1 border-0 border-t rounded-none shadow-none")}>
+              <TableLinearProgress active={tableBusy} />
+              <div
+                className={cn(
+                  "transition-opacity duration-200",
+                  tableBusy && "pointer-events-none opacity-60",
+                )}
+              >
+                <DataTable<Product>
+                  data={rows}
+                  columns={columns}
+                  scrollMode="natural"
+                  className="border-0 shadow-none"
+                  onRowClick={(row) => handleView(row.id)}
+                  emptyMessage="No products match your filters. Create your first product to get started."
+                />
+              </div>
+            </div>
+          )}
+
+          <TablePagination
+            className="border-t px-4"
+            pageOffset={pageOffset}
+            pageSize={pageSize}
+            itemCount={initialLoading ? 0 : rows.length}
+            hasMore={hasMore}
+            loading={initialLoading}
+            busy={tableBusy}
+            onPrevious={goToPreviousPage}
+            onNext={goToNextPage}
+            entityLabel="products"
+            pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+            onPageSizeChange={setPageSize}
           />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Sheet open={batchSheetProductId != null} onOpenChange={(open) => !open && setBatchSheetProductId(null)}>
         <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
@@ -552,6 +702,6 @@ export default function ProductsPage() {
           </div>
         </SheetContent>
       </Sheet>
-    </PageLayout>
+    </PageShell>
   );
 }
