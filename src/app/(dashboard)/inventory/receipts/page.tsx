@@ -92,7 +92,7 @@ export default function InventoryReceiptsPage() {
     fetchSubcontractOrders({})
       .then((scos) => {
         const grnIds = new Set(
-          scos.filter((s: { grnId?: string }) => s.grnId).map((s: { grnId?: string }) => s.grnId as string),
+          scos.map((s) => s.grnId).filter((id): id is string => id != null && id !== ""),
         );
         setSubcontractedGrnIds(grnIds);
       })

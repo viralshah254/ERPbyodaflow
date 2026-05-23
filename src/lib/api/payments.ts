@@ -82,9 +82,6 @@ type BackendApBill = {
   partyId?: string;
   supplierName?: string;
   total: number;
-  landedAllocated?: number;
-  landedBreakdown?: Array<{ label: string; amount: number }>;
-  economicTotal?: number;
   currency?: string;
   exchangeRate?: number;
   status: string;
@@ -92,6 +89,16 @@ type BackendApBill = {
   outstanding?: number;
   poRef?: string;
   grnNumber?: string;
+  isLandedCostBill?: boolean;
+  costType?: string;
+  costReference?: string;
+  sourceGrnId?: string;
+  sourceGrnNumber?: string;
+  allocationId?: string;
+  costAttachments?: Array<{ id: string; fileName: string; contentType?: string }>;
+  economicTotal?: number;
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
 };
 
 type BackendPartyOption = {
@@ -366,9 +373,6 @@ function mapApBillItem(item: BackendApBill): APBillRow {
     date: item.date?.slice(0, 10) ?? "",
     party: item.supplierName ?? item.partyId ?? "",
     total: item.total ?? 0,
-    landedAllocated: item.landedAllocated ?? 0,
-    landedBreakdown: item.landedBreakdown ?? [],
-    economicTotal: item.economicTotal ?? (item.total ?? 0),
     currency: item.currency,
     exchangeRate: item.exchangeRate,
     status: item.status ?? "DRAFT",
@@ -377,6 +381,14 @@ function mapApBillItem(item: BackendApBill): APBillRow {
     outstanding: item.outstanding,
     poRef: item.poRef,
     grnNumber: item.grnNumber,
+    isLandedCostBill: item.isLandedCostBill,
+    costType: item.costType,
+    costReference: item.costReference,
+    sourceGrnId: item.sourceGrnId,
+    sourceGrnNumber: item.sourceGrnNumber,
+    allocationId: item.allocationId,
+    costAttachments: item.costAttachments,
+    economicTotal: item.economicTotal ?? item.total ?? 0,
   };
 }
 

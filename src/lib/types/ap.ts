@@ -12,10 +12,6 @@ export type APBillRow = {
   date: string;
   party: string;
   total: number;
-  /** Sum of linked GRN landed-cost lines in base currency (KES). */
-  landedAllocated?: number;
-  landedBreakdown?: Array<{ label: string; amount: number }>;
-  economicTotal?: number;
   currency?: string;
   exchangeRate?: number;
   status: string;
@@ -23,6 +19,18 @@ export type APBillRow = {
   allocated?: number;
   outstanding?: number;
   poRef?: string;
+  /** True when this bill was auto-created from a GRN cost line (Fuel, Transport, etc.). */
+  isLandedCostBill?: boolean;
+  costType?: string;
+  costReference?: string;
+  sourceGrnId?: string;
+  sourceGrnNumber?: string;
+  allocationId?: string;
+  costAttachments?: Array<{ id: string; fileName: string; contentType?: string }>;
+  /** @deprecated Supplier bills no longer roll up landed costs; use individual cost bills. */
+  landedAllocated?: number;
+  landedBreakdown?: Array<{ label: string; amount: number }>;
+  economicTotal?: number;
   grnNumber?: string;
 };
 

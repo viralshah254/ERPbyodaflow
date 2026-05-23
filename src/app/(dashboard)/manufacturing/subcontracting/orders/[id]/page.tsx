@@ -280,6 +280,7 @@ export default function SubcontractOrderDetailPage() {
         header: string;
         accessor: (r: SubcontractOrderLineRow) => React.ReactNode;
         sticky?: boolean;
+        className?: string;
       }> = [
         {
           id: "type",

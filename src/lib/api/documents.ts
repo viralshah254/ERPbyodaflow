@@ -165,6 +165,13 @@ type BackendDocumentListItem = {
   landedAllocated?: number;
   landedBreakdown?: Array<{ label: string; amount: number }>;
   economicTotal?: number;
+  isLandedCostBill?: boolean;
+  costType?: string;
+  costReference?: string;
+  sourceGrnId?: string;
+  sourceGrnNumber?: string;
+  allocationId?: string;
+  costAttachments?: Array<{ id: string; fileName: string; contentType?: string }>;
   totalWeightKg?: number;
   status: string;
   warehouse?: string;
@@ -432,6 +439,13 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     landedAllocated: item.landedAllocated,
     landedBreakdown: item.landedBreakdown,
     economicTotal: item.economicTotal,
+    isLandedCostBill: item.isLandedCostBill,
+    costType: item.costType,
+    costReference: item.costReference,
+    sourceGrnId: item.sourceGrnId,
+    sourceGrnNumber: item.sourceGrnNumber,
+    allocationId: item.allocationId,
+    costAttachments: item.costAttachments,
     totalWeightKg: item.totalWeightKg,
     status: item.status,
     warehouse: item.warehouse ?? item.warehouseId,

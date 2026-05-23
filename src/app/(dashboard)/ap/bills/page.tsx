@@ -13,7 +13,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
@@ -21,14 +20,13 @@ import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { fetchApBillsPageApi } from "@/lib/api/payments";
 import { bulkDocumentActionApi, fetchDocumentListPageApi } from "@/lib/api/documents";
+import { getLandedCostAttachmentUrl } from "@/lib/api/landed-cost";
 import type { APBillRow } from "@/lib/types/ap";
 import type { DocListRow } from "@/lib/types/documents";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { downloadCsv } from "@/lib/export/csv";
 import { cn } from "@/lib/utils";
@@ -66,11 +64,16 @@ function docToBillRow(r: DocListRow): APBillRow {
     total: r.total ?? 0,
     currency: r.currency,
     exchangeRate: r.exchangeRate,
-    landedAllocated: r.landedAllocated,
-    landedBreakdown: r.landedBreakdown,
-    economicTotal: r.economicTotal,
+    economicTotal: r.economicTotal ?? r.total ?? 0,
     status: r.status,
     poRef: r.poRef,
+    isLandedCostBill: r.isLandedCostBill,
+    costType: r.costType,
+    costReference: r.costReference,
+    sourceGrnId: r.sourceGrnId,
+    sourceGrnNumber: r.sourceGrnNumber,
+    allocationId: r.allocationId,
+    costAttachments: r.costAttachments,
   };
 }
 
@@ -156,46 +159,25 @@ export default function APBillsPage() {
     return chips;
   }, [statusFilter, searchInput, statusOptions]);
 
-  const landedCostsCell = React.useCallback(
-    (r: APBillRow) => {
-      const breakdown = r.landedBreakdown ?? [];
-      const amount = r.landedAllocated ?? 0;
-      const cell = (
-        <DualCurrencyAmount
-          amount={amount}
-          currency={baseCurrency}
-          baseCurrency={baseCurrency}
-          align="right"
-          size="sm"
-        />
-      );
-      if (breakdown.length === 0) {
-        return amount > 0 ? cell : <span className="text-muted-foreground text-sm">—</span>;
-      }
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="cursor-help inline-flex items-center gap-1">
-                {cell}
-                <Icons.Info className="h-3 w-3 text-muted-foreground shrink-0" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="w-48 p-3 space-y-1.5">
-              <p className="text-xs font-semibold text-foreground mb-2">Cost breakdown</p>
-              {breakdown.map((b) => (
-                <div key={b.label} className="flex justify-between text-xs gap-4">
-                  <span className="text-muted-foreground capitalize">{b.label}</span>
-                  <span className="font-medium tabular-nums">{formatMoney(b.amount, baseCurrency)}</span>
-                </div>
-              ))}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    },
-    [baseCurrency],
-  );
+  const receiptCell = React.useCallback((r: APBillRow) => {
+    if (!r.isLandedCostBill || !r.allocationId || !r.costAttachments?.length) {
+      return <span className="text-muted-foreground text-sm">—</span>;
+    }
+    const att = r.costAttachments[0];
+    const href = getLandedCostAttachmentUrl(r.allocationId, att.id);
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Icons.Paperclip className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate max-w-[8rem]">{att.fileName}</span>
+      </a>
+    );
+  }, []);
 
   const columns = React.useMemo(() => {
     const base = [
@@ -224,10 +206,14 @@ export default function APBillsPage() {
         header: "Supplier",
         accessor: (r: APBillRow) => (
           <div className="min-w-[8rem]">
-            <div className="flex items-center gap-1.5">
-              <Icons.Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="font-medium">{r.party}</span>
-            </div>
+            {r.isLandedCostBill ? (
+              <span className="text-muted-foreground text-sm italic">Cost bill</span>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <Icons.Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="font-medium">{r.party || "—"}</span>
+              </div>
+            )}
             {r.poRef ? (
               <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">PO {r.poRef}</p>
             ) : null}
@@ -237,8 +223,53 @@ export default function APBillsPage() {
         sortValue: (r: APBillRow) => r.party.toLowerCase(),
       },
       {
+        id: "costType",
+        header: "Cost type",
+        accessor: (r: APBillRow) =>
+          r.isLandedCostBill ? (
+            <div>
+              <span className="font-medium capitalize">{r.costType ?? "Cost"}</span>
+              {r.costReference ? (
+                <p className="text-[11px] text-muted-foreground mt-0.5">{r.costReference}</p>
+              ) : null}
+            </div>
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          ),
+        sortable: true,
+        sortValue: (r: APBillRow) => (r.costType ?? "").toLowerCase(),
+      },
+      {
+        id: "source",
+        header: "Source",
+        accessor: (r: APBillRow) => {
+          if (r.isLandedCostBill && r.sourceGrnNumber) {
+            return r.sourceGrnId ? (
+              <Link
+                href={`/docs/grn/${r.sourceGrnId}`}
+                className="inline-flex items-center gap-1 text-sm font-mono text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Icons.Package className="h-3.5 w-3.5 shrink-0" />
+                {r.sourceGrnNumber}
+              </Link>
+            ) : (
+              <span className="font-mono text-sm">{r.sourceGrnNumber}</span>
+            );
+          }
+          return <span className="text-muted-foreground text-sm">—</span>;
+        },
+        sortable: true,
+        sortValue: (r: APBillRow) => (r.sourceGrnNumber ?? "").toLowerCase(),
+      },
+      {
+        id: "receipt",
+        header: "Receipt",
+        accessor: receiptCell,
+      },
+      {
         id: "total",
-        header: "Invoice total",
+        header: "Amount",
         accessor: (r: APBillRow) => (
           <DualCurrencyAmount
             amount={r.total}
@@ -251,40 +282,6 @@ export default function APBillsPage() {
         ),
         sortable: true,
         sortValue: (r: APBillRow) => r.total,
-      },
-      {
-        id: "landedAllocated",
-        header: "Additional costs",
-        accessor: landedCostsCell,
-        sortable: true,
-        sortValue: (r: APBillRow) => r.landedAllocated ?? 0,
-      },
-      {
-        id: "economicTotal",
-        header: "Economic total",
-        accessor: (r: APBillRow) => {
-          const hasLanded = (r.landedAllocated ?? 0) > 0;
-          return (
-            <div className="text-right">
-              <DualCurrencyAmount
-                amount={r.economicTotal ?? r.total}
-                currency={r.currency ?? baseCurrency}
-                exchangeRate={r.exchangeRate}
-                baseCurrency={baseCurrency}
-                align="right"
-                size="sm"
-                className={hasLanded ? "font-semibold" : undefined}
-              />
-              {hasLanded ? (
-                <Badge variant="outline" className="mt-1 text-[10px] font-normal">
-                  incl. landed
-                </Badge>
-              ) : null}
-            </div>
-          );
-        },
-        sortable: true,
-        sortValue: (r: APBillRow) => r.economicTotal ?? r.total,
       },
     ];
 
@@ -317,7 +314,7 @@ export default function APBillsPage() {
     });
 
     return base;
-  }, [baseCurrency, tab, landedCostsCell]);
+  }, [baseCurrency, tab, receiptCell]);
 
   const handleClearFilters = () => {
     setStatusFilter("");
@@ -370,8 +367,8 @@ export default function APBillsPage() {
 
   const skeletonWidths =
     tab === "open"
-      ? ["w-24", "w-20", "w-28", "w-24", "w-20", "w-24", "w-20", "w-16"]
-      : ["w-24", "w-20", "w-28", "w-24", "w-20", "w-24", "w-16"];
+      ? ["w-24", "w-20", "w-20", "w-24", "w-20", "w-24", "w-20", "w-16"]
+      : ["w-24", "w-20", "w-20", "w-24", "w-20", "w-24", "w-16"];
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
@@ -493,10 +490,11 @@ export default function APBillsPage() {
                   rows.map((row) => ({
                     number: row.number,
                     date: row.date,
-                    supplier: row.party,
-                    invoiceTotal: row.total,
-                    additionalCosts: row.landedAllocated ?? 0,
-                    economicTotal: row.economicTotal ?? row.total,
+                    supplier: row.isLandedCostBill ? "Cost bill" : row.party,
+                    costType: row.costType ?? "",
+                    source: row.sourceGrnNumber ?? "",
+                    receipt: row.costAttachments?.[0]?.fileName ?? "",
+                    amount: row.total,
                     outstanding: row.outstanding ?? "",
                     currency: row.currency ?? baseCurrency,
                     status: row.status,

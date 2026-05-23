@@ -8,12 +8,17 @@ export type DocListRow = {
   total?: number;
   currency?: string;
   exchangeRate?: number;
-  /** Linked GRN landed costs summed in KES (base). */
+  /** @deprecated Use individual landed-cost bills instead of rolled-up additional costs. */
   landedAllocated?: number;
-  /** Per-template landed amounts in KES (base). */
   landedBreakdown?: Array<{ label: string; amount: number }>;
-  /** Invoice total + landed costs, in document currency (for dual-currency display). */
   economicTotal?: number;
+  isLandedCostBill?: boolean;
+  costType?: string;
+  costReference?: string;
+  sourceGrnId?: string;
+  sourceGrnNumber?: string;
+  allocationId?: string;
+  costAttachments?: Array<{ id: string; fileName: string; contentType?: string }>;
   totalWeightKg?: number;
   status: string;
   poRef?: string;
