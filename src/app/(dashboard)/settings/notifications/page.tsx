@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import {
   fetchNotificationSettingsApi,
+  sendTestPushNotificationApi,
   updateNotificationSettingsApi,
 } from "@/lib/api/notifications";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ export default function NotificationsPage() {
   const [sms, setSms] = React.useState(false);
   const [whatsapp, setWhatsapp] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [testingPush, setTestingPush] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
@@ -48,6 +50,23 @@ export default function NotificationsPage() {
       toast.error(err instanceof Error ? err.message : "Failed to save notification settings.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTestPush = async () => {
+    setTestingPush(true);
+    try {
+      const result = await sendTestPushNotificationApi({
+        title: "OdaFlow test notification",
+        body: "Push notifications are working on this device.",
+        entityType: "approval",
+        alsoInbox: true,
+      });
+      toast.success(`Test push sent to ${result.tokenCount ?? 0} device(s).`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Test push failed.");
+    } finally {
+      setTestingPush(false);
     }
   };
 
@@ -90,6 +109,24 @@ export default function NotificationsPage() {
               <Checkbox id="wa" checked={whatsapp} onCheckedChange={(c) => setWhatsapp(c === true)} />
               <Label htmlFor="wa">WhatsApp</Label>
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Push notifications</CardTitle>
+            <CardDescription>
+              Browser and mobile apps register FCM device tokens on login. Send a test alert to your
+              registered devices.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" size="sm" onClick={handleTestPush} disabled={testingPush}>
+              <Icons.BellRing className="mr-2 h-4 w-4" />
+              {testingPush ? "Sending…" : "Send test push"}
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/automation/alerts">Open alerts inbox</Link>
+            </Button>
           </CardContent>
         </Card>
         <Card>

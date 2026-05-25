@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound } from "lucide-react";
 import { signOut as firebaseSignOut } from "@/lib/firebase";
+import { unregisterWebPushToken } from "@/lib/push-notifications";
 import { setApiAuth } from "@/lib/api/client";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
@@ -33,6 +34,7 @@ export function Header() {
   const userInitials = getUserInitials(user);
 
   const handleLogout = async () => {
+    await unregisterWebPushToken();
     await firebaseSignOut();
     setApiAuth({});
     logout();

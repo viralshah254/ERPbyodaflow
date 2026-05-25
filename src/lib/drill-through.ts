@@ -101,6 +101,21 @@ export function drillFromNotification(notification: NotificationDrillContext): D
   if (notification.entityType === "approval" && notification.entityId) {
     return drillToApprovalInbox(notification.entityId);
   }
+  if (notification.entityType === "sales-order" && notification.entityId) {
+    return drillToDocument("sales-order", notification.entityId);
+  }
+  if (notification.entityType === "purchase-request" && notification.entityId) {
+    return drillToDocument("purchase-request", notification.entityId);
+  }
+  if (notification.entityType === "purchase-order" && notification.entityId) {
+    return drillToDocument("purchase-order", notification.entityId);
+  }
+  if (notification.entityType === "grn" && notification.entityId) {
+    return drillToDocument("grn", notification.entityId);
+  }
+  if (notification.entityType === "payment") {
+    return { href: "/sales/orders", label: "View sales orders" };
+  }
   if (
     notification.entityType === "invoice" && notification.entityId
   ) {
@@ -123,6 +138,9 @@ export function drillFromNotification(notification: NotificationDrillContext): D
     return drillToDocument("journal", notification.entityId);
   }
   if (notification.dedupeKey?.startsWith("approval-")) {
+    return drillToApprovalInbox(notification.entityId);
+  }
+  if (notification.dedupeKey?.startsWith("approval-requested:")) {
     return drillToApprovalInbox(notification.entityId);
   }
   if (

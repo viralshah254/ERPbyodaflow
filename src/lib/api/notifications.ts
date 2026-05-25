@@ -64,3 +64,23 @@ export async function acknowledgeNotificationApi(id: string): Promise<void> {
   requireLiveApi("Acknowledge notification");
   await apiRequest(`/api/notifications/inbox/${encodeURIComponent(id)}/ack`, { method: "POST" });
 }
+
+export async function sendTestPushNotificationApi(input?: {
+  title?: string;
+  body?: string;
+  entityType?: string;
+  entityId?: string;
+  alsoInbox?: boolean;
+}): Promise<{ sent: boolean; tokenCount?: number; reason?: string }> {
+  requireLiveApi("Test push notification");
+  return apiRequest("/api/notifications/test-push", {
+    method: "POST",
+    body: {
+      title: input?.title,
+      body: input?.body,
+      entityType: input?.entityType ?? "approval",
+      entityId: input?.entityId,
+      alsoInbox: input?.alsoInbox ?? true,
+    },
+  });
+}
