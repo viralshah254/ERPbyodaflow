@@ -28,6 +28,7 @@ import {
   type FranchiseNetworkStockItem,
   type FranchiseOutletStockRow,
 } from "@/lib/api/inventory-stock";
+import { compareProductFamilyKeys, UNCATEGORIZED_FAMILY } from "@/lib/products/product-family";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -90,10 +91,10 @@ export default function StockLevelsPage() {
     const arr = [...stockItems];
     const famKey = (f: string | null | undefined) => {
       const t = f?.trim();
-      return t ? t.toLowerCase() : "\uFFFF";
+      return t || UNCATEGORIZED_FAMILY;
     };
     arr.sort((a, b) => {
-      const c = famKey(a.productFamily).localeCompare(famKey(b.productFamily));
+      const c = compareProductFamilyKeys(famKey(a.productFamily), famKey(b.productFamily));
       if (c !== 0) return c;
       return (a.sku ?? "").localeCompare(b.sku ?? "", undefined, { numeric: true });
     });

@@ -729,8 +729,8 @@ export async function createCashDisbursement(body: {
   /** Per-line paid weight for multi-line POs. poLineId format: `${poId}:${lineIndex}` */
   lines?: { poLineId: string; paidWeightKg: number }[];
   paymentMethod?: string;
-  /** Base64 file content (no data: prefix); optional supplier invoice / receipt. */
-  invoiceAttachment?: { fileName: string; contentType?: string; content: string };
+  /** Base64 file content (no data: prefix); required supplier invoice / receipt. */
+  invoiceAttachment: { fileName: string; contentType?: string; content: string };
 }): Promise<{ id: string; reference: string; warnings?: string[] }> {
   requireLiveApi("Create cash disbursement");
   return apiRequest<{ id: string; reference: string; warnings?: string[] }>("/api/purchasing/cash-weight-audit/disbursements", {

@@ -28,6 +28,7 @@ export type UserRow = {
   /** True when a Firebase account exists (admin can set password). */
   hasSignIn?: boolean;
   phoneNumber?: string | null;
+  nationalId?: string | null;
   jobTitle?: string | null;
   employeeCode?: string | null;
   /** Mobile shell this user will be routed to — derived server-side. */

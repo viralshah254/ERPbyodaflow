@@ -90,6 +90,7 @@ export default function UsersRolesPage() {
     copilotEnabled: false,
     roleIds: [],
     phoneNumber: "",
+    nationalId: "",
     employeeCode: "",
   });
   const [userForm, setUserForm] = React.useState<UserFormState>(emptyUserForm);
@@ -147,6 +148,7 @@ export default function UsersRolesPage() {
       copilotEnabled: u.copilotEnabled === true,
       roleIds: [...u.roleIds],
       phoneNumber: u.phoneNumber ?? "",
+      nationalId: u.nationalId ?? "",
       employeeCode: u.employeeCode ?? "",
     });
     setPasswordNew("");
@@ -628,6 +630,7 @@ export default function UsersRolesPage() {
                       copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
                       phoneNumber: userForm.phoneNumber || undefined,
+                      nationalId: userForm.nationalId || undefined,
                       employeeCode: userForm.employeeCode || undefined,
                     });
                       toast.success("User updated.");
@@ -647,6 +650,7 @@ export default function UsersRolesPage() {
                       copilotEnabled: copilotProductEnabled ? userForm.copilotEnabled : false,
                       roleIds: userForm.roleIds,
                       phoneNumber: userForm.phoneNumber || undefined,
+                      nationalId: userForm.nationalId || undefined,
                       employeeCode: userForm.employeeCode || undefined,
                     });
                       toast.success("User staged for billing approval.");

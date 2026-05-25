@@ -37,7 +37,9 @@ import {
   UNCATEGORIZED_FAMILY,
   productFamilyKey,
   productFamilyLabel,
+  compareProductFamilyKeys,
   lineProductFamilyKey,
+  productFamilySortRank,
 } from "@/lib/products/product-family";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
@@ -234,7 +236,10 @@ export function DocumentLineEditor({
               ? rows.slice().sort((a, b) => {
                   const scoreA = a.name.toLowerCase().includes("sourcing") ? 0 : a.productType === "RAW" ? 1 : a.productType === "BOTH" ? 2 : 3;
                   const scoreB = b.name.toLowerCase().includes("sourcing") ? 0 : b.productType === "RAW" ? 1 : b.productType === "BOTH" ? 2 : 3;
-                  return scoreA !== scoreB ? scoreA - scoreB : a.name.localeCompare(b.name);
+                  if (scoreA !== scoreB) return scoreA - scoreB;
+                  const famCmp = productFamilySortRank(a.productFamily) - productFamilySortRank(b.productFamily);
+                  if (famCmp !== 0) return famCmp;
+                  return a.name.localeCompare(b.name);
                 })
               : rows;
           setFilteredProducts(sorted);
@@ -266,6 +271,8 @@ export function DocumentLineEditor({
                   const rB = b.productType === "RAW" ? 0 : 1;
                   if (rA !== rB) return rA - rB;
                 }
+                const famCmp = productFamilySortRank(a.productFamily) - productFamilySortRank(b.productFamily);
+                if (famCmp !== 0) return famCmp;
                 return a.sku.localeCompare(b.sku);
               }).slice(0, 100)
             : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
@@ -297,14 +304,12 @@ export function DocumentLineEditor({
     const keys = new Set<string>();
     for (const p of products) keys.add(productFamilyKey(p));
     return [...keys].sort((a, b) => {
-      if (a === UNCATEGORIZED_FAMILY) return 1;
-      if (b === UNCATEGORIZED_FAMILY) return -1;
       if (mode === "purchasing") {
         const hasRawA = products.some((p) => productFamilyKey(p) === a && p.productType === "RAW") ? 0 : 1;
         const hasRawB = products.some((p) => productFamilyKey(p) === b && p.productType === "RAW") ? 0 : 1;
         if (hasRawA !== hasRawB) return hasRawA - hasRawB;
       }
-      return a.localeCompare(b);
+      return compareProductFamilyKeys(a, b);
     });
   }, [products, mode]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);

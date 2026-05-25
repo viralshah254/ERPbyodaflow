@@ -225,6 +225,7 @@ export default function DocViewPage() {
     "purchase-credit-note",
     "purchase-debit-note",
   ].includes(type);
+  const isGrnDoc = type === "grn";
   const counterpartyLabel = isPurchaseDoc ? "Supplier" : "Customer / Supplier";
   const displayPartyName = resolvedPartyName ?? document?.party ?? "—";
 
@@ -1244,15 +1245,25 @@ export default function DocViewPage() {
                   <div className="rounded border overflow-x-auto">
                     <div
                       className={
-                        isPurchaseDoc
+                        isGrnDoc
+                          ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                          : isPurchaseDoc
                           ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                           : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                       }
                     >
                       <span>Description</span>
                       <span className="text-right">UOM</span>
-                      <span className="text-right">Qty</span>
-                      <span className="text-right">Remaining</span>
+                      {isGrnDoc ? (
+                        <>
+                          <span className="text-right">Ordered</span>
+                          <span className="text-right">Received</span>
+                          <span className="text-right">Variance</span>
+                        </>
+                      ) : (
+                        <span className="text-right">Qty</span>
+                      )}
+                      <span className="text-right">{isGrnDoc ? "Unbilled" : "Remaining"}</span>
                       {isPurchaseDoc ? <span className="text-right">Unit price</span> : null}
                       <span>Tax</span>
                       <span className="text-right">Amount</span>
@@ -1267,16 +1278,28 @@ export default function DocViewPage() {
                       const taxTitle = line.taxCodeName
                         ? `${line.taxCodeName}${line.taxCodeCode ? ` (${line.taxCodeCode})` : ""}`
                         : undefined;
+                      const orderedQty =
+                        line.orderedWeightKg ??
+                        line.sourceQuantity ??
+                        (isGrnDoc ? undefined : line.qty);
+                      const receivedQty = line.receivedWeightKg ?? line.qty;
+                      const varianceKg =
+                        line.receiptVarianceKg ??
+                        (orderedQty != null && receivedQty != null ? receivedQty - orderedQty : undefined);
                       const unitPrice =
                         line.unitPrice ??
-                        (line.qty && line.qty > 0 && line.amount != null
-                          ? line.amount / line.qty
-                          : undefined);
+                        (receivedQty && receivedQty > 0 && line.amount != null
+                          ? line.amount / receivedQty
+                          : line.qty && line.qty > 0 && line.amount != null
+                            ? line.amount / line.qty
+                            : undefined);
                       return (
                         <div
                           key={line.id ?? line.description}
                           className={
-                            isPurchaseDoc
+                            isGrnDoc
+                              ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                              : isPurchaseDoc
                               ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                               : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                           }
@@ -1297,9 +1320,34 @@ export default function DocViewPage() {
                                 From {line.sourceDocumentType.replace(/-/g, " ")}
                               </p>
                             ) : null}
+                            {isGrnDoc && line.varianceReasonCode ? (
+                              <p className="text-xs text-amber-600 dark:text-amber-400">
+                                {line.varianceReasonCode.replace(/_/g, " ").toLowerCase()}
+                              </p>
+                            ) : null}
                           </div>
                           <span className="text-right font-mono text-xs">{line.unit ?? "—"}</span>
-                          <span className="text-right">{line.qty ?? "—"}</span>
+                          {isGrnDoc ? (
+                            <>
+                              <span className="text-right">{orderedQty != null ? orderedQty.toLocaleString() : "—"}</span>
+                              <span className="text-right font-medium">
+                                {receivedQty != null ? receivedQty.toLocaleString() : "—"}
+                              </span>
+                              <span
+                                className={`text-right ${
+                                  varianceKg != null && Math.abs(varianceKg) > 0.05
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : ""
+                                }`}
+                              >
+                                {varianceKg != null
+                                  ? `${varianceKg > 0 ? "+" : ""}${varianceKg.toLocaleString()}`
+                                  : "—"}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-right">{line.qty ?? "—"}</span>
+                          )}
                           <span className="text-right">
                             {line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}
                           </span>

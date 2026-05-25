@@ -20,6 +20,7 @@ type BackendUser = {
   roleNames?: string[];
   hasSignIn?: boolean;
   phoneNumber?: string | null;
+  nationalId?: string | null;
   jobTitle?: string | null;
   employeeCode?: string | null;
   effectiveMobilePersona?: string;
@@ -61,6 +62,7 @@ function mapUser(user: BackendUser): UserRow {
     roleNames: user.roleNames ?? [],
     hasSignIn: user.hasSignIn,
     phoneNumber: user.phoneNumber ?? null,
+    nationalId: user.nationalId ?? null,
     jobTitle: user.jobTitle ?? null,
     employeeCode: user.employeeCode ?? null,
     effectiveMobilePersona: user.effectiveMobilePersona as MobilePersona | undefined,

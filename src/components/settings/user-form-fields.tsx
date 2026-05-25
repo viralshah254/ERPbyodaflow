@@ -15,6 +15,7 @@ export type UserFormState = {
   copilotEnabled: boolean;
   roleIds: string[];
   phoneNumber: string;
+  nationalId: string;
   employeeCode: string;
 };
 
@@ -157,6 +158,15 @@ export function UserFormFields({
           id="user-phone"
           value={form.phoneNumber}
           onChange={(full) => onChange((p) => ({ ...p, phoneNumber: full }))}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>ID number</Label>
+        <Input
+          value={form.nationalId}
+          onChange={(e) => onChange((p) => ({ ...p, nationalId: e.target.value }))}
+          placeholder="National ID / passport number"
         />
       </div>
 

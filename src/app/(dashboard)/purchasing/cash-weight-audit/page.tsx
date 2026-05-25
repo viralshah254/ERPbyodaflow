@@ -550,12 +550,17 @@ export default function CashWeightAuditPage() {
     if (!["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase())) return false;
     // When GRNs exist, a GRN must be selected
     if (poLinkedGrns.length > 0 && (!disbGrnId || disbGrnId === DISB_GRN_NONE)) return false;
+    if (!disbInvoiceFile) return false;
     return true;
-  }, [poDetail?.status, poLinkedGrns.length, disbGrnId]);
+  }, [poDetail?.status, poLinkedGrns.length, disbGrnId, disbInvoiceFile]);
 
   const handleRecordDisbursement = async () => {
     if (!disbPoId.trim() || !disbAmount.trim() || !disbPaidAt) {
       toast.error("Purchase order, amount and paid date are required.");
+      return;
+    }
+    if (!disbInvoiceFile) {
+      toast.error("Attach the supplier invoice or payment receipt before saving.");
       return;
     }
     const amount = parseDecimalString(disbAmount);
@@ -1451,7 +1456,7 @@ export default function CashWeightAuditPage() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="disbInvoice">Supplier invoice or receipt (optional)</Label>
+                    <Label htmlFor="disbInvoice">Supplier invoice or receipt *</Label>
                     <Input
                       id="disbInvoice"
                       type="file"
@@ -1462,7 +1467,7 @@ export default function CashWeightAuditPage() {
                     {disbInvoiceFile ? (
                       <p className="text-xs text-muted-foreground truncate">{disbInvoiceFile.name}</p>
                     ) : (
-                      <p className="text-xs text-muted-foreground">PDF or image, max 5 MB.</p>
+                      <p className="text-xs text-muted-foreground">Required — PDF or image, max 5 MB.</p>
                     )}
                   </div>
 

@@ -187,6 +187,13 @@ export type DocumentDetailRecord = {
     taxRate?: number;
     /** Line gross weight shipped (delivery-note POD baseline). */
     weightKg?: number;
+    receivedWeightKg?: number;
+    orderedWeightKg?: number;
+    receiptVarianceKg?: number;
+    paidWeightKg?: number;
+    paidVarianceKg?: number;
+    varianceReasonCode?: string;
+    varianceReason?: string;
   }>;
   sourceDocument?: {
     id: string;

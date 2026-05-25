@@ -42,3 +42,29 @@ export async function generateMonthEnd(periodMonth: string) {
 export async function exportCoolcatchAnalytics() {
   return apiRequest<Record<string, unknown>>("/api/coolcatch/analytics/export", { method: "POST" });
 }
+
+export type MpesaUnmatchedPayment = {
+  id: string;
+  transactionId: string;
+  phone?: string;
+  amount: number;
+  currency?: string;
+  transactedAt: string;
+  shortCode?: string;
+  billRef?: string;
+  status: "UNMATCHED" | "MATCHED";
+  matchedDocumentId?: string;
+  matchedDocumentNumber?: string;
+};
+
+export async function fetchMpesaUnmatchedPayments(): Promise<MpesaUnmatchedPayment[]> {
+  const payload = await apiRequest<{ items: MpesaUnmatchedPayment[] }>("/api/coolcatch/mpesa/unmatched");
+  return payload.items ?? [];
+}
+
+export async function matchMpesaPayment(paymentId: string, documentId: string): Promise<void> {
+  await apiRequest(`/api/coolcatch/mpesa/${encodeURIComponent(paymentId)}/match`, {
+    method: "POST",
+    body: JSON.stringify({ documentId }),
+  });
+}
