@@ -43,6 +43,8 @@ import {
 } from "@/components/suppliers/SupplierMasterFormFields";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
 import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
+import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
+import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
@@ -65,6 +67,10 @@ export default function MasterPartiesPage() {
   const [parties, setParties] = React.useState<PartyRow[]>([]);
   const [customerCategories, setCustomerCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermRow[]>([]);
+  const [currencies, setCurrencies] = React.useState<
+    Array<{ id: string; code: string; name: string; isBaseCurrency?: boolean }>
+  >([]);
+  const { settings: financialSettings } = useFinancialSettings();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [formName, setFormName] = React.useState("");
@@ -98,6 +104,46 @@ export default function MasterPartiesPage() {
       : tab === "franchisees"
         ? franchiseeLabel
         : supplierLabel;
+
+  React.useEffect(() => {
+    void fetchFinancialCurrenciesApi()
+      .then((currenciesData) => {
+        setCurrencies(
+          currenciesData
+            .filter((c) => c.enabled)
+            .map((c) => ({
+              id: c.code,
+              code: c.code,
+              name: c.name ?? c.code,
+              isBaseCurrency: c.isBaseCurrency,
+            })),
+        );
+      })
+      .catch(() => {
+        setCurrencies([]);
+      });
+  }, []);
+
+  const supplierBaseCurrency = React.useMemo(
+    () =>
+      financialSettings.baseCurrency ||
+      currencies.find((c) => c.isBaseCurrency)?.code ||
+      currencies[0]?.code ||
+      "KES",
+    [currencies, financialSettings.baseCurrency],
+  );
+
+  React.useEffect(() => {
+    if (!drawerOpen || tab !== "suppliers") return;
+    if (!editingId) {
+      setSupplierForm(emptySupplierMasterForm(supplierBaseCurrency));
+      setSupplierFormErrors({});
+      setPinCertFile(null);
+      setPinCertExistingUrl(null);
+      setCompanyRegFile(null);
+      setCompanyRegExistingUrl(null);
+    }
+  }, [drawerOpen, editingId, supplierBaseCurrency, tab]);
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -224,7 +270,7 @@ export default function MasterPartiesPage() {
     setFormPhone("");
     setFormPhonePrefix("+254");
     setFormTaxId("");
-    setSupplierForm(emptySupplierMasterForm());
+    setSupplierForm(emptySupplierMasterForm(tab === "suppliers" ? supplierBaseCurrency : "KES"));
     setSupplierFormErrors({});
     setPinCertFile(null);
     setPinCertExistingUrl(null);
@@ -271,7 +317,7 @@ export default function MasterPartiesPage() {
     setFormPhone(row.phone ?? "");
     setFormTaxId(row.taxId ?? "");
     setSupplierForm({
-      ...emptySupplierMasterForm(),
+      ...emptySupplierMasterForm(supplierBaseCurrency),
       coolcatchSupplierKind: row.coolcatchSupplierKind ?? "BROKER",
       name: row.name,
       contactPersonFirstName: row.contactPersonFirstName ?? "",
@@ -747,7 +793,7 @@ export default function MasterPartiesPage() {
               errors={supplierFormErrors}
               onClearError={(key) => setSupplierFormErrors((prev) => ({ ...prev, [key]: "" }))}
               terms={paymentTerms.map((term) => ({ id: term.id, name: term.name }))}
-              currencies={[{ id: "KES", code: "KES", name: "Kenyan Shilling" }]}
+              currencies={currencies}
               pinCertFile={pinCertFile}
               onPinCertFileChange={setPinCertFile}
               pinCertExistingUrl={pinCertExistingUrl}

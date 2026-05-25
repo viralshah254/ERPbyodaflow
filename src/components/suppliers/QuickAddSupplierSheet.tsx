@@ -94,6 +94,9 @@ export function QuickAddSupplierSheet({
       paymentTermsId: "",
       defaultCurrency: "KES",
       taxId: values.taxId,
+      supplierBankAccountName: "",
+      supplierBankAccountNumber: "",
+      supplierBankBranchName: "",
     });
     const created = await createPartyApi(payload);
     const descParts = [created.code, values.phone.trim(), values.email.trim(), values.taxId.trim()].filter(Boolean);
@@ -199,14 +202,13 @@ export function QuickAddSupplierSheet({
 
           <div className="space-y-1.5">
             <Label htmlFor="qas-email">
-              Email <span className="text-destructive">*</span>
+              Email <span className="text-muted-foreground text-xs">(optional)</span>
             </Label>
             <Input
               id="qas-email"
               type="email"
               placeholder="supplier@example.com"
               {...register("email", {
-                required: "Email is required",
                 pattern: {
                   value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
                   message: "Enter a valid email address",

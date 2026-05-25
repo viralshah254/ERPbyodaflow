@@ -176,7 +176,8 @@ export function SupplierMasterFormFields({
 
       <div className="space-y-2">
         <Label>
-          Email <span className="text-destructive">*</span>
+          Email{" "}
+          <span className="text-muted-foreground text-xs">(optional)</span>
         </Label>
         <Input
           type="email"
@@ -207,7 +208,6 @@ export function SupplierMasterFormFields({
 
       <LocationPickerField
         label="Location"
-        required={isFarm}
         value={locationValue}
         error={errors.addressCity}
         onChange={(next) => {
@@ -468,12 +468,10 @@ export function validateSupplierMasterForm(form: SupplierMasterFormValues): Reco
   if (!form.contactPersonFirstName.trim()) errors.contactPersonFirstName = "First name is required.";
   if (!form.contactPersonLastName.trim()) errors.contactPersonLastName = "Last name is required.";
   const email = form.email.trim();
-  if (!email) errors.email = "Email is required.";
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
-  if (!form.phone.trim()) errors.phone = "Contact number is required.";
-  if (form.coolcatchSupplierKind === "FARM" && !form.locationFormattedAddress.trim()) {
-    errors.addressCity = "Location is required for farms.";
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = "Enter a valid email address.";
   }
+  if (!form.phone.trim()) errors.phone = "Contact number is required.";
   if (!form.taxId.trim()) errors.taxId = "KRA PIN is required.";
   if (!form.supplierBankAccountName.trim()) {
     errors.supplierBankAccountName = "Bank account name is required.";
@@ -505,13 +503,15 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
         }
       : undefined;
 
+  const email = form.email.trim();
+
   return {
     name: form.name.trim(),
     roles: ["supplier"] as PartyRole[],
     coolcatchSupplierKind: form.coolcatchSupplierKind,
     contactPersonFirstName: form.contactPersonFirstName.trim(),
     contactPersonLastName: form.contactPersonLastName.trim(),
-    email: form.email.trim(),
+    ...(email ? { email } : {}),
     phone: form.phone.trim(),
     paymentTermsId: form.paymentTermsId || undefined,
     defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,

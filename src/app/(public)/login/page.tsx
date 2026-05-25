@@ -13,7 +13,6 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppFrame } from "@/components/marketing/app-frame";
 import { LoginHeroPreview } from "@/components/marketing/login-hero-preview";
-import { OdaLogo } from "@/components/brand/OdaLogo";
 import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
@@ -143,15 +142,12 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] flex items-center py-12">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 items-center max-w-6xl mx-auto">
+    <div className="flex w-full flex-1 items-center py-10 lg:py-14">
+      <div className="container mx-auto w-full px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-12">
           {/* Left: Form */}
-          <div>
+          <div className="w-full max-w-md lg:max-w-none mx-auto lg:mx-0">
             <div className="mb-8">
-              <div className="mb-6">
-                <OdaLogo height={40} />
-              </div>
               <h1 className="text-3xl font-bold mb-2">Sign in to your account</h1>
               <p className="text-muted-foreground">
                 Welcome back. Enter your credentials to continue.
@@ -259,7 +255,7 @@ function LoginContent() {
           </div>
 
           {/* Right: product preview */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block w-full">
             <AppFrame>
               <LoginHeroPreview />
             </AppFrame>

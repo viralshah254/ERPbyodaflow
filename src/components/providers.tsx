@@ -28,10 +28,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange={false}
     >
       <QueryClientProvider client={queryClient}>
-        <AuthRestore />
-        <FirebaseClientInit />
-        {children}
-        <Toaster position="bottom-right" richColors />
+        <div className="app-providers-root">
+          <AuthRestore />
+          <FirebaseClientInit />
+          {children}
+          <Toaster position="bottom-right" richColors />
+        </div>
       </QueryClientProvider>
     </ThemeProvider>
   );

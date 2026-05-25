@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { PlatformSidebar } from "@/components/platform/PlatformSidebar";
 import { Header } from "@/components/layout/header";
 import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
+import { AppShellScrollLock } from "@/components/layout/app-shell-scroll-lock";
 
 export default function PlatformLayout({
   children,
@@ -32,12 +33,19 @@ export default function PlatformLayout({
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden">
-      <PlatformSidebar />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+    <>
+      <AppShellScrollLock />
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden">
+        <PlatformSidebar />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <Header />
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-6">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

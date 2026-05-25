@@ -55,6 +55,11 @@ export type GrnLineRow = {
   receivedWeightKg?: number;
   paidWeightKg?: number;
   processedWeightKg?: number;
+  orderedWeightKg?: number;
+  receiptVarianceKg?: number;
+  paidVarianceKg?: number;
+  varianceReasonCode?: string;
+  varianceReason?: string;
 };
 
 export type GrnDetailRow = PurchasingDocRow & {

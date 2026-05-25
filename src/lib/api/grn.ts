@@ -165,7 +165,15 @@ export async function patchGrnHeaderApi(
 export async function patchGRNLine(
   grnId: string,
   lineId: number,
-  body: { receivedWeightKg?: number; paidWeightKg?: number; weightKg?: number; processedWeightKg?: number }
+  body: {
+    receivedWeightKg?: number;
+    paidWeightKg?: number;
+    weightKg?: number;
+    processedWeightKg?: number;
+    orderedWeightKg?: number;
+    varianceReasonCode?: string;
+    varianceReason?: string;
+  }
 ): Promise<GrnDetailRow> {
   requireLiveApi("Patch GRN line");
   return apiRequest<GrnDetailRow>(`/api/purchasing/grn/${encodeURIComponent(grnId)}/lines/${lineId}`, {

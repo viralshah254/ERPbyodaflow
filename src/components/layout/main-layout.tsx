@@ -74,21 +74,17 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden">
+    <div className="flex min-h-0 flex-1 w-full overflow-hidden">
       {sidebarOpen && <AppSidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Header />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* shrink-0: banner height never affects the scrollport below */}
           <div className="shrink-0">
             <TutorialProgressTracker />
             <FirstVisitBanner />
           </div>
-          {/* flex-1 min-h-0: page fills viewport; tables scroll inside, not the whole shell */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="box-border flex min-h-0 flex-1 w-full min-w-0 flex-col overflow-hidden px-6 pb-6 pt-0">
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-            </div>
+          <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0">
+            {children}
           </div>
         </main>
       </div>

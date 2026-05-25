@@ -20,9 +20,13 @@ import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { fetchApBillsPageApi } from "@/lib/api/payments";
 import { bulkDocumentActionApi, fetchDocumentListPageApi } from "@/lib/api/documents";
-import { getLandedCostAttachmentUrl } from "@/lib/api/landed-cost";
+import {
+  CostReceiptAttachments,
+  collectBillReceiptAttachments,
+} from "@/components/ap/CostReceiptAttachments";
 import type { APBillRow } from "@/lib/types/ap";
 import type { DocListRow } from "@/lib/types/documents";
+import { expandApBillRows, type APBillDisplayRow } from "@/lib/ap/expand-bill-rows";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
@@ -70,10 +74,15 @@ function docToBillRow(r: DocListRow): APBillRow {
     isLandedCostBill: r.isLandedCostBill,
     costType: r.costType,
     costReference: r.costReference,
+    costNumber: r.costNumber,
     sourceGrnId: r.sourceGrnId,
     sourceGrnNumber: r.sourceGrnNumber,
     allocationId: r.allocationId,
+    lineIndex: r.lineIndex,
     costAttachments: r.costAttachments,
+    linkedBillId: r.linkedBillId,
+    linkedBillNumber: r.linkedBillNumber,
+    linkedShipmentCosts: r.linkedShipmentCosts,
   };
 }
 
@@ -90,6 +99,7 @@ export default function APBillsPage() {
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(scope));
 
   const [rows, setRows] = React.useState<APBillRow[]>([]);
+  const displayRows = React.useMemo(() => expandApBillRows(rows), [rows]);
   const [pageOffset, setPageOffset] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(25);
   const [hasMore, setHasMore] = React.useState(false);
@@ -159,23 +169,15 @@ export default function APBillsPage() {
     return chips;
   }, [statusFilter, searchInput, statusOptions]);
 
-  const receiptCell = React.useCallback((r: APBillRow) => {
-    if (!r.isLandedCostBill || !r.allocationId || !r.costAttachments?.length) {
-      return <span className="text-muted-foreground text-sm">—</span>;
-    }
-    const att = r.costAttachments[0];
-    const href = getLandedCostAttachmentUrl(r.allocationId, att.id);
+  const receiptCell = React.useCallback((r: APBillDisplayRow) => {
+    const attachments = collectBillReceiptAttachments(r);
     return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Icons.Paperclip className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate max-w-[8rem]">{att.fileName}</span>
-      </a>
+      <CostReceiptAttachments
+        attachments={attachments.length ? attachments : undefined}
+        allocationId={r.allocationId}
+        lineIndex={r.lineIndex}
+        costLabel={r.costType}
+      />
     );
   }, []);
 
@@ -184,30 +186,50 @@ export default function APBillsPage() {
       {
         id: "number",
         header: "Number",
-        accessor: (r: APBillRow) => (
-          <div className="flex items-center gap-2 min-w-[6rem]">
-            <Icons.FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="font-mono text-sm font-medium">{r.number}</span>
+        accessor: (r: APBillDisplayRow) => (
+          <div
+            className={cn(
+              "flex items-center gap-2 min-w-[6rem]",
+              r.isNestedCost && "pl-6 border-l-2 border-amber-500/40",
+            )}
+          >
+            {r.rowKind === "cost" ? (
+              <Icons.Tag className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+            ) : (
+              <Icons.FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            )}
+            <div>
+              <span className="font-mono text-sm font-medium">
+                {r.rowKind === "cost" ? (r.costNumber ?? r.number) : r.number}
+              </span>
+              {r.rowKind === "cost" && r.linkedBillNumber ? (
+                <p className="text-[11px] text-muted-foreground font-mono">Bill {r.linkedBillNumber}</p>
+              ) : null}
+              {r.rowKind === "cost" && r.parentBillNumber ? (
+                <p className="text-[11px] text-muted-foreground">↳ {r.parentBillNumber}</p>
+              ) : null}
+            </div>
           </div>
         ),
         sticky: true,
         sortable: true,
-        sortValue: (r: APBillRow) => r.number.toLowerCase(),
+        sortValue: (r: APBillDisplayRow) => (r.costNumber ?? r.number).toLowerCase(),
       },
       {
         id: "date",
         header: "Date",
-        accessor: (r: APBillRow) => <span className="tabular-nums text-sm">{r.date}</span>,
+        accessor: (r: APBillDisplayRow) =>
+          r.date ? <span className="tabular-nums text-sm">{r.date}</span> : <span className="text-muted-foreground text-sm">—</span>,
         sortable: true,
-        sortValue: (r: APBillRow) => r.date,
+        sortValue: (r: APBillDisplayRow) => r.date,
       },
       {
         id: "party",
         header: "Supplier",
-        accessor: (r: APBillRow) => (
+        accessor: (r: APBillDisplayRow) => (
           <div className="min-w-[8rem]">
-            {r.isLandedCostBill ? (
-              <span className="text-muted-foreground text-sm italic">Cost bill</span>
+            {r.rowKind === "cost" ? (
+              <span className="text-muted-foreground text-sm italic">Shipment cost</span>
             ) : (
               <div className="flex items-center gap-1.5">
                 <Icons.Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -220,13 +242,13 @@ export default function APBillsPage() {
           </div>
         ),
         sortable: true,
-        sortValue: (r: APBillRow) => r.party.toLowerCase(),
+        sortValue: (r: APBillDisplayRow) => r.party.toLowerCase(),
       },
       {
         id: "costType",
         header: "Cost type",
-        accessor: (r: APBillRow) =>
-          r.isLandedCostBill ? (
+        accessor: (r: APBillDisplayRow) =>
+          r.rowKind === "cost" ? (
             <div>
               <span className="font-medium capitalize">{r.costType ?? "Cost"}</span>
               {r.costReference ? (
@@ -237,13 +259,13 @@ export default function APBillsPage() {
             <span className="text-muted-foreground text-sm">—</span>
           ),
         sortable: true,
-        sortValue: (r: APBillRow) => (r.costType ?? "").toLowerCase(),
+        sortValue: (r: APBillDisplayRow) => (r.costType ?? "").toLowerCase(),
       },
       {
         id: "source",
         header: "Source",
-        accessor: (r: APBillRow) => {
-          if (r.isLandedCostBill && r.sourceGrnNumber) {
+        accessor: (r: APBillDisplayRow) => {
+          if (r.sourceGrnNumber) {
             return r.sourceGrnId ? (
               <Link
                 href={`/docs/grn/${r.sourceGrnId}`}
@@ -260,17 +282,18 @@ export default function APBillsPage() {
           return <span className="text-muted-foreground text-sm">—</span>;
         },
         sortable: true,
-        sortValue: (r: APBillRow) => (r.sourceGrnNumber ?? "").toLowerCase(),
+        sortValue: (r: APBillDisplayRow) => (r.sourceGrnNumber ?? "").toLowerCase(),
       },
       {
         id: "receipt",
         header: "Receipt",
         accessor: receiptCell,
+        className: "min-w-[10rem]",
       },
       {
         id: "total",
         header: "Amount",
-        accessor: (r: APBillRow) => (
+        accessor: (r: APBillDisplayRow) => (
           <DualCurrencyAmount
             amount={r.total}
             currency={r.currency ?? baseCurrency}
@@ -281,7 +304,7 @@ export default function APBillsPage() {
           />
         ),
         sortable: true,
-        sortValue: (r: APBillRow) => r.total,
+        sortValue: (r: APBillDisplayRow) => r.total,
       },
     ];
 
@@ -289,7 +312,7 @@ export default function APBillsPage() {
       base.push({
         id: "outstanding",
         header: "Outstanding",
-        accessor: (r: APBillRow) => (
+        accessor: (r: APBillDisplayRow) => (
           <DualCurrencyAmount
             amount={r.outstanding ?? 0}
             currency={r.currency ?? baseCurrency}
@@ -301,16 +324,16 @@ export default function APBillsPage() {
           />
         ),
         sortable: true,
-        sortValue: (r: APBillRow) => r.outstanding ?? 0,
+        sortValue: (r: APBillDisplayRow) => r.outstanding ?? 0,
       });
     }
 
     base.push({
       id: "status",
       header: "Status",
-      accessor: (r: APBillRow) => <StatusBadge status={r.status} />,
+      accessor: (r: APBillDisplayRow) => <StatusBadge status={r.status} />,
       sortable: true,
-      sortValue: (r: APBillRow) => r.status.toLowerCase(),
+      sortValue: (r: APBillDisplayRow) => r.status.toLowerCase(),
     });
 
     return base;
@@ -416,7 +439,7 @@ export default function APBillsPage() {
         }
       />
       <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="flex flex-col rounded-xl border bg-card shadow-sm">
           {tab === "open" && (
             <div className="shrink-0 px-4 pt-4">
               <ExceptionBanner
@@ -487,10 +510,10 @@ export default function APBillsPage() {
               onExport={() =>
                 downloadCsv(
                   `ap-bills-${new Date().toISOString().slice(0, 10)}.csv`,
-                  rows.map((row) => ({
-                    number: row.number,
+                  displayRows.map((row) => ({
+                    number: row.rowKind === "cost" ? (row.costNumber ?? row.number) : row.number,
                     date: row.date,
-                    supplier: row.isLandedCostBill ? "Cost bill" : row.party,
+                    supplier: row.rowKind === "cost" ? "Shipment cost" : row.party,
                     costType: row.costType ?? "",
                     source: row.sourceGrnNumber ?? "",
                     receipt: row.costAttachments?.[0]?.fileName ?? "",
@@ -554,12 +577,7 @@ export default function APBillsPage() {
               <SkeletonDataTable rows={pageSize} columnWidths={skeletonWidths} />
             </div>
           ) : (
-            <div
-              className={cn(
-                LIST_TABLE_STATIC_CLASS,
-                "min-h-0 flex-1 border-0 border-t rounded-none shadow-none",
-              )}
-            >
+            <div className={cn(LIST_TABLE_STATIC_CLASS, "border-0 border-t rounded-none shadow-none")}>
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(
@@ -567,12 +585,24 @@ export default function APBillsPage() {
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >
-                <DataTable<APBillRow>
-                  data={rows}
+                <DataTable<APBillDisplayRow>
+                  data={displayRows}
                   columns={columns}
                   scrollMode="natural"
                   className="border-0 shadow-none"
-                  onRowClick={(row) => router.push(`/docs/bill/${row.id}`)}
+                  onRowClick={(row) => {
+                    const billId =
+                      row.rowKind === "bill"
+                        ? row.id
+                        : row.linkedBillId ?? (row.id.includes(":") ? undefined : row.id);
+                    if (billId) {
+                      router.push(`/docs/bill/${billId}`);
+                      return;
+                    }
+                    if (row.sourceGrnId) {
+                      router.push(`/docs/grn/${row.sourceGrnId}`);
+                    }
+                  }}
                   emptyMessage={
                     tab === "open"
                       ? "No open AP balances. Bills appear here once posted."
@@ -580,7 +610,9 @@ export default function APBillsPage() {
                   }
                   selectable={tab === "all"}
                   selectedIds={selectedIds}
-                  onSelectionChange={setSelectedIds}
+                  onSelectionChange={(ids) => {
+                    setSelectedIds(ids.filter((id) => rows.some((r) => r.id === id && !r.isLandedCostBill)));
+                  }}
                 />
               </div>
             </div>

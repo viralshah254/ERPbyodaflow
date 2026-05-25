@@ -166,12 +166,28 @@ type BackendDocumentListItem = {
   landedBreakdown?: Array<{ label: string; amount: number }>;
   economicTotal?: number;
   isLandedCostBill?: boolean;
+  costNumber?: string;
   costType?: string;
   costReference?: string;
   sourceGrnId?: string;
   sourceGrnNumber?: string;
   allocationId?: string;
   costAttachments?: Array<{ id: string; fileName: string; contentType?: string }>;
+  linkedBillId?: string;
+  linkedBillNumber?: string;
+  linkedShipmentCosts?: Array<{
+    costNumber: string;
+    costType: string;
+    costReference?: string;
+    amount: number;
+    currency: string;
+    billId?: string;
+    billNumber?: string;
+    billStatus?: string;
+    allocationId: string;
+    lineIndex: number;
+    attachments?: Array<{ id: string; fileName: string; contentType?: string }>;
+  }>;
   totalWeightKg?: number;
   status: string;
   warehouse?: string;
@@ -440,12 +456,17 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     landedBreakdown: item.landedBreakdown,
     economicTotal: item.economicTotal,
     isLandedCostBill: item.isLandedCostBill,
+    costNumber: item.costNumber,
     costType: item.costType,
     costReference: item.costReference,
     sourceGrnId: item.sourceGrnId,
     sourceGrnNumber: item.sourceGrnNumber,
     allocationId: item.allocationId,
+    lineIndex: item.lineIndex,
     costAttachments: item.costAttachments,
+    linkedBillId: item.linkedBillId,
+    linkedBillNumber: item.linkedBillNumber,
+    linkedShipmentCosts: item.linkedShipmentCosts,
     totalWeightKg: item.totalWeightKg,
     status: item.status,
     warehouse: item.warehouse ?? item.warehouseId,

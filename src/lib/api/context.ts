@@ -204,11 +204,30 @@ export type SetupStatus = {
   bankAccountsDone: boolean;
   usersDone: boolean;
   firstDocDone: boolean;
+  productsDone: boolean;
+  customersDone: boolean;
+  salesOrdersDone: boolean;
+  purchaseOrdersDone: boolean;
+  grnDone: boolean;
 };
 
 export async function fetchSetupStatusApi(): Promise<SetupStatus | null> {
   try {
-    return await apiRequest<SetupStatus>("/api/me/setup-status");
+    const raw = await apiRequest<Partial<SetupStatus>>("/api/me/setup-status");
+    return {
+      companySetupDone: raw.companySetupDone === true,
+      currenciesDone: raw.currenciesDone === true,
+      coaDone: raw.coaDone === true,
+      taxesDone: raw.taxesDone === true,
+      bankAccountsDone: raw.bankAccountsDone === true,
+      usersDone: raw.usersDone === true,
+      firstDocDone: raw.firstDocDone === true,
+      productsDone: raw.productsDone === true,
+      customersDone: raw.customersDone === true,
+      salesOrdersDone: raw.salesOrdersDone === true,
+      purchaseOrdersDone: raw.purchaseOrdersDone === true,
+      grnDone: raw.grnDone === true,
+    };
   } catch {
     return null;
   }

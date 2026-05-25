@@ -13,7 +13,7 @@ import { AlertsCard } from "./cards/AlertsCard";
 import { CopilotSuggestionsCard } from "./cards/CopilotSuggestionsCard";
 import { RecentDocumentsCard } from "./cards/RecentDocumentsCard";
 import { SetupChecklistCard } from "./SetupChecklistCard";
-import { GuidedWorkflowCard } from "@/components/tutorial/GuidedWorkflowCard";
+import { DashboardGuidanceCard } from "./DashboardGuidanceCard";
 
 const ADMIN_KPI_IDS = [
   "pending-approvals",
@@ -145,16 +145,7 @@ export function DashboardRenderer() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {!compactOps ? (
           <>
-            <GuidedWorkflowCard
-              title="Create your first sales order"
-              description="Set up products and customers, then create a sales order."
-              steps={[
-                { label: "Add products", href: "/master/products" },
-                { label: "Add customers", href: "/master/parties" },
-                { label: "Create sales order", href: "/docs/sales-order/new" },
-              ]}
-              showWhenExploredLessThan={5}
-            />
+            <DashboardGuidanceCard pendingApprovals={approvals.length} />
             <SetupChecklistCard />
           </>
         ) : null}

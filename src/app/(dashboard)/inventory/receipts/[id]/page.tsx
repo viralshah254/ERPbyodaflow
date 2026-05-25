@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -59,6 +60,7 @@ export default function ReceiptDetailPage() {
   const weightTableRef = React.useRef<HTMLDivElement>(null);
   const [editingWeight, setEditingWeight] = React.useState<Record<number, string>>({});
   const [editingProcessedWeight, setEditingProcessedWeight] = React.useState<Record<number, string>>({});
+  const [editingVarianceReason, setEditingVarianceReason] = React.useState<Record<number, string>>({});
 
   // GRN header edit dialog
   const [editHeaderOpen, setEditHeaderOpen] = React.useState(false);
@@ -147,7 +149,13 @@ export default function ReceiptDetailPage() {
       const line = working.lines[idx];
       const persisted = Number(line.receivedWeightKg ?? line.qty);
       if (Math.abs(num - persisted) < 1e-6) continue;
-      const updated = await patchGRNLine(working.id, idx, { receivedWeightKg: num });
+      const orderedKg = line.orderedWeightKg ?? line.qty ?? 0;
+      const reasonCode = editingVarianceReason[idx] ?? line.varianceReasonCode;
+      const updated = await patchGRNLine(working.id, idx, {
+        receivedWeightKg: num,
+        ...(orderedKg > 0 ? { orderedWeightKg: orderedKg } : {}),
+        ...(reasonCode ? { varianceReasonCode: reasonCode } : {}),
+      });
       if (updated) {
         working = updated;
         anyPatch = true;
@@ -156,8 +164,9 @@ export default function ReceiptDetailPage() {
     if (anyPatch) {
       setGrn(working);
       setEditingWeight({});
+      setEditingVarianceReason({});
     }
-  }, [grn, hasCashWeightAudit, editingWeight]);
+  }, [grn, hasCashWeightAudit, editingWeight, editingVarianceReason]);
 
   React.useEffect(() => {
     setLoading(true);
@@ -254,10 +263,29 @@ export default function ReceiptDetailPage() {
   const handleReceivedWeightBlur = async (lineIndex: number, value: string) => {
     const num = value ? parseFloat(value) : undefined;
     if (num == null || Number.isNaN(num) || num < 0) return;
+    const line = grn.lines[lineIndex];
+    const orderedKg = line?.orderedWeightKg ?? line?.qty ?? 0;
+    const varianceKg = Math.abs(num - orderedKg);
+    const reasonCode = editingVarianceReason[lineIndex] ?? line?.varianceReasonCode;
+    if (varianceKg > 0.05 && !reasonCode) {
+      // Don't save yet — signal that reason is needed by updating the editing state
+      setEditingWeight((prev) => ({ ...prev, [lineIndex]: value }));
+      toast.warning("Enter a variance reason before saving the weight.");
+      return;
+    }
     try {
-      const updated = await patchGRNLine(grn.id, lineIndex, { receivedWeightKg: num });
+      const updated = await patchGRNLine(grn.id, lineIndex, {
+        receivedWeightKg: num,
+        ...(orderedKg > 0 ? { orderedWeightKg: orderedKg } : {}),
+        ...(reasonCode ? { varianceReasonCode: reasonCode } : {}),
+      });
       setGrn(updated);
       setEditingWeight((prev) => {
+        const next = { ...prev };
+        delete next[lineIndex];
+        return next;
+      });
+      setEditingVarianceReason((prev) => {
         const next = { ...prev };
         delete next[lineIndex];
         return next;
@@ -300,26 +328,86 @@ export default function ReceiptDetailPage() {
     ...(hasCashWeightAudit
       ? [
           {
+            id: "orderedWeightKg",
+            header: "Ordered kg",
+            accessor: (line: GrnLineRow & { _lineIndex?: number }) =>
+              line.orderedWeightKg != null
+                ? line.orderedWeightKg.toFixed(2)
+                : line.qty != null
+                ? (line.qty as number).toFixed(2)
+                : "—",
+          },
+          {
             id: "receivedWeightKg",
             header: "Received kg",
             accessor: (line: GrnLineRow & { _lineIndex?: number }) => {
               const idx = line._lineIndex ?? 0;
+              const orderedKg = line.orderedWeightKg ?? line.qty ?? 0;
+              const pendingVal = editingWeight[idx];
+              const currentNum = pendingVal !== undefined ? parseFloat(pendingVal) : (line.receivedWeightKg ?? undefined);
+              const hasVariance = currentNum != null && Math.abs(currentNum - orderedKg) > 0.05;
               return canEditWeight ? (
-                <Input
-                  type="number"
-                  step="0.01"
-                  className="w-24 h-8"
-                  placeholder="kg"
-                  value={editingWeight[idx] ?? line.receivedWeightKg ?? ""}
-                  onChange={(e) => setEditingWeight((prev) => ({ ...prev, [idx]: e.target.value }))}
-                  onBlur={(e) => handleReceivedWeightBlur(idx, e.target.value)}
-                />
+                <div className="space-y-1">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    className="w-24 h-8"
+                    placeholder="kg"
+                    value={pendingVal ?? line.receivedWeightKg ?? ""}
+                    onChange={(e) => setEditingWeight((prev) => ({ ...prev, [idx]: e.target.value }))}
+                    onBlur={(e) => handleReceivedWeightBlur(idx, e.target.value)}
+                  />
+                  {hasVariance && (
+                    <Select
+                      value={editingVarianceReason[idx] ?? line.varianceReasonCode ?? ""}
+                      onValueChange={(v) => setEditingVarianceReason((prev) => ({ ...prev, [idx]: v }))}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-40">
+                        <SelectValue placeholder="Variance reason *" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="WATER_MOISTURE_LOSS">Water / moisture loss</SelectItem>
+                        <SelectItem value="TRANSIT_LOSS">Transit loss</SelectItem>
+                        <SelectItem value="GRADING_LOSS">Grading / quality loss</SelectItem>
+                        <SelectItem value="OTHER">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               ) : (
                 (line.receivedWeightKg ?? "—")
               );
             },
           },
           { id: "paidWeightKg", header: "Paid kg", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.paidWeightKg ?? "—" },
+          {
+            id: "receiptVarianceKg",
+            header: "vs Ordered",
+            accessor: (line: GrnLineRow & { _lineIndex?: number }) => {
+              const v = line.receiptVarianceKg;
+              if (v == null || Math.abs(v) <= 0.05) return <span className="text-muted-foreground">—</span>;
+              return (
+                <span className={v < 0 ? "text-amber-600 font-semibold" : "text-emerald-600 font-semibold"}>
+                  {v > 0 ? "+" : ""}{v.toFixed(2)}
+                </span>
+              );
+            },
+          },
+          {
+            id: "varianceReason",
+            header: "Variance reason",
+            accessor: (line: GrnLineRow & { _lineIndex?: number }) => {
+              const codeMap: Record<string, string> = {
+                WATER_MOISTURE_LOSS: "Water / moisture",
+                TRANSIT_LOSS: "Transit",
+                GRADING_LOSS: "Grading",
+                OTHER: "Other",
+              };
+              return line.varianceReasonCode ? (
+                <span className="text-xs text-amber-700 font-medium">{codeMap[line.varianceReasonCode] ?? line.varianceReasonCode}</span>
+              ) : <span className="text-muted-foreground">—</span>;
+            },
+          },
           {
             id: "processedWeightKg",
             header: "Processed kg",

@@ -1,6 +1,6 @@
 /**
  * Firebase client (Auth + optional Analytics).
- * Values from Firebase Console → Project settings → Your apps → Web app (`erp-odaflow`).
+ * Values from Firebase Console → Project settings → Your apps → Web app (`erpbyodaflow`).
  * Set NEXT_PUBLIC_FIREBASE_* in erp-odaflow/.env (see .env.example).
  */
 export function getFirebaseConfig() {

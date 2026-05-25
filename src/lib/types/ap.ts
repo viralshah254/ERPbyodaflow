@@ -21,12 +21,30 @@ export type APBillRow = {
   poRef?: string;
   /** True when this bill was auto-created from a GRN cost line (Fuel, Transport, etc.). */
   isLandedCostBill?: boolean;
+  /** Sequential shipment cost code (SCOST0001, …). */
+  costNumber?: string;
   costType?: string;
   costReference?: string;
   sourceGrnId?: string;
   sourceGrnNumber?: string;
   allocationId?: string;
+  lineIndex?: number;
   costAttachments?: Array<{ id: string; fileName: string; contentType?: string }>;
+  linkedBillId?: string;
+  linkedBillNumber?: string;
+  linkedShipmentCosts?: Array<{
+    costNumber: string;
+    costType: string;
+    costReference?: string;
+    amount: number;
+    currency: string;
+    billId?: string;
+    billNumber?: string;
+    billStatus?: string;
+    allocationId: string;
+    lineIndex: number;
+    attachments?: Array<{ id: string; fileName: string; contentType?: string }>;
+  }>;
   /** @deprecated Supplier bills no longer roll up landed costs; use individual cost bills. */
   landedAllocated?: number;
   landedBreakdown?: Array<{ label: string; amount: number }>;

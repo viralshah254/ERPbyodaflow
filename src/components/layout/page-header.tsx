@@ -35,7 +35,7 @@ export function PageHeader({
   description,
   breadcrumbs,
   actions,
-  sticky = false,
+  sticky = true,
   showCommandHint = true,
   showRightPanelToggle = false,
   dense = false,

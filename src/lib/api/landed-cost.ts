@@ -301,5 +301,23 @@ export async function deleteLandedCostAttachment(
 }
 
 export function getLandedCostAttachmentUrl(allocationId: string, fileId: string): string {
-  return `/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments/${encodeURIComponent(fileId)}`;
+  const base = getApiBase();
+  const path = `/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments/${encodeURIComponent(fileId)}`;
+  return base ? `${base}${path}` : path;
+}
+
+/** Download a landed-cost receipt with API auth (plain links cannot send Bearer tokens). */
+export async function downloadLandedCostAttachment(
+  allocationId: string,
+  fileId: string,
+  fileName: string,
+  onError?: (message: string) => void,
+): Promise<void> {
+  requireLiveApi("Landed cost attachment download");
+  const { downloadFile } = await import("@/lib/api/client");
+  await downloadFile(
+    `/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments/${encodeURIComponent(fileId)}`,
+    fileName,
+    onError ?? (() => undefined),
+  );
 }
