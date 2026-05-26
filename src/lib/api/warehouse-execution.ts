@@ -149,6 +149,7 @@ export async function runPickPackAction(
     vehicleId?: string;
     vehicleMode?: "LEASED" | "SPOT_HIRE";
     carrier?: string;
+    batchLabel?: string;
   }
 ): Promise<void> {
   await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}/action`, {

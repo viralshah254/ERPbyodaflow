@@ -100,7 +100,7 @@ export default function PickPackDetailPage() {
   const [cartons, setCartons] = React.useState("0");
   const [packingNote, setPackingNote] = React.useState("");
   const [courier, setCourier] = React.useState("");
-  const [trackingRef, setTrackingRef] = React.useState("");
+  const [batchLabel, setBatchLabel] = React.useState("");
   const [vehicleMode, setVehicleMode] = React.useState<"LEASED" | "SPOT_HIRE">("LEASED");
   const [selectedVehicleId, setSelectedVehicleId] = React.useState<string>("");
   const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
@@ -679,7 +679,10 @@ export default function PickPackDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>Dispatch</CardTitle>
-              <CardDescription>Select a fleet vehicle or provide spot-hire carrier details.</CardDescription>
+              <CardDescription>
+                Select a fleet vehicle or spot-hire carrier. Use the same batch name (e.g. Kitengela) when grouping
+                multiple delivery notes on one run.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
@@ -731,6 +734,15 @@ export default function PickPackDetailPage() {
                   <Input value={courier} onChange={(e) => setCourier(e.target.value)} placeholder="Carrier / driver name" />
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label>Dispatch batch</Label>
+                <Input
+                  value={batchLabel}
+                  onChange={(e) => setBatchLabel(e.target.value)}
+                  placeholder="e.g. Kitengela, Ruiru, Mathare"
+                />
+              </div>
 
               <div className="space-y-2">
                 <Label>Tracking reference</Label>
@@ -857,6 +869,7 @@ export default function PickPackDetailPage() {
                     vehicleId: vehicleMode === "LEASED" && selectedVehicleId ? selectedVehicleId : undefined,
                     carrier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
                     courier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
+                    batchLabel: batchLabel.trim() || undefined,
                     trackingRef,
                   });
                   toast.success("Dispatch recorded.");
