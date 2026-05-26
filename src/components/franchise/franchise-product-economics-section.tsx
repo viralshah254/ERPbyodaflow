@@ -48,6 +48,8 @@ export function FranchiseProductEconomicsSection(props: {
   const [saving, setSaving] = React.useState(false);
   const [removingId, setRemovingId] = React.useState<string | null>(null);
   const [listRefreshTick, setListRefreshTick] = React.useState(0);
+  /** SKUs removed on Full catalogue — hidden until outlet changes (catalog always lists HQ products). */
+  const [dismissedProductIds, setDismissedProductIds] = React.useState<Set<string>>(() => new Set());
 
   const [catalogSearch, setCatalogSearch] = React.useState("");
   const catalogSearchDebounced = useDebounced(catalogSearch, 400);
@@ -72,6 +74,7 @@ export function FranchiseProductEconomicsSection(props: {
     setAssignedCursor("0");
     setAssignedCursorStack([]);
     setAssignedNextCursor(null);
+    setDismissedProductIds(new Set());
   }, [franchiseeRegistryId]);
 
   React.useEffect(() => {
@@ -107,16 +110,18 @@ export function FranchiseProductEconomicsSection(props: {
         if (cancelled) return;
         const econMap = new Map(econ.items.map((e) => [e.productId, e]));
         setRows(
-          products.items.map((p) => {
-            const e = econMap.get(p.id);
-            return {
-              productId: p.id,
-              sku: p.sku ?? p.id,
-              name: p.name,
-              base: e != null ? String(e.supplyBasePrice) : "",
-              commission: e != null ? String(e.commissionPerUnit) : "",
-            };
-          })
+          products.items
+            .filter((p) => !dismissedProductIds.has(p.id))
+            .map((p) => {
+              const e = econMap.get(p.id);
+              return {
+                productId: p.id,
+                sku: p.sku ?? p.id,
+                name: p.name,
+                base: e != null ? String(e.supplyBasePrice) : "",
+                commission: e != null ? String(e.commissionPerUnit) : "",
+              };
+            })
         );
         setCatalogNextCursor(products.nextCursor ?? null);
       } catch (err) {
@@ -128,7 +133,7 @@ export function FranchiseProductEconomicsSection(props: {
     return () => {
       cancelled = true;
     };
-  }, [franchiseeRegistryId, tab, catalogCursor, catalogSearchDebounced, listRefreshTick]);
+  }, [franchiseeRegistryId, tab, catalogCursor, catalogSearchDebounced, listRefreshTick, dismissedProductIds]);
 
   React.useEffect(() => {
     if (!franchiseeRegistryId || tab !== "assigned") return;
@@ -201,11 +206,11 @@ export function FranchiseProductEconomicsSection(props: {
         { productId, supplyBasePrice: 0, commissionPerUnit: 0 },
       ]);
       toast.success("Removed from this shop.");
-      setListRefreshTick((t) => t + 1);
+      setRows((prev) => prev.filter((r) => r.productId !== productId));
       if (tab === "catalog") {
-        setRows((prev) =>
-          prev.map((r) => (r.productId === productId ? { ...r, base: "", commission: "" } : r))
-        );
+        setDismissedProductIds((prev) => new Set(prev).add(productId));
+      } else {
+        setListRefreshTick((t) => t + 1);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Remove failed.");
@@ -275,8 +280,11 @@ export function FranchiseProductEconomicsSection(props: {
             economics (supply base + commission in KES). Guide retail = base + commission.{" "}
             <strong className="font-medium text-foreground">Assigned SKUs (non-zero economics)</strong> lists only
             outlet–SKU rows where supply base or commission is greater than zero. Save updates only the current page.{" "}
-            <strong className="font-medium text-foreground">Remove</strong> deletes the assignment for that SKU. HQ
-            still owns the product master; POS selling also depends on published outlet prices.
+            <strong className="font-medium text-foreground">Remove</strong> deletes the assignment for that SKU (the row
+            leaves this list; HQ product master is unchanged). On{" "}
+            <strong className="font-medium text-foreground">Full catalogue</strong>, use{" "}
+            <strong className="font-medium text-foreground">Assigned SKUs</strong> or the filter below to see only
+            active assignments. POS selling also depends on published outlet prices.
           </CardDescription>
         </div>
         <Button
