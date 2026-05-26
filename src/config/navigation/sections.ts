@@ -371,7 +371,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "finance-payments", label: "Payments & Receipts", href: "/finance/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.payments.read"] },
       { key: "finance-tax", label: "Tax / VAT", href: "/finance/tax", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.tax.read"] },
       { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
-      { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.bank.read"] },
+      { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
       { key: "finance-mpesa-recon", label: "M-Pesa Till Reconciliation", href: "/finance/mpesa-recon", icon: "Smartphone", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-commission-topup", label: "Commission / Top-up", href: "/finance/commission-topup", icon: "Percent", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
       { key: "finance-journal-events", label: "Journal Events", href: "/finance/journal-events", icon: "BookOpen", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.journals.read"] },

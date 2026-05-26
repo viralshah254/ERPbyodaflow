@@ -172,7 +172,7 @@ export default function PurchaseRequestsPage() {
               asChild
               onClick={(e) => e.stopPropagation()}
             >
-              <Link href={`/docs/purchase-order/new?requestId=${r.id}`}>
+              <Link href={`/docs/purchase-request/${r.id}`}>
                 <Icons.ShoppingCart className="h-3 w-3 mr-1" />
                 Create PO
               </Link>

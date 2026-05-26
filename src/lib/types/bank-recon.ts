@@ -12,8 +12,13 @@ export type BankStatementLine = {
   date: string;
   description: string;
   amount: number;
+  payIn: number;
+  payOut: number;
   balance?: number;
+  reference?: string;
   matchedId?: string | null;
+  matchedDocumentId?: string | null;
+  status: "PENDING" | "MATCHED";
   currency?: string;
 };
 
@@ -24,4 +29,17 @@ export type SystemTransaction = {
   description: string;
   amount: number;
   matchedId?: string | null;
+};
+
+export type BankReconOpenItemSuggestion = {
+  id: string;
+  number: string;
+  date: string;
+  partyId: string;
+  partyName: string;
+  outstanding: number;
+  total: number;
+  currency?: string;
+  documentType: "invoice" | "bill";
+  side: "AR" | "AP";
 };
