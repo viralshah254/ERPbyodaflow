@@ -59,7 +59,7 @@ interface AppSidebarProps {
 export function AppSidebar({ className }: AppSidebarProps) {
   const { sidebarCollapsed, setSidebarCollapsed, sidebarPreferencesRevision } =
     useUIStore();
-  const { user, org, permissions } = useAuthStore();
+  const { user, org, permissions, isAuthenticated, isLoading } = useAuthStore();
   const {
     orgType: ctxOrgType,
     enabledModules,
@@ -75,8 +75,8 @@ export function AppSidebar({ className }: AppSidebarProps) {
   >(undefined);
 
   React.useEffect(() => {
-    if (!isApiConfigured()) {
-      setSidebarLayout(null);
+    if (!isApiConfigured() || isLoading || !isAuthenticated) {
+      if (!isLoading && !isAuthenticated) setSidebarLayout(null);
       return;
     }
     let cancelled = false;
@@ -90,7 +90,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     return () => {
       cancelled = true;
     };
-  }, [sidebarPreferencesRevision]);
+  }, [sidebarPreferencesRevision, isAuthenticated, isLoading]);
 
   const navParams = React.useMemo(
     () => ({

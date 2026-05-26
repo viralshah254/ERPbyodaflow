@@ -52,13 +52,24 @@ export type APBillRow = {
   grnNumber?: string;
 };
 
+export type APPaymentAllocation = {
+  documentType: string;
+  documentId: string;
+  documentNumber?: string;
+  amount: number;
+};
+
 export type APPaymentRow = {
   id: string;
   number: string;
   date: string;
   party: string;
+  partyId?: string;
   amount: number;
   status: string;
   paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
   mpesaTransactionNo?: string;
+  openAmount?: number;
+  appliedAmount?: number;
+  allocations?: APPaymentAllocation[];
 };

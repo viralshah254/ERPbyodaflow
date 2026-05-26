@@ -28,7 +28,21 @@ export type SystemTransaction = {
   reference: string;
   description: string;
   amount: number;
+  type?: "AR_RECEIPT" | "AP_PAYMENT";
   matchedId?: string | null;
+};
+
+export type BankReconciliationSessionRecord = {
+  id: string;
+  bankAccountId: string;
+  periodStart: string;
+  periodEnd: string;
+  matchedCount: number;
+  unmatchedCount: number;
+  status: "OPEN" | "COMPLETED";
+  completedAt?: string;
+  openingBalance?: number;
+  closingBalance?: number;
 };
 
 export type BankReconOpenItemSuggestion = {

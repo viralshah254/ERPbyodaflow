@@ -64,6 +64,7 @@ export default function APPaymentsPage() {
   const [openBills, setOpenBills] = React.useState<OpenBillRow[]>([]);
   const [allocations, setAllocations] = React.useState<Record<string, number>>({});
   const [saving, setSaving] = React.useState(false);
+  const [selectedPayment, setSelectedPayment] = React.useState<APPaymentRow | null>(null);
 
   const refreshPayments = React.useCallback(async () => {
     setAllRows(await fetchApPaymentsApi());
@@ -110,7 +111,7 @@ export default function APPaymentsPage() {
         accessor: (r: APPaymentRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
       },
-      { id: "date", header: "Date", accessor: "date" as keyof APPaymentRow },
+      { id: "date", header: "Date", accessor: (r: APPaymentRow) => r.date.slice(0, 10) },
       { id: "party", header: "Supplier", accessor: "party" as keyof APPaymentRow },
       {
         id: "amount",
@@ -206,6 +207,7 @@ export default function APPaymentsPage() {
           data={filtered}
           columns={columns}
           emptyMessage="No payments yet."
+          onRowClick={(row) => setSelectedPayment(row)}
         />
         {loading ? <p className="text-sm text-muted-foreground">Loading AP payments...</p> : null}
       </div>
@@ -371,6 +373,91 @@ export default function APPaymentsPage() {
               </Button>
             </SheetFooter>
           </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={!!selectedPayment} onOpenChange={(open) => !open && setSelectedPayment(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-lg">
+          {selectedPayment ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selectedPayment.number}</SheetTitle>
+                <SheetDescription>
+                  Supplier payment details and linked bills
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Date</p>
+                    <p className="font-medium">{selectedPayment.date.slice(0, 10)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Status</p>
+                    <p className="font-medium">{selectedPayment.status}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Supplier</p>
+                    <p className="font-medium">{selectedPayment.party}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Amount</p>
+                    <p className="font-medium">{formatMoney(selectedPayment.amount, "KES")}</p>
+                  </div>
+                  {selectedPayment.paymentMethod ? (
+                    <div>
+                      <p className="text-muted-foreground">Method</p>
+                      <p className="font-medium">{selectedPayment.paymentMethod.replace(/_/g, " ")}</p>
+                    </div>
+                  ) : null}
+                  {selectedPayment.appliedAmount != null ? (
+                    <div>
+                      <p className="text-muted-foreground">Applied</p>
+                      <p className="font-medium">{formatMoney(selectedPayment.appliedAmount, "KES")}</p>
+                    </div>
+                  ) : null}
+                  {selectedPayment.openAmount != null ? (
+                    <div>
+                      <p className="text-muted-foreground">Open</p>
+                      <p className="font-medium">{formatMoney(selectedPayment.openAmount, "KES")}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Linked bills</Label>
+                  <div className="rounded border divide-y">
+                    {(selectedPayment.allocations ?? []).length === 0 ? (
+                      <div className="p-3 text-sm text-muted-foreground">
+                        No bill allocations recorded for this payment.
+                      </div>
+                    ) : (
+                      (selectedPayment.allocations ?? []).map((allocation) => (
+                        <div key={`${allocation.documentId}-${allocation.amount}`} className="flex items-center justify-between gap-3 p-3 text-sm">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">
+                              {allocation.documentNumber ?? allocation.documentId}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Allocated {formatMoney(allocation.amount, "KES")}
+                            </p>
+                          </div>
+                          {allocation.documentType === "bill" || !allocation.documentType ? (
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={`/docs/bill/${allocation.documentId}`}>
+                                <Icons.FileText className="mr-2 h-4 w-4" />
+                                View bill
+                              </Link>
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
         </SheetContent>
       </Sheet>
     </PageShell>

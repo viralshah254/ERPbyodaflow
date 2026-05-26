@@ -36,6 +36,12 @@ type BackendPayment = {
   mpesaTransactionNo?: string;
   openAmount?: number;
   appliedAmount?: number;
+  allocations?: Array<{
+    documentType: string;
+    documentId: string;
+    documentNumber?: string;
+    amount: number;
+  }>;
 };
 
 type BackendOpenInvoice = {
@@ -356,12 +362,21 @@ export async function fetchApPaymentsApi(): Promise<APPaymentRow[]> {
   return payload.items.map((item) => ({
     id: item.id,
     number: item.number,
-    date: item.date,
+    date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
     party: item.partyName ?? item.partyId,
+    partyId: item.partyId,
     amount: item.amount,
     status: item.status,
     paymentMethod: item.paymentMethod,
     mpesaTransactionNo: item.mpesaTransactionNo,
+    openAmount: item.openAmount,
+    appliedAmount: item.appliedAmount,
+    allocations: item.allocations?.map((allocation) => ({
+      documentType: allocation.documentType,
+      documentId: allocation.documentId,
+      documentNumber: allocation.documentNumber,
+      amount: allocation.amount,
+    })),
   }));
 }
 

@@ -36,7 +36,7 @@ export function Header() {
   const handleLogout = async () => {
     await unregisterWebPushToken();
     await firebaseSignOut();
-    setApiAuth({});
+    setApiAuth({ bearerToken: undefined });
     logout();
     router.push("/");
   };

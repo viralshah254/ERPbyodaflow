@@ -41,8 +41,14 @@ export type ApiAuthOptions = {
 
 let authOptions: ApiAuthOptions = {};
 
-/** Set auth options (e.g. from auth store after login). Merges into existing options — pass only the keys you want to update. */
+/** Set auth options (e.g. from auth store after login). Pass `bearerToken: undefined` to clear the token on logout. */
 export function setApiAuth(options: ApiAuthOptions): void {
+  if ("bearerToken" in options && options.bearerToken === undefined) {
+    const { bearerToken: _removed, ...rest } = authOptions;
+    authOptions = { ...rest, ...options };
+    delete authOptions.bearerToken;
+    return;
+  }
   authOptions = { ...authOptions, ...options };
 }
 

@@ -1,6 +1,7 @@
 import { fetchOpenBillsApi, fetchOpenInvoicesApi } from "./payments";
 import type {
   BankReconOpenItemSuggestion,
+  BankReconciliationSessionRecord,
   BankStatementLine,
   ReconcileSession,
   SystemTransaction,
@@ -84,14 +85,20 @@ function buildSession(
 }
 
 export async function fetchBankReconSnapshotApi(
-  bankAccountId?: string
+  bankAccountId?: string,
+  opts?: { dateFrom?: string; dateTo?: string }
 ): Promise<BankReconSnapshot> {
   requireLiveApi("Bank reconciliation");
+
+  const statementParams: Record<string, string> = {};
+  if (bankAccountId) statementParams.bankAccountId = bankAccountId;
+  if (opts?.dateFrom) statementParams.dateFrom = opts.dateFrom;
+  if (opts?.dateTo) statementParams.dateTo = opts.dateTo;
 
   const [bankAccountsRes, statementsRes, paymentsRes] = await Promise.all([
     apiRequest<{ items: BankAccount[] }>("/api/treasury/bank-accounts"),
     apiRequest<{ items: BackendBankStatementLine[] }>("/api/finance/bank-recon", {
-      params: bankAccountId ? { bankAccountId } : undefined,
+      params: Object.keys(statementParams).length ? statementParams : undefined,
     }),
     apiRequest<{ items: BackendPayment[] }>("/api/finance/payments", {
       params: bankAccountId ? { bankAccountId } : undefined,
@@ -117,6 +124,7 @@ export async function fetchBankReconSnapshotApi(
     reference: item.number,
     description: item.partyName ?? item.partyId,
     amount: item.amount * (item.type === "AP_PAYMENT" ? -1 : 1),
+    type: item.type,
     matchedId: statementByPayment.get(item.id) ?? null,
   }));
 
@@ -194,6 +202,31 @@ export async function createBankReconAdjustingEntryApi(lineId: string): Promise<
     method: "POST",
     body: { lineId },
   });
+}
+
+export async function completeBankReconApi(body: {
+  bankAccountId: string;
+  periodStart?: string;
+  periodEnd?: string;
+  openingBalance?: number;
+  closingBalance?: number;
+}): Promise<{ sessionId: string; matchedCount: number; unmatchedCount: number }> {
+  requireLiveApi("Bank reconciliation completion");
+  return apiRequest("/api/finance/bank-recon/complete", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function fetchBankReconSessionsApi(
+  bankAccountId?: string
+): Promise<BankReconciliationSessionRecord[]> {
+  requireLiveApi("Bank reconciliation sessions");
+  const res = await apiRequest<{ items: BankReconciliationSessionRecord[] }>(
+    "/api/finance/bank-recon/sessions",
+    { params: bankAccountId ? { bankAccountId } : undefined }
+  );
+  return res.items ?? [];
 }
 
 export async function fetchBankReconOpenItemsApi(params: {
