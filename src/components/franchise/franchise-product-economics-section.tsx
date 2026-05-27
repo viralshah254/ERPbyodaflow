@@ -64,6 +64,31 @@ export function FranchiseProductEconomicsSection(props: {
   const [assignedCursorStack, setAssignedCursorStack] = React.useState<string[]>([]);
   const [assignedNextCursor, setAssignedNextCursor] = React.useState<string | null>(null);
 
+  /** Last saved/loaded values per product on the current page — drives dirty detection. */
+  const [savedByProductId, setSavedByProductId] = React.useState<
+    Map<string, { base: string; commission: string }>
+  >(() => new Map());
+
+  const snapshotRows = React.useCallback((list: Row[]) => {
+    const m = new Map<string, { base: string; commission: string }>();
+    for (const r of list) {
+      m.set(r.productId, { base: r.base, commission: r.commission });
+    }
+    return m;
+  }, []);
+
+  const isDirty = React.useMemo(() => {
+    for (const r of rows) {
+      const saved = savedByProductId.get(r.productId);
+      if (!saved) {
+        if (r.base.trim() !== "" || r.commission.trim() !== "") return true;
+        continue;
+      }
+      if (saved.base !== r.base || saved.commission !== r.commission) return true;
+    }
+    return false;
+  }, [rows, savedByProductId]);
+
   React.useEffect(() => {
     setCatalogCursor("0");
     setCatalogCursorStack([]);
@@ -75,6 +100,7 @@ export function FranchiseProductEconomicsSection(props: {
     setAssignedCursorStack([]);
     setAssignedNextCursor(null);
     setDismissedProductIds(new Set());
+    setSavedByProductId(new Map());
   }, [franchiseeRegistryId]);
 
   React.useEffect(() => {
@@ -109,20 +135,20 @@ export function FranchiseProductEconomicsSection(props: {
           : { items: [], nextCursor: null as string | null };
         if (cancelled) return;
         const econMap = new Map(econ.items.map((e) => [e.productId, e]));
-        setRows(
-          products.items
-            .filter((p) => !dismissedProductIds.has(p.id))
-            .map((p) => {
-              const e = econMap.get(p.id);
-              return {
-                productId: p.id,
-                sku: p.sku ?? p.id,
-                name: p.name,
-                base: e != null ? String(e.supplyBasePrice) : "",
-                commission: e != null ? String(e.commissionPerUnit) : "",
-              };
-            })
-        );
+        const mapped = products.items
+          .filter((p) => !dismissedProductIds.has(p.id))
+          .map((p) => {
+            const e = econMap.get(p.id);
+            return {
+              productId: p.id,
+              sku: p.sku ?? p.id,
+              name: p.name,
+              base: e != null ? String(e.supplyBasePrice) : "",
+              commission: e != null ? String(e.commissionPerUnit) : "",
+            };
+          });
+        setRows(mapped);
+        setSavedByProductId(snapshotRows(mapped));
         setCatalogNextCursor(products.nextCursor ?? null);
       } catch (err) {
         if (!cancelled) toast.error(err instanceof Error ? err.message : "Could not load products.");
@@ -148,15 +174,15 @@ export function FranchiseProductEconomicsSection(props: {
           search: assignedSearchDebounced.trim() || undefined,
         });
         if (cancelled) return;
-        setRows(
-          items.map((e) => ({
-            productId: e.productId,
-            sku: e.sku ?? e.productId,
-            name: e.productName ?? e.productId,
-            base: String(e.supplyBasePrice),
-            commission: String(e.commissionPerUnit),
-          }))
-        );
+        const mapped = items.map((e) => ({
+          productId: e.productId,
+          sku: e.sku ?? e.productId,
+          name: e.productName ?? e.productId,
+          base: String(e.supplyBasePrice),
+          commission: String(e.commissionPerUnit),
+        }));
+        setRows(mapped);
+        setSavedByProductId(snapshotRows(mapped));
         setAssignedNextCursor(nextCursor ?? null);
       } catch (err) {
         if (!cancelled) toast.error(err instanceof Error ? err.message : "Could not load assigned SKUs.");
@@ -189,6 +215,7 @@ export function FranchiseProductEconomicsSection(props: {
       }));
       await putFranchiseeProductEconomicsApi(franchiseeRegistryId, items);
       toast.success("Product economics saved for this page.");
+      setSavedByProductId(snapshotRows(rows));
       setListRefreshTick((t) => t + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed.");
@@ -287,14 +314,17 @@ export function FranchiseProductEconomicsSection(props: {
             active assignments. POS selling also depends on published outlet prices.
           </CardDescription>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => void onSave()}
-          disabled={saving || loading || !rows.length}
-        >
-          {saving ? "Saving…" : "Save this page"}
-        </Button>
+        {isDirty ? (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void onSave()}
+            disabled={saving || loading}
+            className="hidden sm:inline-flex"
+          >
+            {saving ? "Saving…" : "Save this page"}
+          </Button>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4 p-6 pt-0">
         <Tabs value={tab} onValueChange={(v) => setTab(v as "catalog" | "assigned")} className="w-full">
@@ -465,6 +495,19 @@ export function FranchiseProductEconomicsSection(props: {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {isDirty && (
+          <div
+            className="fixed bottom-6 left-1/2 z-50 flex w-[min(100%-2rem,36rem)] -translate-x-1/2 items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 shadow-lg animate-in slide-in-from-bottom-4 duration-200"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="text-sm text-muted-foreground">Unsaved price changes on this page</p>
+            <Button type="button" size="sm" onClick={() => void onSave()} disabled={saving || loading}>
+              {saving ? "Updating…" : "Update prices"}
+            </Button>
           </div>
         )}
       </CardContent>
