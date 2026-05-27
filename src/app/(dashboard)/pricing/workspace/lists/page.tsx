@@ -40,6 +40,7 @@ import {
   updatePriceListApi,
   deletePriceListApi,
   fetchDailyPriceStatusApi,
+  resolveCatalogLabel,
   type DailyPriceStatusList,
 } from "@/lib/api/pricing";
 import { fetchPricingZones, type PricingZoneRow } from "@/lib/api/pricing-engine";
@@ -48,23 +49,34 @@ import { fetchProductsApi } from "@/lib/api/products";
 import { fetchProductPricingApi } from "@/lib/api/product-master";
 import type { ProductRow } from "@/lib/types/masters";
 import { canDeleteEntity } from "@/lib/permissions";
+import { can } from "@/lib/rbac/can";
 import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { PRICING_ENGINE_CHANNELS } from "@/lib/pricing/engine-types";
+import { isFranchiseList } from "@/lib/pricing/franchise-zone-master";
 
 const CHANNELS = ["Retail", "Wholesale", "Distributor", "ModernTrade", "Export"];
+
+function catalogLabelForList(pl: PriceList | null | undefined): string {
+  if (!pl) return "Retail";
+  return resolveCatalogLabel(pl.code ?? pl.channel, pl.pricingEngineChannel);
+}
 
 function PriceListsContent() {
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("list") ?? "";
   const user = useAuthStore((s) => s.user);
-  const canDelete = canDeleteEntity(user);
+  const canDelete =
+    canDeleteEntity(user) || can(user, "inventory.write");
   const [lists, setLists] = React.useState<PriceList[]>([]);
   const [selectedDetail, setSelectedDetail] = React.useState<PriceList | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PriceList | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<PriceList | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [dailyStatus, setDailyStatus] = React.useState<DailyPriceStatusList[]>([]);
   const [pricingZones, setPricingZones] = React.useState<PricingZoneRow[]>([]);
@@ -147,6 +159,37 @@ function PriceListsContent() {
     return m;
   }, [pricingZones]);
 
+  const childListCountById = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const pl of lists) {
+      if (!pl.parentPriceListId) continue;
+      m.set(pl.parentPriceListId, (m.get(pl.parentPriceListId) ?? 0) + 1);
+    }
+    return m;
+  }, [lists]);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    if (!isApiConfigured()) {
+      toast.info("Set NEXT_PUBLIC_API_URL to delete price lists.");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deletePriceListApi(deleteTarget.id);
+      if (selectedId === deleteTarget.id) {
+        setSelectedDetail(null);
+      }
+      await refresh();
+      toast.success(`“${deleteTarget.name}” deleted.`);
+      setDeleteTarget(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete price list.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -222,7 +265,7 @@ function PriceListsContent() {
                   <TableHead>Products</TableHead>
                   <TableHead>{"Today's prices"}</TableHead>
                   <TableHead className="w-52">Updated</TableHead>
-                  <TableHead className="w-40"></TableHead>
+                  <TableHead className="w-56 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -230,18 +273,55 @@ function PriceListsContent() {
                   const status = dailyStatus.find((s) => s.priceListId === pl.id);
                   return (
                   <TableRow key={pl.id}>
-                    <TableCell className="font-medium">{pl.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {pl.name}
+                        {!pl.zoneId &&
+                          (pl.name.toLowerCase().includes("franchise") || isFranchiseList(pl)) &&
+                          pl.pricingEngineChannel &&
+                          pl.pricingEngineChannel !== "FRANCHISE" && (
+                            <Badge variant="destructive" className="text-[10px]">
+                              Not FRANCHISE engine
+                            </Badge>
+                          )}
+                      </div>
+                    </TableCell>
                     <TableCell>{pl.currency}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{pl.channel}</Badge>
                     </TableCell>
                     <TableCell className="text-xs max-w-[200px]" title={pl.zoneId ?? undefined}>
                       {!pl.zoneId ? (
-                        <span className="text-muted-foreground">— assign zone</span>
+                        <button
+                          type="button"
+                          className="text-primary underline hover:opacity-80"
+                          onClick={() => openEdit(pl)}
+                        >
+                          assign zone
+                        </button>
                       ) : zoneLabelById.has(pl.zoneId) ? (
-                        <span>{zoneLabelById.get(pl.zoneId)}</span>
+                        isFranchiseList(pl) ? (
+                          <span>{zoneLabelById.get(pl.zoneId)}</span>
+                        ) : (
+                          <span
+                            className="text-muted-foreground"
+                            title="Does not drive franchise outlets — only FRANCHISE master lists set outlet base prices."
+                          >
+                            {zoneLabelById.get(pl.zoneId)}
+                            <span className="block text-[10px]">(not franchise master)</span>
+                          </span>
+                        )
                       ) : (
-                        <span className="font-mono truncate block">{pl.zoneId}</span>
+                        <span
+                          className={isFranchiseList(pl) ? "font-mono truncate block" : "font-mono truncate block text-muted-foreground"}
+                          title={
+                            isFranchiseList(pl)
+                              ? undefined
+                              : "Does not drive franchise outlets — only FRANCHISE master lists set outlet base prices."
+                          }
+                        >
+                          {pl.zoneId}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-xs">
@@ -268,7 +348,7 @@ function PriceListsContent() {
                       )}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {pl.channel === "FRANCHISE" || pl.channel === "Franchise" ? (
+                      {isFranchiseList(pl) ? (
                         pl.parentPriceListId ? (
                           <Badge variant="secondary">Outlet derived</Badge>
                         ) : (
@@ -304,36 +384,31 @@ function PriceListsContent() {
                           })
                         : "—"}
                     </TableCell>
-                    <TableCell className="space-x-1">
-                      <Button variant="default" size="sm" asChild>
-                        <Link href={`/pricing/price-lists/${pl.id}`}>
-                          <Icons.Tag className="mr-1.5 h-3.5 w-3.5" />
-                          Set prices
-                        </Link>
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(pl)}>Edit</Button>
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={async () => {
-                            if (!isApiConfigured()) {
-                              toast.info("Set NEXT_PUBLIC_API_URL to delete price lists.");
-                              return;
-                            }
-                            try {
-                              await deletePriceListApi(pl.id);
-                              await refresh();
-                              toast.success("Price list removed.");
-                            } catch (e) {
-                              toast.error((e as Error).message || "Failed to delete.");
-                            }
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      )}
+                    <TableCell className="text-right align-top">
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex flex-wrap justify-end gap-1">
+                          <Button variant="default" size="sm" asChild>
+                            <Link href={`/pricing/price-lists/${pl.id}`}>
+                              <Icons.Tag className="mr-1.5 h-3.5 w-3.5" />
+                              Set prices
+                            </Link>
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => openEdit(pl)}>
+                            Edit
+                          </Button>
+                          {canDelete ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                              onClick={() => setDeleteTarget(pl)}
+                            >
+                              <Icons.Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
                     </TableCell>
                   </TableRow>
                   );
@@ -402,6 +477,31 @@ function PriceListsContent() {
           onClose={() => setSheetOpen(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null);
+        }}
+        title={deleteTarget ? `Delete “${deleteTarget.name}”?` : "Delete price list?"}
+        description={
+          deleteTarget
+            ? [
+                "This permanently removes the price list and its daily price rows.",
+                (childListCountById.get(deleteTarget.id) ?? 0) > 0
+                  ? `${childListCountById.get(deleteTarget.id)} derived outlet list(s) still reference this list as their parent — delete or reassign those first.`
+                  : deleteTarget.zoneId && isFranchiseList(deleteTarget)
+                    ? "This list is linked to a pricing zone. Outlets in that zone may lose their price source if this is the zone master."
+                    : null,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : undefined
+        }
+        confirmLabel={deleting ? "Deleting…" : "Delete price list"}
+        variant="destructive"
+        onConfirm={() => void handleConfirmDelete()}
+      />
     </PageShell>
   );
 }
@@ -498,7 +598,7 @@ function PriceListSheet({
 }) {
   const [name, setName] = React.useState(initial?.name ?? "");
   const [currency, setCurrency] = React.useState(initial?.currency ?? "KES");
-  const [catalogLabel, setCatalogLabel] = React.useState(initial?.channel ?? "Retail");
+  const [catalogLabel, setCatalogLabel] = React.useState(() => catalogLabelForList(initial));
   const [pricingChannel, setPricingChannel] = React.useState(initial?.pricingEngineChannel ?? "__none__");
   const [zoneId, setZoneId] = React.useState(initial?.zoneId ?? "");
   const [isDefault, setIsDefault] = React.useState(!!initial?.isDefault);
@@ -511,7 +611,7 @@ function PriceListSheet({
   React.useEffect(() => {
     setName(initial?.name ?? "");
     setCurrency(initial?.currency ?? "KES");
-    setCatalogLabel(initial?.channel ?? "Retail");
+    setCatalogLabel(catalogLabelForList(initial));
     setPricingChannel(initial?.pricingEngineChannel ?? "__none__");
     setZoneId(initial?.zoneId ?? "");
     setIsDefault(!!initial?.isDefault);
@@ -539,6 +639,14 @@ function PriceListSheet({
 
   const zoneSelectValue =
     !zoneId.trim() ? "__none__" : pricingZones.some((z) => z.id === zoneId.trim()) ? zoneId.trim() : "__custom__";
+
+  const engineIsFranchise = pricingChannel === "FRANCHISE";
+  const zoneAssigned = zoneSelectValue !== "__none__" && zoneId.trim() !== "";
+  const showNonFranchiseZoneWarning = zoneAssigned && !engineIsFranchise && !parentId;
+  const catalogLabelOptions = React.useMemo(() => {
+    if (CHANNELS.includes(catalogLabel)) return CHANNELS;
+    return [catalogLabel, ...CHANNELS];
+  }, [catalogLabel]);
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
@@ -573,7 +681,7 @@ function PriceListSheet({
             <Select value={catalogLabel} onValueChange={setCatalogLabel}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {CHANNELS.map((c) => (
+                {catalogLabelOptions.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
@@ -642,6 +750,12 @@ function PriceListSheet({
                 placeholder="Zone UUID (optional)"
               />
             )}
+            {showNonFranchiseZoneWarning ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 dark:border-amber-900/40 dark:bg-amber-950/30">
+                This list is not a FRANCHISE master — linking a zone here will not drive franchise outlet base
+                prices. Use Pricing → Franchise zones to link the zone master instead.
+              </p>
+            ) : null}
           </div>
 
           {/* Inheritance / logistics markup */}

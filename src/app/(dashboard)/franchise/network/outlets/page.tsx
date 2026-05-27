@@ -31,6 +31,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   fetchFranchiseNetworkOutlets,
@@ -43,6 +50,8 @@ import {
   type FranchiseNetworkOutletRow,
   type CreateFranchiseOutletPayload,
 } from "@/lib/api/cool-catch";
+import { assignOutletPricingZone } from "@/lib/api/franchise-pricing";
+import { fetchPricingZones } from "@/lib/api/pricing-engine";
 import { useAuthStore } from "@/stores/auth-store";
 import { Loader2, Plus, Wrench, Target, CheckCircle2, Clock, AlertTriangle, Minus, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -83,6 +92,9 @@ export default function FranchiseOutletsPage() {
   const [savingEdit, setSavingEdit] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<FranchiseNetworkOutletRow | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [pricingZones, setPricingZones] = React.useState<Awaited<ReturnType<typeof fetchPricingZones>>>([]);
+  const [zoneDraft, setZoneDraft] = React.useState<Record<string, string>>({});
+  const [savingZoneFor, setSavingZoneFor] = React.useState<string | null>(null);
   const permissions = useAuthStore((s) => s.permissions);
   const canView =
     permissions.includes("franchise.network.read") ||
@@ -105,7 +117,36 @@ export default function FranchiseOutletsPage() {
       return;
     }
     load();
+    fetchPricingZones()
+      .then(setPricingZones)
+      .catch(() => setPricingZones([]));
   }, [canView, load]);
+
+  React.useEffect(() => {
+    const draft: Record<string, string> = {};
+    for (const o of outlets) {
+      if (o.zoneId) draft[o.id] = o.zoneId;
+    }
+    setZoneDraft(draft);
+  }, [outlets]);
+
+  const handleZoneSave = async (outletId: string) => {
+    const zoneId = zoneDraft[outletId];
+    if (!zoneId) {
+      toast.error("Select a pricing zone.");
+      return;
+    }
+    setSavingZoneFor(outletId);
+    try {
+      await assignOutletPricingZone(outletId, zoneId);
+      toast.success("Pricing zone assigned");
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not assign zone");
+    } finally {
+      setSavingZoneFor(null);
+    }
+  };
 
   // Auto-fetch next outlet code when the sheet opens
   React.useEffect(() => {
@@ -299,6 +340,8 @@ export default function FranchiseOutletsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Code</TableHead>
+                  <TableHead>Pricing zone</TableHead>
+                  <TableHead>Price list</TableHead>
                   <TableHead>Security deposit</TableHead>
                   <TableHead>Territory</TableHead>
                   <TableHead>Status</TableHead>
@@ -313,6 +356,47 @@ export default function FranchiseOutletsPage() {
                   <TableRow key={o.id}>
                   <TableCell className="font-medium">{o.name}</TableCell>
                   <TableCell className="text-muted-foreground">{o.code ?? "—"}</TableCell>
+                  <TableCell className="min-w-[200px]">
+                    {canAdd ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Select
+                          value={zoneDraft[o.id] || "__none__"}
+                          onValueChange={(v) =>
+                            setZoneDraft((prev) => ({
+                              ...prev,
+                              [o.id]: v === "__none__" ? "" : v,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-[160px] text-xs">
+                            <SelectValue placeholder="Select zone…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— None —</SelectItem>
+                            {pricingZones.map((z) => (
+                              <SelectItem key={z.id} value={z.id}>
+                                {z.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          disabled={savingZoneFor === o.id || !zoneDraft[o.id]}
+                          onClick={() => void handleZoneSave(o.id)}
+                        >
+                          {savingZoneFor === o.id ? "Saving…" : "Save"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-sm">{o.zoneName ?? "—"}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs max-w-[140px] truncate" title={o.priceListName ?? undefined}>
+                    {o.priceListName ?? "—"}
+                  </TableCell>
                   <TableCell className="text-sm">
                     {o.securityDepositAmountKes != null && o.securityDepositAmountKes > 0 ? (
                       o.securityDepositPaidAt ? (
@@ -406,6 +490,9 @@ export default function FranchiseOutletsPage() {
                           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenuItem asChild>
                               <Link href={`/franchise/outlets/${o.id}`}>View</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/franchise/outlets/${o.id}?tab=pricing`}>Pricing</Link>
                             </DropdownMenuItem>
                             {canAdd ? (
                               <>

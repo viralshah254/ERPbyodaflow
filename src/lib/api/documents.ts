@@ -172,6 +172,7 @@ type BackendDocumentListItem = {
   sourceGrnId?: string;
   sourceGrnNumber?: string;
   allocationId?: string;
+  lineIndex?: number;
   costAttachments?: Array<{ id: string; fileName: string; contentType?: string }>;
   linkedBillId?: string;
   linkedBillNumber?: string;

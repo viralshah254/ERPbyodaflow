@@ -1026,6 +1026,8 @@ export default function OutletDetailPage() {
             <OutletPricingTab
               outletOrgId={outletOrgId}
               assignedPriceListId={summary?.priceListId ?? null}
+              assignedZoneId={summary?.zoneId ?? null}
+              assignedZoneName={summary?.zoneName ?? null}
               franchiseeRegistryId={franchiseeRegistryId}
               onAssigned={() => void loadSummary()}
             />

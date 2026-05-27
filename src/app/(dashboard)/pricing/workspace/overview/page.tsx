@@ -151,25 +151,36 @@ export default function PricingOverviewPage() {
                 <summary>How to fix (HQ)</summary>
                 <ol className="mt-2 list-decimal pl-4 space-y-1.5 text-muted-foreground dark:text-rose-300/85">
                   <li>
-                    Open <strong className="text-rose-950 dark:text-rose-100">Price lists</strong>, select the outlet list, run daily review / engine publish so each SKU has today&apos;s selling price.
+                    Open{" "}
+                    <Link href="/pricing/workspace/zones" className="text-primary underline">
+                      Franchise zones
+                    </Link>
+                    , link a FRANCHISE master list to each zone, then click{" "}
+                    <strong className="text-rose-950 dark:text-rose-100">Set prices</strong> to publish
+                    today&apos;s daily prices on the zone master (outlets inherit from the master).
                   </li>
                   <li>
-                    Ensure each outlet has a <strong className="text-rose-950 dark:text-rose-100">default price list</strong> on the outlet{" "}
+                    Assign each outlet to a zone on{" "}
+                    <Link href="/franchise/network/outlets" className="text-primary underline">
+                      Franchise network → Outlets
+                    </Link>{" "}
+                    or the outlet{" "}
                     <Link href="/franchise/network/outlets" className="text-primary underline">
                       Pricing tab
                     </Link>
                     .
                   </li>
                   <li>
-                    Optional legacy <strong className="text-rose-950 dark:text-rose-100">batch franchise pricing</strong> rows still help transfer reference but no longer gate Sell.
+                    Per-outlet overrides only when needed — edit the derived outlet list, not the zone
+                    master, for one-off prices.
                   </li>
                 </ol>
               </details>
             </div>
             <Button variant="outline" size="sm" className="shrink-0 border-rose-300 text-rose-900 hover:bg-rose-100" asChild>
-              <Link href="/pricing/workspace/lists">
-                <Icons.List className="mr-1.5 h-3.5 w-3.5" />
-                Price lists
+              <Link href="/pricing/workspace/zones">
+                <Icons.MapPin className="mr-1.5 h-3.5 w-3.5" />
+                Franchise zones
               </Link>
             </Button>
           </div>

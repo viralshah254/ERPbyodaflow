@@ -34,7 +34,17 @@ export function OutletPriceListAssignment({
 
   React.useEffect(() => {
     fetchPriceListsForUi()
-      .then((pls) => setPriceLists(pls))
+      .then((pls) =>
+        setPriceLists(
+          pls.filter(
+            (pl) =>
+              pl.channel === "FRANCHISE" ||
+              pl.channel === "Franchise" ||
+              pl.pricingEngineChannel === "FRANCHISE" ||
+              Boolean(pl.parentPriceListId)
+          )
+        )
+      )
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

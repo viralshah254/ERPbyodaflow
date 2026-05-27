@@ -82,6 +82,8 @@ export type OutletRetailPricePreviewRow = {
   productId: string;
   sku?: string;
   productName: string;
+  zoneBasePrice: number | null;
+  commissionPerUnit: number;
   retailPrice: number | null;
   source: string | null;
   currency: string;

@@ -33,8 +33,10 @@ export interface PriceList {
   id: string;
   name: string;
   currency: string;
-  /** Display badge (often matches legacy `code` or marketing channel). */
+  /** Display badge (catalog label; stored as backend `code`). */
   channel: PriceListChannel;
+  /** Raw backend `code` when present. */
+  code?: string;
   /** Backend pricing-engine channel (`RETAIL`, `FRANCHISE`, …). */
   pricingEngineChannel?: string;
   tier?: string;
@@ -42,6 +44,7 @@ export interface PriceList {
   customerId?: string;
   franchiseId?: string;
   lastCalculatedAt?: string;
+  updatedAt?: string;
   isDefault?: boolean;
   /** When set, prices not in this list's own items are derived from the parent + markup. */
   parentPriceListId?: string;

@@ -26,6 +26,7 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
         <nav className="flex flex-wrap gap-1" aria-label="Pricing workspace">
           {tab("/pricing/workspace/overview", "Overview", "/workspace/overview")}
           {tab("/pricing/workspace/lists", "Price lists", "/workspace/lists")}
+          {tab("/pricing/workspace/zones", "Franchise zones", "/workspace/zones")}
           {tab("/pricing/workspace/approvals", "Approvals", "/workspace/approvals")}
           <Link
             href="/pricing/rules"
@@ -38,7 +39,7 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
           </Link>
         </nav>
       </div>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }

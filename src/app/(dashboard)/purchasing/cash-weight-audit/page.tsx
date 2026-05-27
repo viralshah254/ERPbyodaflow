@@ -595,20 +595,18 @@ export default function CashWeightAuditPage() {
     }
     setSavingDisb(true);
     try {
-      let invoiceAttachment: { fileName: string; contentType: string; content: string } | undefined;
-      if (disbInvoiceFile) {
-        try {
-          const content = await readFileAsBase64(disbInvoiceFile);
-          invoiceAttachment = {
-            fileName: disbInvoiceFile.name,
-            contentType: disbInvoiceFile.type || "application/octet-stream",
-            content,
-          };
-        } catch {
-          toast.error("Could not read the supplier invoice file.");
-          setSavingDisb(false);
-          return;
-        }
+      let invoiceAttachment: { fileName: string; contentType: string; content: string };
+      try {
+        const content = await readFileAsBase64(disbInvoiceFile);
+        invoiceAttachment = {
+          fileName: disbInvoiceFile.name,
+          contentType: disbInvoiceFile.type || "application/octet-stream",
+          content,
+        };
+      } catch {
+        toast.error("Could not read the supplier invoice file.");
+        setSavingDisb(false);
+        return;
       }
       const grnIds = disbGrnId && disbGrnId !== DISB_GRN_NONE ? [disbGrnId] : undefined;
       const disbResult = await createCashDisbursement({
@@ -620,7 +618,7 @@ export default function CashWeightAuditPage() {
         paidWeightKg,
         lines,
         paymentMethod: disbPaymentMethod,
-        ...(invoiceAttachment ? { invoiceAttachment } : {}),
+        invoiceAttachment,
       });
       const receiptLabel = disbResult.reference ? ` Receipt: ${disbResult.reference}.` : "";
       if (disbResult.warnings?.length) {

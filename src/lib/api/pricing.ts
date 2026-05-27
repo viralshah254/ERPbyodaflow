@@ -3,7 +3,24 @@
  */
 
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
-import type { DiscountPolicy, PriceList } from "@/lib/products/pricing-types";
+import type { DiscountPolicy, PriceList, PriceListChannel } from "@/lib/products/pricing-types";
+
+const ENGINE_TO_CATALOG_LABEL: Record<string, PriceListChannel> = {
+  DISTRIBUTOR: "Distributor",
+  FRANCHISE: "Franchise",
+  RETAIL: "Retail",
+  INSTITUTIONAL: "ModernTrade",
+  BULK_EXPORT: "Export",
+};
+
+/** Map backend `code` (catalog label) and `channel` (engine) to UI catalog label. */
+export function resolveCatalogLabel(code?: string, engineChannel?: string): PriceListChannel {
+  if (code?.trim()) return code.trim() as PriceListChannel;
+  if (engineChannel && ENGINE_TO_CATALOG_LABEL[engineChannel]) {
+    return ENGINE_TO_CATALOG_LABEL[engineChannel];
+  }
+  return "Retail";
+}
 
 /** Customer default price list assignment (API shape). */
 export interface CustomerDefaultPriceListRow {
@@ -39,6 +56,7 @@ export interface PriceListDetail {
   customerId?: string;
   franchiseId?: string;
   lastCalculatedAt?: string;
+  updatedAt?: string;
   parentPriceListId?: string;
   parentName?: string;
   markupType?: "PERCENT" | "FLAT";
@@ -140,6 +158,7 @@ export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
       customerId?: string;
       franchiseId?: string;
       lastCalculatedAt?: string;
+      updatedAt?: string;
       parentPriceListId?: string;
       parentName?: string;
       markupType?: "PERCENT" | "FLAT";
@@ -159,6 +178,7 @@ export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
     customerId: item.customerId,
     franchiseId: item.franchiseId,
     lastCalculatedAt: item.lastCalculatedAt,
+    updatedAt: item.updatedAt,
     parentPriceListId: item.parentPriceListId,
     parentName: item.parentName,
     markupType: item.markupType,
@@ -173,13 +193,15 @@ export async function fetchPriceListsForUi(): Promise<PriceList[]> {
     id: d.id,
     name: d.name,
     currency: d.currency ?? "KES",
-    channel: ((d.channel as string | undefined) ?? d.code ?? "Retail") as PriceList["channel"],
+    code: d.code,
+    channel: resolveCatalogLabel(d.code, d.channel),
     pricingEngineChannel: d.channel,
     tier: d.tier,
     zoneId: d.zoneId,
     customerId: d.customerId,
     franchiseId: d.franchiseId,
     lastCalculatedAt: d.lastCalculatedAt,
+    updatedAt: d.updatedAt,
     isDefault: false,
     parentPriceListId: d.parentPriceListId,
     parentName: d.parentName,
@@ -260,15 +282,25 @@ export interface DailyPriceItem {
   fallbackDate: string | null;
   /** True when no price has been entered for the target date. */
   isStale: boolean;
-  /** todayPrice if set, else fallbackPrice. */
+  /** todayPrice if set, else inheritedPrice, else fallbackPrice. */
   effectivePrice: number | null;
+  /** Price from parent zone/master list (when this list is derived). */
+  inheritedPrice?: number | null;
+  inheritedFromListId?: string | null;
+  inheritedFromListName?: string | null;
+  inheritedDate?: string | null;
+  inheritedFromTargetDate?: boolean;
 }
 
 export interface DailyPriceListResponse {
   priceListId: string;
   priceListName: string;
   currency: string;
+  channel?: string | null;
+  franchiseId?: string | null;
   date: string;
+  parentPriceListId?: string | null;
+  parentPriceListName?: string | null;
   items: DailyPriceItem[];
   staleCount: number;
   totalCount: number;
@@ -322,6 +354,55 @@ export async function bulkSetDailyPricesApi(
   await apiRequest(
     `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices`,
     { method: "PUT", body: { items, date } }
+  );
+}
+
+export interface ZonePriceCascadeConflict {
+  outletListId: string;
+  outletListName: string;
+  outletOrgId: string;
+  outletName: string;
+  productId: string;
+  sku: string;
+  productName: string;
+  outletPrice: number;
+  previousZonePrice: number | null;
+  newZonePrice: number;
+}
+
+export async function previewZonePriceCascadeApi(
+  priceListId: string,
+  items: Array<{ productId: string; price: number }>,
+  date?: string
+): Promise<{ conflicts: ZonePriceCascadeConflict[] }> {
+  requireLiveApi("Zone price cascade preview");
+  return apiRequest(
+    `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices/cascade-preview`,
+    { method: "POST", body: { items, date } }
+  );
+}
+
+export async function applyZonePriceCascadeApi(
+  priceListId: string,
+  apply: Array<{ outletListId: string; productId: string }>,
+  date?: string
+): Promise<{ removed: number }> {
+  requireLiveApi("Zone price cascade apply");
+  return apiRequest(
+    `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices/cascade-apply`,
+    { method: "POST", body: { apply, date } }
+  );
+}
+
+export async function syncFranchisePublisherToOutletsApi(
+  priceListId: string,
+  items: Array<{ productId: string; price: number }>,
+  date?: string
+): Promise<{ zoneUpdated: number; outletOverridesRemoved: number }> {
+  requireLiveApi("Sync franchise zone to outlets");
+  return apiRequest(
+    `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices/sync-outlets`,
+    { method: "POST", body: { items, date } }
   );
 }
 

@@ -40,8 +40,9 @@ export function FranchiseProductEconomicsSection(props: {
   franchiseeRegistryId: string | undefined;
   /** Child org id for PATCH body when linking franchisee registry (shown when unlinked). */
   outletOrgId?: string;
+  zoneMasterListId?: string;
 }) {
-  const { franchiseeRegistryId, outletOrgId } = props;
+  const { franchiseeRegistryId, outletOrgId, zoneMasterListId } = props;
   const [tab, setTab] = React.useState<"catalog" | "assigned">("catalog");
   const [rows, setRows] = React.useState<Row[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -66,13 +67,13 @@ export function FranchiseProductEconomicsSection(props: {
 
   /** Last saved/loaded values per product on the current page — drives dirty detection. */
   const [savedByProductId, setSavedByProductId] = React.useState<
-    Map<string, { base: string; commission: string }>
+    Map<string, { commission: string }>
   >(() => new Map());
 
   const snapshotRows = React.useCallback((list: Row[]) => {
-    const m = new Map<string, { base: string; commission: string }>();
+    const m = new Map<string, { commission: string }>();
     for (const r of list) {
-      m.set(r.productId, { base: r.base, commission: r.commission });
+      m.set(r.productId, { commission: r.commission });
     }
     return m;
   }, []);
@@ -81,10 +82,10 @@ export function FranchiseProductEconomicsSection(props: {
     for (const r of rows) {
       const saved = savedByProductId.get(r.productId);
       if (!saved) {
-        if (r.base.trim() !== "" || r.commission.trim() !== "") return true;
+        if (r.commission.trim() !== "") return true;
         continue;
       }
-      if (saved.base !== r.base || saved.commission !== r.commission) return true;
+      if (saved.commission !== r.commission) return true;
     }
     return false;
   }, [rows, savedByProductId]);
@@ -143,7 +144,12 @@ export function FranchiseProductEconomicsSection(props: {
               productId: p.id,
               sku: p.sku ?? p.id,
               name: p.name,
-              base: e != null ? String(e.supplyBasePrice) : "",
+              base:
+                e?.zoneBasePrice != null && e.zoneBasePrice > 0
+                  ? String(e.zoneBasePrice)
+                  : e != null && e.supplyBasePrice > 0
+                    ? String(e.supplyBasePrice)
+                    : "",
               commission: e != null ? String(e.commissionPerUnit) : "",
             };
           });
@@ -178,7 +184,12 @@ export function FranchiseProductEconomicsSection(props: {
           productId: e.productId,
           sku: e.sku ?? e.productId,
           name: e.productName ?? e.productId,
-          base: String(e.supplyBasePrice),
+          base:
+            e.zoneBasePrice != null && e.zoneBasePrice > 0
+              ? String(e.zoneBasePrice)
+              : e.supplyBasePrice > 0
+                ? String(e.supplyBasePrice)
+                : "",
           commission: String(e.commissionPerUnit),
         }));
         setRows(mapped);
@@ -197,24 +208,34 @@ export function FranchiseProductEconomicsSection(props: {
 
   const tableRows = React.useMemo(() => {
     if (tab !== "catalog" || !catalogOnlyEconomics) return rows;
-    return rows.filter((r) => (Number.parseFloat(r.base) || 0) > 0 || (Number.parseFloat(r.commission) || 0) > 0);
+    return rows.filter(
+      (r) => (Number.parseFloat(r.base) || 0) > 0 || (Number.parseFloat(r.commission) || 0) > 0
+    );
   }, [tab, catalogOnlyEconomics, rows]);
 
-  const updateRow = (productId: string, field: "base" | "commission", value: string) => {
-    setRows((prev) => prev.map((r) => (r.productId === productId ? { ...r, [field]: value } : r)));
+  const updateRow = (productId: string, field: "commission", value: string) => {
+    if (field !== "commission") return;
+    setRows((prev) => prev.map((r) => (r.productId === productId ? { ...r, commission: value } : r)));
   };
 
   const onSave = async () => {
     if (!franchiseeRegistryId) return;
     setSaving(true);
     try {
-      const items = rows.map((r) => ({
-        productId: r.productId,
-        supplyBasePrice: Number.parseFloat(r.base) || 0,
-        commissionPerUnit: Number.parseFloat(r.commission) || 0,
-      }));
+      const items = rows
+        .filter((r) => {
+          const saved = savedByProductId.get(r.productId);
+          if (!saved) {
+            return r.commission.trim() !== "" && (Number.parseFloat(r.commission) || 0) !== 0;
+          }
+          return saved.commission !== r.commission;
+        })
+        .map((r) => ({
+          productId: r.productId,
+          commissionPerUnit: Number.parseFloat(r.commission) || 0,
+        }));
       await putFranchiseeProductEconomicsApi(franchiseeRegistryId, items);
-      toast.success("Product economics saved for this page.");
+      toast.success("Commission overrides saved for this page.");
       setSavedByProductId(snapshotRows(rows));
       setListRefreshTick((t) => t + 1);
     } catch (err) {
@@ -226,11 +247,11 @@ export function FranchiseProductEconomicsSection(props: {
 
   const onRemoveFromShop = async (productId: string) => {
     if (!franchiseeRegistryId) return;
-    if (!window.confirm("Remove supply base and commission for this SKU at this shop?")) return;
+    if (!window.confirm("Remove commission override for this SKU at this shop?")) return;
     setRemovingId(productId);
     try {
       await putFranchiseeProductEconomicsApi(franchiseeRegistryId, [
-        { productId, supplyBasePrice: 0, commissionPerUnit: 0 },
+        { productId, commissionPerUnit: 0 },
       ]);
       toast.success("Removed from this shop.");
       setRows((prev) => prev.filter((r) => r.productId !== productId));
@@ -278,7 +299,7 @@ export function FranchiseProductEconomicsSection(props: {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Product commission (supply base + contract commission)</CardTitle>
+          <CardTitle>Commission overrides</CardTitle>
           <CardDescription>
             This outlet is not linked to an HQ franchisee registry record yet. Use{" "}
             <Link href="/franchise/royalties" className="text-primary underline underline-offset-2">
@@ -300,18 +321,19 @@ export function FranchiseProductEconomicsSection(props: {
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <CardTitle>Product commission per shop</CardTitle>
+          <CardTitle>Commission overrides</CardTitle>
           <CardDescription>
-            Each row is an{" "}
-            <strong className="font-medium text-foreground">outlet–SKU assignment</strong> stored as franchisee
-            economics (supply base + commission in KES). Guide retail = base + commission.{" "}
-            <strong className="font-medium text-foreground">Assigned SKUs (non-zero economics)</strong> lists only
-            outlet–SKU rows where supply base or commission is greater than zero. Save updates only the current page.{" "}
-            <strong className="font-medium text-foreground">Remove</strong> deletes the assignment for that SKU (the row
-            leaves this list; HQ product master is unchanged). On{" "}
-            <strong className="font-medium text-foreground">Full catalogue</strong>, use{" "}
-            <strong className="font-medium text-foreground">Assigned SKUs</strong> or the filter below to see only
-            active assignments. POS selling also depends on published outlet prices.
+            Base price comes from your zone master published prices (read-only). Add commission per SKU if this
+            shop&apos;s guide retail should be higher than the zone base. Guide retail = base + commission.
+            {zoneMasterListId ? (
+              <>
+                {" "}
+                <Link href={`/pricing/price-lists/${zoneMasterListId}`} className="text-primary underline">
+                  Set zone prices
+                </Link>{" "}
+                if base is blank.
+              </>
+            ) : null}
           </CardDescription>
         </div>
         {isDirty ? (
@@ -333,7 +355,7 @@ export function FranchiseProductEconomicsSection(props: {
               Full catalogue
             </TabsTrigger>
             <TabsTrigger value="assigned" className="text-xs sm:text-sm">
-              Assigned SKUs (non-zero economics)
+              SKUs with commission override
             </TabsTrigger>
           </TabsList>
           <TabsContent value="catalog" className="mt-4 space-y-3 outline-none">
@@ -374,7 +396,7 @@ export function FranchiseProductEconomicsSection(props: {
                 onCheckedChange={(v) => setCatalogOnlyEconomics(v === true)}
               />
               <Label htmlFor="catalog-only-economics" className="text-sm font-normal text-muted-foreground">
-                On this page, show only SKUs that already have base or commission
+                On this page, show only SKUs with zone base or commission
               </Label>
             </div>
           </TabsContent>
@@ -410,7 +432,7 @@ export function FranchiseProductEconomicsSection(props: {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Paginated outlet–SKU rows with at least one of supply base or commission greater than zero.
+              SKUs where a commission override has been saved for this shop.
             </p>
           </TabsContent>
         </Tabs>
@@ -424,7 +446,7 @@ export function FranchiseProductEconomicsSection(props: {
                 <tr className="text-left text-muted-foreground">
                   <th className="p-3 font-medium">SKU</th>
                   <th className="p-3 font-medium">Product</th>
-                  <th className="p-3 font-medium w-28">Base</th>
+                  <th className="p-3 font-medium w-28">Base (zone)</th>
                   <th className="p-3 font-medium w-28">Commission</th>
                   <th className="p-3 font-medium w-32">Guide retail</th>
                   <th className="p-3 w-12" />
@@ -456,12 +478,12 @@ export function FranchiseProductEconomicsSection(props: {
                         <td className="p-3">{r.name}</td>
                         <td className="p-2">
                           <Input
-                            className="h-8"
+                            className="h-8 bg-muted/50"
                             inputMode="decimal"
-                            value={r.base}
-                            onChange={(e) => updateRow(r.productId, "base", e.target.value)}
-                            placeholder="0"
-                            aria-label={`Base for ${r.sku}`}
+                            value={r.base || "—"}
+                            readOnly
+                            tabIndex={-1}
+                            aria-label={`Zone base for ${r.sku}`}
                           />
                         </td>
                         <td className="p-2">

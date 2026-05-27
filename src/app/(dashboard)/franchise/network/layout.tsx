@@ -25,7 +25,7 @@ export default function FranchiseNetworkLayout({ children }: { children: React.R
           </Link>
         </nav>
       </div>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }

@@ -167,5 +167,5 @@ export async function sendTestPushNotification(input?: {
   if (!res.ok) {
     throw new Error(data.reason ?? `Test push failed (${res.status})`);
   }
-  return data;
+  return { ...data, sent: data.sent ?? false };
 }

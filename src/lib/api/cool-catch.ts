@@ -76,6 +76,11 @@ export interface FranchiseNetworkOutletRow {
   /** Smart stock-take compliance for the current ISO week. */
   weeklyStockTakeStatus?: "ok" | "due" | "overdue" | "none";
   lastStockTakeSubmittedAt?: string | null;
+  /** HQ-assigned pricing zone (FranchisePricingProfile). */
+  zoneId?: string | null;
+  zoneName?: string | null;
+  priceListId?: string | null;
+  priceListName?: string | null;
 }
 
 export interface FranchiseNetworkSummary {
@@ -475,6 +480,8 @@ export async function createFranchiseeApi(body: {
 export type FranchiseeProductEconomicsRow = {
   id: string;
   productId: string;
+  /** Resolved from zone master published prices (read-only). */
+  zoneBasePrice?: number | null;
   supplyBasePrice: number;
   commissionPerUnit: number;
   guideRetail: number;
@@ -510,7 +517,7 @@ export async function fetchFranchiseeProductEconomicsApi(
 
 export async function putFranchiseeProductEconomicsApi(
   franchiseeId: string,
-  items: Array<{ productId: string; supplyBasePrice: number; commissionPerUnit: number }>
+  items: Array<{ productId: string; commissionPerUnit: number; supplyBasePrice?: number }>
 ): Promise<FranchiseeProductEconomicsRow[]> {
   requireLiveApi("Update franchisee product economics");
   const res = await apiRequest<{ items: FranchiseeProductEconomicsRow[] }>(
@@ -1236,6 +1243,9 @@ export interface OutletSummary {
   /** HQ-assigned outlet catalog price list (`PATCH .../price-list`). */
   priceListId?: string | null;
   priceListName?: string | null;
+  /** HQ-assigned pricing zone (FranchisePricingProfile). */
+  zoneId?: string | null;
+  zoneName?: string | null;
   revenue30d: number;
   orderCount30d: number;
   customerCount: number;

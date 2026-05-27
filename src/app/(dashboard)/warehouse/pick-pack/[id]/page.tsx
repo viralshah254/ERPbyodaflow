@@ -100,6 +100,7 @@ export default function PickPackDetailPage() {
   const [cartons, setCartons] = React.useState("0");
   const [packingNote, setPackingNote] = React.useState("");
   const [courier, setCourier] = React.useState("");
+  const [trackingRef, setTrackingRef] = React.useState("");
   const [batchLabel, setBatchLabel] = React.useState("");
   const [vehicleMode, setVehicleMode] = React.useState<"LEASED" | "SPOT_HIRE">("LEASED");
   const [selectedVehicleId, setSelectedVehicleId] = React.useState<string>("");
