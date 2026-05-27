@@ -3,6 +3,7 @@
  */
 
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
+import { sortProductsByFamilyThenName } from "@/lib/products/product-family";
 import type { DiscountPolicy, PriceList, PriceListChannel } from "@/lib/products/pricing-types";
 
 const ENGINE_TO_CATALOG_LABEL: Record<string, PriceListChannel> = {
@@ -327,9 +328,10 @@ export async function fetchDailyPricesApi(
 ): Promise<DailyPriceListResponse> {
   requireLiveApi("Daily prices");
   const params = date ? `?date=${encodeURIComponent(date)}` : "";
-  return apiRequest<DailyPriceListResponse>(
+  const res = await apiRequest<DailyPriceListResponse>(
     `/api/pricing/price-lists/${encodeURIComponent(priceListId)}/daily-prices${params}`
   );
+  return { ...res, items: sortProductsByFamilyThenName(res.items) };
 }
 
 export async function setDailyPriceApi(
