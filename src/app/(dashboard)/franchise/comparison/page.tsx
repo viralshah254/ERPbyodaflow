@@ -210,7 +210,7 @@ export default function FranchisePerformanceHubPage() {
       header: "",
       accessor: (r: FranchiseNetworkPerformance["outlets"][number]) => (
         <Button variant="ghost" size="sm" asChild>
-          <Link href={`/franchise/${r.outletOrgId}`}>Open</Link>
+          <Link href={`/franchise/outlets/${r.outletOrgId}`}>Open</Link>
         </Button>
       ),
     },

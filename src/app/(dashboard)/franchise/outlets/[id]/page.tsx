@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -31,7 +31,6 @@ import {
   fetchOutletSummary,
   fetchOutletCustomers,
   fetchCustomerNetworkHistory,
-  assignOutletPriceList,
   fetchOutletStock,
   fetchOutletStockTakes,
   fetchOutletSummaryRange,
@@ -49,8 +48,9 @@ import {
 import { fetchOutletEquipmentApi } from "@/lib/api/assets";
 import type { AssetRow } from "@/lib/types/assets";
 import { fetchInboundOrders, type InboundOrderRow } from "@/lib/api/cool-catch";
-import { fetchPriceListsForUi } from "@/lib/api/pricing";
-import { type PriceList } from "@/lib/products/pricing-types";
+import { OutletPricingTab } from "@/components/franchise/outlet-pricing-tab";
+import { OutletEconomicsVmiTab } from "@/components/franchise/outlet-economics-vmi-tab";
+import { fetchFranchiseNetworkOutletById } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { toast } from "sonner";
@@ -797,117 +797,6 @@ function CustomersTab({ outletOrgId }: { outletOrgId: string }) {
   );
 }
 
-// ─── Price List tab ───────────────────────────────────────────────────────────
-
-function PriceListTab({
-  outletOrgId,
-  assignedPriceListId,
-  onAssigned,
-}: {
-  outletOrgId: string;
-  assignedPriceListId?: string | null;
-  onAssigned?: () => void;
-}) {
-  const [priceLists, setPriceLists] = React.useState<PriceList[]>([]);
-  const [selected, setSelected] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    fetchPriceListsForUi()
-      .then((pls) => setPriceLists(pls))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  React.useEffect(() => {
-    if (assignedPriceListId) setSelected(assignedPriceListId);
-    else setSelected("");
-  }, [assignedPriceListId]);
-
-  const handleAssign = async () => {
-    if (!selected) return;
-    setSaving(true);
-    try {
-      await assignOutletPriceList(outletOrgId, selected);
-      toast.success("Price list assigned successfully");
-      onAssigned?.();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not assign price list";
-      const hint =
-        /403|forbidden/i.test(msg) ? " You may need franchise.commission.read on your HQ user." : "";
-      toast.error(msg + hint);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const chosenList = priceLists.find((pl) => pl.id === selected);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Tag size={16} />
-          Assigned price list
-        </CardTitle>
-        <CardDescription>
-          The price list used when HQ creates a sales order to this outlet. Choose a derived list
-          so changes to the master list propagate automatically.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loading ? (
-          <div className="h-10 bg-muted animate-pulse rounded" />
-        ) : (
-          <>
-            <div className="space-y-2">
-              <Label>Price list</Label>
-              <Select value={selected || "__none__"} onValueChange={(v) => setSelected(v === "__none__" ? "" : v)}>
-                <SelectTrigger className="w-72">
-                  <SelectValue placeholder="Select a price list…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— None —</SelectItem>
-                  {priceLists.map((pl) => (
-                    <SelectItem key={pl.id} value={pl.id}>
-                      {pl.name}
-                      {pl.parentName ? ` ← ${pl.parentName}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {chosenList?.parentName && (
-              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm text-blue-800">
-                <p className="font-medium mb-1">Derived price list</p>
-                <p>
-                  Based on <strong>{chosenList.parentName}</strong> with a{" "}
-                  {chosenList.markupType === "PERCENT"
-                    ? `+${chosenList.markupValue}% markup`
-                    : `+${formatMoney(chosenList.markupValue ?? 0, "KES")} flat add-on`}
-                  . HQ price changes cascade automatically.
-                </p>
-              </div>
-            )}
-
-            {selected && !chosenList?.parentName && (
-              <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                Standalone list — prices are set manually.
-              </div>
-            )}
-
-            <Button onClick={() => void handleAssign()} disabled={saving || !selected}>
-              {saving ? "Saving…" : "Save assignment"}
-            </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 // ─── Geo Settings Tab ─────────────────────────────────────────────────────────
@@ -1014,7 +903,9 @@ function GeoSettingsTab({
 
 export default function OutletDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const outletOrgId = params.id as string;
+  const defaultTab = searchParams.get("tab") ?? "overview";
 
   const [summary, setSummary] = React.useState<OutletSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = React.useState(true);
@@ -1022,12 +913,13 @@ export default function OutletDetailPage() {
   const [refreshing, setRefreshing] = React.useState(false);
   const [outletLat, setOutletLat] = React.useState<number | undefined>(undefined);
   const [outletLng, setOutletLng] = React.useState<number | undefined>(undefined);
+  const [franchiseeRegistryId, setFranchiseeRegistryId] = React.useState<string | null>(null);
 
   const loadSummary = React.useCallback(async () => {
     try {
       const [s, networkRow] = await Promise.allSettled([
         fetchOutletSummary(outletOrgId),
-        import("@/lib/api/cool-catch").then((m) => m.fetchFranchiseNetworkOutletById(outletOrgId)),
+        fetchFranchiseNetworkOutletById(outletOrgId),
       ]);
       if (s.status === "fulfilled") {
         setSummary(s.value);
@@ -1036,6 +928,7 @@ export default function OutletDetailPage() {
       if (networkRow.status === "fulfilled" && networkRow.value) {
         setOutletLat(networkRow.value.latitude);
         setOutletLng(networkRow.value.longitude);
+        setFranchiseeRegistryId(networkRow.value.franchiseeRegistryId ?? null);
       }
     } catch {
       // summary may fail if no permissions — silently degrade
@@ -1053,10 +946,10 @@ export default function OutletDetailPage() {
     <PageShell>
       <PageHeader
         title={outletName}
-        description="Per-outlet analytics, customers, orders, and price list assignment."
+        description="Per-outlet analytics, customers, pricing, VMI, and operations."
         breadcrumbs={[
-          { label: "Franchise", href: "/franchise/overview" },
-          { label: "Outlets", href: "/franchise/overview" },
+          { label: "Franchise", href: "/franchise/network/overview" },
+          { label: "Outlets", href: "/franchise/network/outlets" },
           { label: outletName },
         ]}
         sticky
@@ -1064,7 +957,7 @@ export default function OutletDetailPage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/franchise/overview">
+              <Link href="/franchise/network/outlets">
                 <ArrowLeft size={14} className="mr-1" /> Back
               </Link>
             </Button>
@@ -1077,8 +970,8 @@ export default function OutletDetailPage() {
       />
 
       <div className="p-6">
-        <Tabs defaultValue="overview">
-          <TabsList className="mb-6">
+        <Tabs defaultValue={defaultTab} key={defaultTab}>
+          <TabsList className="mb-6 flex flex-wrap h-auto">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="customers">Customers</TabsTrigger>
             <TabsTrigger value="stock" className="gap-1.5">
@@ -1094,7 +987,11 @@ export default function OutletDetailPage() {
               <Cpu size={14} />
               Equipment
             </TabsTrigger>
-            <TabsTrigger value="pricelist">Price List</TabsTrigger>
+            <TabsTrigger value="pricing" className="gap-1.5">
+              <Tag size={14} />
+              Pricing
+            </TabsTrigger>
+            <TabsTrigger value="vmi">Economics & VMI</TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5">
               <Settings2 size={14} />
               Settings
@@ -1125,12 +1022,17 @@ export default function OutletDetailPage() {
             <EquipmentTab outletOrgId={outletOrgId} />
           </TabsContent>
 
-          <TabsContent value="pricelist">
-            <PriceListTab
+          <TabsContent value="pricing">
+            <OutletPricingTab
               outletOrgId={outletOrgId}
               assignedPriceListId={summary?.priceListId ?? null}
+              franchiseeRegistryId={franchiseeRegistryId}
               onAssigned={() => void loadSummary()}
             />
+          </TabsContent>
+
+          <TabsContent value="vmi">
+            <OutletEconomicsVmiTab outletOrgId={outletOrgId} />
           </TabsContent>
 
           <TabsContent value="settings">

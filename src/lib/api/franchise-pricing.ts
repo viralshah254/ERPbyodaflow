@@ -60,3 +60,59 @@ export async function upsertBatchFranchisePricingApi(payload: {
     }
   );
 }
+
+export async function assignOutletPricingZone(
+  outletOrgId: string,
+  zoneId: string
+): Promise<{
+  outletOrgId: string;
+  zoneId: string;
+  profileId: string | null;
+  priceListId: string | null;
+  parentPriceListId: string | null;
+}> {
+  requireLiveApi("Outlet zone assignment");
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/zone`, {
+    method: "PATCH",
+    body: { zoneId },
+  });
+}
+
+export type OutletRetailPricePreviewRow = {
+  productId: string;
+  sku?: string;
+  productName: string;
+  retailPrice: number | null;
+  source: string | null;
+  currency: string;
+  eligible: boolean;
+};
+
+export async function fetchOutletRetailPricePreview(
+  outletOrgId: string,
+  date?: string
+): Promise<{
+  outletOrgId: string;
+  outletName?: string;
+  priceListId: string | null;
+  priceListName: string | null;
+  effectiveDate: string;
+  items: OutletRetailPricePreviewRow[];
+}> {
+  requireLiveApi("Outlet retail price preview");
+  const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+  return apiRequest(
+    `/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/retail-prices/preview${qs}`
+  );
+}
+
+export type PriceListOutletRow = {
+  outletOrgId: string;
+  outletName: string;
+  assignmentType: "direct" | "derived";
+};
+
+export async function fetchOutletsForPriceList(priceListId: string): Promise<{ items: PriceListOutletRow[] }> {
+  requireLiveApi("Price list outlets");
+  return apiRequest(`/api/franchise/hq/price-lists/${encodeURIComponent(priceListId)}/outlets`);
+}

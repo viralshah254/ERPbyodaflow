@@ -24,7 +24,7 @@ export function FranchiseHealthCard({
 }: FranchiseHealthCardProps) {
   const risk = topUpExposure > 0 || openReplenishments > 0 ? "Needs review" : "Healthy";
   return (
-    <Link href={`/franchise/${franchiseeId}`} className="block">
+    <Link href={`/franchise/outlets/${franchiseeId}`} className="block">
       <Card className="transition-opacity hover:opacity-90">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2">

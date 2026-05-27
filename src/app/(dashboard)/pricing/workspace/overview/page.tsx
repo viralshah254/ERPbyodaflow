@@ -154,7 +154,11 @@ export default function PricingOverviewPage() {
                     Open <strong className="text-rose-950 dark:text-rose-100">Price lists</strong>, select the outlet list, run daily review / engine publish so each SKU has today&apos;s selling price.
                   </li>
                   <li>
-                    Ensure each outlet has a <strong className="text-rose-950 dark:text-rose-100">default price list</strong> (Franchise network → outlet).
+                    Ensure each outlet has a <strong className="text-rose-950 dark:text-rose-100">default price list</strong> on the outlet{" "}
+                    <Link href="/franchise/network/outlets" className="text-primary underline">
+                      Pricing tab
+                    </Link>
+                    .
                   </li>
                   <li>
                     Optional legacy <strong className="text-rose-950 dark:text-rose-100">batch franchise pricing</strong> rows still help transfer reference but no longer gate Sell.

@@ -52,7 +52,7 @@ import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { PRICING_ENGINE_CHANNELS, PRICING_MARKET_TIERS } from "@/lib/pricing/engine-types";
+import { PRICING_ENGINE_CHANNELS } from "@/lib/pricing/engine-types";
 
 const CHANNELS = ["Retail", "Wholesale", "Distributor", "ModernTrade", "Export"];
 
@@ -194,10 +194,12 @@ function PriceListsContent() {
         <div className="flex flex-wrap items-start gap-3 rounded-md border bg-muted/30 px-4 py-3 text-sm">
           <Icons.MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
           <div className="text-muted-foreground min-w-[200px] flex-1">
-            <strong className="text-foreground">Franchise outlet minimums</strong> derive from this list&apos;s{" "}
-            <span className="text-foreground">tier</span> (engine margin floors) plus optional{" "}
-            <span className="text-foreground">pricing zone</span> for batch-smart markup rules.
-            Publish engine rows / daily prices for &quot;today&quot; so mobile Sell stays compliant.
+            <strong className="text-foreground">Franchise outlet minimums</strong> derive from the linked{" "}
+            <Link href="/pricing/workspace/zones" className="text-primary underline">
+              pricing zone
+            </Link>{" "}
+            (zone tier sets engine margin floors and markup rules). Publish engine rows / daily prices for
+            &quot;today&quot; so mobile Sell and WhatsApp stay compliant.
           </div>
         </div>
 
@@ -213,10 +215,10 @@ function PriceListsContent() {
                   <TableHead>Name</TableHead>
                   <TableHead>Currency</TableHead>
                   <TableHead>Label</TableHead>
-                  <TableHead>Tier</TableHead>
-                  <TableHead>Zone</TableHead>
+                  <TableHead>Pricing zone</TableHead>
                   <TableHead>Engine</TableHead>
                   <TableHead>Based on</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Products</TableHead>
                   <TableHead>{"Today's prices"}</TableHead>
                   <TableHead className="w-52">Updated</TableHead>
@@ -233,10 +235,9 @@ function PriceListsContent() {
                     <TableCell>
                       <Badge variant="outline">{pl.channel}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs tabular-nums">{pl.tier ?? "—"}</TableCell>
-                    <TableCell className="text-xs max-w-[160px]" title={pl.zoneId ?? undefined}>
+                    <TableCell className="text-xs max-w-[200px]" title={pl.zoneId ?? undefined}>
                       {!pl.zoneId ? (
-                        "—"
+                        <span className="text-muted-foreground">— assign zone</span>
                       ) : zoneLabelById.has(pl.zoneId) ? (
                         <span>{zoneLabelById.get(pl.zoneId)}</span>
                       ) : (
@@ -264,6 +265,17 @@ function PriceListsContent() {
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {pl.channel === "FRANCHISE" || pl.channel === "Franchise" ? (
+                        pl.parentPriceListId ? (
+                          <Badge variant="secondary">Outlet derived</Badge>
+                        ) : (
+                          <Badge variant="outline">Zone / master</Badge>
+                        )
+                      ) : (
+                        "—"
                       )}
                     </TableCell>
                     <TableCell>{productCountByList.get(pl.id) ?? 0}</TableCell>
@@ -363,7 +375,6 @@ function PriceListsContent() {
                   channel: pl.pricingEngineChannel?.trim()
                     ? pl.pricingEngineChannel.trim()
                     : null,
-                  tier: pl.tier?.trim() ? pl.tier.trim() : null,
                   zoneId: pl.zoneId?.trim() ? pl.zoneId.trim() : null,
                   parentPriceListId: pl.parentPriceListId ?? null,
                   markupType: pl.markupType ?? null,
@@ -375,7 +386,6 @@ function PriceListsContent() {
                   currency: pl.currency,
                   code: pl.code || undefined,
                   channel: pl.pricingEngineChannel?.trim() ? pl.pricingEngineChannel.trim() : undefined,
-                  tier: pl.tier?.trim() ? pl.tier.trim() : undefined,
                   zoneId: pl.zoneId?.trim() ? pl.zoneId.trim() : undefined,
                   parentPriceListId: pl.parentPriceListId,
                   markupType: pl.markupType,
@@ -478,7 +488,6 @@ function PriceListSheet({
     currency: string;
     code: string;
     pricingEngineChannel?: string;
-    tier?: string;
     zoneId?: string;
     isDefault?: boolean;
     parentPriceListId?: string;
@@ -490,7 +499,6 @@ function PriceListSheet({
   const [name, setName] = React.useState(initial?.name ?? "");
   const [currency, setCurrency] = React.useState(initial?.currency ?? "KES");
   const [catalogLabel, setCatalogLabel] = React.useState(initial?.channel ?? "Retail");
-  const [tier, setTier] = React.useState(initial?.tier ?? "__none__");
   const [pricingChannel, setPricingChannel] = React.useState(initial?.pricingEngineChannel ?? "__none__");
   const [zoneId, setZoneId] = React.useState(initial?.zoneId ?? "");
   const [isDefault, setIsDefault] = React.useState(!!initial?.isDefault);
@@ -504,7 +512,6 @@ function PriceListSheet({
     setName(initial?.name ?? "");
     setCurrency(initial?.currency ?? "KES");
     setCatalogLabel(initial?.channel ?? "Retail");
-    setTier(initial?.tier ?? "__none__");
     setPricingChannel(initial?.pricingEngineChannel ?? "__none__");
     setZoneId(initial?.zoneId ?? "");
     setIsDefault(!!initial?.isDefault);
@@ -521,7 +528,6 @@ function PriceListSheet({
       name: name.trim(),
       currency,
       code: catalogLabel,
-      tier: tier === "__none__" ? undefined : tier,
       pricingEngineChannel: pricingChannel === "__none__" ? undefined : pricingChannel,
       zoneId: zoneId.trim() || undefined,
       isDefault: isDefault || undefined,
@@ -540,7 +546,7 @@ function PriceListSheet({
         <SheetHeader>
           <SheetTitle>{initial ? "Edit price list" : "Add price list"}</SheetTitle>
           <SheetDescription>
-            Name, currency, display label and optional pricing-engine targeting (tier / zone).
+            Name, currency, display label, pricing channel, and pricing zone (tier is defined on the zone).
           </SheetDescription>
         </SheetHeader>
         <div className="space-y-4 py-6">
@@ -574,18 +580,6 @@ function PriceListSheet({
             </Select>
           </div>
           <div>
-            <Label>Pricing tier (engine)</Label>
-            <Select value={tier} onValueChange={setTier}>
-              <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Not set</SelectItem>
-                {PRICING_MARKET_TIERS.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
             <Label>Pricing channel (engine)</Label>
             <Select value={pricingChannel} onValueChange={setPricingChannel}>
               <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
@@ -600,8 +594,11 @@ function PriceListSheet({
           <div>
             <Label>Pricing zone</Label>
             <p className="text-xs text-muted-foreground mb-1.5">
-              Links batch-smart markup rules by zone for franchise outlet lists. Zones are maintained under Pricing → Pricing rules /
-              inventory zone APIs.
+              Tier and markup rules come from the zone. Manage zones under{" "}
+              <Link href="/pricing/workspace/zones" className="text-primary underline">
+                Pricing → Franchise zones
+              </Link>
+              .
             </p>
             <Select
               value={zoneSelectValue}
@@ -615,8 +612,6 @@ function PriceListSheet({
                   return;
                 }
                 setZoneId(v);
-                const z = pricingZones.find((row) => row.id === v);
-                if (z?.tier && tier === "__none__") setTier(z.tier);
               }}
             >
               <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
@@ -633,6 +628,12 @@ function PriceListSheet({
                 <SelectItem value="__custom__">Other — paste zone id</SelectItem>
               </SelectContent>
             </Select>
+            {zoneSelectValue !== "__none__" && zoneSelectValue !== "__custom__" && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Engine tier:{" "}
+                <strong>{pricingZones.find((z) => z.id === zoneId.trim())?.tier ?? "—"}</strong>
+              </p>
+            )}
             {zoneSelectValue === "__custom__" && (
               <Input
                 className="mt-2 font-mono text-xs"

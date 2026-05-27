@@ -405,7 +405,7 @@ export default function FranchiseOutletsPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenuItem asChild>
-                              <Link href={`/franchise/${o.id}`}>View</Link>
+                              <Link href={`/franchise/outlets/${o.id}`}>View</Link>
                             </DropdownMenuItem>
                             {canAdd ? (
                               <>

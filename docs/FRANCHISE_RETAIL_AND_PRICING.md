@@ -45,7 +45,7 @@
 
 2. **Alerts:** `GET /api/franchise/hq/batch-franchise-pricing/alerts` — surfaced on **Pricing → Overview**.
 
-3. **Outlet price list** (suggested retail ladder): **Franchise → Manage franchisees → &lt;outlet&gt; → Price List** — `PATCH /api/franchise/outlets/:id/price-list` with `{ "priceListId": "..." }`. The outlet detail **Overview** summary (`GET /api/franchise/outlets/:id/summary`) returns **`priceListId` / `priceListName`** so the Price List tab reflects the saved assignment after refresh.
+3. **Outlet price list** (suggested retail ladder): **Franchise → Network → outlet → Pricing tab** — `PATCH /api/franchise/outlets/:id/price-list` with `{ "priceListId": "..." }`. Assigning a zone master auto-creates a derived outlet list. The outlet **Pricing** tab shows list assignment, zone, economics, and WhatsApp price preview.
 
 4. **Price list ≠ Sell gate:** Outlet assignment feeds `resolveOutletPriceListId` but **mobile Sell** still filters to SKUs with **released** batch rows (`hasReleasedBatchPricing`). Use **Orders → Request stock** / `stockRequestCatalog=true` on `GET /products` when HQ needs reorder lines without batch release.
 

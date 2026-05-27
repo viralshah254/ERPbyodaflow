@@ -42,6 +42,7 @@ import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FranchiseOutletsPanel } from "@/components/pricing/franchise-outlets-panel";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -389,6 +390,7 @@ export default function PriceListViewPage() {
         />
 
         <div className="p-6 space-y-4">
+          <FranchiseOutletsPanel priceListId={priceListId} />
           {data && isApiConfigured() && (
             <PricingEnginePanel priceListId={priceListId} currency={data.currency} />
           )}

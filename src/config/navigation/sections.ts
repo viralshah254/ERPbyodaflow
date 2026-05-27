@@ -431,6 +431,13 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             moduleKey: "pricing",
           },
           {
+            key: "pricing-workspace-zones",
+            label: "Franchise zones",
+            href: "/pricing/workspace/zones",
+            icon: "MapPin",
+            moduleKey: "pricing",
+          },
+          {
             key: "pricing-workspace-approvals",
             label: "Approvals",
             href: "/pricing/workspace/approvals",

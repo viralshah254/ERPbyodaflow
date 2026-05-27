@@ -91,3 +91,37 @@ export async function fetchPricingZones(): Promise<PricingZoneRow[]> {
   const res = await apiRequest<{ items: PricingZoneRow[] }>("/api/pricing-engine/zones");
   return res.items ?? [];
 }
+
+export interface FranchisePricingProfileRow {
+  id: string;
+  franchiseId: string;
+  zoneId: string;
+  tier?: string;
+  isActive?: boolean;
+}
+
+export async function fetchFranchisePricingProfiles(): Promise<FranchisePricingProfileRow[]> {
+  requireLiveApi("Franchise pricing profiles");
+  const res = await apiRequest<{ items: FranchisePricingProfileRow[] }>(
+    "/api/pricing-engine/franchise-profiles"
+  );
+  return res.items ?? [];
+}
+
+export async function createPricingZone(body: {
+  name: string;
+  tier: string;
+  description?: string;
+}): Promise<PricingZoneRow> {
+  requireLiveApi("Create pricing zone");
+  return apiRequest("/api/pricing-engine/zones", { method: "POST", body });
+}
+
+export async function createFranchisePricingProfile(body: {
+  franchiseId: string;
+  zoneId: string;
+  tier: string;
+}): Promise<FranchisePricingProfileRow> {
+  requireLiveApi("Create franchise pricing profile");
+  return apiRequest("/api/pricing-engine/franchise-profiles", { method: "POST", body });
+}
