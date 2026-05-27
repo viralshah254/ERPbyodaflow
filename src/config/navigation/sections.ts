@@ -143,6 +143,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "warehouse-overview", label: "Warehouse Overview", href: "/warehouse/overview", icon: "LayoutDashboard", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "warehouse-transfers", label: "Transfers", href: "/warehouse/transfers", icon: "Truck", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
       { key: "warehouse-pick-pack", label: "Pick & Pack", href: "/warehouse/pick-pack", icon: "PackageCheck", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
+      { key: "warehouse-dispatch-returns", label: "Driver returns", href: "/warehouse/dispatch-returns", icon: "Undo2", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
       { key: "warehouse-putaway", label: "Putaway", href: "/warehouse/putaway", icon: "MapPin", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
       { key: "warehouse-bin-locations", label: "Bin locations", href: "/warehouse/bin-locations", icon: "LayoutGrid", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "warehouse-cycle-counts", label: "Cycle counts", href: "/warehouse/cycle-counts", icon: "ClipboardCheck", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },

@@ -93,6 +93,29 @@ type BackendDispatchPickup = {
   lines: BackendDispatchPickupLine[];
 };
 
+type BackendDeliveryCheckIn = {
+  checkedInAt: string | Date;
+  checkedInByUserId?: string;
+  latitude: number;
+  longitude: number;
+  distanceM: number;
+  withinGeofence: boolean;
+  geofenceRadiusM: number;
+};
+
+type BackendWarehouseDrop = {
+  droppedAt: string | Date;
+  droppedByUserId?: string;
+  dispatcherName: string;
+  signatureAttachmentId: string;
+  warehouseId: string;
+  note?: string;
+  lines: Array<{ lineId: string; droppedWeightKg: number; varianceReason?: string }>;
+  draftGrnId?: string;
+  receivedAt?: string | Date;
+  receivedByUserId?: string;
+};
+
 type BackendDocumentDetail = {
   id: string;
   number: string;
@@ -141,6 +164,8 @@ type BackendDocumentDetail = {
   documentChain?: ChainNode[];
   podConfirmation?: BackendPodConfirmation;
   dispatchPickup?: BackendDispatchPickup;
+  deliveryCheckIn?: BackendDeliveryCheckIn;
+  warehouseDrop?: BackendWarehouseDrop;
 };
 
 type ChainNode = {
@@ -439,6 +464,41 @@ function mapDocumentDetail(
             loadedWeightKg: ln.loadedWeightKg,
             ...(ln.varianceReason ? { varianceReason: ln.varianceReason } : {}),
           })),
+        }
+      : undefined,
+    deliveryCheckIn: payload.deliveryCheckIn
+      ? {
+          checkedInAt:
+            typeof payload.deliveryCheckIn.checkedInAt === "string"
+              ? payload.deliveryCheckIn.checkedInAt
+              : new Date(payload.deliveryCheckIn.checkedInAt).toISOString(),
+          checkedInByUserId: payload.deliveryCheckIn.checkedInByUserId,
+          latitude: payload.deliveryCheckIn.latitude,
+          longitude: payload.deliveryCheckIn.longitude,
+          distanceM: payload.deliveryCheckIn.distanceM,
+          withinGeofence: payload.deliveryCheckIn.withinGeofence,
+          geofenceRadiusM: payload.deliveryCheckIn.geofenceRadiusM,
+        }
+      : undefined,
+    warehouseDrop: payload.warehouseDrop
+      ? {
+          droppedAt:
+            typeof payload.warehouseDrop.droppedAt === "string"
+              ? payload.warehouseDrop.droppedAt
+              : new Date(payload.warehouseDrop.droppedAt).toISOString(),
+          droppedByUserId: payload.warehouseDrop.droppedByUserId,
+          dispatcherName: payload.warehouseDrop.dispatcherName,
+          signatureAttachmentId: payload.warehouseDrop.signatureAttachmentId,
+          warehouseId: payload.warehouseDrop.warehouseId,
+          note: payload.warehouseDrop.note,
+          lines: payload.warehouseDrop.lines ?? [],
+          draftGrnId: payload.warehouseDrop.draftGrnId,
+          receivedAt: payload.warehouseDrop.receivedAt
+            ? typeof payload.warehouseDrop.receivedAt === "string"
+              ? payload.warehouseDrop.receivedAt
+              : new Date(payload.warehouseDrop.receivedAt).toISOString()
+            : undefined,
+          receivedByUserId: payload.warehouseDrop.receivedByUserId,
         }
       : undefined,
   };

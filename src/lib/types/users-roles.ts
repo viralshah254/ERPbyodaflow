@@ -2,6 +2,7 @@ export type MobilePersona =
   | "owner_admin_web"
   | "procurement_mobile"
   | "dispatch_mobile"
+  | "warehouse_mobile"
   | "logistics_mobile"
   | "franchise_network_mobile"
   | "franchise_outlet";
@@ -11,6 +12,7 @@ export const MOBILE_PERSONA_LABELS: Record<MobilePersona, string> = {
   owner_admin_web: "Web (admin)",
   procurement_mobile: "Mobile: Procurement",
   dispatch_mobile: "Mobile: Dispatch",
+  warehouse_mobile: "Mobile: Warehouse",
   logistics_mobile: "Mobile: Logistics",
   franchise_network_mobile: "Mobile: Franchise Network",
   franchise_outlet: "Mobile: Outlet",

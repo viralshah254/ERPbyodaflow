@@ -881,7 +881,10 @@ export default function DocViewPage() {
                 ) : null}
                 {type === "delivery-note" &&
                   document &&
-                  (document.dispatchPickup || document.podConfirmation?.confirmedAt) && (
+                  (document.dispatchPickup ||
+                    document.deliveryCheckIn ||
+                    document.warehouseDrop ||
+                    document.podConfirmation?.confirmedAt) && (
                     <div className="mt-4 pt-4 border-t space-y-6 text-sm">
                       {document.dispatchPickup ? (
                         <div className="space-y-2">
@@ -931,6 +934,52 @@ export default function DocViewPage() {
                               );
                             })}
                           </div>
+                        </div>
+                      ) : null}
+
+                      {document.deliveryCheckIn ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Customer check-in
+                          </p>
+                          <p>
+                            {new Date(document.deliveryCheckIn.checkedInAt).toLocaleString(undefined, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                            {document.deliveryCheckIn.withinGeofence
+                              ? ` · On premises (${Math.round(document.deliveryCheckIn.distanceM)} m)`
+                              : " · Outside geofence"}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {document.warehouseDrop ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Warehouse return
+                          </p>
+                          <p>
+                            Dropped{" "}
+                            {new Date(document.warehouseDrop.droppedAt).toLocaleString(undefined, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })}
+                            {document.warehouseDrop.dispatcherName
+                              ? ` · ${document.warehouseDrop.dispatcherName}`
+                              : ""}
+                          </p>
+                          {document.warehouseDrop.receivedAt ? (
+                            <p className="text-muted-foreground">
+                              Stock posted{" "}
+                              {new Date(document.warehouseDrop.receivedAt).toLocaleString(undefined, {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              })}
+                            </p>
+                          ) : (
+                            <p className="text-amber-700 dark:text-amber-400">Awaiting warehouse weigh & post</p>
+                          )}
                         </div>
                       ) : null}
 

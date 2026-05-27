@@ -141,6 +141,35 @@ export type DispatchPickupRecord = {
   lines: DispatchPickupLineRecord[];
 };
 
+export type DeliveryCheckInRecord = {
+  checkedInAt: string;
+  checkedInByUserId?: string;
+  latitude: number;
+  longitude: number;
+  distanceM: number;
+  withinGeofence: boolean;
+  geofenceRadiusM: number;
+};
+
+export type WarehouseDropLineRecord = {
+  lineId: string;
+  droppedWeightKg: number;
+  varianceReason?: string;
+};
+
+export type WarehouseDropRecord = {
+  droppedAt: string;
+  droppedByUserId?: string;
+  dispatcherName: string;
+  signatureAttachmentId: string;
+  warehouseId: string;
+  note?: string;
+  lines: WarehouseDropLineRecord[];
+  draftGrnId?: string;
+  receivedAt?: string;
+  receivedByUserId?: string;
+};
+
 export type DocumentDetailRecord = {
   id: string;
   type: DocTypeKey;
@@ -228,6 +257,8 @@ export type DocumentDetailRecord = {
   podConfirmation?: PodConfirmationRecord;
   /** Driver pickup / collection weights (delivery-note only). */
   dispatchPickup?: DispatchPickupRecord;
+  deliveryCheckIn?: DeliveryCheckInRecord;
+  warehouseDrop?: WarehouseDropRecord;
 };
 
 export type DocumentChainNode = {
