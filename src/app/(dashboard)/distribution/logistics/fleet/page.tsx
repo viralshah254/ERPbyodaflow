@@ -28,7 +28,12 @@ import {
   createDistributionVehicle,
   updateDistributionVehicle,
   deleteDistributionVehicle,
+  fetchVehiclePeriodSummary,
+  uploadVehiclePeriodInvoice,
+  markVehiclePeriodPaid,
+  currentPeriodKey,
   type DistributionVehicleRow,
+  type VehiclePeriodSummary,
 } from "@/lib/api/logistics";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -67,6 +72,55 @@ export default function FleetPage() {
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = React.useState<DistributionVehicleRow | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+
+  const leasedVehicles = React.useMemo(
+    () => vehicles.filter((v) => v.type === "LEASED"),
+    [vehicles]
+  );
+  const [invoiceVehicleId, setInvoiceVehicleId] = React.useState("");
+  const [invoicePeriodKey, setInvoicePeriodKey] = React.useState(currentPeriodKey());
+  const [periodSummary, setPeriodSummary] = React.useState<VehiclePeriodSummary | null>(null);
+  const [invoiceAmount, setInvoiceAmount] = React.useState("");
+  const [invoiceFile, setInvoiceFile] = React.useState<File | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = React.useState(false);
+  const [invoiceUploading, setInvoiceUploading] = React.useState(false);
+  const [markingPaid, setMarkingPaid] = React.useState(false);
+
+  const loadPeriodSummary = React.useCallback(async (vehicleId: string, periodKey: string) => {
+    if (!vehicleId) {
+      setPeriodSummary(null);
+      return;
+    }
+    setInvoiceLoading(true);
+    try {
+      const s = await fetchVehiclePeriodSummary(vehicleId, periodKey);
+      setPeriodSummary(s);
+      const vehicle = leasedVehicles.find((v) => v.id === vehicleId);
+      setInvoiceAmount(
+        s.invoiceAmountKes != null
+          ? String(s.invoiceAmountKes)
+          : vehicle?.monthlyCost != null
+            ? String(vehicle.monthlyCost)
+            : ""
+      );
+    } catch {
+      setPeriodSummary(null);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  }, [leasedVehicles]);
+
+  React.useEffect(() => {
+    if (!invoiceVehicleId && leasedVehicles.length === 1) {
+      setInvoiceVehicleId(leasedVehicles[0]!.id);
+    }
+  }, [leasedVehicles, invoiceVehicleId]);
+
+  React.useEffect(() => {
+    if (invoiceVehicleId) {
+      void loadPeriodSummary(invoiceVehicleId, invoicePeriodKey);
+    }
+  }, [invoiceVehicleId, invoicePeriodKey, loadPeriodSummary]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -147,6 +201,52 @@ export default function FleetPage() {
       toast.error(e instanceof Error ? e.message : "Failed to save.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUploadInvoice() {
+    if (!invoiceVehicleId) {
+      toast.error("Choose a leased vehicle.");
+      return;
+    }
+    const amount = parseFloat(invoiceAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid invoice amount.");
+      return;
+    }
+    if (!invoiceFile) {
+      toast.error("Select an invoice file to upload.");
+      return;
+    }
+    setInvoiceUploading(true);
+    try {
+      await uploadVehiclePeriodInvoice({
+        vehicleId: invoiceVehicleId,
+        periodKey: invoicePeriodKey,
+        invoiceAmountKes: amount,
+        file: invoiceFile,
+      });
+      toast.success("Lease invoice uploaded.");
+      setInvoiceFile(null);
+      await loadPeriodSummary(invoiceVehicleId, invoicePeriodKey);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setInvoiceUploading(false);
+    }
+  }
+
+  async function handleMarkPaid() {
+    if (!invoiceVehicleId) return;
+    setMarkingPaid(true);
+    try {
+      await markVehiclePeriodPaid({ vehicleId: invoiceVehicleId, periodKey: invoicePeriodKey });
+      toast.success("Lease marked as paid.");
+      await loadPeriodSummary(invoiceVehicleId, invoicePeriodKey);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not mark paid.");
+    } finally {
+      setMarkingPaid(false);
     }
   }
 
@@ -244,6 +344,130 @@ export default function FleetPage() {
             )}
           </CardContent>
         </Card>
+
+        {leasedVehicles.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Monthly lease invoices</CardTitle>
+              <CardDescription>
+                Upload the lessor invoice each month before payment and period close. Lease cost is split across completed trips at month end.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Leased vehicle</Label>
+                  <Select
+                    value={invoiceVehicleId || "__pick__"}
+                    onValueChange={(v) => {
+                      setInvoiceVehicleId(v === "__pick__" ? "" : v);
+                      setInvoiceAmount("");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select vehicle" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__pick__">Choose vehicle…</SelectItem>
+                      {leasedVehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.code}
+                          {v.name ? ` — ${v.name}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Period</Label>
+                  <Input
+                    placeholder="YYYY-MM"
+                    value={invoicePeriodKey}
+                    onChange={(e) => setInvoicePeriodKey(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {invoiceLoading ? (
+                <p className="text-sm text-muted-foreground">Loading period…</p>
+              ) : periodSummary && invoiceVehicleId ? (
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">{periodSummary.paymentStatus ?? "PENDING_INVOICE"}</Badge>
+                    {periodSummary.status === "CLOSED" && <Badge variant="secondary">Period closed</Badge>}
+                  </div>
+                  <p>
+                    Trips this month: <span className="font-medium">{periodSummary.tripCount ?? 0}</span>
+                    {periodSummary.leasePerTripKes != null && periodSummary.tripCount
+                      ? ` · ${formatMoney(periodSummary.leasePerTripKes, "KES")} lease / trip`
+                      : ""}
+                  </p>
+                  <p>
+                    Fuel: {formatMoney(periodSummary.fuelTotalKes ?? 0, "KES")}
+                    {periodSummary.totalDistanceKm != null
+                      ? ` · Distance: ${periodSummary.totalDistanceKm.toFixed(1)} km`
+                      : ""}
+                  </p>
+                  {periodSummary.invoiceUploadedAt && (
+                    <p className="text-muted-foreground">
+                      Invoice uploaded {new Date(periodSummary.invoiceUploadedAt).toLocaleString()}
+                      {periodSummary.invoiceAmountKes != null
+                        ? ` · ${formatMoney(periodSummary.invoiceAmountKes, "KES")}`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
+              {periodSummary?.status !== "CLOSED" && (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Invoice amount (KES)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="45000"
+                        value={invoiceAmount}
+                        onChange={(e) => setInvoiceAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Invoice file</Label>
+                      <Input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => setInvoiceFile(e.target.files?.[0] ?? null)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => void handleUploadInvoice()}
+                      disabled={invoiceUploading || !invoiceVehicleId}
+                    >
+                      {invoiceUploading ? "Uploading…" : "Upload invoice"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleMarkPaid()}
+                      disabled={
+                        markingPaid ||
+                        !invoiceVehicleId ||
+                        periodSummary?.paymentStatus === "PAID" ||
+                        !periodSummary?.invoiceAttachmentId
+                      }
+                    >
+                      {markingPaid ? "Saving…" : "Mark paid"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Add / Edit sheet */}
@@ -342,7 +566,7 @@ export default function FleetPage() {
                     onChange={(e) => setForm((f) => ({ ...f, assumedTripsPerMonth: e.target.value }))}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Used to amortise the monthly lease cost per trip (monthly cost ÷ assumed trips).
+                    Fallback estimate only — actual lease is split by completed trips at month end after invoice upload.
                   </p>
                 </div>
               </>

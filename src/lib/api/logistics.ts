@@ -1,7 +1,7 @@
 /**
- * Outbound logistics: fuel audit, DN allocation read, vehicle period close.
+ * Outbound logistics: fuel audit, DN allocation read, vehicle period close, lease invoices.
  */
-import { apiRequest, requireLiveApi } from "@/lib/api/client";
+import { apiRequest, requireLiveApi, uploadFormData } from "@/lib/api/client";
 
 export type DistributionVehicleRow = {
   id: string;
@@ -31,13 +31,18 @@ export async function fetchDistributionVehicles(params?: {
 export type FuelEventRow = {
   id: string;
   vehicleId: string;
+  vehicleCode?: string;
+  vehicleName?: string;
   tripId?: string;
+  tripReference?: string;
+  tripBatchLabel?: string;
   odometerKm?: number;
   litres?: number;
   amount: number;
   currency?: string;
   recordedAt: string;
   note?: string;
+  attachmentIds?: string[];
 };
 
 export async function createDistributionVehicle(body: {
@@ -91,6 +96,89 @@ export async function fetchFuelEvents(params?: {
     params: Object.keys(q).length ? q : undefined,
   });
   return res?.items ?? [];
+}
+
+export async function createFuelEvent(params: {
+  vehicleId: string;
+  tripId?: string;
+  odometerKm: number;
+  litres?: number;
+  amount: number;
+  currency?: string;
+  note?: string;
+  recordedAt?: string;
+  file?: File;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create fuel event");
+  const form = new FormData();
+  form.append("vehicleId", params.vehicleId);
+  if (params.tripId) form.append("tripId", params.tripId);
+  form.append("odometerKm", String(params.odometerKm));
+  if (params.litres != null) form.append("litres", String(params.litres));
+  form.append("amount", String(params.amount));
+  if (params.currency) form.append("currency", params.currency);
+  if (params.note) form.append("note", params.note);
+  if (params.recordedAt) form.append("recordedAt", params.recordedAt);
+  if (params.file) form.append("file", params.file);
+
+  return uploadFormData("/api/distribution/fuel-events", form);
+}
+
+export type VehiclePeriodSummary = {
+  periodKey: string;
+  status: "OPEN" | "CLOSED";
+  paymentStatus?: "PENDING_INVOICE" | "READY_TO_PAY" | "PAID";
+  invoiceAttachmentId?: string;
+  invoiceAmountKes?: number;
+  invoiceUploadedAt?: string;
+  tripCount?: number;
+  leasePerTripKes?: number;
+  fuelTotalKes?: number;
+  totalDistanceKm?: number;
+  paidAt?: string;
+};
+
+export function currentPeriodKey(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+export async function fetchVehiclePeriodSummary(
+  vehicleId: string,
+  periodKey?: string
+): Promise<VehiclePeriodSummary> {
+  requireLiveApi("Vehicle period");
+  const params: Record<string, string> = {};
+  if (periodKey) params.periodKey = periodKey;
+  return apiRequest(`/api/distribution/vehicles/${encodeURIComponent(vehicleId)}/periods`, { params });
+}
+
+export async function uploadVehiclePeriodInvoice(params: {
+  vehicleId: string;
+  periodKey: string;
+  invoiceAmountKes: number;
+  file: File;
+}): Promise<{ periodId: string; attachmentId: string }> {
+  requireLiveApi("Upload lease invoice");
+  const form = new FormData();
+  form.append("invoiceAmountKes", String(params.invoiceAmountKes));
+  form.append("file", params.file);
+  return uploadFormData(
+    `/api/distribution/vehicles/${encodeURIComponent(params.vehicleId)}/periods/${encodeURIComponent(params.periodKey)}/invoice`,
+    form
+  );
+}
+
+export async function markVehiclePeriodPaid(params: {
+  vehicleId: string;
+  periodKey: string;
+}): Promise<{ ok: boolean; paymentStatus?: string; paidAt?: string }> {
+  requireLiveApi("Mark lease paid");
+  return apiRequest(
+    `/api/distribution/vehicles/${encodeURIComponent(params.vehicleId)}/periods/${encodeURIComponent(params.periodKey)}/mark-paid`,
+    { method: "POST", body: {} }
+  );
 }
 
 export type OutboundLogisticsAllocationRow = {

@@ -496,6 +496,8 @@ export type FetchFranchiseeProductEconomicsParams = {
   includeProductDetails?: boolean;
   /** HQ product text search; only applied when fetching paged assigned rows (`limit` without `productIds`). */
   search?: string;
+  /** Outlet child org id — ensures zone base prices resolve from the outlet's assigned pricing zone. */
+  outletOrgId?: string;
 };
 
 export async function fetchFranchiseeProductEconomicsApi(
@@ -509,6 +511,7 @@ export async function fetchFranchiseeProductEconomicsApi(
   if (params?.cursor != null && params.cursor !== "") sp.set("cursor", params.cursor);
   if (params?.includeProductDetails) sp.set("includeProductDetails", "true");
   if (params?.search?.trim()) sp.set("search", params.search.trim());
+  if (params?.outletOrgId?.trim()) sp.set("outletOrgId", params.outletOrgId.trim());
   const qs = sp.toString();
   const path = `/api/franchise/franchisees/${encodeURIComponent(franchiseeId)}/product-economics${qs ? `?${qs}` : ""}`;
   const res = await apiRequest<{ items: FranchiseeProductEconomicsRow[]; nextCursor?: string | null }>(path);
@@ -1243,6 +1246,9 @@ export interface OutletSummary {
   /** HQ-assigned outlet catalog price list (`PATCH .../price-list`). */
   priceListId?: string | null;
   priceListName?: string | null;
+  /** False when stored list id is missing from HQ register (re-save zone to repair). */
+  priceListValid?: boolean;
+  zoneMasterPriceListId?: string | null;
   /** HQ-assigned pricing zone (FranchisePricingProfile). */
   zoneId?: string | null;
   zoneName?: string | null;

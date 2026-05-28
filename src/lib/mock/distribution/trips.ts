@@ -15,6 +15,16 @@ export interface TripCostLineRow {
   reference?: string;
 }
 
+export interface TripLegRow {
+  sequence: number;
+  eventType: "PROCESSOR_RECEIVE" | "DISPATCH_PICKUP" | "DELIVERY_CHECKIN" | "POD";
+  documentId?: string;
+  latitude: number;
+  longitude: number;
+  recordedAt: string;
+  distanceFromPrevKm?: number;
+}
+
 export interface TripRow {
   id: string;
   reference: string;
@@ -24,12 +34,15 @@ export interface TripRow {
   vehicleCode?: string;
   carrier?: string;
   deliveryNoteIds?: string[];
+  allocationBasis?: string;
   plannedAt: string;
   completedAt?: string;
   status: TripStatus;
   totalCost?: number;
   currency: string;
   costLines?: TripCostLineRow[];
+  legs?: TripLegRow[];
+  totalDistanceKm?: number;
 }
 
 export const MOCK_TRIPS: TripRow[] = [

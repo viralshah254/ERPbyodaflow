@@ -22,7 +22,7 @@ export async function fetchWarehouseLocations(warehouseId: string): Promise<Ware
 export async function createWarehouseLocation(
   warehouseId: string,
   payload: { type: "BIN" | "ZONE" | "RACK"; name: string; code?: string; parentId?: string }
-): Promise<{ id: string; name: string }> {
+): Promise<{ id: string; name: string; code?: string }> {
   requireLiveApi("Create warehouse location");
   return apiRequest(`/api/master/warehouses/${encodeURIComponent(warehouseId)}/locations`, {
     method: "POST",

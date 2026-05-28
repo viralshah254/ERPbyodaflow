@@ -184,11 +184,52 @@ export default function TripDetailPage() {
                   <p className="font-medium">{trip.totalCost != null ? formatMoney(trip.totalCost, trip.currency) : "—"}</p>
                 </div>
                 <div>
+                  <p className="text-muted-foreground">Total distance</p>
+                  <p className="font-medium">
+                    {trip.totalDistanceKm != null ? `${trip.totalDistanceKm.toFixed(1)} km` : "—"}
+                  </p>
+                </div>
+                <div>
                   <p className="text-muted-foreground">Ownership / Lane</p>
                   <OwnershipLocationBadge owner="CoolCatch" location={trip.type === "INBOUND" ? "Inbound to hub" : "Outbound dispatch"} />
                 </div>
               </CardContent>
             </Card>
+
+            {(trip.legs?.length ?? 0) > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Route legs</CardTitle>
+                  <CardDescription>GPS captured at sign events — haversine distance between stops.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Event</TableHead>
+                        <TableHead>Coordinates</TableHead>
+                        <TableHead className="text-right">Leg km</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {trip.legs!.map((leg) => (
+                        <TableRow key={`${leg.sequence}-${leg.eventType}`}>
+                          <TableCell>{leg.sequence}</TableCell>
+                          <TableCell>{leg.eventType.replace(/_/g, " ")}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {leg.latitude.toFixed(5)}, {leg.longitude.toFixed(5)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {leg.distanceFromPrevKm != null ? leg.distanceFromPrevKm.toFixed(2) : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

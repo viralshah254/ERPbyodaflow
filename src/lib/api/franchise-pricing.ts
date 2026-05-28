@@ -98,6 +98,8 @@ export async function fetchOutletRetailPricePreview(
   outletName?: string;
   priceListId: string | null;
   priceListName: string | null;
+  priceListValid?: boolean;
+  zoneMasterPriceListId?: string | null;
   effectiveDate: string;
   items: OutletRetailPricePreviewRow[];
 }> {

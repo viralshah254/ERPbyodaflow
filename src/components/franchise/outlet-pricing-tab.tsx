@@ -34,6 +34,7 @@ import { pickCanonicalZoneMaster } from "@/lib/pricing/franchise-zone-master";
 export function OutletPricingTab({
   outletOrgId,
   assignedPriceListId,
+  assignedPriceListValid,
   assignedZoneId,
   assignedZoneName,
   franchiseeRegistryId,
@@ -41,6 +42,7 @@ export function OutletPricingTab({
 }: {
   outletOrgId: string;
   assignedPriceListId?: string | null;
+  assignedPriceListValid?: boolean;
   assignedZoneId?: string | null;
   assignedZoneName?: string | null;
   franchiseeRegistryId?: string | null;
@@ -77,7 +79,17 @@ export function OutletPricingTab({
   const assignedList = assignedPriceListId
     ? priceLists.find((pl) => pl.id === assignedPriceListId)
     : undefined;
-  const derivedListId = assignedPriceListId ?? preview?.priceListId ?? assignedList?.id;
+  const rawDerivedListId = assignedPriceListId ?? preview?.priceListId ?? null;
+  const derivedListKnownInUi = rawDerivedListId
+    ? priceLists.some((pl) => pl.id === rawDerivedListId)
+    : false;
+  const derivedListValid =
+    assignedPriceListValid === true ||
+    preview?.priceListValid === true ||
+    (rawDerivedListId != null && derivedListKnownInUi);
+  const derivedListId = derivedListValid ? rawDerivedListId : null;
+  const derivedListMissing =
+    Boolean(assignedZoneId || zoneId) && rawDerivedListId != null && !derivedListValid;
 
   React.useEffect(() => {
     if (!zoneMaster?.id) {
@@ -160,6 +172,11 @@ export function OutletPricingTab({
               </Link>{" "}
               has {masterStaleCount} product{masterStaleCount > 1 ? "s" : ""} without today&apos;s price — shops
               in this zone cannot sell those SKUs until you publish.
+            </div>
+          )}
+          {derivedListMissing && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+              Outlet price list missing — click Save zone to re-wire.
             </div>
           )}
           {listMismatch && (
@@ -245,6 +262,8 @@ export function OutletPricingTab({
                     specific SKUs.
                   </p>
                 </div>
+              ) : derivedListMissing ? (
+                <p className="text-muted-foreground">Missing — save zone to create</p>
               ) : (
                 <p className="text-muted-foreground">Created when you save a zone</p>
               )}

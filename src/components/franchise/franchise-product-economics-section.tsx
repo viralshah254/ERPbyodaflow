@@ -132,7 +132,10 @@ export function FranchiseProductEconomicsSection(props: {
         if (cancelled) return;
         const ids = products.items.map((p) => p.id);
         const econ = ids.length
-          ? await fetchFranchiseeProductEconomicsApi(franchiseeRegistryId, { productIds: ids })
+          ? await fetchFranchiseeProductEconomicsApi(franchiseeRegistryId, {
+              productIds: ids,
+              outletOrgId,
+            })
           : { items: [], nextCursor: null as string | null };
         if (cancelled) return;
         const econMap = new Map(econ.items.map((e) => [e.productId, e]));
@@ -165,7 +168,7 @@ export function FranchiseProductEconomicsSection(props: {
     return () => {
       cancelled = true;
     };
-  }, [franchiseeRegistryId, tab, catalogCursor, catalogSearchDebounced, listRefreshTick, dismissedProductIds]);
+  }, [franchiseeRegistryId, tab, catalogCursor, catalogSearchDebounced, listRefreshTick, dismissedProductIds, outletOrgId]);
 
   React.useEffect(() => {
     if (!franchiseeRegistryId || tab !== "assigned") return;
@@ -178,6 +181,7 @@ export function FranchiseProductEconomicsSection(props: {
           cursor: assignedCursor,
           includeProductDetails: true,
           search: assignedSearchDebounced.trim() || undefined,
+          outletOrgId,
         });
         if (cancelled) return;
         const mapped = items.map((e) => ({
@@ -204,7 +208,7 @@ export function FranchiseProductEconomicsSection(props: {
     return () => {
       cancelled = true;
     };
-  }, [franchiseeRegistryId, tab, assignedCursor, assignedSearchDebounced, listRefreshTick]);
+  }, [franchiseeRegistryId, tab, assignedCursor, assignedSearchDebounced, listRefreshTick, outletOrgId]);
 
   const tableRows = React.useMemo(() => {
     if (tab !== "catalog" || !catalogOnlyEconomics) return rows;

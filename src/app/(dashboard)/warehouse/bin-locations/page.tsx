@@ -166,7 +166,17 @@ export default function BinLocationsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))} placeholder="e.g. A1-01" />
+              {editing ? (
+                <Input
+                  value={form.code}
+                  onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))}
+                  placeholder="e.g. A1-01"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                  Assigned automatically on save (e.g. B01, R02, Z01)
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Name</Label>
@@ -256,15 +266,15 @@ export default function BinLocationsPage() {
                       status: form.status,
                       parentId: form.parentId || undefined,
                     });
+                    toast.success("Location updated.");
                   } else {
-                    await createWarehouseLocation(warehouseId, {
-                      code: form.code || undefined,
+                    const created = await createWarehouseLocation(warehouseId, {
                       name: form.name,
                       type: form.type,
                       parentId: form.parentId || undefined,
                     });
+                    toast.success(`Location created${created.code ? ` (${created.code})` : ""}.`);
                   }
-                  toast.success(`Location ${editing ? "updated" : "created"}.`);
                   setDrawerOpen(false);
                   await refresh();
                 } catch (error) {

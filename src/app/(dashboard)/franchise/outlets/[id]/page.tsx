@@ -45,10 +45,9 @@ import {
   type OutletInvoiceDetail,
   type OutletInvoiceLineDetailRow,
 } from "@/lib/api/cool-catch";
-import { fetchOutletEquipmentApi } from "@/lib/api/assets";
-import type { AssetRow } from "@/lib/types/assets";
 import { fetchInboundOrders, type InboundOrderRow } from "@/lib/api/cool-catch";
 import { OutletPricingTab } from "@/components/franchise/outlet-pricing-tab";
+import { OutletEquipmentTab } from "@/components/franchise/outlet-equipment-tab";
 import { OutletEconomicsVmiTab } from "@/components/franchise/outlet-economics-vmi-tab";
 import { fetchFranchiseNetworkOutletById } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
@@ -618,55 +617,6 @@ function OrdersToHqTab({ outletOrgId }: { outletOrgId: string }) {
   );
 }
 
-// ─── Equipment (HQ-owned assets in custody) ──────────────────────────────────
-
-function EquipmentTab({ outletOrgId }: { outletOrgId: string }) {
-  const router = useRouter();
-  const [rows, setRows] = React.useState<AssetRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    setLoading(true);
-    fetchOutletEquipmentApi(outletOrgId)
-      .then((r) => setRows(r))
-      .catch(() => toast.error("Could not load equipment"))
-      .finally(() => setLoading(false));
-  }, [outletOrgId]);
-
-  const columns = [
-    { id: "code", header: "Code", accessor: (r: AssetRow) => <span className="font-medium">{r.code}</span> },
-    { id: "name", header: "Name", accessor: (r: AssetRow) => r.name },
-    { id: "category", header: "Category", accessor: (r: AssetRow) => r.category },
-    {
-      id: "nbv",
-      header: "Book (net)",
-      accessor: (r: AssetRow) =>
-        formatMoney(Math.max(0, r.cost - (r.accumulatedDepreciation ?? 0)), "KES"),
-    },
-    {
-      id: "tag",
-      header: "Tag",
-      accessor: (r: AssetRow) => (
-        <span className="text-xs font-mono text-muted-foreground">{r.assetTag ?? r.serialNumber ?? "—"}</span>
-      ),
-    },
-  ];
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Fixed assets assigned to this outlet for custody. Ownership stays with HQ; depreciation posts on the parent company books.
-      </p>
-      <DataTable
-        data={rows}
-        columns={columns}
-        onRowClick={(r) => router.push(`/assets/register/${r.id}`)}
-        emptyMessage={loading ? "Loading equipment…" : "No HQ assets currently assigned to this outlet."}
-      />
-    </div>
-  );
-}
-
 // ─── Overview tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ summary, loading }: { summary: OutletSummary | null; loading: boolean }) {
@@ -1019,13 +969,14 @@ export default function OutletDetailPage() {
           </TabsContent>
 
           <TabsContent value="equipment">
-            <EquipmentTab outletOrgId={outletOrgId} />
+            <OutletEquipmentTab outletOrgId={outletOrgId} outletName={outletName} />
           </TabsContent>
 
           <TabsContent value="pricing">
             <OutletPricingTab
               outletOrgId={outletOrgId}
               assignedPriceListId={summary?.priceListId ?? null}
+              assignedPriceListValid={summary?.priceListValid}
               assignedZoneId={summary?.zoneId ?? null}
               assignedZoneName={summary?.zoneName ?? null}
               franchiseeRegistryId={franchiseeRegistryId}

@@ -7,41 +7,12 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  assignAssetCustodyApi,
-  fetchAssetAssignmentsApi,
-  fetchAssetByIdApi,
-} from "@/lib/api/assets";
-import type { AssetAssignmentRow, AssetRow, CustodyType } from "@/lib/types/assets";
-import { fetchFranchiseNetworkOutlets } from "@/lib/api/cool-catch";
-import { fetchEmployeesApi } from "@/lib/api/payroll";
+import { AssignAssetCustodySheet } from "@/components/assets/assign-asset-custody-sheet";
+import { fetchAssetAssignmentsApi, fetchAssetByIdApi } from "@/lib/api/assets";
+import type { AssetAssignmentRow, AssetRow } from "@/lib/types/assets";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-
-const CUSTODY_OPTIONS: Array<{ value: CustodyType; label: string }> = [
-  { value: "ORG_STOCK", label: "HQ / organization stock" },
-  { value: "FRANCHISE_OUTLET", label: "Franchise outlet" },
-  { value: "EMPLOYEE", label: "Employee" },
-  { value: "IN_TRANSIT", label: "In transit" },
-];
 
 export default function AssetDetailPage() {
   const params = useParams();
@@ -50,17 +21,6 @@ export default function AssetDetailPage() {
   const [assignments, setAssignments] = React.useState<AssetAssignmentRow[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [assignOpen, setAssignOpen] = React.useState(false);
-  const [outlets, setOutlets] = React.useState<Array<{ id: string; name: string }>>([]);
-  const [employees, setEmployees] = React.useState<Array<{ id: string; name: string }>>([]);
-  const [assignForm, setAssignForm] = React.useState({
-    custodyType: "ORG_STOCK" as CustodyType,
-    custodianOutletId: "",
-    custodianEmployeeId: "",
-    effectiveFrom: new Date().toISOString().slice(0, 10),
-    monthlyEquipmentFee: "",
-    securityDepositAmount: "",
-    notes: "",
-  });
 
   const load = React.useCallback(async () => {
     setIsLoading(true);
@@ -79,25 +39,6 @@ export default function AssetDetailPage() {
   React.useEffect(() => {
     void load();
   }, [load]);
-
-  React.useEffect(() => {
-    let active = true;
-    void fetchFranchiseNetworkOutlets()
-      .then((rows) => {
-        if (!active) return;
-        setOutlets(rows.map((r) => ({ id: r.id, name: r.name })));
-      })
-      .catch(() => {});
-    void fetchEmployeesApi()
-      .then((emps) => {
-        if (!active) return;
-        setEmployees(emps.map((e) => ({ id: e.id, name: e.name })));
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const nbv =
     asset != null
@@ -244,137 +185,15 @@ export default function AssetDetailPage() {
         )}
       </div>
 
-      <Sheet open={assignOpen} onOpenChange={setAssignOpen}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Transfer custody</SheetTitle>
-            <SheetDescription>Creates a new assignment and closes the previous open period.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Custody type</Label>
-              <Select
-                value={assignForm.custodyType}
-                onValueChange={(v) => setAssignForm((p) => ({ ...p, custodyType: v as CustodyType }))}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CUSTODY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {assignForm.custodyType === "FRANCHISE_OUTLET" && (
-              <div className="space-y-2">
-                <Label>Outlet</Label>
-                <Select
-                  value={assignForm.custodianOutletId || "__none__"}
-                  onValueChange={(v) =>
-                    setAssignForm((p) => ({ ...p, custodianOutletId: v === "__none__" ? "" : v }))
-                  }
-                >
-                  <SelectTrigger><SelectValue placeholder="Select outlet" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Select…</SelectItem>
-                    {outlets.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {assignForm.custodyType === "EMPLOYEE" && (
-              <div className="space-y-2">
-                <Label>Employee</Label>
-                <Select
-                  value={assignForm.custodianEmployeeId || "__none__"}
-                  onValueChange={(v) =>
-                    setAssignForm((p) => ({ ...p, custodianEmployeeId: v === "__none__" ? "" : v }))
-                  }
-                >
-                  <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Select…</SelectItem>
-                    {employees.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Effective from</Label>
-              <Input
-                type="date"
-                value={assignForm.effectiveFrom}
-                onChange={(e) => setAssignForm((p) => ({ ...p, effectiveFrom: e.target.value }))}
-              />
-            </div>
-            {assignForm.custodyType === "FRANCHISE_OUTLET" && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Monthly equipment fee</Label>
-                  <Input
-                    type="number"
-                    value={assignForm.monthlyEquipmentFee}
-                    onChange={(e) => setAssignForm((p) => ({ ...p, monthlyEquipmentFee: e.target.value }))}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Security deposit</Label>
-                  <Input
-                    type="number"
-                    value={assignForm.securityDepositAmount}
-                    onChange={(e) => setAssignForm((p) => ({ ...p, securityDepositAmount: e.target.value }))}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Input
-                value={assignForm.notes}
-                onChange={(e) => setAssignForm((p) => ({ ...p, notes: e.target.value }))}
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-          <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setAssignOpen(false)}>Cancel</Button>
-            <Button
-              onClick={async () => {
-                if (!asset) return;
-                try {
-                  await assignAssetCustodyApi(asset.id, {
-                    custodyType: assignForm.custodyType,
-                    effectiveFrom: assignForm.effectiveFrom,
-                    custodianOutletId: assignForm.custodianOutletId || undefined,
-                    custodianEmployeeId: assignForm.custodianEmployeeId || undefined,
-                    monthlyEquipmentFee: assignForm.monthlyEquipmentFee
-                      ? Number(assignForm.monthlyEquipmentFee)
-                      : undefined,
-                    securityDepositAmount: assignForm.securityDepositAmount
-                      ? Number(assignForm.securityDepositAmount)
-                      : undefined,
-                    currency: "KES",
-                    notes: assignForm.notes || undefined,
-                  });
-                  toast.success("Custody updated.");
-                  setAssignOpen(false);
-                  await load();
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Assignment failed");
-                }
-              }}
-            >
-              Save transfer
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      {asset && (
+        <AssignAssetCustodySheet
+          open={assignOpen}
+          onOpenChange={setAssignOpen}
+          assetId={asset.id}
+          assetLabel={`${asset.code} — ${asset.name}`}
+          onSuccess={load}
+        />
+      )}
     </PageShell>
   );
 }

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -13,7 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { closeLogisticsVehiclePeriod, fetchDistributionVehicles } from "@/lib/api/logistics";
+import {
+  closeLogisticsVehiclePeriod,
+  fetchDistributionVehicles,
+  fetchVehiclePeriodSummary,
+  type VehiclePeriodSummary,
+} from "@/lib/api/logistics";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 
@@ -25,17 +31,18 @@ function defaultPeriodKey(): string {
 }
 
 export default function LogisticsVehiclePeriodClosePage() {
-  const [vehicles, setVehicles] = React.useState<{ id: string; code: string }[]>([]);
+  const [vehicles, setVehicles] = React.useState<{ id: string; code: string; type?: string }[]>([]);
   const [vehicleId, setVehicleId] = React.useState("");
   const [periodKey, setPeriodKey] = React.useState(defaultPeriodKey());
   const [closing, setClosing] = React.useState(false);
   const [lastResult, setLastResult] = React.useState<{ varianceKes: number; postingBatchId?: string } | null>(null);
+  const [periodSummary, setPeriodSummary] = React.useState<VehiclePeriodSummary | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
     fetchDistributionVehicles()
       .then((vs) => {
-        if (!cancelled) setVehicles(vs.map((v) => ({ id: v.id, code: v.code })));
+        if (!cancelled) setVehicles(vs.map((v) => ({ id: v.id, code: v.code, type: v.type })));
       })
       .catch(() => {
         if (!cancelled) setVehicles([]);
@@ -44,6 +51,28 @@ export default function LogisticsVehiclePeriodClosePage() {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!vehicleId || !/^\d{4}-\d{2}$/.test(periodKey.trim())) {
+      setPeriodSummary(null);
+      return;
+    }
+    let cancelled = false;
+    fetchVehiclePeriodSummary(vehicleId, periodKey.trim())
+      .then((s) => {
+        if (!cancelled) setPeriodSummary(s);
+      })
+      .catch(() => {
+        if (!cancelled) setPeriodSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vehicleId, periodKey]);
+
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+  const needsInvoice = selectedVehicle?.type === "LEASED";
+  const invoiceOk = !!periodSummary?.invoiceAttachmentId;
 
   const runClose = async () => {
     if (!vehicleId) {
@@ -55,6 +84,10 @@ export default function LogisticsVehiclePeriodClosePage() {
       toast.error("Period must be YYYY-MM.");
       return;
     }
+    if (needsInvoice && !invoiceOk) {
+      toast.error("Upload the lease invoice on the Fleet page before closing.");
+      return;
+    }
     setClosing(true);
     setLastResult(null);
     try {
@@ -64,6 +97,8 @@ export default function LogisticsVehiclePeriodClosePage() {
       });
       setLastResult({ varianceKes: out.varianceKes, postingBatchId: out.postingBatchId });
       toast.success("Vehicle logistics period closed.");
+      const s = await fetchVehiclePeriodSummary(vehicleId, pk);
+      setPeriodSummary(s);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Period close failed.");
     } finally {
@@ -84,7 +119,9 @@ export default function LogisticsVehiclePeriodClosePage() {
         <Card>
           <CardHeader>
             <CardTitle>Close month per vehicle</CardTitle>
-            <CardDescription>Requires logistics.period.close. Re-running a closed period will error.</CardDescription>
+            <CardDescription>
+              Leased vehicles require a monthly invoice upload before close. Lease is split equally across completed trips.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -110,7 +147,28 @@ export default function LogisticsVehiclePeriodClosePage() {
               <Label htmlFor="period">Calendar period</Label>
               <Input id="period" placeholder="YYYY-MM" value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} />
             </div>
-            <Button type="button" onClick={() => void runClose()} disabled={closing}>
+
+            {periodSummary && vehicleId && (
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">{periodSummary.paymentStatus ?? "PENDING_INVOICE"}</Badge>
+                  {periodSummary.status === "CLOSED" && <Badge variant="secondary">Closed</Badge>}
+                </div>
+                <p>Trips: {periodSummary.tripCount ?? 0}</p>
+                {periodSummary.invoiceAmountKes != null && (
+                  <p>Invoice: {formatMoney(periodSummary.invoiceAmountKes, "KES")}</p>
+                )}
+                {!invoiceOk && needsInvoice && (
+                  <p className="text-destructive">Upload lease invoice on Fleet before closing.</p>
+                )}
+              </div>
+            )}
+
+            <Button
+              type="button"
+              onClick={() => void runClose()}
+              disabled={closing || (needsInvoice && !invoiceOk) || periodSummary?.status === "CLOSED"}
+            >
               {closing ? "Closing…" : "Close period"}
             </Button>
           </CardContent>
