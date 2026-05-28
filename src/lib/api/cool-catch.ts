@@ -483,7 +483,12 @@ export type FranchiseeProductEconomicsRow = {
   /** Resolved from zone master published prices (read-only). */
   zoneBasePrice?: number | null;
   supplyBasePrice: number;
+  orgDefaultCommission?: number | null;
+  zoneDefaultCommission?: number | null;
+  inheritedDefaultCommission?: number;
+  commissionOverride?: number | null;
   commissionPerUnit: number;
+  isOverride?: boolean;
   guideRetail: number;
   sku?: string | null;
   productName?: string | null;

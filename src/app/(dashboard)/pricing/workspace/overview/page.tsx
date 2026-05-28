@@ -110,6 +110,9 @@ export default function PricingOverviewPage() {
               <Link href="/pricing/workspace/lists">Price lists</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
+              <Link href="/pricing/workspace/commissions">Franchise commissions</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
               <Link href="/pricing/rules">Rules</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>

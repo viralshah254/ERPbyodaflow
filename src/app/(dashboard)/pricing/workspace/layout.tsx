@@ -27,6 +27,7 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
           {tab("/pricing/workspace/overview", "Overview", "/workspace/overview")}
           {tab("/pricing/workspace/lists", "Price lists", "/workspace/lists")}
           {tab("/pricing/workspace/zones", "Franchise zones", "/workspace/zones")}
+          {tab("/pricing/workspace/commissions", "Franchise commissions", "/workspace/commissions")}
           {tab("/pricing/workspace/approvals", "Approvals", "/workspace/approvals")}
           <Link
             href="/pricing/rules"

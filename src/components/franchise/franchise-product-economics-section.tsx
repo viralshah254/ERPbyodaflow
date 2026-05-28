@@ -24,7 +24,9 @@ type Row = {
   sku: string;
   name: string;
   base: string;
-  commission: string;
+  defaultCommission: string;
+  override: string;
+  effectiveCommission: number;
 };
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -34,6 +36,33 @@ function useDebounced<T>(value: T, ms: number): T {
     return () => window.clearTimeout(t);
   }, [value, ms]);
   return d;
+}
+
+function mapEconomicsToRow(e: {
+  productId: string;
+  sku?: string | null;
+  productName?: string | null;
+  zoneBasePrice?: number | null;
+  supplyBasePrice: number;
+  inheritedDefaultCommission?: number;
+  commissionOverride?: number | null;
+  commissionPerUnit: number;
+  isOverride?: boolean;
+}, product?: { sku?: string; name?: string }) {
+  return {
+    productId: e.productId,
+    sku: e.sku ?? product?.sku ?? e.productId,
+    name: e.productName ?? product?.name ?? e.productId,
+    base:
+      e.zoneBasePrice != null && e.zoneBasePrice > 0
+        ? String(e.zoneBasePrice)
+        : e.supplyBasePrice > 0
+          ? String(e.supplyBasePrice)
+          : "",
+    defaultCommission: String(e.inheritedDefaultCommission ?? 0),
+    override: e.isOverride && e.commissionOverride != null ? String(e.commissionOverride) : "",
+    effectiveCommission: e.commissionPerUnit ?? 0,
+  };
 }
 
 export function FranchiseProductEconomicsSection(props: {
@@ -49,7 +78,6 @@ export function FranchiseProductEconomicsSection(props: {
   const [saving, setSaving] = React.useState(false);
   const [removingId, setRemovingId] = React.useState<string | null>(null);
   const [listRefreshTick, setListRefreshTick] = React.useState(0);
-  /** SKUs removed on Full catalogue — hidden until outlet changes (catalog always lists HQ products). */
   const [dismissedProductIds, setDismissedProductIds] = React.useState<Set<string>>(() => new Set());
 
   const [catalogSearch, setCatalogSearch] = React.useState("");
@@ -65,15 +93,14 @@ export function FranchiseProductEconomicsSection(props: {
   const [assignedCursorStack, setAssignedCursorStack] = React.useState<string[]>([]);
   const [assignedNextCursor, setAssignedNextCursor] = React.useState<string | null>(null);
 
-  /** Last saved/loaded values per product on the current page — drives dirty detection. */
   const [savedByProductId, setSavedByProductId] = React.useState<
-    Map<string, { commission: string }>
+    Map<string, { override: string }>
   >(() => new Map());
 
   const snapshotRows = React.useCallback((list: Row[]) => {
-    const m = new Map<string, { commission: string }>();
+    const m = new Map<string, { override: string }>();
     for (const r of list) {
-      m.set(r.productId, { commission: r.commission });
+      m.set(r.productId, { override: r.override });
     }
     return m;
   }, []);
@@ -82,10 +109,10 @@ export function FranchiseProductEconomicsSection(props: {
     for (const r of rows) {
       const saved = savedByProductId.get(r.productId);
       if (!saved) {
-        if (r.commission.trim() !== "") return true;
+        if (r.override.trim() !== "") return true;
         continue;
       }
-      if (saved.commission !== r.commission) return true;
+      if (saved.override !== r.override) return true;
     }
     return false;
   }, [rows, savedByProductId]);
@@ -143,18 +170,18 @@ export function FranchiseProductEconomicsSection(props: {
           .filter((p) => !dismissedProductIds.has(p.id))
           .map((p) => {
             const e = econMap.get(p.id);
-            return {
-              productId: p.id,
-              sku: p.sku ?? p.id,
-              name: p.name,
-              base:
-                e?.zoneBasePrice != null && e.zoneBasePrice > 0
-                  ? String(e.zoneBasePrice)
-                  : e != null && e.supplyBasePrice > 0
-                    ? String(e.supplyBasePrice)
-                    : "",
-              commission: e != null ? String(e.commissionPerUnit) : "",
-            };
+            if (!e) {
+              return {
+                productId: p.id,
+                sku: p.sku ?? p.id,
+                name: p.name,
+                base: "",
+                defaultCommission: "0",
+                override: "",
+                effectiveCommission: 0,
+              };
+            }
+            return mapEconomicsToRow(e, { sku: p.sku, name: p.name });
           });
         setRows(mapped);
         setSavedByProductId(snapshotRows(mapped));
@@ -168,7 +195,7 @@ export function FranchiseProductEconomicsSection(props: {
     return () => {
       cancelled = true;
     };
-  }, [franchiseeRegistryId, tab, catalogCursor, catalogSearchDebounced, listRefreshTick, dismissedProductIds, outletOrgId]);
+  }, [franchiseeRegistryId, tab, catalogCursor, catalogSearchDebounced, listRefreshTick, dismissedProductIds, outletOrgId, snapshotRows]);
 
   React.useEffect(() => {
     if (!franchiseeRegistryId || tab !== "assigned") return;
@@ -184,18 +211,7 @@ export function FranchiseProductEconomicsSection(props: {
           outletOrgId,
         });
         if (cancelled) return;
-        const mapped = items.map((e) => ({
-          productId: e.productId,
-          sku: e.sku ?? e.productId,
-          name: e.productName ?? e.productId,
-          base:
-            e.zoneBasePrice != null && e.zoneBasePrice > 0
-              ? String(e.zoneBasePrice)
-              : e.supplyBasePrice > 0
-                ? String(e.supplyBasePrice)
-                : "",
-          commission: String(e.commissionPerUnit),
-        }));
+        const mapped = items.filter((e) => e.isOverride).map((e) => mapEconomicsToRow(e));
         setRows(mapped);
         setSavedByProductId(snapshotRows(mapped));
         setAssignedNextCursor(nextCursor ?? null);
@@ -208,18 +224,32 @@ export function FranchiseProductEconomicsSection(props: {
     return () => {
       cancelled = true;
     };
-  }, [franchiseeRegistryId, tab, assignedCursor, assignedSearchDebounced, listRefreshTick, outletOrgId]);
+  }, [franchiseeRegistryId, tab, assignedCursor, assignedSearchDebounced, listRefreshTick, outletOrgId, snapshotRows]);
 
   const tableRows = React.useMemo(() => {
     if (tab !== "catalog" || !catalogOnlyEconomics) return rows;
     return rows.filter(
-      (r) => (Number.parseFloat(r.base) || 0) > 0 || (Number.parseFloat(r.commission) || 0) > 0
+      (r) =>
+        (Number.parseFloat(r.base) || 0) > 0 ||
+        r.effectiveCommission > 0 ||
+        r.override.trim() !== ""
     );
   }, [tab, catalogOnlyEconomics, rows]);
 
-  const updateRow = (productId: string, field: "commission", value: string) => {
-    if (field !== "commission") return;
-    setRows((prev) => prev.map((r) => (r.productId === productId ? { ...r, commission: value } : r)));
+  const updateOverride = (productId: string, value: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.productId !== productId) return r;
+        const overrideVal = value;
+        const base = Number.parseFloat(r.base) || 0;
+        const defaultComm = Number.parseFloat(r.defaultCommission) || 0;
+        const effective =
+          overrideVal.trim() !== ""
+            ? Number.parseFloat(overrideVal) || 0
+            : defaultComm;
+        return { ...r, override: overrideVal, effectiveCommission: effective };
+      })
+    );
   };
 
   const onSave = async () => {
@@ -229,14 +259,12 @@ export function FranchiseProductEconomicsSection(props: {
       const items = rows
         .filter((r) => {
           const saved = savedByProductId.get(r.productId);
-          if (!saved) {
-            return r.commission.trim() !== "" && (Number.parseFloat(r.commission) || 0) !== 0;
-          }
-          return saved.commission !== r.commission;
+          if (!saved) return r.override.trim() !== "";
+          return saved.override !== r.override;
         })
         .map((r) => ({
           productId: r.productId,
-          commissionPerUnit: Number.parseFloat(r.commission) || 0,
+          commissionPerUnit: Number.parseFloat(r.override) || 0,
         }));
       await putFranchiseeProductEconomicsApi(franchiseeRegistryId, items);
       toast.success("Commission overrides saved for this page.");
@@ -257,11 +285,27 @@ export function FranchiseProductEconomicsSection(props: {
       await putFranchiseeProductEconomicsApi(franchiseeRegistryId, [
         { productId, commissionPerUnit: 0 },
       ]);
-      toast.success("Removed from this shop.");
-      setRows((prev) => prev.filter((r) => r.productId !== productId));
+      toast.success("Override removed — shop will inherit network/zone default.");
       if (tab === "catalog") {
-        setDismissedProductIds((prev) => new Set(prev).add(productId));
+        setRows((prev) =>
+          prev.map((r) =>
+            r.productId === productId
+              ? {
+                  ...r,
+                  override: "",
+                  effectiveCommission: Number.parseFloat(r.defaultCommission) || 0,
+                }
+              : r
+          )
+        );
+        setSavedByProductId((prev) => {
+          const next = new Map(prev);
+          const row = rows.find((r) => r.productId === productId);
+          if (row) next.set(productId, { override: "" });
+          return next;
+        });
       } else {
+        setRows((prev) => prev.filter((r) => r.productId !== productId));
         setListRefreshTick((t) => t + 1);
       }
     } catch (err) {
@@ -327,8 +371,12 @@ export function FranchiseProductEconomicsSection(props: {
         <div>
           <CardTitle>Commission overrides</CardTitle>
           <CardDescription>
-            Base price comes from your zone master published prices (read-only). Add commission per SKU if this
-            shop&apos;s guide retail should be higher than the zone base. Guide retail = base + commission.
+            Base price comes from your zone master published prices (read-only). Default commission comes from{" "}
+            <Link href="/pricing/workspace/commissions" className="text-primary underline">
+              Pricing → Franchise commissions
+            </Link>{" "}
+            (network/zone). Add an override only if this shop&apos;s guide retail should differ. Guide retail = base +
+            effective commission.
             {zoneMasterListId ? (
               <>
                 {" "}
@@ -436,7 +484,7 @@ export function FranchiseProductEconomicsSection(props: {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              SKUs where a commission override has been saved for this shop.
+              SKUs where a standalone commission override has been saved for this shop (not inherited defaults).
             </p>
           </TabsContent>
         </Tabs>
@@ -451,7 +499,8 @@ export function FranchiseProductEconomicsSection(props: {
                   <th className="p-3 font-medium">SKU</th>
                   <th className="p-3 font-medium">Product</th>
                   <th className="p-3 font-medium w-28">Base (zone)</th>
-                  <th className="p-3 font-medium w-28">Commission</th>
+                  <th className="p-3 font-medium w-28">Default commission</th>
+                  <th className="p-3 font-medium w-28">Override</th>
                   <th className="p-3 font-medium w-32">Guide retail</th>
                   <th className="p-3 w-12" />
                 </tr>
@@ -459,11 +508,11 @@ export function FranchiseProductEconomicsSection(props: {
               <tbody>
                 {tableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={7} className="p-6 text-center text-muted-foreground">
                       {tab === "assigned"
                         ? assignedSearchDebounced.trim()
-                          ? "No assignments match this search."
-                          : "No assigned SKUs on this page."
+                          ? "No overrides match this search."
+                          : "No commission overrides on this page."
                         : catalogOnlyEconomics
                           ? "No SKUs with economics on this page. Turn off the filter or try another page."
                           : catalogSearchDebounced.trim()
@@ -474,8 +523,7 @@ export function FranchiseProductEconomicsSection(props: {
                 ) : (
                   tableRows.map((r) => {
                     const b = Number.parseFloat(r.base) || 0;
-                    const c = Number.parseFloat(r.commission) || 0;
-                    const guide = b + c;
+                    const guide = b + r.effectiveCommission;
                     return (
                       <tr key={r.productId} className="border-b border-border/60">
                         <td className="p-3 font-mono text-xs">{r.sku}</td>
@@ -492,12 +540,22 @@ export function FranchiseProductEconomicsSection(props: {
                         </td>
                         <td className="p-2">
                           <Input
+                            className="h-8 bg-muted/50"
+                            inputMode="decimal"
+                            value={r.defaultCommission || "0"}
+                            readOnly
+                            tabIndex={-1}
+                            aria-label={`Default commission for ${r.sku}`}
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
                             className="h-8"
                             inputMode="decimal"
-                            value={r.commission}
-                            onChange={(e) => updateRow(r.productId, "commission", e.target.value)}
-                            placeholder="0"
-                            aria-label={`Commission for ${r.sku}`}
+                            value={r.override}
+                            onChange={(e) => updateOverride(r.productId, e.target.value)}
+                            placeholder="inherit"
+                            aria-label={`Commission override for ${r.sku}`}
                           />
                         </td>
                         <td className="p-3 text-muted-foreground">{guide > 0 ? formatMoney(guide, "KES") : "—"}</td>
@@ -507,9 +565,9 @@ export function FranchiseProductEconomicsSection(props: {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            disabled={removingId === r.productId}
-                            title="Remove from this shop"
-                            aria-label={`Remove ${r.sku} from shop`}
+                            disabled={removingId === r.productId || !r.override.trim()}
+                            title="Remove override"
+                            aria-label={`Remove override for ${r.sku}`}
                             onClick={() => void onRemoveFromShop(r.productId)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -530,9 +588,9 @@ export function FranchiseProductEconomicsSection(props: {
             role="status"
             aria-live="polite"
           >
-            <p className="text-sm text-muted-foreground">Unsaved price changes on this page</p>
+            <p className="text-sm text-muted-foreground">Unsaved override changes on this page</p>
             <Button type="button" size="sm" onClick={() => void onSave()} disabled={saving || loading}>
-              {saving ? "Updating…" : "Update prices"}
+              {saving ? "Updating…" : "Update overrides"}
             </Button>
           </div>
         )}
