@@ -168,6 +168,15 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresPermissions: ["distribution.trips.read"],
       },
       {
+        key: "logistics-dispatch-alerts",
+        label: "Dispatch alerts",
+        href: "/operations/dispatch-alerts",
+        icon: "AlertTriangle",
+        moduleKey: "distribution",
+        requiresFlags: ["commissionEngine"],
+        requiresPermissions: ["sales.deliveries.read", "franchise.network.read"],
+      },
+      {
         key: "logistics-fleet",
         label: "Manage fleet",
         href: "/distribution/logistics/fleet",
@@ -240,6 +249,8 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "purchasing-requests", label: "Purchase Requests", href: "/purchasing/requests", icon: "ClipboardList", moduleKey: "purchasing", requiresPermissions: ["purchase.read", "purchasing.orders.read"] },
       { key: "purchasing-orders", label: "Purchase Orders", href: "/purchasing/orders", icon: "FileText", moduleKey: "purchasing", termKey: "purchaseOrder", requiresPermissions: ["purchase.read", "purchasing.orders.read"] },
       { key: "purchasing-guided-sourcing-flow", label: "Guided Sourcing Flow", href: "/purchasing/sourcing-flow", icon: "Workflow", moduleKey: "purchasing", requiresPermissions: ["purchase.read", "purchasing.orders.read"] },
+      { key: "purchasing-coolcatch-batches", label: "CoolCatch Sourcing Batches", href: "/purchasing/coolcatch-sourcing-batches", icon: "Fish", moduleKey: "purchasing", requiresFlags: ["commissionEngine"], requiresPermissions: ["purchase.read"] },
+      { key: "purchasing-coolcatch-sourcing", label: "CoolCatch New Batch", href: "/purchasing/coolcatch-sourcing", icon: "PlusCircle", moduleKey: "purchasing", requiresFlags: ["commissionEngine"], requiresPermissions: ["purchase.write"] },
       { key: "purchasing-grn", label: "Goods Receipt (GRN)", href: "/inventory/receipts", icon: "PackageCheck", moduleKey: "purchasing", termKey: "goodsReceipt", requiresPermissions: ["purchasing.grn.read"] },
       { key: "purchasing-suppliers", label: "Suppliers", href: "/ap/suppliers", icon: "Building2", moduleKey: "purchasing", termKey: "supplier", requiresPermissions: ["purchasing.suppliers.read"] },
       { key: "purchasing-supplier-invoices", label: "Supplier Invoices (AP)", href: "/ap/bills", icon: "FileText", moduleKey: "purchasing", requiresPermissions: ["purchasing.bills.read"] },
@@ -299,6 +310,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "franchise-vmi", label: "VMI & Replenishment", href: "/franchise/vmi", icon: "PackagePlus", moduleKey: "franchise", requiresFlags: ["vmiReplenishment", "franchiseNetworkMonitoring"], requiresPermissions: ["inventory.read"] },
       { key: "franchise-comparison", label: "Performance Hub", href: "/franchise/comparison", icon: "BarChart3", moduleKey: "franchise", requiresFlags: ["franchiseNetworkAnalytics"], requiresPermissions: ["franchise.analytics.read"] },
       { key: "franchise-network-customers", label: "Network Customers", href: "/franchise/customers", icon: "Users2", moduleKey: "franchise", requiresFlags: ["franchiseNetworkMonitoring"], requiresPermissions: ["sales.customers.read"], requiresOrgRole: "FRANCHISOR" },
+      { key: "franchise-chase-list", label: "Chase lists (BD leads)", href: "/franchise/chase-list", icon: "Users", moduleKey: "franchise", requiresFlags: ["franchiseNetworkMonitoring"], requiresPermissions: ["crm.deals.read", "franchise.network.read"] },
     ],
   },
   {
@@ -374,6 +386,9 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
       { key: "finance-mpesa-recon", label: "M-Pesa Till Reconciliation", href: "/finance/mpesa-recon", icon: "Smartphone", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
+      { key: "finance-coolcatch-bs", label: "CoolCatch BS Inventory", href: "/finance/coolcatch-bs-inventory", icon: "Layers", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read", "inventory.read"] },
+      { key: "finance-coolcatch-month-end", label: "CoolCatch Month-End", href: "/finance/coolcatch-month-end", icon: "CalendarCheck", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.write"] },
+      { key: "finance-coolcatch-etims", label: "CoolCatch eTIMS", href: "/finance/coolcatch-etims", icon: "Receipt", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["sales.write"] },
       { key: "finance-commission-topup", label: "Commission / Top-up", href: "/finance/commission-topup", icon: "Percent", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read"] },
       { key: "finance-journal-events", label: "Journal Events", href: "/finance/journal-events", icon: "BookOpen", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.journals.read"] },
       { key: "finance-statements", label: "Financial Statements", href: "/finance/statements", icon: "BarChart3", moduleKey: "finance", requiresPermissions: ["finance.statements.read"], children: [
