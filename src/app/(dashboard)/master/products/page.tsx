@@ -28,7 +28,7 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
-import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsApi, deleteProductApi } from "@/lib/api/products";
+import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, deleteProductApi } from "@/lib/api/products";
 import { fetchProductCategoriesApi, createProductCategoryApi } from "@/lib/api/product-categories";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
@@ -44,6 +44,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const productIcon = "Package" as const;
+const PRODUCTS_PAGE_SIZE = 50;
 
 /** Derive next sequential SKU from existing SKUs. */
 function suggestNextSku(existing: string[]): string {
@@ -84,6 +85,10 @@ export default function MasterProductsPage() {
   const [allRows, setAllRows] = React.useState<ProductRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [listCursor, setListCursor] = React.useState("0");
+  const [listCursorStack, setListCursorStack] = React.useState<string[]>([]);
+  const [listNextCursor, setListNextCursor] = React.useState<string | null>(null);
+  const [listHasMore, setListHasMore] = React.useState(false);
 
   // Step 1 fields
   const [step, setStep] = React.useState<1 | 2>(1);
@@ -128,22 +133,33 @@ export default function MasterProductsPage() {
   React.useEffect(() => { void loadCategories(); }, [loadCategories]);
   React.useEffect(() => { void loadUoms(); }, [loadUoms]);
 
+  React.useEffect(() => {
+    setListCursor("0");
+    setListCursorStack([]);
+    setListNextCursor(null);
+  }, [debouncedSearch, statusFilter, productTypeFilter]);
+
   const refreshProducts = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchProductsApi({
+      const page = await fetchProductsPageApi({
         search: debouncedSearch || undefined,
         status: statusFilter || undefined,
         productType: productTypeFilter || undefined,
+        limit: PRODUCTS_PAGE_SIZE,
+        cursor: listCursor,
+        includeStock: true,
       });
-      setAllRows(data);
-      setProductsCache(data);
+      setAllRows(page.items);
+      setProductsCache(page.items);
+      setListNextCursor(page.nextCursor);
+      setListHasMore(page.hasMore);
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter, productTypeFilter]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, listCursor]);
 
   React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
@@ -403,12 +419,51 @@ export default function MasterProductsPage() {
             }}
           />
         ) : (
-          <DataTable<ProductRow>
-            data={allRows}
-            columns={columns}
-            onRowClick={(row) => router.push(`/master/products/${row.id}`)}
-            emptyMessage={`No ${productLabel.toLowerCase()}s.`}
-          />
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+              <span>
+                Showing {allRows.length} product{allRows.length === 1 ? "" : "s"}
+                {debouncedSearch.trim() ? ` matching “${debouncedSearch.trim()}”` : " on this page"}
+                {listCursorStack.length > 0 ? ` · page ${listCursorStack.length + 1}` : ""}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || listCursorStack.length === 0}
+                  onClick={() => {
+                    const stack = [...listCursorStack];
+                    const prev = stack.pop()!;
+                    setListCursorStack(stack);
+                    setListCursor(prev);
+                  }}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || !listHasMore || !listNextCursor}
+                  onClick={() => {
+                    if (!listNextCursor) return;
+                    setListCursorStack((s) => [...s, listCursor]);
+                    setListCursor(listNextCursor);
+                  }}
+                >
+                  Next
+                </Button>
+                <span className="text-xs tabular-nums">{PRODUCTS_PAGE_SIZE} per page</span>
+              </div>
+            </div>
+            <DataTable<ProductRow>
+              data={allRows}
+              columns={columns}
+              onRowClick={(row) => router.push(`/master/products/${row.id}`)}
+              emptyMessage={`No ${productLabel.toLowerCase()}s.`}
+            />
+          </>
         )}
       </div>
 
@@ -678,7 +733,12 @@ export default function MasterProductsPage() {
             setDeleteConfirmProductId(null);
             await refreshProducts();
           } catch (err) {
-            toast.error((err as Error).message);
+            const message = err instanceof Error ? err.message : "Delete failed.";
+            toast.error(
+              message.includes("403") || message.toLowerCase().includes("permission")
+                ? "You need admin.settings permission to delete products. Deactivating the product also removes it from price lists."
+                : message
+            );
           }
         }}
       />

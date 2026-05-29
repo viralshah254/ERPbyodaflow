@@ -454,8 +454,8 @@ export default function PriceListViewPage() {
             isOutletDerivedList
               ? `Override prices for this outlet only. Zone base prices inherit from ${data?.parentPriceListName ?? "the parent list"} — shown below when you have not set an outlet override.`
               : isFranchisePublisher
-                ? "Publish today's zone base prices. Linked outlets inherit these unless they have an outlet-specific override."
-                : `Set today's selling price per product. Prices are reviewed daily — stale prices use the previous day's rate as fallback.`
+                ? "Publish today's zone base prices for all active sellable products in your catalog. Deleting or deactivating a product in master removes it from this list. Linked outlets inherit these unless they have an outlet-specific override."
+                : `Set today's selling price per active sellable product in your catalog. Deleting or deactivating a product in master removes it from this list. Stale prices use the previous day's rate as fallback.`
           }
           breadcrumbs={[
             { label: "Pricing", href: "/pricing/overview" },
