@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -220,7 +219,7 @@ export default function ChartOfAccountsPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <input
         ref={importInputRef}
         type="file"
@@ -247,17 +246,16 @@ export default function ChartOfAccountsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by code, name, type, currency..."
           searchValue={search}
           onSearchChange={setSearch}
         />
-      <Card>
-        <CardHeader>
-          <CardTitle>Accounts</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Accounts</h3>
+          </div>
           {loading ? (
             <div className="rounded border p-6 text-sm text-muted-foreground">Loading ledger accounts...</div>
           ) : (
@@ -266,10 +264,12 @@ export default function ChartOfAccountsPage() {
               columns={columns}
               onRowClick={(row) => openEdit(row)}
               emptyMessage="No accounts found."
-            />
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
           )}
-        </CardContent>
-      </Card>
+        </div>
       </div>
 
       <Sheet

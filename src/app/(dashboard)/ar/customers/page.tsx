@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -338,7 +338,7 @@ function ARCustomersContent() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="AR Customers"
         description="Customers with credit limit, payment terms, and AR settings"
@@ -355,8 +355,8 @@ function ARCustomersContent() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search customers..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -402,7 +402,10 @@ function ARCustomersContent() {
               setDrawerOpen(true);
             }}
             emptyMessage="No customers found."
-          />
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
         )}
       </div>
 
@@ -598,7 +601,7 @@ function ARCustomersContent() {
 export default function ARCustomersPage() {
   return (
     <React.Suspense fallback={
-      <PageShell>
+      <PageShell className={LIST_PAGE_SHELL_CLASS}>
         <PageHeader title="AR Customers" description="Customers with credit limit, payment terms, and AR settings" breadcrumbs={[{ label: "Finance", href: "/finance" }, { label: "AR Customers" }]} sticky showCommandHint />
         <div className="p-6">
           <p className="text-sm text-muted-foreground py-8 text-center">Loading...</p>

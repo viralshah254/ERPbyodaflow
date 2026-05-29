@@ -1,8 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { PageLayout } from "@/components/layout/page-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
@@ -53,24 +58,34 @@ export default function DistributionRoutesPage() {
   ];
 
   return (
-    <PageLayout
-      title={`${routeLabel}s`}
-      description="Route list and schedule"
-      actions={
-        <Button onClick={() => setSheetOpen(true)}>
-          <Icons.Plus className="mr-2 h-4 w-4" />
-          New route
-        </Button>
-      }
-    >
-      <Card>
-        <CardHeader>
-          <CardTitle>Routes</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <DataTable data={rows} columns={columns} emptyMessage={loading ? "Loading routes..." : "No routes."} />
-        </CardContent>
-      </Card>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+      <PageHeader
+        title={`${routeLabel}s`}
+        description="Route list and schedule"
+        sticky
+        showCommandHint
+        actions={
+          <Button onClick={() => setSheetOpen(true)}>
+            <Icons.Plus className="mr-2 h-4 w-4" />
+            New route
+          </Button>
+        }
+      />
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Routes</h3>
+          </div>
+          <DataTable
+            data={rows}
+            columns={columns}
+            emptyMessage={loading ? "Loading routes..." : "No routes."}
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+          />
+        </div>
+      </div>
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent>
           <SheetHeader>
@@ -117,6 +132,6 @@ export default function DistributionRoutesPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-    </PageLayout>
+    </PageShell>
   );
 }

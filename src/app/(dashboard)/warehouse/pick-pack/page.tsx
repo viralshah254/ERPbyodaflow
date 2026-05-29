@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -67,7 +67,7 @@ export default function PickPackPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Pick & Pack"
         description="Live warehouse execution tasks for picking, packing, and dispatch."
@@ -78,27 +78,28 @@ export default function PickPackPage() {
         sticky
         showCommandHint
       />
-      <div className="space-y-4 p-6">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by reference, customer..."
           searchValue={search}
           onSearchChange={setSearch}
           filters={[{ id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: setStatusFilter }]}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Execution queue</CardTitle>
-            <CardDescription>Pick tasks now come from backend warehouse execution state.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<WarehousePickPackRow>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Execution queue</h3>
+            <p className="text-xs text-muted-foreground">Pick tasks now come from backend warehouse execution state.</p>
+          </div>
+          <DataTable<WarehousePickPackRow>
               data={filtered}
               columns={columns}
               onRowClick={(row) => router.push(`/warehouse/pick-pack/${row.id}`)}
               emptyMessage={loading ? "Loading pick-pack tasks..." : "No pick-pack tasks."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
     </PageShell>
   );

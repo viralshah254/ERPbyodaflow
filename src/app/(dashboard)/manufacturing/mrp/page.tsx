@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -196,7 +196,7 @@ export default function MrpPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="MRP"
         description="Material requirements planning — periods × items, requirements and planned orders"
@@ -245,8 +245,7 @@ export default function MrpPage() {
           </p>
         </div>
 
-        <DataTableToolbar
-          className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+        <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search SKU, name, or reason…"
           searchValue={search}
           onSearchChange={setSearch}
@@ -300,7 +299,10 @@ export default function MrpPage() {
                 data={rows}
                 columns={columns}
                 emptyMessage="No shortages match your filters."
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             </div>
           </div>
         )}

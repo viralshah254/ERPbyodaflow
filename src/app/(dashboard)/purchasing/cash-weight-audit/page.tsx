@@ -3,12 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import {
-  LIST_PAGE_BODY_PAGINATED_CLASS,
-  LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_STATIC_CLASS,
-  PageShell,
-} from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
@@ -1538,7 +1533,7 @@ export default function CashWeightAuditPage() {
         }
       />
 
-      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+      <div className={LIST_PAGE_BODY_CLASS}>
         {/* ── Stat chips ─────────────────────────────────────────────────────── */}
         <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
           <Card className="p-4">
@@ -1706,7 +1701,7 @@ export default function CashWeightAuditPage() {
               />
             </div>
           ) : (
-            <div className={cn(LIST_TABLE_STATIC_CLASS, "mx-4 mb-0 border-x-0 border-b-0 shadow-none rounded-none")}>
+            <div className={cn(LIST_TABLE_SURFACE_CLASS, "mx-4 mb-0 border-x-0 border-b-0 shadow-none rounded-none")}>
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(
@@ -1717,7 +1712,7 @@ export default function CashWeightAuditPage() {
                 <DataTable
                   data={paginatedPoRows}
                   columns={poColumns}
-                  scrollMode="natural"
+                  scrollMode="fill"
                   className="border-0 shadow-none"
                   emptyMessage="No procurements found. Record a disbursement and create a GRN to start auditing."
                 />
@@ -1889,7 +1884,10 @@ export default function CashWeightAuditPage() {
                       data={selectedPoRow.lines}
                       columns={detailLineColumns}
                       emptyMessage="No audit lines yet. Link a GRN to this PO to generate them."
-                    />
+                      scrollMode="fill"
+                      size="comfortable"
+                      className="min-h-0 flex-1 border-0"
+                      />
                   </div>
                   <p className="mt-1.5 text-xs text-muted-foreground">
                     Received weight comes from the GRN. Variance = received − paid. Use{" "}
@@ -1913,7 +1911,10 @@ export default function CashWeightAuditPage() {
                         data={selectedPoRow.exceptions}
                         columns={detailExceptionColumns}
                         emptyMessage="No exceptions."
-                      />
+                        scrollMode="fill"
+                        size="comfortable"
+                        className="min-h-0 flex-1 border-0"
+                        />
                     </div>
                   </div>
                 )}

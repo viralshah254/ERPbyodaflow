@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { CommissionSummaryCard } from "@/components/operational/CommissionSummaryCard";
@@ -50,7 +54,7 @@ export default function FinanceCommissionTopUpPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Commission / Top-up"
         description="Finance control center for franchise top-up exposure and payout readiness."
@@ -63,8 +67,8 @@ export default function FinanceCommissionTopUpPage() {
           </Button>
         }
       />
-      <div className="p-6">
-        <div className="mb-6 grid gap-4 lg:grid-cols-2">
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <div className="grid shrink-0 gap-4 lg:grid-cols-2">
           <CommissionSummaryCard
             title="Top-up Exposure"
             salesAmount={0}
@@ -80,21 +84,29 @@ export default function FinanceCommissionTopUpPage() {
             status="REVIEW"
           />
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Top-up records</CardTitle>
-            <CardDescription>Drill down and posting workflows can be expanded once finance posting endpoints are wired.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">Loading top-up records…</div>
-            ) : (
-              <DataTable data={rows} columns={columns} emptyMessage="No top-up records." />
-            )}
-          </CardContent>
-        </Card>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Top-up records</h3>
+            <p className="text-xs text-muted-foreground">
+              Drill down and posting workflows can be expanded once finance posting endpoints are wired.
+            </p>
+          </div>
+          {loading ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center py-12 text-sm text-muted-foreground">
+              Loading top-up records…
+            </div>
+          ) : (
+            <DataTable
+              data={rows}
+              columns={columns}
+              emptyMessage="No top-up records."
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+            />
+          )}
+        </div>
       </div>
     </PageShell>
   );
 }
-

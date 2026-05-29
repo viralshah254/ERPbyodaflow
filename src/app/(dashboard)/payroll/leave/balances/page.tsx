@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -84,7 +84,7 @@ export default function LeaveBalancesPage() {
   const years = Array.from({ length: 4 }, (_, i) => currentYear - i);
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Leave balances"
         description="Annual leave remaining, sick days used, and other leave breakdown per employee."
@@ -105,7 +105,7 @@ export default function LeaveBalancesPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <div className="flex flex-wrap gap-4">
           <div className="space-y-1.5">
             <Label>Year</Label>
@@ -127,21 +127,20 @@ export default function LeaveBalancesPage() {
             </Select>
           </div>
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Leave balances — {year}</CardTitle>
-            <CardDescription>
-              {rows.length} record(s). Balances update automatically when leave is approved.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<BalanceRow>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Leave balances — {year}</h3>
+            <p className="text-xs text-muted-foreground">{rows.length} record(s). Balances update automatically when leave is approved.</p>
+          </div>
+          <DataTable<BalanceRow>
               data={rows}
               columns={columns}
               emptyMessage={loading ? "Loading balances…" : "No leave balances found. Approve a leave request to initialise."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
     </PageShell>
   );

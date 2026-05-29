@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -89,7 +89,7 @@ export default function SalesReturnsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Returns / Credit Notes"
         description="Sales returns now create and post real credit notes with AR reversal and stock receipt."
@@ -106,21 +106,22 @@ export default function SalesReturnsPage() {
           </Button>
         }
       />
-      <div className="space-y-4 p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Returns</CardTitle>
-            <CardDescription>Open a row to review the generic document detail page.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<DocListRow>
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Returns</h3>
+            <p className="text-xs text-muted-foreground">Open a row to review the generic document detail page.</p>
+          </div>
+          <DataTable<DocListRow>
               data={rows}
               columns={columns}
               onRowClick={(row) => router.push(`/docs/credit-note/${row.id}`)}
               emptyMessage={loading ? "Loading returns..." : "No sales returns yet."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

@@ -2,12 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -121,7 +125,7 @@ export default function AssetRegisterPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Asset register"
         description="Custody (outlets & staff), depreciation, and linked source documents."
@@ -141,13 +145,13 @@ export default function AssetRegisterPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <div className="flex flex-wrap items-end gap-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <div className="flex shrink-0 flex-wrap items-end gap-4">
           <DataTableToolbar
+            className="min-w-[200px] flex-1 shrink-0"
             searchPlaceholder="Search code, name, tag, assignee…"
             searchValue={search}
             onSearchChange={setSearch}
-            className="flex-1 min-w-[200px]"
           />
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Custody</Label>
@@ -165,20 +169,23 @@ export default function AssetRegisterPage() {
             </Select>
           </div>
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Assets</CardTitle>
-            <CardDescription>Legal register lives here; custody can move to franchisees or staff without changing book cost.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<AssetRow>
-              data={filtered}
-              columns={columns}
-              onRowClick={(row) => router.push(`/assets/register/${row.id}`)}
-              emptyMessage={isLoading ? "Loading assets..." : "No assets."}
-            />
-          </CardContent>
-        </Card>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Assets</h3>
+            <p className="text-xs text-muted-foreground">
+              Legal register lives here; custody can move to franchisees or staff without changing book cost.
+            </p>
+          </div>
+          <DataTable<AssetRow>
+            data={filtered}
+            columns={columns}
+            onRowClick={(row) => router.push(`/assets/register/${row.id}`)}
+            emptyMessage={isLoading ? "Loading assets..." : "No assets."}
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+          />
+        </div>
       </div>
 
       <AddAssetSheet

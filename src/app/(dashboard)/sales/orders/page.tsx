@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -263,7 +263,10 @@ function FranchiseOrdersTab() {
           columns={columns}
           emptyMessage="No inbound orders from franchise outlets."
           onRowClick={(r) => router.push(franchiseInboundDetailHref(r))}
-        />
+          scrollMode="fill"
+          size="comfortable"
+          className="min-h-0 flex-1 border-0"
+          />
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground tabular-nums">
@@ -489,7 +492,7 @@ function SalesOrdersPanel() {
 
   return (
     <div className="space-y-4">
-      <DataTableToolbar
+      <DataTableToolbar className="shrink-0"
         searchPlaceholder="Search by number, customer..."
         searchValue={search}
         onSearchChange={setSearch}
@@ -541,7 +544,10 @@ function SalesOrdersPanel() {
           selectable
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
-        />
+          scrollMode="fill"
+          size="comfortable"
+          className="min-h-0 flex-1 border-0"
+          />
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground tabular-nums">
@@ -575,7 +581,7 @@ export default function SalesOrdersPage() {
   const franchiseOrdersBadge = navCounts["franchise-inbound-orders"] ?? 0;
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Sales Orders"
         description="Orders and fulfillment"
@@ -594,7 +600,7 @@ export default function SalesOrdersPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         {isFranchisor ? (
           <Tabs defaultValue="orders">
             <TabsList>

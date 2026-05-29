@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -462,7 +462,7 @@ export default function MasterPartiesPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Parties"
         description={`Customers, ${franchiseeLabel}s and ${supplierLabel}s. One place to manage every external counterparty.`}
@@ -488,7 +488,7 @@ export default function MasterPartiesPage() {
           )
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "customers" | "franchisees" | "suppliers")}>
           <TabsList>
             <TabsTrigger value="customers">{customerOnlyLabel}s</TabsTrigger>
@@ -496,7 +496,7 @@ export default function MasterPartiesPage() {
             <TabsTrigger value="suppliers">{supplierLabel}s</TabsTrigger>
           </TabsList>
           <TabsContent value="customers" className="mt-4 space-y-4">
-            <DataTableToolbar
+            <DataTableToolbar className="shrink-0"
               searchPlaceholder={`Search ${customerOnlyLabel.toLowerCase()}s...`}
               searchValue={search}
               onSearchChange={setSearch}
@@ -544,11 +544,14 @@ export default function MasterPartiesPage() {
                 columns={columns}
                 onRowClick={openEditDrawer}
                 emptyMessage={`No ${customerOnlyLabel.toLowerCase()}s.`}
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             )}
           </TabsContent>
           <TabsContent value="suppliers" className="mt-4 space-y-4">
-            <DataTableToolbar
+            <DataTableToolbar className="shrink-0"
               searchPlaceholder={`Search ${supplierLabel.toLowerCase()}s...`}
               searchValue={search}
               onSearchChange={setSearch}
@@ -596,7 +599,10 @@ export default function MasterPartiesPage() {
                 columns={columns}
                 onRowClick={openEditDrawer}
                 emptyMessage={`No ${supplierLabel.toLowerCase()}s.`}
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             )}
           </TabsContent>
           <TabsContent value="franchisees" className="mt-4 space-y-4">
@@ -633,7 +639,10 @@ export default function MasterPartiesPage() {
                 columns={columns}
                 onRowClick={openEditDrawer}
                 emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             )}
           </TabsContent>
         </Tabs>

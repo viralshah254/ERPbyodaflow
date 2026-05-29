@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -166,7 +166,7 @@ export default function ExchangeRatesSettingsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Exchange rates"
         description={`Manage manual and imported rates. Base: ${settings.baseCurrency}`}
@@ -201,15 +201,12 @@ export default function ExchangeRatesSettingsPage() {
         }
       />
       <div className="p-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Rates</CardTitle>
-            <CardDescription>
-              Filter by date. Currency pair: From / To (default To = base).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-4">
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Rates</h3>
+            <p className="text-xs text-muted-foreground">Filter by date. Currency pair: From / To (default To = base).</p>
+          </div>
+          <div className="flex flex-wrap gap-4">
               <div className="space-y-2">
                 <Label>Date</Label>
                 <Input
@@ -247,9 +244,11 @@ export default function ExchangeRatesSettingsPage() {
               data={rates}
               columns={columns}
               emptyMessage="No rates for this date."
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={addOpen} onOpenChange={setAddOpen}>

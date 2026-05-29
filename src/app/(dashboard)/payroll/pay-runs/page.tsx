@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -230,7 +230,7 @@ export default function PayRunsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Pay runs"
         description="Create a pay run with auto-calculated Kenya & Uganda statutory deductions. Gross pay is the amount for that calendar month, prorated when someone joins or leaves mid-month (Employees shows full monthly contract)."
@@ -253,8 +253,8 @@ export default function PayRunsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search runs..."
           onExport={() =>
             downloadCsv(
@@ -271,20 +271,21 @@ export default function PayRunsPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Pay runs</CardTitle>
-            <CardDescription>Statutory taxes auto-calculated per jurisdiction. “Period gross” may be lower than the employee’s monthly contract if they were not employed for the full month. Click a run to view / approve / post.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<PayRun>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Pay runs</h3>
+            <p className="text-xs text-muted-foreground">Statutory taxes auto-calculated per jurisdiction. “Period gross” may be lower than the employee’s monthly contract if they were not employed for the full month. Click a run to view / approve / post.</p>
+          </div>
+          <DataTable<PayRun>
               data={runs}
               columns={columns}
               onRowClick={(r) => router.push(`/payroll/pay-runs/${r.id}`)}
               emptyMessage={loading ? "Loading pay runs..." : "No pay runs yet."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) { setCalculatedLines(null); setCasualDeductions({}); } }}>

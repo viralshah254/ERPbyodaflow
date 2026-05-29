@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -87,7 +87,7 @@ export default function StockMovementsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Stock Movements"
         description="Track inventory movements and transactions"
@@ -98,8 +98,8 @@ export default function StockMovementsPage() {
         sticky
         showCommandHint
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by SKU, product, reference..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -155,7 +155,10 @@ export default function StockMovementsPage() {
             data={filtered}
             columns={columns}
             emptyMessage="No movements found."
-          />
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
         )}
       </div>
     </PageShell>

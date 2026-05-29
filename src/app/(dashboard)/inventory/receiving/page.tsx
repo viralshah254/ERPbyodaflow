@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -104,7 +104,7 @@ export default function InventoryReceivingQueuePage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Receiving Queue"
         description="Queue of inbound lines awaiting weigh-in or variance resolution."
@@ -130,13 +130,12 @@ export default function InventoryReceivingQueuePage() {
             receivedWeightKg={rows.reduce((a, r) => a + (r.receivedWeightKg ?? 0), 0)}
           />
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Inbound receiving queue</CardTitle>
-            <CardDescription>Rows marked as variance should be reviewed before posting final receipt.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Inbound receiving queue</h3>
+            <p className="text-xs text-muted-foreground">Rows marked as variance should be reviewed before posting final receipt.</p>
+          </div>
+          {loading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">Loading receiving queue…</div>
             ) : (
               <DataTable
@@ -148,10 +147,12 @@ export default function InventoryReceivingQueuePage() {
                     : router.push("/inventory/receipts")
                 }
                 emptyMessage="No receiving queue rows."
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </PageShell>
   );

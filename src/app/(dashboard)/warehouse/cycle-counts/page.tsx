@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -74,7 +74,7 @@ export default function CycleCountsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Cycle counts"
         description="Backend-backed count sessions with line updates and posting."
@@ -91,8 +91,8 @@ export default function CycleCountsPage() {
           </Button>
         }
       />
-      <div className="space-y-4 p-6">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by number or warehouse..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -108,20 +108,21 @@ export default function CycleCountsPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Sessions</CardTitle>
-            <CardDescription>Sessions can be created by warehouse or a specific bin/location scope.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<WarehouseCycleCountRow>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Sessions</h3>
+            <p className="text-xs text-muted-foreground">Sessions can be created by warehouse or a specific bin/location scope.</p>
+          </div>
+          <DataTable<WarehouseCycleCountRow>
               data={filtered}
               columns={columns}
               onRowClick={(row) => router.push(`/warehouse/cycle-counts/${row.id}`)}
               emptyMessage={loading ? "Loading cycle counts..." : "No cycle count sessions."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>

@@ -1,31 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import Link from "next/link";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import * as Icons from "lucide-react";
 import { isApiConfigured } from "@/lib/api/client";
+import { fetchArAgingApi, type ArAgingData } from "@/lib/api/treasury-ops";
 import { toast } from "sonner";
-import Link from "next/link";
-
-type AgingRow = {
-  partyId: string;
-  partyName: string;
-  current: number;
-  days_1_30: number;
-  days_31_60: number;
-  days_61_90: number;
-  over_90: number;
-  total: number;
-};
-
-type AgingData = {
-  items: AgingRow[];
-  totals: Omit<AgingRow, "partyId" | "partyName">;
-};
+import * as Icons from "lucide-react";
 
 function fmt(n: number) {
   return n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -41,26 +31,34 @@ function heatColor(value: number, bucket: "current" | "1_30" | "31_60" | "61_90"
 }
 
 export default function ArAgingPage() {
-  const [data, setData] = React.useState<AgingData | null>(null);
+  const [data, setData] = React.useState<ArAgingData | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
 
   const load = React.useCallback(async () => {
-    if (!isApiConfigured()) return;
+    if (!isApiConfigured()) {
+      setLoadError("API not configured.");
+      return;
+    }
     setLoading(true);
+    setLoadError(null);
     try {
-      const resp = await fetch("/api/ar/aging");
-      if (!resp.ok) throw new Error("Failed to load aging data");
-      const json = await resp.json() as AgingData;
+      const json = await fetchArAgingApi();
       setData(json);
     } catch (e) {
-      toast.error((e as Error).message);
+      const message = (e as Error).message || "Failed to load aging data";
+      setLoadError(message);
+      setData(null);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   const filtered = React.useMemo(() => {
     if (!data) return [];
@@ -92,7 +90,7 @@ export default function ArAgingPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="AR Aging Report"
         description="Outstanding invoice balances by days overdue"
@@ -102,7 +100,7 @@ export default function ArAgingPage() {
               <Icons.Download className="mr-2 h-4 w-4" />
               Export CSV
             </Button>
-            <Button size="sm" onClick={load} disabled={loading}>
+            <Button size="sm" onClick={() => void load()} disabled={loading}>
               <Icons.RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
@@ -110,9 +108,8 @@ export default function ArAgingPage() {
         }
       />
 
-      {/* Summary KPI row */}
-      {data && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+      {data ? (
+        <div className="grid shrink-0 grid-cols-2 gap-3 px-4 pb-4 sm:grid-cols-5 sm:px-6">
           {[
             { label: "Current", value: data.totals.current, bucket: "current" as const },
             { label: "1–30 days", value: data.totals.days_1_30, bucket: "1_30" as const },
@@ -121,7 +118,7 @@ export default function ArAgingPage() {
             { label: ">90 days", value: data.totals.over_90, bucket: "90plus" as const },
           ].map((kpi) => (
             <Card key={kpi.label} className={kpi.value > 0 ? heatColor(kpi.value, kpi.bucket).replace("text-", "border-").replace("bg-", "").split(" ")[0] : ""}>
-              <CardContent className="pt-4 pb-3">
+              <CardContent className="pb-3 pt-4">
                 <p className="text-xs text-muted-foreground">{kpi.label}</p>
                 <p className={`text-lg font-semibold ${kpi.value > 0 ? heatColor(kpi.value, kpi.bucket).split(" ")[0] : "text-muted-foreground"}`}>
                   {fmt(kpi.value)}
@@ -130,82 +127,91 @@ export default function ArAgingPage() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">Aging Schedule</CardTitle>
-          <Input
-            placeholder="Search customers..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-48 h-8 text-sm"
-          />
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Aging Schedule</h3>
+            <Input
+              placeholder="Search customers..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 w-48 text-sm"
+            />
+          </div>
+          {loadError ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 py-12 text-center">
+              <p className="text-sm text-destructive">{loadError}</p>
+              <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+                Retry
+              </Button>
+            </div>
+          ) : loading ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center py-12 text-sm text-muted-foreground">
+              Loading...
+            </div>
           ) : !data || filtered.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
+            <div className="flex min-h-0 flex-1 items-center justify-center py-12 text-sm text-muted-foreground">
               {!isApiConfigured() ? "API not configured" : "No outstanding invoices"}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full text-sm">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-card">
                   <tr className="border-b bg-muted/40">
-                    <th className="text-left px-4 py-2 font-medium">Customer</th>
-                    <th className="text-right px-3 py-2 font-medium text-emerald-700">Current</th>
-                    <th className="text-right px-3 py-2 font-medium text-amber-600">1–30 days</th>
-                    <th className="text-right px-3 py-2 font-medium text-orange-600">31–60 days</th>
-                    <th className="text-right px-3 py-2 font-medium text-red-600">61–90 days</th>
-                    <th className="text-right px-3 py-2 font-medium text-red-800">&gt;90 days</th>
-                    <th className="text-right px-4 py-2 font-medium">Total</th>
+                    <th className="px-4 py-2 text-left font-medium">Customer</th>
+                    <th className="px-3 py-2 text-right font-medium text-emerald-700">Current</th>
+                    <th className="px-3 py-2 text-right font-medium text-amber-600">1–30 days</th>
+                    <th className="px-3 py-2 text-right font-medium text-orange-600">31–60 days</th>
+                    <th className="px-3 py-2 text-right font-medium text-red-600">61–90 days</th>
+                    <th className="px-3 py-2 text-right font-medium text-red-800">&gt;90 days</th>
+                    <th className="px-4 py-2 text-right font-medium">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((row) => (
-                    <tr key={row.partyId} className="border-b hover:bg-muted/20 transition-colors">
+                    <tr key={row.partyId} className="border-b transition-colors hover:bg-muted/20">
                       <td className="px-4 py-2">
                         <Link href={`/master/parties?search=${encodeURIComponent(row.partyName)}`} className="text-primary hover:underline">
                           {row.partyName}
                         </Link>
                       </td>
-                      <td className={`text-right px-3 py-2 ${heatColor(row.current, "current")}`}>
+                      <td className={`px-3 py-2 text-right ${heatColor(row.current, "current")}`}>
                         {row.current > 0 ? fmt(row.current) : "—"}
                       </td>
-                      <td className={`text-right px-3 py-2 rounded ${heatColor(row.days_1_30, "1_30")}`}>
+                      <td className={`rounded px-3 py-2 text-right ${heatColor(row.days_1_30, "1_30")}`}>
                         {row.days_1_30 > 0 ? fmt(row.days_1_30) : "—"}
                       </td>
-                      <td className={`text-right px-3 py-2 rounded ${heatColor(row.days_31_60, "31_60")}`}>
+                      <td className={`rounded px-3 py-2 text-right ${heatColor(row.days_31_60, "31_60")}`}>
                         {row.days_31_60 > 0 ? fmt(row.days_31_60) : "—"}
                       </td>
-                      <td className={`text-right px-3 py-2 rounded ${heatColor(row.days_61_90, "61_90")}`}>
+                      <td className={`rounded px-3 py-2 text-right ${heatColor(row.days_61_90, "61_90")}`}>
                         {row.days_61_90 > 0 ? fmt(row.days_61_90) : "—"}
                       </td>
-                      <td className={`text-right px-3 py-2 rounded ${heatColor(row.over_90, "90plus")}`}>
+                      <td className={`rounded px-3 py-2 text-right ${heatColor(row.over_90, "90plus")}`}>
                         {row.over_90 > 0 ? fmt(row.over_90) : "—"}
                       </td>
-                      <td className="text-right px-4 py-2 font-medium">{fmt(row.total)}</td>
+                      <td className="px-4 py-2 text-right font-medium">{fmt(row.total)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 bg-muted/50 font-semibold">
                     <td className="px-4 py-2">Total</td>
-                    <td className="text-right px-3 py-2 text-emerald-700">{fmt(data.totals.current)}</td>
-                    <td className="text-right px-3 py-2 text-amber-600">{fmt(data.totals.days_1_30)}</td>
-                    <td className="text-right px-3 py-2 text-orange-600">{fmt(data.totals.days_31_60)}</td>
-                    <td className="text-right px-3 py-2 text-red-600">{fmt(data.totals.days_61_90)}</td>
-                    <td className="text-right px-3 py-2 text-red-800">{fmt(data.totals.over_90)}</td>
-                    <td className="text-right px-4 py-2">{fmt(data.totals.total)}</td>
+                    <td className="px-3 py-2 text-right text-emerald-700">{fmt(data.totals.current)}</td>
+                    <td className="px-3 py-2 text-right text-amber-600">{fmt(data.totals.days_1_30)}</td>
+                    <td className="px-3 py-2 text-right text-orange-600">{fmt(data.totals.days_31_60)}</td>
+                    <td className="px-3 py-2 text-right text-red-600">{fmt(data.totals.days_61_90)}</td>
+                    <td className="px-3 py-2 text-right text-red-800">{fmt(data.totals.over_90)}</td>
+                    <td className="px-4 py-2 text-right">{fmt(data.totals.total)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </PageShell>
   );
 }

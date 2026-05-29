@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -156,7 +156,7 @@ export default function IntercompanyTransactionsPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="IC Transactions"
         description="Intercompany invoices and bills backed by the finance ledger."
@@ -185,25 +185,26 @@ export default function IntercompanyTransactionsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by number, entity..."
           searchValue={search}
           onSearchChange={setSearch}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Transactions</CardTitle>
-            <CardDescription>Create IC invoices and bills, then post elimination journals from finance.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<ICTransactionRow>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Transactions</h3>
+            <p className="text-xs text-muted-foreground">Create IC invoices and bills, then post elimination journals from finance.</p>
+          </div>
+          <DataTable<ICTransactionRow>
               data={filtered}
               columns={columns}
               emptyMessage="No IC transactions."
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Consolidation snapshot</CardTitle>

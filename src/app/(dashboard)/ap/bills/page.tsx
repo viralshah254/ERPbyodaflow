@@ -3,12 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  LIST_PAGE_BODY_PAGINATED_CLASS,
-  LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_STATIC_CLASS,
-  PageShell,
-} from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -438,7 +433,7 @@ export default function APBillsPage() {
           </div>
         }
       />
-      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+      <div className={LIST_PAGE_BODY_CLASS}>
         <div className="flex flex-col rounded-xl border bg-card shadow-sm">
           {tab === "open" && (
             <div className="shrink-0 px-4 pt-4">
@@ -484,8 +479,7 @@ export default function APBillsPage() {
           </div>
 
           <div className="shrink-0 p-4 pb-0">
-            <DataTableToolbar
-              className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+            <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
               searchPlaceholder="Search by number, supplier…"
               searchValue={searchInput}
               onSearchChange={setSearchInput}
@@ -577,7 +571,7 @@ export default function APBillsPage() {
               <SkeletonDataTable rows={pageSize} columnWidths={skeletonWidths} />
             </div>
           ) : (
-            <div className={cn(LIST_TABLE_STATIC_CLASS, "border-0 border-t rounded-none shadow-none")}>
+            <div className={cn(LIST_TABLE_SURFACE_CLASS, "border-0 border-t rounded-none shadow-none")}>
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(
@@ -588,7 +582,7 @@ export default function APBillsPage() {
                 <DataTable<APBillDisplayRow>
                   data={displayRows}
                   columns={columns}
-                  scrollMode="natural"
+                  scrollMode="fill"
                   className="border-0 shadow-none"
                   onRowClick={(row) => {
                     const billId =

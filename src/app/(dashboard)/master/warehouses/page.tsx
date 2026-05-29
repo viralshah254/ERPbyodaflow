@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -160,7 +160,7 @@ export default function MasterWarehousesPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={warehouseLabel + "s"}
         description="Manage warehouses and locations"
@@ -179,7 +179,7 @@ export default function MasterWarehousesPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar
           searchPlaceholder={`Search by code, name, branch...`}
           searchValue={search}
@@ -209,7 +209,10 @@ export default function MasterWarehousesPage() {
             columns={columns}
             onRowClick={openEdit}
             emptyMessage={`No ${warehouseLabel.toLowerCase()}s.`}
-          />
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
         )}
       </div>
 

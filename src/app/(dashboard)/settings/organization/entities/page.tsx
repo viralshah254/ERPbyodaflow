@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -52,7 +52,7 @@ export default function EntitiesPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Entities"
         description="Multi-entity setup with reporting and base-currency control."
@@ -94,8 +94,8 @@ export default function EntitiesPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by code, name..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -111,19 +111,20 @@ export default function EntitiesPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Entities</CardTitle>
-            <CardDescription>Entity register, reporting flags, and base currency master data.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<EntityRow>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Entities</h3>
+            <p className="text-xs text-muted-foreground">Entity register, reporting flags, and base currency master data.</p>
+          </div>
+          <DataTable<EntityRow>
               data={filtered}
               columns={columns}
               emptyMessage={loading ? "Loading entities..." : "No entities."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
     </PageShell>
   );

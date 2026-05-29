@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -343,7 +343,7 @@ export default function WorkOrdersPage() {
   }
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={woLabel}
         description="Create, issue, and receive work orders"
@@ -358,8 +358,7 @@ export default function WorkOrdersPage() {
       />
 
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <DataTableToolbar
-          className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+        <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search number, product, BOM, or GRN…"
           searchValue={search}
           onSearchChange={setSearch}
@@ -413,7 +412,10 @@ export default function WorkOrdersPage() {
                 data={rows}
                 columns={columns}
                 emptyMessage="No work orders match your filters."
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             </div>
           </div>
         )}

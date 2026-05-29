@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -98,7 +98,7 @@ export default function AuditLogPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Audit Log"
         description="Who did what, when. Before/after preview for changes."
@@ -109,28 +109,27 @@ export default function AuditLogPage() {
         sticky
         showCommandHint
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by user, entity, action..."
           searchValue={search}
           onSearchChange={setSearch}
           onExport={() => void exportAuditLogApi()}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Activity</CardTitle>
-            <CardDescription>
-              {filtered.length} entries. All actions are logged for compliance.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<AuditLogEntry>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Activity</h3>
+            <p className="text-xs text-muted-foreground">{filtered.length} entries. All actions are logged for compliance.</p>
+          </div>
+          <DataTable<AuditLogEntry>
               data={filtered}
               columns={columns}
               emptyMessage="No audit entries found."
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
     </PageShell>
   );

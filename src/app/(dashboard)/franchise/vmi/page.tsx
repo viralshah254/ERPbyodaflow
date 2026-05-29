@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -192,7 +192,7 @@ export default function FranchiseVmiPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="VMI & Replenishment"
         description="Franchisee stock visibility and auto-replenishment from Cold Hub"
@@ -281,15 +281,17 @@ export default function FranchiseVmiPage() {
                     />
                   ))}
                 </div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Reorder suggestions</CardTitle>
-                    <CardDescription>Below reorder point; suggested order qty to bring up to max or target.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    <DataTable<FranchiseeStockRow & { id?: string }> data={suggestions as (FranchiseeStockRow & { id?: string })[]} columns={suggestionColumns} emptyMessage="No suggestions (all above reorder point)." />
-                  </CardContent>
-                </Card>
+                <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Reorder suggestions</h3>
+            <p className="text-xs text-muted-foreground">Below reorder point; suggested order qty to bring up to max or target.</p>
+          </div>
+          <DataTable<FranchiseeStockRow & { id?: string }> data={suggestions as (FranchiseeStockRow & { id?: string })[]} columns={suggestionColumns} emptyMessage="No suggestions (all above reorder point)."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
+        </div>
               </div>
             )}
 
@@ -326,7 +328,11 @@ export default function FranchiseVmiPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <DataTable<VMIReplenishmentOrderRow> data={orders} columns={orderColumns} emptyMessage="No replenishment orders." />
+                  <DataTable<VMIReplenishmentOrderRow> data={orders} columns={orderColumns} emptyMessage="No replenishment orders."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
                 </CardContent>
               </Card>
             )}
@@ -354,7 +360,11 @@ export default function FranchiseVmiPage() {
                   </Select>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <DataTable<FranchiseeStockRow & { id?: string }> data={stock as (FranchiseeStockRow & { id?: string })[]} columns={stockColumns} emptyMessage="No stock data." />
+                  <DataTable<FranchiseeStockRow & { id?: string }> data={stock as (FranchiseeStockRow & { id?: string })[]} columns={stockColumns} emptyMessage="No stock data."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
                 </CardContent>
               </Card>
             )}

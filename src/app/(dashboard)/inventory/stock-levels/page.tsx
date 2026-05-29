@@ -3,13 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PageLayout } from "@/components/layout/page-layout";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { FiltersBar } from "@/components/ui/filters-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { CardDescription } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -289,24 +295,28 @@ export default function StockLevelsPage() {
   ];
 
   return (
-    <PageLayout
-      title="Stock Levels"
-      description="View current inventory levels across all warehouses"
-      actions={
-        <>
-          <Button variant="outline">
-            <Icons.Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-          <Button>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Stock Adjustment
-          </Button>
-        </>
-      }
-    >
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+      <PageHeader
+        title="Stock Levels"
+        description="View current inventory levels across all warehouses"
+        sticky
+        showCommandHint
+        actions={
+          <>
+            <Button variant="outline">
+              <Icons.Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+            <Button>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Stock Adjustment
+            </Button>
+          </>
+        }
+      />
+      <div className={LIST_PAGE_BODY_CLASS}>
       {isFranchisor && networkAgg.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-3">
+        <div className="shrink-0 flex flex-wrap gap-3">
           <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm">
             <Icons.Store className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Franchise network total available:</span>
@@ -323,8 +333,8 @@ export default function StockLevelsPage() {
         </div>
       )}
 
-      <Card>
         <FiltersBar
+          className="shrink-0"
           searchPlaceholder="Search by SKU or product name..."
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
@@ -356,19 +366,15 @@ export default function StockLevelsPage() {
           activeFiltersCount={[warehouseFilter, statusFilter].filter((v) => v !== "all").length}
           onClearFilters={() => { setWarehouseFilter("all"); setStatusFilter("all"); }}
         />
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Stock Levels</CardTitle>
-              <CardDescription>
-                {loading
-                  ? "Loading stock..."
-                  : `${filteredItems.length} items across all locations${isFranchisor && networkAgg.length > 0 ? " · Franchise network column shows totals across all outlets" : ""}`}
-              </CardDescription>
-            </div>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Stock Levels</h3>
+            <CardDescription className="mt-1">
+              {loading
+                ? "Loading stock..."
+                : `${filteredItems.length} items across all locations${isFranchisor && networkAgg.length > 0 ? " · Franchise network column shows totals across all outlets" : ""}`}
+            </CardDescription>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
           {loading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">Loading stock levels...</div>
           ) : (
@@ -377,10 +383,13 @@ export default function StockLevelsPage() {
               columns={columns}
               onRowClick={(row) => openStockDetail(row)}
               emptyMessage="No stock items found."
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
             />
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Franchise network drill-down sheet */}
       {franchiseDrillRow && (
@@ -551,6 +560,6 @@ export default function StockLevelsPage() {
           </SheetContent>
         </Sheet>
       )}
-    </PageLayout>
+    </PageShell>
   );
 }

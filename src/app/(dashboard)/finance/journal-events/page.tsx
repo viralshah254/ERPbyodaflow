@@ -1,6 +1,6 @@
 "use client";
 
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -35,7 +35,7 @@ export default function FinanceJournalEventsPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Journal Events"
         description="Preview conditional journal entries generated from operational events."
@@ -44,15 +44,17 @@ export default function FinanceJournalEventsPage() {
         showCommandHint
       />
       <div className="p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Conditional journal preview</CardTitle>
-            <CardDescription>Baseline view for finance controls; can be wired to backend event previews.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable data={journalEventRows} columns={columns} emptyMessage="No journal events." />
-          </CardContent>
-        </Card>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Conditional journal preview</h3>
+            <p className="text-xs text-muted-foreground">Baseline view for finance controls; can be wired to backend event previews.</p>
+          </div>
+          <DataTable data={journalEventRows} columns={columns} emptyMessage="No journal events."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
+        </div>
       </div>
     </PageShell>
   );
