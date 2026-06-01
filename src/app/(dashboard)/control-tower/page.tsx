@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   Card,
@@ -447,7 +447,7 @@ export default function ControlTowerPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={perishableControlTowerEnabled ? "Perishable Command Center" : "Control Tower"}
         description={
@@ -656,7 +656,10 @@ export default function ControlTowerPage() {
                         data={exceptions}
                         columns={exceptionColumns}
                         emptyMessage="No active exceptions."
-                      />
+                        scrollMode="fill"
+                        size="comfortable"
+                        className="min-h-0 flex-1 border-0"
+                        />
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -715,21 +718,20 @@ export default function ControlTowerPage() {
                   />
 
                   {exceptions.filter((e) => e.exceptionType === "weight_variance").length > 0 ? (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Open Weight Variances</CardTitle>
-                        <CardDescription>
-                          Lines with status VARIANCE requiring investigation or approval.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        <DataTable<ExceptionRow>
+                    <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Open Weight Variances</h3>
+            <p className="text-xs text-muted-foreground">Lines with status VARIANCE requiring investigation or approval.</p>
+          </div>
+          <DataTable<ExceptionRow>
                           data={exceptions.filter((e) => e.exceptionType === "weight_variance")}
                           columns={exceptionColumns}
                           emptyMessage="No weight variances."
-                        />
-                      </CardContent>
-                    </Card>
+                          scrollMode="fill"
+                          size="comfortable"
+                          className="min-h-0 flex-1 border-0"
+                          />
+        </div>
                   ) : null}
                 </TabsContent>
 
@@ -763,21 +765,20 @@ export default function ControlTowerPage() {
                   </div>
 
                   {wipBalances.length > 0 ? (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>WIP by Work Center</CardTitle>
-                        <CardDescription>
-                          Stock currently in the custody of each external processor.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        <DataTable<WIPBalanceRow>
+                    <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">WIP by Work Center</h3>
+            <p className="text-xs text-muted-foreground">Stock currently in the custody of each external processor.</p>
+          </div>
+          <DataTable<WIPBalanceRow>
                           data={wipBalances}
                           columns={wipColumns}
                           emptyMessage="No WIP balances."
-                        />
-                      </CardContent>
-                    </Card>
+                          scrollMode="fill"
+                          size="comfortable"
+                          className="min-h-0 flex-1 border-0"
+                          />
+        </div>
                   ) : null}
 
                   <div className="grid gap-6 xl:grid-cols-2">
@@ -946,7 +947,10 @@ export default function ControlTowerPage() {
                           data={exceptions.filter((e) => e.exceptionType === "low_stock")}
                           columns={exceptionColumns}
                           emptyMessage="All outlets stocked above reorder point."
-                        />
+                          scrollMode="fill"
+                          size="comfortable"
+                          className="min-h-0 flex-1 border-0"
+                          />
                       </CardContent>
                     </Card>
                   ) : null}

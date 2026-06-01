@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -216,7 +216,7 @@ export default function FranchiseCommissionPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Commission & Rebates"
         description="Franchise outlet earnings (per-product economics + HQ rules), margin guarantee top-ups, and WHT deductions"
@@ -336,24 +336,20 @@ export default function FranchiseCommissionPage() {
             </Card>
 
             <div className="grid md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Commission rules</CardTitle>
-                  <CardDescription>Percent of sales or fixed per unit; weekly/monthly.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable data={rules} columns={ruleColumns} emptyMessage="No rules." />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Top-ups (margin guarantee)</CardTitle>
-                  <CardDescription>When commission is below floor (e.g. launch phase).</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <DataTable data={topUps} columns={topUpColumns} emptyMessage="No top-ups." />
-                </CardContent>
-              </Card>
+              <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Commission rules</h3>
+            <p className="text-xs text-muted-foreground">Percent of sales or fixed per unit; weekly/monthly.</p>
+          </div>
+          <DataTable data={rules} columns={ruleColumns} emptyMessage="No rules." />
+        </div>
+              <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Top-ups (margin guarantee)</h3>
+            <p className="text-xs text-muted-foreground">When commission is below floor (e.g. launch phase).</p>
+          </div>
+          <DataTable data={topUps} columns={topUpColumns} emptyMessage="No top-ups." />
+        </div>
             </div>
 
             <Card>
@@ -414,7 +410,10 @@ export default function FranchiseCommissionPage() {
                     data={summaryRows}
                     columns={summaryColumns}
                     emptyMessage="No summary rows."
-                  />
+                    scrollMode="fill"
+                    size="comfortable"
+                    className="min-h-0 flex-1 border-0"
+                    />
                 )}
                 {summaryTotals && (
                   <div className="border-t px-4 py-3 text-sm flex flex-wrap gap-4 justify-end text-muted-foreground">

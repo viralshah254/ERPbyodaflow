@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -269,7 +269,7 @@ export default function P9FormsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="P9 Tax Deduction Cards"
         description="Annual employee PAYE cards for Kenya full-time employees. Auto-generated when a pay run is posted."
@@ -310,7 +310,7 @@ export default function P9FormsPage() {
         }
       />
 
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-3">
           <Icons.Info className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
@@ -320,7 +320,7 @@ export default function P9FormsPage() {
           </div>
         </div>
 
-        <DataTableToolbar
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by employee name or KRA PIN..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -360,7 +360,10 @@ export default function P9FormsPage() {
               columns={columns}
               onRowClick={handleOpenDetail}
               emptyMessage={loading ? "Loading…" : `No P9 cards for ${year}.`}
-            />
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
           </CardContent>
         </Card>
       </div>

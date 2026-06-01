@@ -3,14 +3,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PageLayout } from "@/components/layout/page-layout";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
+import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { FiltersBar } from "@/components/ui/filters-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import * as Icons from "lucide-react";
@@ -188,36 +194,43 @@ export default function CustomersPage() {
 
   if (!isApiConfigured()) {
     return (
-      <PageLayout
-        title="Customers"
-        description="Manage customer accounts and relationships."
-        breadcrumbs={[{ label: "Sales", href: "/sales/overview" }, { label: "Customers" }]}
-      >
-        <EmptyState
-          icon="PlugZap"
-          title="API not configured"
-          description="Set NEXT_PUBLIC_API_URL to load customers from your organisation."
+      <PageShell className={LIST_PAGE_SHELL_CLASS}>
+        <PageHeader
+          title="Customers"
+          description="Manage customer accounts and relationships."
+          breadcrumbs={[{ label: "Sales", href: "/sales/overview" }, { label: "Customers" }]}
         />
-      </PageLayout>
+        <div className={LIST_PAGE_BODY_CLASS}>
+          <EmptyState
+            icon="PlugZap"
+            title="API not configured"
+            description="Set NEXT_PUBLIC_API_URL to load customers from your organisation."
+          />
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <PageLayout
-      title="Customers"
-      description="Live customer roster from Accounts Receivable. Edit credit and terms under Finance → AR Customers."
-      breadcrumbs={[{ label: "Sales", href: "/sales/overview" }, { label: "Customers" }]}
-      actions={
-        <Button asChild>
-          <Link href="/ar/customers?new=1">
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add customer
-          </Link>
-        </Button>
-      }
-    >
-      <Card>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+      <PageHeader
+        title="Customers"
+        description="Live customer roster from Accounts Receivable. Edit credit and terms under Finance → AR Customers."
+        breadcrumbs={[{ label: "Sales", href: "/sales/overview" }, { label: "Customers" }]}
+        sticky
+        showCommandHint
+        actions={
+          <Button asChild>
+            <Link href="/ar/customers?new=1">
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add customer
+            </Link>
+          </Button>
+        }
+      />
+      <div className={LIST_PAGE_BODY_CLASS}>
         <FiltersBar
+          className="shrink-0"
           searchPlaceholder="Search by name or email..."
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
@@ -246,78 +259,83 @@ export default function CustomersPage() {
             },
           ]}
         />
-        <CardHeader className="border-t">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>Customers</CardTitle>
-              <CardDescription>
-                {loading ? "Loading…" : `${filtered.length} customer${filtered.length === 1 ? "" : "s"}`}
-                {" · "}
-                <Link href="/ar/customers" className="text-primary underline-offset-4 hover:underline">
-                  Open AR Customers
-                </Link>{" "}
-                for full credit workflow
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                type="button"
-                onClick={() =>
-                  downloadCsv(
-                    `sales-customers-${new Date().toISOString().slice(0, 10)}.csv`,
-                    filtered.map((r) => ({
-                      name: r.name,
-                      email: r.email ?? "",
-                      phone: r.phone ?? "",
-                      customerType: r.customerType ?? "",
-                      creditLimit: r.creditLimit ?? r.creditLimitAmount ?? "",
-                      outstanding: r.outstandingBalance ?? "",
-                      status: r.status ?? "",
-                    }))
-                  )
-                }
-                disabled={loading || filtered.length === 0}
-              >
-                <Icons.Download className="mr-2 h-4 w-4" />
-                Export
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/settings/migrations">
-                  <Icons.Upload className="mr-2 h-4 w-4" />
-                  Import
-                </Link>
-              </Button>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Customers</h3>
+                <CardDescription className="mt-1">
+                  {loading ? "Loading…" : `${filtered.length} customer${filtered.length === 1 ? "" : "s"}`}
+                  {" · "}
+                  <Link href="/ar/customers" className="text-primary underline-offset-4 hover:underline">
+                    Open AR Customers
+                  </Link>{" "}
+                  for full credit workflow
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() =>
+                    downloadCsv(
+                      `sales-customers-${new Date().toISOString().slice(0, 10)}.csv`,
+                      filtered.map((r) => ({
+                        name: r.name,
+                        email: r.email ?? "",
+                        phone: r.phone ?? "",
+                        customerType: r.customerType ?? "",
+                        creditLimit: r.creditLimit ?? r.creditLimitAmount ?? "",
+                        outstanding: r.outstandingBalance ?? "",
+                        status: r.status ?? "",
+                      }))
+                    )
+                  }
+                  disabled={loading || filtered.length === 0}
+                >
+                  <Icons.Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/settings/migrations">
+                    <Icons.Upload className="mr-2 h-4 w-4" />
+                    Import
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-0 pb-6">
           {loading ? (
             <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
               <Icons.Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Loading customers…
             </div>
           ) : filtered.length === 0 ? (
-            <EmptyState
-              icon="Users"
-              title="No customers match"
-              description="Try clearing filters or add a customer via AR Customers."
-              action={{
-                label: "Add customer",
-                onClick: () => router.push("/ar/customers?new=1"),
-              }}
-            />
+            <div className="p-6">
+              <EmptyState
+                icon="Users"
+                title="No customers match"
+                description="Try clearing filters or add a customer via AR Customers."
+                action={{
+                  label: "Add customer",
+                  onClick: () => router.push("/ar/customers?new=1"),
+                }}
+              />
+            </div>
           ) : (
             <DataTable
               data={filtered}
               columns={columns}
               onRowClick={(row) => router.push(`/ar/customers?id=${encodeURIComponent(row.id)}`)}
               emptyMessage="No customers found."
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
             />
           )}
-        </CardContent>
-      </Card>
-    </PageLayout>
+        </div>
+      </div>
+    </PageShell>
   );
 }

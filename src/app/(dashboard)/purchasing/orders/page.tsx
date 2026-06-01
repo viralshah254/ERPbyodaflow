@@ -3,12 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  LIST_PAGE_BODY_PAGINATED_CLASS,
-  LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_STATIC_CLASS,
-  PageShell,
-} from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -265,7 +260,7 @@ export default function PurchaseOrdersPage() {
           </Button>
         }
       />
-      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+      <div className={LIST_PAGE_BODY_CLASS}>
         <ExceptionBanner
           type="info"
           title="Procurement workspace"
@@ -376,7 +371,7 @@ export default function PurchaseOrdersPage() {
             columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
           />
         ) : (
-          <div className={LIST_TABLE_STATIC_CLASS}>
+          <div className={LIST_TABLE_SURFACE_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
@@ -387,7 +382,7 @@ export default function PurchaseOrdersPage() {
               <DataTable<PurchasingDocRow>
                 data={rows}
                 columns={columns}
-                scrollMode="natural"
+                scrollMode="fill"
                 className="border-0 shadow-none"
                 onRowClick={(row) => router.push(`/purchasing/orders/${row.id}`)}
                 emptyMessage="No purchase orders match your filters."

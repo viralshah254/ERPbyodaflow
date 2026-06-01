@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -304,7 +304,7 @@ function FranchisorNetworkDashboard() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Franchise Network"
         description="Command centre: monitor all outlets, assign price lists, and track network performance."
@@ -376,7 +376,10 @@ function FranchisorNetworkDashboard() {
                 data={filteredOutlets}
                 columns={columns}
                 emptyMessage="No outlets found."
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             )}
           </CardContent>
         </Card>
@@ -475,7 +478,7 @@ function FranchiseeOutletOverview() {
   const singleBranch = branches.length <= 1;
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Your locations"
         description={
@@ -528,21 +531,21 @@ function FranchiseeOutletOverview() {
           <OperationalKpiCard title="Low stock" value={workspace?.lowStockCount ?? 0} subtitle="SKUs below threshold" severity={(workspace?.lowStockCount ?? 0) > 0 ? "warning" : "default"} href="/inventory/stock-levels" />
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Branches</CardTitle>
-            <CardDescription>
-              {singleBranch ? "You are on your main branch." : `${branches.length} locations.`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Branches</h3>
+            <p className="text-xs text-muted-foreground">{singleBranch ? "You are on your main branch." : `${branches.length} locations.`}</p>
+          </div>
+          {loading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">Loading branches…</div>
             ) : (
-              <DataTable<BranchRow> data={branches} columns={branchColumns} emptyMessage="No branches found." />
+              <DataTable<BranchRow> data={branches} columns={branchColumns} emptyMessage="No branches found."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
-          </CardContent>
-        </Card>
+        </div>
 
         <Card>
           <CardHeader><CardTitle>Shortcuts</CardTitle></CardHeader>
@@ -573,7 +576,7 @@ export default function FranchiseOverviewPage() {
   if (isFranchisor) return <FranchisorNetworkDashboard />;
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Franchise"
         breadcrumbs={[{ label: "Franchise", href: "/franchise/network/overview" }, { label: "Overview" }]}

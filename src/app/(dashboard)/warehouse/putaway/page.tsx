@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -69,7 +69,7 @@ export default function PutawayPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Putaway"
         description="Live receipt putaway tasks with bin-level allocation."
@@ -80,8 +80,8 @@ export default function PutawayPage() {
         sticky
         showCommandHint
       />
-      <div className="space-y-4 p-6">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by receipt, warehouse, PO..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -98,20 +98,21 @@ export default function PutawayPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Putaway queue</CardTitle>
-            <CardDescription>Tasks are now stored and confirmed against backend bin locations.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<WarehousePutawayRow>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Putaway queue</h3>
+            <p className="text-xs text-muted-foreground">Tasks are now stored and confirmed against backend bin locations.</p>
+          </div>
+          <DataTable<WarehousePutawayRow>
               data={filtered}
               columns={columns}
               onRowClick={(row) => router.push(`/warehouse/putaway/${row.id}`)}
               emptyMessage={loading ? "Loading putaway tasks..." : "No putaway tasks."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
     </PageShell>
   );

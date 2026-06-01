@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -229,7 +229,7 @@ export default function BomsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={`Bills of Material (${bomLabel})`}
         description="Define product structures, formulas, and cost rollup"
@@ -252,8 +252,7 @@ export default function BomsPage() {
         }
       />
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <DataTableToolbar
-          className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+        <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search code, name, or product…"
           searchValue={search}
           onSearchChange={setSearch}
@@ -315,7 +314,10 @@ export default function BomsPage() {
                 columns={columns}
                 emptyMessage="No BOMs match your filters. Create one to get started."
                 onRowClick={(r) => router.push(`/manufacturing/boms/${r.id}`)}
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             </div>
           </div>
         )}

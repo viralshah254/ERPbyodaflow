@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -699,7 +699,7 @@ export default function ManufacturingYieldPage() {
                   <DataTable<YieldRecordRow>
                     data={records}
                     columns={yieldColumns}
-                    scrollMode="natural"
+                    scrollMode="fill"
                     size="comfortable"
                     className="min-h-0 flex-1 border-0"
                     onRowClick={(row) => router.push(`/manufacturing/yield/${row.id}`)}
@@ -789,7 +789,7 @@ export default function ManufacturingYieldPage() {
                   <DataTable<MassBalanceSummaryRow>
                     data={massBalance}
                     columns={massBalanceColumns}
-                    scrollMode="natural"
+                    scrollMode="fill"
                     size="comfortable"
                     className="min-h-0 flex-1 border-0"
                     emptyMessage="No mass balance rows match your filters. Record yield batches to populate this report."

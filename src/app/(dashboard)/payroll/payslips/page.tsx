@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -121,7 +121,7 @@ export default function PayslipsPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Payslips"
         description="Preview and export payslips."
@@ -140,8 +140,8 @@ export default function PayslipsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by employee, month..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -159,20 +159,21 @@ export default function PayslipsPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Payslips</CardTitle>
-            <CardDescription>Open to preview or export a payslip copy.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<Payslip>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Payslips</h3>
+            <p className="text-xs text-muted-foreground">Open to preview or export a payslip copy.</p>
+          </div>
+          <DataTable<Payslip>
               data={filtered}
               columns={columns}
               onRowClick={openPreview}
               emptyMessage={loading ? "Loading payslips..." : "No payslips."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -220,7 +220,7 @@ export default function LeaveRequestsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Leave requests"
         description="Manage employee leave applications — approve, reject, or cancel."
@@ -248,7 +248,7 @@ export default function LeaveRequestsPage() {
         }
       />
 
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <div className="flex gap-2">
           {["ALL", "PENDING", "APPROVED", "REJECTED", "CANCELLED"].map((s) => (
             <Button
@@ -263,21 +263,20 @@ export default function LeaveRequestsPage() {
           ))}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Requests</CardTitle>
-            <CardDescription>
-              {filtered.length} request(s). Approved leaves auto-update employee balances.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<LeaveRequest>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Requests</h3>
+            <p className="text-xs text-muted-foreground">{filtered.length} request(s). Approved leaves auto-update employee balances.</p>
+          </div>
+          <DataTable<LeaveRequest>
               data={filtered}
               columns={columns}
               emptyMessage={loading ? "Loading requests..." : "No leave requests."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       {/* Create request sheet */}

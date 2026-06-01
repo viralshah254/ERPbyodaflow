@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -202,7 +202,7 @@ export default function PayrollEmployeesPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Employees"
         description="Personal, job, compensation, and statutory setup for Kenya & Uganda payroll. Monthly gross is the contract amount; pay runs prorate pay when someone joins or leaves mid-month."
@@ -225,8 +225,8 @@ export default function PayrollEmployeesPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by name, department, branch..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -245,19 +245,20 @@ export default function PayrollEmployeesPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Employees</CardTitle>
-            <CardDescription>Full-time employees and consultants across Kenya and Uganda operations.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<Employee>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Employees</h3>
+            <p className="text-xs text-muted-foreground">Full-time employees and consultants across Kenya and Uganda operations.</p>
+          </div>
+          <DataTable<Employee>
               data={filtered}
               columns={columns}
               emptyMessage={loading ? "Loading employees..." : "No employees found."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={(o) => { setSheetOpen(o); if (!o) resetForm(); }}>

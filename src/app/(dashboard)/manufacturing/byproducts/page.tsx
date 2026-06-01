@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -86,7 +86,7 @@ export default function ManufacturingByproductsPage() {
   const wasteKg     = summary?.totalWasteKg     ?? 0;
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Byproducts"
         description="Track byproduct stock, valuation, reservation, and destination channel."
@@ -117,22 +117,21 @@ export default function ManufacturingByproductsPage() {
           />
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Byproduct inventory</CardTitle>
-            <CardDescription>
-              Secondary outputs from filleting and processing — stock on hand, reservations, and valuation.
-              {summary ? ` Aggregated across ${summary.batchCount} yield batch${summary.batchCount !== 1 ? "es" : ""}.` : ""}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<Col>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Byproduct inventory</h3>
+            <p className="text-xs text-muted-foreground">Secondary outputs from filleting and processing — stock on hand, reservations, and valuation.
+              {summary ? ` Aggregated across ${summary.batchCount} yield batch${summary.batchCount !== 1 ? "es" : ""}.` : ""}</p>
+          </div>
+          <DataTable<Col>
               data={loading ? [] : rows}
               columns={columns}
               emptyMessage={loading ? "Loading…" : "No byproduct SKUs found. Mark products with productRole = BYPRODUCT via the seed or admin."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
     </PageShell>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -141,7 +141,7 @@ export default function CRMDealsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Deals / Opportunities"
         description="Manage pipeline stages, ownership, and close forecasts."
@@ -153,24 +153,26 @@ export default function CRMDealsPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar searchPlaceholder="Search deals..." searchValue={search} onSearchChange={setSearch} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Deals</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0" searchPlaceholder="Search deals..." searchValue={search} onSearchChange={setSearch} />
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Deals</h3>
+          </div>
+          {loading ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Loading deals...</div>
             ) : filtered.length === 0 ? (
               <div className="p-6">
                 <EmptyState icon="TrendingUp" title="No deals" description="Track sales opportunities and deals here." action={{ label: "Create Deal", onClick: openCreate }} />
               </div>
             ) : (
-              <DataTable<CrmDealRow> data={filtered} columns={columns} onRowClick={openEdit} emptyMessage="No deals found." />
+              <DataTable<CrmDealRow> data={filtered} columns={columns} onRowClick={openEdit} emptyMessage="No deals found."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
 
       {drawerOpen ? (

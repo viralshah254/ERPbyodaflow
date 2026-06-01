@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -116,7 +116,7 @@ export default function GoodsReceiptPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Goods Receipt (GRN)"
         description="Purchasing view of GRNs. Use Inventory Receipts as the canonical operations queue."
@@ -135,8 +135,8 @@ export default function GoodsReceiptPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search GRNs..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -150,22 +150,24 @@ export default function GoodsReceiptPage() {
             },
           ]}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Goods Receipt Notes</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Goods Receipt Notes</h3>
+          </div>
+          {loading ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Loading GRNs...</div>
             ) : filtered.length === 0 ? (
               <div className="p-6">
                 <EmptyState icon="PackageCheck" title="No GRNs" description="Record goods received to update inventory." action={{ label: "Create GRN", onClick: () => router.push("/docs/grn/new") }} />
               </div>
             ) : (
-              <DataTable<PurchasingDocRow> data={filtered} columns={columns} onRowClick={(row) => router.push(`/inventory/receipts/${row.id}`)} emptyMessage="No GRNs found." />
+              <DataTable<PurchasingDocRow> data={filtered} columns={columns} onRowClick={(row) => router.push(`/inventory/receipts/${row.id}`)} emptyMessage="No GRNs found."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </PageShell>
   );

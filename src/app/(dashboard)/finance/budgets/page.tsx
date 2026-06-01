@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -192,7 +192,7 @@ export default function BudgetsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Budgets"
         description="Create, submit, approve, and review budget variance."
@@ -204,22 +204,26 @@ export default function BudgetsPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar searchPlaceholder="Search budgets..." searchValue={search} onSearchChange={setSearch} />
-        <Card>
-          <CardHeader><CardTitle>Budgets</CardTitle></CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0" searchPlaceholder="Search budgets..." searchValue={search} onSearchChange={setSearch} />
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Budgets</h3>
+          </div>
+          {loading ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Loading budgets...</div>
             ) : filtered.length === 0 ? (
               <div className="p-6">
                 <EmptyState icon="Target" title="No budgets" description="Create budgets to track performance against targets." action={{ label: "Create Budget", onClick: openCreate }} />
               </div>
             ) : (
-              <DataTable<BudgetRow> data={filtered} columns={columns} emptyMessage="No budgets found." />
+              <DataTable<BudgetRow> data={filtered} columns={columns} emptyMessage="No budgets found."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
 
       {drawerOpen ? (

@@ -1,12 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  LIST_PAGE_BODY_PAGINATED_CLASS,
-  LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_STATIC_CLASS,
-  PageShell,
-} from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -343,7 +338,7 @@ export default function InventoryStockExplorerPage() {
         ]}
         showCommandHint
       />
-      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+      <div className={LIST_PAGE_BODY_CLASS}>
         <Card className="shrink-0 overflow-hidden">
           <CardHeader className="space-y-4 pb-4">
             <div>
@@ -354,8 +349,7 @@ export default function InventoryStockExplorerPage() {
               </CardDescription>
             </div>
 
-            <DataTableToolbar
-              className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+            <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
               searchPlaceholder="Search SKU or product name…"
               searchValue={searchInput}
               onSearchChange={setSearchInput}
@@ -448,7 +442,7 @@ export default function InventoryStockExplorerPage() {
                 />
               </div>
             ) : (
-              <div className={LIST_TABLE_STATIC_CLASS}>
+              <div className={LIST_TABLE_SURFACE_CLASS}>
                 <TableLinearProgress active={tableBusy} />
                 <div
                   className={cn(
@@ -459,7 +453,7 @@ export default function InventoryStockExplorerPage() {
                   <DataTable
                     data={rows}
                     columns={columns}
-                    scrollMode="natural"
+                    scrollMode="fill"
                     className="border-0 shadow-none"
                     emptyMessage="No stock rows match your filters."
                   />

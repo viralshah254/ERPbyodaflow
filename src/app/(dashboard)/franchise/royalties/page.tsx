@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -248,7 +248,7 @@ export default function FranchiseRoyaltiesPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Royalty billing"
         description="Monthly franchise royalty invoicing (typically KSH 15,000) and netting against commission runs."
@@ -344,7 +344,11 @@ export default function FranchiseRoyaltiesPage() {
                   Last run: {lastRun.year}-{String(lastRun.month).padStart(2, "0")} ({lastRun.results.length} franchisees)
                 </p>
                 <div className="overflow-x-auto">
-                  <DataTable data={lastRun.results} columns={runResultColumns} emptyMessage="No rows." />
+                  <DataTable data={lastRun.results} columns={runResultColumns} emptyMessage="No rows."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
                 </div>
               </div>
             ) : (
@@ -412,7 +416,11 @@ export default function FranchiseRoyaltiesPage() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </p>
             ) : (
-              <DataTable data={charges} columns={royaltyColumns} emptyMessage="No royalty charges yet." />
+              <DataTable data={charges} columns={royaltyColumns} emptyMessage="No royalty charges yet."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
           </CardContent>
         </Card>
@@ -423,7 +431,11 @@ export default function FranchiseRoyaltiesPage() {
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             {loading ? null : (
-              <DataTable data={franchisees} columns={feColumns} emptyMessage="No franchisees." />
+              <DataTable data={franchisees} columns={feColumns} emptyMessage="No franchisees."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
           </CardContent>
         </Card>

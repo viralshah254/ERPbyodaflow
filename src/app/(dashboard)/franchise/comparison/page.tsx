@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -260,7 +260,7 @@ export default function FranchisePerformanceHubPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Franchise Performance Hub"
         description="Track outlet sales, WhatsApp order mix, stock position, and growth across the network."
@@ -484,13 +484,12 @@ export default function FranchisePerformanceHubPage() {
               />
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Channel breakdown</CardTitle>
-                <CardDescription>Posted invoice revenue by order channel.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {loading ? (
+            <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Channel breakdown</h3>
+            <p className="text-xs text-muted-foreground">Posted invoice revenue by order channel.</p>
+          </div>
+          {loading ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
                 ) : (
                   <DataTable
@@ -510,10 +509,12 @@ export default function FranchisePerformanceHubPage() {
                       },
                     ]}
                     emptyMessage="No channel data for this period."
-                  />
+                    scrollMode="fill"
+                    size="comfortable"
+                    className="min-h-0 flex-1 border-0"
+                    />
                 )}
-              </CardContent>
-            </Card>
+        </div>
 
             <Card>
               <CardHeader>
@@ -558,19 +559,20 @@ export default function FranchisePerformanceHubPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Outlets by channel performance</CardTitle>
-                <CardDescription>Sortable outlet view for the selected period.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <DataTable
+            <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Outlets by channel performance</h3>
+            <p className="text-xs text-muted-foreground">Sortable outlet view for the selected period.</p>
+          </div>
+          <DataTable
                   data={data?.outlets ?? []}
                   columns={channelColumns}
                   emptyMessage="No outlet sales in this period."
-                />
-              </CardContent>
-            </Card>
+                  scrollMode="fill"
+                  size="comfortable"
+                  className="min-h-0 flex-1 border-0"
+                  />
+        </div>
           </TabsContent>
 
           <TabsContent value="stock" className="space-y-6 outline-none">
@@ -588,13 +590,12 @@ export default function FranchisePerformanceHubPage() {
               />
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Stock by outlet</CardTitle>
-                <CardDescription>Current network stock position.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <DataTable
+            <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Stock by outlet</h3>
+            <p className="text-xs text-muted-foreground">Current network stock position.</p>
+          </div>
+          <DataTable
                   data={data?.stockByOutlet ?? []}
                   columns={[
                     { id: "name", header: "Outlet", accessor: (r) => r.outletName },
@@ -607,9 +608,11 @@ export default function FranchisePerformanceHubPage() {
                     },
                   ]}
                   emptyMessage="No stock data."
-                />
-              </CardContent>
-            </Card>
+                  scrollMode="fill"
+                  size="comfortable"
+                  className="min-h-0 flex-1 border-0"
+                  />
+        </div>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -635,7 +638,10 @@ export default function FranchisePerformanceHubPage() {
                     { id: "outlets", header: "Outlets", accessor: (r) => r.outletCount },
                   ]}
                   emptyMessage="No products match your search."
-                />
+                  scrollMode="fill"
+                  size="comfortable"
+                  className="min-h-0 flex-1 border-0"
+                  />
               </CardContent>
             </Card>
           </TabsContent>
@@ -657,26 +663,25 @@ export default function FranchisePerformanceHubPage() {
                 ][index] ?? "bg-primary",
               }))}
             />
-            <Card>
-              <CardHeader>
-                <CardTitle>Outlet comparison</CardTitle>
-                <CardDescription>
-                  Sales, WhatsApp mix, stock, growth, and receivables for {dateRange.from} →{" "}
-                  {dateRange.to}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                {loading ? (
+            <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Outlet comparison</h3>
+            <p className="text-xs text-muted-foreground">Sales, WhatsApp mix, stock, growth, and receivables for {dateRange.from} →{" "}
+                  {dateRange.to}.</p>
+          </div>
+          {loading ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
                 ) : (
                   <DataTable
                     data={data?.outlets ?? []}
                     columns={comparisonColumns}
                     emptyMessage="No comparison data for this period."
-                  />
+                    scrollMode="fill"
+                    size="comfortable"
+                    className="min-h-0 flex-1 border-0"
+                    />
                 )}
-              </CardContent>
-            </Card>
+        </div>
           </TabsContent>
         </Tabs>
       </div>

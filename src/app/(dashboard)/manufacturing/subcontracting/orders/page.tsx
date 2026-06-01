@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -148,7 +148,7 @@ export default function SubcontractOrdersListPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Subcontract Orders"
         description="All orders sent to external processors — factories and women's groups"
@@ -169,7 +169,7 @@ export default function SubcontractOrdersListPage() {
         }
       />
 
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <div className="flex flex-wrap gap-3">
           <Select
             value={statusFilter || "all"}
@@ -217,7 +217,10 @@ export default function SubcontractOrdersListPage() {
                 data={orders}
                 columns={columns}
                 emptyMessage="No subcontract orders found. Use 'Send to processor' to create one."
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             )}
           </CardContent>
         </Card>

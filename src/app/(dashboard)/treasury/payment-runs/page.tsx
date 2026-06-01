@@ -3,12 +3,16 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -160,7 +164,7 @@ export default function PaymentRunsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Payment runs"
         description="AP payment runs — select bills, generate files"
@@ -180,8 +184,9 @@ export default function PaymentRunsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar
+          className="shrink-0"
           searchPlaceholder="Search runs..."
           onExport={() =>
             downloadCsv(
@@ -199,21 +204,23 @@ export default function PaymentRunsPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Runs</CardTitle>
-            <CardDescription>Select bills, group by supplier/currency, choose method, and generate payment files.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<PaymentRunRow>
-              data={runs}
-              columns={columns}
-              onRowClick={(r) => router.push(`/treasury/payment-runs/${r.id}`)}
-              emptyMessage="No payment runs."
-            />
-            {loading ? <p className="px-4 pb-4 text-sm text-muted-foreground">Loading payment runs...</p> : null}
-          </CardContent>
-        </Card>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Runs</h3>
+            <p className="text-xs text-muted-foreground">
+              Select bills, group by supplier/currency, choose method, and generate payment files.
+            </p>
+          </div>
+          <DataTable<PaymentRunRow>
+            data={runs}
+            columns={columns}
+            onRowClick={(r) => router.push(`/treasury/payment-runs/${r.id}`)}
+            emptyMessage={loading ? "Loading payment runs..." : "No payment runs."}
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+          />
+        </div>
       </div>
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>

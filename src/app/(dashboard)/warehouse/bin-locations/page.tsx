@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -95,7 +95,7 @@ export default function BinLocationsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Bin locations"
         description="Live bin master data plus location/bin stock visibility."
@@ -116,8 +116,8 @@ export default function BinLocationsPage() {
           </Button>
         }
       />
-      <div className="space-y-4 p-6">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by code, name, type..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -131,13 +131,12 @@ export default function BinLocationsPage() {
             },
           ]}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Locations</CardTitle>
-            <CardDescription>Bin, zone, and rack records now use backend master data and show on-hand stock.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Locations</h3>
+            <p className="text-xs text-muted-foreground">Bin, zone, and rack records now use backend master data and show on-hand stock.</p>
+          </div>
+          <DataTable
               data={filtered}
               columns={columns}
               onRowClick={(row) => {
@@ -152,9 +151,11 @@ export default function BinLocationsPage() {
                 setDrawerOpen(true);
               }}
               emptyMessage={!warehouseId ? "Select a warehouse." : "No locations found."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>

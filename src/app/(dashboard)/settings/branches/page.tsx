@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -141,7 +141,7 @@ export default function BranchesPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Branches"
         description="Manage organization branches and default operational branch."
@@ -153,14 +153,13 @@ export default function BranchesPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar searchPlaceholder="Search branches..." searchValue={search} onSearchChange={setSearch} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Branches</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0" searchPlaceholder="Search branches..." searchValue={search} onSearchChange={setSearch} />
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Branches</h3>
+          </div>
+          {loading ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Loading branches...</div>
             ) : filtered.length === 0 ? (
               <div className="p-6">
@@ -172,10 +171,13 @@ export default function BranchesPage() {
                 />
               </div>
             ) : (
-              <DataTable<BranchRow> data={filtered} columns={columns} emptyMessage="No branches found." />
+              <DataTable<BranchRow> data={filtered} columns={columns} emptyMessage="No branches found."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>

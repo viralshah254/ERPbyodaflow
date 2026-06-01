@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -99,7 +98,7 @@ export default function DistributionTripsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Trips / Logistics"
         description="Leased vs spot truck; trip-level cost allocation (inbound / outbound)"
@@ -116,15 +115,15 @@ export default function DistributionTripsPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Trips</CardTitle>
-            <CardDescription>
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Trips</h3>
+            <p className="text-xs text-muted-foreground">
               Farm → hub (inbound), hub → customer (outbound). Fleet vehicle or spot hire. Select delivery
               notes at creation to allocate transport cost to each order.
-            </CardDescription>
-            <div className="flex gap-2 mt-2">
+            </p>
+            <div className="mt-2 flex gap-2">
               <Select value={typeFilter || "ALL"} onValueChange={(v) => setTypeFilter(v === "ALL" ? "" : v)}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="All types" />
@@ -147,20 +146,21 @@ export default function DistributionTripsPage() {
                 </SelectContent>
               </Select>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">Loading trips…</div>
-            ) : (
-              <DataTable
-                data={trips}
-                columns={columns}
-                onRowClick={(row) => router.push(`/distribution/trips/${row.id}`)}
-                emptyMessage="No trips yet. Create one with New trip."
-              />
-            )}
-          </CardContent>
-        </Card>
+          </div>
+          {loading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Loading trips…</div>
+          ) : (
+            <DataTable
+              data={trips}
+              columns={columns}
+              onRowClick={(row) => router.push(`/distribution/trips/${row.id}`)}
+              emptyMessage="No trips yet. Create one with New trip."
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+            />
+          )}
+        </div>
       </div>
 
       <NewTripSheet

@@ -1,12 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -140,7 +144,7 @@ export default function DisposalsPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Disposals"
         description="Disposal wizard, gain/loss preview"
@@ -160,25 +164,29 @@ export default function DisposalsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar
+          className="shrink-0"
           searchPlaceholder="Search by asset..."
           searchValue={search}
           onSearchChange={setSearch}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Disposals</CardTitle>
-            <CardDescription>Sale price, date, reason, and live gain/loss preview.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<DisposalRow>
-              data={filtered}
-              columns={columns}
-              emptyMessage="No disposals."
-            />
-          </CardContent>
-        </Card>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Disposals</h3>
+            <p className="text-xs text-muted-foreground">
+              Sale price, date, reason, and live gain/loss preview.
+            </p>
+          </div>
+          <DataTable<DisposalRow>
+            data={filtered}
+            columns={columns}
+            emptyMessage="No disposals."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+          />
+        </div>
       </div>
 
       <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>

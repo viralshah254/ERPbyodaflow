@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -54,7 +54,7 @@ export default function CommissionReconciliationPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Commission reconciliation"
         description="Run-level reconciliation of sales base, commissions, top-ups, journals, and settlement status."
@@ -68,19 +68,21 @@ export default function CommissionReconciliationPage() {
         }
       />
       <div className="p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Run reconciliation</CardTitle>
-            <CardDescription>Single view of payout math and settlement progress.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Run reconciliation</h3>
+            <p className="text-xs text-muted-foreground">Single view of payout math and settlement progress.</p>
+          </div>
+          {loading ? (
               <p className="p-4 text-sm text-muted-foreground">Loading…</p>
             ) : (
-              <DataTable data={rows} columns={columns} emptyMessage="No commission runs found." />
+              <DataTable data={rows} columns={columns} emptyMessage="No commission runs found."
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </PageShell>
   );

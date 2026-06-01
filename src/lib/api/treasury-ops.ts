@@ -190,6 +190,27 @@ export function exportPaymentRunApi(id: string, onError: (message: string) => vo
   void downloadFile(`/api/treasury/payment-runs/${encodeURIComponent(id)}/export`, `payment-run-${id}.csv`, onError);
 }
 
+export type ArAgingRow = {
+  partyId: string;
+  partyName: string;
+  current: number;
+  days_1_30: number;
+  days_31_60: number;
+  days_61_90: number;
+  over_90: number;
+  total: number;
+};
+
+export type ArAgingData = {
+  items: ArAgingRow[];
+  totals: Omit<ArAgingRow, "partyId" | "partyName">;
+};
+
+export async function fetchArAgingApi(): Promise<ArAgingData> {
+  requireLiveApi("AR aging");
+  return apiRequest<ArAgingData>("/api/ar/aging");
+}
+
 export async function fetchCollectionsApi(): Promise<OverdueInvoiceRow[]> {
   requireLiveApi("Collections");
   const payload = await apiRequest<{

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -145,7 +145,7 @@ export default function ProjectsListPage() {
   );
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Projects"
         description="List, budget, cost center mapping"
@@ -165,8 +165,8 @@ export default function ProjectsListPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by code, name, client..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -174,13 +174,12 @@ export default function ProjectsListPage() {
             { id: "status", label: "Status", options: STATUS_OPTIONS, value: statusFilter, onChange: (v) => setStatusFilter(v) },
           ]}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Projects</CardTitle>
-            <CardDescription>Code, name, client, start/end, status, budget, cost center. Attach docs (bills, journals, expenses).</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Projects</h3>
+            <p className="text-xs text-muted-foreground">Code, name, client, start/end, status, budget, cost center. Attach docs (bills, journals, expenses).</p>
+          </div>
+          {loading ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Loading projects...</div>
             ) : (
               <DataTable<ProjectRow>
@@ -188,10 +187,12 @@ export default function ProjectsListPage() {
                 columns={columns}
                 onRowClick={(row) => router.push(`/projects/${row.id}`)}
                 emptyMessage="No projects."
-              />
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+                />
             )}
-          </CardContent>
-        </Card>
+        </div>
       </div>
       <EntityDrawer
         open={drawerOpen}

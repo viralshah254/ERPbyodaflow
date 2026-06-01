@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -183,7 +183,7 @@ export default function InventoryValuationPage() {
         : "No rows match the current data.";
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Inventory Valuation"
         description="Latest costing snapshot per SKU and warehouse—run costing to refresh; GL tie-out is done with finance outside this screen."
@@ -191,7 +191,7 @@ export default function InventoryValuationPage() {
         sticky
         showCommandHint
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         {loadError ? (
           <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <Icons.AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -268,7 +268,11 @@ export default function InventoryValuationPage() {
             </CardContent>
           ) : null}
           <CardContent className="p-0">
-            <DataTable data={valuationRows} columns={columns} emptyMessage={emptyMessage} />
+            <DataTable data={valuationRows} columns={columns} emptyMessage={emptyMessage}
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
           </CardContent>
         </Card>
 
@@ -327,7 +331,10 @@ export default function InventoryValuationPage() {
                   data={franchiseRows}
                   columns={franchiseColumns}
                   emptyMessage="No franchise stock data."
-                />
+                  scrollMode="fill"
+                  size="comfortable"
+                  className="min-h-0 flex-1 border-0"
+                  />
               )}
             </CardContent>
           </Card>

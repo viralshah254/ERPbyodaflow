@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -167,7 +167,7 @@ export default function SalesDeliveriesPage() {
   const rangeEnd = pageOffset + rows.length;
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Deliveries"
         description="Delivery notes and shipments"
@@ -186,8 +186,8 @@ export default function SalesDeliveriesPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by number, customer..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -288,7 +288,10 @@ export default function SalesDeliveriesPage() {
             selectable
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
-          />
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+            />
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground tabular-nums">

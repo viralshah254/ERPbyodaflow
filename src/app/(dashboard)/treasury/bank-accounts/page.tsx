@@ -1,12 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -115,7 +119,7 @@ export default function BankAccountsPage() {
   }, [refresh]);
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Bank accounts"
         description="Manage bank accounts, GL mapping"
@@ -135,8 +139,9 @@ export default function BankAccountsPage() {
           </div>
         }
       />
-      <div className="p-6 space-y-4">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar
+          className="shrink-0"
           searchPlaceholder="Search by name, bank, account..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -154,20 +159,23 @@ export default function BankAccountsPage() {
             )
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Accounts</CardTitle>
-            <CardDescription>Account name/number, bank, branch, currency, GL mapping. Enable/disable.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<BankAccountRow>
-              data={filtered}
-              columns={columns}
-              onRowClick={(row) => openEdit(row)}
-              emptyMessage="No bank accounts."
-            />
-          </CardContent>
-        </Card>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Accounts</h3>
+            <p className="text-xs text-muted-foreground">
+              Account name/number, bank, branch, currency, GL mapping. Enable/disable.
+            </p>
+          </div>
+          <DataTable<BankAccountRow>
+            data={filtered}
+            columns={columns}
+            onRowClick={(row) => openEdit(row)}
+            emptyMessage={loading ? "Loading bank accounts..." : "No bank accounts."}
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+          />
+        </div>
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>

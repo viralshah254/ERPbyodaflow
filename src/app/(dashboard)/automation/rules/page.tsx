@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -147,7 +147,7 @@ export default function AutomationRulesPage() {
   ];
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Automation Rules"
         description="IF/THEN rules: triggers, conditions, actions"
@@ -164,27 +164,26 @@ export default function AutomationRulesPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-4">
-        <DataTableToolbar
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search rules..."
           searchValue={search}
           onSearchChange={setSearch}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Rules</CardTitle>
-            <CardDescription>
-              {filtered.length} rule(s). Create rules to automate workflows and notifications.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<AutomationRule>
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="shrink-0 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Rules</h3>
+            <p className="text-xs text-muted-foreground">{filtered.length} rule(s). Create rules to automate workflows and notifications.</p>
+          </div>
+          <DataTable<AutomationRule>
               data={filtered}
               columns={columns}
               emptyMessage={copilotEnabled ? "No rules. Create one or generate with Copilot." : "No rules. Create one."}
-            />
-          </CardContent>
-        </Card>
+              scrollMode="fill"
+              size="comfortable"
+              className="min-h-0 flex-1 border-0"
+              />
+        </div>
       </div>
 
       <Sheet open={createOpen} onOpenChange={handleOpenCreate}>

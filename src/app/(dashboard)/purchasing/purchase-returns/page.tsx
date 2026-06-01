@@ -1,12 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  LIST_PAGE_BODY_PAGINATED_CLASS,
-  LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_STATIC_CLASS,
-  PageShell,
-} from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -307,11 +302,10 @@ export default function PurchaseReturnsPage() {
           </Button>
         }
       />
-      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+      <div className={LIST_PAGE_BODY_CLASS}>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 p-4 pb-0">
-            <DataTableToolbar
-              className="rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
+            <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
               searchPlaceholder="Search by number, supplier, GRN ref…"
               searchValue={searchInput}
               onSearchChange={setSearchInput}
@@ -360,7 +354,7 @@ export default function PurchaseReturnsPage() {
           ) : (
             <div
               className={cn(
-                LIST_TABLE_STATIC_CLASS,
+                LIST_TABLE_SURFACE_CLASS,
                 "min-h-0 flex-1 border-0 border-t rounded-none shadow-none",
               )}
             >
@@ -374,7 +368,7 @@ export default function PurchaseReturnsPage() {
                 <DataTable<PurchaseReturnRow>
                   data={rows}
                   columns={columns}
-                  scrollMode="natural"
+                  scrollMode="fill"
                   className="border-0 shadow-none"
                   onRowClick={(row) => {
                     setSelectedReturn(row);
