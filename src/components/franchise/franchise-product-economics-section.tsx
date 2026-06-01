@@ -153,6 +153,7 @@ export function FranchiseProductEconomicsSection(props: {
           limit: PAGE_SIZE,
           cursor: catalogCursor,
           sellable: true,
+          status: "ACTIVE",
           includeStock: false,
           search: catalogSearchDebounced.trim() || undefined,
         });

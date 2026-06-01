@@ -70,6 +70,8 @@ type SupplierMasterFormFieldsProps = {
   companyRegFile: File | null;
   onCompanyRegFileChange: (file: File | null) => void;
   companyRegExistingUrl?: string | null;
+  /** When editing an existing supplier — enables View/Download on stored documents. */
+  partyId?: string | null;
   showPaymentFields?: boolean;
 };
 
@@ -86,11 +88,61 @@ export function SupplierMasterFormFields({
   companyRegFile,
   onCompanyRegFileChange,
   companyRegExistingUrl,
+  partyId,
   showPaymentFields = true,
 }: SupplierMasterFormFieldsProps) {
   const pinCertInputRef = React.useRef<HTMLInputElement>(null);
   const companyRegInputRef = React.useRef<HTMLInputElement>(null);
   const isFarm = form.coolcatchSupplierKind === "FARM";
+  const [docBusy, setDocBusy] = React.useState<"pin-view" | "pin-dl" | "reg-view" | "reg-dl" | null>(null);
+
+  const openPinView = async () => {
+    if (!partyId) return;
+    setDocBusy("pin-view");
+    try {
+      const { viewPartyPinCertificateApi } = await import("@/lib/api/parties");
+      await viewPartyPinCertificateApi(partyId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not open KRA PIN certificate.");
+    } finally {
+      setDocBusy(null);
+    }
+  };
+
+  const downloadPin = async () => {
+    if (!partyId) return;
+    setDocBusy("pin-dl");
+    try {
+      const { downloadPartyPinCertificateApi } = await import("@/lib/api/parties");
+      await downloadPartyPinCertificateApi(partyId, (msg) => alert(msg));
+    } finally {
+      setDocBusy(null);
+    }
+  };
+
+  const openRegView = async () => {
+    if (!partyId) return;
+    setDocBusy("reg-view");
+    try {
+      const { viewPartyCompanyRegistrationApi } = await import("@/lib/api/parties");
+      await viewPartyCompanyRegistrationApi(partyId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not open company registration.");
+    } finally {
+      setDocBusy(null);
+    }
+  };
+
+  const downloadReg = async () => {
+    if (!partyId) return;
+    setDocBusy("reg-dl");
+    try {
+      const { downloadPartyCompanyRegistrationApi } = await import("@/lib/api/parties");
+      await downloadPartyCompanyRegistrationApi(partyId, (msg) => alert(msg));
+    } finally {
+      setDocBusy(null);
+    }
+  };
 
   const locationValue: ResolvedLocation | null = form.locationFormattedAddress
     ? {
@@ -385,6 +437,32 @@ export function SupplierMasterFormFields({
               <Icons.CheckCircle2 className="h-3 w-3" /> Certificate on file
             </span>
           ) : null}
+          {partyId && pinCertExistingUrl ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                disabled={docBusy != null}
+                onClick={() => void openPinView()}
+              >
+                <Icons.Eye className="h-4 w-4 mr-1" />
+                {docBusy === "pin-view" ? "Opening…" : "View"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                disabled={docBusy != null}
+                onClick={() => void downloadPin()}
+              >
+                <Icons.Download className="h-4 w-4 mr-1" />
+                {docBusy === "pin-dl" ? "…" : "Download"}
+              </Button>
+            </>
+          ) : null}
         </div>
         <input
           ref={pinCertInputRef}
@@ -421,6 +499,32 @@ export function SupplierMasterFormFields({
             <span className="text-xs text-emerald-600 flex items-center gap-1">
               <Icons.CheckCircle2 className="h-3 w-3" /> Document on file
             </span>
+          ) : null}
+          {partyId && companyRegExistingUrl ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                disabled={docBusy != null}
+                onClick={() => void openRegView()}
+              >
+                <Icons.Eye className="h-4 w-4 mr-1" />
+                {docBusy === "reg-view" ? "Opening…" : "View"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                disabled={docBusy != null}
+                onClick={() => void downloadReg()}
+              >
+                <Icons.Download className="h-4 w-4 mr-1" />
+                {docBusy === "reg-dl" ? "…" : "Download"}
+              </Button>
+            </>
           ) : null}
         </div>
         <input

@@ -30,6 +30,8 @@ import {
   updatePartyApi,
   uploadPartyCompanyRegistrationApi,
   uploadPartyPinCertificateApi,
+  viewPartyPinCertificateApi,
+  viewPartyCompanyRegistrationApi,
 } from "@/lib/api/parties";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import type { CoolcatchSupplierKind } from "@/lib/types/masters";
@@ -377,6 +379,49 @@ export default function APSuppliersPage() {
         sortValue: (r: APSupplierRow) => `${r.coolcatchSupplierKind ?? ""} ${r.currency ?? ""}`,
       },
       {
+        id: "documents",
+        header: "Documents",
+        accessor: (r: APSupplierRow) => {
+          const hasPin = Boolean(r.pinCertificateUrl);
+          const hasReg = Boolean(r.companyRegistrationUrl);
+          if (!hasPin && !hasReg) {
+            return <span className="text-xs text-muted-foreground">—</span>;
+          }
+          return (
+            <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+              {hasPin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => void viewPartyPinCertificateApi(r.id).catch((err) =>
+                    toast.error(err instanceof Error ? err.message : "Could not open KRA PIN certificate."),
+                  )}
+                >
+                  <Icons.FileText className="h-3 w-3 mr-1" />
+                  PIN
+                </Button>
+              ) : null}
+              {hasReg ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => void viewPartyCompanyRegistrationApi(r.id).catch((err) =>
+                    toast.error(err instanceof Error ? err.message : "Could not open company registration."),
+                  )}
+                >
+                  <Icons.Building2 className="h-3 w-3 mr-1" />
+                  Reg
+                </Button>
+              ) : null}
+            </div>
+          );
+        },
+      },
+      {
         id: "status",
         header: "Status",
         accessor: (r: APSupplierRow) => <StatusBadge status={r.status ?? "ACTIVE"} />,
@@ -535,6 +580,7 @@ export default function APSuppliersPage() {
           companyRegFile={companyRegFile}
           onCompanyRegFileChange={setCompanyRegFile}
           companyRegExistingUrl={companyRegExistingUrl}
+          partyId={editingId}
         />
       </EntityDrawer>
     </PageShell>

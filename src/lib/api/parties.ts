@@ -428,3 +428,53 @@ export async function uploadPartyCompanyRegistrationApi(
     formData
   );
 }
+
+export async function viewPartyPinCertificateApi(partyId: string): Promise<void> {
+  requireLiveApi("PIN certificate view");
+  const { fetchApiBinary } = await import("@/lib/api/client");
+  const blob = await fetchApiBinary(
+    `/api/parties/${encodeURIComponent(partyId)}/pin-certificate?inline=1`,
+  );
+  if (!blob) throw new Error("Could not load KRA PIN certificate.");
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function downloadPartyPinCertificateApi(
+  partyId: string,
+  onError: (message: string) => void,
+): Promise<void> {
+  requireLiveApi("PIN certificate download");
+  const { downloadFile } = await import("@/lib/api/client");
+  await downloadFile(
+    `/api/parties/${encodeURIComponent(partyId)}/pin-certificate`,
+    "kra-pin-certificate",
+    onError,
+  );
+}
+
+export async function viewPartyCompanyRegistrationApi(partyId: string): Promise<void> {
+  requireLiveApi("Company registration view");
+  const { fetchApiBinary } = await import("@/lib/api/client");
+  const blob = await fetchApiBinary(
+    `/api/parties/${encodeURIComponent(partyId)}/company-registration?inline=1`,
+  );
+  if (!blob) throw new Error("Could not load company registration document.");
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function downloadPartyCompanyRegistrationApi(
+  partyId: string,
+  onError: (message: string) => void,
+): Promise<void> {
+  requireLiveApi("Company registration download");
+  const { downloadFile } = await import("@/lib/api/client");
+  await downloadFile(
+    `/api/parties/${encodeURIComponent(partyId)}/company-registration`,
+    "company-registration",
+    onError,
+  );
+}

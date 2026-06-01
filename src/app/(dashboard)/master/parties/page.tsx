@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import * as Icons from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -32,6 +33,8 @@ import {
   fetchNextCustomerCodeApi,
   uploadPartyPinCertificateApi,
   uploadPartyCompanyRegistrationApi,
+  viewPartyPinCertificateApi,
+  viewPartyCompanyRegistrationApi,
 } from "@/lib/api/parties";
 import {
   emptySupplierMasterForm,
@@ -48,7 +51,7 @@ import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
+
 
 export default function MasterPartiesPage() {
   const terminology = useTerminology();
@@ -244,6 +247,49 @@ export default function MasterPartiesPage() {
       },
       { id: "email", header: "Email", accessor: "email" as keyof PartyRow },
       { id: "phone", header: "Phone", accessor: "phone" as keyof PartyRow },
+      {
+        id: "documents",
+        header: "Documents",
+        accessor: (r: PartyRow) => {
+          const hasPin = Boolean(r.pinCertificateUrl);
+          const hasReg = Boolean(r.companyRegistrationUrl);
+          if (!hasPin && !hasReg) {
+            return <span className="text-xs text-muted-foreground">—</span>;
+          }
+          return (
+            <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+              {hasPin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => void viewPartyPinCertificateApi(r.id).catch((err) =>
+                    alert(err instanceof Error ? err.message : "Could not open KRA PIN certificate."),
+                  )}
+                >
+                  <Icons.FileText className="h-3 w-3 mr-1" />
+                  PIN
+                </Button>
+              ) : null}
+              {hasReg ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => void viewPartyCompanyRegistrationApi(r.id).catch((err) =>
+                    alert(err instanceof Error ? err.message : "Could not open company registration."),
+                  )}
+                >
+                  <Icons.Building2 className="h-3 w-3 mr-1" />
+                  Reg
+                </Button>
+              ) : null}
+            </div>
+          );
+        },
+      },
       {
         id: "status",
         header: "Status",
@@ -800,6 +846,7 @@ export default function MasterPartiesPage() {
               companyRegFile={companyRegFile}
               onCompanyRegFileChange={setCompanyRegFile}
               companyRegExistingUrl={companyRegExistingUrl}
+              partyId={editingId}
             />
           )}
 
