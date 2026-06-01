@@ -166,7 +166,12 @@ export default function ManufacturingYieldPage() {
   const [yieldSaving, setYieldSaving] = React.useState(false);
   const [subcontractOrders, setSubcontractOrders] = React.useState<SubcontractOrderRow[]>([]);
   const [reverseBoms, setReverseBoms] = React.useState<
-    Array<{ id: string; name: string; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>
+    Array<{
+      id: string;
+      name: string;
+      quantity?: number;
+      items: Array<{ productId: string; productName?: string; type: string; quantity: number }>;
+    }>
   >([]);
   const [workOrders, setWorkOrders] = React.useState<ManufacturingWorkOrder[]>([]);
   const [selectedScoId, setSelectedScoId] = React.useState("");

@@ -1037,7 +1037,7 @@ export async function createSubcontractOrder(body: {
 /** Fetch active reverse BOMs for the subcontract order creation picker.
  *  Only active BOMs are returned (activeOnly=true) so deactivated legacy BOMs
  *  are excluded from auto-selection without requiring a hard delete. */
-export async function fetchReverseBoms(): Promise<Array<{ id: string; name: string; code: string; productId: string; direction: string; isActive: boolean; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>> {
+export async function fetchReverseBoms(): Promise<Array<{ id: string; name: string; code: string; productId: string; direction: string; isActive: boolean; quantity?: number; items: Array<{ productId: string; productName?: string; type: string; quantity: number }> }>> {
   requireLiveApi("Reverse BOMs");
   const res = await apiRequest<{ items: Array<Record<string, any>> }>("/api/manufacturing/boms", {
     params: { direction: "REVERSE", activeOnly: "true", includeItems: "true", limit: "100" },
