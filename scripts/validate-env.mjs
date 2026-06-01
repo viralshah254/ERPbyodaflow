@@ -16,6 +16,7 @@ if (runtimeMode === "demo" && !enableMockAuth) {
   throw new Error("Demo runtime mode requires NEXT_PUBLIC_ENABLE_MOCK_AUTH=1.");
 }
 
+
 if (enableMockAuth && !enableDevAuth) {
   throw new Error("Mock auth requires NEXT_PUBLIC_ENABLE_DEV_AUTH=1.");
 }
