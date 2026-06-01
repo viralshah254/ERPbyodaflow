@@ -32,6 +32,7 @@ export type SupplierMasterFormValues = {
   paymentTermsId: string;
   defaultCurrency: string;
   taxId: string;
+  supplierBankName: string;
   supplierBankAccountName: string;
   supplierBankAccountNumber: string;
   supplierBankBranchName: string;
@@ -52,6 +53,7 @@ export const emptySupplierMasterForm = (defaultCurrency = "KES"): SupplierMaster
   paymentTermsId: "",
   defaultCurrency,
   taxId: "",
+  supplierBankName: "",
   supplierBankAccountName: "",
   supplierBankAccountNumber: "",
   supplierBankBranchName: "",
@@ -362,6 +364,22 @@ export function SupplierMasterFormFields({
             </p>
             <div className="space-y-2">
               <Label>
+                Bank name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={form.supplierBankName}
+                onChange={(e) => {
+                  patch({ supplierBankName: e.target.value });
+                  onClearError?.("supplierBankName");
+                }}
+                placeholder="e.g. KCB, Equity Bank"
+              />
+              {errors.supplierBankName ? (
+                <p className="text-xs text-destructive">{errors.supplierBankName}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label>
                 Bank account name <span className="text-destructive">*</span>
               </Label>
               <Input
@@ -577,6 +595,9 @@ export function validateSupplierMasterForm(form: SupplierMasterFormValues): Reco
   }
   if (!form.phone.trim()) errors.phone = "Contact number is required.";
   if (!form.taxId.trim()) errors.taxId = "KRA PIN is required.";
+  if (!form.supplierBankName.trim()) {
+    errors.supplierBankName = "Bank name is required.";
+  }
   if (!form.supplierBankAccountName.trim()) {
     errors.supplierBankAccountName = "Bank account name is required.";
   }
@@ -620,6 +641,7 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
     paymentTermsId: form.paymentTermsId || undefined,
     defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,
     taxId: form.taxId.trim(),
+    supplierBankName: form.supplierBankName.trim(),
     supplierBankAccountName: form.supplierBankAccountName.trim(),
     supplierBankAccountNumber: form.supplierBankAccountNumber.trim(),
     supplierBankBranchName: form.supplierBankBranchName.trim(),

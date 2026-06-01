@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DocumentPageShell } from "@/components/docs/DocumentPageShell";
+import { DocumentFulfilmentLinesTable } from "@/components/docs/DocumentFulfilmentLinesTable";
 import { DocumentTabs } from "@/components/docs/DocumentTabs";
 import { DocumentRightPanel } from "@/components/docs/DocumentRightPanel";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
@@ -226,6 +227,37 @@ export default function DocViewPage() {
     "purchase-debit-note",
   ].includes(type);
   const isGrnDoc = type === "grn";
+  const isFulfilmentDoc = type === "sales-order" || type === "delivery-note";
+  const dispatchedDnStatuses = ["IN_TRANSIT", "DELIVERED", "POSTED", "CONVERTED"];
+  const showFulfilmentTable = React.useMemo(() => {
+    if (!isFulfilmentDoc || !document) return false;
+    const lines = document.lines ?? [];
+    const st = String(document.status ?? "").toUpperCase();
+    const sourceSt = String(document.sourceDocument?.status ?? "").toUpperCase();
+
+    const lineHasGap = (l: (typeof lines)[number]) => {
+      const ordered = l.orderedQuantity ?? l.sourceQuantity;
+      const shipped = l.shippedQuantity ?? l.qty ?? 0;
+      return (
+        l.fulfilmentStatus === "NOT_PACKED" ||
+        l.fulfilmentStatus === "PARTIALLY_PACKED" ||
+        (ordered != null && ordered > shipped + 0.01) ||
+        (l.backorderQuantity ?? 0) > 0.01
+      );
+    };
+
+    if (type === "delivery-note") {
+      if (st === "DRAFT") return false;
+      if (dispatchedDnStatuses.includes(st)) return true;
+      return lines.some(lineHasGap) || sourceSt === "PARTIALLY_FULFILLED";
+    }
+
+    return (
+      st === "PARTIALLY_FULFILLED" ||
+      sourceSt === "PARTIALLY_FULFILLED" ||
+      lines.some(lineHasGap)
+    );
+  }, [document, isFulfilmentDoc, type]);
   const counterpartyLabel = isPurchaseDoc ? "Supplier" : "Customer / Supplier";
   const displayPartyName = resolvedPartyName ?? document?.party ?? "—";
 
@@ -1290,12 +1322,24 @@ export default function DocViewPage() {
                       </p>
                     )}
                   </div>
+                ) : showFulfilmentTable && isFulfilmentDoc ? (
+                  <DocumentFulfilmentLinesTable
+                    lines={document?.lines ?? []}
+                    currency={document?.currency ?? "KES"}
+                    exchangeRate={document?.exchangeRate}
+                    docType={type as "sales-order" | "delivery-note"}
+                    docStatus={document?.status}
+                    sourceDocStatus={document?.sourceDocument?.status}
+                    showAlternateCurrency={type !== "delivery-note"}
+                  />
                 ) : (
                   <div className="rounded border overflow-x-auto">
                     <div
                       className={
                         isGrnDoc
                           ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                          : showFulfilmentTable
+                          ? "min-w-[920px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                           : isPurchaseDoc
                           ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                           : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
@@ -1308,6 +1352,12 @@ export default function DocViewPage() {
                           <span className="text-right">Ordered</span>
                           <span className="text-right">Received</span>
                           <span className="text-right">Variance</span>
+                        </>
+                      ) : showFulfilmentTable ? (
+                        <>
+                          <span className="text-right">Ordered</span>
+                          <span className="text-right">Shipped</span>
+                          <span className="text-right">Backorder</span>
                         </>
                       ) : (
                         <span className="text-right">Qty</span>
@@ -1348,6 +1398,13 @@ export default function DocViewPage() {
                           className={
                             isGrnDoc
                               ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                              : showFulfilmentTable
+                              ? `min-w-[920px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0${
+                                  line.fulfilmentStatus === "NOT_PACKED" ||
+                                  line.fulfilmentStatus === "PARTIALLY_PACKED"
+                                    ? " bg-amber-50/80 dark:bg-amber-950/20"
+                                    : ""
+                                }`
                               : isPurchaseDoc
                               ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                               : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
@@ -1374,6 +1431,15 @@ export default function DocViewPage() {
                                 {line.varianceReasonCode.replace(/_/g, " ").toLowerCase()}
                               </p>
                             ) : null}
+                            {line.fulfilmentReason ? (
+                              <p className="text-xs text-amber-600 dark:text-amber-400">{line.fulfilmentReason}</p>
+                            ) : type === "sales-order" && (line.backorderQuantity ?? 0) > 0.01 ? (
+                              <p className="text-xs text-amber-600 dark:text-amber-400">
+                                {(line.shippedQuantity ?? 0) <= 0
+                                  ? "Not shipped — out of stock at warehouse"
+                                  : `Partially shipped (${line.shippedQuantity} of ${line.orderedQuantity ?? line.qty})`}
+                              </p>
+                            ) : null}
                           </div>
                           <span className="text-right font-mono text-xs">{line.unit ?? "—"}</span>
                           {isGrnDoc ? (
@@ -1392,6 +1458,29 @@ export default function DocViewPage() {
                                 {varianceKg != null
                                   ? `${varianceKg > 0 ? "+" : ""}${varianceKg.toLocaleString()}`
                                   : "—"}
+                              </span>
+                            </>
+                          ) : showFulfilmentTable ? (
+                            <>
+                              <span className="text-right">
+                                {(line.orderedQuantity ?? line.sourceQuantity ?? line.qty)?.toLocaleString() ?? "—"}
+                              </span>
+                              <span className="text-right font-medium">
+                                {(line.shippedQuantity ?? line.convertedQuantity ?? 0).toLocaleString()}
+                              </span>
+                              <span
+                                className={`text-right ${
+                                  (line.backorderQuantity ?? 0) > 0.01 ||
+                                  line.fulfilmentStatus === "NOT_PACKED"
+                                    ? "text-amber-600 dark:text-amber-400 font-medium"
+                                    : ""
+                                }`}
+                              >
+                                {line.backorderQuantity != null && line.backorderQuantity > 0.01
+                                  ? line.backorderQuantity.toLocaleString()
+                                  : line.fulfilmentStatus === "NOT_PACKED"
+                                    ? (line.orderedQuantity ?? line.qty ?? "—").toLocaleString()
+                                    : "—"}
                               </span>
                             </>
                           ) : (

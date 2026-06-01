@@ -17,6 +17,7 @@ import {
   type CashDisbursementRow,
   type CashWeightAuditLineRow,
 } from "@/lib/mock/purchasing/cash-weight-audit";
+import type { PoCashPaymentSummary } from "@/lib/types/purchasing";
 import {
   type ExternalWorkCenterRow,
   type SubcontractOrderLineRow,
@@ -744,9 +745,12 @@ export async function createCashDisbursement(body: {
   /** Per-line paid weight for multi-line POs. poLineId format: `${poId}:${lineIndex}` */
   lines?: { poLineId: string; paidWeightKg: number }[];
   paymentMethod?: string;
+  /** DEPOSIT = advance before pickup; BALANCE = remainder after receipt; PARTIAL / FULL. */
+  paymentKind?: "DEPOSIT" | "PARTIAL" | "BALANCE" | "FULL";
+  notes?: string;
   /** Base64 file content (no data: prefix); required supplier invoice / receipt. */
   invoiceAttachment: { fileName: string; contentType?: string; content: string };
-}): Promise<{ id: string; reference: string; warnings?: string[] }> {
+}): Promise<{ id: string; reference: string; paymentKind?: string; paymentSummary?: PoCashPaymentSummary; warnings?: string[] }> {
   requireLiveApi("Create cash disbursement");
   return apiRequest<{ id: string; reference: string; warnings?: string[] }>("/api/purchasing/cash-weight-audit/disbursements", {
     method: "POST",

@@ -396,6 +396,7 @@ export default function MasterPartiesPage() {
           contactPersonLastName: detail.contactPersonLastName ?? prev.contactPersonLastName,
           paymentTermsId: detail.paymentTermsId ?? prev.paymentTermsId,
           defaultCurrency: detail.defaultCurrency ?? prev.defaultCurrency,
+          supplierBankName: detail.supplierBankName ?? prev.supplierBankName,
           supplierBankAccountName: detail.supplierBankAccountName ?? prev.supplierBankAccountName,
           supplierBankAccountNumber: detail.supplierBankAccountNumber ?? prev.supplierBankAccountNumber,
           supplierBankBranchName: detail.supplierBankBranchName ?? prev.supplierBankBranchName,

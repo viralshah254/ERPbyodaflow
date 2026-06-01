@@ -172,7 +172,10 @@ export default function PurchaseOrderDetailPage() {
     if (!order) return [];
     const isApproved = order.status === "APPROVED" || order.status === "RECEIVED";
     const isPendingApproval = order.status === "PENDING_APPROVAL";
-    const isPaid = disbursementCount > 0;
+    const cashPay = order.cashPayment;
+    const isFullyPaid = cashPay?.paymentStatus === "PAID";
+    const isPartiallyPaid = cashPay?.paymentStatus === "PARTIALLY_PAID";
+    const hasAnyPayment = (cashPay?.totalPaid ?? 0) > 0 || disbursementCount > 0;
     const hasReceiptFromGrn =
       totalReceivedWeightFromGrns > 0 ||
       (order.lineReceipts?.some((r) => r.receivedQty > 0 || r.receivedValue > 0) ?? false);
@@ -199,8 +202,12 @@ export default function PurchaseOrderDetailPage() {
           ? "current"
           : "upcoming";
 
-    const paidStatus = deriveStatus(isPaid, isApproved);
-    const receivedStatus = deriveStatus(isReceived, isPaid);
+    const paidStatus = isFullyPaid
+      ? "completed"
+      : isPartiallyPaid || hasAnyPayment
+        ? "current"
+        : deriveStatus(false, isApproved);
+    const receivedStatus = deriveStatus(isReceived, hasAnyPayment || isApproved);
 
     const approvalHref =
       !isApproved ? `/docs/purchase-order/${id}` : undefined;
@@ -224,9 +231,13 @@ export default function PurchaseOrderDetailPage() {
         id: "paid",
         label: "Cash disbursement",
         status: paidStatus,
-        detail: isPaid ? `${disbursementCount} disbursement(s) recorded` : "Awaiting disbursement",
+        detail: cashPay
+          ? `${formatMoney(cashPay.totalPaid, cashPay.currency)} paid · ${formatMoney(cashPay.openBalance, cashPay.currency)} open (${disbursementCount || cashPay.disbursementCount} payment(s))`
+          : hasAnyPayment
+            ? `${disbursementCount} disbursement(s) recorded`
+            : "Awaiting deposit or payment",
         href: `/purchasing/cash-weight-audit?poId=${id}&openDisbursement=1`,
-        actionLabel: paidStatus === "current" ? "Record disbursement" : undefined,
+        actionLabel: paidStatus === "current" ? (isPartiallyPaid ? "Record balance" : "Record disbursement") : undefined,
       },
       {
         id: "received",

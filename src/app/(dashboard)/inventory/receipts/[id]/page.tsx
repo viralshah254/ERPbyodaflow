@@ -36,6 +36,10 @@ import { addDocumentCommentApi, editDocumentCommentApi, deleteDocumentCommentApi
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
+import {
+  GRN_VARIANCE_REASON_LABELS,
+  grnVarianceReasonCodesForDeltaKg,
+} from "@/lib/constants/grn-variance-reasons";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -345,7 +349,12 @@ export default function ReceiptDetailPage() {
               const orderedKg = line.orderedWeightKg ?? line.qty ?? 0;
               const pendingVal = editingWeight[idx];
               const currentNum = pendingVal !== undefined ? parseFloat(pendingVal) : (line.receivedWeightKg ?? undefined);
-              const hasVariance = currentNum != null && Math.abs(currentNum - orderedKg) > 0.05;
+              const deltaKg =
+                currentNum != null && !Number.isNaN(currentNum) ? currentNum - orderedKg : 0;
+              const hasVariance = Math.abs(deltaKg) > 0.05;
+              const reasonCodes = grnVarianceReasonCodesForDeltaKg(deltaKg);
+              const selectedReason = editingVarianceReason[idx] ?? line.varianceReasonCode ?? "";
+              const reasonValue = reasonCodes.includes(selectedReason) ? selectedReason : "";
               return canEditWeight ? (
                 <div className="space-y-1">
                   <Input
@@ -359,17 +368,18 @@ export default function ReceiptDetailPage() {
                   />
                   {hasVariance && (
                     <Select
-                      value={editingVarianceReason[idx] ?? line.varianceReasonCode ?? ""}
+                      value={reasonValue}
                       onValueChange={(v) => setEditingVarianceReason((prev) => ({ ...prev, [idx]: v }))}
                     >
-                      <SelectTrigger className="h-7 text-xs w-40">
+                      <SelectTrigger className="h-7 text-xs w-44">
                         <SelectValue placeholder="Variance reason *" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="WATER_MOISTURE_LOSS">Water / moisture loss</SelectItem>
-                        <SelectItem value="TRANSIT_LOSS">Transit loss</SelectItem>
-                        <SelectItem value="GRADING_LOSS">Grading / quality loss</SelectItem>
-                        <SelectItem value="OTHER">Other</SelectItem>
+                        {reasonCodes.map((code) => (
+                          <SelectItem key={code} value={code}>
+                            {GRN_VARIANCE_REASON_LABELS[code] ?? code}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   )}
@@ -397,15 +407,18 @@ export default function ReceiptDetailPage() {
             id: "varianceReason",
             header: "Variance reason",
             accessor: (line: GrnLineRow & { _lineIndex?: number }) => {
-              const codeMap: Record<string, string> = {
-                WATER_MOISTURE_LOSS: "Water / moisture",
-                TRANSIT_LOSS: "Transit",
-                GRADING_LOSS: "Grading",
-                OTHER: "Other",
-              };
               return line.varianceReasonCode ? (
-                <span className="text-xs text-amber-700 font-medium">{codeMap[line.varianceReasonCode] ?? line.varianceReasonCode}</span>
-              ) : <span className="text-muted-foreground">—</span>;
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    (line.receiptVarianceKg ?? 0) > 0.05 ? "text-emerald-700" : "text-amber-700"
+                  )}
+                >
+                  {GRN_VARIANCE_REASON_LABELS[line.varianceReasonCode] ?? line.varianceReasonCode}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              );
             },
           },
           {

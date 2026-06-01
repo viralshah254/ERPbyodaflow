@@ -20,6 +20,20 @@ import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
 
+function formatLineQty(line: { quantityKg?: number; uom?: string | null }) {
+  const qty = line.quantityKg;
+  if (qty == null || !Number.isFinite(qty)) return "—";
+  const uom =
+    line.uom && String(line.uom).trim() && String(line.uom) !== "undefined"
+      ? String(line.uom).trim()
+      : "kg";
+  return (
+    <span className="tabular-nums">
+      {qty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {uom}
+    </span>
+  );
+}
+
 export default function YieldDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -72,9 +86,9 @@ export default function YieldDetailPage() {
           </Button>
         }
       />
-      <div className="p-6 space-y-6">
-        <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
+      <div className="px-4 pb-6 sm:px-6">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem] xl:items-start">
+          <div className="min-w-0 space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Yield Record Summary</CardTitle>
@@ -116,19 +130,44 @@ export default function YieldDetailPage() {
             />
 
             <Card>
-              <CardHeader>
-                <CardTitle>Output lines</CardTitle>
+              <CardHeader className="border-b bg-muted/30 px-4 py-3">
+                <CardTitle className="text-base">Output lines</CardTitle>
                 <CardDescription>Primary, secondary, and waste by SKU.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <DataTable<(typeof record.lines)[number]>
                   data={record.lines}
                   columns={[
-                    { id: "sku", header: "SKU", accessor: (line: (typeof record.lines)[number]) => line.skuCode, sticky: true },
-                    { id: "product", header: "Product", accessor: (line: (typeof record.lines)[number]) => line.productName },
-                    { id: "type", header: "Type", accessor: (line: (typeof record.lines)[number]) => <Badge variant={line.type === "PRIMARY" ? "default" : "secondary"}>{line.type}</Badge> },
-                    { id: "qty", header: "Quantity (kg)", accessor: (line: (typeof record.lines)[number]) => `${line.quantityKg} ${line.uom ?? "kg"}` },
+                    {
+                      id: "sku",
+                      header: "SKU",
+                      accessor: (line) => line.skuCode ?? line.skuId ?? "—",
+                      sticky: true,
+                    },
+                    {
+                      id: "product",
+                      header: "Product",
+                      accessor: (line) => line.productName ?? "—",
+                    },
+                    {
+                      id: "type",
+                      header: "Type",
+                      accessor: (line) => (
+                        <Badge variant={line.type === "PRIMARY" ? "default" : "secondary"}>
+                          {line.type}
+                        </Badge>
+                      ),
+                    },
+                    {
+                      id: "qty",
+                      header: "Quantity (kg)",
+                      accessor: (line) => formatLineQty(line),
+                      className: "text-right",
+                    },
                   ]}
+                  scrollMode="natural"
+                  size="comfortable"
+                  className="w-full border-0 rounded-none shadow-none"
                   emptyMessage="No output lines."
                 />
               </CardContent>
@@ -146,7 +185,7 @@ export default function YieldDetailPage() {
             />
           </div>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-4">
             <BatchStatusTimeline
               title="Yield Lifecycle"
               steps={[

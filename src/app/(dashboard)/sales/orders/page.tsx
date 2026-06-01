@@ -47,6 +47,7 @@ const STATUS_OPTIONS = [
   { label: "Draft", value: "DRAFT" },
   { label: "Pending", value: "PENDING_APPROVAL" },
   { label: "Approved", value: "APPROVED" },
+  { label: "Partially fulfilled", value: "PARTIALLY_FULFILLED" },
   { label: "Fulfilled", value: "FULFILLED" },
 ];
 

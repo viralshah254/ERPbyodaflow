@@ -206,6 +206,12 @@ export type DocumentDetailRecord = {
     sourceDocumentType?: DocTypeKey;
     sourceLineId?: string;
     sourceQuantity?: number;
+    orderedQuantity?: number;
+    shippedQuantity?: number;
+    backorderQuantity?: number;
+    fulfilmentStatus?: "SHIPPED" | "NOT_PACKED" | "PARTIALLY_PACKED";
+    fulfilmentReasonCode?: string;
+    fulfilmentReason?: string;
     convertedQuantity?: number;
     remainingQuantity?: number;
     taxCodeId?: string;

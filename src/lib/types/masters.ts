@@ -56,6 +56,7 @@ export type PartyRow = {
   pinCertificateUrl?: string;
   companyRegistrationUrl?: string;
   supplierPaymentMethod?: "BANK" | "PAYBILL" | "TILL";
+  supplierBankName?: string;
   supplierBankAccountName?: string;
   supplierBankAccountNumber?: string;
   supplierBankBranchName?: string;

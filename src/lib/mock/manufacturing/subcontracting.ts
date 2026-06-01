@@ -73,7 +73,7 @@ export interface SubcontractOrderRow {
   species?: "TILAPIA" | "NILE_PERCH" | null;
   /** Processing operation type */
   processType?: "FILLETING" | "GUTTING" | null;
-  status: "SENT" | "WIP" | "RECEIVED";
+  status: "SENT" | "WIP" | "COLLECTED" | "RECEIVED";
   sentAt: string | null;
   receivedAt: string | null;
   /** Warehouse stock was posted to on receive. */

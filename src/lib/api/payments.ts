@@ -174,6 +174,7 @@ export type ApSupplierSummary = {
   status?: string;
   currency?: string;
   defaultCurrency?: string;
+  supplierBankName?: string;
   supplierBankAccountName?: string;
   supplierBankAccountNumber?: string;
   supplierBankBranchName?: string;

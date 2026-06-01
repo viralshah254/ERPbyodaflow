@@ -94,6 +94,7 @@ export function QuickAddSupplierSheet({
       paymentTermsId: "",
       defaultCurrency: "KES",
       taxId: values.taxId,
+      supplierBankName: "",
       supplierBankAccountName: "",
       supplierBankAccountNumber: "",
       supplierBankBranchName: "",

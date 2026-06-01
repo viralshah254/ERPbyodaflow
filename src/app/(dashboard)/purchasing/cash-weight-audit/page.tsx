@@ -236,6 +236,8 @@ export default function CashWeightAuditPage() {
   const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
   const [disbPaymentMethod, setDisbPaymentMethod] = React.useState<string>("CASH");
+  const [disbPaymentKind, setDisbPaymentKind] = React.useState<"DEPOSIT" | "PARTIAL" | "BALANCE">("DEPOSIT");
+  const [poCashPayment, setPoCashPayment] = React.useState<import("@/lib/types/purchasing").PoCashPaymentSummary | null>(null);
   const [disbInvoiceFile, setDisbInvoiceFile] = React.useState<File | null>(null);
   const [disbGrnDetail, setDisbGrnDetail] = React.useState<GrnDetailRow | null>(null);
   const [poReceivedTotals, setPoReceivedTotals] = React.useState<ReceivedTotals | null>(null);
@@ -390,6 +392,7 @@ export default function CashWeightAuditPage() {
       setPoLinkedGrns([]);
       setDisbGrnId(DISB_GRN_NONE);
       setPoReceivedTotals(null);
+      setPoCashPayment(null);
       setPoReferenceOpen(false);
       return;
     }
@@ -416,6 +419,21 @@ export default function CashWeightAuditPage() {
         setPoLinkedGrns(grns);
         if (grns.length > 0) setDisbGrnId(grns[0].id);
         setPoReceivedTotals(po.receivedTotals ?? null);
+        const cashPay = po.cashPayment ?? null;
+        setPoCashPayment(cashPay);
+        const openBal = cashPay?.openBalance ?? po.total ?? 0;
+        const defaultKind: "DEPOSIT" | "PARTIAL" | "BALANCE" =
+          (cashPay?.totalPaid ?? 0) > 0.005
+            ? openBal > 0.005
+              ? "BALANCE"
+              : "PARTIAL"
+            : "DEPOSIT";
+        setDisbPaymentKind(defaultKind);
+        if (defaultKind === "DEPOSIT" && (cashPay?.totalPaid ?? 0) <= 0.005) {
+          setDisbAmount("");
+        } else if (openBal > 0) {
+          setDisbAmount(String(Math.round(openBal)));
+        }
         if (!po.lines?.length) return;
         const lines = po.lines.map((l, i) => ({
           poLineId: `${po.id}:${i}`,
@@ -543,11 +561,11 @@ export default function CashWeightAuditPage() {
   const canSaveDisbursement = React.useMemo(() => {
     if (!poDetail?.status) return true;
     if (!["APPROVED", "RECEIVED"].includes(poDetail.status.trim().toUpperCase())) return false;
-    // When GRNs exist, a GRN must be selected
-    if (poLinkedGrns.length > 0 && (!disbGrnId || disbGrnId === DISB_GRN_NONE)) return false;
+    const isDeposit = disbPaymentKind === "DEPOSIT";
+    if (!isDeposit && poLinkedGrns.length > 0 && (!disbGrnId || disbGrnId === DISB_GRN_NONE)) return false;
     if (!disbInvoiceFile) return false;
     return true;
-  }, [poDetail?.status, poLinkedGrns.length, disbGrnId, disbInvoiceFile]);
+  }, [poDetail?.status, poLinkedGrns.length, disbGrnId, disbInvoiceFile, disbPaymentKind]);
 
   const handleRecordDisbursement = async () => {
     if (!disbPoId.trim() || !disbAmount.trim() || !disbPaidAt) {
@@ -576,17 +594,20 @@ export default function CashWeightAuditPage() {
             .filter((x): x is { poLineId: string; paidWeightKg: number } => x != null)
         : undefined;
     let paidWeightKg: number | undefined;
-    if (poLines.length <= 1) {
-      const w = disbPaidWeightKg.trim() ? parseDecimalString(disbPaidWeightKg) : NaN;
-      if (Number.isNaN(w) || w <= 0) {
-        toast.error("Enter a valid paid weight (kg).");
+    const weightRequired = disbPaymentKind !== "DEPOSIT";
+    if (weightRequired) {
+      if (poLines.length <= 1) {
+        const w = disbPaidWeightKg.trim() ? parseDecimalString(disbPaidWeightKg) : NaN;
+        if (Number.isNaN(w) || w <= 0) {
+          toast.error("Enter a valid paid weight (kg) for balance or partial payments.");
+          return;
+        }
+        paidWeightKg = w;
+      }
+      if (poLines.length > 1 && (!lines?.length || lines.length < poLines.length)) {
+        toast.error("Enter paid weight (kg) for each product line.");
         return;
       }
-      paidWeightKg = w;
-    }
-    if (poLines.length > 1 && (!lines?.length || lines.length < poLines.length)) {
-      toast.error("Enter paid weight (kg) for each product line.");
-      return;
     }
     setSavingDisb(true);
     try {
@@ -613,6 +634,7 @@ export default function CashWeightAuditPage() {
         paidWeightKg,
         lines,
         paymentMethod: disbPaymentMethod,
+        paymentKind: disbPaymentKind,
         invoiceAttachment,
       });
       const receiptLabel = disbResult.reference ? ` Receipt: ${disbResult.reference}.` : "";
@@ -648,6 +670,8 @@ export default function CashWeightAuditPage() {
       setPoLinkedGrns([]);
       setDisbGrnId(DISB_GRN_NONE);
       setDisbPaymentMethod("CASH");
+      setDisbPaymentKind("DEPOSIT");
+      setPoCashPayment(null);
       setDisbInvoiceFile(null);
       setDisbGrnDetail(null);
       setPoReceivedTotals(null);
@@ -1116,7 +1140,58 @@ export default function CashWeightAuditPage() {
                     </p>
                   </div>
 
-                  {poLinkedGrns.length > 0 && (
+                  {poCashPayment && poDetail && (
+                    <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm space-y-1">
+                      <p className="font-medium">Payment on this PO</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        Paid {formatMoney(poCashPayment.totalPaid, poCashPayment.currency)} of{" "}
+                        {formatMoney(poCashPayment.poTotal, poCashPayment.currency)}
+                        {poCashPayment.openBalance > 0.005 && (
+                          <>
+                            {" "}
+                            · open balance{" "}
+                            <span className="font-semibold text-foreground">
+                              {formatMoney(poCashPayment.openBalance, poCashPayment.currency)}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                      <Badge variant="outline" className="text-[10px] uppercase">
+                        {poCashPayment.paymentStatus.replaceAll("_", " ")}
+                      </Badge>
+                    </div>
+                  )}
+
+                  <div className="grid gap-2">
+                    <Label>Payment type</Label>
+                    <Select
+                      value={disbPaymentKind}
+                      onValueChange={(v) => setDisbPaymentKind(v as "DEPOSIT" | "PARTIAL" | "BALANCE")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DEPOSIT">Deposit (before fish picked)</SelectItem>
+                        <SelectItem value="PARTIAL">Partial payment</SelectItem>
+                        <SelectItem value="BALANCE">Balance (after pickup / GRN)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {disbPaymentKind === "DEPOSIT"
+                        ? "Advance payment only — paid weight and GRN are optional until fish is collected."
+                        : "Record paid weight at farm gate and link to the GRN receipt when available."}
+                    </p>
+                  </div>
+
+                  {poLinkedGrns.length > 0 && disbPaymentKind === "DEPOSIT" && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Icons.Info className="h-3 w-3 shrink-0" />
+                      GRN not required for a deposit — link the balance payment to a receipt later.
+                    </p>
+                  )}
+
+                  {poLinkedGrns.length > 0 && disbPaymentKind !== "DEPOSIT" && (
                     <div className="grid gap-2">
                       <Label>
                         GRN <span className="text-destructive">*</span>
@@ -1469,45 +1544,46 @@ export default function CashWeightAuditPage() {
                     <span>A receipt number is assigned automatically when you save.</span>
                   </div>
 
-                  {poLines.length <= 1 ? (
-                    <div className="grid gap-2">
-                      <Label htmlFor="disbPaidWeightKg">
-                        Paid weight (kg){" "}
-                        <span className="font-normal text-muted-foreground">
-                          — what you weighed at farm gate
-                        </span>
-                      </Label>
-                      <FormattedDecimalInput
-                        id="disbPaidWeightKg"
-                        value={disbPaidWeightKg}
-                        onValueChange={setDisbPaidWeightKg}
-                        placeholder="e.g. 1,200.5"
-                      />
-                    </div>
-                  ) : (
-                    <div className="grid gap-2">
-                      <Label>Paid weight per product (kg)</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Enter the weight you paid for at farm gate for each line.
-                      </p>
-                      {poLines.map((l) => (
-                        <div key={l.poLineId} className="flex items-center gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{l.productName}</p>
-                            <p className="text-xs text-muted-foreground">{l.sku}</p>
+                  {disbPaymentKind !== "DEPOSIT" &&
+                    (poLines.length <= 1 ? (
+                      <div className="grid gap-2">
+                        <Label htmlFor="disbPaidWeightKg">
+                          Paid weight (kg){" "}
+                          <span className="font-normal text-muted-foreground">
+                            — what you weighed at farm gate
+                          </span>
+                        </Label>
+                        <FormattedDecimalInput
+                          id="disbPaidWeightKg"
+                          value={disbPaidWeightKg}
+                          onValueChange={setDisbPaidWeightKg}
+                          placeholder="e.g. 1,200.5"
+                        />
+                      </div>
+                    ) : (
+                      <div className="grid gap-2">
+                        <Label>Paid weight per product (kg)</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Enter the weight you paid for at farm gate for each line.
+                        </p>
+                        {poLines.map((l) => (
+                          <div key={l.poLineId} className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{l.productName}</p>
+                              <p className="text-xs text-muted-foreground">{l.sku}</p>
+                            </div>
+                            <FormattedDecimalInput
+                              placeholder="kg"
+                              className="w-28"
+                              value={disbLineWeights[l.poLineId] ?? ""}
+                              onValueChange={(value) =>
+                                setDisbLineWeights((prev) => ({ ...prev, [l.poLineId]: value }))
+                              }
+                            />
                           </div>
-                          <FormattedDecimalInput
-                            placeholder="kg"
-                            className="w-28"
-                            value={disbLineWeights[l.poLineId] ?? ""}
-                            onValueChange={(value) =>
-                              setDisbLineWeights((prev) => ({ ...prev, [l.poLineId]: value }))
-                            }
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    ))}
                 </div>
                 <SheetFooter>
                   <Button

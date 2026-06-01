@@ -12,6 +12,8 @@ export interface CashDisbursementRow {
   reference: string;
   status: "PENDING" | "RECONCILED";
   paymentMethod?: string;
+  paymentKind?: "DEPOSIT" | "PARTIAL" | "BALANCE" | "FULL" | null;
+  notes?: string | null;
   hasSupplierInvoice?: boolean;
   supplierInvoiceFileName?: string;
 }

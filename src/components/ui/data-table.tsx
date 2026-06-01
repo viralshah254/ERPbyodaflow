@@ -161,26 +161,34 @@ export function DataTable<T extends object>({
     ? "sticky top-0 z-10 bg-muted/95 backdrop-blur-sm"
     : "z-10 bg-muted/95";
 
-  const bodyRowCount = Math.max(displayData.length, 1);
-  const cappedRows = Math.min(bodyRowCount, Math.max(1, maxVisibleRows));
-  const autoMaxHeight =
-    scrollMode === "auto"
-      ? `min(70dvh, calc(2.75rem * ${cappedRows} + 3.25rem))`
-      : undefined;
+  const needsAutoScroll =
+    scrollMode === "auto" && displayData.length > maxVisibleRows;
+  const autoScrollRows = needsAutoScroll
+    ? Math.min(displayData.length, maxVisibleRows)
+    : 0;
+  const autoMaxHeight = needsAutoScroll
+    ? `min(70dvh, calc(2.75rem * ${autoScrollRows} + 3.25rem))`
+    : undefined;
 
   const scrollClassName = cn(
     "w-full min-w-0 max-w-full",
     scrollMode === "natural" && "overflow-x-auto overflow-y-visible",
-    scrollMode !== "natural" && "overflow-auto",
+    scrollMode === "auto" &&
+      !needsAutoScroll &&
+      "overflow-x-auto overflow-y-visible",
+    (scrollMode === "fixed" ||
+      scrollMode === "fill" ||
+      (scrollMode === "auto" && needsAutoScroll)) &&
+      "overflow-auto",
     scrollMode === "fixed" && "max-h-[min(28rem,70dvh)] min-h-0",
     scrollMode === "fill" && "min-h-0 flex-1",
-    scrollMode === "auto" && "min-h-0",
+    scrollMode === "auto" && needsAutoScroll && "min-h-0",
   );
 
   const tableSizeClass =
     size === "comfortable"
-      ? "[&_td]:py-3.5 [&_td]:px-4 [&_th]:py-3 [&_th]:px-4 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
-      : "";
+      ? "[&_td]:h-auto [&_td]:py-3.5 [&_td]:px-4 [&_th]:h-auto [&_th]:min-h-10 [&_th]:py-3 [&_th]:px-4 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
+      : "[&_td]:h-auto [&_th]:h-auto [&_th]:min-h-10";
 
   return (
     <div

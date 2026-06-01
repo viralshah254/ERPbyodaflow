@@ -109,6 +109,17 @@ export type PoLineReceiptRollup = {
   receivedValue: number;
 };
 
+export type PoCashPaymentSummary = {
+  poTotal: number;
+  currency: string;
+  totalPaid: number;
+  openBalance: number;
+  paymentStatus: "UNPAID" | "PARTIALLY_PAID" | "PAID";
+  disbursementCount: number;
+  hasDeposit: boolean;
+  lastPaidAt?: string;
+};
+
 export type PurchaseOrderDetailRow = PurchasingDocRow & {
   supplier: string;
   currency: string;
@@ -124,6 +135,8 @@ export type PurchaseOrderDetailRow = PurchasingDocRow & {
   receivedTotals?: ReceivedTotals;
   /** Bills converted from linked GRNs. */
   linkedBills?: LinkedBillSummary[];
+  /** Farm-gate / CoD disbursements against this PO (deposit + balance). */
+  cashPayment?: PoCashPaymentSummary;
   lines: Array<{
     id: string;
     /** Present when line is product-backed; used for lookups. */
