@@ -16,6 +16,9 @@ export interface CashDisbursementRow {
   notes?: string | null;
   hasSupplierInvoice?: boolean;
   supplierInvoiceFileName?: string;
+  /** Per-line farm-gate weight on this disbursement (summed across payments for audit). */
+  lines?: Array<{ poLineId: string; paidWeightKg: number }>;
+  paidWeightKg?: number;
 }
 
 export interface CashWeightAuditLineRow {

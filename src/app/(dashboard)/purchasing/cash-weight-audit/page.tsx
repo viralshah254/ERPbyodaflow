@@ -54,7 +54,7 @@ import { searchPurchaseOrderLookupApi } from "@/lib/api/documents";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import type { AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import type { CashWeightAuditLineRow, CashDisbursementRow } from "@/lib/mock/purchasing/cash-weight-audit";
-import type { GrnDetailRow, ReceivedTotals } from "@/lib/types/purchasing";
+import type { GrnDetailRow, PoLineReceiptRollup, ReceivedTotals } from "@/lib/types/purchasing";
 import { formatMoney } from "@/lib/money";
 import { parseDecimalString } from "@/lib/decimal-input";
 import { fetchLiveExchangeRate } from "@/lib/fx/live-rates";
@@ -113,6 +113,116 @@ interface PoAuditRow {
   exceptions: CashWeightAuditLineRow[];
 }
 
+const PAID_RECEIVED_MATCH_TOLERANCE_KG = 0.01;
+
+/** Sum paid kg per PO line across all disbursements (source of truth for multi-payment). */
+function cumulativePaidKgByLine(disbursements: CashDisbursementRow[]): Map<string, number> {
+  const byLine = new Map<string, number>();
+  for (const d of disbursements) {
+    if (d.lines?.length) {
+      for (const l of d.lines) {
+        byLine.set(l.poLineId, (byLine.get(l.poLineId) ?? 0) + l.paidWeightKg);
+      }
+    } else if ((d.paidWeightKg ?? 0) > 0) {
+      const key = `${d.poId}:0`;
+      byLine.set(key, (byLine.get(key) ?? 0) + d.paidWeightKg!);
+    }
+  }
+  return byLine;
+}
+
+/** Paid kg per canonical PO line, including index fallback when legacy disbursements used wrong poLineId. */
+function cumulativePaidKgForPoLines(
+  poId: string,
+  poLines: Array<{ poLineId: string }>,
+  disbursements: CashDisbursementRow[]
+): Map<string, number> {
+  const knownIds = new Set(poLines.map((l) => l.poLineId));
+  const byLine = new Map<string, number>();
+  for (const d of disbursements.filter((x) => x.poId === poId)) {
+    if (d.lines?.length) {
+      d.lines.forEach((l, idx) => {
+        let targetId = l.poLineId;
+        if (!knownIds.has(targetId) && idx < poLines.length) {
+          targetId = poLines[idx].poLineId;
+        }
+        if (!knownIds.has(targetId)) return;
+        byLine.set(targetId, (byLine.get(targetId) ?? 0) + l.paidWeightKg);
+      });
+    } else if ((d.paidWeightKg ?? 0) > 0) {
+      const targetId = poLines.length === 1 ? poLines[0].poLineId : `${poId}:0`;
+      if (knownIds.has(targetId)) {
+        byLine.set(targetId, (byLine.get(targetId) ?? 0) + d.paidWeightKg!);
+      }
+    }
+  }
+  return byLine;
+}
+
+function formatDisbursementWeightDetail(
+  d: CashDisbursementRow,
+  poLines: Array<{ poLineId: string; productName: string; sku: string }>,
+  formatKg: (kg: number) => string
+): string | null {
+  if (d.lines?.length) {
+    const parts = d.lines
+      .map((l, idx) => {
+        const pl =
+          poLines.find((p) => p.poLineId === l.poLineId) ??
+          (idx < poLines.length ? poLines[idx] : undefined);
+        const label = pl ? `${pl.productName}` : l.poLineId;
+        return `${label} ${formatKg(l.paidWeightKg)} kg`;
+      })
+      .filter(Boolean);
+    return parts.length ? parts.join(" · ") : null;
+  }
+  const kg = disbursementPaidKg(d);
+  return kg != null ? `${formatKg(kg)} kg total` : null;
+}
+
+function disbursementPaidKg(d: CashDisbursementRow): number | null {
+  if (d.lines?.length) {
+    const sum = d.lines.reduce((s, l) => s + l.paidWeightKg, 0);
+    return sum > 0 ? sum : null;
+  }
+  return (d.paidWeightKg ?? 0) > 0 ? d.paidWeightKg! : null;
+}
+
+/** Audit rows are refreshed after each payment; until then, derive paid kg from disbursements. */
+function applyCumulativePaidFromDisbursements(row: PoAuditRow) {
+  const byLine = cumulativePaidKgForPoLines(
+    row.poId,
+    row.lines.map((l) => ({ poLineId: l.poLineId })),
+    row.disbursements
+  );
+  if (!byLine.size || !row.lines.length) return;
+
+  let totalPaid = 0;
+  row.lines = row.lines.map((line) => {
+    const cum = byLine.get(line.poLineId);
+    if (cum == null) {
+      if (line.paidWeightKg != null) totalPaid += line.paidWeightKg;
+      return line;
+    }
+    totalPaid += cum;
+    const received = line.receivedWeightKg;
+    const varianceKg = received != null ? received - cum : line.varianceKg;
+    let status = line.status;
+    if (received != null) {
+      const diff = Math.abs(varianceKg ?? 0);
+      status = diff <= PAID_RECEIVED_MATCH_TOLERANCE_KG ? "MATCHED" : "VARIANCE";
+    }
+    return { ...line, paidWeightKg: cum, varianceKg, status };
+  });
+  row.totalPaidKg = totalPaid;
+  if (row.totalPaidKg > 0 || row.totalReceivedKg > 0) {
+    row.totalVarianceKg = row.totalReceivedKg - row.totalPaidKg;
+  }
+  const hasVariance = row.lines.some((l) => l.status === "VARIANCE");
+  const allMatched = row.lines.length > 0 && row.lines.every((l) => l.status === "MATCHED");
+  row.status = hasVariance ? "VARIANCE" : allMatched ? "MATCHED" : "PENDING";
+}
+
 function groupAuditLinesByPo(
   lines: CashWeightAuditLineRow[],
   disbursements: CashDisbursementRow[],
@@ -161,12 +271,7 @@ function groupAuditLinesByPo(
   }
 
   for (const row of map.values()) {
-    const hasVariance = row.lines.some((l) => l.status === "VARIANCE");
-    const allMatched = row.lines.length > 0 && row.lines.every((l) => l.status === "MATCHED");
-    row.status = hasVariance ? "VARIANCE" : allMatched ? "MATCHED" : "PENDING";
-    if (row.totalPaidKg > 0 || row.totalReceivedKg > 0) {
-      row.totalVarianceKg = row.totalReceivedKg - row.totalPaidKg;
-    }
+    applyCumulativePaidFromDisbursements(row);
   }
 
   return Array.from(map.values()).sort((a, b) => {
@@ -234,6 +339,8 @@ export default function CashWeightAuditPage() {
   const [poLinkedGrns, setPoLinkedGrns] = React.useState<Array<{ id: string; number: string; status: string; receivedWeightKg?: number }>>([]);
   const [savingDisb, setSavingDisb] = React.useState(false);
   const [selectedPoOption, setSelectedPoOption] = React.useState<AsyncSearchableSelectOption | null>(null);
+  const [disbursementSheetPortalHost, setDisbursementSheetPortalHost] =
+    React.useState<HTMLElement | null>(null);
   const [disbKesPreview, setDisbKesPreview] = React.useState<number | null>(null);
   const [disbPaymentMethod, setDisbPaymentMethod] = React.useState<string>("CASH");
   const [disbPaymentKind, setDisbPaymentKind] = React.useState<"DEPOSIT" | "PARTIAL" | "BALANCE">("DEPOSIT");
@@ -241,7 +348,105 @@ export default function CashWeightAuditPage() {
   const [disbInvoiceFile, setDisbInvoiceFile] = React.useState<File | null>(null);
   const [disbGrnDetail, setDisbGrnDetail] = React.useState<GrnDetailRow | null>(null);
   const [poReceivedTotals, setPoReceivedTotals] = React.useState<ReceivedTotals | null>(null);
+  const [poLineReceipts, setPoLineReceipts] = React.useState<PoLineReceiptRollup[]>([]);
   const [poReferenceOpen, setPoReferenceOpen] = React.useState(false);
+
+  const formatKg = (kg: number) =>
+    kg.toLocaleString("en-KE", { maximumFractionDigits: 2 });
+
+  const disbPoDisbursements = React.useMemo(() => {
+    const poId = disbPoId.trim();
+    if (!poId) return [];
+    return disbursements
+      .filter((d) => d.poId === poId)
+      .sort((a, b) => String(a.paidAt).localeCompare(String(b.paidAt)));
+  }, [disbursements, disbPoId]);
+
+  const paidKgFromAllDisbursements = React.useMemo(
+    () => cumulativePaidKgForPoLines(disbPoId.trim(), poLines, disbursements),
+    [disbPoId, poLines, disbursements]
+  );
+
+  /** Per PO line: received vs paid so far vs kg still to allocate on this payment. */
+  const poLineWeightHints = React.useMemo(() => {
+    const poId = disbPoId.trim();
+    if (!poId || !poLines.length) return new Map<string, { receivedKg: number; paidKg: number; remainingKg: number }>();
+
+    const auditByLine = new Map<string, CashWeightAuditLineRow>();
+    for (const row of auditLines) {
+      if (row.poId === poId) auditByLine.set(row.poLineId, row);
+    }
+
+    const hasDisbursements = disbPoDisbursements.length > 0;
+
+    const hints = new Map<string, { receivedKg: number; paidKg: number; remainingKg: number }>();
+    poLines.forEach((pl, index) => {
+      const audit = auditByLine.get(pl.poLineId);
+      const receipt = poLineReceipts.find((r) => r.poLineId === pl.poLineId) ?? poLineReceipts[index];
+      const grnLine = disbGrnDetail?.lines?.[index];
+
+      const receivedKg =
+        audit?.receivedWeightKg ??
+        receipt?.receivedWeightKg ??
+        grnLine?.receivedWeightKg ??
+        (grnLine && grnLine.qty > 0 ? grnLine.qty : null) ??
+        (pl.qty > 0 ? pl.qty : 0);
+
+      const paidKg = hasDisbursements
+        ? (paidKgFromAllDisbursements.get(pl.poLineId) ?? 0)
+        : (audit?.paidWeightKg ?? 0);
+      const remainingKg = Math.max(0, (receivedKg ?? 0) - paidKg);
+      hints.set(pl.poLineId, {
+        receivedKg: receivedKg ?? 0,
+        paidKg,
+        remainingKg,
+      });
+    });
+    return hints;
+  }, [
+    auditLines,
+    disbGrnDetail,
+    disbPoId,
+    disbPoDisbursements.length,
+    paidKgFromAllDisbursements,
+    poLineReceipts,
+    poLines,
+  ]);
+
+  const totalWeightRemainingKg = React.useMemo(() => {
+    let sum = 0;
+    for (const h of poLineWeightHints.values()) sum += h.remainingKg;
+    return sum;
+  }, [poLineWeightHints]);
+
+  const cashOpenBalance = poCashPayment?.openBalance ?? poDetail?.total ?? 0;
+
+  /** Live cash balance remaining as the user types amount (open − this payment). */
+  const liveCashBalance = React.useMemo(() => {
+    const entered = parseDecimalString(disbAmount);
+    const valid = !Number.isNaN(entered) && entered > 0;
+    const remainingAfter = valid ? Math.max(0, cashOpenBalance - entered) : cashOpenBalance;
+    return { open: cashOpenBalance, entered: valid ? entered : 0, remainingAfter };
+  }, [cashOpenBalance, disbAmount]);
+
+  /** Live kg remaining per line as the user types weights for this payment. */
+  const liveLineWeights = React.useMemo(() => {
+    return poLines.map((l) => {
+      const hint = poLineWeightHints.get(l.poLineId);
+      const start = hint?.remainingKg ?? 0;
+      const raw =
+        poLines.length <= 1 ? disbPaidWeightKg : (disbLineWeights[l.poLineId] ?? "");
+      const entered = parseDecimalString(raw);
+      const valid = !Number.isNaN(entered) && entered > 0;
+      const remainingAfter = valid ? Math.max(0, start - entered) : start;
+      return { line: l, hint, entered: valid ? entered : 0, remainingAfter, start };
+    });
+  }, [poLines, poLineWeightHints, disbLineWeights, disbPaidWeightKg]);
+
+  const liveTotalKgRemainingAfter = React.useMemo(
+    () => liveLineWeights.reduce((s, x) => s + x.remainingAfter, 0),
+    [liveLineWeights]
+  );
 
   const receivedWeightForPo = React.useMemo(() => {
     if (!disbPoId.trim()) return null;
@@ -321,13 +526,35 @@ export default function CashWeightAuditPage() {
   }, []);
 
   React.useEffect(() => {
+    const openBal = poCashPayment?.openBalance ?? 0;
+    const hasPriorPay = (poCashPayment?.totalPaid ?? 0) > 0.005;
+    const isDeposit = disbPaymentKind === "DEPOSIT";
+
+    // Follow-up partial/balance: always suggest remaining PO balance, not full GRN value.
+    if (hasPriorPay && openBal > 0.005 && !isDeposit) {
+      setDisbAmount(String(Math.round(openBal)));
+      return;
+    }
+
     if (!disbGrnId || disbGrnId === DISB_GRN_NONE || !disbGrnDetail || disbGrnDetail.id !== disbGrnId) {
       return;
     }
-    const total = grnReceiptTotal(disbGrnDetail);
-    if (total == null) return;
-    setDisbAmount(total % 1 === 0 ? String(total) : total.toFixed(2));
-  }, [disbGrnId, disbGrnDetail, grnReceiptTotal]);
+    if (isDeposit) return;
+
+    const grnTotal = grnReceiptTotal(disbGrnDetail);
+    if (grnTotal == null) return;
+    const cap =
+      openBal > 0.005 ? openBal : poDetail?.total != null && poDetail.total > 0 ? poDetail.total : grnTotal;
+    const amount = Math.min(grnTotal, cap);
+    setDisbAmount(amount % 1 === 0 ? String(amount) : amount.toFixed(2));
+  }, [
+    disbGrnId,
+    disbGrnDetail,
+    grnReceiptTotal,
+    poCashPayment,
+    disbPaymentKind,
+    poDetail?.total,
+  ]);
 
   // Batch-load landed cost allocations for all GRN IDs
   React.useEffect(() => {
@@ -372,7 +599,8 @@ export default function CashWeightAuditPage() {
     (query: string) =>
       searchPurchaseOrderLookupApi(query, {
         status: "APPROVED,RECEIVED",
-        excludeWithCashDisbursement: true,
+        // Allow follow-up partial/balance payments on POs that already have a deposit.
+        excludeWithCashDisbursement: false,
       }).then((items) =>
         items.map((item) => ({
           id: item.id,
@@ -392,6 +620,7 @@ export default function CashWeightAuditPage() {
       setPoLinkedGrns([]);
       setDisbGrnId(DISB_GRN_NONE);
       setPoReceivedTotals(null);
+      setPoLineReceipts([]);
       setPoCashPayment(null);
       setPoReferenceOpen(false);
       return;
@@ -402,6 +631,12 @@ export default function CashWeightAuditPage() {
       .then((po) => {
         if (cancelled || !po) return;
         if (po.currency) setDisbCurrency(po.currency);
+        setSelectedPoOption({
+          id: po.id,
+          label: [po.number, po.supplier].filter(Boolean).join(" · "),
+          description: po.date ? new Date(po.date).toLocaleDateString() : undefined,
+          badges: [{ label: po.status, variant: "secondary" }],
+        });
         setPoDetail({
           number: po.number,
           supplier: po.supplier,
@@ -419,6 +654,7 @@ export default function CashWeightAuditPage() {
         setPoLinkedGrns(grns);
         if (grns.length > 0) setDisbGrnId(grns[0].id);
         setPoReceivedTotals(po.receivedTotals ?? null);
+        setPoLineReceipts(po.lineReceipts ?? []);
         const cashPay = po.cashPayment ?? null;
         setPoCashPayment(cashPay);
         const openBal = cashPay?.openBalance ?? po.total ?? 0;
@@ -638,24 +874,35 @@ export default function CashWeightAuditPage() {
         invoiceAttachment,
       });
       const receiptLabel = disbResult.reference ? ` Receipt: ${disbResult.reference}.` : "";
+      const paySummary = disbResult.paymentSummary;
+      const payStatusLabel = paySummary
+        ? ` ${formatMoney(paySummary.totalPaid, paySummary.currency)} paid · ${formatMoney(paySummary.openBalance, paySummary.currency)} open (${paySummary.paymentStatus}).`
+        : "";
       if (disbResult.warnings?.length) {
         toast.warning(
           `Weight data check: ${disbResult.warnings.join("; ")}. Audit lines will still be created.`
         );
       }
+      const auditUpdated = (disbResult as { auditRebuilt?: { created: number; updated: number } })
+        .auditRebuilt;
       try {
         const built = await buildCashWeightAudit({ poId: disbPoId.trim() });
-        if (built.built > 0) {
+        const rebuiltCount = built.built + (auditUpdated?.updated ?? 0);
+        if (rebuiltCount > 0) {
           toast.success(
-            `Disbursement recorded.${receiptLabel} ${built.built} audit line(s) created automatically.`
+            `Disbursement recorded.${receiptLabel}${payStatusLabel} Weight audit updated (${rebuiltCount} line(s)).`
           );
         } else {
-          toast.success(
-            `Disbursement recorded.${receiptLabel} Audit lines will appear once a GRN is linked.`
-          );
+          toast.success(`Disbursement recorded.${receiptLabel}${payStatusLabel}`);
         }
       } catch {
-        toast.success(`Disbursement recorded.${receiptLabel}`);
+        if (auditUpdated && (auditUpdated.created > 0 || auditUpdated.updated > 0)) {
+          toast.success(
+            `Disbursement recorded.${receiptLabel}${payStatusLabel} Weight audit updated.`
+          );
+        } else {
+          toast.success(`Disbursement recorded.${receiptLabel}${payStatusLabel}`);
+        }
       }
       setDisbursementOpen(false);
       setDisbPoId("");
@@ -777,7 +1024,8 @@ export default function CashWeightAuditPage() {
           <div className="space-y-0.5">
             {r.disbursements.map((d) => (
               <p key={d.id} className="font-mono text-xs text-muted-foreground">
-                {d.reference ?? d.id}
+                {d.paymentKind ? `${d.paymentKind} · ` : ""}
+                {formatMoney(d.amount, d.currency)} · {d.reference ?? d.id}
               </p>
             ))}
           </div>
@@ -1109,7 +1357,11 @@ export default function CashWeightAuditPage() {
                   Record disbursement
                 </Button>
               </SheetTrigger>
-              <SheetContent className="overflow-y-auto">
+              <SheetContent className="flex w-full flex-col overflow-hidden sm:max-w-lg">
+                <div
+                  ref={setDisbursementSheetPortalHost}
+                  className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1"
+                >
                 <SheetHeader>
                   <SheetTitle>Record cash disbursement</SheetTitle>
                   <SheetDescription>
@@ -1124,7 +1376,10 @@ export default function CashWeightAuditPage() {
                     <Label>Purchase order</Label>
                     <AsyncSearchableSelect
                       value={disbPoId}
-                      onValueChange={setDisbPoId}
+                      onValueChange={(id) => {
+                        setDisbPoId(id);
+                        if (!id) setSelectedPoOption(null);
+                      }}
                       onOptionSelect={(opt) => setSelectedPoOption(opt)}
                       loadOptions={loadPoOptions}
                       selectedOption={selectedPoOption}
@@ -1133,6 +1388,7 @@ export default function CashWeightAuditPage() {
                       emptyMessage="No approved or received purchase orders found."
                       allowClear
                       recentStorageKey="disb-po-picker"
+                      portalContainer={disbursementSheetPortalHost}
                     />
                     <p className="text-xs text-muted-foreground">
                       Approved or received POs are shown (you can record farm-gate payment while the
@@ -1468,10 +1724,42 @@ export default function CashWeightAuditPage() {
                         onValueChange={setDisbAmount}
                         placeholder="0.00"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Prefilled from the selected GRN total receipt value when available. You can change it before
-                        saving.
-                      </p>
+                      {cashOpenBalance > 0.005 ? (
+                        <p className="text-xs tabular-nums rounded-md border bg-muted/40 px-3 py-2">
+                          Open balance{" "}
+                          <strong className="text-foreground">
+                            {formatMoney(liveCashBalance.open, disbCurrency)}
+                          </strong>
+                          {liveCashBalance.entered > 0 ? (
+                            <>
+                              {" "}
+                              · this payment{" "}
+                              <strong className="text-foreground">
+                                {formatMoney(liveCashBalance.entered, disbCurrency)}
+                              </strong>
+                              {" "}
+                              ·{" "}
+                              <span
+                                className={
+                                  liveCashBalance.remainingAfter <= 0.005
+                                    ? "font-semibold text-emerald-700 dark:text-emerald-400"
+                                    : "font-semibold text-foreground"
+                                }
+                              >
+                                {liveCashBalance.remainingAfter <= 0.005
+                                  ? "fully paid after save"
+                                  : `${formatMoney(liveCashBalance.remainingAfter, disbCurrency)} left`}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground"> · enter amount above</span>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Prefilled from the PO open balance when paying a balance or follow-up partial.
+                        </p>
+                      )}
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="disbCurrency">Currency</Label>
@@ -1547,41 +1835,173 @@ export default function CashWeightAuditPage() {
                   {disbPaymentKind !== "DEPOSIT" &&
                     (poLines.length <= 1 ? (
                       <div className="grid gap-2">
+                        {liveLineWeights[0]?.hint ? (
+                          <p className="text-xs text-muted-foreground tabular-nums rounded-md border bg-muted/40 px-3 py-2">
+                            Received{" "}
+                            <strong className="text-foreground">
+                              {formatKg(liveLineWeights[0].hint!.receivedKg)} kg
+                            </strong>
+                            {" · "}
+                            Paid so far{" "}
+                            <strong className="text-foreground">
+                              {formatKg(liveLineWeights[0].hint!.paidKg)} kg
+                            </strong>
+                            {" · "}
+                            Still to pay{" "}
+                            <strong className="text-foreground">
+                              {formatKg(liveLineWeights[0].start)} kg
+                            </strong>
+                            {liveLineWeights[0].entered > 0 ? (
+                              <>
+                                {" "}
+                                · after this payment{" "}
+                                <span
+                                  className={
+                                    liveLineWeights[0].remainingAfter <= 0.005
+                                      ? "font-semibold text-emerald-700 dark:text-emerald-400"
+                                      : "font-semibold text-foreground"
+                                  }
+                                >
+                                  {liveLineWeights[0].remainingAfter <= 0.005
+                                    ? "0 kg left"
+                                    : `${formatKg(liveLineWeights[0].remainingAfter)} kg left`}
+                                </span>
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
                         <Label htmlFor="disbPaidWeightKg">
                           Paid weight (kg){" "}
                           <span className="font-normal text-muted-foreground">
-                            — what you weighed at farm gate
+                            — weight for this payment
                           </span>
                         </Label>
                         <FormattedDecimalInput
                           id="disbPaidWeightKg"
                           value={disbPaidWeightKg}
                           onValueChange={setDisbPaidWeightKg}
-                          placeholder="e.g. 1,200.5"
+                          placeholder={
+                            poLines[0] && (poLineWeightHints.get(poLines[0].poLineId)?.remainingKg ?? 0) > 0
+                              ? String(poLineWeightHints.get(poLines[0].poLineId)!.remainingKg)
+                              : "e.g. 1,200.5"
+                          }
                         />
                       </div>
                     ) : (
                       <div className="grid gap-2">
                         <Label>Paid weight per product (kg)</Label>
                         <p className="text-xs text-muted-foreground">
-                          Enter the weight you paid for at farm gate for each line.
+                          Enter the weight for <strong>this payment</strong>. Remaining kg is received minus already
+                          paid on prior disbursements.
                         </p>
-                        {poLines.map((l) => (
-                          <div key={l.poLineId} className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium truncate">{l.productName}</p>
-                              <p className="text-xs text-muted-foreground">{l.sku}</p>
-                            </div>
-                            <FormattedDecimalInput
-                              placeholder="kg"
-                              className="w-28"
-                              value={disbLineWeights[l.poLineId] ?? ""}
-                              onValueChange={(value) =>
-                                setDisbLineWeights((prev) => ({ ...prev, [l.poLineId]: value }))
-                              }
-                            />
+                        {disbPoDisbursements.some((d) => disbursementPaidKg(d) != null) ? (
+                          <div className="rounded-md border bg-muted/30 px-3 py-2 space-y-2">
+                            <p className="text-xs font-medium text-foreground">
+                              Weights already paid ({disbPoDisbursements.length} payment
+                              {disbPoDisbursements.length === 1 ? "" : "s"})
+                            </p>
+                            <ul className="space-y-1.5 text-[11px] text-muted-foreground tabular-nums">
+                              {disbPoDisbursements.map((d) => {
+                                const detail = formatDisbursementWeightDetail(d, poLines, formatKg);
+                                if (!detail) return null;
+                                return (
+                                  <li key={d.id} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                                    <span className="font-mono text-foreground shrink-0">
+                                      {d.reference ?? d.id}
+                                      {d.paymentKind ? ` · ${d.paymentKind}` : ""}
+                                    </span>
+                                    <span>{detail}</span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                            <p className="text-[11px] tabular-nums border-t pt-2">
+                              Cumulative paid per line:{" "}
+                              {poLines
+                                .map((pl) => {
+                                  const paid = paidKgFromAllDisbursements.get(pl.poLineId) ?? 0;
+                                  if (paid <= 0.005) return null;
+                                  return `${pl.productName} ${formatKg(paid)} kg`;
+                                })
+                                .filter(Boolean)
+                                .join(" · ") || "—"}
+                            </p>
                           </div>
-                        ))}
+                        ) : null}
+                        {totalWeightRemainingKg > 0.005 ? (
+                          <p className="text-xs tabular-nums rounded-md border border-primary/20 bg-primary/5 px-3 py-2">
+                            Total kg still to pay:{" "}
+                            <strong>{formatKg(totalWeightRemainingKg)} kg</strong>
+                            {liveLineWeights.some((x) => x.entered > 0) ? (
+                              <>
+                                {" "}
+                                · after entries above{" "}
+                                <strong
+                                  className={
+                                    liveTotalKgRemainingAfter <= 0.005
+                                      ? "text-emerald-700 dark:text-emerald-400"
+                                      : undefined
+                                  }
+                                >
+                                  {liveTotalKgRemainingAfter <= 0.005
+                                    ? "0 kg left"
+                                    : `${formatKg(liveTotalKgRemainingAfter)} kg left`}
+                                </strong>
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
+                        {liveLineWeights.map(({ line: l, hint, entered, remainingAfter, start }) => (
+                            <div
+                              key={l.poLineId}
+                              className="rounded-md border bg-background/80 px-3 py-2.5 space-y-2"
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium">{l.productName}</p>
+                                  <p className="text-xs text-muted-foreground">{l.sku}</p>
+                                  {hint ? (
+                                    <p className="text-[11px] text-muted-foreground tabular-nums mt-1">
+                                      Received {formatKg(hint.receivedKg)} kg · Paid{" "}
+                                      {formatKg(hint.paidKg)} kg · Still to pay{" "}
+                                      <strong className="text-foreground">{formatKg(start)} kg</strong>
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <FormattedDecimalInput
+                                  placeholder={start > 0 ? formatKg(start) : "kg"}
+                                  className="w-28 shrink-0"
+                                  value={disbLineWeights[l.poLineId] ?? ""}
+                                  onValueChange={(value) =>
+                                    setDisbLineWeights((prev) => ({ ...prev, [l.poLineId]: value }))
+                                  }
+                                />
+                              </div>
+                              {hint ? (
+                                <p className="text-[11px] tabular-nums text-muted-foreground border-t pt-2">
+                                  {entered > 0 ? (
+                                    <>
+                                      This payment: <strong>{formatKg(entered)} kg</strong>
+                                      {" · "}
+                                      <span
+                                        className={
+                                          remainingAfter <= 0.005
+                                            ? "font-semibold text-emerald-700 dark:text-emerald-400"
+                                            : "font-semibold text-foreground"
+                                        }
+                                      >
+                                        {remainingAfter <= 0.005
+                                          ? "Line fully paid after save"
+                                          : `${formatKg(remainingAfter)} kg still to pay on line`}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>Enter kg for this payment · up to {formatKg(start)} kg on this line</>
+                                  )}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))}
                       </div>
                     ))}
                 </div>
@@ -1600,6 +2020,7 @@ export default function CashWeightAuditPage() {
                     {savingDisb ? "Saving…" : "Save disbursement"}
                   </Button>
                 </SheetFooter>
+                </div>
               </SheetContent>
             </Sheet>
             <Button variant="outline" size="sm" asChild>
@@ -1884,7 +2305,20 @@ export default function CashWeightAuditPage() {
                             <p className="font-medium font-mono text-xs">
                               {d.reference ?? d.id}
                             </p>
+                            {d.paymentKind ? (
+                              <Badge variant="outline" className="text-[10px] mt-0.5">
+                                {d.paymentKind}
+                              </Badge>
+                            ) : null}
                             <p className="text-xs text-muted-foreground">{d.paidAt}</p>
+                            {disbursementPaidKg(d) != null ? (
+                              <p className="text-[10px] text-muted-foreground tabular-nums">
+                                Weight this payment: {disbursementPaidKg(d)!.toLocaleString("en-KE")} kg
+                                {d.lines?.length
+                                  ? ` (${d.lines.map((l) => l.paidWeightKg.toLocaleString("en-KE")).join(" + ")} kg)`
+                                  : ""}
+                              </p>
+                            ) : null}
                             <p className="text-[10px] text-muted-foreground mt-0.5">
                               Paid via{" "}
                               {DISB_PAYMENT_METHODS.find(
@@ -1921,8 +2355,13 @@ export default function CashWeightAuditPage() {
                             <Badge
                               variant={d.status === "RECONCILED" ? "default" : "secondary"}
                               className="text-[10px] mt-0.5"
+                              title={
+                                d.status === "RECONCILED"
+                                  ? "Paid vs received weights match within tolerance"
+                                  : "Cash recorded — weight audit not yet matched to GRN"
+                              }
                             >
-                              {d.status}
+                              {d.status === "RECONCILED" ? "Reconciled" : "Awaiting match"}
                             </Badge>
                           </div>
                         </div>
