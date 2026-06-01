@@ -104,7 +104,15 @@ export default function YieldDetailPage() {
               inputKg={record.inputWeightKg}
               primaryKg={record.outputPrimaryKg}
               secondaryKg={record.outputSecondaryKg}
-              lossKg={record.wasteKg}
+              lossKg={
+                record.wasteKg ??
+                Math.max(
+                  0,
+                  record.inputWeightKg -
+                    (record.outputPrimaryKg ?? 0) -
+                    (record.outputSecondaryKg ?? 0)
+                )
+              }
             />
 
             <Card>
@@ -119,7 +127,7 @@ export default function YieldDetailPage() {
                     { id: "sku", header: "SKU", accessor: (line: (typeof record.lines)[number]) => line.skuCode, sticky: true },
                     { id: "product", header: "Product", accessor: (line: (typeof record.lines)[number]) => line.productName },
                     { id: "type", header: "Type", accessor: (line: (typeof record.lines)[number]) => <Badge variant={line.type === "PRIMARY" ? "default" : "secondary"}>{line.type}</Badge> },
-                    { id: "qty", header: "Quantity (kg)", accessor: (line: (typeof record.lines)[number]) => `${line.quantityKg} ${line.uom}` },
+                    { id: "qty", header: "Quantity (kg)", accessor: (line: (typeof record.lines)[number]) => `${line.quantityKg} ${line.uom ?? "kg"}` },
                   ]}
                   emptyMessage="No output lines."
                 />

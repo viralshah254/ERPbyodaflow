@@ -78,7 +78,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         icon: "Factory",
         moduleKey: "manufacturing",
         requiresFlags: ["subcontracting"],
-        requiresPermissions: ["manufacturing.production.read"],
+        requiresPermissions: ["manufacturing.production.read", "manufacturing.subcontracting.read"],
       },
       {
         key: "manufacturing-yield",
@@ -87,7 +87,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         icon: "Scale",
         moduleKey: "manufacturing",
         requiresFlags: ["massBalanceYield"],
-        requiresPermissions: ["manufacturing.production.read"],
+        requiresPermissions: ["manufacturing.production.read", "manufacturing.subcontracting.read"],
       },
       {
         key: "manufacturing-byproducts",

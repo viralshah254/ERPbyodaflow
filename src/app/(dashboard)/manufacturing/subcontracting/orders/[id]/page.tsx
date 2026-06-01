@@ -822,26 +822,38 @@ export default function SubcontractOrderDetailPage() {
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Input kg</p>
-                          <p className="tabular-nums">{String(yr.inputKg ?? "—")}</p>
+                          <p className="tabular-nums">{String(yr.inputWeightKg ?? "—")}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Primary kg</p>
-                          <p className="tabular-nums">{String(yr.primaryOutputKg ?? "—")}</p>
+                          <p className="tabular-nums">{String(yr.outputPrimaryKg ?? "—")}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Secondary kg</p>
-                          <p className="tabular-nums">{String(yr.secondaryOutputKg ?? "—")}</p>
+                          <p className="tabular-nums">{String(yr.outputSecondaryKg ?? "—")}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Loss kg</p>
-                          <p className="tabular-nums">{String(yr.processLossKg ?? "—")}</p>
+                          <p className="tabular-nums">
+                            {yr.wasteKg != null
+                              ? String(yr.wasteKg)
+                              : yr.inputWeightKg != null
+                                ? String(
+                                    Math.max(
+                                      0,
+                                      Number(yr.inputWeightKg) -
+                                        Number(yr.outputPrimaryKg ?? 0) -
+                                        Number(yr.outputSecondaryKg ?? 0) -
+                                        Number(yr.wasteKg ?? 0)
+                                    )
+                                  )
+                                : "—"}
+                          </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Yield %</p>
                           <p className="tabular-nums">
-                            {yr.primaryYieldPct != null
-                              ? `${(Number(yr.primaryYieldPct) * 100).toFixed(1)}%`
-                              : "—"}
+                            {yr.yieldPercent != null ? `${Number(yr.yieldPercent).toFixed(1)}%` : "—"}
                           </p>
                         </div>
                       </div>

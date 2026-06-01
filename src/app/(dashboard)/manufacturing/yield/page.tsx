@@ -336,7 +336,8 @@ export default function ManufacturingYieldPage() {
       );
       return;
     }
-    const scale = inputQty > 0 ? inputQty / 100 : 1;
+    const bomBaseQty = Math.max(1, bom.quantity ?? 100);
+    const scale = inputQty > 0 ? inputQty / bomBaseQty : 1;
     const scoNameMap = new Map<string, string>();
     (sco.lines ?? []).forEach((l) => {
       if (l.productId && l.productName) scoNameMap.set(l.productId, l.productName);
@@ -368,7 +369,8 @@ export default function ManufacturingYieldPage() {
       setOutputLines([]);
       return;
     }
-    const scale = inputQty > 0 ? inputQty / 100 : 1;
+    const bomBaseQty = Math.max(1, bom.quantity ?? 100);
+    const scale = inputQty > 0 ? inputQty / bomBaseQty : 1;
     setOutputLines(
       bom.items.map((item) => {
         const lineType: BomOutputLine["type"] =
@@ -392,7 +394,7 @@ export default function ManufacturingYieldPage() {
     const sco = subcontractOrders.find((s) => s.id === selectedScoId);
     const bom = sco?.bomId ? reverseBoms.find((b) => b.id === sco.bomId) : null;
     if (!bom) return outputLines;
-    const scale = currentInputKg / 100;
+    const scale = currentInputKg / Math.max(1, bom.quantity ?? 100);
     return outputLines.map((line, i) => ({
       ...line,
       expectedKg: Math.round((bom.items[i]?.quantity ?? 0) * scale * 100) / 100,
@@ -422,10 +424,10 @@ export default function ManufacturingYieldPage() {
     const lines = scaledLines.map((l) => ({
       skuId: l.productId,
       type: l.type === "OUTPUT_PRIMARY" ? ("PRIMARY" as const) : l.type === "OUTPUT_SECONDARY" ? ("SECONDARY" as const) : ("WASTE" as const),
-      quantityKg: Number(l.actualKg) || l.expectedKg,
+      quantityKg: Number(l.actualKg) || 0,
     }));
     if (lines.every((l) => l.quantityKg <= 0)) {
-      toast.error("Enter at least one output quantity.");
+      toast.error("Enter at least one actual output quantity (kg).");
       return;
     }
     setYieldSaving(true);

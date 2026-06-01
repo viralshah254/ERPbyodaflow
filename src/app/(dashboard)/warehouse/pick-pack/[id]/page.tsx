@@ -285,10 +285,11 @@ export default function PickPackDetailPage() {
 
   const pickedDraftInvalid = React.useMemo(() => {
     if (!task || (task.status ?? "").trim().toUpperCase() !== "PENDING") return false;
-    return task.lines.some((line) => {
+    const hasAnyPick = task.lines.some((line) => {
       const pq = parsePickedQtyInput(linePickedDraft[line.id], line.quantity);
-      return !(pq > 1e-9);
+      return pq > 1e-9;
     });
+    return !hasAnyPick;
   }, [task, linePickedDraft]);
 
   if (!task && loading) {
@@ -757,7 +758,7 @@ export default function PickPackDetailPage() {
           {workflowHint ? <p className="text-xs text-muted-foreground">{workflowHint}</p> : null}
           {pickedDraftInvalid && canConfirmPick ? (
             <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-              Each line needs a picked quantity greater than zero.
+              At least one line needs a picked quantity greater than zero. Set out-of-stock lines to 0 to ship the rest.
             </p>
           ) : null}
           {fulfilmentPickPackBlock.missingWarehouse && canConfirmPick ? (
@@ -790,7 +791,7 @@ export default function PickPackDetailPage() {
               disabled={!canConfirmPickAndPackStockOk || pickPackLoading}
               title={
                 pickedDraftInvalid
-                  ? "Enter a picked quantity greater than zero on each line."
+                  ? "Enter a picked quantity greater than zero on at least one line."
                   : fulfilmentPickPackBlock.missingWarehouse
                     ? "Select a fulfilment warehouse first."
                     : fulfilmentPickPackBlock.shortfalls.length
