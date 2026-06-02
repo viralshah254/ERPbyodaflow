@@ -24,7 +24,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { createFinancialTaxApi, fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  createFinancialTaxApi,
+  fetchFinancialTaxesApi,
+  updateFinancialTaxApi,
+  deleteFinancialTaxApi,
+} from "@/lib/api/financial-taxes";
 import type { TaxRow } from "@/lib/types/taxes";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -42,6 +49,10 @@ export default function TaxesSettingsPage() {
   });
 
   const [rows, setRows] = React.useState<TaxRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
   const refreshRows = React.useCallback(async () => {
     const items = await fetchFinancialTaxesApi();
@@ -49,10 +60,60 @@ export default function TaxesSettingsPage() {
   }, []);
 
   React.useEffect(() => {
-    void refreshRows().catch((error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to load tax codes.");
-    });
+    void refreshRows()
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to load tax codes.");
+      })
+      .finally(() => setLoading(false));
   }, [refreshRows]);
+
+  const handleSave = async () => {
+    if (!form.code.trim() || !form.name.trim()) {
+      toast.error("Code and name are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateFinancialTaxApi(editing.id, {
+          code: form.code.trim(),
+          name: form.name.trim(),
+          rate: form.rate,
+        });
+        toast.success("Tax code updated.");
+      } else {
+        await createFinancialTaxApi({
+          code: form.code.trim(),
+          name: form.name.trim(),
+          rate: form.rate,
+          type: "VAT",
+        });
+        toast.success("Tax code created.");
+      }
+      await refreshRows();
+      setDrawerOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save tax code.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editing) return;
+    setDeleting(true);
+    try {
+      await deleteFinancialTaxApi(editing.id);
+      await refreshRows();
+      setDeleteConfirmOpen(false);
+      setDrawerOpen(false);
+      toast.success("Tax code deleted.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete tax code.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -121,32 +182,52 @@ export default function TaxesSettingsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
-                  <TableRow
-                    key={r.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => openEdit(r)}
-                  >
-                    <TableCell className="font-medium">{r.code}</TableCell>
-                    <TableCell>{r.name}</TableCell>
-                    <TableCell>{r.rate}</TableCell>
-                    <TableCell>{r.inclusive ? "Yes" : "No"}</TableCell>
-                    <TableCell>{r.effectiveFrom}</TableCell>
-                    <TableCell>{r.effectiveTo ?? "—"}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(r);
-                        }}
-                      >
-                        Edit
-                      </Button>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={`sk-${i}`}>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-10" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-10" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-14" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                      No tax codes yet. Click &ldquo;Add tax code&rdquo; to create one.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  rows.map((r) => (
+                    <TableRow
+                      key={r.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => openEdit(r)}
+                    >
+                      <TableCell className="font-medium">{r.code}</TableCell>
+                      <TableCell>{r.name}</TableCell>
+                      <TableCell>{r.rate}</TableCell>
+                      <TableCell>{r.inclusive ? "Yes" : "No"}</TableCell>
+                      <TableCell>{r.effectiveFrom}</TableCell>
+                      <TableCell>{r.effectiveTo ?? "—"}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(r);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -220,36 +301,46 @@ export default function TaxesSettingsPage() {
               />
             </div>
           </div>
-          <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setDrawerOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                if (editing) {
-                  toast.info("Editing tax codes is not yet supported by the backend contract.");
-                  return;
-                }
-                try {
-                  await createFinancialTaxApi({
-                    code: form.code.trim(),
-                    name: form.name.trim(),
-                    rate: form.rate,
-                    type: "VAT",
-                  });
-                  await refreshRows();
-                  setDrawerOpen(false);
-                  toast.success("Tax code created.");
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Failed to create tax code.");
-                }
-              }}
-            >
-              {editing ? "Save" : "Create"}
-            </Button>
+          <SheetFooter className="mt-6 sm:justify-between">
+            {editing ? (
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={deleting || saving}
+              >
+                <Icons.Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setDrawerOpen(false)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={() => void handleSave()} disabled={saving}>
+                {saving ? "Saving…" : editing ? "Save" : "Create"}
+              </Button>
+            </div>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Delete tax code?"
+        description={
+          editing
+            ? `This removes "${editing.code} — ${editing.name}". Products using it keep their stored reference but it will no longer be selectable. This cannot be undone.`
+            : "This cannot be undone."
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </PageShell>
   );
 }

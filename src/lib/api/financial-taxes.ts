@@ -39,3 +39,19 @@ export async function createFinancialTaxApi(payload: {
     body: payload,
   });
 }
+
+export async function updateFinancialTaxApi(
+  id: string,
+  payload: { code?: string; name?: string; rate?: number; type?: string }
+): Promise<{ id: string }> {
+  requireLiveApi("Update financial tax");
+  return apiRequest<{ id: string }>(`/api/settings/financial/taxes/${id}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function deleteFinancialTaxApi(id: string): Promise<void> {
+  requireLiveApi("Delete financial tax");
+  await apiRequest(`/api/settings/financial/taxes/${id}`, { method: "DELETE" });
+}

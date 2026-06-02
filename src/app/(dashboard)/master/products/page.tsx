@@ -8,6 +8,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { RowActions } from "@/components/ui/row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { TopProgressBar } from "@/components/ui/top-progress-bar";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +30,9 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
-import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, deleteProductApi } from "@/lib/api/products";
+import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, fetchProductFamiliesApi, deleteProductApi } from "@/lib/api/products";
+import { importProductsApi, exportProductsCsvApi, downloadProductsTemplateCsv } from "@/lib/api/import-export";
+import type { ImportProductsResult } from "@/lib/api/import-export";
 import { fetchProductCategoriesApi, createProductCategoryApi } from "@/lib/api/product-categories";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
@@ -44,7 +48,8 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const productIcon = "Package" as const;
-const PRODUCTS_PAGE_SIZE = 50;
+const PRODUCTS_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
 
 /** Derive next sequential SKU from existing SKUs. */
 function suggestNextSku(existing: string[]): string {
@@ -81,9 +86,14 @@ export default function MasterProductsPage() {
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [productTypeFilter, setProductTypeFilter] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
+  const [categoryFilter, setCategoryFilter] = React.useState("");
+  const [familyFilter, setFamilyFilter] = React.useState("");
+  const [families, setFamilies] = React.useState<string[]>([]);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [allRows, setAllRows] = React.useState<ProductRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
+  const [pageSize, setPageSize] = React.useState<number>(PRODUCTS_PAGE_SIZE);
   const [saving, setSaving] = React.useState(false);
   const [listCursor, setListCursor] = React.useState("0");
   const [listCursorStack, setListCursorStack] = React.useState<string[]>([]);
@@ -110,6 +120,26 @@ export default function MasterProductsPage() {
   const [addingCategory, setAddingCategory] = React.useState(false);
   const [uomOptions, setUomOptions] = React.useState<string[]>([]);
 
+  // Bulk import / export
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importFile, setImportFile] = React.useState<File | null>(null);
+  const [importing, setImporting] = React.useState(false);
+  const [importResult, setImportResult] = React.useState<ImportProductsResult | null>(null);
+  const [dragOver, setDragOver] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const ACCEPTED_IMPORT = ".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+  const pickImportFile = (file: File | null) => {
+    if (!file) return;
+    if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
+      toast.error("Please choose a .csv, .xlsx or .xls file.");
+      return;
+    }
+    setImportFile(file);
+    setImportResult(null);
+  };
+
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search), 300);
     return () => window.clearTimeout(id);
@@ -130,14 +160,21 @@ export default function MasterProductsPage() {
     } catch { setUomOptions(["EA", "KG", "L", "M", "PCS"]); }
   }, []);
 
+  const loadFamilies = React.useCallback(async () => {
+    try {
+      setFamilies(await fetchProductFamiliesApi());
+    } catch { setFamilies([]); }
+  }, []);
+
   React.useEffect(() => { void loadCategories(); }, [loadCategories]);
   React.useEffect(() => { void loadUoms(); }, [loadUoms]);
+  React.useEffect(() => { void loadFamilies(); }, [loadFamilies]);
 
   React.useEffect(() => {
     setListCursor("0");
     setListCursorStack([]);
     setListNextCursor(null);
-  }, [debouncedSearch, statusFilter, productTypeFilter]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, familyFilter, pageSize]);
 
   const refreshProducts = React.useCallback(async () => {
     setLoading(true);
@@ -146,7 +183,9 @@ export default function MasterProductsPage() {
         search: debouncedSearch || undefined,
         status: statusFilter || undefined,
         productType: productTypeFilter || undefined,
-        limit: PRODUCTS_PAGE_SIZE,
+        categoryId: categoryFilter || undefined,
+        productFamily: familyFilter || undefined,
+        limit: pageSize,
         cursor: listCursor,
         includeStock: true,
       });
@@ -158,8 +197,9 @@ export default function MasterProductsPage() {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
+      setHasLoadedOnce(true);
     }
-  }, [debouncedSearch, statusFilter, productTypeFilter, listCursor]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, familyFilter, listCursor, pageSize]);
 
   React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
@@ -213,7 +253,7 @@ export default function MasterProductsPage() {
         id: "category",
         header: "Category",
         accessor: (r: ProductRow) =>
-          r.category ? categoryNameById.get(r.category) ?? r.category : "—",
+          r.categoryName ?? (r.category ? categoryNameById.get(r.category) : undefined) ?? "—",
       },
       {
         id: "productType",
@@ -238,6 +278,11 @@ export default function MasterProductsPage() {
           <div onClick={(e) => e.stopPropagation()}>
             <RowActions
               actions={[
+                {
+                  label: "Edit",
+                  icon: "Pencil",
+                  onClick: () => router.push(`/master/products/${r.id}`),
+                },
                 {
                   label: "View",
                   icon: "Eye",
@@ -324,6 +369,45 @@ export default function MasterProductsPage() {
     }
   };
 
+  const handleImport = async () => {
+    if (!importFile) {
+      toast.error("Choose a CSV file to import first.");
+      return;
+    }
+    setImporting(true);
+    try {
+      const result = await importProductsApi(importFile);
+      setImportResult(result);
+      const skippedCount = result.skipped?.length ?? 0;
+      const created = result.created ?? result.imported;
+      const updated = result.updated ?? 0;
+      if (skippedCount > 0) {
+        toast.warning(
+          `Imported ${result.imported} (${created} new, ${updated} updated). ${skippedCount} row${skippedCount === 1 ? "" : "s"} skipped.`
+        );
+      } else {
+        toast.success(
+          `Imported ${result.imported} product${result.imported === 1 ? "" : "s"} (${created} new, ${updated} updated).`
+        );
+      }
+      setImportFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setListCursor("0");
+      setListCursorStack([]);
+      await refreshProducts();
+      void loadCategories();
+      void loadFamilies();
+      // Keep the sheet open only if there is a report worth reading.
+      if (skippedCount === 0 && (result.warnings?.length ?? 0) === 0) {
+        setImportOpen(false);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Import failed.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // Product type option cards for the create drawer
   const typeOptions: Array<{ value: "RAW" | "FINISHED" | "BOTH"; label: string; description: string; color: string; icon: keyof typeof Icons }> = [
     {
@@ -361,16 +445,32 @@ export default function MasterProductsPage() {
         sticky
         showCommandHint
         actions={
-          <Button
-            onClick={() => {
-              resetForm();
-              setDrawerOpen(true);
-            }}
-            data-tour-step="create-button"
-          >
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add {productLabel}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => exportProductsCsvApi((msg) => toast.error(msg))}
+            >
+              <Icons.Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => { setImportFile(null); setImportResult(null); setImportOpen(true); }}
+            >
+              <Icons.Upload className="mr-2 h-4 w-4" />
+              Import
+            </Button>
+            <Button
+              onClick={() => {
+                resetForm();
+                setDrawerOpen(true);
+              }}
+              data-tour-step="create-button"
+            >
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add {productLabel}
+            </Button>
+          </div>
         }
       />
       <div className="p-6 space-y-4">
@@ -402,13 +502,38 @@ export default function MasterProductsPage() {
               value: productTypeFilter,
               onChange: (v) => setProductTypeFilter(v as "RAW" | "FINISHED" | "BOTH" | ""),
             },
+            {
+              id: "category",
+              label: "Category",
+              options: [
+                { label: "All categories", value: "" },
+                ...categories.map((c) => ({ label: c.name, value: c.id })),
+              ],
+              value: categoryFilter,
+              onChange: (v) => setCategoryFilter(v),
+            },
+            {
+              id: "family",
+              label: "Product family",
+              options: [
+                { label: "All families", value: "" },
+                ...families.map((f) => ({ label: f, value: f })),
+              ],
+              value: familyFilter,
+              onChange: (v) => setFamilyFilter(v),
+            },
           ]}
         />
-        {loading ? (
-          <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
-            Loading {productLabel.toLowerCase()}s...
+        {!hasLoadedOnce ? (
+          <div className="relative overflow-hidden rounded-lg border">
+            <TopProgressBar active />
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-9 animate-pulse rounded bg-muted/60" />
+              ))}
+            </div>
           </div>
-        ) : allRows.length === 0 ? (
+        ) : !loading && allRows.length === 0 ? (
           <EmptyState
             icon={productIcon}
             title={`No ${productLabel.toLowerCase()}s found`}
@@ -419,51 +544,82 @@ export default function MasterProductsPage() {
             }}
           />
         ) : (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          <div className="space-y-3">
+            <div className="relative">
+              <TopProgressBar active={loading} />
+              <DataTable<ProductRow>
+                data={allRows}
+                columns={columns}
+                onRowClick={(row) => router.push(`/master/products/${row.id}`)}
+                emptyMessage={loading ? "Searching…" : `No ${productLabel.toLowerCase()}s.`}
+                className={cn(
+                  "transition-opacity duration-200",
+                  loading && "opacity-60",
+                )}
+              />
+            </div>
+
+            {/* Pagination — below the table */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>
                 Showing {allRows.length} product{allRows.length === 1 ? "" : "s"}
-                {debouncedSearch.trim() ? ` matching “${debouncedSearch.trim()}”` : " on this page"}
+                {debouncedSearch.trim() ? ` matching “${debouncedSearch.trim()}”` : ""}
                 {listCursorStack.length > 0 ? ` · page ${listCursorStack.length + 1}` : ""}
               </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={loading || listCursorStack.length === 0}
-                  onClick={() => {
-                    const stack = [...listCursorStack];
-                    const prev = stack.pop()!;
-                    setListCursorStack(stack);
-                    setListCursor(prev);
-                  }}
-                >
-                  Previous
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={loading || !listHasMore || !listNextCursor}
-                  onClick={() => {
-                    if (!listNextCursor) return;
-                    setListCursorStack((s) => [...s, listCursor]);
-                    setListCursor(listNextCursor);
-                  }}
-                >
-                  Next
-                </Button>
-                <span className="text-xs tabular-nums">{PRODUCTS_PAGE_SIZE} per page</span>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs">Show</span>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(v) => setPageSize(Number(v))}
+                  >
+                    <SelectTrigger className="h-8 w-[72px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZE_OPTIONS.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs">per page</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || listCursorStack.length === 0}
+                    onClick={() => {
+                      const stack = [...listCursorStack];
+                      const prev = stack.pop()!;
+                      setListCursorStack(stack);
+                      setListCursor(prev);
+                    }}
+                  >
+                    <Icons.ChevronLeft className="mr-1 h-4 w-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || !listHasMore || !listNextCursor}
+                    onClick={() => {
+                      if (!listNextCursor) return;
+                      setListCursorStack((s) => [...s, listCursor]);
+                      setListCursor(listNextCursor);
+                    }}
+                  >
+                    Next
+                    <Icons.ChevronRight className="ml-1 h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
-            <DataTable<ProductRow>
-              data={allRows}
-              columns={columns}
-              onRowClick={(row) => router.push(`/master/products/${row.id}`)}
-              emptyMessage={`No ${productLabel.toLowerCase()}s.`}
-            />
-          </>
+          </div>
         )}
       </div>
 
@@ -742,6 +898,129 @@ export default function MasterProductsPage() {
           }
         }}
       />
+
+      {/* ── Bulk import sheet ─────────────────────────────────────────────── */}
+      <Sheet open={importOpen} onOpenChange={(o) => { if (!o) { setImportFile(null); setImportResult(null); } setImportOpen(o); }}>
+        <SheetContent className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Import {productLabel.toLowerCase()}s</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-5 py-4">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground space-y-2">
+              <p className="font-medium text-foreground">Columns</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><span className="font-medium text-foreground">code</span> <span className="text-red-500">(required)</span> — each product&apos;s unique identity, like a barcode. Numbers (<code>00001</code>) or text (<code>FISH-TIL</code>) both work. No two products can share it.</li>
+                <li><span className="font-medium text-foreground">name</span> <span className="text-red-500">(required)</span> — the product name.</li>
+                <li><span className="font-medium text-foreground">baseUom</span> — base unit of measure the product is tracked in (KG, EA, L…). Defaults to EA.</li>
+                <li><span className="font-medium text-foreground">productType</span> — <code>Purchased product</code> (buy), <code>Finished product</code> (sell) or <code>Stock product</code> (buy &amp; sell).</li>
+                <li><span className="font-medium text-foreground">category</span> — optional group name (e.g. <code>Fish</code>). Created automatically if it&apos;s new.</li>
+                <li><span className="font-medium text-foreground">productFamily</span> — optional. Groups related SKUs together (e.g. <code>Tilapia</code> for whole + fillet). Leave blank to skip; edit later per product.</li>
+              </ul>
+              <p className="pt-1">Upload the same <span className="font-medium text-foreground">code</span> again to update that product instead of creating a duplicate. No price needed — set prices via price lists.</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+              <div className="flex items-center gap-2 text-sm">
+                <Icons.FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Need the format?</span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadProductsTemplateCsv()}
+              >
+                <Icons.Download className="mr-2 h-3.5 w-3.5" />
+                Template
+              </Button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_IMPORT}
+              className="hidden"
+              onChange={(e) => pickImportFile(e.target.files?.[0] ?? null)}
+            />
+
+            {/* Drag & drop zone */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                pickImportFile(e.dataTransfer.files?.[0] ?? null);
+              }}
+              className={`w-full rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
+                dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30"
+              }`}
+            >
+              {importFile ? (
+                <div className="flex flex-col items-center gap-1">
+                  <Icons.FileCheck2 className="h-8 w-8 text-primary" />
+                  <p className="text-sm font-medium text-foreground">{importFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{(importFile.size / 1024).toFixed(1)} KB · click to change</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-1.5">
+                  <Icons.UploadCloud className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm font-medium text-foreground">Drag &amp; drop your file here</p>
+                  <p className="text-xs text-muted-foreground">or click to browse · CSV, XLSX or XLS</p>
+                </div>
+              )}
+            </button>
+            <p className="text-xs text-muted-foreground text-center">
+              Excel files are converted automatically — no need to save as CSV first.
+            </p>
+
+            {importResult && (
+              <div className="space-y-2 rounded-lg border p-3 text-sm">
+                <p className="font-medium text-foreground">
+                  Result: {importResult.imported} imported
+                  {typeof importResult.created === "number" ? ` · ${importResult.created} new` : ""}
+                  {typeof importResult.updated === "number" ? ` · ${importResult.updated} updated` : ""}
+                </p>
+                {(importResult.categoriesCreated?.length ?? 0) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Created {importResult.categoriesCreated!.length} new categor{importResult.categoriesCreated!.length === 1 ? "y" : "ies"}: {importResult.categoriesCreated!.join(", ")}
+                  </p>
+                )}
+                {(importResult.skipped?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <p className="font-medium text-red-600">{importResult.skipped!.length} skipped</p>
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground max-h-40 overflow-y-auto">
+                      {importResult.skipped!.map((s, idx) => (
+                        <li key={idx}>Row {s.row}{s.code ? ` (${s.code})` : ""}: {s.reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(importResult.warnings?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <p className="font-medium text-amber-600">{importResult.warnings!.length} warning{importResult.warnings!.length === 1 ? "" : "s"}</p>
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground max-h-40 overflow-y-auto">
+                      {importResult.warnings!.map((w, idx) => (
+                        <li key={idx}>Row {w.row}{w.code ? ` (${w.code})` : ""}: {w.reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => { setImportFile(null); setImportResult(null); setImportOpen(false); }}>
+              {importResult ? "Close" : "Cancel"}
+            </Button>
+            <Button disabled={!importFile || importing} onClick={() => void handleImport()}>
+              {importing ? "Importing..." : importResult ? "Import again" : "Import"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

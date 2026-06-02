@@ -7,6 +7,7 @@ type BackendProduct = {
   name: string;
   productFamily?: string | null;
   category?: string;
+  categoryName?: string;
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
@@ -32,7 +33,7 @@ export type ProductPayload = {
   description?: string;
 };
 
-function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string; updatedAt?: string }): ProductRow {
+function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?: string; uom?: string; updatedAt?: string }): ProductRow {
   const category = item.category ?? item.categoryId;
   const uom = item.unit ?? item.baseUom ?? item.uom;
   return {
@@ -41,6 +42,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; uom?: string; 
     name: item.name,
     productFamily: item.productFamily ?? undefined,
     category,
+    categoryName: item.categoryName ?? undefined,
     unit: uom,
     baseUom: uom,
     productType: item.productType,
@@ -59,6 +61,7 @@ export type FetchProductsOptions = {
   sellable?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
   categoryId?: string;
+  productFamily?: string;
   stockBand?: "low" | "out" | "in_stock";
   /** Server caps at 100; use for document line pickers. */
   limit?: number;
@@ -92,6 +95,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.sellable) params.set("sellable", "true");
   if (opts.productType) params.set("productType", opts.productType);
   if (opts.categoryId?.trim()) params.set("categoryId", opts.categoryId.trim());
+  if (opts.productFamily?.trim()) params.set("productFamily", opts.productFamily.trim());
   if (opts.stockBand) params.set("stockBand", opts.stockBand);
   if (opts.includeStock !== undefined) params.set("includeStock", opts.includeStock ? "true" : "false");
   const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 25;
@@ -159,6 +163,13 @@ export async function fetchProductCodesApi(): Promise<string[]> {
   requireLiveApi("Product codes");
   const data = await apiRequest<{ codes: string[] }>("/api/products/codes");
   return data.codes ?? [];
+}
+
+/** Fetch the distinct product families in the org. Used to populate the list filter. */
+export async function fetchProductFamiliesApi(): Promise<string[]> {
+  requireLiveApi("Product families");
+  const data = await apiRequest<{ families: string[] }>("/api/products/families");
+  return data.families ?? [];
 }
 
 export async function fetchProductApi(id: string): Promise<ProductRow | null> {

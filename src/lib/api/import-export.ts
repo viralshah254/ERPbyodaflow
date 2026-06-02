@@ -41,13 +41,48 @@ export function downloadImportTemplateApi(
   downloadFile(`/api/import/templates/${entityType}`, `${entityType}-import-template.csv`, onError);
 }
 
+/**
+ * Generate and download the minimal products import template entirely client-side.
+ * Kept here (not from the API) so it is always the current, minimal fish example and
+ * never depends on a backend deploy.
+ */
+export function downloadProductsTemplateCsv(): void {
+  const csv = [
+    "code,name,baseUom,productType,category,productFamily",
+    "00001,Tilapia Whole,KG,Finished product,Fish,Tilapia",
+    "00002,Ice 5kg Bag,EA,Purchased product,Packaging,",
+    "00003,Nile Perch Fillet,KG,Stock product,Fish,Nile Perch",
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "products-import-template.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export interface ImportPartiesResult {
   imported: number;
   type: string;
 }
 
+export interface ImportRowIssue {
+  row: number;
+  code: string;
+  reason: string;
+}
+
 export interface ImportProductsResult {
   imported: number;
+  created?: number;
+  updated?: number;
+  skipped?: ImportRowIssue[];
+  warnings?: ImportRowIssue[];
+  /** Names of categories auto-created from the file during import. */
+  categoriesCreated?: string[];
 }
 
 export interface ImportProductPackagingResult {
@@ -67,11 +102,32 @@ export async function importPartiesApi(file: File, type: "customer" | "supplier"
   return uploadFormData<ImportPartiesResult>("/api/import/parties", formData);
 }
 
-/** Import products from CSV file. */
+/** True for Excel files we transparently convert to CSV before upload. */
+function isExcelFile(file: File): boolean {
+  return /\.(xlsx|xls)$/i.test(file.name);
+}
+
+/**
+ * Import products from a CSV or Excel (.xlsx/.xls) file.
+ * Excel is parsed in the browser (first sheet) and converted to CSV, so the backend
+ * keeps a single CSV code path and no server-side Excel dependency is needed.
+ */
 export async function importProductsApi(file: File): Promise<ImportProductsResult> {
   requireLiveApi("Products import");
+  let uploadFile = file;
+  if (isExcelFile(file)) {
+    const XLSX = await import("xlsx");
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const firstSheetName = wb.SheetNames[0];
+    if (!firstSheetName) {
+      throw new Error("The Excel file has no sheets.");
+    }
+    const csv = XLSX.utils.sheet_to_csv(wb.Sheets[firstSheetName]);
+    uploadFile = new File([csv], file.name.replace(/\.(xlsx|xls)$/i, ".csv"), { type: "text/csv" });
+  }
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", uploadFile);
   return uploadFormData<ImportProductsResult>("/api/import/products", formData);
 }
 

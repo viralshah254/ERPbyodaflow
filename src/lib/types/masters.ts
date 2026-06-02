@@ -4,7 +4,10 @@ export type ProductRow = {
   name: string;
   /** High-level line for grouping in pickers and grids (e.g. Tilapia, Nile Perch). */
   productFamily?: string;
+  /** Category id (raw reference). */
   category?: string;
+  /** Human-readable category name resolved by the backend. */
+  categoryName?: string;
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";

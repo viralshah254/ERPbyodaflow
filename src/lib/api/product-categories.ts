@@ -33,3 +33,24 @@ export async function createProductCategoryApi(payload: {
     }
   );
 }
+
+export async function updateProductCategoryApi(
+  id: string,
+  payload: { name?: string; code?: string; description?: string; isActive?: boolean }
+): Promise<ItemCategoryRow> {
+  requireLiveApi("Update product category");
+  return apiRequest<ItemCategoryRow>(
+    `/api/master-data/product/item-categories/${id}`,
+    { method: "PATCH", body: payload }
+  );
+}
+
+export async function deleteProductCategoryApi(
+  id: string
+): Promise<{ ok: boolean; detachedProducts: number }> {
+  requireLiveApi("Delete product category");
+  return apiRequest<{ ok: boolean; detachedProducts: number }>(
+    `/api/master-data/product/item-categories/${id}`,
+    { method: "DELETE" }
+  );
+}

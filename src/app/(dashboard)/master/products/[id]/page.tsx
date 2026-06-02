@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -45,7 +46,16 @@ import {
   fetchProductApi,
   patchProductApi,
   applyProductPricingTemplateApi,
+  fetchProductFamiliesApi,
+  type ProductPatchPayload,
 } from "@/lib/api/products";
+import {
+  fetchProductCategoriesApi,
+  createProductCategoryApi,
+  updateProductCategoryApi,
+  deleteProductCategoryApi,
+} from "@/lib/api/product-categories";
+import { Combobox } from "@/components/ui/combobox";
 import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
 import type { TaxRow } from "@/lib/types/taxes";
 import {
@@ -159,11 +169,14 @@ export default function ProductDetailPage() {
   const [uomOptions, setUomOptions] = React.useState<string[]>(["EA", "KG", "L", "M", "PCS"]);
   const [mounted, setMounted] = React.useState(false);
   const [nameDraft, setNameDraft] = React.useState("");
-  const [savingName, setSavingName] = React.useState(false);
   const [descriptionDraft, setDescriptionDraft] = React.useState("");
-  const [savingNotes, setSavingNotes] = React.useState(false);
   const [productFamilyDraft, setProductFamilyDraft] = React.useState("");
-  const [savingFamily, setSavingFamily] = React.useState(false);
+  const [productTypeDraft, setProductTypeDraft] = React.useState("");
+  const [baseUomDraft, setBaseUomDraft] = React.useState("");
+  const [categoryDraft, setCategoryDraft] = React.useState("");
+  const [categoryList, setCategoryList] = React.useState<{ id: string; name: string }[]>([]);
+  const [familyOptions, setFamilyOptions] = React.useState<string[]>([]);
+  const [savingAll, setSavingAll] = React.useState(false);
 
   React.useEffect(() => setMounted(true), []);
 
@@ -173,11 +186,17 @@ export default function ProductDetailPage() {
       setNameDraft("");
       setDescriptionDraft("");
       setProductFamilyDraft("");
+      setProductTypeDraft("");
+      setBaseUomDraft("");
+      setCategoryDraft("");
       return;
     }
     setNameDraft(product.name ?? "");
     setDescriptionDraft(product.description ?? "");
     setProductFamilyDraft(product.productFamily ?? "");
+    setProductTypeDraft(product.productType ?? "");
+    setBaseUomDraft(product.baseUom ?? product.unit ?? "");
+    setCategoryDraft(product.category ?? "");
   }, [product]);
 
   // Load all data in parallel
@@ -219,6 +238,22 @@ export default function ProductDetailPage() {
         setUomOptions(codes.length > 0 ? codes : ["EA", "KG", "L", "M", "PCS"]);
       })
       .catch(() => setUomOptions(["EA", "KG", "L", "M", "PCS"]));
+  }, []);
+
+  const loadCategories = React.useCallback(async () => {
+    try {
+      const list = await fetchProductCategoriesApi();
+      setCategoryList(list.filter((c) => c.isActive).map((c) => ({ id: c.id, name: c.name })));
+    } catch {
+      setCategoryList([]);
+    }
+  }, []);
+
+  React.useEffect(() => { void loadCategories(); }, [loadCategories]);
+  React.useEffect(() => {
+    fetchProductFamiliesApi()
+      .then(setFamilyOptions)
+      .catch(() => setFamilyOptions([]));
   }, []);
 
   // Sync draft tiers when price list changes
@@ -269,72 +304,130 @@ export default function ProductDetailPage() {
     } catch (err) { toast.error((err as Error).message); }
   };
 
-  const saveDefaultTaxCode = async (v: string) => {
-    const next = v === "__none__" ? "" : v;
-    setDefaultTaxCodeId(next);
-    try {
-      await patchProductApi(id, { defaultTaxCodeId: next || undefined });
-      toast.success("Default tax code updated.");
-    } catch (err) { toast.error((err as Error).message); }
-  };
+  const overviewDirty = React.useMemo(() => {
+    if (!product) return false;
+    const nameChanged = nameDraft.trim() !== (product.name ?? "");
+    const familyChanged = (productFamilyDraft.trim() || "") !== (product.productFamily ?? "");
+    const notesChanged = descriptionDraft !== (product.description ?? "");
+    const typeChanged = Boolean(productTypeDraft) && productTypeDraft !== (product.productType ?? "");
+    const taxChanged = (defaultTaxCodeId || "") !== (product.defaultTaxCodeId ?? "");
+    const uomChanged = Boolean(baseUomDraft) && baseUomDraft !== (product.baseUom ?? product.unit ?? "");
+    const categoryChanged = (categoryDraft || "") !== (product.category ?? "");
+    return (
+      nameChanged ||
+      familyChanged ||
+      notesChanged ||
+      typeChanged ||
+      taxChanged ||
+      uomChanged ||
+      categoryChanged
+    );
+  }, [
+    product,
+    nameDraft,
+    productFamilyDraft,
+    descriptionDraft,
+    productTypeDraft,
+    defaultTaxCodeId,
+    baseUomDraft,
+    categoryDraft,
+  ]);
 
-  const patchType = async (v: string) => {
-    const next = v === "__default__" ? "BOTH" : (v as "RAW" | "FINISHED" | "BOTH");
-    try {
-      await patchProductApi(id, { productType: next });
-      setProduct((p) => (p ? { ...p, productType: next } : p));
-      toast.success("Product type updated.");
-    } catch (err) { toast.error((err as Error).message); }
-  };
-
-  const saveProductName = async () => {
+  /** Single CTA: commit every editable Overview field in one PATCH. */
+  const saveAllOverview = async () => {
     if (!product) return;
-    const next = nameDraft.trim();
-    if (!next) {
+    const nameNext = nameDraft.trim();
+    if (!nameNext) {
       toast.error("Name cannot be empty.");
       return;
     }
-    if (next === product.name) return;
-    setSavingName(true);
+    const patch: ProductPatchPayload = {};
+    if (nameNext !== (product.name ?? "")) patch.name = nameNext;
+    const familyNext = productFamilyDraft.trim() || undefined;
+    if ((familyNext ?? "") !== (product.productFamily ?? "")) patch.productFamily = familyNext;
+    const notesNext = descriptionDraft.trim() || undefined;
+    if (descriptionDraft !== (product.description ?? "")) patch.description = notesNext;
+    const typeNext = (productTypeDraft || undefined) as "RAW" | "FINISHED" | "BOTH" | undefined;
+    if (typeNext && typeNext !== (product.productType ?? "")) patch.productType = typeNext;
+    const taxNext = defaultTaxCodeId || undefined;
+    if ((taxNext ?? "") !== (product.defaultTaxCodeId ?? "")) patch.defaultTaxCodeId = taxNext;
+    const uomNext = baseUomDraft.trim();
+    if (uomNext && uomNext !== (product.baseUom ?? product.unit ?? "")) patch.baseUom = uomNext;
+    const categoryNext = categoryDraft || undefined;
+    if ((categoryNext ?? "") !== (product.category ?? "")) patch.category = categoryNext;
+
+    if (Object.keys(patch).length === 0) return;
+    setSavingAll(true);
     try {
-      await patchProductApi(id, { name: next });
-      setProduct((p) => (p ? { ...p, name: next } : p));
-      toast.success("Name updated.");
+      await patchProductApi(id, patch);
+      // Keep derived display fields (unit, categoryName) in sync with the saved values.
+      const merged: Record<string, unknown> = { ...patch };
+      if (patch.baseUom !== undefined) merged.unit = patch.baseUom;
+      if (patch.category !== undefined) {
+        merged.categoryName = categoryList.find((c) => c.id === patch.category)?.name;
+      }
+      setProduct((p) => (p ? { ...p, ...merged } : p));
+      toast.success("Changes saved.");
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
-      setSavingName(false);
+      setSavingAll(false);
     }
   };
 
-  const saveProductNotes = async () => {
-    if (!product) return;
-    setSavingNotes(true);
+  const createCategory = async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const existing = categoryList.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      setCategoryDraft(existing.id);
+      return;
+    }
     try {
-      const next = descriptionDraft.trim() || undefined;
-      await patchProductApi(id, { description: next });
-      setProduct((p) => (p ? { ...p, description: next } : p));
-      toast.success("Notes saved.");
+      const code =
+        trimmed.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20) ||
+        `CAT${Date.now().toString().slice(-4)}`;
+      const { id: newId } = await createProductCategoryApi({ code, name: trimmed });
+      setCategoryList((prev) =>
+        [...prev, { id: newId, name: trimmed }].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setCategoryDraft(newId);
+      toast.success(`Category “${trimmed}” created.`);
     } catch (err) {
       toast.error((err as Error).message);
-    } finally {
-      setSavingNotes(false);
     }
   };
 
-  const saveProductFamily = async () => {
-    if (!product) return;
-    const next = productFamilyDraft.trim() || undefined;
-    if (next === (product.productFamily ?? undefined)) return;
-    setSavingFamily(true);
+  const renameCategory = async (catId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
     try {
-      await patchProductApi(id, { productFamily: next });
-      setProduct((p) => (p ? { ...p, productFamily: next } : p));
-      toast.success("Product family updated.");
+      await updateProductCategoryApi(catId, { name: trimmed });
+      setCategoryList((prev) =>
+        prev.map((c) => (c.id === catId ? { ...c, name: trimmed } : c)).sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setProduct((p) => (p && p.category === catId ? { ...p, categoryName: trimmed } : p));
+      toast.success("Category renamed.");
     } catch (err) {
       toast.error((err as Error).message);
-    } finally {
-      setSavingFamily(false);
+    }
+  };
+
+  const deleteCategory = async (catId: string) => {
+    try {
+      const { detachedProducts } = await deleteProductCategoryApi(catId);
+      setCategoryList((prev) => prev.filter((c) => c.id !== catId));
+      if (categoryDraft === catId) setCategoryDraft("");
+      setProduct((p) =>
+        p && p.category === catId ? { ...p, category: "", categoryName: undefined } : p
+      );
+      toast.success(
+        detachedProducts > 0
+          ? `Category deleted · removed from ${detachedProducts} product${detachedProducts === 1 ? "" : "s"}.`
+          : "Category deleted."
+      );
+    } catch (err) {
+      toast.error((err as Error).message);
     }
   };
 
@@ -424,39 +517,63 @@ export default function ProductDetailPage() {
     } catch (err) { toast.error((err as Error).message); }
   };
 
+  const loadingView = (
+    <PageShell>
+      <PageHeader
+        title="Loading…"
+        breadcrumbs={[
+          { label: "Masters", href: "/master" },
+          { label: t("product", terminology) + "s", href: "/master/products" },
+          { label: "Loading…" },
+        ]}
+      />
+      <div className="p-6 space-y-6">
+        {/* Tabs row */}
+        <div className="flex gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-32 rounded-md" />
+          ))}
+        </div>
+        {/* Two detail cards */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="rounded-lg border p-6 space-y-4">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-56" />
+              <div className="space-y-3 pt-2">
+                {Array.from({ length: 5 }).map((_, j) => (
+                  <div key={j} className="grid grid-cols-[110px_1fr] items-center gap-3">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-8 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Two preview cards */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="rounded-lg border p-6 space-y-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </PageShell>
+  );
+
   // ── Hydration guard: defer full render until client to avoid SSR mismatch ───
   if (!mounted) {
-    return (
-      <PageShell>
-        <PageHeader
-          title="Loading..."
-          breadcrumbs={[
-            { label: "Masters", href: "/master" },
-            { label: "Products", href: "/master/products" },
-            { label: "Loading..." },
-          ]}
-        />
-        <div className="p-6 text-sm text-muted-foreground">Loading product...</div>
-      </PageShell>
-    );
+    return loadingView;
   }
 
   // ── Loading / not found states ─────────────────────────────────────────────
 
   if (product === undefined) {
-    return (
-      <PageShell>
-        <PageHeader
-          title="Loading..."
-          breadcrumbs={[
-            { label: "Masters", href: "/master" },
-            { label: t("product", terminology) + "s", href: "/master/products" },
-            { label: "Loading..." },
-          ]}
-        />
-        <div className="p-6 text-sm text-muted-foreground">Loading product...</div>
-      </PageShell>
-    );
+    return loadingView;
   }
 
   if (!product) {
@@ -490,7 +607,7 @@ export default function ProductDetailPage() {
     <PageShell>
       <PageHeader
         title={`${product.sku} — ${product.name}`}
-        description={`${product.category ?? "—"} · Base UOM: ${baseUom}`}
+        description={`${product.categoryName ? `${product.categoryName} · ` : ""}Base UOM: ${baseUom}`}
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: t("product", terminology) + "s", href: "/master/products" },
@@ -501,6 +618,15 @@ export default function ProductDetailPage() {
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <ProductTypeBadge type={productType} whenUnset="stock" />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void saveAllOverview()}
+              disabled={!overviewDirty || savingAll}
+            >
+              <Icons.Save className="mr-2 h-4 w-4" />
+              {savingAll ? "Saving…" : "Save changes"}
+            </Button>
             <ExplainThis
               prompt={`Explain product ${product.sku} (${product.name}): type, packaging, pricing.`}
               label="Explain"
@@ -595,7 +721,7 @@ export default function ProductDetailPage() {
                     <span className="text-muted-foreground">SKU</span>
                     <span className="font-mono font-medium">{product.sku}</span>
                     <span className="text-muted-foreground align-top pt-1.5">Name</span>
-                    <div className="space-y-2 min-w-0">
+                    <div className="min-w-0">
                       <Input
                         id="product-name"
                         value={nameDraft}
@@ -605,55 +731,58 @@ export default function ProductDetailPage() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
-                            void saveProductName();
+                            void saveAllOverview();
                           }
                         }}
                       />
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void saveProductName()}
-                        disabled={
-                          savingName ||
-                          !nameDraft.trim() ||
-                          nameDraft.trim() === product.name
-                        }
-                      >
-                        {savingName ? "Saving…" : "Save name"}
-                      </Button>
                     </div>
                     <span className="text-muted-foreground align-top pt-1.5">Product family</span>
-                    <div className="space-y-2 min-w-0">
-                      <Input
-                        id="product-family"
+                    <div className="min-w-0">
+                      <Combobox
                         value={productFamilyDraft}
-                        onChange={(e) => setProductFamilyDraft(e.target.value)}
-                        placeholder="e.g. Tilapia — groups this SKU in pickers"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            void saveProductFamily();
-                          }
+                        onChange={setProductFamilyDraft}
+                        options={familyOptions.map((f) => ({ value: f, label: f }))}
+                        placeholder="Select or create a family"
+                        searchPlaceholder="Search or type a new family…"
+                        emptyMessage="No families yet — type to create one."
+                        onCreate={(label) => {
+                          setProductFamilyDraft(label);
+                          setFamilyOptions((prev) =>
+                            prev.includes(label) ? prev : [...prev, label].sort((a, b) => a.localeCompare(b))
+                          );
                         }}
                       />
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void saveProductFamily()}
-                        disabled={
-                          savingFamily ||
-                          productFamilyDraft.trim() === (product.productFamily ?? "").trim()
-                        }
-                      >
-                        {savingFamily ? "Saving…" : "Save product family"}
-                      </Button>
                     </div>
-                    <span className="text-muted-foreground">Category</span>
-                    <span>{product.category ?? "—"}</span>
-                    <span className="text-muted-foreground">Base UOM</span>
-                    <span>{baseUom}</span>
+                    <span className="text-muted-foreground align-top pt-1.5">Category</span>
+                    <div className="min-w-0">
+                      <Combobox
+                        value={categoryDraft}
+                        onChange={setCategoryDraft}
+                        options={categoryList.map((c) => ({ value: c.id, label: c.name }))}
+                        placeholder="Select a category"
+                        searchPlaceholder="Search or create a category…"
+                        emptyMessage="No categories yet."
+                        onCreate={createCategory}
+                        onRename={renameCategory}
+                        onDelete={deleteCategory}
+                        deleteHint={() =>
+                          "Any products using it will have their category cleared. This can’t be undone."
+                        }
+                      />
+                    </div>
+                    <span className="text-muted-foreground align-top pt-1.5">Base UOM</span>
+                    <div className="min-w-0">
+                      <Combobox
+                        value={baseUomDraft}
+                        onChange={setBaseUomDraft}
+                        options={[
+                          ...new Set([...(baseUomDraft ? [baseUomDraft] : []), ...uomOptions]),
+                        ].map((u) => ({ value: u, label: u }))}
+                        placeholder="Select unit"
+                        searchPlaceholder="Search units…"
+                        emptyMessage="No units."
+                      />
+                    </div>
                     <span className="text-muted-foreground">Status</span>
                     <span>
                       <Badge variant={product.status === "ACTIVE" ? "secondary" : "outline"}>
@@ -677,15 +806,6 @@ export default function ProductDetailPage() {
                       rows={3}
                       className="resize-y min-h-[72px]"
                     />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => void saveProductNotes()}
-                      disabled={savingNotes || descriptionDraft === (product.description ?? "")}
-                    >
-                      {savingNotes ? "Saving…" : "Save notes"}
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -702,8 +822,10 @@ export default function ProductDetailPage() {
                   <div className="space-y-2">
                     <Label>Product type</Label>
                     <Select
-                      value={product.productType ?? "__default__"}
-                      onValueChange={patchType}
+                      value={productTypeDraft || "__default__"}
+                      onValueChange={(v) =>
+                        setProductTypeDraft(v === "__default__" ? "BOTH" : v)
+                      }
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue />
@@ -736,9 +858,9 @@ export default function ProductDetailPage() {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {productType === "RAW"
+                      {productTypeDraft === "RAW"
                         ? "Only shows on purchase orders and supplier invoices."
-                        : productType === "FINISHED"
+                        : productTypeDraft === "FINISHED"
                         ? "Only shows on sales orders and customer invoices."
                         : "Shows on both purchase and sales documents."}
                     </p>
@@ -749,7 +871,7 @@ export default function ProductDetailPage() {
                     <Label>Default tax code</Label>
                     <Select
                       value={defaultTaxCodeId || "__none__"}
-                      onValueChange={saveDefaultTaxCode}
+                      onValueChange={(v) => setDefaultTaxCodeId(v === "__none__" ? "" : v)}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="None" />
