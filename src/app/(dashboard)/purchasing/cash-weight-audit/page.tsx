@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
@@ -2202,7 +2202,7 @@ export default function CashWeightAuditPage() {
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(
-                  "transition-opacity duration-200",
+                  LIST_TABLE_SCROLL_BODY_CLASS,
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >

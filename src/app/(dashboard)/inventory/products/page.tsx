@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_PAGINATION_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -573,7 +573,7 @@ export default function ProductsPage() {
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(
-                  "transition-opacity duration-200",
+                  LIST_TABLE_SCROLL_BODY_CLASS,
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >
@@ -590,7 +590,7 @@ export default function ProductsPage() {
           )}
 
           <TablePagination
-            className="border-t px-4"
+            className={LIST_TABLE_PAGINATION_CLASS}
             pageOffset={pageOffset}
             pageSize={pageSize}
             itemCount={initialLoading ? 0 : rows.length}

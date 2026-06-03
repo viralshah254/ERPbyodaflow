@@ -194,7 +194,7 @@ export function DataTable<T extends object>({
     <div
       className={cn(
         "min-w-0 max-w-full rounded-md border",
-        scrollMode === "fill" && "flex min-h-0 flex-1 flex-col",
+        scrollMode === "fill" && "flex min-h-0 flex-1 flex-col overflow-hidden",
         className,
       )}
     >

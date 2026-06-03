@@ -15,6 +15,13 @@ export const LIST_PAGE_BODY_CLASS =
 export const LIST_TABLE_SURFACE_CLASS =
   "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
 
+/** Flex child between LIST_TABLE_SURFACE and DataTable scrollMode="fill". */
+export const LIST_TABLE_SCROLL_BODY_CLASS =
+  "flex min-h-0 flex-1 flex-col overflow-hidden transition-opacity duration-200";
+
+/** Pagination footer pinned below a fill-mode table card. */
+export const LIST_TABLE_PAGINATION_CLASS = "shrink-0 border-t px-4";
+
 /** Paginated lists: table grows with rows — no inner scrollport (use with scrollMode="natural"). */
 export const LIST_TABLE_STATIC_CLASS =
   "relative shrink-0 overflow-visible rounded-xl border bg-card shadow-sm";

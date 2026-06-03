@@ -66,7 +66,7 @@ export function TablePagination({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-xl border bg-card/80 px-4 py-3 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between",
+        "flex shrink-0 flex-col gap-3 rounded-xl border bg-card/80 px-4 py-3 shadow-sm backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between",
         sticky && "sticky bottom-0 z-10 mt-4",
         className
       )}
