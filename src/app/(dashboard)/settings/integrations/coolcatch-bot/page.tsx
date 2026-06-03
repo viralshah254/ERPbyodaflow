@@ -47,6 +47,7 @@ import {
   type CoolcatchTestResult,
 } from "@/lib/api/coolcatch-bot-integration";
 import { CoolcatchShopRegistryEditor } from "@/components/settings/coolcatch-shop-registry-editor";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { validateShopRows } from "@/lib/coolcatch/shop-registry";
 
 export default function CoolcatchBotIntegrationPage() {
@@ -79,6 +80,7 @@ export default function CoolcatchBotIntegrationPage() {
 
   const [testResult, setTestResult] = React.useState<CoolcatchTestResult | null>(null);
   const [testing, setTesting] = React.useState(false);
+  const [confirmRegenOpen, setConfirmRegenOpen] = React.useState(false);
 
   const applyResponse = React.useCallback((data: CoolcatchBotIntegrationApiResponse) => {
     setEnabled(!!data.enabled);
@@ -138,14 +140,7 @@ export default function CoolcatchBotIntegrationPage() {
     }
   };
 
-  const handleGenerateKey = async () => {
-    if (!canSave) return;
-    if (apiKeyConfigured) {
-      const ok = window.confirm(
-        "This will replace the existing API key. The bot will stop working until the new key is shared with Coolcatch. Continue?"
-      );
-      if (!ok) return;
-    }
+  const doGenerateKey = async () => {
     setGeneratingKey(true);
     try {
       const { apiKey, generatedAt } = await generateCoolcatchBotApiKeyApi();
@@ -156,12 +151,21 @@ export default function CoolcatchBotIntegrationPage() {
       setApiKeyCallCount(0);
       setApiKeyLastUsedAt(null);
       setEnabled(true);
-      toast.success("API key generated. Copy it and share it with Coolcatch.");
+      toast.success("API key generated. Copy it and use it in your bot configuration.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to generate key.");
     } finally {
       setGeneratingKey(false);
     }
+  };
+
+  const handleGenerateKey = () => {
+    if (!canSave) return;
+    if (apiKeyConfigured) {
+      setConfirmRegenOpen(true);
+      return;
+    }
+    void doGenerateKey();
   };
 
   const handleTest = async () => {
@@ -235,7 +239,7 @@ export default function CoolcatchBotIntegrationPage() {
               <div>
                 <CardTitle className="text-base">API key</CardTitle>
                 <CardDescription>
-                  The bot authenticates with this key. Generate one and share it with Coolcatch.
+                  The bot uses this key to connect. Generate one and configure it in your bot.
                 </CardDescription>
               </div>
             </div>
@@ -260,7 +264,7 @@ export default function CoolcatchBotIntegrationPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Tell Coolcatch to send this as the <code className="text-[11px] bg-muted px-1 rounded">X-API-Key</code> header on every request.
+                  Use this as the <code className="text-[11px] bg-muted px-1 rounded">X-API-Key</code> header in your bot configuration.
                 </p>
               </div>
             ) : apiKeyConfigured ? (
@@ -302,7 +306,7 @@ export default function CoolcatchBotIntegrationPage() {
                 <Key className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm text-muted-foreground mb-1">No API key yet</p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Generate a key so the Coolcatch bot can connect to your products and prices.
+                  Generate a key so the bot can connect to your products and prices.
                 </p>
               </div>
             )}
@@ -400,7 +404,7 @@ export default function CoolcatchBotIntegrationPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">API endpoints</CardTitle>
             <CardDescription>
-              Share these URLs with Coolcatch. They use the API key as an <code className="text-[11px] bg-muted px-1 rounded">X-API-Key</code> header.
+              The bot connects to these endpoints using the API key above.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -450,59 +454,36 @@ export default function CoolcatchBotIntegrationPage() {
                   </Label>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">
-                      <Shield className="inline h-3 w-3 mr-1" />
-                      HMAC secret (optional extra security)
-                    </Label>
-                    <Input
-                      type="password"
-                      autoComplete="new-password"
-                      placeholder={hmacConfigured ? "••••••••" : "Leave blank if not using HMAC"}
-                      value={hmacSecret}
-                      onChange={(e) => setHmacSecret(e.target.value)}
-                      disabled={!canSave}
-                      className="mt-1 font-mono text-sm"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Display name on sales orders</Label>
-                    <Input
-                      value={integrationUserName}
-                      onChange={(e) => setIntegrationUserName(e.target.value)}
-                      placeholder="Coolcatch Bot"
-                      disabled={!canSave}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-
                 <div>
-                  <Label className="text-xs text-muted-foreground">Attribute orders to user</Label>
-                  <Select
-                    value={integrationUserId || "__none__"}
-                    onValueChange={(v) => setIntegrationUserId(v === "__none__" ? "" : v)}
+                  <Label className="text-xs text-muted-foreground">
+                    <Shield className="inline h-3 w-3 mr-1" />
+                    HMAC secret (optional extra security)
+                  </Label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder={hmacConfigured ? "••••••••" : "Leave blank if not using HMAC"}
+                    value={hmacSecret}
+                    onChange={(e) => setHmacSecret(e.target.value)}
                     disabled={!canSave}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Automatic" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Automatic</SelectItem>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {[u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || u.id}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    className="mt-1 font-mono text-sm max-w-md"
+                  />
                 </div>
               </CardContent>
             </Card>
           </div>
         </details>
       </div>
+
+      <ConfirmDialog
+        open={confirmRegenOpen}
+        onOpenChange={setConfirmRegenOpen}
+        title="Replace API key?"
+        description="The current key will stop working immediately. You'll need to update your bot configuration with the new key."
+        confirmLabel="Replace key"
+        variant="destructive"
+        onConfirm={() => void doGenerateKey()}
+      />
     </PageShell>
   );
 }

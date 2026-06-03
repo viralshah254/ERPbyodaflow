@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { GripVertical, Loader2, MapPin, Phone, Plus, RefreshCw, Star, Store, Trash2, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { CoolcatchShopRowDto } from "@/lib/api/coolcatch-bot-integration";
 import { fetchCoolcatchBotOutletCandidatesApi } from "@/lib/api/coolcatch-bot-integration";
 import { candidatesToShopRows, moveShopRow } from "@/lib/coolcatch/shop-registry";
@@ -20,6 +21,8 @@ type Props = {
 
 export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading }: Props) {
   const [candidatesLoading, setCandidatesLoading] = React.useState(false);
+  const [confirmRefreshOpen, setConfirmRefreshOpen] = React.useState(false);
+  const [pendingCandidates, setPendingCandidates] = React.useState<Awaited<ReturnType<typeof fetchCoolcatchBotOutletCandidatesApi>>["items"] | null>(null);
 
   const updateRow = (index: number, patch: Partial<CoolcatchShopRowDto>) => {
     onChange(shops.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -36,6 +39,16 @@ export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading
     ]);
   };
 
+  const applyCandidates = (items: Awaited<ReturnType<typeof fetchCoolcatchBotOutletCandidatesApi>>["items"]) => {
+    onChange(candidatesToShopRows(items, shops));
+    const missingPhone = items.filter((c) => !c.suggestedWaPhoneE164).length;
+    toast.success(
+      missingPhone > 0
+        ? `Loaded ${items.length} outlets. Enter WhatsApp numbers for ${missingPhone} that are missing.`
+        : `Loaded ${items.length} outlets from franchise network.`
+    );
+  };
+
   const loadFromFranchise = async () => {
     setCandidatesLoading(true);
     try {
@@ -45,18 +58,11 @@ export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading
         return;
       }
       if (shops.length > 0) {
-        const ok = window.confirm(
-          `Refresh from ${items.length} outlet(s)? Existing WhatsApp numbers are kept when the outlet matches.`
-        );
-        if (!ok) return;
+        setPendingCandidates(items);
+        setConfirmRefreshOpen(true);
+        return;
       }
-      onChange(candidatesToShopRows(items, shops));
-      const missingPhone = items.filter((c) => !c.suggestedWaPhoneE164).length;
-      toast.success(
-        missingPhone > 0
-          ? `Loaded ${items.length} outlets. Enter WhatsApp numbers for ${missingPhone} that are missing.`
-          : `Loaded ${items.length} outlets from franchise network.`
-      );
+      applyCandidates(items);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load franchise outlets.");
     } finally {
@@ -121,7 +127,7 @@ export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading
               >
                 {index === 0 && (
                   <span className="absolute -top-2.5 left-3 bg-primary text-primary-foreground text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Star className="h-3 w-3" /> Primary catalogue
+                    <Star className="h-3 w-3" /> First outlet
                   </span>
                 )}
 
@@ -207,9 +213,24 @@ export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading
         <Link href="/franchise/network/outlets" className="underline">
           Franchise → Outlets
         </Link>
-        . The WhatsApp number must match what Coolcatch sends on orders. The <strong>primary</strong> outlet
-        resolves the shared product catalogue.
+        . The WhatsApp number must match the number used for orders at each outlet. All outlets share the
+        same product list — prices are loaded per outlet.
       </p>
+
+      <ConfirmDialog
+        open={confirmRefreshOpen}
+        onOpenChange={(open) => {
+          setConfirmRefreshOpen(open);
+          if (!open) setPendingCandidates(null);
+        }}
+        title="Refresh outlet list?"
+        description={`This will update the registry with ${pendingCandidates?.length ?? 0} outlet(s) from your franchise network. WhatsApp numbers you already entered are kept when the outlet matches.`}
+        confirmLabel="Refresh outlets"
+        onConfirm={() => {
+          if (pendingCandidates) applyCandidates(pendingCandidates);
+          setPendingCandidates(null);
+        }}
+      />
     </div>
   );
 }
