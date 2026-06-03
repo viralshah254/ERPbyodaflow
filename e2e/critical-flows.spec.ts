@@ -5,6 +5,7 @@ import { bootstrapLocalSession } from "./auth";
  * E2E Critical Flow Tests — key user journeys.
  */
 
+
 test.beforeEach(async ({ page }) => {
   await bootstrapLocalSession(page);
 });
