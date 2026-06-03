@@ -21,11 +21,38 @@ export type CoolcatchBotIntegrationApiResponse = {
   ordersWebhookUrl: string | null;
   productsUrl: string | null;
   pricesUrlPattern: string | null;
+  apiKeyGeneratedAt: string | null;
+  apiKeyLastUsedAt: string | null;
+  apiKeyCallCount: number;
+};
+
+export type CoolcatchShopCandidateDto = {
+  outletOrgId: string;
+  location: string;
+  erpShopId: string;
+  suggestedWaPhoneE164: string;
+  waPhoneSource: "outlet_admin" | null;
+  territory?: string;
+  isActive: boolean;
+};
+
+export type CoolcatchTestResult = {
+  ok: boolean;
+  checks: { name: string; ok: boolean; detail?: string }[];
 };
 
 export async function fetchCoolcatchBotIntegrationApi(): Promise<CoolcatchBotIntegrationApiResponse> {
   requireLiveApi("Coolcatch bot integration");
   return apiRequest<CoolcatchBotIntegrationApiResponse>("/api/settings/integrations/coolcatch-bot");
+}
+
+export async function fetchCoolcatchBotOutletCandidatesApi(): Promise<{
+  items: CoolcatchShopCandidateDto[];
+}> {
+  requireLiveApi("Coolcatch bot outlet candidates");
+  return apiRequest<{ items: CoolcatchShopCandidateDto[] }>(
+    "/api/settings/integrations/coolcatch-bot/outlet-candidates"
+  );
 }
 
 export async function updateCoolcatchBotIntegrationApi(
@@ -50,7 +77,25 @@ export async function updateCoolcatchBotIntegrationApi(
   });
 }
 
-/** Client-side API base for docs when server has no PUBLIC_API_BASE_URL */
+export async function generateCoolcatchBotApiKeyApi(): Promise<{
+  apiKey: string;
+  generatedAt: string;
+}> {
+  requireLiveApi("Coolcatch bot generate key");
+  return apiRequest<{ apiKey: string; generatedAt: string }>(
+    "/api/settings/integrations/coolcatch-bot/generate-key",
+    { method: "POST" }
+  );
+}
+
+export async function testCoolcatchBotConnectionApi(): Promise<CoolcatchTestResult> {
+  requireLiveApi("Coolcatch bot test connection");
+  return apiRequest<CoolcatchTestResult>(
+    "/api/settings/integrations/coolcatch-bot/test-connection",
+    { method: "POST" }
+  );
+}
+
 export function getCoolcatchApiBaseFromFrontend(): string {
   return getApiBase() ?? "";
 }

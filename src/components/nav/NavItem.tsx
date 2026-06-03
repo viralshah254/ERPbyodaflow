@@ -41,12 +41,22 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
   }, [item.id, hasChildren, isActive, isChildActive]);
 
   React.useEffect(() => {
-    if (isActive && itemRef.current) {
-      try {
-        itemRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
-      } catch {
-        // ignore scroll errors
+    const el = itemRef.current;
+    if (!isActive || !el) return;
+    const scrollParent = el.closest("[data-sidebar-scroll]") as HTMLElement | null;
+    if (!scrollParent) return;
+    try {
+      // Keep scroll inside the sidebar rail only — block:"center" on scrollIntoView
+      // also scrolls the document and clips the global header on deep nav items.
+      const elRect = el.getBoundingClientRect();
+      const parentRect = scrollParent.getBoundingClientRect();
+      if (elRect.top < parentRect.top) {
+        scrollParent.scrollTop -= parentRect.top - elRect.top;
+      } else if (elRect.bottom > parentRect.bottom) {
+        scrollParent.scrollTop += elRect.bottom - parentRect.bottom;
       }
+    } catch {
+      // ignore scroll errors
     }
   }, [isActive]);
 
