@@ -23,12 +23,13 @@ export function candidatesToShopRows(
 export function validateShopRows(shops: CoolcatchShopRowDto[]): string | null {
   for (let i = 0; i < shops.length; i++) {
     const s = shops[i];
-    if (!s.erp_shop_id?.trim()) return `Row ${i + 1}: shop id (e.g. F0002) is required.`;
-    if (!s.location?.trim()) return `Row ${i + 1}: location name is required.`;
-    if (!s.outlet_org_id?.trim()) return `Row ${i + 1}: outlet is required.`;
-    if (!s.wa_phone_e164?.trim()) return `Row ${i + 1}: WhatsApp number (E.164) is required.`;
+    const name = s.location?.trim() || s.erp_shop_id?.trim() || `Outlet ${i + 1}`;
+    if (!s.erp_shop_id?.trim()) return `${name} is missing a shop code.`;
+    if (!s.location?.trim()) return `${s.erp_shop_id} is missing a location name.`;
+    if (!s.outlet_org_id?.trim()) return `${name} is not linked to a franchise outlet.`;
+    if (!s.wa_phone_e164?.trim()) return `${name} is missing a WhatsApp number.`;
     if (!s.wa_phone_e164.trim().startsWith("+")) {
-      return `Row ${i + 1}: WhatsApp number should start with + (E.164).`;
+      return `${name}'s WhatsApp number needs a country code (e.g. +254…).`;
     }
   }
   return null;

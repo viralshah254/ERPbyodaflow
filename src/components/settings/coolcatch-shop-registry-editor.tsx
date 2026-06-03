@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { GripVertical, Loader2, MapPin, Phone, Plus, RefreshCw, Star, Store, Trash2, X } from "lucide-react";
+import { GripVertical, Loader2, MapPin, Phone, RefreshCw, Star, Store, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { CoolcatchShopRowDto } from "@/lib/api/coolcatch-bot-integration";
 import { fetchCoolcatchBotOutletCandidatesApi } from "@/lib/api/coolcatch-bot-integration";
@@ -30,13 +30,6 @@ export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading
 
   const removeRow = (index: number) => {
     onChange(shops.filter((_, i) => i !== index));
-  };
-
-  const addRow = () => {
-    onChange([
-      ...shops,
-      { erp_shop_id: "", location: "", wa_phone_e164: "", outlet_org_id: "" },
-    ]);
   };
 
   const applyCandidates = (items: Awaited<ReturnType<typeof fetchCoolcatchBotOutletCandidatesApi>>["items"]) => {
@@ -108,11 +101,7 @@ export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading
               onClick={() => void loadFromFranchise()}
             >
               {candidatesLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              Refresh from franchise
-            </Button>
-            <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={addRow}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add manually
+              Sync outlets
             </Button>
           </div>
 
@@ -223,9 +212,9 @@ export function CoolcatchShopRegistryEditor({ shops, onChange, disabled, loading
           setConfirmRefreshOpen(open);
           if (!open) setPendingCandidates(null);
         }}
-        title="Refresh outlet list?"
-        description={`This will update the registry with ${pendingCandidates?.length ?? 0} outlet(s) from your franchise network. WhatsApp numbers you already entered are kept when the outlet matches.`}
-        confirmLabel="Refresh outlets"
+        title="Sync outlets?"
+        description={`This will update the list with ${pendingCandidates?.length ?? 0} outlet(s) from your franchise network. WhatsApp numbers you already entered are kept.`}
+        confirmLabel="Sync outlets"
         onConfirm={() => {
           if (pendingCandidates) applyCandidates(pendingCandidates);
           setPendingCandidates(null);
