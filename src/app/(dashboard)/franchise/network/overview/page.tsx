@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, LIST_TABLE_PAGINATION_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,11 @@ import {
 } from "@/components/ui/select";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
 import { FranchiseHealthCard } from "@/components/operational/FranchiseHealthCard";
-import { fetchFranchiseNetworkSummary, fetchFranchiseOutletWorkspace, fetchNetworkSummaryV2, assignOutletPriceList, type FranchiseNetworkOutletRow } from "@/lib/api/cool-catch";
+import { fetchFranchiseNetworkSummary, fetchFranchiseOutletWorkspace, fetchNetworkSummaryV2Page, assignOutletPriceList, type FranchiseNetworkOutletRow } from "@/lib/api/cool-catch";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { type PriceList } from "@/lib/products/pricing-types";
 import { formatMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import {
@@ -186,49 +188,88 @@ function PriceListCell({
 
 // ─── Franchisor network command centre ───────────────────────────────────────
 
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+
 function FranchisorNetworkDashboard() {
   const [outlets, setOutlets] = React.useState<NetworkOutletRow[]>([]);
+  const [healthOutlets, setHealthOutlets] = React.useState<NetworkOutletRow[]>([]);
   const [kpis, setKpis] = React.useState<NetworkKpis | null>(null);
   const [priceLists, setPriceLists] = React.useState<PriceList[]>([]);
   const [outletStockMap, setOutletStockMap] = React.useState<Map<string, FranchiseNetworkOutletRow>>(new Map());
   const [loading, setLoading] = React.useState(true);
-  const [search, setSearch] = React.useState("");
+  const [tableBusy, setTableBusy] = React.useState(false);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(25);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const hasLoadedOnce = React.useRef(false);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const [summary, pls, networkSummary] = await Promise.all([
-        fetchNetworkSummaryV2(),
-        fetchPriceListsForUi(),
-        fetchFranchiseNetworkSummary().catch(() => null),
-      ]);
-      setKpis(summary.kpis);
-      setOutlets(summary.outlets);
-      setPriceLists(pls);
-      if (networkSummary?.outlets) {
-        setOutletStockMap(new Map(networkSummary.outlets.map((o) => [o.id, o])));
-      }
-    } catch {
-      toast.error("Could not load network data");
-    } finally {
-      setLoading(false);
-    }
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [debouncedSearch, pageSize]);
+
+  React.useEffect(() => {
+    void fetchNetworkSummaryV2Page({ limit: 4, offset: 0 })
+      .then((page) => setHealthOutlets(page.outlets))
+      .catch(() => setHealthOutlets([]));
+    fetchPriceListsForUi()
+      .then(setPriceLists)
+      .catch(() => setPriceLists([]));
+    fetchFranchiseNetworkSummary()
+      .then((networkSummary) => {
+        if (networkSummary?.outlets) {
+          setOutletStockMap(new Map(networkSummary.outlets.map((o) => [o.id, o])));
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  React.useEffect(() => { void load(); }, [load]);
+  const loadTable = React.useCallback(async (offset: number) => {
+    const isFirstLoad = !hasLoadedOnce.current;
+    if (isFirstLoad) setLoading(true);
+    else setTableBusy(true);
+    try {
+      const summaryPage = await fetchNetworkSummaryV2Page({
+        limit: pageSize,
+        offset,
+        search: debouncedSearch || undefined,
+      });
+      setKpis(summaryPage.kpis);
+      setOutlets(summaryPage.outlets);
+      setPageOffset(summaryPage.offset);
+      setHasMore(summaryPage.hasMore);
+      setTotalCount(summaryPage.total);
+      hasLoadedOnce.current = true;
+    } catch {
+      toast.error("Could not load network data");
+      setOutlets([]);
+      setTotalCount(0);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+      setTableBusy(false);
+    }
+  }, [pageSize, debouncedSearch]);
 
-  const filteredOutlets = React.useMemo(
-    () =>
-      search
-        ? outlets.filter(
-            (o) =>
-              o.name.toLowerCase().includes(search.toLowerCase()) ||
-              o.territory?.toLowerCase().includes(search.toLowerCase()) ||
-              o.code?.toLowerCase().includes(search.toLowerCase())
-          )
-        : outlets,
-    [outlets, search]
-  );
+  React.useEffect(() => {
+    void loadTable(pageOffset);
+  }, [pageOffset, debouncedSearch, pageSize, loadTable]);
+
+  const refreshAll = React.useCallback(() => {
+    hasLoadedOnce.current = false;
+    void loadTable(pageOffset);
+    void fetchNetworkSummaryV2Page({ limit: 4, offset: 0 })
+      .then((page) => setHealthOutlets(page.outlets))
+      .catch(() => {});
+  }, [loadTable, pageOffset]);
 
   const handlePriceListAssigned = (outletId: string, priceListId: string, priceListName: string) => {
     setOutlets((prev) =>
@@ -313,8 +354,8 @@ function FranchisorNetworkDashboard() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-              <RefreshCw size={14} className={loading ? "animate-spin mr-1" : "mr-1"} />
+            <Button variant="outline" size="sm" onClick={() => void refreshAll()} disabled={loading || tableBusy}>
+              <RefreshCw size={14} className={loading || tableBusy ? "animate-spin mr-1" : "mr-1"} />
               Refresh
             </Button>
             <Button variant="outline" asChild>
@@ -326,13 +367,14 @@ function FranchisorNetworkDashboard() {
           </div>
         }
       />
-      <div className="space-y-6 p-6">
-        <KpiStrip kpis={kpis} loading={loading} />
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-6 gap-6">
+        <div className="shrink-0">
+          <KpiStrip kpis={kpis} loading={loading && !hasLoadedOnce.current} />
+        </div>
 
-        {/* Health cards — top 4 outlets */}
-        {outlets.length > 0 && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {outlets.slice(0, 4).map((o) => {
+        {healthOutlets.length > 0 ? (
+          <div className="shrink-0 grid gap-4 lg:grid-cols-2">
+            {healthOutlets.map((o) => {
               const stockData = outletStockMap.get(o.id);
               return (
                 <FranchiseHealthCard
@@ -347,39 +389,59 @@ function FranchisorNetworkDashboard() {
               );
             })}
           </div>
-        )}
+        ) : null}
 
-        <Card>
+        <Card className="shrink-0">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle>Outlets</CardTitle>
                 <CardDescription>
-                  {outlets.length} outlet{outlets.length !== 1 ? "s" : ""} in this network · Click a row to view details
+                  {totalCount > 0
+                    ? `${totalCount} outlet${totalCount !== 1 ? "s" : ""} in this network · Click a row to view details`
+                    : "Outlets in this network · Click a row to view details"}
                 </CardDescription>
               </div>
               <Input
                 placeholder="Search outlets…"
-                className="w-48"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                className="w-full sm:w-48 shrink-0"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {loading ? (
+            {loading && !hasLoadedOnce.current ? (
               <div className="py-12 text-center text-sm text-muted-foreground animate-pulse">
                 Loading network data…
               </div>
             ) : (
-              <DataTable<NetworkOutletRow>
-                data={filteredOutlets}
-                columns={columns}
-                emptyMessage="No outlets found."
-                scrollMode="fill"
-                size="comfortable"
-                className="min-h-0 flex-1 border-0"
+              <div className="border-t">
+                <div className={cn("transition-opacity duration-200", tableBusy && "pointer-events-none opacity-60")}>
+                  <DataTable<NetworkOutletRow>
+                    data={outlets}
+                    columns={columns}
+                    emptyMessage={debouncedSearch ? "No outlets match your search." : "No outlets found."}
+                    scrollMode="natural"
+                    size="comfortable"
+                    className="border-0"
+                  />
+                </div>
+                <TablePagination
+                  className={LIST_TABLE_PAGINATION_CLASS}
+                  pageOffset={pageOffset}
+                  pageSize={pageSize}
+                  itemCount={outlets.length}
+                  hasMore={hasMore}
+                  loading={loading && !hasLoadedOnce.current}
+                  busy={tableBusy}
+                  onPrevious={() => setPageOffset((o) => Math.max(0, o - pageSize))}
+                  onNext={() => setPageOffset((o) => o + pageSize)}
+                  entityLabel="outlets"
+                  pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+                  onPageSizeChange={setPageSize}
                 />
+              </div>
             )}
           </CardContent>
         </Card>

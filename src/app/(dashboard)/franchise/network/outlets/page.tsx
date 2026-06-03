@@ -3,8 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_PAGINATION_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  fetchFranchiseNetworkOutlets,
+  fetchFranchiseNetworkOutletsPage,
   createFranchiseOutletApi,
   fetchNextOutletCodeApi,
   repairFranchiseeRegistryApi,
@@ -55,6 +56,7 @@ import { fetchPricingZones } from "@/lib/api/pricing-engine";
 import { useAuthStore } from "@/stores/auth-store";
 import { Loader2, Plus, Wrench, Target, CheckCircle2, Clock, AlertTriangle, Minus, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const emptyForm: CreateFranchiseOutletPayload = {
   name: "",
@@ -65,10 +67,21 @@ const emptyForm: CreateFranchiseOutletPayload = {
   managerName: "",
 };
 
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+
 export default function FranchiseOutletsPage() {
   const router = useRouter();
   const [outlets, setOutlets] = React.useState<FranchiseNetworkOutletRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [tableBusy, setTableBusy] = React.useState(false);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(25);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const hasLoadedOnce = React.useRef(false);
   const [addOpen, setAddOpen] = React.useState(false);
   const [form, setForm] = React.useState<CreateFranchiseOutletPayload>(emptyForm);
   const [saving, setSaving] = React.useState(false);
@@ -102,13 +115,42 @@ export default function FranchiseOutletsPage() {
     permissions.includes("admin.users");
   const canAdd = permissions.includes("franchise.network.write") || permissions.includes("admin.users");
 
-  const load = React.useCallback(() => {
-    setLoading(true);
-    fetchFranchiseNetworkOutlets()
-      .then((data) => setOutlets(data))
-      .catch(() => setOutlets([]))
-      .finally(() => setLoading(false));
-  }, []);
+  const load = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setLoading(true);
+      else setTableBusy(true);
+      try {
+        const page = await fetchFranchiseNetworkOutletsPage({
+          limit: pageSize,
+          offset,
+          search: debouncedSearch || undefined,
+        });
+        setOutlets(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setTotalCount(page.total);
+        hasLoadedOnce.current = true;
+      } catch {
+        setOutlets([]);
+        setTotalCount(0);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+        setTableBusy(false);
+      }
+    },
+    [pageSize, debouncedSearch],
+  );
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [debouncedSearch, pageSize]);
 
   React.useEffect(() => {
     if (!canView) {
@@ -116,11 +158,15 @@ export default function FranchiseOutletsPage() {
       setLoading(false);
       return;
     }
-    load();
+    void load(pageOffset);
+  }, [canView, pageOffset, debouncedSearch, pageSize, load]);
+
+  React.useEffect(() => {
+    if (!canView) return;
     fetchPricingZones()
       .then(setPricingZones)
       .catch(() => setPricingZones([]));
-  }, [canView, load]);
+  }, [canView]);
 
   React.useEffect(() => {
     const draft: Record<string, string> = {};
@@ -140,7 +186,7 @@ export default function FranchiseOutletsPage() {
     try {
       await assignOutletPricingZone(outletId, zoneId);
       toast.success("Pricing zone assigned");
-      load();
+      load(pageOffset);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not assign zone");
     } finally {
@@ -212,7 +258,7 @@ export default function FranchiseOutletsPage() {
       });
       toast.success("Targets updated.");
       setTargetOutlet(null);
-      load();
+      load(pageOffset);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save targets.");
     } finally {
@@ -231,7 +277,7 @@ export default function FranchiseOutletsPage() {
       if (errors > 0 || items.some((i) => i.message)) {
         console.info("[repair-franchisee-registry]", items);
       }
-      load();
+      load(pageOffset);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Repair failed");
     } finally {
@@ -275,7 +321,7 @@ export default function FranchiseOutletsPage() {
         toast.success("Franchise outlet updated.");
       }
       setEditOutlet(null);
-      load();
+      load(pageOffset);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to update outlet.");
     } finally {
@@ -290,7 +336,7 @@ export default function FranchiseOutletsPage() {
       await deleteFranchiseNetworkOutletApi(deleteTarget.id);
       toast.success(`${deleteTarget.name} removed from the active network. Users can no longer sign in.`);
       setDeleteTarget(null);
-      load();
+      load(pageOffset);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to remove outlet.");
     } finally {
@@ -299,7 +345,7 @@ export default function FranchiseOutletsPage() {
   };
 
   return (
-    <PageShell>
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Outlets"
         description="Add franchisees (outlets) and give them login access. New outlets also get an HQ customer party and franchisee registry row for royalty and commission. Use Repair if older outlets pre-date that automation."
@@ -320,22 +366,53 @@ export default function FranchiseOutletsPage() {
           ) : null
         }
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Franchisees (outlets)</CardTitle>
-          <CardDescription>
-            Outlets that can log in to the ERP. Each franchisee gets their own org and admin user immediately on creation, plus HQ billing linkage (franchisee registry). For outlets created before that automation, run Repair commission registry.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!canView ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              You do not have permission to view franchise network outlets.
+      <div className={LIST_PAGE_BODY_CLASS}>
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <CardHeader className="shrink-0 space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Franchisees (outlets)</CardTitle>
+                <CardDescription>
+                  {totalCount > 0
+                    ? `${totalCount} outlet${totalCount !== 1 ? "s" : ""} in this network.`
+                    : "Outlets that can log in to the ERP."}{" "}
+                  Each franchisee gets their own org and admin user on creation, plus HQ billing linkage.
+                </CardDescription>
+              </div>
+              {canView ? (
+                <Input
+                  placeholder="Search outlets…"
+                  className="w-full sm:w-56 shrink-0"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                />
+              ) : null}
             </div>
-          ) : loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <Table>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+            {!canView ? (
+              <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+                You do not have permission to view franchise network outlets.
+              </div>
+            ) : loading ? (
+              <p className="px-6 py-8 text-sm text-muted-foreground">Loading…</p>
+            ) : outlets.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+                {debouncedSearch
+                  ? "No outlets match your search."
+                  : canAdd
+                    ? "No franchisees yet. Click “Add franchisee” to create one and give them login access."
+                    : "You need franchise.network.write permission to add franchisees."}
+              </div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
+                <div
+                  className={cn(
+                    "min-h-0 flex-1 overflow-auto",
+                    tableBusy && "pointer-events-none opacity-60",
+                  )}
+                >
+                  <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
@@ -512,18 +589,27 @@ export default function FranchiseOutletsPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-          )}
-          {canView && !loading && outlets.length === 0 && (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              No franchisees yet.{" "}
-              {canAdd
-                ? "Click \u201cAdd franchisee\u201d to create one and give them login access."
-                : "You need franchise.network.write permission to add franchisees."}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </Table>
+                </div>
+                <TablePagination
+                  className={LIST_TABLE_PAGINATION_CLASS}
+                  pageOffset={pageOffset}
+                  pageSize={pageSize}
+                  itemCount={outlets.length}
+                  hasMore={hasMore}
+                  loading={loading}
+                  busy={tableBusy}
+                  onPrevious={() => setPageOffset((o) => Math.max(0, o - pageSize))}
+                  onNext={() => setPageOffset((o) => o + pageSize)}
+                  entityLabel="outlets"
+                  pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+                  onPageSizeChange={setPageSize}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Sheet open={canView && addOpen} onOpenChange={setAddOpen}>
         <SheetContent className="overflow-y-auto sm:max-w-md">

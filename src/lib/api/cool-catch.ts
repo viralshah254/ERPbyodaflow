@@ -125,10 +125,43 @@ export async function fetchFranchiseNetworkSummary(): Promise<FranchiseNetworkSu
   return apiRequest<FranchiseNetworkSummary>("/api/franchise/network/summary");
 }
 
-export async function fetchFranchiseNetworkOutlets(): Promise<FranchiseNetworkOutletRow[]> {
+export interface FranchiseNetworkOutletsPage {
+  items: FranchiseNetworkOutletRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export async function fetchFranchiseNetworkOutletsPage(params?: {
+  limit?: number;
+  offset?: number;
+  cursor?: string;
+  search?: string;
+}): Promise<FranchiseNetworkOutletsPage> {
   requireLiveApi("Franchise network outlets");
-  const payload = await apiRequest<{ items: FranchiseNetworkOutletRow[] }>("/api/franchise/network/outlets");
-  return payload.items ?? [];
+  const qs = new URLSearchParams();
+  if (params?.limit != null) qs.set("limit", String(params.limit));
+  if (params?.cursor != null) qs.set("cursor", params.cursor);
+  else if (params?.offset != null) qs.set("offset", String(params.offset));
+  if (params?.search?.trim()) qs.set("search", params.search.trim());
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiRequest<FranchiseNetworkOutletsPage>(`/api/franchise/network/outlets${suffix}`);
+}
+
+/** Loads all outlets by paging through the network outlets API. */
+export async function fetchFranchiseNetworkOutlets(): Promise<FranchiseNetworkOutletRow[]> {
+  const items: FranchiseNetworkOutletRow[] = [];
+  let offset = 0;
+  const limit = 100;
+  for (;;) {
+    const page = await fetchFranchiseNetworkOutletsPage({ limit, offset });
+    items.push(...page.items);
+    if (!page.hasMore) break;
+    offset += page.limit;
+  }
+  return items;
 }
 
 export type FranchisePerformanceGroupBy = "day" | "week" | "month";
@@ -1245,8 +1278,34 @@ export interface NetworkKpis {
   pendingOrdersValue: number;
 }
 
+export interface NetworkSummaryV2Page {
+  kpis: NetworkKpis;
+  outlets: NetworkOutletRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export async function fetchNetworkSummaryV2Page(params?: {
+  limit?: number;
+  offset?: number;
+  cursor?: string;
+  search?: string;
+}): Promise<NetworkSummaryV2Page> {
+  const qs = new URLSearchParams();
+  if (params?.limit != null) qs.set("limit", String(params.limit));
+  if (params?.cursor != null) qs.set("cursor", params.cursor);
+  else if (params?.offset != null) qs.set("offset", String(params.offset));
+  if (params?.search?.trim()) qs.set("search", params.search.trim());
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiRequest<NetworkSummaryV2Page>(`/api/franchise/network/summary-v2${suffix}`);
+}
+
 export async function fetchNetworkSummaryV2(): Promise<{ kpis: NetworkKpis; outlets: NetworkOutletRow[] }> {
-  return apiRequest("/api/franchise/network/summary-v2");
+  const page = await fetchNetworkSummaryV2Page({ limit: 500, offset: 0 });
+  return { kpis: page.kpis, outlets: page.outlets };
 }
 
 export interface OutletSummary {

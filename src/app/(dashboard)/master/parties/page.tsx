@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import * as Icons from "lucide-react";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -535,7 +535,7 @@ export default function MasterPartiesPage() {
           )
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
         <Tabs value={tab} onValueChange={(v) => setTab(v as "customers" | "franchisees" | "suppliers")}>
           <TabsList>
             <TabsTrigger value="customers">{customerOnlyLabel}s</TabsTrigger>
@@ -591,9 +591,8 @@ export default function MasterPartiesPage() {
                 columns={columns}
                 onRowClick={openEditDrawer}
                 emptyMessage={`No ${customerOnlyLabel.toLowerCase()}s.`}
-                scrollMode="fill"
+                scrollMode="natural"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
                 />
             )}
           </TabsContent>
@@ -646,9 +645,8 @@ export default function MasterPartiesPage() {
                 columns={columns}
                 onRowClick={openEditDrawer}
                 emptyMessage={`No ${supplierLabel.toLowerCase()}s.`}
-                scrollMode="fill"
+                scrollMode="natural"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
                 />
             )}
           </TabsContent>
@@ -686,9 +684,8 @@ export default function MasterPartiesPage() {
                 columns={columns}
                 onRowClick={openEditDrawer}
                 emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
-                scrollMode="fill"
+                scrollMode="natural"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
                 />
             )}
           </TabsContent>
