@@ -240,6 +240,15 @@ export function DataTable<T extends object>({
                     column.className,
                     column.className?.includes("text-right") && "text-right",
                   )}
+                  aria-sort={
+                    column.sortable
+                      ? sort?.columnId === column.id
+                        ? sort.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                      : undefined
+                  }
                 >
                   {column.sortable ? (
                     <button
@@ -251,13 +260,6 @@ export function DataTable<T extends object>({
                         e.stopPropagation();
                         toggleSort(column.id);
                       }}
-                      aria-sort={
-                        sort?.columnId === column.id
-                          ? sort.dir === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
                     >
                       {column.header}
                       {sort?.columnId === column.id ? (

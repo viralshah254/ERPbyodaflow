@@ -29,9 +29,11 @@ const PLATFORM_NAV: { label: string; href: string; icon: React.ComponentType<{ c
   { label: "Settings", href: "/platform/settings", icon: Settings, permission: "platform.read" },
 ];
 
+const EMPTY_PERMISSIONS: string[] = [];
+
 export function PlatformSidebar() {
   const pathname = usePathname();
-  const permissions = useAuthStore((s) => s.permissions) ?? [];
+  const permissions = useAuthStore((s) => s.permissions) ?? EMPTY_PERMISSIONS;
 
   const visibleNav = React.useMemo(() => {
     const hasOwner = permissions.includes("platform.write");
