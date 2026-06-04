@@ -677,16 +677,9 @@ export default function SubcontractingPage() {
       toast.error("No eligible batches selected. Enable batches with a positive send quantity (kg).");
       return;
     }
-    const missing = toCreate.find((b) => !b.workCenterId || !b.processType);
+    const missing = toCreate.find((b) => !b.workCenterId || !b.processType || !b.species);
     if (missing) {
-      toast.error(`Set work center and process type for: ${missing.productName}`);
-      return;
-    }
-    const missingBom = toCreate.find((b) => !b.bomId);
-    if (missingBom) {
-      toast.error(
-        `Pick species and process so a BOM is selected for "${missingBom.productName}", or configure reverse BOMs.`
-      );
+      toast.error(`Set work center, species, and process type for: ${missing.productName}`);
       return;
     }
     const EPS = 1e-4;
@@ -722,7 +715,7 @@ export default function SubcontractingPage() {
       try {
         await createSubcontractOrder({
           workCenterId: batch.workCenterId,
-          bomId: batch.bomId,
+          bomId: batch.bomId || null,
           species: batch.species || undefined,
           processType: batch.processType || undefined,
           grnId: orderGrnId,

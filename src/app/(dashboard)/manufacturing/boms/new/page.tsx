@@ -43,10 +43,6 @@ export default function NewBomPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const isCoolCatchTemplate = templateId === "cool-catch";
 
-  if (!canWrite) {
-    return <div className="p-8 text-center text-muted-foreground">You do not have write access to manufacturing.</div>;
-  }
-
   const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [uomCodes, setUomCodes] = React.useState<string[]>([]);
   const [hydrating, setHydrating] = React.useState(true);
@@ -96,6 +92,10 @@ export default function NewBomPage() {
     }
     defaultsApplied.current = true;
   }, [hydrating, uomCodes, isCoolCatchTemplate]);
+
+  if (!canWrite) {
+    return <div className="p-8 text-center text-muted-foreground">You do not have write access to manufacturing.</div>;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
