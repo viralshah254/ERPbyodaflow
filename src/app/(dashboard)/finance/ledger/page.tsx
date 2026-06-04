@@ -1,18 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Download } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Search, Download, Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,6 +17,15 @@ import { fetchFinanceAccountsApi, fetchFinancePeriodsApi, fetchLedgerEntriesApi 
 import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
+import { DataTable } from "@/components/ui/data-table";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import { PageHeader } from "@/components/layout/page-header";
+
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+type LedgerEntry = Awaited<ReturnType<typeof fetchLedgerEntriesApi>>[number];
 
 export default function LedgerPage() {
   const baseCurrency = useBaseCurrency();
@@ -33,8 +34,11 @@ export default function LedgerPage() {
   const [periodId, setPeriodId] = React.useState("");
   const [accounts, setAccounts] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
-  const [entries, setEntries] = React.useState<Awaited<ReturnType<typeof fetchLedgerEntriesApi>>>([]);
+  const [entries, setEntries] = React.useState<LedgerEntry[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
 
   React.useEffect(() => {
     Promise.all([fetchFinanceAccountsApi(), fetchFinancePeriodsApi()])
@@ -47,9 +51,14 @@ export default function LedgerPage() {
   }, []);
 
   React.useEffect(() => {
+    setLoading(true);
     fetchLedgerEntriesApi(accountId || undefined, periodId || undefined)
-      .then(setEntries)
-      .catch((error) => toast.error((error as Error).message || "Failed to load ledger entries."));
+      .then((data) => {
+        setEntries(data);
+        setPageOffset(0);
+      })
+      .catch((error) => toast.error((error as Error).message || "Failed to load ledger entries."))
+      .finally(() => setLoading(false));
   }, [accountId, periodId]);
 
   const filtered = React.useMemo(() => {
@@ -64,114 +73,173 @@ export default function LedgerPage() {
     );
   }, [entries, search]);
 
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [search]);
+
+  const paginatedRows = React.useMemo(
+    () => filtered.slice(pageOffset, pageOffset + pageSize),
+    [filtered, pageOffset, pageSize]
+  );
+
+  const columns = React.useMemo(
+    () => [
+      {
+        id: "date",
+        header: "Date",
+        accessor: (row: LedgerEntry) => row.date.slice(0, 10),
+      },
+      {
+        id: "account",
+        header: "Account",
+        accessor: (row: LedgerEntry) => (
+          <span className="font-medium">{row.accountCode} \u00b7 {row.accountName}</span>
+        ),
+      },
+      {
+        id: "description",
+        header: "Description",
+        accessor: (row: LedgerEntry) => row.description,
+      },
+      {
+        id: "source",
+        header: "Source",
+        accessor: (row: LedgerEntry) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            onClick={() => setPostingSource({ sourceType: row.sourceType, sourceId: row.sourceId })}
+          >
+            {row.documentNumber}
+          </Button>
+        ),
+      },
+      {
+        id: "debit",
+        header: "Debit",
+        headerClassName: "text-right",
+        className: "text-right",
+        accessor: (row: LedgerEntry) =>
+          row.debit > 0 ? formatMoney(row.debit, baseCurrency) : "\u2013",
+      },
+      {
+        id: "credit",
+        header: "Credit",
+        headerClassName: "text-right",
+        className: "text-right",
+        accessor: (row: LedgerEntry) =>
+          row.credit > 0 ? formatMoney(row.credit, baseCurrency) : "\u2013",
+      },
+      {
+        id: "balance",
+        header: "Balance",
+        headerClassName: "text-right",
+        className: "text-right font-medium",
+        accessor: (row: LedgerEntry) => formatMoney(row.balance, baseCurrency),
+      },
+    ],
+    [baseCurrency]
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">General Ledger</h1>
-          <p className="text-muted-foreground">
-            View all accounting entries
-          </p>
-        </div>
-        <Button variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search accounts or descriptions..."
-                  className="pl-9"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+      <PageHeader
+        title="General Ledger"
+        description="View all accounting entries"
+        actions={
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+        }
+      />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        {/* Filters */}
+        <Card className="shrink-0">
+          <CardHeader>
+            <CardTitle>Filters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex-1 min-w-[200px]">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search accounts or descriptions\u2026"
+                    className="pl-9"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
               </div>
+              <Select value={accountId || "__all_accounts"} onValueChange={(value) => setAccountId(value === "__all_accounts" ? "" : value)}>
+                <SelectTrigger className="w-52"><SelectValue placeholder="All accounts" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all_accounts">All accounts</SelectItem>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>{account.code} \u00b7 {account.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={periodId || "__all_periods"} onValueChange={(value) => setPeriodId(value === "__all_periods" ? "" : value)}>
+                <SelectTrigger className="w-44"><SelectValue placeholder="All periods" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all_periods">All periods</SelectItem>
+                  {periods.map((period) => (
+                    <SelectItem key={period.id} value={period.id}>{period.fiscalYear} \u00b7 P{period.periodNumber}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={accountId || "__all_accounts"} onValueChange={(value) => setAccountId(value === "__all_accounts" ? "" : value)}>
-              <SelectTrigger className="w-52"><SelectValue placeholder="All accounts" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all_accounts">All accounts</SelectItem>
-                {accounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={periodId || "__all_periods"} onValueChange={(value) => setPeriodId(value === "__all_periods" ? "" : value)}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="All periods" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all_periods">All periods</SelectItem>
-                {periods.map((period) => (
-                  <SelectItem key={period.id} value={period.id}>{period.fiscalYear} · P{period.periodNumber}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Ledger Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Journal Entries</CardTitle>
-          <CardDescription>
-            {filtered.length} entries found
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead className="text-right">Debit</TableHead>
-                <TableHead className="text-right">Credit</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((entry) => (
-                <TableRow key={`${entry.documentId}-${entry.accountId}-${entry.date}`}>
-                  <TableCell>{entry.date.slice(0, 10)}</TableCell>
-                  <TableCell className="font-medium">{entry.accountCode} · {entry.accountName}</TableCell>
-                  <TableCell>{entry.description}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => setPostingSource({ sourceType: entry.sourceType, sourceId: entry.sourceId })}
-                    >
-                      {entry.documentNumber}
-                    </Button>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {entry.debit > 0 ? formatMoney(entry.debit, baseCurrency) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {entry.credit > 0 ? formatMoney(entry.credit, baseCurrency) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatMoney(entry.balance, baseCurrency)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        {/* Ledger Table */}
+        <Card className="shrink-0">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Journal Entries</CardTitle>
+              {!loading && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {filtered.length === 0
+                    ? "No entries match your filters."
+                    : `${filtered.length} ${filtered.length === 1 ? "entry" : "entries"} found`}
+                </p>
+              )}
+            </div>
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </CardHeader>
+          <CardContent className="p-0">
+            <DataTable<LedgerEntry>
+              data={paginatedRows}
+              columns={columns}
+              emptyMessage={loading ? "Loading entries\u2026" : "No ledger entries found."}
+              scrollMode="natural"
+              size="comfortable"
+            />
+          </CardContent>
+        </Card>
+
+        <TablePagination
+          className="shrink-0"
+          pageOffset={pageOffset}
+          pageSize={pageSize}
+          itemCount={paginatedRows.length}
+          totalCount={filtered.length || undefined}
+          hasMore={pageOffset + pageSize < filtered.length}
+          loading={loading}
+          onPrevious={() => setPageOffset(Math.max(0, pageOffset - pageSize))}
+          onNext={() => setPageOffset(pageOffset + pageSize)}
+          entityLabel="entries"
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPageOffset(0);
+          }}
+        />
+      </div>
       <PostingBatchSheet
         open={!!postingSource}
         onOpenChange={(open) => {
@@ -180,7 +248,6 @@ export default function LedgerPage() {
         sourceType={postingSource?.sourceType}
         sourceId={postingSource?.sourceId}
       />
-    </div>
+    </PageShell>
   );
 }
-

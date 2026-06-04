@@ -589,6 +589,7 @@ export type FetchDocumentListOpts = {
 
 export type FetchDocumentListPageResult = {
   items: DocListRow[];
+  total?: number;
   limit: number;
   offset: number;
   hasMore: boolean;

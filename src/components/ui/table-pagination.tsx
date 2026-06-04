@@ -25,6 +25,8 @@ export interface TablePaginationProps {
   className?: string;
   /** Pin footer to bottom of scroll area for long tables */
   sticky?: boolean;
+  /** Total items across all pages (when available from API). */
+  totalCount?: number;
   /** When set, shows a rows-per-page control and resets to page 0 on change. */
   pageSizeOptions?: number[];
   onPageSizeChange?: (size: number) => void;
@@ -42,6 +44,7 @@ export function TablePagination({
   entityLabel,
   className,
   sticky = false,
+  totalCount,
   pageSizeOptions,
   onPageSizeChange,
 }: TablePaginationProps) {
@@ -58,6 +61,8 @@ export function TablePagination({
     summary = entityLabel ? `Updating ${entityLabel}…` : "Updating…";
   } else if (itemCount === 0) {
     summary = entityLabel ? `No ${entityLabel} match your filters.` : "No results match your filters.";
+  } else if (totalCount != null && totalCount > 0) {
+    summary = `Showing ${rangeStart}–${rangeEnd} of ${totalCount}`;
   } else {
     summary = `Showing ${rangeStart}–${rangeEnd}`;
     if (hasMore) summary += "+";

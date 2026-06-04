@@ -29,7 +29,8 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const SEARCH_DEBOUNCE_MS = 400;
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 interface JournalEntry {
   id: string;
@@ -72,7 +73,9 @@ export default function JournalEntriesPage() {
   const [fetching, setFetching] = React.useState(false);
   const [rows, setRows] = React.useState<JournalEntry[]>([]);
   const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [hasMore, setHasMore] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState(0);
   const [postingSource, setPostingSource] = React.useState<{
     sourceType: string;
     sourceId: string;
@@ -94,7 +97,7 @@ export default function JournalEntriesPage() {
       else setFetching(true);
       try {
         const page = await fetchDocumentListPageApi("journal", {
-          limit: PAGE_SIZE,
+          limit: pageSize,
           cursor: String(offset),
           status: statusFilter || undefined,
           search: debouncedSearch.trim() || undefined,
@@ -102,6 +105,7 @@ export default function JournalEntriesPage() {
         setRows(page.items.map(mapJournalRow));
         setPageOffset(page.offset);
         setHasMore(page.hasMore);
+        if (page.total != null) setTotalCount(page.total);
         hasLoadedOnce.current = true;
       } catch (error) {
         toast.error((error as Error).message || "Failed to load journals.");
@@ -110,7 +114,7 @@ export default function JournalEntriesPage() {
         setFetching(false);
       }
     },
-    [debouncedSearch, statusFilter],
+    [debouncedSearch, statusFilter, pageSize],
   );
 
   React.useEffect(() => {
@@ -123,12 +127,12 @@ export default function JournalEntriesPage() {
 
   const goToPreviousPage = () => {
     if (pageOffset <= 0 || initialLoading || fetching) return;
-    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+    void loadPage(Math.max(0, pageOffset - pageSize));
   };
 
   const goToNextPage = () => {
     if (!hasMore || initialLoading || fetching) return;
-    void loadPage(pageOffset + PAGE_SIZE);
+    void loadPage(pageOffset + pageSize);
   };
 
   const searchPending = search.trim() !== debouncedSearch.trim();
@@ -285,7 +289,7 @@ export default function JournalEntriesPage() {
         />
         {initialLoading ? (
           <SkeletonDataTable
-            rows={PAGE_SIZE}
+            rows={pageSize}
             columnWidths={[
               "w-20",
               "w-24",
@@ -317,14 +321,21 @@ export default function JournalEntriesPage() {
         )}
         <TablePagination
           pageOffset={pageOffset}
-          pageSize={PAGE_SIZE}
+          pageSize={pageSize}
           itemCount={initialLoading ? 0 : rows.length}
+          totalCount={totalCount || undefined}
           hasMore={hasMore}
           loading={initialLoading || fetching}
           busy={searchPending}
           onPrevious={goToPreviousPage}
           onNext={goToNextPage}
           entityLabel="journal entries"
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPageOffset(0);
+            void loadPage(0);
+          }}
         />
       </div>
       <PostingBatchSheet
