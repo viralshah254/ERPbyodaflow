@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -104,11 +105,13 @@ export default function SupplierInvoicesPage() {
                 />
               </div>
             ) : (
-              <DataTable<APBillRow> data={filtered} columns={columns} onRowClick={(row) => router.push(`/docs/bill/${row.id}`)} emptyMessage="No supplier invoices found."
-            scrollMode="fill"
-            size="comfortable"
-            className="min-h-0 flex-1 border-0"
-            />
+              <div className={cn(LIST_TABLE_SCROLL_BODY_CLASS)}>
+                <DataTable<APBillRow> data={filtered} columns={columns} onRowClick={(row) => router.push(`/docs/bill/${row.id}`)} emptyMessage="No supplier invoices found."
+              scrollMode="fill"
+              size="comfortable"
+              className="border-0"
+              />
+              </div>
             )}
         </div>
       </div>

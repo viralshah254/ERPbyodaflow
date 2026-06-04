@@ -200,9 +200,8 @@ export default function IntercompanyTransactionsPage() {
               data={filtered}
               columns={columns}
               emptyMessage="No IC transactions."
-              scrollMode="fill"
+              scrollMode="natural"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
               />
         </div>
         <Card>

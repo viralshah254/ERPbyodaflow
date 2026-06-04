@@ -357,7 +357,7 @@ export default function WorkOrdersPage() {
         }
       />
 
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search number, product, BOM, or GRN…"
           searchValue={search}
@@ -400,7 +400,7 @@ export default function WorkOrdersPage() {
             columnWidths={["w-24", "w-44", "w-32", "w-28", "w-20", "w-20", "w-20", "w-16", "w-24", "w-24", "w-28"]}
           />
         ) : (
-          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className={LIST_TABLE_SURFACE_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(

@@ -403,16 +403,15 @@ export default function FranchiseCommissionPage() {
               <CardContent className="p-0">
                 {summaryRows.length === 0 && !summaryLoading ? (
                   <p className="p-4 text-sm text-muted-foreground">
-                    No summary rows. Adjust dates and refresh once backend is configured.
+                    No commission data found for this period. Try adjusting the date range or status filter.
                   </p>
                 ) : (
                   <DataTable<CommissionSummaryRow>
                     data={summaryRows}
                     columns={summaryColumns}
                     emptyMessage="No summary rows."
-                    scrollMode="fill"
+                    scrollMode="natural"
                     size="comfortable"
-                    className="min-h-0 flex-1 border-0"
                     />
                 )}
                 {summaryTotals && (

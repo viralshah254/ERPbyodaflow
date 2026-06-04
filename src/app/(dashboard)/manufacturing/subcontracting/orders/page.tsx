@@ -217,9 +217,8 @@ export default function SubcontractOrdersListPage() {
                 data={orders}
                 columns={columns}
                 emptyMessage="No subcontract orders found. Use 'Send to processor' to create one."
-                scrollMode="fill"
+                scrollMode="natural"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
                 />
             )}
           </CardContent>

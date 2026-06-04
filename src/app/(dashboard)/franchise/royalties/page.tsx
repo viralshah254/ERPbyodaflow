@@ -345,9 +345,8 @@ export default function FranchiseRoyaltiesPage() {
                 </p>
                 <div className="overflow-x-auto">
                   <DataTable data={lastRun.results} columns={runResultColumns} emptyMessage="No rows."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
                 </div>
               </div>
@@ -417,9 +416,8 @@ export default function FranchiseRoyaltiesPage() {
               </p>
             ) : (
               <DataTable data={charges} columns={royaltyColumns} emptyMessage="No royalty charges yet."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
             )}
           </CardContent>
@@ -432,9 +430,8 @@ export default function FranchiseRoyaltiesPage() {
           <CardContent className="p-0 overflow-x-auto">
             {loading ? null : (
               <DataTable data={franchisees} columns={feColumns} emptyMessage="No franchisees."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
             )}
           </CardContent>

@@ -77,9 +77,8 @@ export default function CommissionReconciliationPage() {
               <p className="p-4 text-sm text-muted-foreground">Loading…</p>
             ) : (
               <DataTable data={rows} columns={columns} emptyMessage="No commission runs found."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
             )}
         </div>

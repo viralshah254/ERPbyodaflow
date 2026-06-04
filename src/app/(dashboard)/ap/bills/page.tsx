@@ -582,7 +582,7 @@ export default function APBillsPage() {
                 <DataTable<APBillDisplayRow>
                   data={displayRows}
                   columns={columns}
-                  scrollMode="fill"
+                  scrollMode="natural"
                   className="border-0 shadow-none"
                   onRowClick={(row) => {
                     const billId =

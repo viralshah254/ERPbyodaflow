@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -340,32 +339,29 @@ export default function P9FormsPage() {
           }
         />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
             <div>
-              <CardTitle>P9 Cards — {year}</CardTitle>
-              <CardDescription>
+              <h3 className="text-sm font-semibold">P9 Cards — {year}</h3>
+              <p className="text-xs text-muted-foreground">
                 {certs.length === 0 && !loading
                   ? `No P9 cards found for ${year}. Post a pay run to auto-generate, or use Regenerate all.`
                   : `${certs.length} Kenya full-time employee${certs.length !== 1 ? "s" : ""}. Click a row to preview the full P9 table.`}
-              </CardDescription>
+              </p>
             </div>
             <Badge variant="secondary" className="text-xs">
               KRA P9 · {year}
             </Badge>
-          </CardHeader>
-          <CardContent className="p-0">
-            <DataTable<P9CertRow>
+          </div>
+          <DataTable<P9CertRow>
               data={filtered}
               columns={columns}
               onRowClick={handleOpenDetail}
               emptyMessage={loading ? "Loading…" : `No P9 cards for ${year}.`}
-              scrollMode="fill"
+              scrollMode="natural"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
               />
-          </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Detail sheet */}

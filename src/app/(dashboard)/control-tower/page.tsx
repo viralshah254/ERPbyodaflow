@@ -656,9 +656,8 @@ export default function ControlTowerPage() {
                         data={exceptions}
                         columns={exceptionColumns}
                         emptyMessage="No active exceptions."
-                        scrollMode="fill"
+                        scrollMode="natural"
                         size="comfortable"
-                        className="min-h-0 flex-1 border-0"
                         />
                     </CardContent>
                   </Card>
@@ -727,9 +726,8 @@ export default function ControlTowerPage() {
                           data={exceptions.filter((e) => e.exceptionType === "weight_variance")}
                           columns={exceptionColumns}
                           emptyMessage="No weight variances."
-                          scrollMode="fill"
+                          scrollMode="natural"
                           size="comfortable"
-                          className="min-h-0 flex-1 border-0"
                           />
         </div>
                   ) : null}
@@ -774,9 +772,8 @@ export default function ControlTowerPage() {
                           data={wipBalances}
                           columns={wipColumns}
                           emptyMessage="No WIP balances."
-                          scrollMode="fill"
+                          scrollMode="natural"
                           size="comfortable"
-                          className="min-h-0 flex-1 border-0"
                           />
         </div>
                   ) : null}
@@ -947,9 +944,8 @@ export default function ControlTowerPage() {
                           data={exceptions.filter((e) => e.exceptionType === "low_stock")}
                           columns={exceptionColumns}
                           emptyMessage="All outlets stocked above reorder point."
-                          scrollMode="fill"
+                          scrollMode="natural"
                           size="comfortable"
-                          className="min-h-0 flex-1 border-0"
                           />
                       </CardContent>
                     </Card>

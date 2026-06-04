@@ -100,9 +100,8 @@ export default function FinanceCommissionTopUpPage() {
               data={rows}
               columns={columns}
               emptyMessage="No top-up records."
-              scrollMode="fill"
+              scrollMode="natural"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
             />
           )}
         </div>

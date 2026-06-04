@@ -218,9 +218,8 @@ export default function BudgetsPage() {
               </div>
             ) : (
               <DataTable<BudgetRow> data={filtered} columns={columns} emptyMessage="No budgets found."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
             )}
         </div>

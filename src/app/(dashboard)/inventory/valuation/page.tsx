@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -269,9 +269,8 @@ export default function InventoryValuationPage() {
           ) : null}
           <CardContent className="p-0">
             <DataTable data={valuationRows} columns={columns} emptyMessage={emptyMessage}
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
           </CardContent>
         </Card>
@@ -331,9 +330,8 @@ export default function InventoryValuationPage() {
                   data={franchiseRows}
                   columns={franchiseColumns}
                   emptyMessage="No franchise stock data."
-                  scrollMode="fill"
+                  scrollMode="natural"
                   size="comfortable"
-                  className="min-h-0 flex-1 border-0"
                   />
               )}
             </CardContent>

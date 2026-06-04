@@ -283,7 +283,7 @@ export default function RoutingPage() {
         }
       />
 
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search code, name, or description…"
           searchValue={search}
@@ -313,7 +313,7 @@ export default function RoutingPage() {
             columnWidths={["w-24", "w-36", "w-16", "w-44", "w-16"]}
           />
         ) : (
-          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className={LIST_TABLE_SURFACE_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(

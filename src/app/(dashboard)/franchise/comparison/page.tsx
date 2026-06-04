@@ -509,9 +509,8 @@ export default function FranchisePerformanceHubPage() {
                       },
                     ]}
                     emptyMessage="No channel data for this period."
-                    scrollMode="fill"
+                    scrollMode="natural"
                     size="comfortable"
-                    className="min-h-0 flex-1 border-0"
                     />
                 )}
         </div>
@@ -568,9 +567,8 @@ export default function FranchisePerformanceHubPage() {
                   data={data?.outlets ?? []}
                   columns={channelColumns}
                   emptyMessage="No outlet sales in this period."
-                  scrollMode="fill"
+                  scrollMode="natural"
                   size="comfortable"
-                  className="min-h-0 flex-1 border-0"
                   />
         </div>
           </TabsContent>
@@ -608,9 +606,8 @@ export default function FranchisePerformanceHubPage() {
                     },
                   ]}
                   emptyMessage="No stock data."
-                  scrollMode="fill"
+                  scrollMode="natural"
                   size="comfortable"
-                  className="min-h-0 flex-1 border-0"
                   />
         </div>
 
@@ -638,9 +635,8 @@ export default function FranchisePerformanceHubPage() {
                     { id: "outlets", header: "Outlets", accessor: (r) => r.outletCount },
                   ]}
                   emptyMessage="No products match your search."
-                  scrollMode="fill"
+                  scrollMode="natural"
                   size="comfortable"
-                  className="min-h-0 flex-1 border-0"
                   />
               </CardContent>
             </Card>
@@ -676,9 +672,8 @@ export default function FranchisePerformanceHubPage() {
                     data={data?.outlets ?? []}
                     columns={comparisonColumns}
                     emptyMessage="No comparison data for this period."
-                    scrollMode="fill"
+                    scrollMode="natural"
                     size="comfortable"
-                    className="min-h-0 flex-1 border-0"
                     />
                 )}
         </div>

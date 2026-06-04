@@ -244,9 +244,8 @@ export default function ExchangeRatesSettingsPage() {
               data={rates}
               columns={columns}
               emptyMessage="No rates for this date."
-              scrollMode="fill"
+              scrollMode="natural"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
               />
         </div>
       </div>

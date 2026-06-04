@@ -1306,9 +1306,8 @@ export default function SubcontractingPage() {
                       <DataTable<SubcontractOrderRow>
                         data={orders}
                         columns={orderColumns}
-                        scrollMode="fill"
+                        scrollMode="natural"
                         maxVisibleRows={ordersPageSize}
-                        className="min-h-0 flex-1 border-0"
                         onRowClick={(r) => window.location.assign(`/manufacturing/subcontracting/orders/${r.id}`)}
                         emptyMessage="No subcontract orders match your filters. Use Send to processor to create one."
                       />

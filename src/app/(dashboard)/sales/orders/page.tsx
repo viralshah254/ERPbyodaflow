@@ -264,9 +264,8 @@ function FranchiseOrdersTab() {
           columns={columns}
           emptyMessage="No inbound orders from franchise outlets."
           onRowClick={(r) => router.push(franchiseInboundDetailHref(r))}
-          scrollMode="fill"
+          scrollMode="natural"
           size="comfortable"
-          className="min-h-0 flex-1 border-0"
           />
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -545,9 +544,8 @@ function SalesOrdersPanel() {
           selectable
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
-          scrollMode="fill"
+          scrollMode="natural"
           size="comfortable"
-          className="min-h-0 flex-1 border-0"
           />
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

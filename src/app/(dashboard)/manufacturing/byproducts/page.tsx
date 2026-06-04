@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -127,9 +127,8 @@ export default function ManufacturingByproductsPage() {
               data={loading ? [] : rows}
               columns={columns}
               emptyMessage={loading ? "Loading…" : "No byproduct SKUs found. Mark products with productRole = BYPRODUCT via the seed or admin."}
-              scrollMode="fill"
+              scrollMode="natural"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
               />
         </div>
       </div>

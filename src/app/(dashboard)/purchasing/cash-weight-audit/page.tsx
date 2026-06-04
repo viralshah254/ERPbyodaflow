@@ -2209,7 +2209,7 @@ export default function CashWeightAuditPage() {
                 <DataTable
                   data={paginatedPoRows}
                   columns={poColumns}
-                  scrollMode="fill"
+                  scrollMode="natural"
                   className="border-0 shadow-none"
                   emptyMessage="No procurements found. Record a disbursement and create a GRN to start auditing."
                 />
@@ -2399,9 +2399,9 @@ export default function CashWeightAuditPage() {
                       data={selectedPoRow.lines}
                       columns={detailLineColumns}
                       emptyMessage="No audit lines yet. Link a GRN to this PO to generate them."
-                      scrollMode="fill"
+                      scrollMode="natural"
                       size="comfortable"
-                      className="min-h-0 flex-1 border-0"
+                      className="border-0"
                       />
                   </div>
                   <p className="mt-1.5 text-xs text-muted-foreground">
@@ -2426,9 +2426,9 @@ export default function CashWeightAuditPage() {
                         data={selectedPoRow.exceptions}
                         columns={detailExceptionColumns}
                         emptyMessage="No exceptions."
-                        scrollMode="fill"
+                        scrollMode="natural"
                         size="comfortable"
-                        className="min-h-0 flex-1 border-0"
+                        className="border-0"
                         />
                     </div>
                   </div>

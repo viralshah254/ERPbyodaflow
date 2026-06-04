@@ -706,9 +706,8 @@ export default function ManufacturingYieldPage() {
                   <DataTable<YieldRecordRow>
                     data={records}
                     columns={yieldColumns}
-                    scrollMode="fill"
+                    scrollMode="natural"
                     size="comfortable"
-                    className="min-h-0 flex-1 border-0"
                     onRowClick={(row) => router.push(`/manufacturing/yield/${row.id}`)}
                     emptyMessage="No yield records match your filters. Record yield to add one."
                   />
@@ -796,9 +795,8 @@ export default function ManufacturingYieldPage() {
                   <DataTable<MassBalanceSummaryRow>
                     data={massBalance}
                     columns={massBalanceColumns}
-                    scrollMode="fill"
+                    scrollMode="natural"
                     size="comfortable"
-                    className="min-h-0 flex-1 border-0"
                     emptyMessage="No mass balance rows match your filters. Record yield batches to populate this report."
                   />
                 </div>

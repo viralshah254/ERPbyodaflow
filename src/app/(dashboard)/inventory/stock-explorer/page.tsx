@@ -453,8 +453,7 @@ export default function InventoryStockExplorerPage() {
                   <DataTable
                     data={rows}
                     columns={columns}
-                    scrollMode="fill"
-                    className="border-0 shadow-none"
+                    scrollMode="natural"
                     emptyMessage="No stock rows match your filters."
                   />
                 </div>

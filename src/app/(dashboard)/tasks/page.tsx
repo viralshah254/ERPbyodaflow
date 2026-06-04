@@ -138,9 +138,8 @@ export default function TasksPage() {
               </div>
             ) : (
               <DataTable<WorkQueueTaskRow> data={filtered} columns={columns} emptyMessage="No tasks found."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
             )}
         </div>

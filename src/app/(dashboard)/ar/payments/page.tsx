@@ -303,9 +303,8 @@ export default function ARPaymentsPage() {
           data={filtered}
           columns={columns}
           emptyMessage="No payments yet."
-          scrollMode="fill"
+          scrollMode="natural"
           size="comfortable"
-          className="min-h-0 flex-1 border-0"
           />
         {loading ? <p className="text-sm text-muted-foreground">Loading AR payments...</p> : null}
       </div>

@@ -52,9 +52,8 @@ export default function RetailReplenishmentPage() {
             data={MOCK}
             columns={columns}
             emptyMessage="No suggestions."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
           />
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -299,9 +299,8 @@ export default function MrpPage() {
                 data={rows}
                 columns={columns}
                 emptyMessage="No shortages match your filters."
-                scrollMode="fill"
+                scrollMode="natural"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
                 />
             </div>
           </div>

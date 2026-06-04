@@ -382,7 +382,7 @@ export default function PurchaseOrdersPage() {
               <DataTable<PurchasingDocRow>
                 data={rows}
                 columns={columns}
-                scrollMode="fill"
+                scrollMode="natural"
                 className="border-0 shadow-none"
                 onRowClick={(row) => router.push(`/purchasing/orders/${row.id}`)}
                 emptyMessage="No purchase orders match your filters."

@@ -402,9 +402,8 @@ function ARCustomersContent() {
               setDrawerOpen(true);
             }}
             emptyMessage="No customers found."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
         )}
       </div>

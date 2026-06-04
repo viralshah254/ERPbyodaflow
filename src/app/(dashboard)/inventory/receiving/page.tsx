@@ -147,9 +147,8 @@ export default function InventoryReceivingQueuePage() {
                     : router.push("/inventory/receipts")
                 }
                 emptyMessage="No receiving queue rows."
-                scrollMode="fill"
+                scrollMode="natural"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
                 />
             )}
         </div>

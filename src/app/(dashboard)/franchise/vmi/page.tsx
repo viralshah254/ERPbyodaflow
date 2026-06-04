@@ -287,9 +287,8 @@ export default function FranchiseVmiPage() {
             <p className="text-xs text-muted-foreground">Below reorder point; suggested order qty to bring up to max or target.</p>
           </div>
           <DataTable<FranchiseeStockRow & { id?: string }> data={suggestions as (FranchiseeStockRow & { id?: string })[]} columns={suggestionColumns} emptyMessage="No suggestions (all above reorder point)."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
         </div>
               </div>
@@ -329,9 +328,8 @@ export default function FranchiseVmiPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <DataTable<VMIReplenishmentOrderRow> data={orders} columns={orderColumns} emptyMessage="No replenishment orders."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
                 </CardContent>
               </Card>
@@ -361,9 +359,8 @@ export default function FranchiseVmiPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <DataTable<FranchiseeStockRow & { id?: string }> data={stock as (FranchiseeStockRow & { id?: string })[]} columns={stockColumns} emptyMessage="No stock data."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
                 </CardContent>
               </Card>

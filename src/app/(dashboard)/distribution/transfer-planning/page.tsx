@@ -44,9 +44,8 @@ export default function TransferPlanningPage() {
             <p className="text-xs text-muted-foreground">Phase 1 transfer planner scaffold using mocked lanes and quantities.</p>
           </div>
           <DataTable data={planningRows} columns={columns} emptyMessage="No transfer plans."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
         </div>
       </div>

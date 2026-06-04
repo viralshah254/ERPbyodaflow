@@ -50,9 +50,8 @@ export default function FinanceJournalEventsPage() {
             <p className="text-xs text-muted-foreground">Baseline view for finance controls; can be wired to backend event previews.</p>
           </div>
           <DataTable data={journalEventRows} columns={columns} emptyMessage="No journal events."
-            scrollMode="fill"
+            scrollMode="natural"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
             />
         </div>
       </div>
