@@ -48,10 +48,14 @@ import {
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
+import { useAuthStore } from "@/stores/auth-store";
+import { fetchRuntimeSession } from "@/lib/api/context";
 
 export default function UsersRolesPage() {
   const copilotProductEnabled = useCopilotFeatureEnabled();
   const router = useRouter();
+  const currentUserId = useAuthStore((s) => s.user?.userId);
+  const setSession = useAuthStore((s) => s.setSession);
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleDetailRow[]>([]);
   const [franchiseOutlets, setFranchiseOutlets] = React.useState<FranchiseOutletUserRow[]>([]);
@@ -640,6 +644,22 @@ export default function UsersRolesPage() {
                             ? `Billing updated: ${updated.billingImpact.lineItems.map((line) => line.description).join(", ")}`
                             : `Billing linked: invoice ${updated.billingImpact.invoiceId.slice(0, 8)}…`
                         );
+                      }
+                      if (editingUser.id === currentUserId) {
+                        try {
+                          const session = await fetchRuntimeSession();
+                          setSession({
+                            user: session.user,
+                            org: session.org,
+                            tenant: session.tenant,
+                            currentBranch: session.currentBranch,
+                            branches: session.branches,
+                            permissions: session.permissions,
+                            isPlatformOperator: session.isPlatformOperator,
+                          });
+                        } catch {
+                          toast.info("Log out and back in to apply your new permissions.");
+                        }
                       }
                     } else {
                     const created = await createUserApi({

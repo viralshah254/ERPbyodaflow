@@ -24,6 +24,7 @@ import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -58,6 +59,7 @@ const scope = "inventory-receipts";
 
 export default function InventoryReceiptsPage() {
   const router = useRouter();
+  const canWrite = useCanWriteInventory();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -271,7 +273,7 @@ export default function InventoryReceiptsPage() {
               <Icons.CheckCircle2 className="h-3 w-3" />
               Costed
             </Badge>
-          ) : (
+          ) : canWrite ? (
             <Button
               size="sm"
               variant="outline"
@@ -284,13 +286,13 @@ export default function InventoryReceiptsPage() {
                 Apply costs
               </Link>
             </Button>
-          ),
+          ) : null,
       },
       {
         id: "rowActions",
         header: "",
         accessor: (r: PurchasingDocRow) =>
-          r.status === "DRAFT" || r.status === "APPROVED" ? (
+          canWrite && (r.status === "DRAFT" || r.status === "APPROVED") ? (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -371,12 +373,14 @@ export default function InventoryReceiptsPage() {
             <Button variant="outline" asChild>
               <Link href="/purchasing/goods-receipt">Purchasing View</Link>
             </Button>
-            <Button asChild>
-              <Link href="/docs/grn/new" data-tour-step="create-button">
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                Create GRN
-              </Link>
-            </Button>
+            {canWrite && (
+              <Button asChild>
+                <Link href="/docs/grn/new" data-tour-step="create-button">
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Create GRN
+                </Link>
+              </Button>
+            )}
           </div>
         }
       />
@@ -413,7 +417,7 @@ export default function InventoryReceiptsPage() {
           onDeleteView={handleDeleteView}
           onExport={() => exportGRNsCsv(rows)}
           bulkActions={
-            selectedIds.length > 0 ? (
+            canWrite && selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
                   {selectedIds.length} selected

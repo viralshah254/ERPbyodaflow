@@ -24,10 +24,12 @@ import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const canWrite = useCanWritePurchasing();
   const id = String(params?.id ?? "");
   const [runningAudit, setRunningAudit] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
@@ -371,7 +373,7 @@ export default function PurchaseOrderDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2 flex-wrap">
-            {order.status === "DRAFT" && (
+            {canWrite && order.status === "DRAFT" && (
               <>
                 <Button size="sm" variant="outline" asChild>
                   <Link href={`/docs/purchase-order/${id}`}>
@@ -401,7 +403,7 @@ export default function PurchaseOrderDetailPage() {
                 </Button>
               </>
             )}
-            {order.status === "PENDING_APPROVAL" && (
+            {canWrite && order.status === "PENDING_APPROVAL" && (
               <Button
                 size="sm"
                 disabled={actionLoading}
@@ -423,7 +425,7 @@ export default function PurchaseOrderDetailPage() {
                 Approve
               </Button>
             )}
-            {showPrimaryCreateGrn && (
+            {canWrite && showPrimaryCreateGrn && (
               <Button size="sm" asChild>
                 <Link href={`/docs/grn/new?poId=${id}`}>
                   <Icons.PackagePlus className="mr-2 h-4 w-4" />
@@ -431,7 +433,7 @@ export default function PurchaseOrderDetailPage() {
                 </Link>
               </Button>
             )}
-            {showBillFromReceipts && (
+            {canWrite && showBillFromReceipts && (
               <Button size="sm" variant="default" asChild>
                 <Link href={`/docs/bill/new?poId=${id}`}>
                   <Icons.FileText className="mr-2 h-4 w-4" />
@@ -469,7 +471,7 @@ export default function PurchaseOrderDetailPage() {
         }
       />
       <div className="mx-auto max-w-[1536px] min-w-0 space-y-6 px-1 pb-8 sm:px-0">
-        {order.status === "DRAFT" && (
+        {canWrite && order.status === "DRAFT" && (
           <Card className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/20">
             <CardContent className="py-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -533,12 +535,14 @@ export default function PurchaseOrderDetailPage() {
                 <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                   All goods received for this PO — next: create and post the supplier bill.
                 </span>
-                <Button size="sm" variant="default" asChild>
-                  <Link href={`/docs/bill/new?poId=${id}`}>
-                    <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
-                    Create bill from PO
-                  </Link>
-                </Button>
+                {canWrite && (
+                  <Button size="sm" variant="default" asChild>
+                    <Link href={`/docs/bill/new?poId=${id}`}>
+                      <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
+                      Create bill from PO
+                    </Link>
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" asChild>
                   <Link href="/ap/three-way-match">
                     <Icons.GitCompare className="mr-1.5 h-3.5 w-3.5" />

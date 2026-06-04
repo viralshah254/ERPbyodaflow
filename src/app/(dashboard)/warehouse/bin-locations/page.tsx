@@ -22,9 +22,11 @@ import {
 type BinLocationTableRow = WarehouseLocationRow & { onHand: number };
 import { fetchLocationStock, type WarehouseLocationStockRow } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 export default function BinLocationsPage() {
+  const canWrite = useCanWriteInventory();
   const [search, setSearch] = React.useState("");
   const [warehouseId, setWarehouseId] = React.useState("");
   const [warehouses, setWarehouses] = React.useState<Array<{ id: string; label: string }>>([]);
@@ -106,7 +108,7 @@ export default function BinLocationsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" onClick={() => {
+          canWrite && <Button size="sm" onClick={() => {
             setEditing(null);
             setForm({ code: "", name: "", type: "BIN", status: "ACTIVE", parentId: "" });
             setDrawerOpen(true);

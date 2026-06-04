@@ -23,6 +23,7 @@ import {
 import { fetchTripById, addTripCost } from "@/lib/api/trips";
 import type { TripRow } from "@/lib/api/trips";
 import { formatMoney } from "@/lib/money";
+import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import {
@@ -56,6 +57,7 @@ const COST_TYPES = ["FUEL", "DRIVER", "HIRE_FEE", "TOLL", "OTHER"] as const;
 export default function TripDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteDistribution();
   const [trip, setTrip] = React.useState<TripRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [addCostOpen, setAddCostOpen] = React.useState(false);
@@ -136,10 +138,10 @@ export default function TripDetailPage() {
         sticky
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setAddCostOpen(true)}>
+            {canWrite && <Button variant="outline" size="sm" onClick={() => setAddCostOpen(true)}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add cost
-            </Button>
+            </Button>}
             <Button variant="outline" size="sm" asChild>
               <Link href="/distribution/trips">Back to list</Link>
             </Button>

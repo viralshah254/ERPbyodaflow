@@ -20,9 +20,11 @@ import {
   type FuelEventRow,
 } from "@/lib/api/logistics";
 import { formatMoney } from "@/lib/money";
+import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
 export default function LogisticsFuelAuditPage() {
+  const canWrite = useCanWriteDistribution();
   const [vehicles, setVehicles] = React.useState<{ id: string; code: string }[]>([]);
   const [vehicleId, setVehicleId] = React.useState<string>("");
   const [dateFrom, setDateFrom] = React.useState("");
@@ -182,9 +184,9 @@ export default function LogisticsFuelAuditPage() {
               <Input value={formNote} onChange={(e) => setFormNote(e.target.value)} placeholder="Station, batch, etc." />
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
-              <Button type="button" onClick={() => void submitFuel()} disabled={saving}>
+              {canWrite && <Button type="button" onClick={() => void submitFuel()} disabled={saving}>
                 {saving ? "Saving…" : "Save fuel event"}
-              </Button>
+              </Button>}
             </div>
           </CardContent>
         </Card>

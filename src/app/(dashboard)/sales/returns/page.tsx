@@ -20,8 +20,10 @@ import type { DocListRow } from "@/lib/types/documents";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 export default function SalesReturnsPage() {
+  const canWrite = useCanWriteSales();
   const router = useRouter();
   const [rows, setRows] = React.useState<DocListRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -99,12 +101,12 @@ export default function SalesReturnsPage() {
         ]}
         sticky
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button onClick={() => setSheetOpen(true)}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create Return
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <div className={LIST_TABLE_SURFACE_CLASS}>

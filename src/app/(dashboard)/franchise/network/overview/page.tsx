@@ -36,6 +36,7 @@ import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
 import {
   fetchBranchesApi,
   createBranchApi,
@@ -105,10 +106,12 @@ function PriceListCell({
   outlet,
   priceLists,
   onAssigned,
+  canWrite = true,
 }: {
   outlet: NetworkOutletRow;
   priceLists: PriceList[];
   onAssigned: (outletId: string, priceListId: string, priceListName: string) => void;
+  canWrite?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -135,7 +138,7 @@ function PriceListCell({
       <span className="text-sm truncate max-w-[120px]">
         {outlet.priceListName ?? <span className="text-muted-foreground italic">None</span>}
       </span>
-      <Sheet open={open} onOpenChange={setOpen}>
+      {canWrite && <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
             <Tag size={12} />
@@ -181,7 +184,7 @@ function PriceListCell({
             </Button>
           </SheetFooter>
         </SheetContent>
-      </Sheet>
+      </Sheet>}
     </div>
   );
 }
@@ -192,6 +195,7 @@ const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 function FranchisorNetworkDashboard() {
+  const canWrite = useCanWriteFranchise();
   const [outlets, setOutlets] = React.useState<NetworkOutletRow[]>([]);
   const [healthOutlets, setHealthOutlets] = React.useState<NetworkOutletRow[]>([]);
   const [kpis, setKpis] = React.useState<NetworkKpis | null>(null);
@@ -301,7 +305,7 @@ function FranchisorNetworkDashboard() {
       id: "priceList",
       header: "Price List",
       accessor: (r: NetworkOutletRow) => (
-        <PriceListCell outlet={r} priceLists={priceLists} onAssigned={handlePriceListAssigned} />
+        <PriceListCell outlet={r} priceLists={priceLists} onAssigned={handlePriceListAssigned} canWrite={canWrite} />
       ),
     },
     {
@@ -455,10 +459,12 @@ function FranchisorNetworkDashboard() {
 function FranchiseeOutletOverview() {
   const permissions = useAuthStore((s) => s.permissions);
   const orgRole = useOrgContextStore((s) => s.orgRole);
+  const canWriteFranchise = useCanWriteFranchise();
   const canManageBranches =
+    canWriteFranchise && (
     orgRole === "FRANCHISEE" ||
     permissions.includes("settings.branches.write") ||
-    permissions.includes("admin.settings");
+    permissions.includes("admin.settings"));
 
   const [branches, setBranches] = React.useState<BranchRow[]>([]);
   const [workspace, setWorkspace] = React.useState<Awaited<ReturnType<typeof fetchFranchiseOutletWorkspace>> | null>(null);

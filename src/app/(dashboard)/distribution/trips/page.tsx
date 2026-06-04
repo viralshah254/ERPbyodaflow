@@ -16,6 +16,7 @@ import {
 import { DataTable } from "@/components/ui/data-table";
 import { fetchTrips, type TripRow, type TripType, type TripStatus } from "@/lib/api/trips";
 import { formatMoney } from "@/lib/money";
+import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 import { NewTripSheet } from "./new-trip-sheet";
 
@@ -23,6 +24,7 @@ import { NewTripSheet } from "./new-trip-sheet";
 
 export default function DistributionTripsPage() {
   const router = useRouter();
+  const canWrite = useCanWriteDistribution();
   const [typeFilter, setTypeFilter] = React.useState<string>("");
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [trips, setTrips] = React.useState<TripRow[]>([]);
@@ -109,7 +111,7 @@ export default function DistributionTripsPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => setNewTripOpen(true)}>
+          canWrite && <Button onClick={() => setNewTripOpen(true)}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             New trip
           </Button>

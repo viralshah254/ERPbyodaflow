@@ -80,6 +80,7 @@ export default function MasterProductsPage() {
   const terminology = useTerminology();
   const permissions = useAuthStore((s) => s.permissions);
   const canDeleteProduct = permissions.includes("admin.settings");
+  const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
   const productLabel = t("product", terminology);
 
   const [search, setSearch] = React.useState("");
@@ -444,7 +445,7 @@ export default function MasterProductsPage() {
         ]}
         sticky
         showCommandHint
-        actions={
+        actions={canWriteProduct ? (
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -471,6 +472,7 @@ export default function MasterProductsPage() {
               Add {productLabel}
             </Button>
           </div>
+        ) : undefined
         }
       />
       <div className="p-6 space-y-4">
@@ -537,11 +539,11 @@ export default function MasterProductsPage() {
           <EmptyState
             icon={productIcon}
             title={`No ${productLabel.toLowerCase()}s found`}
-            description="Add your first product or adjust filters."
-            action={{
+            description={canWriteProduct ? "Add your first product or adjust filters." : "No products match your filters."}
+            action={canWriteProduct ? {
               label: `Add ${productLabel}`,
               onClick: () => setDrawerOpen(true),
-            }}
+            } : undefined}
           />
         ) : (
           <div className="space-y-3">

@@ -50,6 +50,7 @@ import {
   type ManufacturingWorkOrder,
 } from "@/lib/api/manufacturing";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -133,6 +134,7 @@ function alertBadge(alert?: string) {
 
 export default function ManufacturingYieldPage() {
   const router = useRouter();
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
 
@@ -651,10 +653,12 @@ export default function ManufacturingYieldPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => setRecordYieldOpen(true)}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Record yield
-          </Button>
+          canWrite ? (
+            <Button onClick={() => setRecordYieldOpen(true)}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Record yield
+            </Button>
+          ) : undefined
         }
       />
 

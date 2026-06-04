@@ -43,6 +43,7 @@ import {
 } from "@/lib/api/product-master";
 import type { ProductAttributeDef } from "@/lib/products/types";
 import { t } from "@/lib/terminology";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useTerminology } from "@/stores/orgContextStore";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
@@ -54,6 +55,7 @@ export default function ProductAttributesPage() {
   const params = useParams();
   const id = params.id as string;
   const terminology = useTerminology();
+  const canWrite = useCanWriteInventory();
 
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
   const [defs, setDefs] = React.useState<ProductAttributeDef[]>([]);
@@ -190,10 +192,12 @@ export default function ProductAttributesPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain product attributes (size, grade, flavor) and how they are used in variants." label="Explain" />
-            <Button size="sm" onClick={() => { setEditing(null); setSheetOpen(true); }}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Add attribute
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={() => { setEditing(null); setSheetOpen(true); }}>
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Add attribute
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href={`/master/products/${id}`}>Product</Link>
             </Button>

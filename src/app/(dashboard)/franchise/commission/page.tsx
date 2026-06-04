@@ -41,8 +41,10 @@ import type { CommissionRunRow, CommissionRuleRow, TopUpRow } from "@/lib/mock/f
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
 
 export default function FranchiseCommissionPage() {
+  const canWrite = useCanWriteFranchise();
   const [statusFilter, setStatusFilter] = React.useState<string>("");
   const [runs, setRuns] = React.useState<CommissionRunRow[]>([]);
   const [rules, setRules] = React.useState<CommissionRuleRow[]>([]);
@@ -181,7 +183,7 @@ export default function FranchiseCommissionPage() {
     { id: "actions", header: "", accessor: (r: CommissionRunRow) => (
       <div className="flex gap-1">
         <Button size="sm" variant="ghost" asChild><Link href={`/franchise/commission/runs/${r.id}`}>View</Link></Button>
-        {r.status === "DRAFT" && (
+        {canWrite && r.status === "DRAFT" && (
           <Button size="sm" variant="outline" disabled={postingId === r.id} onClick={() => handlePostRun(r)}>
             {postingId === r.id ? "Posting…" : "Post"}
           </Button>
@@ -227,7 +229,7 @@ export default function FranchiseCommissionPage() {
         sticky
         showCommandHint
         actions={
-          <Sheet open={newRunOpen} onOpenChange={setNewRunOpen}>
+          canWrite ? <Sheet open={newRunOpen} onOpenChange={setNewRunOpen}>
             <SheetTrigger asChild>
               <Button>
                 <Icons.Plus className="mr-2 h-4 w-4" />
@@ -270,7 +272,7 @@ export default function FranchiseCommissionPage() {
                 </div>
               </div>
             </SheetContent>
-          </Sheet>
+          </Sheet> : null
         }
       />
       <div className="p-6 space-y-6">

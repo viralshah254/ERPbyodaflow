@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { bulkDocumentActionApi } from "@/lib/api/documents";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -38,6 +39,7 @@ const scope = "sales-deliveries";
 const PAGE_SIZE = 25;
 
 export default function SalesDeliveriesPage() {
+  const canWrite = useCanWriteSales();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -177,14 +179,14 @@ export default function SalesDeliveriesPage() {
         ]}
         sticky
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button asChild>
             <Link href="/docs/delivery-note/new">
               <Icons.Plus className="mr-2 h-4 w-4" />
               Create Delivery Note
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar className="shrink-0"

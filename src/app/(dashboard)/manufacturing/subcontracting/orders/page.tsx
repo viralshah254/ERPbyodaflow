@@ -22,6 +22,7 @@ import {
   type SubcontractOrderRow,
   type ExternalWorkCenterRow,
 } from "@/lib/api/cool-catch";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { manufacturingAreaLabel } from "@/lib/terminology";
@@ -34,6 +35,7 @@ function statusVariant(status: SubcontractOrderRow["status"]): "default" | "seco
 }
 
 export default function SubcontractOrdersListPage() {
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const [orders, setOrders] = React.useState<SubcontractOrderRow[]>([]);
@@ -129,7 +131,7 @@ export default function SubcontractOrdersListPage() {
             <Button size="sm" variant="ghost" asChild>
               <Link href={`/manufacturing/subcontracting/orders/${r.id}`}>View</Link>
             </Button>
-            {r.status === "WIP" && (
+            {canWrite && r.status === "WIP" && (
               <Button
                 size="sm"
                 variant="outline"
@@ -160,12 +162,14 @@ export default function SubcontractOrdersListPage() {
         sticky
         showCommandHint
         actions={
-          <Button asChild>
-            <Link href="/manufacturing/subcontracting">
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Send to processor
-            </Link>
-          </Button>
+          canWrite ? (
+            <Button asChild>
+              <Link href="/manufacturing/subcontracting">
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Send to processor
+              </Link>
+            </Button>
+          ) : undefined
         }
       />
 

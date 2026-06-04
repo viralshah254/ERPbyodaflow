@@ -17,10 +17,12 @@ import { createDistributionRoute, fetchDistributionRoutes, type DistributionRout
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
+import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 export default function DistributionRoutesPage() {
   const terminology = useTerminology();
+  const canWrite = useCanWriteDistribution();
   const routeLabel = t("route", terminology);
   const [rows, setRows] = React.useState<Array<DistributionRouteRow & { schedule: string; outlets: number; status: string }>>([]);
   const [loading, setLoading] = React.useState(true);
@@ -65,7 +67,7 @@ export default function DistributionRoutesPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => setSheetOpen(true)}>
+          canWrite && <Button onClick={() => setSheetOpen(true)}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             New route
           </Button>

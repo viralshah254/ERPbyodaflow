@@ -27,6 +27,7 @@ import { fetchProductUomsApi } from "@/lib/api/uom";
 import type { ProductRow } from "@/lib/types/masters";
 import type { UomDefinition } from "@/lib/products/types";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -47,6 +48,7 @@ function statusVariant(s: TransferStatus): "default" | "secondary" | "outline" |
 
 export default function WarehouseTransfersPage() {
   const router = useRouter();
+  const canWrite = useCanWriteInventory();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -235,7 +237,7 @@ export default function WarehouseTransfersPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain inter-warehouse transfers and status lifecycle." label="Explain transfers" />
-            <Sheet open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
+            {canWrite && <Sheet open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetForm(); }}>
               <SheetTrigger asChild>
                 <Button size="sm" data-tour-step="create-button">
                   <Icons.Plus className="mr-2 h-4 w-4" />
@@ -386,7 +388,7 @@ export default function WarehouseTransfersPage() {
                   </Button>
                 </div>
               </SheetContent>
-            </Sheet>
+            </Sheet>}
           </div>
         }
       />
@@ -400,7 +402,7 @@ export default function WarehouseTransfersPage() {
           ]}
           onExport={() => exportTransfersCsv(filtered)}
           bulkActions={
-            selectedIds.length > 0 ? (
+            selectedIds.length > 0 && canWrite ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
                 {canApprove && (

@@ -45,6 +45,7 @@ import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { t } from "@/lib/terminology";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -55,6 +56,7 @@ export default function ProductPackagingPage() {
   const params = useParams();
   const id = params.id as string;
   const terminology = useTerminology();
+  const canWrite = useCanWriteInventory();
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
@@ -189,10 +191,12 @@ export default function ProductPackagingPage() {
                 Copilot
               </Button>
             ) : null}
-            <Button size="sm" onClick={() => { setEditingIndex(null); setSheetOpen(true); }}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Add UOM
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={() => { setEditingIndex(null); setSheetOpen(true); }}>
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Add UOM
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href={`/master/products/${id}`}>Product</Link>
             </Button>

@@ -31,6 +31,7 @@ import type { ProductKind } from "@/lib/products/product-type";
 import { productTypeSortKey } from "@/lib/products/product-type";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
 import { formatDate, cn } from "@/lib/utils";
@@ -99,6 +100,7 @@ function StockLevelCell({ stock }: { stock: number }) {
 
 export default function ProductsPage() {
   const router = useRouter();
+  const canWrite = useCanWriteInventory();
   const permissions = useAuthStore((s) => s.permissions);
   const canDelete = permissions.includes("admin.settings");
 
@@ -463,10 +465,12 @@ export default function ProductsPage() {
         ]}
         showCommandHint
         actions={
-          <Button onClick={() => router.push("/master/products")}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add Product
-          </Button>
+          canWrite ? (
+            <Button onClick={() => router.push("/master/products")}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add Product
+            </Button>
+          ) : undefined
         }
       />
 

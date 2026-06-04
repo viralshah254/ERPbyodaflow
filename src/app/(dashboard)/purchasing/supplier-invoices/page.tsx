@@ -16,9 +16,11 @@ import type { APBillRow } from "@/lib/types/ap";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 export default function SupplierInvoicesPage() {
   const router = useRouter();
+  const canWrite = useCanWritePurchasing();
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<APBillRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -78,12 +80,14 @@ export default function SupplierInvoicesPage() {
             <Button variant="outline" asChild>
               <Link href="/ap/bills">Open AP Bills</Link>
             </Button>
-            <Button asChild>
-              <Link href="/docs/bill/new">
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                Record Bill
-              </Link>
-            </Button>
+            {canWrite && (
+              <Button asChild>
+                <Link href="/docs/bill/new">
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Record Bill
+                </Link>
+              </Button>
+            )}
           </div>
         }
       />
@@ -101,7 +105,7 @@ export default function SupplierInvoicesPage() {
                   icon="FileText"
                   title="No supplier invoices"
                   description="Record supplier invoices to track accounts payable."
-                  action={{ label: "Record Bill", onClick: () => router.push("/docs/bill/new") }}
+                  action={canWrite ? { label: "Record Bill", onClick: () => router.push("/docs/bill/new") } : undefined}
                 />
               </div>
             ) : (

@@ -15,6 +15,7 @@ import { fetchPickPackTask, patchPickPackWarehouse, runPickPackAction, stagePick
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { patchDocumentApi } from "@/lib/api/documents";
 import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import {
   Select,
@@ -95,6 +96,7 @@ function AvailWithPickDelta({
 export default function PickPackDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteInventory();
   const [task, setTask] = React.useState<WarehousePickPackRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [cartons, setCartons] = React.useState("0");
@@ -620,7 +622,7 @@ export default function PickPackDetailPage() {
           </CardContent>
         </Card>
 
-        {showStageStockCta ? (
+        {canWrite && showStageStockCta ? (
           <Card className="border-sky-500/35">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Stock is in another site</CardTitle>
@@ -786,7 +788,7 @@ export default function PickPackDetailPage() {
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
-          {canConfirmPick ? (
+          {canWrite && canConfirmPick ? (
             <Button
               disabled={!canConfirmPickAndPackStockOk || pickPackLoading}
               title={
@@ -825,7 +827,7 @@ export default function PickPackDetailPage() {
               {pickPackLoading ? "Saving…" : "Confirm pick & pack"}
             </Button>
           ) : null}
-          {canConfirmPackOnly ? (
+          {canWrite && canConfirmPackOnly ? (
             <Button
               variant="secondary"
               disabled={!canConfirmPackOnlyStockOk || pickPackLoading}
@@ -858,7 +860,7 @@ export default function PickPackDetailPage() {
               {pickPackLoading ? "Saving…" : "Confirm pack"}
             </Button>
           ) : null}
-          <Button
+          {canWrite && <Button
             variant="secondary"
             disabled={!canDispatch}
             title={!canDispatch ? "Confirm pack first." : undefined}
@@ -883,8 +885,8 @@ export default function PickPackDetailPage() {
             }}
           >
             Mark dispatched
-          </Button>
-          <Button
+          </Button>}
+          {canWrite && <Button
             variant="outline"
             disabled={!canComplete}
             title={!canComplete ? "Mark dispatched first." : undefined}
@@ -893,7 +895,7 @@ export default function PickPackDetailPage() {
             }
           >
             Complete
-          </Button>
+          </Button>}
           {task.sourceDocumentId ? (
             <Button variant="outline" asChild>
               <Link href={`/docs/delivery-note/${task.sourceDocumentId}`}>Open delivery note</Link>

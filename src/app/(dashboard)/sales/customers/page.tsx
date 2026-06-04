@@ -27,6 +27,7 @@ import { isApiConfigured } from "@/lib/api/client";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { toast } from "sonner";
 import type { CustomerType } from "@/lib/types/masters";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const CUSTOMER_TYPES: CustomerType[] = ["DISTRIBUTOR", "WHOLESALER", "RETAILER", "FRANCHISEE", "END_CUSTOMER"];
 
@@ -36,6 +37,7 @@ function humanizeSegment(value: string) {
 
 /** Sales roster: live AR customer summaries (same `/api/ar/customers` feed as Finance → AR Customers). */
 export default function CustomersPage() {
+  const canWrite = useCanWriteSales();
   const router = useRouter();
   const { settings } = useFinancialSettings();
   const currency = settings.baseCurrency?.trim()?.toUpperCase() || "KES";
@@ -219,14 +221,14 @@ export default function CustomersPage() {
         breadcrumbs={[{ label: "Sales", href: "/sales/overview" }, { label: "Customers" }]}
         sticky
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button asChild>
             <Link href="/ar/customers?new=1">
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add customer
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <FiltersBar

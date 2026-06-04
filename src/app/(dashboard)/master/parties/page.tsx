@@ -50,11 +50,14 @@ import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 
 
 export default function MasterPartiesPage() {
   const terminology = useTerminology();
+  const permissions = useAuthStore((s) => s.permissions);
+  const canWriteParty = permissions.includes("sales.write") || permissions.includes("purchase.write") || permissions.includes("admin.settings") || permissions.includes("*");
   /** Always "Customer" on this screen — franchisees have their own tab and Franchise → Manage franchisees. */
   const customerOnlyLabel = "Customer";
   const supplierLabel = t("supplier", terminology);
@@ -520,19 +523,21 @@ export default function MasterPartiesPage() {
         sticky
         showCommandHint
         actions={
-          tab !== "franchisees" ? (
+          tab === "franchisees" ? (
+            canWriteParty ? (
+              <Button variant="outline" asChild>
+                <Link href="/franchise/outlets">
+                  <Icons.ExternalLink className="mr-2 h-4 w-4" />
+                  Manage franchisees
+                </Link>
+              </Button>
+            ) : undefined
+          ) : canWriteParty ? (
             <Button onClick={openCreateDrawer}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add {label}
             </Button>
-          ) : (
-            <Button variant="outline" asChild>
-              <Link href="/franchise/outlets">
-                <Icons.ExternalLink className="mr-2 h-4 w-4" />
-                Manage franchisees
-              </Link>
-            </Button>
-          )
+          ) : undefined
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6">

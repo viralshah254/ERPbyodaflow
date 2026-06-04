@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
 import {
   Sheet,
   SheetContent,
@@ -59,8 +60,9 @@ function summarizeRoyaltyRun(results: RoyaltyMonthRunResultRow[]) {
 export default function FranchiseRoyaltiesPage() {
   const permissions = useAuthStore((s) => s.permissions);
   const org = useAuthStore((s) => s.org);
+  const canWriteGlobal = useCanWriteFranchise();
   const canRead = permissions.includes("franchise.commission.read");
-  const canWrite = permissions.includes("franchise.commission.write");
+  const canWrite = canWriteGlobal && permissions.includes("franchise.commission.write");
   const [franchisees, setFranchisees] = React.useState<FranchiseeRow[]>([]);
   const [charges, setCharges] = React.useState<RoyaltyChargeRow[]>([]);
   const [loading, setLoading] = React.useState(true);

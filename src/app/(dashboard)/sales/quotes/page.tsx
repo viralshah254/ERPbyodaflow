@@ -22,6 +22,7 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import { bulkDocumentActionApi } from "@/lib/api/documents";
 import * as Icons from "lucide-react";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -34,6 +35,7 @@ const STATUS_OPTIONS = [
 const scope = "sales-quotes";
 
 export default function SalesQuotesPage() {
+  const canWrite = useCanWriteSales();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -145,14 +147,14 @@ export default function SalesQuotesPage() {
         ]}
         sticky
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button asChild>
             <Link href="/docs/quote/new">
               <Icons.Plus className="mr-2 h-4 w-4" />
               Create Quote
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar className="shrink-0"

@@ -36,11 +36,13 @@ import {
 } from "@/lib/api/inventory-stock";
 import { compareProductFamilyKeys, UNCATEGORIZED_FAMILY } from "@/lib/products/product-family";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function StockLevelsPage() {
   const router = useRouter();
+  const canWrite = useCanWriteInventory();
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const isFranchisor = orgRole === "FRANCHISOR";
 
@@ -274,19 +276,23 @@ export default function StockLevelsPage() {
               icon: "Eye",
               onClick: (e) => { e?.stopPropagation?.(); openStockDetail(row); },
             },
-            {
-              label: "Adjust Stock",
-              icon: "Edit",
-              onClick: (e) => { e?.stopPropagation?.(); openAdjust(row); },
-            },
-            {
-              label: "Transfer",
-              icon: "ArrowLeftRight",
-              onClick: (e) => {
-                e?.stopPropagation?.();
-                router.push(`/warehouse/transfers?from=${row.id}`);
-              },
-            },
+            ...(canWrite
+              ? [
+                  {
+                    label: "Adjust Stock",
+                    icon: "Edit" as const,
+                    onClick: (e?: React.MouseEvent) => { e?.stopPropagation?.(); openAdjust(row); },
+                  },
+                  {
+                    label: "Transfer",
+                    icon: "ArrowLeftRight" as const,
+                    onClick: (e?: React.MouseEvent) => {
+                      e?.stopPropagation?.();
+                      router.push(`/warehouse/transfers?from=${row.id}`);
+                    },
+                  },
+                ]
+              : []),
           ]}
         />
       ),
@@ -307,10 +313,12 @@ export default function StockLevelsPage() {
               <Icons.Download className="mr-2 h-4 w-4" />
               Export
             </Button>
-            <Button>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Stock Adjustment
-            </Button>
+            {canWrite && (
+              <Button>
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Stock Adjustment
+              </Button>
+            )}
           </>
         }
       />

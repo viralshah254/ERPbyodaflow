@@ -85,6 +85,7 @@ import { validateTiers } from "@/lib/pricing/validation";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import { formatMoney } from "@/lib/money";
 import { t } from "@/lib/terminology";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
 import { useTerminology } from "@/stores/orgContextStore";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
@@ -130,6 +131,7 @@ export default function ProductDetailPage() {
   const id = params.id as string;
   const permissions = useAuthStore((s) => s.permissions);
   const canDelete = permissions.includes("admin.settings");
+  const canWrite = useCanWriteInventory();
   const terminology = useTerminology();
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
@@ -618,15 +620,17 @@ export default function ProductDetailPage() {
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <ProductTypeBadge type={productType} whenUnset="stock" />
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void saveAllOverview()}
-              disabled={!overviewDirty || savingAll}
-            >
-              <Icons.Save className="mr-2 h-4 w-4" />
-              {savingAll ? "Saving…" : "Save changes"}
-            </Button>
+            {canWrite && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void saveAllOverview()}
+                disabled={!overviewDirty || savingAll}
+              >
+                <Icons.Save className="mr-2 h-4 w-4" />
+                {savingAll ? "Saving…" : "Save changes"}
+              </Button>
+            )}
             <ExplainThis
               prompt={`Explain product ${product.sku} (${product.name}): type, packaging, pricing.`}
               label="Explain"
@@ -1156,17 +1160,21 @@ export default function ProductDetailPage() {
                     </Table>
                   )}
                   <div className="p-4 border-t flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setEditingTierIdx(null); setTierSheetOpen(true); }}
-                    >
-                      <Icons.Plus className="mr-2 h-4 w-4" />
-                      Add tier
-                    </Button>
-                    <Button size="sm" onClick={handleSaveTiers} disabled={!selectedListId}>
-                      Save tiers
-                    </Button>
+                    {canWrite && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setEditingTierIdx(null); setTierSheetOpen(true); }}
+                      >
+                        <Icons.Plus className="mr-2 h-4 w-4" />
+                        Add tier
+                      </Button>
+                    )}
+                    {canWrite && (
+                      <Button size="sm" onClick={handleSaveTiers} disabled={!selectedListId}>
+                        Save tiers
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1191,13 +1199,15 @@ export default function ProductDetailPage() {
                   />
                   <Label htmlFor="decimals" className="text-xs">Allow decimals</Label>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() => { setEditingPackIdx(null); setPackSheetOpen(true); }}
-                >
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Add UOM
-                </Button>
+                {canWrite && (
+                  <Button
+                    size="sm"
+                    onClick={() => { setEditingPackIdx(null); setPackSheetOpen(true); }}
+                  >
+                    <Icons.Plus className="mr-2 h-4 w-4" />
+                    Add UOM
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -1288,7 +1298,7 @@ export default function ProductDetailPage() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  {sortedDefs.length > 0 && (
+                  {canWrite && sortedDefs.length > 0 && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1298,13 +1308,15 @@ export default function ProductDetailPage() {
                       Generate variants
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    onClick={() => { setEditingAttr(null); setAttrSheetOpen(true); }}
-                  >
-                    <Icons.Plus className="mr-2 h-4 w-4" />
-                    Add option type
-                  </Button>
+                  {canWrite && (
+                    <Button
+                      size="sm"
+                      onClick={() => { setEditingAttr(null); setAttrSheetOpen(true); }}
+                    >
+                      <Icons.Plus className="mr-2 h-4 w-4" />
+                      Add option type
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -1374,13 +1386,15 @@ export default function ProductDetailPage() {
                       Copilot
                     </Button>
                   ) : null}
-                  <Button
-                    size="sm"
-                    onClick={() => { setEditingVariant(null); setVariantSheetOpen(true); }}
-                  >
-                    <Icons.Plus className="mr-2 h-4 w-4" />
-                    Add variant
-                  </Button>
+                  {canWrite && (
+                    <Button
+                      size="sm"
+                      onClick={() => { setEditingVariant(null); setVariantSheetOpen(true); }}
+                    >
+                      <Icons.Plus className="mr-2 h-4 w-4" />
+                      Add variant
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="p-0">

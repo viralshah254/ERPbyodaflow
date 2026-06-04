@@ -6,9 +6,11 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { fetchPendingWarehouseDrops, type PendingWarehouseDropRow } from "@/lib/api/dispatch-warehouse";
 
 export default function DispatchReturnsPage() {
+  const canWrite = useCanWriteInventory();
   const [rows, setRows] = React.useState<PendingWarehouseDropRow[] | undefined>(undefined);
 
   React.useEffect(() => {
@@ -53,9 +55,9 @@ export default function DispatchReturnsPage() {
                   Dropped {new Date(row.droppedAt).toLocaleString()}
                 </p>
               </div>
-              <Button asChild size="sm">
+              {canWrite && <Button asChild size="sm">
                 <Link href={`/warehouse/dispatch-returns/${row.deliveryNoteId}`}>Weigh & post</Link>
-              </Button>
+              </Button>}
             </CardContent>
           </Card>
         ))}

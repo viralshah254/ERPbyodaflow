@@ -14,10 +14,12 @@ import { fetchCollectionsApi } from "@/lib/api/treasury-ops";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
+import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 export default function DistributionCollectionsPage() {
   const terminology = useTerminology();
+  const canWrite = useCanWriteDistribution();
   const collectionLabel = t("collection", terminology);
   const [rows, setRows] = React.useState<Array<{ id: string; party: string; due: number; overdue: number; aging: string }>>([]);
   const [loading, setLoading] = React.useState(true);
@@ -62,7 +64,7 @@ export default function DistributionCollectionsPage() {
         sticky
         showCommandHint
         actions={
-          <Button>
+          canWrite && <Button>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Record collection
           </Button>

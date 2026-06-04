@@ -71,6 +71,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { useUIStore } from "@/stores/ui-store";
+import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -121,6 +122,7 @@ export default function DocViewPage() {
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
+  const canWrite = useCanWriteDocType(type);
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
@@ -592,7 +594,7 @@ export default function DocViewPage() {
       rightSlot={rightSlot}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {document?.status === "DRAFT" && (
+          {canWrite && document?.status === "DRAFT" && (
             <Button
               size="sm"
               variant="outline"
@@ -613,7 +615,7 @@ export default function DocViewPage() {
                 </Link>
               </Button>
             )}
-          {convertTargets.length === 1 ? (
+          {canWrite && convertTargets.length === 1 ? (
             <Button
               size="sm"
               disabled={actionLoading}
@@ -622,7 +624,7 @@ export default function DocViewPage() {
               <Icons.GitBranchPlus className="mr-2 h-4 w-4" />
               Convert to {humanizeDocTypeKey(convertTargets[0])}
             </Button>
-          ) : convertTargets.length > 1 ? (
+          ) : canWrite && convertTargets.length > 1 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" disabled={actionLoading}>
@@ -640,7 +642,7 @@ export default function DocViewPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          {canRequestApproval && (
+          {canWrite && canRequestApproval && (
             <Button
               variant="outline"
               size="sm"
@@ -668,7 +670,7 @@ export default function DocViewPage() {
               Posted
             </Button>
           )}
-          {(canApprove || canPost) && (
+          {canWrite && (canApprove || canPost) && (
             <>
               {canApprove && (
               <Button
@@ -718,7 +720,7 @@ export default function DocViewPage() {
               )}
             </>
           )}
-          {canCancel && (
+          {canWrite && canCancel && (
             <Button
               variant="outline"
               size="sm"
@@ -740,7 +742,7 @@ export default function DocViewPage() {
               Cancel
             </Button>
           )}
-          {canReverse && (
+          {canWrite && canReverse && (
             <Button
               variant="outline"
               size="sm"

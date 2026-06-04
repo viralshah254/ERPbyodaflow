@@ -49,6 +49,7 @@ import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { t } from "@/lib/terminology";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useTerminology } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
 
@@ -62,6 +63,7 @@ export default function ProductPricingPage() {
   const params = useParams();
   const id = params.id as string;
   const terminology = useTerminology();
+  const canWrite = useCanWriteInventory();
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
@@ -367,13 +369,17 @@ export default function ProductPricingPage() {
                 </Table>
               )}
               <div className="p-4 border-t">
-                <Button size="sm" onClick={() => { setEditingTierIndex(null); setTierSheetOpen(true); }}>
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Add tier
-                </Button>
-                <Button size="sm" className="ml-2" onClick={handleSaveTiers}>
-                  Save tiers
-                </Button>
+                {canWrite && (
+                  <Button size="sm" onClick={() => { setEditingTierIndex(null); setTierSheetOpen(true); }}>
+                    <Icons.Plus className="mr-2 h-4 w-4" />
+                    Add tier
+                  </Button>
+                )}
+                {canWrite && (
+                  <Button size="sm" className="ml-2" onClick={handleSaveTiers}>
+                    Save tiers
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

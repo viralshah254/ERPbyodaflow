@@ -53,6 +53,7 @@ import { fetchGRNs } from "@/lib/api/grn";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { formatMoney } from "@/lib/money";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
@@ -309,6 +310,7 @@ function buildPreviewLines(
 }
 
 export default function SubcontractingPage() {
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const [tab, setTab] = React.useState<"orders" | "wip" | "workcenters">("orders");
@@ -819,12 +821,12 @@ export default function SubcontractingPage() {
           <Button size="sm" variant="ghost" asChild>
             <Link href={`/manufacturing/subcontracting/orders/${r.id}`}>View</Link>
           </Button>
-          {r.status === "SENT" && (
+          {canWrite && r.status === "SENT" && (
             <Button size="sm" variant="secondary" disabled={dispatchingId === r.id} onClick={() => handleDispatch(r)}>
               {dispatchingId === r.id ? "Dispatching…" : "Mark WIP"}
             </Button>
           )}
-          {r.status === "WIP" && (
+          {canWrite && r.status === "WIP" && (
             <Button size="sm" variant="outline" disabled={receivingId === r.id} onClick={() => handleReceive(r)}>
               {receivingId === r.id ? "Receiving…" : "Receive"}
             </Button>
@@ -879,13 +881,14 @@ export default function SubcontractingPage() {
         sticky
         showCommandHint
         actions={
-          <Sheet open={sendSheetOpen} onOpenChange={(o) => { setSendSheetOpen(o); if (!o) resetOrderForm(); }}>
-            <SheetTrigger asChild>
-              <Button>
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                Send to processor
-              </Button>
-            </SheetTrigger>
+          canWrite ? (
+            <Sheet open={sendSheetOpen} onOpenChange={(o) => { setSendSheetOpen(o); if (!o) resetOrderForm(); }}>
+              <SheetTrigger asChild>
+                <Button>
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Send to processor
+                </Button>
+              </SheetTrigger>
             <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
               <SheetHeader>
                 <SheetTitle>Send to processor</SheetTitle>
@@ -1213,6 +1216,7 @@ export default function SubcontractingPage() {
               </SheetFooter>
             </SheetContent>
           </Sheet>
+          ) : undefined
         }
       />
 
@@ -1442,12 +1446,14 @@ export default function SubcontractingPage() {
                     </p>
                   </div>
                   <Sheet open={workCenterSheetOpen} onOpenChange={setWorkCenterSheetOpen}>
-                    <SheetTrigger asChild>
-                      <Button size="sm" variant="outline">
-                        <Icons.Plus className="mr-2 h-4 w-4" />
-                        New work center
-                      </Button>
-                    </SheetTrigger>
+                    {canWrite && (
+                      <SheetTrigger asChild>
+                        <Button size="sm" variant="outline">
+                          <Icons.Plus className="mr-2 h-4 w-4" />
+                          New work center
+                        </Button>
+                      </SheetTrigger>
+                    )}
                     <SheetContent>
                       <SheetHeader>
                         <SheetTitle>New external work center</SheetTitle>

@@ -19,6 +19,7 @@ import {
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -69,6 +70,7 @@ function toRow(b: ManufacturingBom): BomRow {
 
 export default function BomsPage() {
   const router = useRouter();
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const bomLabel = t("bom", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
@@ -244,10 +246,12 @@ export default function BomsPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/mrp">MRP</Link>
             </Button>
-            <Button size="sm" onClick={() => router.push("/manufacturing/boms/new")} data-tour-step="create-button">
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              New BOM
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={() => router.push("/manufacturing/boms/new")} data-tour-step="create-button">
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                New BOM
+              </Button>
+            )}
           </div>
         }
       />

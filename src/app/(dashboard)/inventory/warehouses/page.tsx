@@ -26,10 +26,12 @@ import {
 } from "@/lib/api/warehouses";
 import { fetchBranchOptions } from "@/lib/api/lookups";
 import type { WarehouseRow } from "@/lib/types/masters";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function WarehousesPage() {
+  const canWrite = useCanWriteInventory();
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<WarehouseRow[]>([]);
   const [branches, setBranches] = React.useState<Array<{ id: string; label: string }>>([]);
@@ -88,9 +90,11 @@ export default function WarehousesPage() {
         header: "Actions",
         accessor: (row: WarehouseRow) => (
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
-              Edit
-            </Button>
+            {canWrite && (
+              <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                Edit
+              </Button>
+            )}
             <Button size="sm" variant="outline" asChild>
               <Link href="/warehouse/bin-locations">Locations</Link>
             </Button>
@@ -108,10 +112,12 @@ export default function WarehousesPage() {
         description="Manage warehouses and navigate to bin/location configuration."
         breadcrumbs={[{ label: "Inventory", href: "/inventory" }, { label: "Warehouses" }]}
         actions={
-          <Button onClick={openCreate}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add Warehouse
-          </Button>
+          canWrite ? (
+            <Button onClick={openCreate}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add Warehouse
+            </Button>
+          ) : undefined
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
@@ -128,7 +134,7 @@ export default function WarehousesPage() {
                   icon="MapPin"
                   title="No warehouses"
                   description="Add warehouses to organize your inventory storage."
-                  action={{ label: "Add Warehouse", onClick: openCreate }}
+                  action={canWrite ? { label: "Add Warehouse", onClick: openCreate } : undefined}
                 />
               </div>
             ) : (

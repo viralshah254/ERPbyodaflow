@@ -41,6 +41,7 @@ import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -574,6 +575,7 @@ function SalesOrdersPanel() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SalesOrdersPage() {
+  const canWrite = useCanWriteSales();
   const navCounts = useNavCounts();
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const isFranchisor = orgRole === "FRANCHISOR";
@@ -590,14 +592,14 @@ export default function SalesOrdersPage() {
         ]}
         sticky
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button asChild>
             <Link href="/docs/sales-order/new">
               <Icons.Plus className="mr-2 h-4 w-4" />
               Create Sales Order
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         {isFranchisor ? (

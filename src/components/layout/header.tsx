@@ -25,8 +25,9 @@ import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
 
 export function Header() {
   const router = useRouter();
-  const { user, currentBranch, logout } = useAuthStore();
+  const { user, currentBranch, permissions, logout } = useAuthStore();
   const copilotEnabled = useCopilotFeatureEnabled();
+  const canSeeOrgProfile = permissions.includes("settings.org.read") || permissions.includes("*");
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
 
@@ -111,12 +112,14 @@ export function Header() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href="/settings/org" className="flex cursor-pointer items-center">
-              <User className="mr-2 h-4 w-4" />
-              <span>Profile</span>
-            </Link>
-          </DropdownMenuItem>
+          {canSeeOrgProfile && (
+            <DropdownMenuItem asChild>
+              <Link href="/settings/org" className="flex cursor-pointer items-center">
+                <User className="mr-2 h-4 w-4" />
+                <span>Profile</span>
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem asChild>
             <Link href="/settings" className="flex cursor-pointer items-center">
               <Settings className="mr-2 h-4 w-4" />

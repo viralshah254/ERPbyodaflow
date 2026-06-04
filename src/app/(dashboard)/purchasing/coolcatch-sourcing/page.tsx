@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSourcingBatch } from "@/lib/api/coolcatch-gap";
 import { toast } from "sonner";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 const TILAPIA_YIELDS: Record<string, number> = {
   "Tilapia Fillet": 32.1,
@@ -39,6 +40,7 @@ type SkuRow = { key: string; label: string; yieldPct: string; kg: string };
 
 /** Guided sourcing (Models 1–3) with multi-SKU filleting apportionment. */
 export default function CoolcatchSourcingPage() {
+  const canWrite = useCanWritePurchasing();
   const [model, setModel] = useState("MODEL_1_GUTTING");
   const [species, setSpecies] = useState<"tilapia" | "nile_perch">("tilapia");
   const [supplier, setSupplier] = useState("");
@@ -300,7 +302,7 @@ export default function CoolcatchSourcingPage() {
               </div>
             ) : null}
 
-            <Button type="button" disabled={saving} className="w-full" onClick={() => void submit()}>
+            <Button type="button" disabled={saving || !canWrite} className="w-full" onClick={() => void submit()}>
               {saving ? "Saving…" : "Create batch & recalc EMP"}
             </Button>
           </CardContent>

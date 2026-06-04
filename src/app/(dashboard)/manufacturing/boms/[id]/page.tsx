@@ -26,6 +26,7 @@ import { listProducts } from "@/lib/data/products.repo";
 import { listUoms } from "@/lib/data/uom.repo";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -34,6 +35,7 @@ export default function BomDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const products = React.useMemo(() => listProducts(), []);
@@ -157,19 +159,21 @@ export default function BomDetailPage() {
             <Badge variant={bom.isActive ? "outline" : "secondary"}>
               {bom.isActive ? "Active" : "Inactive"}
             </Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={togglingActive}
-              onClick={handleToggleActive}
-            >
-              {togglingActive
-                ? "Saving…"
-                : bom.isActive
-                ? "Deactivate"
-                : "Activate"}
-            </Button>
-            {confirmDelete ? (
+            {canWrite && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={togglingActive}
+                onClick={handleToggleActive}
+              >
+                {togglingActive
+                  ? "Saving…"
+                  : bom.isActive
+                  ? "Deactivate"
+                  : "Activate"}
+              </Button>
+            )}
+            {canWrite && (confirmDelete ? (
               <>
                 <Button
                   variant="destructive"
@@ -193,7 +197,7 @@ export default function BomDetailPage() {
                 <Icons.Trash2 className="h-4 w-4 mr-1" />
                 Delete
               </Button>
-            )}
+            ))}
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/boms">Back to list</Link>
             </Button>
@@ -229,35 +233,41 @@ export default function BomDetailPage() {
                     <TableCell>{item.isOptional ? "Yes" : "No"}</TableCell>
                     <TableCell>{item.scrapFactor ?? "—"}</TableCell>
                     <TableCell>
-                      <Button size="sm" variant="ghost" onClick={() => {
-                        setEditingItem(item);
-                        setSheetOpen(true);
-                      }}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive"
-                        onClick={() => {
-                          void saveItems(bom.items.filter((candidate) => candidate.id !== item.id));
-                        }}
-                      >
-                        Remove
-                      </Button>
+                      {canWrite && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => {
+                            setEditingItem(item);
+                            setSheetOpen(true);
+                          }}>
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            onClick={() => {
+                              void saveItems(bom.items.filter((candidate) => candidate.id !== item.id));
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
             <div className="border-t p-4">
-              <Button size="sm" onClick={() => {
-                setEditingItem(null);
-                setSheetOpen(true);
-              }}>
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                Add component
-              </Button>
+              {canWrite && (
+                <Button size="sm" onClick={() => {
+                  setEditingItem(null);
+                  setSheetOpen(true);
+                }}>
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Add component
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -271,6 +281,7 @@ export default function BomDetailPage() {
             <div className="space-y-2">
               <Label>Route</Label>
               <Select
+                disabled={!canWrite}
                 value={bom.routeId ?? "__none__"}
                 onValueChange={async (value) => {
                   try {

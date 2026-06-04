@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -50,6 +51,7 @@ const scope = "purchasing-orders";
 export default function PurchaseOrdersPage() {
   const router = useRouter();
   const baseCurrency = useBaseCurrency();
+  const canWrite = useCanWritePurchasing();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("OPEN");
@@ -175,7 +177,7 @@ export default function PurchaseOrdersPage() {
         id: "actions",
         header: "",
         accessor: (r: PurchasingDocRow) =>
-          r.status === "PENDING_APPROVAL" ? (
+          canWrite && r.status === "PENDING_APPROVAL" ? (
             <Button
               size="sm"
               variant="outline"
@@ -203,7 +205,7 @@ export default function PurchaseOrdersPage() {
           ) : null,
       },
     ],
-    [approvingId, loadPage, pageOffset, baseCurrency],
+    [approvingId, loadPage, pageOffset, baseCurrency, canWrite],
   );
 
   const handleClearFilters = () => {
@@ -251,14 +253,14 @@ export default function PurchaseOrdersPage() {
           { label: "Purchase Orders" },
         ]}
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button asChild>
             <Link href="/docs/purchase-order/new">
               <Icons.Plus className="mr-2 h-4 w-4" />
               Create PO
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <ExceptionBanner
@@ -327,31 +329,33 @@ export default function PurchaseOrdersPage() {
                 <span className="text-sm text-muted-foreground">
                   {selectedIds.length} selected
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    const pendingIds = selectedIds.filter(
-                      (sid) => rows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL",
-                    );
-                    if (pendingIds.length === 0) {
-                      toast.info("No pending-approval POs in selection.");
-                      return;
+                {canWrite && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const pendingIds = selectedIds.filter(
+                        (sid) => rows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL",
+                      );
+                      if (pendingIds.length === 0) {
+                        toast.info("No pending-approval POs in selection.");
+                        return;
+                      }
+                      await approvePurchaseOrders(pendingIds);
+                      toast.success(`${pendingIds.length} purchase order(s) approved.`);
+                      setSelectedIds([]);
+                      await loadPage(pageOffset);
+                    }}
+                  >
+                    Approve (
+                    {
+                      selectedIds.filter(
+                        (sid) => rows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL",
+                      ).length
                     }
-                    await approvePurchaseOrders(pendingIds);
-                    toast.success(`${pendingIds.length} purchase order(s) approved.`);
-                    setSelectedIds([]);
-                    await loadPage(pageOffset);
-                  }}
-                >
-                  Approve (
-                  {
-                    selectedIds.filter(
-                      (sid) => rows.find((r) => r.id === sid)?.status === "PENDING_APPROVAL",
-                    ).length
-                  }
-                  )
-                </Button>
+                    )
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

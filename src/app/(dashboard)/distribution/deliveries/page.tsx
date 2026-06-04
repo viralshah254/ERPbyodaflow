@@ -12,6 +12,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 const MOCK = [
@@ -21,6 +22,7 @@ const MOCK = [
 
 export default function DistributionDeliveriesPage() {
   const terminology = useTerminology();
+  const canWrite = useCanWriteDistribution();
   const deliveryLabel = t("delivery", terminology);
 
   const columns = [
@@ -38,7 +40,7 @@ export default function DistributionDeliveriesPage() {
         sticky
         showCommandHint
         actions={
-          <Button>
+          canWrite && <Button>
             <Icons.Plus className="mr-2 h-4 w-4" />
             New delivery
           </Button>

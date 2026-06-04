@@ -31,6 +31,7 @@ import {
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -66,6 +67,7 @@ function toRow(route: ManufacturingRoute): RouteRow {
 }
 
 export default function RoutingPage() {
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
 
@@ -241,7 +243,7 @@ export default function RoutingPage() {
       {
         id: "actions",
         header: "",
-        accessor: (r: RouteRow) => (
+        accessor: (r: RouteRow) => canWrite ? (
           <Button
             size="sm"
             variant="ghost"
@@ -253,10 +255,10 @@ export default function RoutingPage() {
           >
             Edit
           </Button>
-        ),
+        ) : null,
       },
     ],
-    []
+    [canWrite]
   );
 
   return (
@@ -275,10 +277,12 @@ export default function RoutingPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/boms">BOMs</Link>
             </Button>
-            <Button size="sm" onClick={() => void openNewRoute()}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              New route
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={() => void openNewRoute()}>
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                New route
+              </Button>
+            )}
           </div>
         }
       />

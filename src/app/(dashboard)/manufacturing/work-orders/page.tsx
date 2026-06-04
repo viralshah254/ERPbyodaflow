@@ -35,6 +35,7 @@ import { fetchGRNs } from "@/lib/api/grn";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
 import { hydrateProductsFromApi, listProducts, subscribeProductsCache } from "@/lib/data/products.repo";
 import { isApiConfigured } from "@/lib/api/client";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -51,6 +52,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function WorkOrdersPage() {
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
@@ -288,17 +290,17 @@ export default function WorkOrdersPage() {
         header: "",
         accessor: (r: ManufacturingWorkOrder) => (
           <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-            {r.status === "DRAFT" && (
+            {canWrite && r.status === "DRAFT" && (
               <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "release" })}>
                 Release
               </Button>
             )}
-            {r.status === "RELEASED" && (
+            {canWrite && r.status === "RELEASED" && (
               <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "start" })}>
                 Start
               </Button>
             )}
-            {r.status === "IN_PROGRESS" && (
+            {canWrite && r.status === "IN_PROGRESS" && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -350,10 +352,12 @@ export default function WorkOrdersPage() {
         breadcrumbs={[{ label: areaLabel, href: "/manufacturing/work-orders" }, { label: woLabel }]}
         sticky
         actions={
-          <Button size="sm" onClick={() => setSheetOpen(true)}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            New work order
-          </Button>
+          canWrite ? (
+            <Button size="sm" onClick={() => setSheetOpen(true)}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              New work order
+            </Button>
+          ) : undefined
         }
       />
 

@@ -72,6 +72,7 @@ import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -1517,6 +1518,7 @@ const ALLOCATION_STATUS_OPTIONS = [
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function InventoryCostingPage() {
+  const canWrite = useCanWriteInventory();
   const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
   const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
   const authPermissions = useAuthStore((s) => s.permissions);
@@ -1704,7 +1706,7 @@ export default function InventoryCostingPage() {
         showCommandHint
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            <Button
+            {canWrite && <Button
               size="sm"
               disabled={runCostingLoading}
               onClick={async () => {
@@ -1732,7 +1734,7 @@ export default function InventoryCostingPage() {
             >
               <Icons.Play className="mr-2 h-4 w-4" />
               Run costing
-            </Button>
+            </Button>}
             {hasCashWeightAudit && (
               <Button variant="outline" size="sm" asChild>
                 <Link href="/purchasing/cash-weight-audit">Cash-to-weight audit</Link>
@@ -2014,7 +2016,7 @@ export default function InventoryCostingPage() {
                             <Icons.CheckCircle2 className="h-3 w-3" />
                             Allocated
                           </Badge>
-                          {canEditAllocated && (
+                          {canWrite && canEditAllocated && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -2027,7 +2029,7 @@ export default function InventoryCostingPage() {
                             </Button>
                           )}
                         </div>
-                      ) : (
+                      ) : canWrite ? (
                         <Button
                           size="sm"
                           variant="default"
@@ -2037,7 +2039,7 @@ export default function InventoryCostingPage() {
                           <Icons.Sparkles className="mr-1.5 h-3.5 w-3.5" />
                           Allocate
                         </Button>
-                      )}
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

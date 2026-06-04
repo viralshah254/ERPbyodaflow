@@ -42,6 +42,7 @@ import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { formatMoney } from "@/lib/money";
+import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 
 const SEARCH_DEBOUNCE_MS = 400;
@@ -149,6 +150,7 @@ export default function DocTypeListPage() {
   const type = params.type as string;
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
+  const canWrite = useCanWriteDocType(type);
   const labelKey = (config?.termKey ?? TYPE_LABELS[type]) as string;
   const label = t(
     labelKey as
@@ -338,9 +340,11 @@ export default function DocTypeListPage() {
   );
 
   const showBulkApprove =
+    canWrite &&
     selectedIds.length > 0 &&
     selectedRows.some((r) => r.status === "PENDING_APPROVAL");
   const showBulkPost =
+    canWrite &&
     selectedIds.length > 0 &&
     DOC_BULK_POST_RULES[type as DocTypeKey]?.canPost === true;
 
@@ -473,12 +477,14 @@ export default function DocTypeListPage() {
         breadcrumbs={[{ label: "Documents", href: "/docs" }, { label }]}
         showCommandHint
         actions={
-          <Button asChild>
-            <Link href={`/docs/${type}/new`} data-tour-step="create-button">
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              New {label}
-            </Link>
-          </Button>
+          canWrite ? (
+            <Button asChild>
+              <Link href={`/docs/${type}/new`} data-tour-step="create-button">
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                New {label}
+              </Link>
+            </Button>
+          ) : undefined
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>

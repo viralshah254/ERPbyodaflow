@@ -14,11 +14,13 @@ import {
   postWarehouseDropReceive,
   type PendingWarehouseDropRow,
 } from "@/lib/api/dispatch-warehouse";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
 export default function DispatchReturnDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteInventory();
   const [row, setRow] = React.useState<PendingWarehouseDropRow | null | undefined>(undefined);
   const [weights, setWeights] = React.useState<Record<string, string>>({});
   const [posting, setPosting] = React.useState(false);
@@ -122,9 +124,9 @@ export default function DispatchReturnDetailPage() {
                 <p className="text-xs text-muted-foreground">Driver dropped: {l.droppedWeightKg} kg</p>
               </div>
             ))}
-            <Button onClick={onPost} disabled={posting}>
+            {canWrite && <Button onClick={onPost} disabled={posting}>
               {posting ? "Posting…" : "Post to stock"}
-            </Button>
+            </Button>}
           </CardContent>
         </Card>
       </div>

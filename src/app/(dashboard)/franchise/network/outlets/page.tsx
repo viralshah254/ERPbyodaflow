@@ -54,6 +54,7 @@ import {
 import { assignOutletPricingZone } from "@/lib/api/franchise-pricing";
 import { fetchPricingZones } from "@/lib/api/pricing-engine";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
 import { Loader2, Plus, Wrench, Target, CheckCircle2, Clock, AlertTriangle, Minus, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -109,11 +110,12 @@ export default function FranchiseOutletsPage() {
   const [zoneDraft, setZoneDraft] = React.useState<Record<string, string>>({});
   const [savingZoneFor, setSavingZoneFor] = React.useState<string | null>(null);
   const permissions = useAuthStore((s) => s.permissions);
+  const canWrite = useCanWriteFranchise();
   const canView =
     permissions.includes("franchise.network.read") ||
     permissions.includes("franchise.analytics.read") ||
     permissions.includes("admin.users");
-  const canAdd = permissions.includes("franchise.network.write") || permissions.includes("admin.users");
+  const canAdd = canWrite && (permissions.includes("franchise.network.write") || permissions.includes("admin.users"));
 
   const load = React.useCallback(
     async (offset: number) => {

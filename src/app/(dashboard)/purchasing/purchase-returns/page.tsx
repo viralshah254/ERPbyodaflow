@@ -29,6 +29,7 @@ import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -45,6 +46,7 @@ const scope = "purchasing-returns";
 
 export default function PurchaseReturnsPage() {
   const baseCurrency = useBaseCurrency();
+  const canWrite = useCanWritePurchasing();
   const [searchInput, setSearchInput] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -295,12 +297,12 @@ export default function PurchaseReturnsPage() {
           { label: "Purchase Returns" },
         ]}
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button disabled={creating} onClick={() => void handleCreateReturn()}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create Return
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -332,9 +334,11 @@ export default function PurchaseReturnsPage() {
                 selectedIds.length > 0 ? (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
-                    <Button variant="outline" size="sm" disabled={approving} onClick={() => void handleBulkApprove()}>
-                      Approve
-                    </Button>
+                    {canWrite && (
+                      <Button variant="outline" size="sm" disabled={approving} onClick={() => void handleBulkApprove()}>
+                        Approve
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={handleExport}>
                       Export
                     </Button>
@@ -428,17 +432,19 @@ export default function PurchaseReturnsPage() {
                 <StatusBadge status={selectedReturn.status} />
               </p>
               <div className="pt-4">
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    await approvePurchaseReturnApi(selectedReturn.id);
-                    await refreshCurrentPage();
-                    setDetailOpen(false);
-                    toast.success("Return approved.");
-                  }}
-                >
-                  Approve return
-                </Button>
+                {canWrite && (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await approvePurchaseReturnApi(selectedReturn.id);
+                      await refreshCurrentPage();
+                      setDetailOpen(false);
+                      toast.success("Return approved.");
+                    }}
+                  >
+                    Approve return
+                  </Button>
+                )}
               </div>
             </div>
           )}

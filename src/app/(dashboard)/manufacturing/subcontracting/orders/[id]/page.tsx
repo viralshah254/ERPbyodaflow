@@ -43,6 +43,7 @@ import { fetchYieldRecords } from "@/lib/api/yield";
 import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCard";
 import type { SubcontractOrderLineRow } from "@/lib/mock/manufacturing/subcontracting";
 import { formatMoney } from "@/lib/money";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
@@ -138,6 +139,7 @@ function ReceiveWeightRow({
 export default function SubcontractOrderDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const [order, setOrder] = React.useState<Awaited<ReturnType<typeof fetchSubcontractOrderById>>>(null);
@@ -478,7 +480,7 @@ export default function SubcontractOrderDetailPage() {
         showCommandHint
         actions={
           <div className="flex flex-wrap gap-2">
-            {order.status === "SENT" && (
+            {canWrite && order.status === "SENT" && (
               <Button size="sm" variant="secondary" disabled={dispatching} onClick={handleDispatch}>
                 {dispatching ? "Dispatching…" : "Mark as In Processing"}
               </Button>
@@ -552,7 +554,7 @@ export default function SubcontractOrderDetailPage() {
               </div>
             )}
 
-            {order.status === "WIP" && (
+            {order.status === "WIP" && canWrite && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Outbound trip</CardTitle>
@@ -789,9 +791,11 @@ export default function SubcontractOrderDetailPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
                 <CardTitle className="text-base">Yield batches</CardTitle>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/manufacturing/yield?subcontractOrderId=${id}`}>Record yield</Link>
-                </Button>
+                {canWrite && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/manufacturing/yield?subcontractOrderId=${id}`}>Record yield</Link>
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="p-0">
                 {sidebarLoading ? (

@@ -49,6 +49,7 @@ import { useTerminology } from "@/stores/orgContextStore";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -58,6 +59,7 @@ export default function ProductVariantsPage() {
   const id = params.id as string;
   const user = useAuthStore((s) => s.user);
   const canDelete = canDeleteEntity(user);
+  const canWrite = useCanWriteInventory();
   const terminology = useTerminology();
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
@@ -179,10 +181,12 @@ export default function ProductVariantsPage() {
                 Copilot
               </Button>
             ) : null}
-            <Button size="sm" onClick={() => { setEditing(null); setSheetOpen(true); }}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Add variant
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={() => { setEditing(null); setSheetOpen(true); }}>
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Add variant
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href={`/master/products/${id}`}>Product</Link>
             </Button>

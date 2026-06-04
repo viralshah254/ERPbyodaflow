@@ -26,6 +26,7 @@ import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -36,6 +37,7 @@ const STATUS_OPTIONS = [
 const scope = "sales-invoices";
 
 export default function SalesInvoicesPage() {
+  const canWrite = useCanWriteSales();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -152,7 +154,7 @@ export default function SalesInvoicesPage() {
         ]}
         sticky
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link href="/docs/credit-note/new">
@@ -173,7 +175,7 @@ export default function SalesInvoicesPage() {
               </Link>
             </Button>
           </div>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar className="shrink-0"

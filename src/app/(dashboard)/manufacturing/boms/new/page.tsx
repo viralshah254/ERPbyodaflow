@@ -24,6 +24,7 @@ import type { BomType } from "@/lib/manufacturing/types";
 import type { ProductRow } from "@/lib/types/masters";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -36,10 +37,15 @@ function pickKgUomCode(codes: string[]): string | undefined {
 
 export default function NewBomPage() {
   const router = useRouter();
+  const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const templateId = useOrgContextStore((s) => s.templateId);
   const isCoolCatchTemplate = templateId === "cool-catch";
+
+  if (!canWrite) {
+    return <div className="p-8 text-center text-muted-foreground">You do not have write access to manufacturing.</div>;
+  }
 
   const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [uomCodes, setUomCodes] = React.useState<string[]>([]);

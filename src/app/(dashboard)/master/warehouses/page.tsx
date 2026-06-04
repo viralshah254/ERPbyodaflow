@@ -29,6 +29,7 @@ import {
   updateWarehouseApi,
 } from "@/lib/api/warehouses";
 import { t } from "@/lib/terminology";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -47,6 +48,7 @@ function suggestNextWarehouseCode(existing: string[]): string {
 
 export default function MasterWarehousesPage() {
   const terminology = useTerminology();
+  const canWrite = useCanWriteInventory();
   const warehouseLabel = t("warehouse", terminology);
 
   const [search, setSearch] = React.useState("");
@@ -171,12 +173,14 @@ export default function MasterWarehousesPage() {
         sticky
         showCommandHint
         actions={
-          <Button
-            onClick={openCreate}
-          >
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add {warehouseLabel}
-          </Button>
+          canWrite ? (
+            <Button
+              onClick={openCreate}
+            >
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add {warehouseLabel}
+            </Button>
+          ) : undefined
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
@@ -198,16 +202,16 @@ export default function MasterWarehousesPage() {
             icon="MapPin"
             title={`No ${warehouseLabel.toLowerCase()}s`}
             description="Add your first warehouse."
-            action={{
+            action={canWrite ? {
               label: `Add ${warehouseLabel}`,
               onClick: openCreate,
-            }}
+            } : undefined}
           />
         ) : (
           <DataTable<WarehouseRow>
             data={filtered}
             columns={columns}
-            onRowClick={openEdit}
+            onRowClick={canWrite ? openEdit : undefined}
             emptyMessage={`No ${warehouseLabel.toLowerCase()}s.`}
             scrollMode="fill"
             size="comfortable"

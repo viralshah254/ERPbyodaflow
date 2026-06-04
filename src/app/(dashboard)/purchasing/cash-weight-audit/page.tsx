@@ -64,6 +64,7 @@ import * as Icons from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { Permissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -284,6 +285,7 @@ function groupAuditLinesByPo(
 export default function CashWeightAuditPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const canWrite = useCanWritePurchasing();
   const permissions = useAuthStore((s) => s.permissions);
   const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
   const canOverride =
@@ -1350,6 +1352,7 @@ export default function CashWeightAuditPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            {canWrite && (
             <Sheet open={disbursementOpen} onOpenChange={setDisbursementOpen}>
               <SheetTrigger asChild>
                 <Button size="sm">
@@ -2023,6 +2026,7 @@ export default function CashWeightAuditPage() {
                 </div>
               </SheetContent>
             </Sheet>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href="/ap/three-way-match">Standard 3-way match</Link>
             </Button>

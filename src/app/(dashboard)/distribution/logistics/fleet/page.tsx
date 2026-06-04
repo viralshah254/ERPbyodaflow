@@ -36,6 +36,7 @@ import {
   type VehiclePeriodSummary,
 } from "@/lib/api/logistics";
 import { formatMoney } from "@/lib/money";
+import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import { Truck, Plus, Pencil, Trash2 } from "lucide-react";
 
@@ -60,6 +61,7 @@ const emptyForm = (): VehicleForm => ({
 });
 
 export default function FleetPage() {
+  const canWrite = useCanWriteDistribution();
   const [vehicles, setVehicles] = React.useState<(DistributionVehicleRow & { isActive?: boolean })[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -274,7 +276,7 @@ export default function FleetPage() {
         { label: "Fleet" },
       ]}
       actions={
-        <Button onClick={openCreate} size="sm">
+        canWrite && <Button onClick={openCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" />
           Add vehicle
         </Button>
@@ -326,17 +328,17 @@ export default function FleetPage() {
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(v)}>
+                      {canWrite && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(v)}>
                         <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
+                      </Button>}
+                      {canWrite && <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
                         onClick={() => setDeleteTarget(v)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      </Button>}
                     </div>
                   </div>
                 ))}
@@ -419,7 +421,7 @@ export default function FleetPage() {
                 </div>
               ) : null}
 
-              {periodSummary?.status !== "CLOSED" && (
+              {periodSummary?.status !== "CLOSED" && canWrite && (
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">

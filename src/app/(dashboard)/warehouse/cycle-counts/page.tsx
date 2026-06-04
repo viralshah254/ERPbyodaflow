@@ -16,10 +16,12 @@ import { createCycleCountTask, fetchCycleCountTasks, type WarehouseCycleCountRow
 import { fetchWarehouseLocations } from "@/lib/api/warehouse-locations";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 export default function CycleCountsPage() {
   const router = useRouter();
+  const canWrite = useCanWriteInventory();
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<WarehouseCycleCountRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -85,7 +87,7 @@ export default function CycleCountsPage() {
         sticky
         showCommandHint
         actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          canWrite && <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create session
           </Button>

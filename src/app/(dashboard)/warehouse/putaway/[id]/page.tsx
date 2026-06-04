@@ -12,11 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchPutawayTask, updatePutawayTask, confirmPutawayTask, type WarehousePutawayRow } from "@/lib/api/warehouse-execution";
 import { fetchWarehouseLocations } from "@/lib/api/warehouse-locations";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
 export default function PutawayDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteInventory();
   const [task, setTask] = React.useState<WarehousePutawayRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [locations, setLocations] = React.useState<Array<{ id: string; code?: string; name: string }>>([]);
@@ -156,7 +158,7 @@ export default function PutawayDetailPage() {
           </CardContent>
         </Card>
         <div className="flex gap-2">
-          <Button
+          {canWrite && <Button
             onClick={async () => {
               await updatePutawayTask(
                 task.id,
@@ -171,8 +173,8 @@ export default function PutawayDetailPage() {
             }}
           >
             Save allocation
-          </Button>
-          <Button
+          </Button>}
+          {canWrite && <Button
             variant="secondary"
             onClick={async () => {
               await confirmPutawayTask(task.id);
@@ -181,7 +183,7 @@ export default function PutawayDetailPage() {
             }}
           >
             Confirm putaway
-          </Button>
+          </Button>}
           {task.sourceDocumentId ? (
             <Button variant="outline" asChild>
               <Link href={`/inventory/receipts/${task.sourceDocumentId}`}>Open receipt</Link>

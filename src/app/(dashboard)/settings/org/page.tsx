@@ -38,6 +38,7 @@ function formatBytes(bytes?: number): string {
 
 export default function OrganizationPage() {
   const permissions = useAuthStore((s) => s.permissions);
+  const canReadOrg = permissions.includes("settings.org.read") || permissions.includes("*");
   const canManageOrg = permissions.includes("admin.settings");
 
   const { templateId, template } = useOrgContextStore();
@@ -167,6 +168,16 @@ export default function OrganizationPage() {
       if (kind === "logo" && logoFileRef.current) logoFileRef.current.value = "";
     }
   };
+
+  if (!canReadOrg) {
+    return (
+      <PageLayout title="Organization Profile" description="Manage your organization details">
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-muted-foreground">You do not have permission to view this page.</p>
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout title="Organization Profile" description="Manage your organization details">

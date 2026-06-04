@@ -14,6 +14,7 @@ import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const NAV_LINKS = [
   { href: "/sales/quotes", label: "Quotes", icon: "FileText" as const },
@@ -33,6 +34,7 @@ type KpiData = {
 };
 
 export default function SalesOverviewPage() {
+  const canWrite = useCanWriteSales();
   const [kpis, setKpis] = React.useState<KpiData | null>(null);
   const [loading, setLoading] = React.useState(false);
 
@@ -95,14 +97,14 @@ export default function SalesOverviewPage() {
         breadcrumbs={[{ label: "Sales" }]}
         sticky
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button asChild>
             <Link href="/docs/sales-order/new">
               <Icons.Plus className="mr-2 h-4 w-4" />
               New Sales Order
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <div className="p-6 space-y-6">
 
@@ -239,12 +241,14 @@ export default function SalesOverviewPage() {
                 <CardTitle className="text-base">Quick actions</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
-                <Button asChild size="sm">
-                  <Link href="/docs/sales-order/new">
-                    <Icons.Plus className="mr-1.5 h-4 w-4" />
-                    New Sales Order
-                  </Link>
-                </Button>
+                {canWrite && (
+                  <Button asChild size="sm">
+                    <Link href="/docs/sales-order/new">
+                      <Icons.Plus className="mr-1.5 h-4 w-4" />
+                      New Sales Order
+                    </Link>
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/sales/orders">
                     <Icons.List className="mr-1.5 h-4 w-4" />

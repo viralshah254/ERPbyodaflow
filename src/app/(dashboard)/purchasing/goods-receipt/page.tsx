@@ -16,6 +16,7 @@ import { fetchGRNs, postGRN, type GrnPostError } from "@/lib/api/grn";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 const GRN_STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -28,6 +29,7 @@ const GRN_STATUS_OPTIONS = [
 
 export default function GoodsReceiptPage() {
   const router = useRouter();
+  const canWrite = useCanWritePurchasing();
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [rows, setRows] = React.useState<PurchasingDocRow[]>([]);
@@ -80,7 +82,7 @@ export default function GoodsReceiptPage() {
         id: "actions",
         header: "Actions",
         accessor: (row: PurchasingDocRow) =>
-          row.status === "DRAFT" ? (
+          canWrite && row.status === "DRAFT" ? (
             <Button
               size="sm"
               variant="outline"
@@ -113,7 +115,7 @@ export default function GoodsReceiptPage() {
           ) : null,
       },
     ],
-    [refresh]
+    [refresh, canWrite]
   );
 
   return (
@@ -127,12 +129,14 @@ export default function GoodsReceiptPage() {
             <Button variant="outline" asChild>
               <Link href="/inventory/receipts">Open Receipts</Link>
             </Button>
-            <Button asChild>
-              <Link href="/docs/grn/new">
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                Create GRN
-              </Link>
-            </Button>
+            {canWrite && (
+              <Button asChild>
+                <Link href="/docs/grn/new">
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Create GRN
+                </Link>
+              </Button>
+            )}
           </div>
         }
       />
@@ -159,7 +163,7 @@ export default function GoodsReceiptPage() {
               <div className="p-8 text-center text-sm text-muted-foreground">Loading GRNs...</div>
             ) : filtered.length === 0 ? (
               <div className="p-6">
-                <EmptyState icon="PackageCheck" title="No GRNs" description="Record goods received to update inventory." action={{ label: "Create GRN", onClick: () => router.push("/docs/grn/new") }} />
+                <EmptyState icon="PackageCheck" title="No GRNs" description="Record goods received to update inventory." action={canWrite ? { label: "Create GRN", onClick: () => router.push("/docs/grn/new") } : undefined} />
               </div>
             ) : (
               <div className={cn(LIST_TABLE_SCROLL_BODY_CLASS)}>

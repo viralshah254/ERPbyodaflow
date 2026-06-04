@@ -27,10 +27,12 @@ import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import type { FranchiseeStockRow, VMIReplenishmentOrderRow } from "@/lib/mock/franchise/vmi";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
 
 const VMI_SOURCE_WAREHOUSE_LS_KEY = "odaflow_vmi_source_warehouse_id";
 
 export default function FranchiseVmiPage() {
+  const canWrite = useCanWriteFranchise();
   const [tab, setTab] = React.useState<"suggestions" | "orders" | "stock">("suggestions");
   const [orderStatusFilter, setOrderStatusFilter] = React.useState<string>("");
   const [franchiseeFilter, setFranchiseeFilter] = React.useState<string>("");
@@ -173,7 +175,7 @@ export default function FranchiseVmiPage() {
     { id: "status", header: "Status", accessor: (r: VMIReplenishmentOrderRow) => <Badge variant={r.status === "RECEIVED" ? "default" : r.status === "SENT" ? "secondary" : "outline"}>{r.status}</Badge> },
     { id: "totalQty", header: "Total qty", accessor: (r: VMIReplenishmentOrderRow) => r.totalQty },
     { id: "actions", header: "", accessor: (r: VMIReplenishmentOrderRow) =>
-      r.status === "DRAFT" ? (
+      canWrite && r.status === "DRAFT" ? (
         <Button size="sm" variant="outline" disabled={confirmingId === r.id} onClick={() => handleConfirm(r)}>
           {confirmingId === r.id ? "Confirming…" : "Confirm"}
         </Button>
@@ -203,6 +205,7 @@ export default function FranchiseVmiPage() {
         sticky
         showCommandHint
         actions={
+          canWrite ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Select
               value={sourceWarehouseId || "__none__"}
@@ -235,6 +238,7 @@ export default function FranchiseVmiPage() {
               {autoReplenishing ? "Creating…" : "Create from suggestions"}
             </Button>
           </div>
+          ) : null
         }
       />
       <div className="p-6 space-y-6">
@@ -270,10 +274,10 @@ export default function FranchiseVmiPage() {
                         `On hand ${suggestion.qty} below reorder point ${suggestion.reorderPoint}`,
                         `Target max ${suggestion.maxQty}`,
                       ]}
-                      primaryAction={{
+                      primaryAction={canWrite ? {
                         label: "Create replenishment",
                         onClick: () => void handleAutoReplenish(),
-                      }}
+                      } : undefined}
                       secondaryAction={{
                         label: "Review stock",
                         onClick: () => setTab("stock"),

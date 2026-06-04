@@ -10,6 +10,7 @@ import { getDocTypeConfig } from "@/config/documents";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
+import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -21,6 +22,7 @@ export default function DocEditPage() {
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
+  const canWrite = useCanWriteDocType(type);
 
   const [loading, setLoading] = React.useState(true);
   const [document, setDocument] = React.useState<DocumentDetailRecord | null>(null);
@@ -51,6 +53,18 @@ export default function DocEditPage() {
       });
     return () => { cancelled = true; };
   }, [type, id, router]);
+
+  if (!canWrite) {
+    return (
+      <PageShell>
+        <div className="flex flex-col items-center justify-center py-24 gap-2 text-muted-foreground">
+          <Icons.ShieldX className="h-8 w-8" />
+          <p className="text-sm font-medium">You do not have write access</p>
+          <p className="text-xs">You lack the required permission to edit this document type.</p>
+        </div>
+      </PageShell>
+    );
+  }
 
   if (loading) {
     return (

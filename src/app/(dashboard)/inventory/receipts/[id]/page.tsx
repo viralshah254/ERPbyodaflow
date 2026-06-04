@@ -40,12 +40,14 @@ import {
   GRN_VARIANCE_REASON_LABELS,
   grnVarianceReasonCodesForDeltaKg,
 } from "@/lib/constants/grn-variance-reasons";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function ReceiptDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteInventory();
   const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
   const hasLandedCostMultiCurrency = useOrgContextStore((s) => s.hasFlag?.("landedCostMultiCurrency") ?? false);
   const currentUser = useAuthStore((s) => s.user);
@@ -460,7 +462,7 @@ export default function ReceiptDetailPage() {
         showCommandHint={false}
         actions={
           <div className="flex gap-2">
-            {(["DRAFT", "POSTED"].includes(grn.status) &&
+            {canWrite && (["DRAFT", "POSTED"].includes(grn.status) &&
               (String((grn as unknown as Record<string, unknown>).createdBy ?? "") === (currentUserId ?? "") || isAdmin)) && (
               <Button
                 size="sm"
@@ -477,7 +479,7 @@ export default function ReceiptDetailPage() {
                 Edit
               </Button>
             )}
-            {grn.status === "DRAFT" && (
+            {canWrite && grn.status === "DRAFT" && (
               <TooltipProvider delayDuration={200}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -554,7 +556,7 @@ export default function ReceiptDetailPage() {
                   View Bill ({grn.linkedBill.number})
                 </Link>
               </Button>
-            ) : (grn.status === "POSTED" || grn.status === "RECEIVED") ? (
+            ) : canWrite && (grn.status === "POSTED" || grn.status === "RECEIVED") ? (
               <Button
                 size="sm"
                 variant="default"
@@ -589,7 +591,7 @@ export default function ReceiptDetailPage() {
                 <Link href="/purchasing/cash-weight-audit">Cash-to-weight audit</Link>
               </Button>
             )}
-            {hasLandedCostMultiCurrency && (
+            {canWrite && hasLandedCostMultiCurrency && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/inventory/costing?sourceId=${id}`}>Add additional costs</Link>
               </Button>
@@ -627,7 +629,7 @@ export default function ReceiptDetailPage() {
                     ? "This GRN is a draft — post it to update inventory."
                     : "Apply additional costs before posting this GRN."}
                 </span>
-                {hasAnyCosts ? (
+                {canWrite && (hasAnyCosts ? (
                   <Button
                     size="sm"
                     variant="default"
@@ -672,7 +674,7 @@ export default function ReceiptDetailPage() {
                       Apply costs
                     </Link>
                   </Button>
-                )}
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -695,12 +697,14 @@ export default function ReceiptDetailPage() {
                     Enter processed weight
                   </Button>
                 )}
-                <Button size="sm" variant="outline" asChild>
-                  <Link href={`/inventory/costing?sourceId=${grn.id}`}>
-                    <Icons.TrendingUp className="mr-1.5 h-3.5 w-3.5" />
-                    Apply additional costs
-                  </Link>
-                </Button>
+                {canWrite && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/inventory/costing?sourceId=${grn.id}`}>
+                      <Icons.TrendingUp className="mr-1.5 h-3.5 w-3.5" />
+                      Apply additional costs
+                    </Link>
+                  </Button>
+                )}
                 {hasCashWeightAudit && (
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/purchasing/cash-weight-audit${grn.sourceDocumentId ? `?poId=${grn.sourceDocumentId}` : grn.poRef ? `?poId=${grn.poRef}` : ""}`}>
@@ -709,7 +713,7 @@ export default function ReceiptDetailPage() {
                     </Link>
                   </Button>
                 )}
-                {!grn.linkedBill && (
+                {canWrite && !grn.linkedBill && (
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/docs/bill/new?grnId=${grn.id}`}>
                       <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
@@ -737,7 +741,7 @@ export default function ReceiptDetailPage() {
                 <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                   Goods fully received — create supplier bill and run 3-way match.
                 </span>
-                {!grn.linkedBill && (
+                {canWrite && !grn.linkedBill && (
                   <Button size="sm" variant="default" asChild>
                     <Link href={`/docs/bill/new?grnId=${grn.id}`}>
                       <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
@@ -957,7 +961,7 @@ export default function ReceiptDetailPage() {
                         </Link>
                       </Button>
                     </div>
-                  ) : canEditProcessedWeight && hasAnyProcessedWeight ? (
+                  ) : canWrite && canEditProcessedWeight && hasAnyProcessedWeight ? (
                     <div className="flex items-center gap-3">
                       <Button
                         size="sm"

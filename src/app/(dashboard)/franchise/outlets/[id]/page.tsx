@@ -69,6 +69,7 @@ import {
   MapPin,
   Settings2,
 } from "lucide-react";
+import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
 
 // ─── KPI Cards ───────────────────────────────────────────────────────────────
 
@@ -760,6 +761,7 @@ function GeoSettingsTab({
   initialLat?: number;
   initialLng?: number;
 }) {
+  const canWrite = useCanWriteFranchise();
   const [lat, setLat] = React.useState(initialLat != null ? String(initialLat) : "");
   const [lng, setLng] = React.useState(initialLng != null ? String(initialLng) : "");
   const [saving, setSaving] = React.useState(false);
@@ -841,11 +843,11 @@ function GeoSettingsTab({
             </a>
           </p>
         )}
-        <div>
+        {canWrite && <div>
           <Button onClick={() => void handleSave()} disabled={saving}>
             {saving ? "Saving…" : "Save coordinates"}
           </Button>
-        </div>
+        </div>}
       </CardContent>
     </Card>
   );

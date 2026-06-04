@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { fetchTransferById, updateTransferStatus, type TransferRow } from "@/lib/api/warehouse-transfers";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -30,6 +31,7 @@ function statusVariant(s: string): "default" | "secondary" | "outline" {
 export default function TransferDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteInventory();
   const [transfer, setTransfer] = React.useState<TransferRow | null | undefined>(undefined);
 
   React.useEffect(() => {
@@ -92,7 +94,7 @@ export default function TransferDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            {canApprove && (
+            {canWrite && canApprove && (
               <Button
                 size="sm"
                 onClick={async () => {
@@ -104,7 +106,7 @@ export default function TransferDetailPage() {
                 Approve
               </Button>
             )}
-            {canTransit && (
+            {canWrite && canTransit && (
               <Button
                 size="sm"
                 onClick={async () => {
@@ -116,7 +118,7 @@ export default function TransferDetailPage() {
                 Mark in transit
               </Button>
             )}
-            {canReceive && (
+            {canWrite && canReceive && (
               <Button
                 size="sm"
                 onClick={async () => {

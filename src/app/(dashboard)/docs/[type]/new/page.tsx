@@ -8,6 +8,8 @@ import { DocumentCreateWizard } from "@/components/docs/DocumentCreateWizard";
 import { getDocTypeConfig } from "@/config/documents";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
+import * as Icons from "lucide-react";
 
 export default function DocTypeNewPage() {
   const params = useParams();
@@ -16,6 +18,19 @@ export default function DocTypeNewPage() {
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
+  const canWrite = useCanWriteDocType(type);
+
+  if (!canWrite) {
+    return (
+      <PageShell>
+        <div className="flex flex-col items-center justify-center py-24 gap-2 text-muted-foreground">
+          <Icons.ShieldX className="h-8 w-8" />
+          <p className="text-sm font-medium">You do not have write access</p>
+          <p className="text-xs">You lack the required permission to create this document type.</p>
+        </div>
+      </PageShell>
+    );
+  }
 
   // ?poId= — GRN from PO, or supplier bill from PO lifecycle (supplier + lines prefilled)
   const initialPoId =

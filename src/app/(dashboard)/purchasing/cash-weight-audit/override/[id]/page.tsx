@@ -13,6 +13,7 @@ import type { ApprovalItem } from "@/lib/types/approvals";
 import { fetchApprovalById, approveApprovalApi, rejectApprovalApi } from "@/lib/api/approvals";
 import { toast } from "sonner";
 import { ArrowLeft, Scale, CheckCircle2, XCircle, Clock, ArrowRight } from "lucide-react";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 type OverridePayload = {
   // Proposed (new) values
@@ -99,6 +100,7 @@ function StatusBadge({ status }: { status: ApprovalItem["status"] }) {
 export default function OverrideDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const canWrite = useCanWritePurchasing();
   const id = params.id as string;
 
   const [approval, setApproval] = React.useState<ApprovalItem | null>(null);
@@ -306,7 +308,7 @@ export default function OverrideDetailPage() {
           </Card>
 
           {/* Approve / Reject actions */}
-          {isPending && (
+          {isPending && canWrite && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Decision</CardTitle>

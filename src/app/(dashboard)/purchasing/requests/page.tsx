@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -38,6 +39,7 @@ const scope = "purchasing-requests";
 
 export default function PurchaseRequestsPage() {
   const router = useRouter();
+  const canWrite = useCanWritePurchasing();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -159,7 +161,7 @@ export default function PurchaseRequestsPage() {
         id: "rowActions",
         header: "",
         accessor: (r: PurchasingDocRow) =>
-          r.status === "APPROVED" ? (
+          canWrite && r.status === "APPROVED" ? (
             <Button
               size="sm"
               variant="outline"
@@ -175,7 +177,7 @@ export default function PurchaseRequestsPage() {
           ) : null,
       },
     ],
-    [],
+    [canWrite],
   );
 
   const handleClearFilters = () => {
@@ -218,14 +220,14 @@ export default function PurchaseRequestsPage() {
           { label: "Purchase Requests" },
         ]}
         showCommandHint
-        actions={
+        actions={canWrite ? (
           <Button asChild>
             <Link href="/docs/purchase-request/new">
               <Icons.Plus className="mr-2 h-4 w-4" />
               Create Request
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <DataTableToolbar

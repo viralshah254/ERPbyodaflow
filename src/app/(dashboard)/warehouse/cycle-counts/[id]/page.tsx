@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchCycleCountTask, submitCycleCountTask, updateCycleCountTaskLine, type WarehouseCycleCountRow } from "@/lib/api/warehouse-execution";
+import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
 export default function CycleCountDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const canWrite = useCanWriteInventory();
   const [task, setTask] = React.useState<WarehouseCycleCountRow | null>(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -51,13 +53,13 @@ export default function CycleCountDetailPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={async () => {
+            {canWrite && <Button variant="secondary" onClick={async () => {
               await submitCycleCountTask(task.id);
               toast.success("Cycle count posted.");
               await refresh();
             }}>
               Submit & post
-            </Button>
+            </Button>}
             <Button variant="outline" size="sm" asChild>
               <Link href="/warehouse/cycle-counts">Back to list</Link>
             </Button>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 const DOC_TYPES = [
@@ -23,18 +24,21 @@ const DOC_TYPES = [
 
 export default function DocumentCenterHubPage() {
   const terminology = useTerminology();
+  const canWriteAnyDoc = useHasPermission("sales.write", "purchase.write", "finance.write", "finance.ar.write", "finance.gl.write", "admin.settings");
 
   return (
     <PageLayout
       title="Document Center"
       description="Create and manage core documents"
       actions={
-        <Button asChild>
-          <Link href="/docs/sales-order/new">
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            New document
-          </Link>
-        </Button>
+        canWriteAnyDoc ? (
+          <Button asChild>
+            <Link href="/docs/sales-order/new">
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              New document
+            </Link>
+          </Button>
+        ) : undefined
       }
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-tour-step="doc-type-list">

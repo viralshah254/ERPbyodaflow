@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/table";
 import { fetchSourcingBatches, type SourcingBatchRow } from "@/lib/api/coolcatch-gap";
 import { toast } from "sonner";
+import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
 
 export default function CoolcatchSourcingBatchesPage() {
+  const canWrite = useCanWritePurchasing();
   const [items, setItems] = React.useState<SourcingBatchRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -52,9 +54,11 @@ export default function CoolcatchSourcingBatchesPage() {
             <Button variant="outline" onClick={() => void refresh()} disabled={loading}>
               Refresh
             </Button>
-            <Button asChild>
-              <Link href="/purchasing/coolcatch-sourcing">New batch</Link>
-            </Button>
+            {canWrite && (
+              <Button asChild>
+                <Link href="/purchasing/coolcatch-sourcing">New batch</Link>
+              </Button>
+            )}
           </div>
         }
       />
