@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -309,7 +309,7 @@ export default function P9FormsPage() {
         }
       />
 
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-3">
           <Icons.Info className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
@@ -339,7 +339,7 @@ export default function P9FormsPage() {
           }
         />
 
-        <div className={LIST_TABLE_SURFACE_CLASS}>
+        <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
             <div>
               <h3 className="text-sm font-semibold">P9 Cards — {year}</h3>

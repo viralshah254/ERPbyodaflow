@@ -191,7 +191,7 @@ export default function InventoryValuationPage() {
         sticky
         showCommandHint
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         {loadError ? (
           <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <Icons.AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

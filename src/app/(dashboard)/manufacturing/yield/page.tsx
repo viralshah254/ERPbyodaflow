@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -642,7 +642,7 @@ export default function ManufacturingYieldPage() {
   );
 
   return (
-    <PageShell className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
+    <PageShell className="flex min-h-0 flex-1 flex-col gap-0">
       <PageHeader
         title="Yield / Mass balance"
         description="Record actual outputs per batch; compare to BOM-expected. Process loss = input − primary − secondary."
@@ -662,7 +662,7 @@ export default function ManufacturingYieldPage() {
         }
       />
 
-      <div className="flex min-h-0 flex-col overflow-hidden px-6 pb-6">
+      <div className="flex min-h-0 flex-col overflow-y-auto px-6 pb-6">
         <div className="flex shrink-0 gap-2 border-b pb-2">
           {(["records", "mass-balance"] as const).map((t) => (
             <Button key={t} variant={tab === t ? "secondary" : "ghost"} size="sm" onClick={() => setTab(t)}>
@@ -672,7 +672,7 @@ export default function ManufacturingYieldPage() {
         </div>
 
         {tab === "records" && (
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
             <div className="shrink-0">
               <h2 className="text-lg font-semibold tracking-tight">Yield records</h2>
               <p className="text-sm text-muted-foreground">
@@ -704,7 +704,7 @@ export default function ManufacturingYieldPage() {
             {!recordsLoadedOnce.current && recordsInitialLoading ? (
               <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-32", "w-36", "w-28", "w-20", "w-20", "w-20", "w-24", "w-16"]} />
             ) : (
-              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
                 <TableLinearProgress active={recordsTableBusy} />
                 <div className={cn("flex min-h-0 flex-1 flex-col transition-opacity duration-200", recordsTableBusy && "pointer-events-none opacity-60")}>
                   <DataTable<YieldRecordRow>
@@ -741,7 +741,7 @@ export default function ManufacturingYieldPage() {
         )}
 
         {tab === "mass-balance" && (
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
             <div className="shrink-0">
               <h2 className="text-lg font-semibold tracking-tight">Mass balance report</h2>
               <p className="text-sm text-muted-foreground">
@@ -793,7 +793,7 @@ export default function ManufacturingYieldPage() {
             {!mbLoadedOnce.current && mbInitialLoading ? (
               <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-8", "w-24", "w-36", "w-28", "w-20", "w-20", "w-20", "w-24", "w-16", "w-36"]} />
             ) : (
-              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
                 <TableLinearProgress active={mbTableBusy} />
                 <div className={cn("flex min-h-0 flex-1 flex-col transition-opacity duration-200", mbTableBusy && "pointer-events-none opacity-60")}>
                   <DataTable<MassBalanceSummaryRow>

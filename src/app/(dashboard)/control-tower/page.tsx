@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   Card,
@@ -717,7 +717,7 @@ export default function ControlTowerPage() {
                   />
 
                   {exceptions.filter((e) => e.exceptionType === "weight_variance").length > 0 ? (
-                    <div className={LIST_TABLE_SURFACE_CLASS}>
+                    <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Open Weight Variances</h3>
             <p className="text-xs text-muted-foreground">Lines with status VARIANCE requiring investigation or approval.</p>
@@ -763,7 +763,7 @@ export default function ControlTowerPage() {
                   </div>
 
                   {wipBalances.length > 0 ? (
-                    <div className={LIST_TABLE_SURFACE_CLASS}>
+                    <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">WIP by Work Center</h3>
             <p className="text-xs text-muted-foreground">Stock currently in the custody of each external processor.</p>

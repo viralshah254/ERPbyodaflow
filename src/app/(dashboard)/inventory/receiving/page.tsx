@@ -122,7 +122,7 @@ export default function InventoryReceivingQueuePage() {
           </div>
         }
       />
-      <div className="p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6">
         <div className="mb-6">
           <ProcurementVariancePanel
             poWeightKg={rows.reduce((a, r) => a + r.expectedWeightKg, 0)}
@@ -130,7 +130,7 @@ export default function InventoryReceivingQueuePage() {
             receivedWeightKg={rows.reduce((a, r) => a + (r.receivedWeightKg ?? 0), 0)}
           />
         </div>
-        <div className={LIST_TABLE_SURFACE_CLASS}>
+        <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Inbound receiving queue</h3>
             <p className="text-xs text-muted-foreground">Rows marked as variance should be reviewed before posting final receipt.</p>

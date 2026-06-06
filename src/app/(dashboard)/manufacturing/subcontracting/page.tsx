@@ -1213,7 +1213,7 @@ export default function SubcontractingPage() {
         }
       />
 
-      <div className="flex min-h-0 flex-col overflow-hidden px-6 pb-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6">
         <div className="flex shrink-0 gap-2 border-b pb-2">
           {(["orders", "wip", "workcenters"] as const).map((t) => (
             <Button key={t} variant={tab === t ? "secondary" : "ghost"} size="sm" onClick={() => setTab(t)}>
@@ -1224,7 +1224,7 @@ export default function SubcontractingPage() {
 
         <>
             {tab === "orders" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
                 <div className="shrink-0">
                   <h2 className="text-lg font-semibold tracking-tight">Subcontract orders</h2>
                   <p className="text-sm text-muted-foreground">
@@ -1292,7 +1292,7 @@ export default function SubcontractingPage() {
                     columnWidths={["w-28", "w-36", "w-32", "w-36", "w-28", "w-20", "w-24", "w-24", "w-32"]}
                   />
                 ) : (
-                  <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+                  <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
                     <TableLinearProgress active={ordersTableBusy} />
                     <div
                       className={cn(
@@ -1336,7 +1336,7 @@ export default function SubcontractingPage() {
             )}
 
             {tab === "wip" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
                 <div className="shrink-0">
                   <h2 className="text-lg font-semibold tracking-tight">WIP at processors</h2>
                   <p className="text-sm text-muted-foreground">
@@ -1388,7 +1388,7 @@ export default function SubcontractingPage() {
                     columnWidths={["w-40", "w-24", "w-48", "w-28", "w-36"]}
                   />
                 ) : (
-                  <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+                  <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
                     <TableLinearProgress active={wipTableBusy} />
                     <div
                       className={cn(
@@ -1430,7 +1430,7 @@ export default function SubcontractingPage() {
             )}
 
             {tab === "workcenters" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
                 <div className="flex shrink-0 items-start justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight">External work centers</h2>
@@ -1524,7 +1524,7 @@ export default function SubcontractingPage() {
                     columnWidths={["w-24", "w-40", "w-20", "w-36", "w-32", "w-16"]}
                   />
                 ) : (
-                  <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+                  <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
                     <TableLinearProgress active={wcTableBusy} />
                     <div
                       className={cn(

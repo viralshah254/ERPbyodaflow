@@ -338,8 +338,8 @@ export default function InventoryStockExplorerPage() {
         ]}
         showCommandHint
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
-        <Card className="shrink-0 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        <Card className="shrink-0">
           <CardHeader className="space-y-4 pb-4">
             <div>
               <CardTitle>Global stock explorer</CardTitle>
@@ -442,11 +442,11 @@ export default function InventoryStockExplorerPage() {
                 />
               </div>
             ) : (
-              <div className={LIST_TABLE_SURFACE_CLASS}>
+              <div>
                 <TableLinearProgress active={tableBusy} />
                 <div
                   className={cn(
-                    LIST_TABLE_SCROLL_BODY_CLASS,
+                    "transition-opacity duration-200",
                     tableBusy && "pointer-events-none opacity-60",
                   )}
                 >

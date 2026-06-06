@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -262,7 +262,7 @@ export default function PurchaseOrdersPage() {
           </Button>
         ) : undefined}
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         <ExceptionBanner
           type="info"
           title="Procurement workspace"
@@ -375,11 +375,11 @@ export default function PurchaseOrdersPage() {
             columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
           />
         ) : (
-          <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
-                LIST_TABLE_SCROLL_BODY_CLASS,
+                "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
                 tableBusy && "pointer-events-none opacity-60",
               )}
             >

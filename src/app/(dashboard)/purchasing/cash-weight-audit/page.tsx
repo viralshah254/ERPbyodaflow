@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
@@ -2034,7 +2034,7 @@ export default function CashWeightAuditPage() {
         }
       />
 
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         {/* ── Stat chips ─────────────────────────────────────────────────────── */}
         <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
           <Card className="p-4">
@@ -2202,11 +2202,11 @@ export default function CashWeightAuditPage() {
               />
             </div>
           ) : (
-            <div className={cn(LIST_TABLE_SURFACE_CLASS, "mx-4 mb-0 border-x-0 border-b-0 shadow-none rounded-none")}>
+            <div className={cn("relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm", "mx-4 mb-0 border-x-0 border-b-0 shadow-none rounded-none")}>
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(
-                  LIST_TABLE_SCROLL_BODY_CLASS,
+                  "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >

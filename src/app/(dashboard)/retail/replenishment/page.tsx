@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  LIST_PAGE_BODY_CLASS,
   LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_SURFACE_CLASS,
   PageShell,
 } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -43,8 +41,8 @@ export default function RetailReplenishmentPage() {
           </Button>
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
-        <div className={LIST_TABLE_SURFACE_CLASS}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Suggestions</h3>
           </div>
