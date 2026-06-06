@@ -1,13 +1,17 @@
 import { useAuthStore } from "@/stores/auth-store";
 
+function hasAnyPermission(permissions: string[], ...perms: string[]): boolean {
+  if (permissions.includes("*")) return true;
+  return perms.some((p) => permissions.includes(p));
+}
+
 /**
  * Returns true if the current user holds at least one of the given permissions.
  * Handles wildcard (`*`) automatically.
  */
 export function useHasPermission(...perms: string[]): boolean {
   const permissions = useAuthStore((s) => s.permissions);
-  if (permissions.includes("*")) return true;
-  return perms.some((p) => permissions.includes(p));
+  return hasAnyPermission(permissions, ...perms);
 }
 
 export function useCanWriteManufacturing(): boolean {
@@ -55,7 +59,8 @@ const DOC_TYPE_WRITE_PERMISSIONS: Record<string, string[]> = {
 };
 
 export function useCanWriteDocType(type: string): boolean {
+  const permissions = useAuthStore((s) => s.permissions);
   const perms = DOC_TYPE_WRITE_PERMISSIONS[type];
   if (!perms) return true;
-  return useHasPermission(...perms, "admin.settings");
+  return hasAnyPermission(permissions, ...perms, "admin.settings");
 }
