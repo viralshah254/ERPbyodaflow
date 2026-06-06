@@ -690,6 +690,57 @@ export async function syncVmIFranchiseSnapshotsFromLedger(body?: {
   );
 }
 
+export async function fetchCashWeightAuditLinesPage(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+  status?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<{
+  items: CashWeightAuditLineRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  totals: { orderedQty: number; paidWeightKg: number; receivedWeightKg: number };
+}> {
+  requireLiveApi("Cash-weight audit lines");
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 25;
+  const query = listParams({
+    dateFrom: params?.dateFrom,
+    dateTo: params?.dateTo,
+    status: params?.status,
+  });
+  query.limit = String(lim);
+  if (params?.cursor) query.cursor = params.cursor;
+  const res = await apiRequest<{
+    items: CashWeightAuditLineRow[];
+    total?: number;
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+    totals?: { orderedQty: number; paidWeightKg: number; receivedWeightKg: number };
+  }>("/api/purchasing/cash-weight-audit", { params: query });
+  const limit = typeof res.limit === "number" ? res.limit : lim;
+  const offset =
+    typeof res.offset === "number" ? res.offset : params?.cursor ? Number(params.cursor) || 0 : 0;
+  const items = res.items ?? [];
+  const total = typeof res.total === "number" ? res.total : items.length;
+  const hasMore =
+    typeof res.hasMore === "boolean" ? res.hasMore : offset + items.length < total;
+  return {
+    items,
+    total,
+    limit,
+    offset,
+    hasMore,
+    nextCursor: res.nextCursor ?? (hasMore ? String(offset + items.length) : null),
+    totals: res.totals ?? { orderedQty: 0, paidWeightKg: 0, receivedWeightKg: 0 },
+  };
+}
+
 export async function fetchCashWeightAuditLines(params?: {
   dateFrom?: string;
   dateTo?: string;

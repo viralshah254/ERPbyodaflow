@@ -1,10 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { ODA_BRAND } from "@/lib/brand";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = localFont({
+  src: "../fonts/inter-latin-wght-normal.woff2",
+  display: "swap",
+  weight: "100 900",
+});
 
 export const metadata: Metadata = {
   title: "ERP by OdaFlow",

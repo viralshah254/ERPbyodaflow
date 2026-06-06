@@ -266,11 +266,61 @@ export async function fetchFinancialStatementDrilldownApi(
   return payload.items ?? [];
 }
 
+export type LedgerPageResult = {
+  entries: LedgerEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchLedgerEntriesPageApi(params?: {
+  accountId?: string;
+  periodId?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<LedgerPageResult> {
+  requireLiveApi("Ledger entries");
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 25;
+  const qs = new URLSearchParams();
+  qs.set("limit", String(lim));
+  if (params?.cursor) qs.set("cursor", params.cursor);
+  if (params?.accountId) qs.set("accountId", params.accountId);
+  if (params?.periodId) qs.set("periodId", params.periodId);
+  if (params?.search?.trim()) qs.set("search", params.search.trim());
+  const payload = await apiRequest<{
+    entries: LedgerEntry[];
+    total?: number;
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/finance/ledger", { params: qs });
+  const entries = payload.entries ?? [];
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const offset =
+    typeof payload.offset === "number" ? payload.offset : params?.cursor ? Number(params.cursor) || 0 : 0;
+  const total = typeof payload.total === "number" ? payload.total : entries.length;
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : offset + entries.length < total;
+  return {
+    entries,
+    total,
+    limit,
+    offset,
+    hasMore,
+    nextCursor: payload.nextCursor ?? (hasMore ? String(offset + entries.length) : null),
+  };
+}
+
 export async function fetchLedgerEntriesApi(accountId?: string, periodId?: string): Promise<LedgerEntry[]> {
   requireLiveApi("Ledger entries");
   const params = new URLSearchParams();
   if (accountId) params.set("accountId", accountId);
   if (periodId) params.set("periodId", periodId);
+  params.set("limit", "5000");
   const payload = await apiRequest<{ entries: LedgerEntry[] }>("/api/finance/ledger", { params });
   return payload.entries ?? [];
 }
