@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_PAGINATION_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -863,7 +869,7 @@ export default function SubcontractingPage() {
   ];
 
   return (
-    <PageShell className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
+    <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Subcontracting / Job Work"
         description="WIP at external work centers — factories and women's groups. Processing fees auto-post to GL on receive."
@@ -1213,7 +1219,7 @@ export default function SubcontractingPage() {
         }
       />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6">
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         <div className="flex shrink-0 gap-2 border-b pb-2">
           {(["orders", "wip", "workcenters"] as const).map((t) => (
             <Button key={t} variant={tab === t ? "secondary" : "ghost"} size="sm" onClick={() => setTab(t)}>
@@ -1224,7 +1230,7 @@ export default function SubcontractingPage() {
 
         <>
             {tab === "orders" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
+              <div className="flex flex-col gap-3 pt-4">
                 <div className="shrink-0">
                   <h2 className="text-lg font-semibold tracking-tight">Subcontract orders</h2>
                   <p className="text-sm text-muted-foreground">
@@ -1292,11 +1298,11 @@ export default function SubcontractingPage() {
                     columnWidths={["w-28", "w-36", "w-32", "w-36", "w-28", "w-20", "w-24", "w-24", "w-32"]}
                   />
                 ) : (
-                  <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
+                  <div className={LIST_TABLE_STATIC_CLASS}>
                     <TableLinearProgress active={ordersTableBusy} />
                     <div
                       className={cn(
-                        "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+                        "transition-opacity duration-200",
                         ordersTableBusy && "pointer-events-none opacity-60"
                       )}
                     >
@@ -1304,7 +1310,7 @@ export default function SubcontractingPage() {
                         data={orders}
                         columns={orderColumns}
                         scrollMode="natural"
-                        maxVisibleRows={ordersPageSize}
+                        className="border-0 shadow-none"
                         onRowClick={(r) => window.location.assign(`/manufacturing/subcontracting/orders/${r.id}`)}
                         emptyMessage="No subcontract orders match your filters. Use Send to processor to create one."
                       />
@@ -1313,7 +1319,7 @@ export default function SubcontractingPage() {
                 )}
 
                 <TablePagination
-                  className="shrink-0"
+                  className={LIST_TABLE_PAGINATION_CLASS}
                   pageOffset={ordersPageOffset}
                   pageSize={ordersPageSize}
                   pageSizeOptions={[...ORDERS_PAGE_SIZE_OPTIONS]}
@@ -1336,7 +1342,7 @@ export default function SubcontractingPage() {
             )}
 
             {tab === "wip" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
+              <div className="flex flex-col gap-3 pt-4">
                 <div className="shrink-0">
                   <h2 className="text-lg font-semibold tracking-tight">WIP at processors</h2>
                   <p className="text-sm text-muted-foreground">
@@ -1388,11 +1394,11 @@ export default function SubcontractingPage() {
                     columnWidths={["w-40", "w-24", "w-48", "w-28", "w-36"]}
                   />
                 ) : (
-                  <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
+                  <div className={LIST_TABLE_STATIC_CLASS}>
                     <TableLinearProgress active={wipTableBusy} />
                     <div
                       className={cn(
-                        "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+                        "transition-opacity duration-200",
                         wipTableBusy && "pointer-events-none opacity-60"
                       )}
                     >
@@ -1401,7 +1407,7 @@ export default function SubcontractingPage() {
                         columns={wipColumns}
                         scrollMode="natural"
                         size="comfortable"
-                        className="min-h-0 flex-1 border-0"
+                        className="border-0 shadow-none"
                         emptyMessage="No WIP balances match your filters."
                       />
                     </div>
@@ -1409,7 +1415,7 @@ export default function SubcontractingPage() {
                 )}
 
                 <TablePagination
-                  className="shrink-0"
+                  className={LIST_TABLE_PAGINATION_CLASS}
                   pageOffset={wipPageOffset}
                   pageSize={LIST_PAGE_SIZE}
                   itemCount={!wipLoadedOnce.current && wipInitialLoading ? 0 : wip.length}
@@ -1430,7 +1436,7 @@ export default function SubcontractingPage() {
             )}
 
             {tab === "workcenters" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 pt-4">
+              <div className="flex flex-col gap-3 pt-4">
                 <div className="flex shrink-0 items-start justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight">External work centers</h2>
@@ -1524,11 +1530,11 @@ export default function SubcontractingPage() {
                     columnWidths={["w-24", "w-40", "w-20", "w-36", "w-32", "w-16"]}
                   />
                 ) : (
-                  <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
+                  <div className={LIST_TABLE_STATIC_CLASS}>
                     <TableLinearProgress active={wcTableBusy} />
                     <div
                       className={cn(
-                        "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+                        "transition-opacity duration-200",
                         wcTableBusy && "pointer-events-none opacity-60"
                       )}
                     >
@@ -1537,7 +1543,7 @@ export default function SubcontractingPage() {
                         columns={workCenterColumns}
                         scrollMode="natural"
                         size="comfortable"
-                        className="min-h-0 flex-1 border-0"
+                        className="border-0 shadow-none"
                         emptyMessage="No work centers match your filters."
                         onRowClick={(row) => {
                           setWorkCenterFilter(row.id);
@@ -1549,7 +1555,7 @@ export default function SubcontractingPage() {
                 )}
 
                 <TablePagination
-                  className="shrink-0"
+                  className={LIST_TABLE_PAGINATION_CLASS}
                   pageOffset={wcPageOffset}
                   pageSize={LIST_PAGE_SIZE}
                   itemCount={!wcLoadedOnce.current && wcInitialLoading ? 0 : workCenterRows.length}
