@@ -1,0 +1,197 @@
+/* OpenDyslexic — dyslexia-friendly reading font */
+@font-face {
+  font-family: "OpenDyslexic";
+  src: url("https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/woff/OpenDyslexic-Regular.woff")
+    format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Accessibility overlay styles (applied via html[data-a11y-*]) ── */
+
+html[data-a11y-pause-animations] *,
+html[data-a11y-pause-animations] *::before,
+html[data-a11y-pause-animations] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+html[data-a11y-bigger-text],
+html[data-a11y-bigger-text] body {
+  font-size: calc(1rem * var(--a11y-font-scale, 1));
+}
+
+html[data-a11y-line-height] body {
+  line-height: var(--a11y-line-height, 1.5);
+}
+
+html[data-a11y-text-spacing] body {
+  letter-spacing: 0.08em;
+  word-spacing: 0.12em;
+}
+
+html[data-a11y-text-align="left"] body {
+  text-align: left;
+}
+
+html[data-a11y-text-align="center"] body {
+  text-align: center;
+}
+
+html[data-a11y-text-align="justify"] body {
+  text-align: justify;
+}
+
+html[data-a11y-text-align] table,
+html[data-a11y-text-align] th,
+html[data-a11y-text-align] td,
+html[data-a11y-text-align] input,
+html[data-a11y-text-align] textarea,
+html[data-a11y-text-align] select,
+html[data-a11y-text-align] [role="grid"],
+html[data-a11y-text-align] [role="gridcell"] {
+  text-align: inherit;
+}
+
+html[data-a11y-dyslexia-friendly] body {
+  font-family: "OpenDyslexic", "Comic Sans MS", "Comic Sans", cursive, sans-serif !important;
+}
+
+html[data-a11y-smart-contrast]:not(.dark) {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 0%;
+  --primary: 220 100% 35%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 92%;
+  --secondary-foreground: 0 0% 0%;
+  --muted: 0 0% 94%;
+  --muted-foreground: 0 0% 25%;
+  --accent: 0 0% 90%;
+  --accent-foreground: 0 0% 0%;
+  --border: 0 0% 20%;
+  --input: 0 0% 85%;
+  --ring: 220 100% 35%;
+}
+
+html[data-a11y-smart-contrast].dark {
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 5%;
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 5%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 210 100% 65%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 80%;
+  --accent: 0 0% 18%;
+  --accent-foreground: 0 0% 100%;
+  --border: 0 0% 80%;
+  --input: 0 0% 20%;
+  --ring: 210 100% 65%;
+}
+
+html[data-a11y-contrast-plus]:not(.dark) {
+  --background: 60 100% 97%;
+  --foreground: 0 0% 0%;
+  --primary: 240 100% 40%;
+  --primary-foreground: 0 0% 100%;
+  --border: 0 0% 0%;
+  --muted-foreground: 0 0% 15%;
+}
+
+html[data-a11y-contrast-plus].dark {
+  --background: 240 30% 5%;
+  --foreground: 60 100% 95%;
+  --primary: 50 100% 55%;
+  --primary-foreground: 0 0% 0%;
+  --border: 60 100% 80%;
+  --muted-foreground: 60 50% 85%;
+}
+
+html[data-a11y-highlight-links] a,
+html[data-a11y-highlight-links] [role="link"] {
+  text-decoration: underline !important;
+  text-decoration-thickness: 2px !important;
+  text-underline-offset: 3px !important;
+  background-color: hsl(50 100% 70% / 0.35) !important;
+  outline: 1px solid hsl(220 80% 40%) !important;
+}
+
+html[data-a11y-hide-images] img:not([data-a11y-keep]),
+html[data-a11y-hide-images] picture:not([data-a11y-keep]),
+html[data-a11y-hide-images] video:not([data-a11y-keep]),
+html[data-a11y-hide-images] [role="img"]:not([data-a11y-keep]):not(svg) {
+  visibility: hidden !important;
+}
+
+html[data-a11y-hide-images] svg.lucide,
+html[data-a11y-hide-images] svg[class*="lucide"],
+html[data-a11y-hide-images] button svg,
+html[data-a11y-hide-images] a svg {
+  visibility: visible !important;
+}
+
+html[data-a11y-big-cursor],
+html[data-a11y-big-cursor] * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' stroke='%23fff' stroke-width='1' d='M4 4l16 8-8 2-2 8z'/%3E%3C/svg%3E")
+      4 4,
+    auto !important;
+}
+
+html[data-a11y-saturation] #app-root {
+  filter: saturate(var(--a11y-saturation, 100%));
+}
+
+html[data-a11y-oversized-targets] button,
+html[data-a11y-oversized-targets] a,
+html[data-a11y-oversized-targets] [role="button"],
+html[data-a11y-oversized-targets] input[type="checkbox"],
+html[data-a11y-oversized-targets] input[type="radio"],
+html[data-a11y-oversized-targets] select {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+html[data-a11y-screen-reader] :focus-visible {
+  outline: 3px solid hsl(var(--ring)) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 6px hsl(var(--ring) / 0.25) !important;
+}
+
+html[data-a11y-tooltips] [title] {
+  position: relative;
+}
+
+html[data-a11y-tooltips] [title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 10070;
+  margin-top: 4px;
+  max-width: 240px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: normal;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+}
+
+/* Page structure overlay highlights */
+.a11y-landmark-highlight {
+  outline: 3px dashed var(--a11y-landmark-color, #1e88e5) !important;
+  outline-offset: 2px !important;
+}
