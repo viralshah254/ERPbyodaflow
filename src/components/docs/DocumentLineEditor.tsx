@@ -323,16 +323,24 @@ export function DocumentLineEditor({
     (productId: string, qty: number, uom: string): { price: number; reason: string } => {
       if (useCostPricing) return { price: 0, reason: "Manual" };
       const daily = dailyPricesByProductId?.[productId];
-      if (daily?.effectivePrice != null) {
+      if (daily?.effectivePrice != null && daily.effectivePrice > 0) {
         const label = daily.isStale
           ? `⚠ Stale${daily.fallbackDate ? ` (${daily.fallbackDate})` : ""}`
           : "Daily price";
         return { price: daily.effectivePrice, reason: label };
       }
-      return getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+      const tier = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+      if (tier.price > 0) return tier;
+      if (daily && daily.effectivePrice == null) {
+        return { price: 0, reason: "Not priced on list" };
+      }
+      return tier;
     },
     [useCostPricing, dailyPricesByProductId, priceListIdResolved, pricingByProductId]
   );
+
+  const resolvePriceRef = React.useRef(resolvePrice);
+  resolvePriceRef.current = resolvePrice;
 
   // Variants per product — loaded lazily when a product with variants is selected
   const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
@@ -434,6 +442,27 @@ export function DocumentLineEditor({
       });
     });
   }, [taxCodesKey, linesAreTaxInclusive, taxCodes.length]);
+
+  /** Re-apply prices when daily prices or tier data finish loading (avoids stuck KES 0.00). */
+  React.useEffect(() => {
+    if (useCostPricing) return;
+    const dailyKeys = Object.keys(dailyPricesByProductId ?? {});
+    if (dailyKeys.length === 0 && Object.keys(pricingByProductId ?? {}).length === 0) return;
+    onLinesChangeRef.current((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map((l) => {
+        if (!l.productId) return l;
+        const { price, reason } = resolvePriceRef.current(l.productId, l.qty, l.uom);
+        if (price === l.price && reason === l.priceReason) return l;
+        changed = true;
+        const merged = { ...l, price, priceReason: reason, amount: l.qty * price };
+        const taxed = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
+        return { ...merged, tax: taxed.tax, amount: taxed.amount };
+      });
+      return changed ? next : prev;
+    });
+  }, [dailyPricesByProductId, priceListIdResolved, pricingByProductId, useCostPricing, taxCodes, linesAreTaxInclusive]);
 
   const setProduct = (lineId: string, productId: string) => {
     const applyRow = (row: ProductRow) => {
