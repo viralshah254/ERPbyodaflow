@@ -20,6 +20,7 @@ import {
 import {
   fetchFranchiseInboundOrderDetail,
   acceptInboundOrder,
+  rejectInboundOrder,
   type FranchiseInboundOrderDetail,
 } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
@@ -65,6 +66,7 @@ export default function FranchiseInboundOrderDetailPage() {
   const [doc, setDoc] = React.useState<FranchiseInboundOrderDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [accepting, setAccepting] = React.useState(false);
+  const [rejecting, setRejecting] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -97,6 +99,22 @@ export default function FranchiseInboundOrderDetailPage() {
     }
   };
 
+  const handleReject = async () => {
+    if (!doc) return;
+    if (!window.confirm(`Reject purchase request ${doc.number} from ${doc.outletName}?`)) return;
+    const reason = window.prompt("Reason for rejection (optional):") ?? undefined;
+    setRejecting(true);
+    try {
+      await rejectInboundOrder(outletOrgId, prId, reason || undefined);
+      toast.success(`Purchase request ${doc.number} rejected.`);
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message ?? "Failed to reject order.");
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   if (loading) {
     return <FranchiseInboundDetailSkeleton />;
   }
@@ -114,7 +132,8 @@ export default function FranchiseInboundOrderDetailPage() {
     );
   }
 
-  const canAccept = doc.status !== "CONVERTED" && doc.status !== "CANCELLED";
+  const canAct =
+    doc.status !== "CONVERTED" && doc.status !== "CANCELLED" && doc.status !== "RECEIVED";
 
   return (
     <PageShell>
@@ -135,22 +154,44 @@ export default function FranchiseInboundOrderDetailPage() {
                 Back to list
               </Link>
             </Button>
-            {canAccept ? (
-              <Button onClick={() => void handleAccept()} disabled={accepting}>
-                {accepting ? (
-                  <>
-                    <Icons.Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Accepting…
-                  </>
-                ) : (
-                  <>
-                    <Icons.CheckCircle className="h-4 w-4 mr-2" />
-                    Accept → sales order
-                  </>
-                )}
-              </Button>
+            {canAct ? (
+              <>
+                <Button onClick={() => void handleAccept()} disabled={accepting || rejecting}>
+                  {accepting ? (
+                    <>
+                      <Icons.Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Accepting…
+                    </>
+                  ) : (
+                    <>
+                      <Icons.CheckCircle className="h-4 w-4 mr-2" />
+                      Accept → sales order
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => void handleReject()}
+                  disabled={accepting || rejecting}
+                >
+                  {rejecting ? (
+                    <>
+                      <Icons.Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Rejecting…
+                    </>
+                  ) : (
+                    <>
+                      <Icons.XCircle className="h-4 w-4 mr-2" />
+                      Reject
+                    </>
+                  )}
+                </Button>
+              </>
             ) : doc.status === "CONVERTED" ? (
               <span className="text-sm text-muted-foreground">Already converted at HQ.</span>
+            ) : doc.status === "CANCELLED" ? (
+              <span className="text-sm text-muted-foreground">Rejected at HQ.</span>
             ) : null}
           </div>
         }

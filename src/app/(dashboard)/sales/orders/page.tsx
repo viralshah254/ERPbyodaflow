@@ -25,7 +25,7 @@ import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import { documentActionApi } from "@/lib/api/documents";
-import { fetchInboundOrdersPage, acceptInboundOrder, type InboundOrderRow } from "@/lib/api/cool-catch";
+import { fetchInboundOrdersPage, acceptInboundOrder, rejectInboundOrder, type InboundOrderRow } from "@/lib/api/cool-catch";
 import { useNavCounts } from "@/lib/use-nav-counts";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
@@ -84,6 +84,11 @@ function franchiseInboundDetailHref(r: InboundOrderRow) {
   return `/sales/orders/franchise-inbound/${encodeURIComponent(r.outletOrgId)}/${encodeURIComponent(r.id)}`;
 }
 
+function inboundOrderCanAct(status: string): boolean {
+  const st = status.trim().toUpperCase();
+  return st !== "CONVERTED" && st !== "CANCELLED" && st !== "RECEIVED";
+}
+
 function FranchiseOrdersTab() {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
@@ -94,6 +99,7 @@ function FranchiseOrdersTab() {
   const [pageOffset, setPageOffset] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(false);
   const [acceptingId, setAcceptingId] = React.useState<string | null>(null);
+  const [rejectingId, setRejectingId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search), 350);
@@ -154,6 +160,22 @@ function FranchiseOrdersTab() {
     }
   };
 
+  const handleReject = async (row: InboundOrderRow) => {
+    if (!inboundOrderCanAct(row.status)) return;
+    if (!window.confirm(`Reject stock request ${row.number} from ${row.outletName}?`)) return;
+    const reason = window.prompt("Reason for rejection (optional):") ?? undefined;
+    setRejectingId(row.id);
+    try {
+      await rejectInboundOrder(row.outletOrgId, row.id, reason || undefined);
+      toast.success(`Purchase request ${row.number} rejected.`);
+      void loadPage(pageOffset);
+    } catch (e) {
+      toast.error((e as Error).message ?? "Failed to reject order.");
+    } finally {
+      setRejectingId(null);
+    }
+  };
+
   const columns = [
     { id: "outlet", header: "Outlet", accessor: (r: InboundOrderRow) => <span className="font-medium">{r.outletName}</span> },
     {
@@ -203,7 +225,7 @@ function FranchiseOrdersTab() {
           </Button>
           <Button
             size="sm"
-            disabled={acceptingId === r.id || r.status === "CONVERTED"}
+            disabled={!inboundOrderCanAct(r.status) || acceptingId === r.id || rejectingId === r.id}
             onClick={(e) => { e.stopPropagation(); void handleAccept(r); }}
           >
             {acceptingId === r.id ? (
@@ -213,6 +235,22 @@ function FranchiseOrdersTab() {
             )}
             {r.status === "CONVERTED" ? "Accepted" : "Accept"}
           </Button>
+          {inboundOrderCanAct(r.status) ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10"
+              disabled={acceptingId === r.id || rejectingId === r.id}
+              onClick={(e) => { e.stopPropagation(); void handleReject(r); }}
+            >
+              {rejectingId === r.id ? (
+                <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Icons.XCircle className="h-3 w-3 mr-1" />
+              )}
+              Reject
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -226,7 +264,7 @@ function FranchiseOrdersTab() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Purchase requests from franchise outlets — accept to create a sales order on HQ side.
+          Purchase requests from franchise outlets — accept to create a sales order, or reject to decline the request.
         </p>
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading} className="shrink-0 self-start sm:self-auto">
           <Icons.RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />

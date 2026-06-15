@@ -1585,6 +1585,20 @@ export async function acceptInboundOrder(
   });
 }
 
+export async function rejectInboundOrder(
+  childOrgId: string,
+  prId: string,
+  reason?: string
+): Promise<{ prId: string; prNumber: string; status: string }> {
+  return apiRequest(
+    `/api/franchise/network/inbound-orders/${encodeURIComponent(childOrgId)}/${encodeURIComponent(prId)}/reject`,
+    {
+      method: "POST",
+      body: reason?.trim() ? { reason: reason.trim() } : {},
+    }
+  );
+}
+
 // ─── Franchise Stock (HQ reads outlet stock) ──────────────────────────────────
 
 export interface OutletStockRow {
