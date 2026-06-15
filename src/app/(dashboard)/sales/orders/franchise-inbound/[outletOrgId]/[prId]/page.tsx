@@ -25,7 +25,7 @@ import {
 } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
+import { FranchiseInboundRejectDialog } from "@/components/franchise/franchise-inbound-reject-dialog";
 
 function FranchiseInboundDetailSkeleton() {
   return (
@@ -67,6 +67,7 @@ export default function FranchiseInboundOrderDetailPage() {
   const [loading, setLoading] = React.useState(true);
   const [accepting, setAccepting] = React.useState(false);
   const [rejecting, setRejecting] = React.useState(false);
+  const [rejectOpen, setRejectOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -99,14 +100,13 @@ export default function FranchiseInboundOrderDetailPage() {
     }
   };
 
-  const handleReject = async () => {
+  const handleRejectConfirm = async (reason?: string) => {
     if (!doc) return;
-    if (!window.confirm(`Reject purchase request ${doc.number} from ${doc.outletName}?`)) return;
-    const reason = window.prompt("Reason for rejection (optional):") ?? undefined;
     setRejecting(true);
     try {
-      await rejectInboundOrder(outletOrgId, prId, reason || undefined);
+      await rejectInboundOrder(outletOrgId, prId, reason);
       toast.success(`Purchase request ${doc.number} rejected.`);
+      setRejectOpen(false);
       await load();
     } catch (e) {
       toast.error((e as Error).message ?? "Failed to reject order.");
@@ -172,20 +172,11 @@ export default function FranchiseInboundOrderDetailPage() {
                 <Button
                   variant="outline"
                   className="text-destructive border-destructive/40 hover:bg-destructive/10"
-                  onClick={() => void handleReject()}
+                  onClick={() => setRejectOpen(true)}
                   disabled={accepting || rejecting}
                 >
-                  {rejecting ? (
-                    <>
-                      <Icons.Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Rejecting…
-                    </>
-                  ) : (
-                    <>
-                      <Icons.XCircle className="h-4 w-4 mr-2" />
-                      Reject
-                    </>
-                  )}
+                  <Icons.XCircle className="h-4 w-4 mr-2" />
+                  Reject
                 </Button>
               </>
             ) : doc.status === "CONVERTED" ? (
@@ -224,6 +215,14 @@ export default function FranchiseInboundOrderDetailPage() {
               <div className="text-muted-foreground">Total</div>
               <div className="font-medium">{formatMoney(doc.total, doc.currency, { decimals: 0 })}</div>
             </div>
+            {doc.hqRejectionReason ? (
+              <div className="sm:col-span-2">
+                <div className="text-muted-foreground">Rejection reason</div>
+                <div className="font-medium mt-1 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-destructive">
+                  {doc.hqRejectionReason}
+                </div>
+              </div>
+            ) : null}
             {doc.linkedHqSalesOrder ? (
               <div className="sm:col-span-2">
                 <div className="text-muted-foreground">HQ sales order</div>
@@ -297,6 +296,14 @@ export default function FranchiseInboundOrderDetailPage() {
           </CardContent>
         </Card>
       </div>
+      <FranchiseInboundRejectDialog
+        target={doc && rejectOpen ? { prNumber: doc.number, outletName: doc.outletName } : null}
+        onOpenChange={(open) => {
+          if (!rejecting) setRejectOpen(open);
+        }}
+        rejecting={rejecting}
+        onConfirm={handleRejectConfirm}
+      />
     </PageShell>
   );
 }

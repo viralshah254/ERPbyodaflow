@@ -1563,6 +1563,7 @@ export type FranchiseInboundOrderDetail = Omit<InboundOrderRow, "lines"> & {
   notes: string | null;
   partyId: string | null;
   supplierName: string | null;
+  hqRejectionReason?: string;
   lines: Array<InboundOrderLine & { unit?: string; description?: string }>;
 };
 
@@ -1595,6 +1596,63 @@ export async function rejectInboundOrder(
     {
       method: "POST",
       body: reason?.trim() ? { reason: reason.trim() } : {},
+    }
+  );
+}
+
+export type StockRequestCatalogItem = {
+  id: string;
+  sku?: string;
+  name: string;
+  productFamily?: string;
+  unit?: string;
+  unitPrice: number;
+  transferReferencePrice?: number | null;
+  suggestedRetail?: number | null;
+  pricingCurrency?: string;
+};
+
+export async function fetchOutletStockRequestCatalogPage(
+  outletOrgId: string,
+  params?: { search?: string; limit?: number; cursor?: string }
+): Promise<{
+  items: StockRequestCatalogItem[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}> {
+  const p = new URLSearchParams();
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 50;
+  p.set("limit", String(lim));
+  if (params?.cursor != null && params.cursor !== "") p.set("cursor", params.cursor);
+  if (params?.search?.trim()) p.set("search", params.search.trim());
+  const qs = p.toString();
+  return apiRequest(
+    `/api/franchise/network/outlets/${encodeURIComponent(outletOrgId)}/stock-request-catalog${qs ? `?${qs}` : ""}`
+  );
+}
+
+export type CreateManualFranchiseOrderLine = {
+  productId: string;
+  quantity: number;
+  unitPrice?: number;
+};
+
+export async function createManualFranchiseOrder(
+  outletOrgId: string,
+  body: {
+    lines: CreateManualFranchiseOrderLine[];
+    currency?: string;
+    notes?: string;
+    date?: string;
+  }
+): Promise<{ prId: string; prNumber: string; soId: string; soNumber: string; outletName: string }> {
+  return apiRequest(
+    `/api/franchise/network/inbound-orders/${encodeURIComponent(outletOrgId)}/create-manual`,
+    {
+      method: "POST",
+      body,
     }
   );
 }

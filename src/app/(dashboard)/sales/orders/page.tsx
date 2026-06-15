@@ -26,6 +26,7 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
 import { documentActionApi } from "@/lib/api/documents";
 import { fetchInboundOrdersPage, acceptInboundOrder, rejectInboundOrder, type InboundOrderRow } from "@/lib/api/cool-catch";
+import { FranchiseInboundRejectDialog } from "@/components/franchise/franchise-inbound-reject-dialog";
 import { useNavCounts } from "@/lib/use-nav-counts";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
@@ -89,7 +90,7 @@ function inboundOrderCanAct(status: string): boolean {
   return st !== "CONVERTED" && st !== "CANCELLED" && st !== "RECEIVED";
 }
 
-function FranchiseOrdersTab() {
+function FranchiseOrdersTab({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -100,6 +101,7 @@ function FranchiseOrdersTab() {
   const [hasMore, setHasMore] = React.useState(false);
   const [acceptingId, setAcceptingId] = React.useState<string | null>(null);
   const [rejectingId, setRejectingId] = React.useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = React.useState<InboundOrderRow | null>(null);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search), 350);
@@ -160,14 +162,13 @@ function FranchiseOrdersTab() {
     }
   };
 
-  const handleReject = async (row: InboundOrderRow) => {
-    if (!inboundOrderCanAct(row.status)) return;
-    if (!window.confirm(`Reject stock request ${row.number} from ${row.outletName}?`)) return;
-    const reason = window.prompt("Reason for rejection (optional):") ?? undefined;
-    setRejectingId(row.id);
+  const handleRejectConfirm = async (reason?: string) => {
+    if (!rejectTarget) return;
+    setRejectingId(rejectTarget.id);
     try {
-      await rejectInboundOrder(row.outletOrgId, row.id, reason || undefined);
-      toast.success(`Purchase request ${row.number} rejected.`);
+      await rejectInboundOrder(rejectTarget.outletOrgId, rejectTarget.id, reason);
+      toast.success(`Purchase request ${rejectTarget.number} rejected.`);
+      setRejectTarget(null);
       void loadPage(pageOffset);
     } catch (e) {
       toast.error((e as Error).message ?? "Failed to reject order.");
@@ -241,7 +242,7 @@ function FranchiseOrdersTab() {
               variant="outline"
               className="text-destructive border-destructive/40 hover:bg-destructive/10"
               disabled={acceptingId === r.id || rejectingId === r.id}
-              onClick={(e) => { e.stopPropagation(); void handleReject(r); }}
+              onClick={(e) => { e.stopPropagation(); setRejectTarget(r); }}
             >
               {rejectingId === r.id ? (
                 <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
@@ -266,10 +267,20 @@ function FranchiseOrdersTab() {
         <p className="text-sm text-muted-foreground">
           Purchase requests from franchise outlets — accept to create a sales order, or reject to decline the request.
         </p>
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading} className="shrink-0 self-start sm:self-auto">
-          <Icons.RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">
+          {canWrite ? (
+            <Button variant="default" size="sm" asChild>
+              <Link href="/sales/orders/franchise-inbound/new">
+                <Icons.Plus className="h-4 w-4 mr-2" />
+                Create order for outlet
+              </Link>
+            </Button>
+          ) : null}
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+            <Icons.RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+            Refresh
+          </Button>
+        </div>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
@@ -326,6 +337,18 @@ function FranchiseOrdersTab() {
           <span className="text-xs text-muted-foreground tabular-nums">{PAGE_SIZE} per page</span>
         </div>
       </div>
+      <FranchiseInboundRejectDialog
+        target={
+          rejectTarget
+            ? { prNumber: rejectTarget.number, outletName: rejectTarget.outletName }
+            : null
+        }
+        onOpenChange={(open) => {
+          if (!open && !rejectingId) setRejectTarget(null);
+        }}
+        rejecting={rejectTarget != null && rejectingId === rejectTarget.id}
+        onConfirm={handleRejectConfirm}
+      />
     </div>
   );
 }
@@ -655,7 +678,7 @@ export default function SalesOrdersPage() {
               </TabsTrigger>
             </TabsList>
             <TabsContent value="franchise-orders" className="mt-4">
-              <FranchiseOrdersTab />
+              <FranchiseOrdersTab canWrite={canWrite} />
             </TabsContent>
             <TabsContent value="orders" className="mt-4">
               <SalesOrdersPanel />
