@@ -6,6 +6,8 @@ import { Toaster } from "sonner";
 import { useState } from "react";
 import { AuthRestore } from "@/components/auth/auth-restore";
 import { FirebaseClientInit } from "@/components/firebase-client-init";
+import { AccessibilityProvider } from "@/components/accessibility/AccessibilityProvider";
+import { AccessibilityWidget } from "@/components/accessibility/AccessibilityWidget";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -28,12 +30,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange={false}
     >
       <QueryClientProvider client={queryClient}>
-        <div className="app-providers-root">
-          <AuthRestore />
-          <FirebaseClientInit />
-          {children}
-          <Toaster position="bottom-right" richColors />
-        </div>
+        <AccessibilityProvider>
+          <div className="app-providers-root">
+            <AuthRestore />
+            <FirebaseClientInit />
+            {children}
+            <Toaster position="bottom-right" richColors />
+            <AccessibilityWidget />
+          </div>
+        </AccessibilityProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );
