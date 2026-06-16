@@ -72,6 +72,7 @@ import * as Icons from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { useUIStore } from "@/stores/ui-store";
 import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
+import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -333,16 +334,21 @@ export default function DocViewPage() {
     })
       .then((extra) => {
         if (cancelled || !extra) return;
-        setDocument((prev) =>
-          prev
-            ? {
-                ...prev,
-                attachments: extra.attachments ?? prev.attachments,
-                comments: extra.comments ?? prev.comments,
-                auditHistory: extra.auditHistory ?? prev.auditHistory,
-              }
-            : extra
-        );
+        setDocument((prev) => {
+          if (cancelled || !extra) return prev ?? null;
+          if (!prev) return extra;
+          const merged = {
+            ...prev,
+            attachments: extra.attachments ?? prev.attachments,
+            comments: extra.comments ?? prev.comments,
+            auditHistory: extra.auditHistory ?? prev.auditHistory,
+            approvalHistory: extra.approvalHistory ?? prev.approvalHistory,
+          };
+          return {
+            ...merged,
+            createdByName: resolveDocumentCreatedByName(merged) ?? merged.createdByName,
+          };
+        });
       })
       .catch(() => {});
     return () => {
@@ -550,6 +556,10 @@ export default function DocViewPage() {
 
   const displayTitle = document?.number ? `${document.number}` : `${label} ${id}`;
   const breadcrumbLabel = document?.number ?? id;
+  const createdByDisplayName = React.useMemo(
+    () => resolveDocumentCreatedByName(document) ?? null,
+    [document]
+  );
 
   const handleAppendPodEvidence = React.useCallback(
     async (lineIdx: number, fileList: FileList | null) => {
@@ -591,6 +601,7 @@ export default function DocViewPage() {
       ]}
       status={document?.status ?? "APPROVED"}
       statusActor={document?.statusActor ?? null}
+      createdByName={createdByDisplayName}
       rightSlot={rightSlot}
       actions={
         <div className="flex flex-wrap items-center gap-2">

@@ -5,6 +5,7 @@ import type {
   DocumentStatusActor,
   DocumentTimelineEntry,
 } from "@/lib/types/documents";
+import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
 
 type BackendDocumentLine = {
@@ -56,6 +57,7 @@ type BackendTimelineEntry = {
   by: string;
   at: string;
   note?: string;
+  requesterBy?: string;
 };
 
 type BackendPodConfirmationLine = {
@@ -129,6 +131,7 @@ type BackendDocumentDetail = {
   exchangeRate?: number;
   status: string;
   statusActor?: DocumentStatusActor | null;
+  createdByName?: string;
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
@@ -342,6 +345,7 @@ function mapTimeline(entries?: BackendTimelineEntry[]): DocumentTimelineEntry[] 
     action: entry.action,
     by: entry.by,
     at: new Date(entry.at).toLocaleString(),
+    requesterBy: entry.requesterBy,
   }));
 }
 
@@ -370,6 +374,11 @@ function mapDocumentDetail(
     exchangeRate: payload.exchangeRate,
     status: payload.status,
     statusActor: payload.statusActor ?? null,
+    createdByName: resolveDocumentCreatedByName({
+      createdByName: payload.createdByName,
+      auditHistory: mapTimeline(payload.auditHistory),
+      approvalHistory: mapTimeline(payload.approvalHistory),
+    }),
     availableActions: payload.availableActions ?? [],
     availableConversionTargets: payload.availableConversionTargets ?? [],
     outputTemplateId: payload.outputTemplateId,

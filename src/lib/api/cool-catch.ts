@@ -1492,6 +1492,9 @@ export interface InboundOrderRow {
   lineCount?: number;
   /** Present when HQ spawned a sales order from this outlet PR. */
   linkedHqSalesOrder?: { id: string; number: string; status: string } | null;
+  orderChannel?: string | null;
+  /** True when HQ placed the order on behalf of the outlet (auto-accepted). */
+  hqCreated?: boolean;
   lines: InboundOrderLine[];
 }
 

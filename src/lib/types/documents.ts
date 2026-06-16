@@ -62,6 +62,8 @@ export type DocumentTimelineEntry = {
   action: string;
   by: string;
   at: string;
+  /** Who submitted the document for approval (when provided by API). */
+  requesterBy?: string;
 };
 
 /** Who performed the action reflected in the current status (from API). */
@@ -177,6 +179,8 @@ export type DocumentDetailRecord = {
   date: string;
   /** Present when the API could resolve a user for the current status. */
   statusActor?: DocumentStatusActor | null;
+  /** Resolved creator display name (when distinct from status actor). */
+  createdByName?: string;
   partyId?: string;
   party?: string;
   branchId?: string;

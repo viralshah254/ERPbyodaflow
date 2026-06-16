@@ -90,6 +90,10 @@ function inboundOrderCanAct(status: string): boolean {
   return st !== "CONVERTED" && st !== "CANCELLED" && st !== "RECEIVED";
 }
 
+function inboundOrderIsHqCreated(r: InboundOrderRow): boolean {
+  return r.hqCreated === true || r.orderChannel === "MANUAL";
+}
+
 function FranchiseOrdersTab({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const [search, setSearch] = React.useState("");
@@ -211,7 +215,26 @@ function FranchiseOrdersTab({ canWrite }: { canWrite: boolean }) {
     {
       id: "status",
       header: "Status",
-      accessor: (r: InboundOrderRow) => <StatusBadge status={r.status} />,
+      accessor: (r: InboundOrderRow) => (
+        <div className="flex flex-col gap-1">
+          {inboundOrderIsHqCreated(r) && r.status.trim().toUpperCase() === "CONVERTED" ? (
+            <Badge variant="secondary" className="w-fit text-[10px] font-semibold uppercase tracking-wide">
+              HQ created
+            </Badge>
+          ) : (
+            <StatusBadge status={r.status} />
+          )}
+          {r.linkedHqSalesOrder?.number ? (
+            <Link
+              href={`/docs/sales-order/${r.linkedHqSalesOrder.id}`}
+              className="text-[10px] text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {r.linkedHqSalesOrder.number}
+            </Link>
+          ) : null}
+        </div>
+      ),
     },
     {
       id: "action",
@@ -224,34 +247,45 @@ function FranchiseOrdersTab({ canWrite }: { canWrite: boolean }) {
               View
             </Link>
           </Button>
-          <Button
-            size="sm"
-            disabled={!inboundOrderCanAct(r.status) || acceptingId === r.id || rejectingId === r.id}
-            onClick={(e) => { e.stopPropagation(); void handleAccept(r); }}
-          >
-            {acceptingId === r.id ? (
-              <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
-            ) : (
-              <Icons.CheckCircle className="h-3 w-3 mr-1" />
-            )}
-            {r.status === "CONVERTED" ? "Accepted" : "Accept"}
-          </Button>
-          {inboundOrderCanAct(r.status) ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-destructive border-destructive/40 hover:bg-destructive/10"
-              disabled={acceptingId === r.id || rejectingId === r.id}
-              onClick={(e) => { e.stopPropagation(); setRejectTarget(r); }}
-            >
-              {rejectingId === r.id ? (
-                <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
-              ) : (
-                <Icons.XCircle className="h-3 w-3 mr-1" />
-              )}
-              Reject
+          {inboundOrderIsHqCreated(r) && r.linkedHqSalesOrder ? (
+            <Button size="sm" variant="secondary" asChild>
+              <Link href={`/docs/sales-order/${r.linkedHqSalesOrder.id}`} onClick={(e) => e.stopPropagation()}>
+                <Icons.FileText className="h-3 w-3 mr-1" />
+                Sales order
+              </Link>
             </Button>
-          ) : null}
+          ) : (
+            <>
+              <Button
+                size="sm"
+                disabled={!inboundOrderCanAct(r.status) || acceptingId === r.id || rejectingId === r.id}
+                onClick={(e) => { e.stopPropagation(); void handleAccept(r); }}
+              >
+                {acceptingId === r.id ? (
+                  <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <Icons.CheckCircle className="h-3 w-3 mr-1" />
+                )}
+                {r.status === "CONVERTED" ? "Accepted" : "Accept"}
+              </Button>
+              {inboundOrderCanAct(r.status) ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                  disabled={acceptingId === r.id || rejectingId === r.id}
+                  onClick={(e) => { e.stopPropagation(); setRejectTarget(r); }}
+                >
+                  {rejectingId === r.id ? (
+                    <Icons.Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : (
+                    <Icons.XCircle className="h-3 w-3 mr-1" />
+                  )}
+                  Reject
+                </Button>
+              ) : null}
+            </>
+          )}
         </div>
       ),
     },
@@ -265,7 +299,8 @@ function FranchiseOrdersTab({ canWrite }: { canWrite: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Purchase requests from franchise outlets — accept to create a sales order, or reject to decline the request.
+          Purchase requests from franchise outlets — accept to create a sales order, or reject to decline.
+          HQ-created orders (via Create order for outlet) appear here as <span className="font-medium text-foreground">HQ created</span> with an linked sales order.
         </p>
         <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">
           {canWrite ? (

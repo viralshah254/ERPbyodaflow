@@ -25,6 +25,7 @@ import {
 } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
+import * as Icons from "lucide-react";
 import { FranchiseInboundRejectDialog } from "@/components/franchise/franchise-inbound-reject-dialog";
 
 function FranchiseInboundDetailSkeleton() {

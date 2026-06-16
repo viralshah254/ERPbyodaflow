@@ -12,6 +12,7 @@ interface DocumentPageShellProps {
   actions?: React.ReactNode;
   status?: string;
   statusActor?: DocumentStatusActor | null;
+  createdByName?: string | null;
   rightSlot?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -23,6 +24,7 @@ export function DocumentPageShell({
   actions,
   status,
   statusActor,
+  createdByName,
   rightSlot,
   children,
 }: DocumentPageShellProps) {
@@ -36,7 +38,13 @@ export function DocumentPageShell({
         showCommandHint
         showRightPanelToggle={!!rightSlot}
       />
-      {status != null && <DocumentStatusBar status={status} statusActor={statusActor} />}
+      {status != null && (
+        <DocumentStatusBar
+          status={status}
+          statusActor={statusActor}
+          createdByName={createdByName}
+        />
+      )}
       <div className="flex-1 p-6">{children}</div>
     </PageShell>
   );

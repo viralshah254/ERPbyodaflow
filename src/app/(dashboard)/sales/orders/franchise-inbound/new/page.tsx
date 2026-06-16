@@ -299,8 +299,10 @@ export default function CreateManualFranchiseOrderPage() {
         currency,
         notes: notes.trim() || undefined,
       });
-      toast.success(`Sales order ${result.soNumber} created for ${result.outletName}.`);
-      router.push(`/docs/sales-order/${result.soId}`);
+      toast.success(`Order ${result.prNumber} created for ${result.outletName} — sales order ${result.soNumber} approved.`);
+      router.push(
+        `/sales/orders/franchise-inbound/${encodeURIComponent(selectedOutletId)}/${encodeURIComponent(result.prId)}`
+      );
     } catch (e) {
       toast.error((e as Error).message ?? "Failed to create order.");
     } finally {
