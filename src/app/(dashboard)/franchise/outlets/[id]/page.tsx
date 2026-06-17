@@ -49,6 +49,7 @@ import { fetchInboundOrders, type InboundOrderRow } from "@/lib/api/cool-catch";
 import { OutletPricingTab } from "@/components/franchise/outlet-pricing-tab";
 import { OutletEquipmentTab } from "@/components/franchise/outlet-equipment-tab";
 import { OutletEconomicsVmiTab } from "@/components/franchise/outlet-economics-vmi-tab";
+import { OutletMpesaTab } from "@/components/franchise/outlet-mpesa-tab";
 import { fetchFranchiseNetworkOutletById } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -68,6 +69,7 @@ import {
   Cpu,
   MapPin,
   Settings2,
+  Smartphone,
 } from "lucide-react";
 import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
 
@@ -944,6 +946,10 @@ export default function OutletDetailPage() {
               Pricing
             </TabsTrigger>
             <TabsTrigger value="vmi">Economics & VMI</TabsTrigger>
+            <TabsTrigger value="mpesa" className="gap-1.5">
+              <Smartphone size={14} />
+              M-Pesa
+            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5">
               <Settings2 size={14} />
               Settings
@@ -988,6 +994,10 @@ export default function OutletDetailPage() {
 
           <TabsContent value="vmi">
             <OutletEconomicsVmiTab outletOrgId={outletOrgId} />
+          </TabsContent>
+
+          <TabsContent value="mpesa">
+            <OutletMpesaTab outletOrgId={outletOrgId} outletName={outletName} />
           </TabsContent>
 
           <TabsContent value="settings">
