@@ -177,6 +177,7 @@ export default function APSuppliersPage() {
           paymentTermsId: party.paymentTermsId ?? "",
           defaultCurrency: party.defaultCurrency ?? "KES",
           taxId: party.taxId ?? "",
+          supplierPaymentMethod: party.supplierPaymentMethod ?? "BANK",
           supplierBankName: party.supplierBankName ?? "",
           supplierBankAccountName: party.supplierBankAccountName ?? "",
           supplierBankAccountNumber: party.supplierBankAccountNumber ?? "",

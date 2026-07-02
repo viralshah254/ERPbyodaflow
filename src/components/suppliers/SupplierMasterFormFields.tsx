@@ -15,6 +15,8 @@ import type { CoolcatchSupplierKind, PartyRole } from "@/lib/types/masters";
 import { LocationPickerField, type ResolvedLocation } from "@/components/location/LocationPickerField";
 import * as Icons from "lucide-react";
 
+export type SupplierPaymentMethod = "BANK" | "MPESA" | "PAYBILL" | "TILL";
+
 export type SupplierMasterFormValues = {
   coolcatchSupplierKind: CoolcatchSupplierKind;
   name: string;
@@ -32,6 +34,7 @@ export type SupplierMasterFormValues = {
   paymentTermsId: string;
   defaultCurrency: string;
   taxId: string;
+  supplierPaymentMethod: SupplierPaymentMethod;
   supplierBankName: string;
   supplierBankAccountName: string;
   supplierBankAccountNumber: string;
@@ -53,6 +56,7 @@ export const emptySupplierMasterForm = (defaultCurrency = "KES"): SupplierMaster
   paymentTermsId: "",
   defaultCurrency,
   taxId: "",
+  supplierPaymentMethod: "BANK",
   supplierBankName: "",
   supplierBankAccountName: "",
   supplierBankAccountNumber: "",
@@ -360,43 +364,79 @@ export function SupplierMasterFormFields({
           <div className="space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">Payment details</p>
             <p className="text-xs text-muted-foreground">
-              Bank account where this supplier receives payments (used by finance for AP).
+              How this supplier receives payments (bank, M-Pesa, paybill, or till). Optional but
+              recommended for AP.
             </p>
             <div className="space-y-2">
-              <Label>
-                Bank name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={form.supplierBankName}
-                onChange={(e) => {
-                  patch({ supplierBankName: e.target.value });
-                  onClearError?.("supplierBankName");
-                }}
-                placeholder="e.g. KCB, Equity Bank"
-              />
-              {errors.supplierBankName ? (
-                <p className="text-xs text-destructive">{errors.supplierBankName}</p>
-              ) : null}
+              <Label>Payment method</Label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(
+                  [
+                    ["BANK", "Bank"],
+                    ["MPESA", "M-Pesa"],
+                    ["PAYBILL", "Paybill"],
+                    ["TILL", "Till"],
+                  ] as const
+                ).map(([method, label]) => (
+                  <Button
+                    key={method}
+                    type="button"
+                    variant={form.supplierPaymentMethod === method ? "default" : "outline"}
+                    onClick={() => patch({ supplierPaymentMethod: method })}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </div>
+            {form.supplierPaymentMethod === "BANK" ? (
+              <div className="space-y-2">
+                <Label>
+                  Bank name{" "}
+                  <span className="text-muted-foreground text-xs">(recommended)</span>
+                </Label>
+                <Input
+                  value={form.supplierBankName}
+                  onChange={(e) => {
+                    patch({ supplierBankName: e.target.value });
+                    onClearError?.("supplierBankName");
+                  }}
+                  placeholder="e.g. KCB, Equity Bank"
+                />
+                {errors.supplierBankName ? (
+                  <p className="text-xs text-destructive">{errors.supplierBankName}</p>
+                ) : null}
+              </div>
+            ) : null}
+            {form.supplierPaymentMethod !== "MPESA" ? (
+              <div className="space-y-2">
+                <Label>
+                  Beneficiary name{" "}
+                  <span className="text-muted-foreground text-xs">(recommended)</span>
+                </Label>
+                <Input
+                  value={form.supplierBankAccountName}
+                  onChange={(e) => {
+                    patch({ supplierBankAccountName: e.target.value });
+                    onClearError?.("supplierBankAccountName");
+                  }}
+                  placeholder="e.g. Lakeview Tilapia Farm"
+                />
+                {errors.supplierBankAccountName ? (
+                  <p className="text-xs text-destructive">{errors.supplierBankAccountName}</p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label>
-                Bank account name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={form.supplierBankAccountName}
-                onChange={(e) => {
-                  patch({ supplierBankAccountName: e.target.value });
-                  onClearError?.("supplierBankAccountName");
-                }}
-                placeholder="e.g. Lakeview Tilapia Farm"
-              />
-              {errors.supplierBankAccountName ? (
-                <p className="text-xs text-destructive">{errors.supplierBankAccountName}</p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label>
-                Account number <span className="text-destructive">*</span>
+                {form.supplierPaymentMethod === "MPESA"
+                  ? "M-Pesa phone number"
+                  : form.supplierPaymentMethod === "PAYBILL"
+                    ? "Paybill number"
+                    : form.supplierPaymentMethod === "TILL"
+                      ? "Till number"
+                      : "Account number"}{" "}
+                <span className="text-muted-foreground text-xs">(recommended)</span>
               </Label>
               <Input
                 value={form.supplierBankAccountNumber}
@@ -404,29 +444,47 @@ export function SupplierMasterFormFields({
                   patch({ supplierBankAccountNumber: e.target.value });
                   onClearError?.("supplierBankAccountNumber");
                 }}
-                placeholder="e.g. 0123456789"
+                placeholder={
+                  form.supplierPaymentMethod === "MPESA"
+                    ? "e.g. 0712345678"
+                    : form.supplierPaymentMethod === "PAYBILL"
+                      ? "e.g. 522522"
+                      : form.supplierPaymentMethod === "TILL"
+                        ? "e.g. 123456"
+                        : "e.g. 0123456789"
+                }
+                type={form.supplierPaymentMethod === "MPESA" ? "tel" : "text"}
                 autoComplete="off"
               />
               {errors.supplierBankAccountNumber ? (
                 <p className="text-xs text-destructive">{errors.supplierBankAccountNumber}</p>
               ) : null}
             </div>
-            <div className="space-y-2">
-              <Label>
-                Branch name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={form.supplierBankBranchName}
-                onChange={(e) => {
-                  patch({ supplierBankBranchName: e.target.value });
-                  onClearError?.("supplierBankBranchName");
-                }}
-                placeholder="e.g. Nairobi Main"
-              />
-              {errors.supplierBankBranchName ? (
-                <p className="text-xs text-destructive">{errors.supplierBankBranchName}</p>
-              ) : null}
-            </div>
+            {form.supplierPaymentMethod !== "TILL" && form.supplierPaymentMethod !== "MPESA" ? (
+              <div className="space-y-2">
+                <Label>
+                  {form.supplierPaymentMethod === "PAYBILL" ? "Account no." : "Branch name"}{" "}
+                  <span className="text-muted-foreground text-xs">
+                    {form.supplierPaymentMethod === "PAYBILL" ? "(optional)" : "(recommended)"}
+                  </span>
+                </Label>
+                <Input
+                  value={form.supplierBankBranchName}
+                  onChange={(e) => {
+                    patch({ supplierBankBranchName: e.target.value });
+                    onClearError?.("supplierBankBranchName");
+                  }}
+                  placeholder={
+                    form.supplierPaymentMethod === "PAYBILL"
+                      ? "If required by paybill"
+                      : "e.g. Nairobi Main"
+                  }
+                />
+                {errors.supplierBankBranchName ? (
+                  <p className="text-xs text-destructive">{errors.supplierBankBranchName}</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </>
       ) : null}
@@ -584,6 +642,12 @@ export function locationFieldsFromParty(party: {
   };
 }
 
+export function isValidKenyanPhone(raw: string): boolean {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return false;
+  return /^(?:254[17]\d{8}|0[17]\d{8}|[17]\d{8})$/.test(digits);
+}
+
 export function validateSupplierMasterForm(form: SupplierMasterFormValues): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!form.name.trim()) errors.name = "Name is required.";
@@ -595,17 +659,13 @@ export function validateSupplierMasterForm(form: SupplierMasterFormValues): Reco
   }
   if (!form.phone.trim()) errors.phone = "Contact number is required.";
   if (!form.taxId.trim()) errors.taxId = "KRA PIN is required.";
-  if (!form.supplierBankName.trim()) {
-    errors.supplierBankName = "Bank name is required.";
-  }
-  if (!form.supplierBankAccountName.trim()) {
-    errors.supplierBankAccountName = "Bank account name is required.";
-  }
-  if (!form.supplierBankAccountNumber.trim()) {
-    errors.supplierBankAccountNumber = "Account number is required.";
-  }
-  if (!form.supplierBankBranchName.trim()) {
-    errors.supplierBankBranchName = "Branch name is required.";
+  if (
+    form.supplierPaymentMethod === "MPESA" &&
+    form.supplierBankAccountNumber.trim() &&
+    !isValidKenyanPhone(form.supplierBankAccountNumber)
+  ) {
+    errors.supplierBankAccountNumber =
+      "Enter a valid Kenyan mobile number (e.g. 0712 345 678 or +254 712 345 678).";
   }
   const currency = form.defaultCurrency.trim().toUpperCase();
   if (currency && !/^[A-Z]{3}$/.test(currency)) {
@@ -629,6 +689,12 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
       : undefined;
 
   const email = form.email.trim();
+  const method = form.supplierPaymentMethod;
+  const bankName = form.supplierBankName.trim();
+  const accountName = form.supplierBankAccountName.trim();
+  const accountNumber = form.supplierBankAccountNumber.trim();
+  const branchName = form.supplierBankBranchName.trim();
+  const hasPaymentDetails = bankName || accountName || accountNumber || branchName;
 
   return {
     name: form.name.trim(),
@@ -641,10 +707,13 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
     paymentTermsId: form.paymentTermsId || undefined,
     defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,
     taxId: form.taxId.trim(),
-    supplierBankName: form.supplierBankName.trim(),
-    supplierBankAccountName: form.supplierBankAccountName.trim(),
-    supplierBankAccountNumber: form.supplierBankAccountNumber.trim(),
-    supplierBankBranchName: form.supplierBankBranchName.trim(),
+    ...(hasPaymentDetails ? { supplierPaymentMethod: method } : {}),
+    ...(method === "BANK" && bankName ? { supplierBankName: bankName } : {}),
+    ...(method !== "MPESA" && accountName ? { supplierBankAccountName: accountName } : {}),
+    ...(accountNumber ? { supplierBankAccountNumber: accountNumber } : {}),
+    ...(method !== "TILL" && method !== "MPESA" && branchName
+      ? { supplierBankBranchName: branchName }
+      : {}),
     address,
     lastKnownLatitude: form.latitude,
     lastKnownLongitude: form.longitude,
