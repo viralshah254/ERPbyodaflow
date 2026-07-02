@@ -15,10 +15,18 @@ export function parseDecimalString(s: string): number {
   return Number(t);
 }
 
-/** Format with thousands separators for display when the field is not focused. */
+/** Parse only when the user has finished a decimal token (not trailing "."). */
+export function parsePartialDecimalString(s: string): number | null {
+  const t = sanitizeDecimalInput(s).trim();
+  if (t === "" || t === "." || t.endsWith(".")) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Format with thousands separators when blurred; preserve measured decimal precision. */
 export function formatDecimalDisplay(raw: string): string {
   if (!raw.trim()) return "";
   const n = parseDecimalString(raw);
   if (!Number.isFinite(n)) return raw;
-  return n.toLocaleString("en-US", { maximumFractionDigits: 10 });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 20 });
 }
