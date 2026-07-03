@@ -14,6 +14,8 @@ export type ProductRow = {
   defaultTaxCodeId?: string;
   status: string;
   currentStock?: number;
+  /** Available at fulfilment warehouse when fetched with includeStock + warehouseId. */
+  availableQuantity?: number;
   /** Internal notes / long description (not printed on docs unless configured). */
   description?: string;
   updatedAt?: string;
