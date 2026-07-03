@@ -45,6 +45,10 @@ export type WarehousePickPackRow = {
     onHandPrimaryWarehouse?: number;
     /** Sum of available quantity across all warehouses (display only). */
     onHandOrgWide?: number;
+    /** Extra line added at pick time — can be removed while PENDING. */
+    addedAtPickPack?: boolean;
+    /** Server-computed: show remove control while PENDING. */
+    canRemove?: boolean;
   }>;
   /** Resolved primary stock warehouse (code MAIN); used for MAIN stock column. */
   primaryStockWarehouseId?: string;
@@ -163,6 +167,36 @@ export async function patchPickPackWarehouse(id: string, warehouseId: string): P
   await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: { warehouseId },
+  });
+}
+
+export async function patchPickPackLines(
+  id: string,
+  body: {
+    updates?: Array<{
+      lineId: string;
+      productId?: string;
+      quantity?: number;
+      pickedQty?: number;
+      locationId?: string;
+      remove?: boolean;
+    }>;
+    addLines?: Array<{
+      productId: string;
+      quantity: number;
+      pickedQty?: number;
+      substituteForLineId?: string;
+    }>;
+    replaceLineWithBreakdown?: {
+      lineId: string;
+      breakdown: Array<{ productId: string; quantity: number }>;
+    };
+  }
+): Promise<void> {
+  requireLiveApi("Pick-pack line edits");
+  await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body,
   });
 }
 

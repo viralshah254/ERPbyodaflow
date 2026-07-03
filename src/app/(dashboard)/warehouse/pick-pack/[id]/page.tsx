@@ -11,9 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchPickPackTask, patchPickPackWarehouse, runPickPackAction, stagePickPackStock, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import { fetchPickPackTask, patchPickPackLines, patchPickPackWarehouse, runPickPackAction, stagePickPackStock, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { patchDocumentApi } from "@/lib/api/documents";
+import { fetchProductsApi } from "@/lib/api/products";
+import type { ProductRow } from "@/lib/types/masters";
 import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
@@ -24,6 +26,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 /** 400 from pick-pack action may include shortLines (same shape as dispatch). */
 function toastPickPackInsufficientError(e: unknown) {
@@ -63,6 +75,28 @@ function parsePickedQtyInput(raw: string | undefined, fallback: number): number 
   const n = Number(trimmed);
   if (!Number.isFinite(n) || n < 0) return fallback;
   return n;
+}
+
+function isRoundFishMixLine(line: { productName?: string; sku?: string }): boolean {
+  const name = (line.productName ?? "").toLowerCase();
+  const sku = (line.sku ?? "").toLowerCase();
+  if (name.includes("round fish") && !/\bsize\b/.test(name)) return true;
+  if (sku === "tp-round" || sku === "np-round") return true;
+  return /round fish.*\bmix\b/i.test(line.productName ?? "");
+}
+
+function sizeProductsForBreakdown(products: ProductRow[], line: { productName?: string; sku?: string }): ProductRow[] {
+  const familyHint = (line.productName ?? "").split(/[—–-]/)[0]?.trim().toLowerCase() ?? "";
+  return products
+    .filter((p) => {
+      const name = p.name.toLowerCase();
+      if (!/\bsize\b/.test(name) && !/\bs10up\b/i.test(p.sku ?? "")) return false;
+      if (familyHint && !name.includes(familyHint.split(" ")[0] ?? "")) {
+        if (!/tilapia|perch|fresh/i.test(name)) return false;
+      }
+      return /round fish|gutted|fresh tilapia|tilapia/i.test(name);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function AvailWithPickDelta({
@@ -115,6 +149,16 @@ export default function PickPackDetailPage() {
   const [loadError, setLoadError] = React.useState<"not_found" | null>(null);
   /** Editable picked qty per line while task is PENDING (keyed by line.id). */
   const [linePickedDraft, setLinePickedDraft] = React.useState<Record<string, string>>({});
+  const [products, setProducts] = React.useState<ProductRow[]>([]);
+  const [lineEditSaving, setLineEditSaving] = React.useState<string | null>(null);
+  const [breakdownLineId, setBreakdownLineId] = React.useState<string | null>(null);
+  const [breakdownDraft, setBreakdownDraft] = React.useState<Record<string, string>>({});
+  const [breakdownSaving, setBreakdownSaving] = React.useState(false);
+  const [addLineOpen, setAddLineOpen] = React.useState(false);
+  const [addLineProductId, setAddLineProductId] = React.useState("");
+  const [addLineQty, setAddLineQty] = React.useState("");
+  const [addLineSaving, setAddLineSaving] = React.useState(false);
+  const [removeConfirm, setRemoveConfirm] = React.useState<{ lineId: string; label: string } | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -144,12 +188,24 @@ export default function PickPackDetailPage() {
   }, [refresh]);
 
   React.useEffect(() => {
+    void fetchProductsApi({ sellable: true, limit: 100, includeStock: false })
+      .then(setProducts)
+      .catch(() => {
+        /* product list optional for substitution */
+      });
+  }, []);
+
+  React.useEffect(() => {
     if (!task) return;
     const statusUpper = (task.status ?? "").trim().toUpperCase();
     if (statusUpper !== "PENDING") return;
     const next: Record<string, string> = {};
     for (const line of task.lines) {
-      const initial = line.pickedQty != null && line.pickedQty > 0 ? line.pickedQty : line.quantity;
+      const avail = typeof line.onHandWarehouse === "number" ? line.onHandWarehouse : line.quantity;
+      const initial =
+        line.pickedQty != null && line.pickedQty > 0
+          ? line.pickedQty
+          : Math.min(line.quantity, avail);
       next[line.id] = String(initial);
     }
     setLinePickedDraft(next);
@@ -244,37 +300,91 @@ export default function PickPackDetailPage() {
     [task, refresh, fulfilmentWarehouseUi.changeViaDn, fulfilmentWarehouseUi.coolCatchLocked]
   );
 
-  /** Mirrors server-side getPickPackDispatchShortfalls — block confirm pick/pack when fulfilment qty is insufficient. */
-  const fulfilmentPickPackBlock = React.useMemo(() => {
-    type Row = { sku?: string; productName?: string; need: number; available: number };
-    if (!task) return { blocked: false, missingWarehouse: false, shortfalls: [] as Row[] };
+  /** Partial pick / substitution summary — warnings only; confirm is allowed when at least one line picks > 0. */
+  const partialPickSummary = React.useMemo(() => {
+    type Row = { sku?: string; productName?: string; ordered: number; picked: number; available: number };
+    if (!task) return { missingWarehouse: false, skipped: [] as Row[], partial: [] as Row[], overPick: [] as Row[] };
     const missingWarehouse = !(task.warehouseId ?? "").trim();
-    if (missingWarehouse) return { blocked: true, missingWarehouse: true, shortfalls: [] as Row[] };
+    if (missingWarehouse) return { missingWarehouse: true, skipped: [] as Row[], partial: [] as Row[], overPick: [] as Row[] };
 
     const statusUpper = (task.status ?? "").trim().toUpperCase();
-    const shortfalls: Row[] = [];
+    const skipped: Row[] = [];
+    const partial: Row[] = [];
+    const overPick: Row[] = [];
     for (const line of task.lines) {
-      const need =
+      const ordered = line.quantity;
+      const picked =
         statusUpper === "PENDING"
           ? parsePickedQtyInput(linePickedDraft[line.id], line.quantity)
           : (line.pickedQty ?? line.quantity);
-      if (!(need > 1e-9)) continue;
       const available = line.onHandWarehouse ?? 0;
-      if (available + 1e-9 < need) {
-        shortfalls.push({
-          sku: line.sku,
-          productName: line.productName,
-          need,
-          available,
-        });
+      if (picked <= 1e-9) {
+        if (ordered > 1e-9) {
+          skipped.push({ sku: line.sku, productName: line.productName, ordered, picked: 0, available });
+        }
+        continue;
+      }
+      if (available <= 1e-9) {
+        overPick.push({ sku: line.sku, productName: line.productName, ordered, picked, available });
+      } else if (picked + 1e-9 < ordered) {
+        partial.push({ sku: line.sku, productName: line.productName, ordered, picked, available });
+      } else if (picked > available + 1e-9) {
+        overPick.push({ sku: line.sku, productName: line.productName, ordered, picked, available });
       }
     }
-    return {
-      blocked: shortfalls.length > 0,
-      missingWarehouse: false,
-      shortfalls,
-    };
+    return { missingWarehouse: false, skipped, partial, overPick };
   }, [task, linePickedDraft]);
+
+  const saveLineProductSubstitution = React.useCallback(
+    async (lineId: string, productId: string) => {
+      if (!task) return;
+      setLineEditSaving(lineId);
+      try {
+        await patchPickPackLines(task.id, { updates: [{ lineId, productId }] });
+        toast.success("Product updated on this line.");
+        await refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not update product.");
+      } finally {
+        setLineEditSaving(null);
+      }
+    },
+    [task, refresh]
+  );
+
+  const removeAddedLine = React.useCallback(
+    async (lineId: string) => {
+      if (!task) return;
+      setLineEditSaving(lineId);
+      try {
+        await patchPickPackLines(task.id, { updates: [{ lineId, remove: true }] });
+        await refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not remove line.");
+      } finally {
+        setLineEditSaving(null);
+      }
+    },
+    [task, refresh]
+  );
+
+  const openBreakdownForLine = React.useCallback(
+    (lineId: string) => {
+      const line = task?.lines.find((l) => l.id === lineId);
+      if (!line) return;
+      const sizeProducts = sizeProductsForBreakdown(products, line);
+      const draft: Record<string, string> = {};
+      for (const p of sizeProducts) {
+        draft[p.id] = "";
+      }
+      setBreakdownDraft(draft);
+      setBreakdownLineId(lineId);
+    },
+    [task, products]
+  );
+
+  const breakdownLine = breakdownLineId ? task?.lines.find((l) => l.id === breakdownLineId) : null;
+  const breakdownSizeProducts = breakdownLine ? sizeProductsForBreakdown(products, breakdownLine) : [];
 
   const buildPickLinesPayload = React.useCallback(() => {
     if (!task) return [];
@@ -364,7 +474,7 @@ export default function PickPackDetailPage() {
   const workflowHint = (() => {
     if (isCancelled) return "This task was cancelled.";
     if (taskStatusUpper === "PENDING")
-      return "Edit picked quantities if needed, set cartons, then confirm pick & pack in one step.";
+      return "Change the product on a line to substitute (dropdown), set picked qty, then confirm pick & pack. Set picked to 0 to skip.";
     if (taskStatusUpper === "PICKED") return "Pick saved — adjust cartons if needed, then confirm pack.";
     if (taskStatusUpper === "PACKED") return "Packed — add courier/tracking and mark dispatched to issue stock from the fulfilment warehouse.";
     if (taskStatusUpper === "DISPATCHED")
@@ -375,14 +485,8 @@ export default function PickPackDetailPage() {
   })();
 
   const canConfirmPickAndPackStockOk =
-    canConfirmPick &&
-    !pickedDraftInvalid &&
-    !fulfilmentPickPackBlock.missingWarehouse &&
-    fulfilmentPickPackBlock.shortfalls.length === 0;
-  const canConfirmPackOnlyStockOk =
-    canConfirmPackOnly &&
-    !fulfilmentPickPackBlock.missingWarehouse &&
-    fulfilmentPickPackBlock.shortfalls.length === 0;
+    canConfirmPick && !pickedDraftInvalid && !partialPickSummary.missingWarehouse;
+  const canConfirmPackOnlyStockOk = canConfirmPackOnly && !partialPickSummary.missingWarehouse;
 
   return (
     <PageShell>
@@ -523,8 +627,11 @@ export default function PickPackDetailPage() {
               ) : null}
             </div>
             <CardDescription>
-              Suggested bins and picked quantities come from backend execution records. Table columns use available quantity (on
-              hand minus reserved), including inactive warehouses in &quot;All sites&quot;.
+              <strong>Most substitutions:</strong> use the product dropdown on the line (e.g. change Size 3 → Size 10 when Size 3
+              is out of stock), then enter picked qty. Set picked to 0 to skip a line entirely.{" "}
+              <strong>Round fish mix:</strong> use &quot;Break down by size&quot; on that line.{" "}
+              Only use &quot;Add extra product line&quot; when you need a second product on the shipment while keeping the original
+              line at 0 for the record.
               {dispatchedOrComplete ? (
                 <span className="mt-2 block font-medium text-foreground">
                   This shipment has been dispatched from stock; remaining columns still show ledger availability before this task&apos;s
@@ -537,7 +644,7 @@ export default function PickPackDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product</TableHead>
+                  <TableHead className="min-w-[12rem]">Product (substitute)</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>Qty</TableHead>
                   <TableHead className="text-right">Avail. (warehouse)</TableHead>
@@ -546,6 +653,7 @@ export default function PickPackDetailPage() {
                   <TableHead className="text-right">Avail. at bin</TableHead>
                   <TableHead>Suggested bin</TableHead>
                   <TableHead>{qtyColumnLabel}</TableHead>
+                  {canConfirmPick && canWrite ? <TableHead className="w-10" aria-label="Remove line" /> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -568,7 +676,40 @@ export default function PickPackDetailPage() {
                     atBin < line.quantity;
                   return (
                     <TableRow key={line.id}>
-                      <TableCell>{line.productName ?? line.productId}</TableCell>
+                      <TableCell className="min-w-[12rem]">
+                        {canEditPicked && products.length ? (
+                          <Select
+                            value={line.productId}
+                            disabled={lineEditSaving === line.id}
+                            onValueChange={(productId) => {
+                              void saveLineProductSubstitution(line.id, productId);
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72">
+                              {products.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.sku ? `${p.sku} — ${p.name}` : p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          line.productName ?? line.productId
+                        )}
+                        {canEditPicked && isRoundFishMixLine(line) ? (
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="h-auto p-0 text-xs"
+                            onClick={() => openBreakdownForLine(line.id)}
+                          >
+                            Break down by size
+                          </Button>
+                        ) : null}
+                      </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">{line.sku ?? "—"}</TableCell>
                       <TableCell>{line.quantity}</TableCell>
                       <TableCell
@@ -614,11 +755,46 @@ export default function PickPackDetailPage() {
                           <span className="tabular-nums">{line.pickedQty ?? 0}</span>
                         )}
                       </TableCell>
+                      {canConfirmPick && canWrite ? (
+                        <TableCell className="w-10 px-2">
+                          {line.canRemove ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              disabled={lineEditSaving === line.id}
+                              aria-label={`Remove ${line.productName ?? line.sku ?? "line"}`}
+                              title="Remove extra line"
+                              onClick={() =>
+                                setRemoveConfirm({
+                                  lineId: line.id,
+                                  label: line.productName ?? line.sku ?? "this line",
+                                })
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   );
                 })}
               </TableBody>
             </Table>
+            {canConfirmPick && canWrite ? (
+              <div className="border-t px-4 py-3 space-y-1">
+                <Button type="button" variant="outline" size="sm" onClick={() => setAddLineOpen(true)}>
+                  Add extra product line
+                </Button>
+                <p className="text-[11px] text-muted-foreground max-w-xl">
+                  Optional — only if you ship an additional product while leaving the original line at picked 0. For a simple swap
+                  (Size 9 → Size 10), use the product dropdown on that row instead. Added lines show a{" "}
+                  <Trash2 className="inline h-3 w-3 align-text-bottom" aria-hidden /> remove icon on the right.
+                </p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -760,26 +936,50 @@ export default function PickPackDetailPage() {
           {workflowHint ? <p className="text-xs text-muted-foreground">{workflowHint}</p> : null}
           {pickedDraftInvalid && canConfirmPick ? (
             <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-              At least one line needs a picked quantity greater than zero. Set out-of-stock lines to 0 to ship the rest.
+              At least one line needs a picked quantity greater than zero. Set out-of-stock lines to 0 to ship the rest, or substitute another product.
             </p>
           ) : null}
-          {fulfilmentPickPackBlock.missingWarehouse && canConfirmPick ? (
+          {partialPickSummary.missingWarehouse && canConfirmPick ? (
             <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
               Select a fulfilment warehouse before you can confirm pick &amp; pack.
             </p>
           ) : null}
-          {fulfilmentPickPackBlock.shortfalls.length ? (
-            <div className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-              <p className="font-medium">Insufficient stock at fulfilment warehouse — pick &amp; pack disabled.</p>
-              <ul className="mt-2 list-disc pl-5 space-y-1">
-                {fulfilmentPickPackBlock.shortfalls.map((s, idx) => (
-                  <li key={`${s.sku ?? s.productName ?? idx}-${idx}`}>
-                    {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · need{" "}
-                    <span className="tabular-nums font-medium">{s.need}</span>, available{" "}
-                    <span className="tabular-nums font-medium">{s.available}</span>
-                  </li>
-                ))}
-              </ul>
+          {(partialPickSummary.skipped.length > 0 ||
+            partialPickSummary.partial.length > 0 ||
+            partialPickSummary.overPick.length > 0) &&
+          canConfirmPick ? (
+            <div className="text-sm rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-amber-950 dark:text-amber-100">
+              <p className="font-medium">Partial delivery — you can still confirm pick &amp; pack.</p>
+              {partialPickSummary.skipped.length ? (
+                <ul className="mt-2 list-disc pl-5 space-y-1">
+                  {partialPickSummary.skipped.map((s, idx) => (
+                    <li key={`skip-${idx}`}>
+                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · ordered {s.ordered} —{" "}
+                      <strong>skipped</strong> (set picked to 0)
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {partialPickSummary.partial.length ? (
+                <ul className="mt-2 list-disc pl-5 space-y-1">
+                  {partialPickSummary.partial.map((s, idx) => (
+                    <li key={`part-${idx}`}>
+                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · shipping {s.picked} of{" "}
+                      {s.ordered} (available {s.available})
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {partialPickSummary.overPick.length ? (
+                <ul className="mt-2 list-disc pl-5 space-y-1">
+                  {partialPickSummary.overPick.map((s, idx) => (
+                    <li key={`over-${idx}`}>
+                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · picked {s.picked} but only{" "}
+                      {s.available} available — will cap to available on confirm
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               {showStageStockCta ? (
                 <p className="mt-2 text-xs opacity-95">
                   If stock exists at another warehouse, use <strong>Stage stock to fulfilment warehouse</strong> below.
@@ -794,11 +994,9 @@ export default function PickPackDetailPage() {
               title={
                 pickedDraftInvalid
                   ? "Enter a picked quantity greater than zero on at least one line."
-                  : fulfilmentPickPackBlock.missingWarehouse
+                  : partialPickSummary.missingWarehouse
                     ? "Select a fulfilment warehouse first."
-                    : fulfilmentPickPackBlock.shortfalls.length
-                      ? "Not enough available stock here for the picked quantities."
-                      : undefined
+                    : undefined
               }
               onClick={() =>
                 void (async () => {
@@ -832,11 +1030,9 @@ export default function PickPackDetailPage() {
               variant="secondary"
               disabled={!canConfirmPackOnlyStockOk || pickPackLoading}
               title={
-                fulfilmentPickPackBlock.missingWarehouse
+                partialPickSummary.missingWarehouse
                   ? "Select a fulfilment warehouse first."
-                  : fulfilmentPickPackBlock.shortfalls.length
-                    ? "Not enough available stock for these picked quantities."
-                    : undefined
+                  : undefined
               }
               onClick={() =>
                 void (async () => {
@@ -903,6 +1099,165 @@ export default function PickPackDetailPage() {
           ) : null}
         </div>
         </div>
+
+        <Sheet open={breakdownLineId != null} onOpenChange={(open) => !open && setBreakdownLineId(null)}>
+          <SheetContent className="overflow-y-auto sm:max-w-lg">
+            <SheetHeader>
+              <SheetTitle>Break down by size</SheetTitle>
+              <SheetDescription>
+                Enter kg per size for {breakdownLine?.productName ?? "round fish"}. Total should match the ordered quantity (
+                {breakdownLine?.quantity ?? 0} kg).
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-3 py-4">
+              {breakdownSizeProducts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No size products found in catalog. Add tilapia/perch size SKUs first.</p>
+              ) : (
+                breakdownSizeProducts.map((p) => (
+                  <div key={p.id} className="flex items-center gap-3">
+                    <Label className="min-w-0 flex-1 truncate text-xs">{p.sku ? `${p.sku} — ${p.name}` : p.name}</Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="any"
+                      className="h-8 w-24 tabular-nums"
+                      placeholder="kg"
+                      value={breakdownDraft[p.id] ?? ""}
+                      onChange={(e) => setBreakdownDraft((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+            <SheetFooter>
+              <Button
+                type="button"
+                disabled={breakdownSaving || !breakdownLineId || breakdownSizeProducts.length === 0}
+                onClick={() =>
+                  void (async () => {
+                    if (!task || !breakdownLineId) return;
+                    const breakdown = breakdownSizeProducts
+                      .map((p) => ({
+                        productId: p.id,
+                        quantity: Number(breakdownDraft[p.id] ?? 0),
+                      }))
+                      .filter((row) => Number.isFinite(row.quantity) && row.quantity > 0);
+                    if (!breakdown.length) {
+                      toast.error("Enter at least one size quantity.");
+                      return;
+                    }
+                    setBreakdownSaving(true);
+                    try {
+                      await patchPickPackLines(task.id, {
+                        replaceLineWithBreakdown: { lineId: breakdownLineId, breakdown },
+                      });
+                      toast.success("Line broken down into sizes.");
+                      setBreakdownLineId(null);
+                      await refresh();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Breakdown failed.");
+                    } finally {
+                      setBreakdownSaving(false);
+                    }
+                  })()
+                }
+              >
+                {breakdownSaving ? "Saving…" : "Apply breakdown"}
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={addLineOpen} onOpenChange={setAddLineOpen}>
+          <SheetContent className="sm:max-w-md">
+            <SheetHeader>
+              <SheetTitle>Add extra product line</SheetTitle>
+              <SheetDescription>
+                Adds another row to this pick list. Use this only when the customer ordered one product but you are shipping an extra
+                SKU as well (original line stays at picked 0). To replace a line entirely, use the product dropdown on that row.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Product</Label>
+                <Select value={addLineProductId} onValueChange={setAddLineProductId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select product" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.sku ? `${p.sku} — ${p.name}` : p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Quantity (kg)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={addLineQty}
+                  onChange={(e) => setAddLineQty(e.target.value)}
+                />
+              </div>
+            </div>
+            <SheetFooter>
+              <Button
+                type="button"
+                disabled={addLineSaving || !addLineProductId}
+                onClick={() =>
+                  void (async () => {
+                    if (!task) return;
+                    const qty = Number(addLineQty);
+                    if (!Number.isFinite(qty) || qty <= 0) {
+                      toast.error("Enter a quantity greater than zero.");
+                      return;
+                    }
+                    setAddLineSaving(true);
+                    try {
+                      await patchPickPackLines(task.id, {
+                        addLines: [{ productId: addLineProductId, quantity: qty }],
+                      });
+                      setAddLineOpen(false);
+                      setAddLineProductId("");
+                      setAddLineQty("");
+                      await refresh();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Could not add line.");
+                    } finally {
+                      setAddLineSaving(false);
+                    }
+                  })()
+                }
+              >
+                {addLineSaving ? "Adding…" : "Add line"}
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+
+        <ConfirmDialog
+          open={removeConfirm != null}
+          onOpenChange={(open) => {
+            if (!open) setRemoveConfirm(null);
+          }}
+          title="Remove extra product line?"
+          description={
+            removeConfirm
+              ? `"${removeConfirm.label}" will be removed from this pick list. This cannot be undone. To skip an order line without deleting it, set picked qty to 0 instead.`
+              : undefined
+          }
+          confirmLabel="Remove line"
+          cancelLabel="Keep line"
+          variant="destructive"
+          onConfirm={() => {
+            if (removeConfirm) void removeAddedLine(removeConfirm.lineId);
+          }}
+        />
       </div>
     </PageShell>
   );
