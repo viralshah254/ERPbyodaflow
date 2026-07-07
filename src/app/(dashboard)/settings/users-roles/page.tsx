@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -77,6 +77,18 @@ export default function UsersRolesPage() {
   const [passwordResetRequests, setPasswordResetRequests] = React.useState<PasswordResetRequestRow[]>([]);
   const [passwordResetLoading, setPasswordResetLoading] = React.useState(false);
   const [dismissingRequestId, setDismissingRequestId] = React.useState<string | null>(null);
+  const pathname = usePathname();
+
+  const pendingResetUserIds = React.useMemo(
+    () => new Set(passwordResetRequests.map((r) => r.userId)),
+    [passwordResetRequests]
+  );
+
+  const clearResetUserFromUrl = React.useCallback(() => {
+    if (searchParams.get("userId")) {
+      router.replace("/settings/users-roles", { scroll: false });
+    }
+  }, [router, searchParams]);
 
   const sortedRoles = React.useMemo(
     () => [...roles].sort((a, b) => a.name.localeCompare(b.name)),
@@ -137,6 +149,27 @@ export default function UsersRolesPage() {
     void refreshPasswordResetRequests();
   }, [refreshPasswordResetRequests]);
 
+  // Refresh queue whenever admin returns to this page (e.g. after browsing elsewhere in ERP).
+  React.useEffect(() => {
+    if (pathname?.startsWith("/settings/users-roles")) {
+      void refreshPasswordResetRequests();
+    }
+  }, [pathname, refreshPasswordResetRequests]);
+
+  React.useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        void refreshPasswordResetRequests();
+      }
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [refreshPasswordResetRequests]);
+
   // Lazy-load franchisees when tab is first opened
   const franchiseLoaded = React.useRef(false);
   const loadFranchiseOutlets = React.useCallback(() => {
@@ -182,16 +215,40 @@ export default function UsersRolesPage() {
     setUserSheetOpen(true);
   };
 
-  // Open user edit sheet when arriving from a password-reset notification deep link.
-  const deepLinkHandled = React.useRef(false);
+  const openResetPasswordForUserId = React.useCallback(
+    (userId: string) => {
+      router.push(`/settings/users-roles?userId=${encodeURIComponent(userId)}`, { scroll: false });
+      const target = users.find((u) => u.id === userId);
+      if (target) openEditUser(target);
+    },
+    [router, users]
+  );
+
+  // Open (or re-open) reset sheet when landing with ?userId= from a notification or queue link.
   React.useEffect(() => {
-    if (loading || !deepLinkUserId || deepLinkHandled.current) return;
+    if (loading || passwordResetLoading || !deepLinkUserId) return;
+
+    const stillPending = passwordResetRequests.some((r) => r.userId === deepLinkUserId);
+    if (!stillPending) {
+      clearResetUserFromUrl();
+      return;
+    }
+
     const target = users.find((u) => u.id === deepLinkUserId);
     if (!target) return;
-    deepLinkHandled.current = true;
+    if (userSheetOpen && editingUser?.id === deepLinkUserId) return;
+
     openEditUser(target);
-    router.replace("/settings/users-roles");
-  }, [loading, deepLinkUserId, users, router]);
+  }, [
+    loading,
+    passwordResetLoading,
+    deepLinkUserId,
+    passwordResetRequests,
+    users,
+    userSheetOpen,
+    editingUser?.id,
+    clearResetUserFromUrl,
+  ]);
 
   const openCreateRole = () => {
     setEditingRole(null);
@@ -246,7 +303,14 @@ export default function UsersRolesPage() {
       <div className="p-6">
         <Tabs defaultValue="users" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="users" className="gap-2">
+              Users
+              {passwordResetRequests.length > 0 ? (
+                <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-xs bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                  {passwordResetRequests.length}
+                </Badge>
+              ) : null}
+            </TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
             <TabsTrigger value="franchisees" onClick={loadFranchiseOutlets}>
               Franchisees
@@ -264,7 +328,8 @@ export default function UsersRolesPage() {
                         Password reset requests
                       </CardTitle>
                       <CardDescription>
-                        Users waiting for an admin to set a new password. This list stays visible even if push notifications fail.
+                        Users waiting for an admin to set a new password. Safe to browse elsewhere in ERP — this
+                        queue stays until you reset or dismiss each request.
                       </CardDescription>
                     </div>
                     <Button
@@ -293,8 +358,13 @@ export default function UsersRolesPage() {
                       <TableBody>
                         {passwordResetRequests.map((req) => {
                           const userRow = users.find((u) => u.id === req.userId);
+                          const isActive = deepLinkUserId === req.userId && userSheetOpen;
                           return (
-                            <TableRow key={req.userId}>
+                            <TableRow
+                              key={req.userId}
+                              className={`cursor-pointer ${isActive ? "bg-amber-500/10" : "hover:bg-muted/50"}`}
+                              onClick={() => openResetPasswordForUserId(req.userId)}
+                            >
                               <TableCell>
                                 <div className="font-medium">{req.displayName}</div>
                                 <div className="text-sm text-muted-foreground">{req.email}</div>
@@ -309,13 +379,10 @@ export default function UsersRolesPage() {
                                 {new Date(req.requestedAt).toLocaleString()}
                               </TableCell>
                               <TableCell className="text-right">
-                                <div className="flex justify-end gap-2">
+                                <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                                   <Button
                                     size="sm"
-                                    onClick={() => {
-                                      if (userRow) openEditUser(userRow);
-                                      else router.push(`/settings/users-roles?userId=${encodeURIComponent(req.userId)}`);
-                                    }}
+                                    onClick={() => openResetPasswordForUserId(req.userId)}
                                   >
                                     Reset password
                                   </Button>
@@ -330,6 +397,7 @@ export default function UsersRolesPage() {
                                         setPasswordResetRequests((prev) =>
                                           prev.filter((r) => r.userId !== req.userId)
                                         );
+                                        if (deepLinkUserId === req.userId) clearResetUserFromUrl();
                                         toast.success("Request dismissed.");
                                       } catch (error) {
                                         toast.error(
@@ -388,8 +456,20 @@ export default function UsersRolesPage() {
                       </TableRow>
                     ) : null}
                     {users.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell className="font-medium">{u.firstName} {u.lastName}</TableCell>
+                      <TableRow
+                        key={u.id}
+                        className={pendingResetUserIds.has(u.id) ? "bg-amber-500/5" : undefined}
+                      >
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{u.firstName} {u.lastName}</span>
+                            {pendingResetUserIds.has(u.id) ? (
+                              <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-700 dark:text-amber-300">
+                                Reset pending
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </TableCell>
                         <TableCell>{u.email}</TableCell>
                         <TableCell>{u.status ?? "ACTIVE"}</TableCell>
                         {copilotProductEnabled ? (
@@ -404,9 +484,15 @@ export default function UsersRolesPage() {
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
-                            Edit
-                          </Button>
+                          {pendingResetUserIds.has(u.id) ? (
+                            <Button variant="secondary" size="sm" onClick={() => openResetPasswordForUserId(u.id)}>
+                              Reset password
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" onClick={() => openEditUser(u)}>
+                              Edit
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -619,7 +705,13 @@ export default function UsersRolesPage() {
         </Tabs>
       </div>
 
-      <Sheet open={userSheetOpen} onOpenChange={setUserSheetOpen}>
+      <Sheet
+        open={userSheetOpen}
+        onOpenChange={(open) => {
+          setUserSheetOpen(open);
+          if (!open) clearResetUserFromUrl();
+        }}
+      >
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editingUser ? "Edit user" : "Add user"}</SheetTitle>
@@ -639,6 +731,11 @@ export default function UsersRolesPage() {
 
             {editingUser ? (
               <div className="space-y-3 rounded-lg border p-4">
+                {pendingResetUserIds.has(editingUser.id) ? (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+                    This user requested a password reset. Set a new password below, then share it with them securely.
+                  </div>
+                ) : null}
                 <div>
                   <p className="text-sm font-medium">Sign-in password</p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -701,6 +798,7 @@ export default function UsersRolesPage() {
                       toast.success("Password updated.");
                       setPasswordNew("");
                       setPasswordConfirm("");
+                      clearResetUserFromUrl();
                       void refreshPasswordResetRequests();
                       // Refetch so hasSignIn reflects the newly provisioned Firebase account.
                       const refreshed = await fetchUsersApi();
