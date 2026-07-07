@@ -30,6 +30,11 @@ export function getRuntimeMode(): RuntimeMode {
   return normalizeRuntimeMode(process.env.NEXT_PUBLIC_RUNTIME_MODE);
 }
 
+/** Client-visible environment label (set NEXT_PUBLIC_NODE_ENV=development locally). */
+export function isDevelopmentEnvironment(): boolean {
+  return process.env.NEXT_PUBLIC_NODE_ENV === "development";
+}
+
 export function canUseDevHeaders(): boolean {
   if (typeof window === "undefined") return false;
   const host = window.location.hostname;

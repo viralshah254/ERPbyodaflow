@@ -7,26 +7,26 @@ import { isFirebaseConfigured } from "@/lib/firebase";
 
 /** Registers web FCM after login; removes token on logout. */
 export function PushNotificationInit() {
-  const user = useAuthStore((s) => s.user);
+  const userId = useAuthStore((s) => s.user?.userId);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const startedRef = useRef(false);
+  const startedForUserRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isLoading || !isFirebaseConfigured()) return;
 
-    if (!user) {
-      startedRef.current = false;
+    if (!userId) {
+      startedForUserRef.current = null;
       void unregisterWebPushToken();
       return;
     }
 
-    if (startedRef.current) return;
-    startedRef.current = true;
+    if (startedForUserRef.current === userId) return;
+    startedForUserRef.current = userId;
     void initWebPushNotifications().catch((err) => {
       console.warn("[push] init failed:", err);
-      startedRef.current = false;
+      startedForUserRef.current = null;
     });
-  }, [user, isLoading]);
+  }, [userId, isLoading]);
 
   return null;
 }

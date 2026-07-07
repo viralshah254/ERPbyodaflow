@@ -370,10 +370,6 @@ export default function UsersRolesPage() {
                         <Icons.KeyRound className="h-4 w-4 text-amber-600" />
                         Password reset requests
                       </CardTitle>
-                      <CardDescription>
-                        Users waiting for an admin to set a new password. Safe to browse elsewhere in ERP — this
-                        queue stays until you reset or dismiss each request.
-                      </CardDescription>
                     </div>
                     <Button
                       variant="ghost"

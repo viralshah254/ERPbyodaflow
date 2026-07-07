@@ -3,6 +3,7 @@
 import { MainLayout } from "@/components/layout/main-layout";
 import { AppShellScrollLock } from "@/components/layout/app-shell-scroll-lock";
 import { PushNotificationInit } from "@/components/push-notification-init";
+import { PushForegroundToast } from "@/components/push-foreground-toast";
 import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -55,6 +56,7 @@ export default function DashboardLayout({
     <>
       <AppShellScrollLock />
       <PushNotificationInit />
+      <PushForegroundToast />
       <MainLayout>
         {!isApiConfigured() ? (
           <div className="mb-4 shrink-0 w-full rounded-md border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-xs text-amber-200">

@@ -346,6 +346,39 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
     ? rows.filter((r) => r.productName.toLowerCase().includes(search.toLowerCase()) || r.sku.toLowerCase().includes(search.toLowerCase()))
     : rows;
 
+  const adjustPreview = React.useMemo(() => {
+    if (!adjusting) return null;
+    const current = adjusting.quantity;
+    const parsed = parseFloat(adjustQty);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return { valid: false as const, current };
+    }
+
+    let projected = current;
+    let delta = 0;
+    if (adjustMode === "SET") {
+      projected = parsed;
+      delta = parsed - current;
+    } else if (adjustMode === "INCREASE") {
+      delta = parsed;
+      projected = current + parsed;
+    } else {
+      delta = -parsed;
+      projected = current - parsed;
+    }
+
+    const valid = projected >= 0 && projected >= adjusting.reservedQuantity;
+    return {
+      valid,
+      current,
+      projected,
+      delta,
+      reserved: adjusting.reservedQuantity,
+      negative: projected < 0,
+      belowReserved: projected >= 0 && projected < adjusting.reservedQuantity,
+    };
+  }, [adjusting, adjustMode, adjustQty]);
+
   const columns = [
     { id: "sku", header: "SKU", accessor: (r: OutletStockRow) => <span className="font-mono text-xs">{r.sku}</span> },
     { id: "product", header: "Product", accessor: (r: OutletStockRow) => r.productName },
@@ -407,11 +440,6 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
 
   return (
     <div className="space-y-4">
-      {canWrite ? (
-        <div className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
-          HQ admins can correct outlet on-hand quantities here. Changes post stock movements, update VMI snapshots, and are audit-logged. Removing a row zeroes stock first; movement history is kept.
-        </div>
-      ) : null}
       {latestTake && (
         <div className="flex items-center gap-2 text-xs rounded-md border border-emerald-500/25 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2 text-emerald-700 dark:text-emerald-400">
           <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
@@ -482,6 +510,52 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
                   onChange={(e) => setAdjustQty(e.target.value)}
                 />
               </div>
+              {adjustPreview && adjustQty.trim() !== "" ? (
+                <div
+                  className={`rounded-md border px-3 py-2.5 text-sm ${
+                    adjustPreview.valid
+                      ? "border-blue-300/70 bg-blue-50 text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50"
+                      : "border-destructive/40 bg-destructive/5 text-destructive"
+                  }`}
+                >
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                    Preview
+                  </div>
+                  {adjustPreview.valid || adjustPreview.negative || adjustPreview.belowReserved ? (
+                    <p className="font-medium tabular-nums">
+                      <span>{adjustPreview.current.toLocaleString()}</span>
+                      <span className="mx-1.5 text-muted-foreground">on hand</span>
+                      {adjustMode === "SET" ? (
+                        <>
+                          <span className="mx-1 text-muted-foreground">→</span>
+                          <span>set to {parseFloat(adjustQty).toLocaleString()}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="mx-1 text-muted-foreground">→</span>
+                          <span>
+                            {adjustMode === "INCREASE" ? "increase" : "decrease"} by{" "}
+                            {parseFloat(adjustQty).toLocaleString()}
+                          </span>
+                        </>
+                      )}
+                      <span className="mx-1 text-muted-foreground">→</span>
+                      <span className={adjustPreview.valid ? "text-emerald-700 dark:text-emerald-400" : ""}>
+                        will be {adjustPreview.projected.toLocaleString()}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">Enter a valid quantity to preview the new on-hand total.</p>
+                  )}
+                  {adjustPreview.negative ? (
+                    <p className="mt-1 text-xs">Cannot reduce below zero.</p>
+                  ) : adjustPreview.belowReserved ? (
+                    <p className="mt-1 text-xs">
+                      Cannot reduce below reserved quantity ({adjustPreview.reserved.toLocaleString()}).
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <Label>Reason (required)</Label>
                 <Textarea
@@ -496,7 +570,15 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
               <Button variant="outline" onClick={() => setAdjusting(null)} disabled={savingAdjust}>
                 Cancel
               </Button>
-              <Button onClick={() => void handleApplyAdjustment()} disabled={savingAdjust || !adjustReason.trim()}>
+              <Button
+                onClick={() => void handleApplyAdjustment()}
+                disabled={
+                  savingAdjust ||
+                  !adjustReason.trim() ||
+                  !adjustPreview?.valid ||
+                  !adjustQty.trim()
+                }
+              >
                 {savingAdjust ? "Saving…" : "Apply adjustment"}
               </Button>
             </SheetFooter>

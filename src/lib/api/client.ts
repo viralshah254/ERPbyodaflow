@@ -265,7 +265,10 @@ export async function apiRequest<T = unknown>(
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error((data as { error?: string }).error ?? `Request failed (${res.status})`) as Error & { status?: number; body?: unknown };
+    const payload = data as { error?: string; message?: string; reason?: string };
+    const err = new Error(
+      payload.error ?? payload.message ?? payload.reason ?? `Request failed (${res.status})`
+    ) as Error & { status?: number; body?: unknown };
     err.status = res.status;
     err.body = data;
     throw err;
