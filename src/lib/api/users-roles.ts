@@ -219,3 +219,30 @@ export async function fetchFranchiseOutletUsersApi(): Promise<FranchiseOutletUse
   );
   return payload.items;
 }
+
+export type PasswordResetRequestRow = {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  roleNames: string[];
+  mobilePersona: string;
+  mobilePersonaLabel: string;
+  requestedAt: string;
+};
+
+export async function fetchPasswordResetRequestsApi(): Promise<PasswordResetRequestRow[]> {
+  requireLiveApi("Password reset requests");
+  const payload = await apiRequest<{ items: PasswordResetRequestRow[] }>(
+    "/api/settings/password-reset-requests"
+  );
+  return payload.items;
+}
+
+export async function dismissPasswordResetRequestApi(userId: string): Promise<void> {
+  requireLiveApi("Password reset requests");
+  await apiRequest(`/api/settings/password-reset-requests/${encodeURIComponent(userId)}/dismiss`, {
+    method: "POST",
+  });
+}

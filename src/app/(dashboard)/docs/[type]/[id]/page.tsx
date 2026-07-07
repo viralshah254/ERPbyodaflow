@@ -43,10 +43,12 @@ import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import {
   addDocumentCommentApi,
+  amendDeliveryNoteDispatchApi,
   confirmDeliveryPodApi,
   convertDocumentApi,
   documentActionApi,
   downloadDocumentPdfApi,
+  downloadDocumentExcelApi,
   downloadDocumentAttachmentApi,
   fetchDocumentDetailApi,
   patchDocumentApi,
@@ -67,11 +69,14 @@ import {
 import { DocumentChainTimeline } from "@/components/docs/document-chain-timeline";
 import { deliveryLinePrimaryLabel, deliveryLineSku } from "@/lib/documents/format-delivery-line";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
+import { WarehouseProductPicker } from "@/components/warehouse/warehouse-product-picker";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import { useUIStore } from "@/stores/ui-store";
 import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
+import { can, Permissions } from "@/lib/permissions";
+import { useAuthStore } from "@/stores/auth-store";
 import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
 
 const POD_QTY_TOLERANCE = 0.02;
@@ -115,6 +120,74 @@ function humanizeDocTypeKey(key: string) {
   return key.replace(/-/g, " ");
 }
 
+type LinkedDocSummary = NonNullable<DocumentDetailRecord["relatedDocuments"]>[number];
+
+const DN_NEEDS_FULFILMENT_STATUSES = new Set(["DRAFT", "APPROVED"]);
+
+function pickActiveLinkedDeliveryNote(
+  relatedDocuments?: DocumentDetailRecord["relatedDocuments"]
+): LinkedDocSummary | null {
+  if (!relatedDocuments?.length) return null;
+  const dns = relatedDocuments.filter(
+    (d) =>
+      String(d.typeKey ?? "").trim().toLowerCase() === "delivery-note" &&
+      String(d.status ?? "").trim().toUpperCase() !== "CANCELLED"
+  );
+  if (!dns.length) return null;
+  const priority = new Map([
+    ["DRAFT", 0],
+    ["APPROVED", 1],
+    ["IN_TRANSIT", 2],
+    ["DELIVERED", 3],
+    ["POSTED", 4],
+    ["CONVERTED", 5],
+  ]);
+  return [...dns].sort((a, b) => {
+    const pa = priority.get(String(a.status ?? "").trim().toUpperCase()) ?? 99;
+    const pb = priority.get(String(b.status ?? "").trim().toUpperCase()) ?? 99;
+    if (pa !== pb) return pa - pb;
+    return String(b.date ?? "").localeCompare(String(a.date ?? ""));
+  })[0];
+}
+
+function salesOrderCanCreateDeliveryNote(
+  document: DocumentDetailRecord | null,
+  linkedDeliveryNote: LinkedDocSummary | null
+): boolean {
+  if (!document?.lines?.length) return !linkedDeliveryNote;
+  const hasExplicitRemaining = document.lines.some((line) => typeof line.remainingQuantity === "number");
+  if (hasExplicitRemaining) {
+    return document.lines.some((line) => (line.remainingQuantity ?? 0) > 0.01);
+  }
+  if (linkedDeliveryNote) return false;
+  return document.lines.some((line) => {
+    const qty = line.qty ?? 0;
+    const converted = line.convertedQuantity ?? 0;
+    return qty - converted > 0.01;
+  });
+}
+
+function salesOrderRemainingLineSummaries(document: DocumentDetailRecord | null): string[] {
+  if (!document?.lines?.length) return [];
+  return document.lines
+    .map((line) => {
+      const remaining =
+        typeof line.remainingQuantity === "number"
+          ? line.remainingQuantity
+          : (line.qty ?? 0) - (line.convertedQuantity ?? 0);
+      if (remaining <= 0.01) return null;
+      const label = line.productName ?? line.description ?? "Line item";
+      const unit = line.unit?.trim();
+      return unit ? `${label} (${remaining.toLocaleString()} ${unit})` : `${label} (${remaining.toLocaleString()})`;
+    })
+    .filter((row): row is string => !!row);
+}
+
+function salesOrderFulfilmentInProgress(linkedDeliveryNote: LinkedDocSummary | null): boolean {
+  if (!linkedDeliveryNote) return false;
+  return DN_NEEDS_FULFILMENT_STATUSES.has(String(linkedDeliveryNote.status ?? "").trim().toUpperCase());
+}
+
 export default function DocViewPage() {
   const params = useParams();
   const router = useRouter();
@@ -124,6 +197,26 @@ export default function DocViewPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
+  const authUser = useAuthStore((s) => s.user);
+  const [amendOpen, setAmendOpen] = React.useState(false);
+  const [amendReason, setAmendReason] = React.useState("");
+  const [amendLineRows, setAmendLineRows] = React.useState<
+    Array<{
+      lineId: string;
+      productId: string;
+      description: string;
+      productSku?: string;
+      unit?: string;
+      quantity: string;
+    }>
+  >([]);
+  const [amendLoading, setAmendLoading] = React.useState(false);
+  const amendSheetContentRef = React.useRef<HTMLDivElement | null>(null);
+  const [amendSelectPortalHost, setAmendSelectPortalHost] = React.useState<HTMLElement | null>(null);
+  const setAmendSheetHostRef = React.useCallback((node: HTMLDivElement | null) => {
+    amendSheetContentRef.current = node;
+    setAmendSelectPortalHost(node);
+  }, []);
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const [printOpen, setPrintOpen] = React.useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
@@ -187,6 +280,61 @@ export default function DocViewPage() {
     const raw = document?.availableConversionTargets ?? [];
     return [...new Set(raw)];
   }, [document?.availableConversionTargets]);
+
+  const linkedDeliveryNote = React.useMemo(
+    () => (type === "sales-order" ? pickActiveLinkedDeliveryNote(document?.relatedDocuments) : null),
+    [type, document?.relatedDocuments]
+  );
+
+  const canCreateDeliveryNote = React.useMemo(
+    () => type !== "sales-order" || salesOrderCanCreateDeliveryNote(document, linkedDeliveryNote),
+    [type, document, linkedDeliveryNote]
+  );
+
+  const fulfilmentInProgress = React.useMemo(
+    () => type === "sales-order" && salesOrderFulfilmentInProgress(linkedDeliveryNote),
+    [type, linkedDeliveryNote]
+  );
+
+  const remainingLineSummaries = React.useMemo(
+    () => (type === "sales-order" ? salesOrderRemainingLineSummaries(document) : []),
+    [type, document]
+  );
+
+  const effectiveConvertTargets = React.useMemo(() => {
+    let targets = convertTargets;
+    if (type === "sales-order") {
+      if (fulfilmentInProgress || !canCreateDeliveryNote) {
+        targets = targets.filter((t) => t !== "delivery-note");
+      }
+    }
+    return targets;
+  }, [type, fulfilmentInProgress, canCreateDeliveryNote, convertTargets]);
+
+  const canAmendDispatch = React.useMemo(
+    () =>
+      type === "delivery-note" &&
+      !!document?.dispatchAmendEligibility?.allowed &&
+      (can(authUser, Permissions.SALES_DELIVERIES_AMEND) ||
+        can(authUser, Permissions.SALES_WRITE) ||
+        can(authUser, Permissions.ADMIN_SETTINGS)),
+    [type, document?.dispatchAmendEligibility?.allowed, authUser]
+  );
+
+  React.useEffect(() => {
+    if (!amendOpen || !document?.lines?.length) return;
+    setAmendReason("");
+    setAmendLineRows(
+      document.lines.map((line) => ({
+        lineId: line.id ?? "",
+        productId: line.productId ?? "",
+        description: line.productName ?? line.description ?? "Line item",
+        productSku: line.productSku,
+        unit: line.unit,
+        quantity: String(line.qty ?? 0),
+      }))
+    );
+  }, [amendOpen, document?.id, document?.lines]);
 
   React.useEffect(() => {
     if (!podSheetOpen || !document?.lines?.length) return;
@@ -293,12 +441,23 @@ export default function DocViewPage() {
     () => ({
       type,
       id,
+      number: document?.number,
       title: `${label} ${document?.number ?? id}`,
-      date: document?.date ?? "2025-01-28",
+      date: document?.date,
+      dueDate: document?.dueDate,
       party: displayPartyName,
+      reference: document?.sourceDocument?.number,
       total: document?.total ?? 0,
+      subtotal: document?.total ?? 0,
       currency: document?.currency ?? "KES",
-      lines: document?.lines,
+      notes: document?.notes,
+      lines: document?.lines?.map((line) => ({
+        description: line.description || line.productName || String(line.productId ?? ""),
+        qty: line.qty,
+        uom: line.unit,
+        unitPrice: line.unitPrice,
+        amount: line.amount,
+      })),
     }),
     [type, id, label, document, displayPartyName]
   );
@@ -415,6 +574,29 @@ export default function DocViewPage() {
           setWarehouseTaskLink(items[0] ? { label: `Open putaway ${items[0].grnNumber}`, href: `/warehouse/putaway/${items[0].id}` } : null);
           return;
         }
+        if (type === "sales-order") {
+          const dn = pickActiveLinkedDeliveryNote(document.relatedDocuments);
+          if (!dn?.id) {
+            setWarehouseTaskLink(null);
+            return;
+          }
+          const dnStatus = String(dn.status ?? "").trim().toUpperCase();
+          if (!DN_NEEDS_FULFILMENT_STATUSES.has(dnStatus)) {
+            setWarehouseTaskLink(null);
+            return;
+          }
+          const items = await fetchPickPackTasks({ sourceDocumentId: dn.id });
+          if (!active) return;
+          const actionable = items.find((t) =>
+            PICK_PACK_ACTIONABLE_STATUSES.has(String(t.status ?? "").trim().toUpperCase())
+          );
+          setWarehouseTaskLink(
+            actionable
+              ? { label: "Go to pick and pack", href: `/warehouse/pick-pack/${actionable.id}` }
+              : null
+          );
+          return;
+        }
         setWarehouseTaskLink(null);
       } catch {
         if (active) setWarehouseTaskLink(null);
@@ -518,7 +700,11 @@ export default function DocViewPage() {
     <DynamicNextStepsPanel
       type={type}
       document={document}
-      convertTargets={convertTargets}
+      convertTargets={effectiveConvertTargets}
+      linkedDeliveryNote={linkedDeliveryNote}
+      canCreateDeliveryNote={canCreateDeliveryNote}
+      fulfilmentInProgress={fulfilmentInProgress}
+      remainingLineSummaries={remainingLineSummaries}
       warehouseTaskLink={warehouseTaskLink}
       actionLoading={actionLoading}
       onAction={async (action) => {
@@ -626,16 +812,44 @@ export default function DocViewPage() {
                 </Link>
               </Button>
             )}
-          {canWrite && convertTargets.length === 1 ? (
+          {canAmendDispatch && (
+            <Button size="sm" variant="outline" onClick={() => setAmendOpen(true)}>
+              <Icons.ShieldAlert className="mr-2 h-4 w-4" />
+              Amend dispatch
+            </Button>
+          )}
+          {type === "sales-order" &&
+            fulfilmentInProgress &&
+            warehouseTaskLink &&
+            !rightPanelOpen && (
+              <Button size="sm" variant="default" asChild>
+                <Link href={warehouseTaskLink.href}>
+                  <Icons.Warehouse className="mr-2 h-4 w-4" />
+                  Go to pick and pack
+                </Link>
+              </Button>
+            )}
+          {type === "sales-order" &&
+            fulfilmentInProgress &&
+            !warehouseTaskLink &&
+            linkedDeliveryNote && (
+              <Button size="sm" variant="default" asChild>
+                <Link href={`/docs/delivery-note/${linkedDeliveryNote.id}`}>
+                  <Icons.Truck className="mr-2 h-4 w-4" />
+                  View {linkedDeliveryNote.number}
+                </Link>
+              </Button>
+            )}
+          {canWrite && effectiveConvertTargets.length === 1 ? (
             <Button
               size="sm"
               disabled={actionLoading}
-              onClick={() => openConvertSheet(convertTargets[0])}
+              onClick={() => openConvertSheet(effectiveConvertTargets[0])}
             >
               <Icons.GitBranchPlus className="mr-2 h-4 w-4" />
-              Convert to {humanizeDocTypeKey(convertTargets[0])}
+              Convert to {humanizeDocTypeKey(effectiveConvertTargets[0])}
             </Button>
-          ) : canWrite && convertTargets.length > 1 ? (
+          ) : canWrite && effectiveConvertTargets.length > 1 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" disabled={actionLoading}>
@@ -645,7 +859,7 @@ export default function DocViewPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {convertTargets.map((targetType) => (
+                {effectiveConvertTargets.map((targetType) => (
                   <DropdownMenuItem key={targetType} onSelect={() => scheduleConvert(targetType)}>
                     Convert to {humanizeDocTypeKey(targetType)}
                   </DropdownMenuItem>
@@ -818,6 +1032,16 @@ export default function DocViewPage() {
                 <Icons.FileDown className="mr-2 h-4 w-4" />
                 Export PDF
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  downloadDocumentExcelApi(type as DocTypeKey, id, `${document?.number ?? type}-${id}.xlsx`, (msg) =>
+                    toast.info(msg || "Export not available.")
+                  )
+                }
+              >
+                <Icons.Sheet className="mr-2 h-4 w-4" />
+                Export Excel
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setPrintOpen(true)}>
                 <Icons.Printer className="mr-2 h-4 w-4" />
                 Print
@@ -920,7 +1144,16 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-blue-300/70 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
-                      Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app only; invoices follow POD-received quantities once recorded there.
+                      Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app; invoices follow POD once recorded.
+                      {canAmendDispatch ? (
+                        <span className="block mt-1 font-normal">
+                          Administrators can use <strong>Amend dispatch</strong> above to correct a dispatch mistake before POD (updates stock, pick & pack, and any draft invoice).
+                        </span>
+                      ) : document.dispatchAmendEligibility?.reason ? (
+                        <span className="block mt-1 font-normal text-blue-900/80 dark:text-blue-100/80">
+                          {document.dispatchAmendEligibility.reason}
+                        </span>
+                      ) : null}
                     </p>
                   </div>
                 ) : null}
@@ -1718,6 +1951,115 @@ export default function DocViewPage() {
         </SheetContent>
       </Sheet>
 
+      <Sheet open={amendOpen} onOpenChange={setAmendOpen} modal={false}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <div ref={setAmendSheetHostRef} className="flex min-h-0 flex-col">
+          <SheetHeader>
+            <SheetTitle>Amend dispatch (admin)</SheetTitle>
+            <SheetDescription>
+              Correct shipped products and quantities after dispatch while this delivery is still in transit and before
+              POD. Stock, pick & pack, draft invoices, and linked outlet GRNs are updated together.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4 flex-1 overflow-y-auto">
+            <div className="space-y-2">
+              <Label htmlFor="amend-reason">Reason (required)</Label>
+              <Textarea
+                id="amend-reason"
+                value={amendReason}
+                onChange={(e) => setAmendReason(e.target.value)}
+                placeholder="e.g. Shipped Size 4 instead of Size 3 — customer accepted substitute"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Shipped lines (product & quantity)
+              </p>
+              {amendLineRows.map((row, idx) => (
+                <div key={row.lineId || idx} className="rounded border p-3 space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Product</Label>
+                    <WarehouseProductPicker
+                      value={row.productId}
+                      warehouseId={document?.warehouseId}
+                      portalContainer={amendSelectPortalHost}
+                      floating={false}
+                      allowZeroStockProductId={row.productId}
+                      selectedProduct={
+                        row.productId
+                          ? {
+                              id: row.productId,
+                              name: row.description,
+                              sku: row.productSku,
+                            }
+                          : null
+                      }
+                      onValueChange={(productId) => {
+                        setAmendLineRows((prev) =>
+                          prev.map((r, i) => (i === idx ? { ...r, productId } : r))
+                        );
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Quantity{row.unit ? ` (${row.unit})` : ""}</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={row.quantity}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setAmendLineRows((prev) =>
+                          prev.map((r, i) => (i === idx ? { ...r, quantity: v } : r))
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <SheetFooter className="mt-6">
+            <Button variant="outline" onClick={() => setAmendOpen(false)} disabled={amendLoading}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                amendLoading ||
+                !amendReason.trim() ||
+                !amendLineRows.length ||
+                amendLineRows.some((row) => !row.productId.trim())
+              }
+              onClick={async () => {
+                setAmendLoading(true);
+                try {
+                  await amendDeliveryNoteDispatchApi(id, {
+                    reason: amendReason.trim(),
+                    lines: amendLineRows.map((row) => ({
+                      lineId: row.lineId,
+                      productId: row.productId,
+                      quantity: Number(row.quantity),
+                    })),
+                  });
+                  toast.success("Dispatch amended. Stock and linked documents were updated.");
+                  setAmendOpen(false);
+                  await refreshDocument(true);
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setAmendLoading(false);
+                }
+              }}
+            >
+              Apply correction
+            </Button>
+          </SheetFooter>
+          </div>
+        </SheetContent>
+      </Sheet>
+
       {DELIVERY_NOTE_POD_WEB_ENABLED ? (
       <Sheet open={podSheetOpen} onOpenChange={setPodSheetOpen} modal={false}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
@@ -2149,6 +2491,10 @@ function DynamicNextStepsPanel({
   type,
   document,
   convertTargets,
+  linkedDeliveryNote,
+  canCreateDeliveryNote,
+  fulfilmentInProgress,
+  remainingLineSummaries,
   warehouseTaskLink,
   actionLoading,
   onAction,
@@ -2158,6 +2504,10 @@ function DynamicNextStepsPanel({
   type: string;
   document: DocumentDetailRecord | null;
   convertTargets: DocTypeKey[];
+  linkedDeliveryNote: LinkedDocSummary | null;
+  canCreateDeliveryNote: boolean;
+  fulfilmentInProgress: boolean;
+  remainingLineSummaries: string[];
   warehouseTaskLink: { label: string; href: string } | null;
   actionLoading: boolean;
   onAction: (action: string) => Promise<void>;
@@ -2182,8 +2532,53 @@ function DynamicNextStepsPanel({
       steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4" />, text: "Submit for approval", action: () => void onAction("submit"), actionLabel: "Submit", variant: "default" });
     } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
-    } else if (status === "APPROVED") {
-      steps.push({ icon: <Icons.Truck className="h-4 w-4 text-blue-500" />, text: "Ready to fulfill — create a Delivery Note", action: () => onConvert("delivery-note"), actionLabel: "Create Delivery Note", variant: "default" });
+    } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
+      const dn = linkedDeliveryNote;
+      if (fulfilmentInProgress && dn) {
+        if (warehouseTaskLink) {
+          steps.push({
+            icon: <Icons.Package className="h-4 w-4 text-blue-500" />,
+            text: `${dn.number} is ready. Continue with pick & pack, then dispatch.`,
+            href: warehouseTaskLink.href,
+            actionLabel: "Go to pick and pack",
+            variant: "default",
+          });
+        } else {
+          steps.push({
+            icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
+            text: `${dn.number} is waiting in the warehouse. Open it to continue fulfilment.`,
+            href: `/docs/delivery-note/${dn.id}`,
+            actionLabel: `View ${dn.number}`,
+            variant: "default",
+          });
+        }
+      } else if (canCreateDeliveryNote && convertTargets.includes("delivery-note")) {
+        if (remainingLineSummaries.length > 0) {
+          steps.push({
+            icon: <Icons.List className="h-4 w-4 text-muted-foreground" />,
+            text: `Still to ship: ${remainingLineSummaries.slice(0, 4).join("; ")}${
+              remainingLineSummaries.length > 4 ? ` (+${remainingLineSummaries.length - 4} more)` : ""
+            }.`,
+          });
+        }
+        steps.push({
+          icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
+          text: remainingLineSummaries.length
+            ? "Create a delivery note for the remaining quantities."
+            : "Ready to fulfill — create a delivery note.",
+          action: () => onConvert("delivery-note"),
+          actionLabel: "Create delivery note",
+          variant: "default",
+        });
+      } else if (dn) {
+        steps.push({
+          icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
+          text: `${dn.number} is in progress — continue fulfilment on the delivery note.`,
+          href: `/docs/delivery-note/${dn.id}`,
+          actionLabel: `View ${dn.number}`,
+          variant: "default",
+        });
+      }
     }
   } else if (type === "delivery-note") {
     const st = status.toUpperCase();
@@ -2392,9 +2787,34 @@ function DynamicNextStepsPanel({
                         {step.actionLabel}
                       </Button>
                     )}
-                    {step.href && !step.action && (
+                    {step.href && step.actionLabel && !step.action && (
+                      step.variant === "default" ? (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="mt-1 h-7 text-xs"
+                          asChild
+                        >
+                          <Link href={step.href}>{step.actionLabel}</Link>
+                        </Button>
+                      ) : step.variant === "outline" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1 h-7 text-xs"
+                          asChild
+                        >
+                          <Link href={step.href}>{step.actionLabel}</Link>
+                        </Button>
+                      ) : (
+                        <Link href={step.href} className="text-primary text-xs underline-offset-4 hover:underline">
+                          {step.actionLabel}
+                        </Link>
+                      )
+                    )}
+                    {step.href && !step.actionLabel && (
                       <Link href={step.href} className="text-primary text-xs underline-offset-4 hover:underline">
-                        {step.actionLabel ?? "Go →"}
+                        Go →
                       </Link>
                     )}
                   </div>

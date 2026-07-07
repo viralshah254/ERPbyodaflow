@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -43,7 +43,10 @@ import {
   seedStandardRolesApi,
   setUserPasswordApi,
   fetchFranchiseOutletUsersApi,
+  fetchPasswordResetRequestsApi,
+  dismissPasswordResetRequestApi,
   type FranchiseOutletUserRow,
+  type PasswordResetRequestRow,
 } from "@/lib/api/users-roles";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -54,6 +57,8 @@ import { fetchRuntimeSession } from "@/lib/api/context";
 export default function UsersRolesPage() {
   const copilotProductEnabled = useCopilotFeatureEnabled();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkUserId = searchParams.get("userId")?.trim() ?? "";
   const currentUserId = useAuthStore((s) => s.user?.userId);
   const setSession = useAuthStore((s) => s.setSession);
   const [users, setUsers] = React.useState<UserRow[]>([]);
@@ -69,6 +74,9 @@ export default function UsersRolesPage() {
   const [passwordMustChange, setPasswordMustChange] = React.useState(true);
   const [settingPassword, setSettingPassword] = React.useState(false);
   const [deletingUser, setDeletingUser] = React.useState(false);
+  const [passwordResetRequests, setPasswordResetRequests] = React.useState<PasswordResetRequestRow[]>([]);
+  const [passwordResetLoading, setPasswordResetLoading] = React.useState(false);
+  const [dismissingRequestId, setDismissingRequestId] = React.useState<string | null>(null);
 
   const sortedRoles = React.useMemo(
     () => [...roles].sort((a, b) => a.name.localeCompare(b.name)),
@@ -102,6 +110,18 @@ export default function UsersRolesPage() {
 
   const [permissionCatalog, setPermissionCatalog] = React.useState<PermissionCatalogGroupDto[]>([]);
 
+  const refreshPasswordResetRequests = React.useCallback(async () => {
+    try {
+      setPasswordResetLoading(true);
+      setPasswordResetRequests(await fetchPasswordResetRequestsApi());
+    } catch {
+      // Non-admins or API unavailable — hide queue silently.
+      setPasswordResetRequests([]);
+    } finally {
+      setPasswordResetLoading(false);
+    }
+  }, []);
+
   React.useEffect(() => {
     setLoading(true);
     Promise.all([fetchUsersApi(), fetchRolesApi(), fetchPermissionCatalogApi()])
@@ -114,7 +134,8 @@ export default function UsersRolesPage() {
         toast.error((error as Error).message || "Failed to load users and roles.");
       })
       .finally(() => setLoading(false));
-  }, []);
+    void refreshPasswordResetRequests();
+  }, [refreshPasswordResetRequests]);
 
   // Lazy-load franchisees when tab is first opened
   const franchiseLoaded = React.useRef(false);
@@ -160,6 +181,17 @@ export default function UsersRolesPage() {
     setPasswordMustChange(true);
     setUserSheetOpen(true);
   };
+
+  // Open user edit sheet when arriving from a password-reset notification deep link.
+  const deepLinkHandled = React.useRef(false);
+  React.useEffect(() => {
+    if (loading || !deepLinkUserId || deepLinkHandled.current) return;
+    const target = users.find((u) => u.id === deepLinkUserId);
+    if (!target) return;
+    deepLinkHandled.current = true;
+    openEditUser(target);
+    router.replace("/settings/users-roles");
+  }, [loading, deepLinkUserId, users, router]);
 
   const openCreateRole = () => {
     setEditingRole(null);
@@ -222,6 +254,105 @@ export default function UsersRolesPage() {
           </TabsList>
 
           <TabsContent value="users" className="space-y-4">
+            {(passwordResetLoading || passwordResetRequests.length > 0) && (
+              <Card className="border-amber-500/40 bg-amber-500/5">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Icons.KeyRound className="h-4 w-4 text-amber-600" />
+                        Password reset requests
+                      </CardTitle>
+                      <CardDescription>
+                        Users waiting for an admin to set a new password. This list stays visible even if push notifications fail.
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={passwordResetLoading}
+                      onClick={() => void refreshPasswordResetRequests()}
+                    >
+                      <Icons.RefreshCw className={`h-4 w-4 ${passwordResetLoading ? "animate-spin" : ""}`} />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {passwordResetLoading && passwordResetRequests.length === 0 ? (
+                    <p className="px-6 pb-4 text-sm text-muted-foreground">Loading requests…</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead>Role / mobile</TableHead>
+                          <TableHead>Requested</TableHead>
+                          <TableHead className="w-48 text-right" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {passwordResetRequests.map((req) => {
+                          const userRow = users.find((u) => u.id === req.userId);
+                          return (
+                            <TableRow key={req.userId}>
+                              <TableCell>
+                                <div className="font-medium">{req.displayName}</div>
+                                <div className="text-sm text-muted-foreground">{req.email}</div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  {req.roleNames.length ? req.roleNames.join(", ") : "—"}
+                                </div>
+                                <div className="text-xs text-muted-foreground">{req.mobilePersonaLabel}</div>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {new Date(req.requestedAt).toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      if (userRow) openEditUser(userRow);
+                                      else router.push(`/settings/users-roles?userId=${encodeURIComponent(req.userId)}`);
+                                    }}
+                                  >
+                                    Reset password
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={dismissingRequestId === req.userId}
+                                    onClick={async () => {
+                                      try {
+                                        setDismissingRequestId(req.userId);
+                                        await dismissPasswordResetRequestApi(req.userId);
+                                        setPasswordResetRequests((prev) =>
+                                          prev.filter((r) => r.userId !== req.userId)
+                                        );
+                                        toast.success("Request dismissed.");
+                                      } catch (error) {
+                                        toast.error(
+                                          error instanceof Error ? error.message : "Could not dismiss request."
+                                        );
+                                      } finally {
+                                        setDismissingRequestId(null);
+                                      }
+                                    }}
+                                  >
+                                    Dismiss
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -570,6 +701,7 @@ export default function UsersRolesPage() {
                       toast.success("Password updated.");
                       setPasswordNew("");
                       setPasswordConfirm("");
+                      void refreshPasswordResetRequests();
                       // Refetch so hasSignIn reflects the newly provisioned Firebase account.
                       const refreshed = await fetchUsersApi();
                       setUsers(refreshed);

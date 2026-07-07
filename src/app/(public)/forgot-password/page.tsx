@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { isFirebaseConfigured, sendPasswordReset } from "@/lib/firebase";
+import { getApiBase, isApiConfigured } from "@/lib/api/client";
 import * as Icons from "lucide-react";
 
 const forgotPasswordSchema = z.object({
@@ -18,8 +18,32 @@ const forgotPasswordSchema = z.object({
 
 type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 
+async function requestPasswordResetFromAdmin(email: string): Promise<string> {
+  const base = getApiBase();
+  if (!base) {
+    throw new Error("Password reset requires a live API connection.");
+  }
+  const res = await fetch(`${base}/api/auth/password-reset-request`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+  if (!res.ok) {
+    throw new Error(data.error ?? "Failed to submit password reset request.");
+  }
+  return (
+    data.message ??
+    "If an account exists for this email, your administrator has been notified and will reset your password."
+  );
+}
+
 export default function ForgotPasswordPage() {
   const [isSubmitted, setIsSubmitted] = React.useState(false);
+  const [successMessage, setSuccessMessage] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const {
     register,
@@ -31,21 +55,22 @@ export default function ForgotPasswordPage() {
   });
 
   const onSubmit = async (data: ForgotPasswordForm) => {
-    if (!isFirebaseConfigured()) {
+    if (!isApiConfigured()) {
       setError("root", {
-        message: "Password reset requires Firebase client configuration.",
+        message: "Password reset requires a live API connection.",
       });
       return;
     }
 
     setIsLoading(true);
     try {
-      await sendPasswordReset(data.email);
+      const message = await requestPasswordResetFromAdmin(data.email);
+      setSuccessMessage(message);
       setIsSubmitted(true);
     } catch (error) {
       setError("root", {
         message:
-          error instanceof Error ? error.message : "Failed to send reset email",
+          error instanceof Error ? error.message : "Failed to submit password reset request",
       });
     } finally {
       setIsLoading(false);
@@ -61,10 +86,10 @@ export default function ForgotPasswordPage() {
               <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <Icons.Check className="h-8 w-8 text-primary" />
               </div>
-              <h1 className="text-2xl font-bold mb-2">Check your email</h1>
+              <h1 className="text-2xl font-bold mb-2">Request submitted</h1>
               <p className="text-muted-foreground">
-                We&apos;ve sent a password reset link to your email address. Please check
-                your inbox and follow the instructions.
+                {successMessage ||
+                  "Your administrator has been notified and will reset your password. You will be able to sign in once they have done so."}
               </p>
             </div>
             <Button asChild className="w-full">
@@ -82,7 +107,8 @@ export default function ForgotPasswordPage() {
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold mb-2">Forgot password?</h1>
           <p className="text-muted-foreground">
-            Enter your email address and we&apos;ll send you a link to reset your password.
+            Enter your email address. An administrator will be notified and will reset your
+            password for you.
           </p>
         </div>
 
@@ -97,6 +123,7 @@ export default function ForgotPasswordPage() {
                 id="email"
                 type="email"
                 placeholder="you@example.com"
+                autoComplete="email"
                 {...register("email")}
               />
               {errors.email && (
@@ -105,7 +132,7 @@ export default function ForgotPasswordPage() {
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Sending..." : "Send reset link"}
+              {isLoading ? "Submitting..." : "Notify administrator"}
             </Button>
           </form>
 
@@ -122,8 +149,3 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
-
-
-
-
-

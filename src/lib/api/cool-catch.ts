@@ -1678,6 +1678,38 @@ export async function fetchOutletStock(outletOrgId: string): Promise<{ items: Ou
   return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock`);
 }
 
+export async function adjustOutletStockApi(
+  outletOrgId: string,
+  payload: {
+    stockLevelId: string;
+    quantityDelta?: number;
+    targetQuantity?: number;
+    reason?: string;
+    comment?: string;
+  }
+): Promise<{ adjustmentId: string; number: string; stockLevelId: string; quantity: number; available: number }> {
+  requireLiveApi("Adjust outlet stock");
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock-adjustments`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function deleteOutletStockApi(
+  outletOrgId: string,
+  stockLevelId: string,
+  payload?: { reason?: string; zeroFirst?: boolean }
+): Promise<{ deleted: boolean; stockLevelId: string }> {
+  requireLiveApi("Delete outlet stock");
+  return apiRequest(
+    `/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock/${encodeURIComponent(stockLevelId)}`,
+    {
+      method: "DELETE",
+      body: payload ?? {},
+    }
+  );
+}
+
 // ─── Outlet targets ──────────────────────────────────────────────────────────
 
 export async function patchOutletTargets(

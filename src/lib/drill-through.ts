@@ -149,6 +149,21 @@ export function drillFromNotification(notification: NotificationDrillContext): D
   ) {
     return drillToDocument("invoice", notification.entityId);
   }
+  if (notification.entityType === "user" && notification.entityId) {
+    return {
+      href: `/settings/users-roles?userId=${encodeURIComponent(notification.entityId)}`,
+      label: "Reset password",
+    };
+  }
+  if (notification.dedupeKey?.startsWith("password-reset-request:")) {
+    const userId = notification.entityId ?? notification.dedupeKey.replace("password-reset-request:", "");
+    if (userId) {
+      return {
+        href: `/settings/users-roles?userId=${encodeURIComponent(userId)}`,
+        label: "Reset password",
+      };
+    }
+  }
   return {
     href: "/automation/alerts",
     label: "View alert",

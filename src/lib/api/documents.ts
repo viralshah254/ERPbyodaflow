@@ -169,6 +169,7 @@ type BackendDocumentDetail = {
   dispatchPickup?: BackendDispatchPickup;
   deliveryCheckIn?: BackendDeliveryCheckIn;
   warehouseDrop?: BackendWarehouseDrop;
+  dispatchAmendEligibility?: { allowed: boolean; reason?: string };
 };
 
 type ChainNode = {
@@ -510,6 +511,7 @@ function mapDocumentDetail(
           receivedByUserId: payload.warehouseDrop.receivedByUserId,
         }
       : undefined,
+    dispatchAmendEligibility: payload.dispatchAmendEligibility,
   };
 }
 
@@ -736,6 +738,20 @@ export async function convertDocumentApi(
   });
 }
 
+export async function amendDeliveryNoteDispatchApi(
+  deliveryNoteId: string,
+  payload: {
+    reason: string;
+    lines: Array<{ lineId: string; productId?: string; quantity: number }>;
+  }
+): Promise<DocumentWriteResponse> {
+  requireLiveApi("Amend delivery dispatch");
+  return apiRequest<DocumentWriteResponse>(`/api/documents/delivery-note/${deliveryNoteId}/amend-dispatch`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function confirmDeliveryPodApi(
   deliveryNoteId: string,
   payload: {
@@ -801,6 +817,16 @@ export function downloadDocumentPdfApi(
 ): void {
   requireLiveApi("Document PDF export");
   downloadFile(`/api/documents/${type}/${id}/pdf`, fileName, onNotAvailable);
+}
+
+export function downloadDocumentExcelApi(
+  type: DocTypeKey,
+  id: string,
+  fileName: string,
+  onNotAvailable: (message: string) => void
+): void {
+  requireLiveApi("Document Excel export");
+  downloadFile(`/api/documents/${type}/${id}/xlsx`, fileName, onNotAvailable);
 }
 
 export function exportDocumentListApi(

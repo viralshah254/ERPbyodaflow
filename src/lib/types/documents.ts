@@ -269,6 +269,8 @@ export type DocumentDetailRecord = {
   dispatchPickup?: DispatchPickupRecord;
   deliveryCheckIn?: DeliveryCheckInRecord;
   warehouseDrop?: WarehouseDropRecord;
+  /** Admin can amend in-transit dispatch when allowed (delivery-note only). */
+  dispatchAmendEligibility?: { allowed: boolean; reason?: string };
 };
 
 export type DocumentChainNode = {
