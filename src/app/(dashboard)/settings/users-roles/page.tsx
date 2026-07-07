@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserFormFields, type UserFormState } from "@/components/settings/user-form-fields";
+import { SetPasswordSheet, type SetPasswordSheetUser } from "@/components/settings/set-password-sheet";
 import type { PermissionCatalogGroupDto, UserRow } from "@/lib/types/users-roles";
 import { MOBILE_PERSONA_LABELS } from "@/lib/types/users-roles";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +78,8 @@ export default function UsersRolesPage() {
   const [passwordResetRequests, setPasswordResetRequests] = React.useState<PasswordResetRequestRow[]>([]);
   const [passwordResetLoading, setPasswordResetLoading] = React.useState(false);
   const [dismissingRequestId, setDismissingRequestId] = React.useState<string | null>(null);
+  const [setPasswordSheetOpen, setSetPasswordSheetOpen] = React.useState(false);
+  const [setPasswordUser, setSetPasswordUser] = React.useState<SetPasswordSheetUser | null>(null);
   const pathname = usePathname();
 
   const pendingResetUserIds = React.useMemo(
@@ -218,10 +221,39 @@ export default function UsersRolesPage() {
   const openResetPasswordForUserId = React.useCallback(
     (userId: string) => {
       router.push(`/settings/users-roles?userId=${encodeURIComponent(userId)}`, { scroll: false });
-      const target = users.find((u) => u.id === userId);
-      if (target) openEditUser(target);
+      const req = passwordResetRequests.find((r) => r.userId === userId);
+      const row = users.find((u) => u.id === userId);
+      if (req) {
+        setSetPasswordUser({
+          id: req.userId,
+          email: req.email,
+          displayName: req.displayName,
+          roleHint: [req.roleNames.join(", "), req.mobilePersonaLabel].filter(Boolean).join(" · "),
+        });
+      } else if (row) {
+        setSetPasswordUser({
+          id: row.id,
+          email: row.email,
+          displayName: [row.firstName, row.lastName].filter(Boolean).join(" ") || row.email,
+          roleHint: row.roleNames.join(", "),
+        });
+      } else {
+        return;
+      }
+      setSetPasswordSheetOpen(true);
     },
-    [router, users]
+    [router, users, passwordResetRequests]
+  );
+
+  const closeSetPasswordSheet = React.useCallback(
+    (open: boolean) => {
+      setSetPasswordSheetOpen(open);
+      if (!open) {
+        setSetPasswordUser(null);
+        clearResetUserFromUrl();
+      }
+    },
+    [clearResetUserFromUrl]
   );
 
   // Open (or re-open) reset sheet when landing with ?userId= from a notification or queue link.
@@ -236,17 +268,28 @@ export default function UsersRolesPage() {
 
     const target = users.find((u) => u.id === deepLinkUserId);
     if (!target) return;
-    if (userSheetOpen && editingUser?.id === deepLinkUserId) return;
+    if (setPasswordSheetOpen && setPasswordUser?.id === deepLinkUserId) return;
 
-    openEditUser(target);
+    const req = passwordResetRequests.find((r) => r.userId === deepLinkUserId);
+    setSetPasswordUser({
+      id: deepLinkUserId,
+      email: req?.email ?? target.email,
+      displayName:
+        req?.displayName ??
+        ([target.firstName, target.lastName].filter(Boolean).join(" ") || target.email),
+      roleHint: req
+        ? [req.roleNames.join(", "), req.mobilePersonaLabel].filter(Boolean).join(" · ")
+        : target.roleNames.join(", "),
+    });
+    setSetPasswordSheetOpen(true);
   }, [
     loading,
     passwordResetLoading,
     deepLinkUserId,
     passwordResetRequests,
     users,
-    userSheetOpen,
-    editingUser?.id,
+    setPasswordSheetOpen,
+    setPasswordUser?.id,
     clearResetUserFromUrl,
   ]);
 
@@ -1025,6 +1068,19 @@ export default function UsersRolesPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <SetPasswordSheet
+        open={setPasswordSheetOpen}
+        user={setPasswordUser}
+        onOpenChange={closeSetPasswordSheet}
+        fromPasswordResetRequest={
+          setPasswordUser ? pendingResetUserIds.has(setPasswordUser.id) : false
+        }
+        onSuccess={() => {
+          toast.success("Password set — share it with the user so they can sign in.");
+          void refreshPasswordResetRequests();
+        }}
+      />
     </PageShell>
   );
 }
