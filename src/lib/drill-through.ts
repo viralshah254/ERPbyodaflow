@@ -14,6 +14,42 @@ export interface NotificationDrillContext {
   dedupeKey?: string;
   title?: string;
   message?: string;
+  routeWeb?: string;
+}
+
+export const PASSWORD_RESET_REQUESTS_WEB_ROUTE = "/settings/users-roles";
+
+export function isPasswordResetNotification(notification: NotificationDrillContext): boolean {
+  if (notification.dedupeKey?.startsWith("password-reset-request:")) return true;
+  const routeWeb = notification.routeWeb?.trim();
+  if (routeWeb?.startsWith(PASSWORD_RESET_REQUESTS_WEB_ROUTE)) return true;
+  return notification.entityType === "user" && Boolean(notification.entityId);
+}
+
+export function passwordResetUserIdFromNotification(notification: NotificationDrillContext): string | undefined {
+  const fromEntity = notification.entityId?.trim();
+  if (fromEntity) return fromEntity;
+  const dedupeKey = notification.dedupeKey?.trim();
+  if (dedupeKey?.startsWith("password-reset-request:")) {
+    const id = dedupeKey.slice("password-reset-request:".length).trim();
+    return id || undefined;
+  }
+  return undefined;
+}
+
+export function passwordResetRequestsWebRoute(userId?: string): string {
+  const id = userId?.trim();
+  if (id) {
+    return `${PASSWORD_RESET_REQUESTS_WEB_ROUTE}?userId=${encodeURIComponent(id)}`;
+  }
+  return PASSWORD_RESET_REQUESTS_WEB_ROUTE;
+}
+
+export function drillToPasswordResetRequest(userId?: string): DrillLink {
+  return {
+    href: passwordResetRequestsWebRoute(userId),
+    label: "Reset password",
+  };
 }
 
 /** Get drill link for a product/SKU */
@@ -149,20 +185,8 @@ export function drillFromNotification(notification: NotificationDrillContext): D
   ) {
     return drillToDocument("invoice", notification.entityId);
   }
-  if (notification.entityType === "user" && notification.entityId) {
-    return {
-      href: `/settings/users-roles?userId=${encodeURIComponent(notification.entityId)}`,
-      label: "Reset password",
-    };
-  }
-  if (notification.dedupeKey?.startsWith("password-reset-request:")) {
-    const userId = notification.entityId ?? notification.dedupeKey.replace("password-reset-request:", "");
-    if (userId) {
-      return {
-        href: `/settings/users-roles?userId=${encodeURIComponent(userId)}`,
-        label: "Reset password",
-      };
-    }
+  if (isPasswordResetNotification(notification)) {
+    return drillToPasswordResetRequest(passwordResetUserIdFromNotification(notification));
   }
   return {
     href: "/automation/alerts",

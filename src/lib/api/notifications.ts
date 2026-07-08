@@ -107,11 +107,16 @@ export async function sendOrgAdminTestPushApi(input?: {
   });
 }
 
-export async function fetchPushTokenStatusApi(): Promise<{
+export async function fetchPushTokenStatusApi(currentToken?: string): Promise<{
   registered: boolean;
   tokenCount: number;
   platforms: string[];
+  currentTokenRegistered?: boolean;
 }> {
   requireLiveApi("Push token status");
-  return apiRequest("/api/me/push-token/status");
+  const params =
+    currentToken?.trim() != null && currentToken.trim() !== ""
+      ? { token: currentToken.trim() }
+      : undefined;
+  return apiRequest("/api/me/push-token/status", { params });
 }

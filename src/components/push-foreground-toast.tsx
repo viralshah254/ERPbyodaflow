@@ -44,12 +44,16 @@ export function PushForegroundToast() {
     };
 
     window.addEventListener("odaflow:push-message", onCustomEvent);
-    navigator.serviceWorker?.addEventListener("message", onServiceWorkerMessage);
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.onmessage = onServiceWorkerMessage;
+    }
 
     return () => {
       unsubscribe?.();
       window.removeEventListener("odaflow:push-message", onCustomEvent);
-      navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.onmessage = null;
+      }
     };
   }, []);
 

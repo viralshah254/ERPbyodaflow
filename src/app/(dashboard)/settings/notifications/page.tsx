@@ -16,7 +16,7 @@ import {
   sendTestPushNotificationApi,
   updateNotificationSettingsApi,
 } from "@/lib/api/notifications";
-import { initWebPushNotifications } from "@/lib/push-notifications";
+import { getLocalWebFcmToken, getWebPushDiagnostics, initWebPushNotifications, resetWebPushClient } from "@/lib/push-notifications";
 import { isDevelopmentEnvironment } from "@/lib/runtime-flags";
 import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
@@ -34,22 +34,38 @@ export default function NotificationsPage() {
   const [testingPush, setTestingPush] = React.useState(false);
   const [testingOrgAdmins, setTestingOrgAdmins] = React.useState(false);
   const [registeringPush, setRegisteringPush] = React.useState(false);
+  const [resettingPush, setResettingPush] = React.useState(false);
   const [pushStatus, setPushStatus] = React.useState<{
     registered: boolean;
     tokenCount: number;
     platforms: string[];
+    currentTokenRegistered?: boolean;
   } | null>(null);
   const [browserPermission, setBrowserPermission] = React.useState<string>("unknown");
+
+  const [pushDiagnostics, setPushDiagnostics] = React.useState<{
+    origin: string;
+    permission: string;
+    localToken: boolean;
+    serviceWorkerScopes: string[];
+    serviceWorkerScript?: string;
+  } | null>(null);
 
   const refreshPushStatus = React.useCallback(async () => {
     if (typeof window !== "undefined" && "Notification" in window) {
       setBrowserPermission(Notification.permission);
     }
     try {
-      const status = await fetchPushTokenStatusApi();
+      const localToken = getLocalWebFcmToken() ?? undefined;
+      const [status, diagnostics] = await Promise.all([
+        fetchPushTokenStatusApi(localToken),
+        getWebPushDiagnostics(),
+      ]);
       setPushStatus(status);
+      setPushDiagnostics(diagnostics);
     } catch {
       setPushStatus(null);
+      setPushDiagnostics(null);
     }
   }, []);
 
@@ -116,10 +132,23 @@ export default function NotificationsPage() {
     }
   };
 
+  const handleResetPush = async () => {
+    setResettingPush(true);
+    try {
+      await resetWebPushClient();
+      toast.success("Push setup cleared. Click Register this browser again.");
+      await refreshPushStatus();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not reset push setup.");
+    } finally {
+      setResettingPush(false);
+    }
+  };
+
   const handleRegisterBrowser = async () => {
     setRegisteringPush(true);
     try {
-      const result = await initWebPushNotifications();
+      const result = await initWebPushNotifications({ force: true });
       if (result.registered) {
         toast.success("This browser is registered for push notifications.");
       } else {
@@ -213,6 +242,40 @@ export default function NotificationsPage() {
                     : "none registered"}
                 </span>
               </p>
+              {pushDiagnostics ? (
+                <>
+                  <p>
+                    This browser origin:{" "}
+                    <span className="font-medium">{pushDiagnostics.origin || "unknown"}</span>
+                  </p>
+                  <p>
+                    Local token on this origin:{" "}
+                    <span className="font-medium">
+                      {pushDiagnostics.localToken ? "yes" : "no — click Register this browser"}
+                    </span>
+                  </p>
+                  <p>
+                    This browser token on server:{" "}
+                    <span className="font-medium">
+                      {pushStatus?.currentTokenRegistered === true
+                        ? "yes"
+                        : pushStatus?.currentTokenRegistered === false
+                          ? "no — click Register this browser (server has other tokens)"
+                          : "unknown"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Service worker file:{" "}
+                    <code className="text-xs break-all">
+                      {pushDiagnostics.serviceWorkerScript ?? "not active yet"}
+                    </code>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    If Chrome keeps opening DevTools on Register, go to Application → Service Workers
+                    and uncheck &quot;Update on reload&quot;, then close extra DevTools windows.
+                  </p>
+                </>
+              ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button variant="outline" size="sm" onClick={handleRegisterBrowser} disabled={registeringPush}>
@@ -222,6 +285,9 @@ export default function NotificationsPage() {
               <Button variant="outline" size="sm" onClick={handleTestPush} disabled={testingPush}>
                 <Icons.BellRing className="mr-2 h-4 w-4" />
                 {testingPush ? "Sending…" : "Send test push to me"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleResetPush} disabled={resettingPush}>
+                {resettingPush ? "Resetting…" : "Reset push setup"}
               </Button>
               {canTestOrgAdmins ? (
                 <Button variant="outline" size="sm" onClick={handleOrgAdminTest} disabled={testingOrgAdmins}>

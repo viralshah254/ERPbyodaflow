@@ -3,11 +3,16 @@
  */
 import { getFirebaseConfig, getCurrentFirebaseIdTokenForApi, isFirebaseConfigured } from "@/lib/firebase";
 import { getApiBase, isApiConfigured } from "@/lib/api/client";
-import { drillFromNotification } from "@/lib/drill-through";
+import {
+  drillFromNotification,
+  isPasswordResetNotification,
+  passwordResetRequestsWebRoute,
+  passwordResetUserIdFromNotification,
+} from "@/lib/drill-through";
 
 const SW_PATH = "/firebase-messaging-sw.js";
-/** Narrow scope avoids clashing with other workers and Chrome version downgrade errors. */
-const FCM_SW_SCOPE = "/firebase-cloud-messaging-push-scope/";
+/** Legacy narrow scope from earlier builds — migrated to default `/` for reliable FCM delivery. */
+const LEGACY_FCM_SW_SCOPE = "/firebase-cloud-messaging-push-scope/";
 const TOKEN_STORAGE_KEY = "odaflow_web_fcm_token";
 
 function swVersionConflict(err: unknown): boolean {
@@ -15,11 +20,17 @@ function swVersionConflict(err: unknown): boolean {
   return msg.includes("requested version") && msg.includes("existing version");
 }
 
+async function unregisterLegacyFcmScope(): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  const legacy = await navigator.serviceWorker.getRegistration(LEGACY_FCM_SW_SCOPE);
+  if (legacy) await legacy.unregister();
+}
+
 async function getExistingFcmRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
   return (
-    (await navigator.serviceWorker.getRegistration(FCM_SW_SCOPE)) ??
     (await navigator.serviceWorker.getRegistration("/")) ??
+    (await navigator.serviceWorker.getRegistration(LEGACY_FCM_SW_SCOPE)) ??
     null
   );
 }
@@ -39,12 +50,16 @@ async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null;
 
   const existing = await getExistingFcmRegistration();
-  if (existing?.active || existing?.installing || existing?.waiting) {
+  if (existing?.active?.scriptURL?.includes("firebase-messaging-sw.js")) {
+    return existing;
+  }
+  if (existing?.installing || existing?.waiting) {
     return existing;
   }
 
   try {
-    return await navigator.serviceWorker.register(SW_PATH, { scope: FCM_SW_SCOPE });
+    await unregisterLegacyFcmScope();
+    return await navigator.serviceWorker.register(SW_PATH);
   } catch (err) {
     if (swVersionConflict(err)) {
       const fallback = await getExistingFcmRegistration();
@@ -55,13 +70,73 @@ async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null
   }
 }
 
-async function registerTokenWithBackend(token: string): Promise<void> {
-  if (!isApiConfigured()) return;
+type FcmMessagingContext = {
+  messaging: import("firebase/messaging").Messaging;
+  token: string;
+  swReg: ServiceWorkerRegistration;
+};
+
+let fcmReadyPromise: Promise<FcmMessagingContext | null> | null = null;
+
+/** Register SW + obtain FCM token before foreground listeners attach. */
+async function ensureFcmMessagingReady(): Promise<FcmMessagingContext | null> {
+  if (typeof window === "undefined" || !isFirebaseConfigured()) return null;
+  if (!getVapidKey()) return null;
+
+  if (!fcmReadyPromise) {
+    fcmReadyPromise = (async () => {
+      const { isSupported, getMessaging, getToken } = await import("firebase/messaging");
+      if (!(await isSupported())) return null;
+
+      const swReg = await registerServiceWorker();
+      if (!swReg) return null;
+
+      const app = await getMessagingApp();
+      if (!app) return null;
+
+      const messaging = getMessaging(app);
+      let token: string | undefined;
+      try {
+        token = await getToken(messaging, {
+          vapidKey: getVapidKey(),
+          serviceWorkerRegistration: swReg,
+        });
+      } catch (err) {
+        if (swVersionConflict(err)) {
+          const fallbackReg = await getExistingFcmRegistration();
+          if (fallbackReg) {
+            token = await getToken(messaging, {
+              vapidKey: getVapidKey(),
+              serviceWorkerRegistration: fallbackReg,
+            });
+          }
+        }
+        if (!token) throw err;
+      }
+      if (!token) return null;
+
+      return { messaging, token, swReg };
+    })().catch((err) => {
+      fcmReadyPromise = null;
+      console.warn("[push] FCM setup failed:", err);
+      return null;
+    });
+  }
+
+  return fcmReadyPromise;
+}
+
+async function registerTokenWithBackend(token: string, force = false): Promise<void> {
+  if (!isApiConfigured()) {
+    throw new Error("API is not configured");
+  }
   const bearer = await getCurrentFirebaseIdTokenForApi();
-  if (!bearer) return;
+  if (!bearer) {
+    throw new Error("Not signed in — cannot register push token with server");
+  }
 
   const previous = localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (previous === token) return;
+  if (!force && previous === token) return;
 
   if (previous && previous !== token) {
     try {
@@ -89,8 +164,8 @@ async function registerTokenWithBackend(token: string): Promise<void> {
     body: JSON.stringify({ token, platform: "web" }),
   });
   if (!res.ok) {
-    console.warn("[push] token register failed:", res.status, await res.text());
-    return;
+    const detail = await res.text();
+    throw new Error(`Server rejected push token (${res.status}): ${detail || "unknown error"}`);
   }
   localStorage.setItem(TOKEN_STORAGE_KEY, token);
 }
@@ -117,7 +192,35 @@ export async function unregisterWebPushToken(): Promise<void> {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
+/** Clear SW + local token so Register this browser starts fresh (fixes stale localhost tokens). */
+export async function resetWebPushClient(): Promise<void> {
+  if (typeof window === "undefined") return;
+  fcmReadyPromise = null;
+  await unregisterWebPushToken();
+  await unregisterLegacyFcmScope();
+  if ("serviceWorker" in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const reg of regs) {
+      if (reg.active?.scriptURL?.includes("firebase-messaging-sw.js")) {
+        await reg.unregister();
+      }
+    }
+  }
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
 function navigateFromPayload(data: Record<string, string>): void {
+  if (isPasswordResetNotification(data)) {
+    const userId = passwordResetUserIdFromNotification(data);
+    const listRoute = passwordResetRequestsWebRoute();
+    const detailRoute = passwordResetRequestsWebRoute(userId);
+    const routeWeb = data.routeWeb?.trim();
+    window.location.assign(
+      routeWeb?.startsWith(passwordResetRequestsWebRoute()) ? routeWeb : detailRoute || listRoute
+    );
+    return;
+  }
+
   const routeWeb = data.routeWeb?.trim();
   if (routeWeb) {
     window.location.assign(routeWeb);
@@ -164,22 +267,19 @@ function handlePushPayload(payload: {
 
 /** Attach FCM onMessage for the open tab. Safe to call on every dashboard mount. */
 export async function attachForegroundPushListener(): Promise<(() => void) | null> {
-  if (typeof window === "undefined" || !isFirebaseConfigured()) return null;
+  const ctx = await ensureFcmMessagingReady();
+  if (!ctx) return null;
 
-  const { isSupported, getMessaging, onMessage } = await import("firebase/messaging");
-  if (!(await isSupported())) return null;
-
-  const app = await getMessagingApp();
-  if (!app) return null;
-
-  const messaging = getMessaging(app);
-  return onMessage(messaging, (payload) => {
+  const { onMessage } = await import("firebase/messaging");
+  return onMessage(ctx.messaging, (payload) => {
     handlePushPayload(payload);
   });
 }
 
 /** Request permission, register SW, sync FCM token with backend. Idempotent per session. */
-export async function initWebPushNotifications(): Promise<{
+export async function initWebPushNotifications(options?: {
+  force?: boolean;
+}): Promise<{
   registered: boolean;
   reason?: string;
 }> {
@@ -192,56 +292,68 @@ export async function initWebPushNotifications(): Promise<{
     return { registered: false, reason: "VAPID key not configured" };
   }
 
+  if (options?.force) {
+    fcmReadyPromise = null;
+    await unregisterLegacyFcmScope();
+  }
+
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
     return { registered: false, reason: `Notification permission: ${permission}` };
   }
 
-  const swReg = await registerServiceWorker();
-  if (!swReg) return { registered: false, reason: "Service worker registration failed" };
-
-  const app = await getMessagingApp();
-  if (!app) return { registered: false, reason: "Firebase app unavailable" };
-
-  const { getMessaging, getToken } = await import("firebase/messaging");
-  const messaging = getMessaging(app);
-
-  let token: string | undefined;
+  let ctx: FcmMessagingContext | null;
   try {
-    token = await getToken(messaging, {
-      vapidKey: getVapidKey(),
-      serviceWorkerRegistration: swReg,
-    });
+    ctx = await ensureFcmMessagingReady();
   } catch (err) {
-    if (swVersionConflict(err)) {
-      const fallbackReg = await getExistingFcmRegistration();
-      if (fallbackReg) {
-        try {
-          token = await getToken(messaging, {
-            vapidKey: getVapidKey(),
-            serviceWorkerRegistration: fallbackReg,
-          });
-        } catch (retryErr) {
-          return {
-            registered: false,
-            reason: retryErr instanceof Error ? retryErr.message : "FCM token request failed",
-          };
-        }
-      }
-    }
-    if (!token) {
-      return {
-        registered: false,
-        reason: err instanceof Error ? err.message : "FCM token request failed",
-      };
-    }
+    return {
+      registered: false,
+      reason: err instanceof Error ? err.message : "FCM token request failed",
+    };
   }
 
-  if (!token) return { registered: false, reason: "FCM token not returned" };
+  if (!ctx) return { registered: false, reason: "FCM token not returned" };
 
-  await registerTokenWithBackend(token);
+  try {
+    await registerTokenWithBackend(ctx.token, options?.force === true);
+  } catch (err) {
+    return {
+      registered: false,
+      reason: err instanceof Error ? err.message : "Failed to save push token on server",
+    };
+  }
 
   return { registered: true };
+}
+
+/** Client-side push diagnostics for Settings → Notifications. */
+export function getLocalWebFcmToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+export async function getWebPushDiagnostics(): Promise<{
+  origin: string;
+  permission: string;
+  localToken: boolean;
+  serviceWorkerScopes: string[];
+  serviceWorkerScript?: string;
+}> {
+  if (typeof window === "undefined") {
+    return { origin: "", permission: "unsupported", localToken: false, serviceWorkerScopes: [] };
+  }
+
+  const registrations =
+    "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+
+  return {
+    origin: window.location.origin,
+    permission:
+      typeof Notification !== "undefined" ? Notification.permission : "unsupported",
+    localToken: !!localStorage.getItem(TOKEN_STORAGE_KEY),
+    serviceWorkerScopes: registrations.map((reg) => reg.scope),
+    serviceWorkerScript: registrations[0]?.active?.scriptURL,
+  };
 }
 
 export async function sendTestPushNotification(input?: {

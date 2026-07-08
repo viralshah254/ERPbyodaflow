@@ -81,6 +81,8 @@ export default function UsersRolesPage() {
   const [setPasswordSheetOpen, setSetPasswordSheetOpen] = React.useState(false);
   const [setPasswordUser, setSetPasswordUser] = React.useState<SetPasswordSheetUser | null>(null);
   const pathname = usePathname();
+  const passwordResetCardRef = React.useRef<HTMLDivElement | null>(null);
+  const deepLinkFallbackHandledRef = React.useRef<string | null>(null);
 
   const pendingResetUserIds = React.useMemo(
     () => new Set(passwordResetRequests.map((r) => r.userId)),
@@ -245,6 +247,10 @@ export default function UsersRolesPage() {
     [router, users, passwordResetRequests]
   );
 
+  const scrollToPasswordResetQueue = React.useCallback(() => {
+    passwordResetCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const closeSetPasswordSheet = React.useCallback(
     (open: boolean) => {
       setSetPasswordSheetOpen(open);
@@ -258,39 +264,43 @@ export default function UsersRolesPage() {
 
   // Open (or re-open) reset sheet when landing with ?userId= from a notification or queue link.
   React.useEffect(() => {
-    if (loading || passwordResetLoading || !deepLinkUserId) return;
-
-    const stillPending = passwordResetRequests.some((r) => r.userId === deepLinkUserId);
-    if (!stillPending) {
-      clearResetUserFromUrl();
+    if (!deepLinkUserId) {
+      deepLinkFallbackHandledRef.current = null;
       return;
     }
-
-    const target = users.find((u) => u.id === deepLinkUserId);
-    if (!target) return;
+    if (loading || passwordResetLoading) return;
     if (setPasswordSheetOpen && setPasswordUser?.id === deepLinkUserId) return;
 
     const req = passwordResetRequests.find((r) => r.userId === deepLinkUserId);
-    setSetPasswordUser({
-      id: deepLinkUserId,
-      email: req?.email ?? target.email,
-      displayName:
-        req?.displayName ??
-        ([target.firstName, target.lastName].filter(Boolean).join(" ") || target.email),
-      roleHint: req
-        ? [req.roleNames.join(", "), req.mobilePersonaLabel].filter(Boolean).join(" · ")
-        : target.roleNames.join(", "),
+    if (req) {
+      deepLinkFallbackHandledRef.current = null;
+      setSetPasswordUser({
+        id: deepLinkUserId,
+        email: req.email,
+        displayName: req.displayName,
+        roleHint: [req.roleNames.join(", "), req.mobilePersonaLabel].filter(Boolean).join(" · "),
+      });
+      setSetPasswordSheetOpen(true);
+      return;
+    }
+
+    if (deepLinkFallbackHandledRef.current === deepLinkUserId) return;
+    deepLinkFallbackHandledRef.current = deepLinkUserId;
+    clearResetUserFromUrl();
+    toast.message("Password reset request not found", {
+      description:
+        "That user may already have been reset or dismissed. Choose someone from the password reset requests list below.",
     });
-    setSetPasswordSheetOpen(true);
+    scrollToPasswordResetQueue();
   }, [
     loading,
     passwordResetLoading,
     deepLinkUserId,
     passwordResetRequests,
-    users,
     setPasswordSheetOpen,
     setPasswordUser?.id,
     clearResetUserFromUrl,
+    scrollToPasswordResetQueue,
   ]);
 
   const openCreateRole = () => {
@@ -362,7 +372,7 @@ export default function UsersRolesPage() {
 
           <TabsContent value="users" className="space-y-4">
             {(passwordResetLoading || passwordResetRequests.length > 0) && (
-              <Card className="border-amber-500/40 bg-amber-500/5">
+              <Card ref={passwordResetCardRef} className="border-amber-500/40 bg-amber-500/5">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -396,8 +406,7 @@ export default function UsersRolesPage() {
                       </TableHeader>
                       <TableBody>
                         {passwordResetRequests.map((req) => {
-                          const userRow = users.find((u) => u.id === req.userId);
-                          const isActive = deepLinkUserId === req.userId && userSheetOpen;
+                          const isActive = deepLinkUserId === req.userId && setPasswordSheetOpen;
                           return (
                             <TableRow
                               key={req.userId}

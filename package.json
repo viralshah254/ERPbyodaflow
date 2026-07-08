@@ -13,6 +13,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate:env": "node ./scripts/validate-env.mjs",
+    "generate:firebase-sw": "node ./scripts/generate-firebase-messaging-sw.mjs",
+    "predev": "node ./scripts/generate-firebase-messaging-sw.mjs",
+    "prebuild": "node ./scripts/generate-firebase-messaging-sw.mjs",
     "ci": "npm run validate:env && npm run lint && npm run typecheck && npm run build:ci",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
