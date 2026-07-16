@@ -4,6 +4,8 @@ export type SettingsHubLink = {
   description: string;
   icon: string;
   requiresPermissions?: string[];
+  /** OdaFlow platform console only — hidden for customer org sessions (e.g. Top Food). */
+  requiresPlatformOperator?: boolean;
 };
 
 export type SettingsHubGroup = {
@@ -18,7 +20,7 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     title: "Organization",
     links: [
       { href: "/settings/org", label: "Organization profile", description: "Org name, type, and core identity", icon: "Building", requiresPermissions: ["settings.org.read"] },
-      { href: "/settings/platform", label: "Platform control", description: "Cross-tenant platform settings", icon: "Shield", requiresPermissions: ["platform.read"] },
+      { href: "/settings/platform", label: "Platform control", description: "Cross-tenant platform settings", icon: "Shield", requiresPermissions: ["platform.read"], requiresPlatformOperator: true },
       { href: "/settings/billing", label: "Billing", description: "Subscription and invoices", icon: "CreditCard", requiresPermissions: ["settings.org.read"] },
       { href: "/settings/organization/entities", label: "Entities", description: "Legal entities", icon: "Building2", requiresPermissions: ["settings.org.read"] },
       { href: "/settings/branches", label: "Branches", description: "Branches and locations", icon: "MapPin", requiresPermissions: ["settings.branches.read"] },

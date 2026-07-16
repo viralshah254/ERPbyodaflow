@@ -3,13 +3,14 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { attachForegroundPushListener } from "@/lib/push-notifications";
+import { normalizeNotificationWebRoute } from "@/lib/drill-through";
 
 type PushDetail = { title?: string; body?: string; routeWeb?: string };
 
 function showPushToast(detail: PushDetail): void {
   const title = detail.title?.trim() || "OdaFlow";
   const body = detail.body?.trim() || "";
-  const routeWeb = detail.routeWeb?.trim();
+  const routeWeb = normalizeNotificationWebRoute(detail.routeWeb);
 
   toast(title, {
     description: body || undefined,

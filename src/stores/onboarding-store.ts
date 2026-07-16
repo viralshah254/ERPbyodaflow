@@ -7,9 +7,10 @@ interface OnboardingData {
   firstName?: string;
   lastName?: string;
   email?: string;
-  password?: string;
+  phone?: string;
 
-  // Step 2: OrgType + Template (template-driven)
+  // Step 2: industry category + org type + template
+  industryCategory?: "FMCG" | "SEAFOOD" | "OTHER";
   orgType?: TemplateOrgType;
   templateId?: string;
 

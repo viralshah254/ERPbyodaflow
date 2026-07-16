@@ -6,6 +6,7 @@ import { getApiBase, isApiConfigured } from "@/lib/api/client";
 import {
   drillFromNotification,
   isPasswordResetNotification,
+  normalizeNotificationWebRoute,
   passwordResetRequestsWebRoute,
   passwordResetUserIdFromNotification,
 } from "@/lib/drill-through";
@@ -221,7 +222,7 @@ function navigateFromPayload(data: Record<string, string>): void {
     return;
   }
 
-  const routeWeb = data.routeWeb?.trim();
+  const routeWeb = normalizeNotificationWebRoute(data.routeWeb?.trim());
   if (routeWeb) {
     window.location.assign(routeWeb);
     return;

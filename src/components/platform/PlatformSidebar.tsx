@@ -16,10 +16,14 @@ import {
   HeadphonesIcon,
   ClipboardList,
   Settings,
+  Building2,
+  Inbox,
 } from "lucide-react";
 
 const PLATFORM_NAV: { label: string; href: string; icon: React.ComponentType<{ className?: string }>; permission?: string }[] = [
   { label: "Dashboard", href: "/platform", icon: LayoutDashboard },
+  { label: "Applicants", href: "/platform/applicants", icon: Inbox, permission: "platform.read" },
+  { label: "Organisations", href: "/platform/organizations", icon: Building2, permission: "platform.read" },
   { label: "Customers", href: "/platform/customers", icon: Users, permission: "platform.read" },
   { label: "Team", href: "/platform/users", icon: UserPlus, permission: "platform.owner.manage" },
   { label: "Subscriptions", href: "/platform/subscriptions", icon: CreditCard, permission: "platform.billing.read" },

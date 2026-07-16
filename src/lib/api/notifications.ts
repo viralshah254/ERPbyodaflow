@@ -21,6 +21,7 @@ export type InboxNotification = {
   permission?: string;
   entityType?: string;
   entityId?: string;
+  routeWeb?: string;
 };
 
 const DEFAULT_SETTINGS: NotificationSettings = {

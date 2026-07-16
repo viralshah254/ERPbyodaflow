@@ -3,6 +3,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
+  resolveIndustryCategoryFromTemplateId,
+  type IndustryCategory,
+} from "@/config/industry";
+import {
   getTemplateById,
   type TemplateOrgType,
   type ModuleKey,
@@ -18,6 +22,7 @@ const STORAGE_KEY = "odaflow_erp_org_context";
 export type OrgContextState = {
   orgType: TemplateOrgType | null;
   templateId: string | null;
+  industryCategory: "FMCG" | "SEAFOOD" | "OTHER" | null;
   /** Resolved from template; can be overridden post-onboarding */
   enabledModules: ModuleKey[];
   featureFlags: Partial<Record<FeatureFlagKey, boolean>>;
@@ -46,6 +51,7 @@ export type OrgContextActions = {
   hydrateFromBackend: (payload: {
     orgType?: string | null;
     templateId?: string | null;
+    industryCategory?: "FMCG" | "SEAFOOD" | "OTHER" | null;
     enabledModules?: string[];
     featureFlags?: Record<string, boolean>;
     terminology?: Record<string, string>;
@@ -70,6 +76,7 @@ export type OrgContextActions = {
 const emptyState: OrgContextState = {
   orgType: null,
   templateId: null,
+  industryCategory: null,
   enabledModules: [],
   featureFlags: {},
   terminology: {},
@@ -84,6 +91,7 @@ function hydrateFromTemplate(template: IndustryTemplateDefinition): OrgContextSt
   return {
     orgType: template.orgType,
     templateId: template.id,
+    industryCategory: resolveIndustryCategoryFromTemplateId(template.id),
     enabledModules: template.enabledModules,
     featureFlags: template.featureFlags,
     terminology: template.terminology,
@@ -145,6 +153,7 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
           set({
             orgType: normalizedOrgType,
             templateId: payload.templateId ?? null,
+            industryCategory: payload.industryCategory ?? null,
             enabledModules: (payload.enabledModules ?? []) as ModuleKey[],
             featureFlags: (payload.featureFlags ?? {}) as Partial<Record<FeatureFlagKey, boolean>>,
             terminology: (payload.terminology ?? {}) as TerminologyOverrides,
@@ -164,6 +173,9 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
           ...hydrateFromTemplate(template),
           orgType: normalizedOrgType ?? template.orgType,
           templateId: payload.templateId ?? template.id,
+          industryCategory:
+            payload.industryCategory ??
+            resolveIndustryCategoryFromTemplateId(payload.templateId ?? template.id),
           enabledModules: (payload.enabledModules?.length
             ? payload.enabledModules
             : template.enabledModules) as ModuleKey[],

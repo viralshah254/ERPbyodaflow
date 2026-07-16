@@ -45,6 +45,56 @@ export function passwordResetRequestsWebRoute(userId?: string): string {
   return PASSWORD_RESET_REQUESTS_WEB_ROUTE;
 }
 
+/**
+ * Rewrite legacy or API-shaped notification paths to real Next.js app routes.
+ * Push/inbox payloads may still carry old paths until notifications expire.
+ */
+export function normalizeNotificationWebRoute(routeWeb?: string | null): string | undefined {
+  const raw = routeWeb?.trim();
+  if (!raw) return undefined;
+
+  if (raw.startsWith("/dashboard/")) {
+    return raw.slice("/dashboard".length) || "/";
+  }
+
+  const inbound = /^\/franchise\/network\/inbound-orders\/([^/]+)\/([^/?#]+)(.*)$/i.exec(raw);
+  if (inbound) {
+    const [, outletOrgId, prId, suffix] = inbound;
+    return `/sales/orders/franchise-inbound/${encodeURIComponent(outletOrgId!)}/${encodeURIComponent(prId!)}${suffix ?? ""}`;
+  }
+
+  if (raw.startsWith("/purchasing/grns")) {
+    try {
+      const url = new URL(raw, "http://local");
+      const highlight = url.searchParams.get("highlight")?.trim();
+      if (highlight) return `/inventory/receipts/${encodeURIComponent(highlight)}`;
+    } catch {
+      // fall through to list route
+    }
+    return "/inventory/receipts";
+  }
+
+  if (raw.startsWith("/finance/payment-runs")) {
+    return raw.replace(/^\/finance\/payment-runs/, "/treasury/payment-runs");
+  }
+
+  const grnDoc = /^\/docs\/grn\/([^/?#]+)(.*)$/i.exec(raw);
+  if (grnDoc) {
+    return `/inventory/receipts/${encodeURIComponent(grnDoc[1]!)}${grnDoc[2] ?? ""}`;
+  }
+
+  const subcontract = /^\/manufacturing\/subcontract-orders\/(.+)$/i.exec(raw);
+  if (subcontract) {
+    return `/manufacturing/subcontracting/orders/${subcontract[1]}`;
+  }
+
+  return raw;
+}
+
+export function franchiseInboundOrderWebRoute(outletOrgId: string, prId: string): string {
+  return `/sales/orders/franchise-inbound/${encodeURIComponent(outletOrgId)}/${encodeURIComponent(prId)}`;
+}
+
 export function drillToPasswordResetRequest(userId?: string): DrillLink {
   return {
     href: passwordResetRequestsWebRoute(userId),
@@ -134,6 +184,19 @@ export function drillToApprovalInbox(approvalId?: string): DrillLink {
 }
 
 export function drillFromNotification(notification: NotificationDrillContext): DrillLink {
+  const normalizedRoute = normalizeNotificationWebRoute(notification.routeWeb);
+  if (normalizedRoute) {
+    return { href: normalizedRoute, label: "Open" };
+  }
+
+  const inboundDedupe = notification.dedupeKey?.match(/^hq-inbound-pr:([^:]+):([^:]+)$/);
+  if (inboundDedupe) {
+    return {
+      href: franchiseInboundOrderWebRoute(inboundDedupe[1]!, inboundDedupe[2]!),
+      label: "Review franchise order",
+    };
+  }
+
   if (notification.entityType === "approval" && notification.entityId) {
     return drillToApprovalInbox(notification.entityId);
   }
@@ -147,10 +210,16 @@ export function drillFromNotification(notification: NotificationDrillContext): D
     return drillToDocument("purchase-order", notification.entityId);
   }
   if (notification.entityType === "grn" && notification.entityId) {
-    return drillToDocument("grn", notification.entityId);
+    return { href: `/inventory/receipts/${encodeURIComponent(notification.entityId)}`, label: "View receipt" };
+  }
+  if (notification.entityType === "payment" && notification.entityId) {
+    return {
+      href: `/sales/orders?highlight=${encodeURIComponent(notification.entityId)}&channel=whatsapp`,
+      label: "View sales orders",
+    };
   }
   if (notification.entityType === "payment") {
-    return { href: "/sales/orders", label: "View sales orders" };
+    return { href: "/sales/orders?channel=whatsapp", label: "View sales orders" };
   }
   if (
     notification.entityType === "invoice" && notification.entityId
@@ -159,6 +228,12 @@ export function drillFromNotification(notification: NotificationDrillContext): D
   }
   if (notification.entityType === "delivery-note" && notification.entityId) {
     return drillToDocument("delivery-note", notification.entityId);
+  }
+  if (notification.entityType === "subcontract-order" && notification.entityId) {
+    return {
+      href: `/manufacturing/subcontracting/orders/${notification.entityId}`,
+      label: "View subcontract order",
+    };
   }
   if (
     notification.entityType === "Party" ||

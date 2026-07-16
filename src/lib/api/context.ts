@@ -3,6 +3,7 @@ import type { Branch, Org, Tenant, User } from "@/types/erp";
 
 export type RuntimeOrgContext = {
   templateId: string;
+  industryCategory: "FMCG" | "SEAFOOD" | "OTHER";
   edition: string;
   enabledModules: string[];
   featureFlags: Record<string, boolean>;

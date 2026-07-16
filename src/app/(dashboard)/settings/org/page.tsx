@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { industryCategoryLabel } from "@/config/industry";
 import {
   PERISHABLE_DISTRIBUTION_TEMPLATE_IDS,
   getAllTemplates,
@@ -41,7 +42,7 @@ export default function OrganizationPage() {
   const canReadOrg = permissions.includes("settings.org.read") || permissions.includes("*");
   const canManageOrg = permissions.includes("admin.settings");
 
-  const { templateId, template } = useOrgContextStore();
+  const { templateId, template, industryCategory } = useOrgContextStore();
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [orgId, setOrgId] = React.useState("");
@@ -326,8 +327,13 @@ export default function OrganizationPage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-sm font-medium">{active?.name ?? templateId ?? "—"}</span>
+                      {industryCategory ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {industryCategoryLabel(industryCategory)}
+                        </Badge>
+                      ) : null}
                       <Badge variant="default" className="text-[10px]">
                         Active
                       </Badge>

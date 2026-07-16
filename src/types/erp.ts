@@ -12,6 +12,7 @@ export type RoleId = string;
 
 export type OrgType = "MANUFACTURER" | "DISTRIBUTOR" | "SHOP";
 export type OrgRole = "STANDARD" | "FRANCHISOR" | "FRANCHISEE";
+export type IndustryCategory = "FMCG" | "SEAFOOD" | "OTHER";
 
 export interface Tenant {
   tenantId: TenantId;
@@ -23,6 +24,7 @@ export interface Tenant {
   timeZone: string;
   edition?: string;
   defaultTemplateId?: string;
+  industryCategory?: IndustryCategory;
   enabledModules?: string[];
   featureFlags?: Record<string, boolean>;
   createdAt: Date;
@@ -37,6 +39,7 @@ export interface Org {
   name: string;
   edition?: string;
   templateId?: string;
+  industryCategory?: IndustryCategory;
   enabledModules?: string[];
   featureFlags?: Record<string, boolean>;
   terminology?: Record<string, string>;

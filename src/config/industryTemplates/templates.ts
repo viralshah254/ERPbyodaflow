@@ -2,7 +2,7 @@ import type { IndustryTemplateDefinition } from "./types";
 
 const SEAFOOD_DISTRIBUTOR_TEMPLATE: IndustryTemplateDefinition = {
   id: "seafood-distributor",
-  name: "Cool-Catch Template",
+  name: "Seafood Distributor",
   description:
     "Procurement-led perishable distributor with outsourced processing, reverse BOM/yield, cold-hub logistics, franchise monitoring, and settlement analytics.",
   orgType: "DISTRIBUTOR",
@@ -390,14 +390,14 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
 
   "seafood-distributor": SEAFOOD_DISTRIBUTOR_TEMPLATE,
 
-  /** Cool Catch Distributors Ltd — first live deployment of the reusable seafood/perishables vertical. Internal template, hidden from the public selector. */
+  /** Legacy template id retained for existing seafood deployments; hidden from public selectors. */
   "cool-catch": {
     ...SEAFOOD_DISTRIBUTOR_TEMPLATE,
     id: "cool-catch",
-    name: "Cool Catch (Seafood Vertical)",
+    name: "Seafood Distributor",
     hidden: true,
     description:
-      "Client deployment of the seafood/perishables distribution vertical with farm-gate procurement, outsourced processing, cold hub, franchise settlement, and VMI replenishment.",
+      "Seafood and perishables distribution with farm-gate procurement, outsourced processing, cold hub, franchise settlement, and VMI replenishment.",
     terminology: {
       ...SEAFOOD_DISTRIBUTOR_TEMPLATE.terminology,
       customer: "Customer",

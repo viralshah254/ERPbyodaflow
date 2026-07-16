@@ -13,6 +13,43 @@ self.addEventListener("activate", function (event) {
 firebase.initializeApp({"apiKey":"AIzaSyDebLeLbFxXi83mDyZ1ojPgCDJ_bqjaOLI","authDomain":"erpbyodaflow.firebaseapp.com","projectId":"erpbyodaflow","storageBucket":"erpbyodaflow.firebasestorage.app","messagingSenderId":"928143223188","appId":"1:928143223188:web:d180126edaef6c136bc781"});
 const messaging = firebase.messaging();
 
+function normalizeNotificationWebRoute(routeWeb) {
+  var raw = (routeWeb || "").trim();
+  if (!raw) return raw;
+  if (raw.indexOf("/dashboard/") === 0) {
+    return raw.slice("/dashboard".length) || "/";
+  }
+  var inbound = /^\/franchise\/network\/inbound-orders\/([^/]+)\/([^/?#]+)(.*)$/i.exec(raw);
+  if (inbound) {
+    return (
+      "/sales/orders/franchise-inbound/" +
+      encodeURIComponent(inbound[1]) +
+      "/" +
+      encodeURIComponent(inbound[2]) +
+      (inbound[3] || "")
+    );
+  }
+  if (raw.indexOf("/purchasing/grns") === 0) {
+    var highlightMatch = /[?&]highlight=([^&]+)/.exec(raw);
+    if (highlightMatch) {
+      return "/inventory/receipts/" + decodeURIComponent(highlightMatch[1]);
+    }
+    return "/inventory/receipts";
+  }
+  if (raw.indexOf("/finance/payment-runs") === 0) {
+    return raw.replace(/^\/finance\/payment-runs/, "/treasury/payment-runs");
+  }
+  var grnDoc = /^\/docs\/grn\/([^/?#]+)(.*)$/i.exec(raw);
+  if (grnDoc) {
+    return "/inventory/receipts/" + encodeURIComponent(grnDoc[1]) + (grnDoc[2] || "");
+  }
+  var subcontract = /^\/manufacturing\/subcontract-orders\/(.+)$/i.exec(raw);
+  if (subcontract) {
+    return "/manufacturing/subcontracting/orders/" + subcontract[1];
+  }
+  return raw;
+}
+
 messaging.onBackgroundMessage(function (payload) {
   var title =
     (payload.notification && payload.notification.title) ||
@@ -22,13 +59,14 @@ messaging.onBackgroundMessage(function (payload) {
     (payload.notification && payload.notification.body) ||
     (payload.data && payload.data.body) ||
     "";
-  var routeWeb =
+  var routeWeb = normalizeNotificationWebRoute(
     (payload.data && payload.data.routeWeb) ||
     (payload.data &&
     payload.data.dedupeKey &&
     String(payload.data.dedupeKey).indexOf("password-reset-request:") === 0
       ? "/settings/users-roles"
-      : "/automation/alerts");
+      : "/automation/alerts")
+  );
   var notificationData = Object.assign({}, payload.data || {}, { routeWeb: routeWeb });
 
   return self.registration.showNotification(title, {
@@ -40,13 +78,14 @@ messaging.onBackgroundMessage(function (payload) {
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
-  var routeWeb =
+  var routeWeb = normalizeNotificationWebRoute(
     (event.notification.data && event.notification.data.routeWeb) ||
     (event.notification.data &&
     event.notification.data.dedupeKey &&
     String(event.notification.data.dedupeKey).indexOf("password-reset-request:") === 0
       ? "/settings/users-roles"
-      : "/automation/alerts");
+      : "/automation/alerts")
+  );
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (list) {
       for (var i = 0; i < list.length; i++) {
