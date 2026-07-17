@@ -345,7 +345,7 @@ export default function MasterPartiesPage() {
       .finally(() => setSupplierCodeLoading(false));
   }, [drawerOpen, editingId, tab]);
 
-  /** Load next customer code (0001, …) when creating a customer only (franchisees are added under Franchise → Manage franchisees). */
+  /** Load next customer code (001, …) when creating a customer only (franchisees are added under Franchise → Manage franchisees). */
   React.useEffect(() => {
     if (!drawerOpen || editingId !== null || tab !== "customers") return;
     setCustomerCodeLoading(true);

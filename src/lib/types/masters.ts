@@ -47,6 +47,7 @@ export type CoolcatchSupplierKind = "FARM" | "BROKER";
 export type PartyRow = {
   id: string;
   name: string;
+  tradingName?: string;
   code?: string;
   type: "customer" | "supplier";
   roles?: PartyRole[];
@@ -70,6 +71,9 @@ export type PartyRow = {
     postalCode?: string;
     country?: string;
   };
+  route?: string;
+  latitude?: number;
+  longitude?: number;
   pinCertificateUrl?: string;
   companyRegistrationUrl?: string;
   supplierPaymentMethod?: "BANK" | "MPESA" | "PAYBILL" | "TILL";

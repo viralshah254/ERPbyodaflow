@@ -12,6 +12,7 @@ import { apiRequest, requireLiveApi, uploadFormData } from "./client";
 type BackendParty = {
   id: string;
   name: string;
+  tradingName?: string;
   code?: string;
   roles?: PartyRole[];
   customerType?: CustomerType;
@@ -43,6 +44,9 @@ type BackendParty = {
     postalCode?: string;
     country?: string;
   };
+  route?: string;
+  latitude?: number;
+  longitude?: number;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   pinCertificateUrl?: string;
@@ -57,6 +61,7 @@ type BackendParty = {
 export type PartyPayload = {
   name: string;
   roles: PartyRole[];
+  tradingName?: string;
   code?: string;
   customerType?: CustomerType;
   channel?: PartyChannel;
@@ -87,6 +92,9 @@ export type PartyPayload = {
     postalCode?: string;
     country?: string;
   };
+  route?: string;
+  latitude?: number;
+  longitude?: number;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   supplierPaymentMethod?: "BANK" | "MPESA" | "PAYBILL" | "TILL";
@@ -237,6 +245,7 @@ function mapParty(item: BackendParty): PartyRow {
   return {
     id: item.id,
     name: item.name,
+    tradingName: item.tradingName,
     code: item.code,
     type: roles.includes("supplier") ? "supplier" : "customer",
     roles,
@@ -253,6 +262,9 @@ function mapParty(item: BackendParty): PartyRow {
     phone: item.phone,
     taxId: item.taxId,
     address: item.address,
+    route: item.route,
+    latitude: item.latitude,
+    longitude: item.longitude,
     pinCertificateUrl: item.pinCertificateUrl,
     companyRegistrationUrl: item.companyRegistrationUrl,
     supplierPaymentMethod: item.supplierPaymentMethod,
@@ -260,6 +272,8 @@ function mapParty(item: BackendParty): PartyRow {
     supplierBankAccountName: item.supplierBankAccountName,
     supplierBankAccountNumber: item.supplierBankAccountNumber,
     supplierBankBranchName: item.supplierBankBranchName,
+    lastKnownLatitude: item.lastKnownLatitude,
+    lastKnownLongitude: item.lastKnownLongitude,
     status: item.status ?? "ACTIVE",
   };
 }
@@ -273,7 +287,7 @@ export async function fetchNextSupplierCodeApi(): Promise<string> {
   return data.code;
 }
 
-/** Preview next customer code (0001, 0002, …). Server allocates the real code on create. */
+/** Preview next customer code (001, 002, …). Server allocates the real code on create when omitted. */
 export async function fetchNextCustomerCodeApi(): Promise<string> {
   requireLiveApi("Customer code preview");
   const data = await apiRequest<{ code: string }>("/api/parties/next-code", {
@@ -317,6 +331,7 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
   return {
     id: created.id,
     name: payload.name,
+    tradingName: payload.tradingName,
     code: created.code ?? payload.code,
     type: payload.roles.includes("supplier") ? "supplier" : "customer",
     roles: payload.roles,
@@ -331,6 +346,11 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     customerCategoryId: payload.customerCategoryId,
     email: payload.email,
     phone: payload.phone,
+    taxId: payload.taxId,
+    address: payload.address,
+    route: payload.route,
+    latitude: payload.latitude,
+    longitude: payload.longitude,
     status: payload.status ?? "ACTIVE",
   };
 }
