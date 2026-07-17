@@ -39,6 +39,8 @@ export interface BuildVisibleNavInput {
   orgRole?: string;
   /** When true, only sections listed in defaultNav are rendered; no extra sections are appended. */
   strictSections?: boolean;
+  /** Current org industry template id (e.g. fmcg-manufacturer). */
+  templateId?: string | null;
 }
 
 function hasRuntimePermission(permissions: string[], required: string): boolean {
@@ -64,6 +66,9 @@ function itemPasses(item: NavItemConfig, input: BuildVisibleNavInput): boolean {
     if (!hasPermission) return false;
   }
   if (item.requiresOrgRole && input.orgRole !== item.requiresOrgRole) return false;
+  if (item.requiresTemplates?.length) {
+    if (!input.templateId || !item.requiresTemplates.includes(input.templateId)) return false;
+  }
   return true;
 }
 

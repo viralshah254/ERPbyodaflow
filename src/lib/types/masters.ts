@@ -30,6 +30,15 @@ export type CustomerType =
   | "FRANCHISEE"
   | "END_CUSTOMER";
 
+export type PartyChannel = "MODERN_TRADE" | "GENERAL_TRADE" | "E_COM" | "HORECA" | "OTHER";
+
+export type SfaSegment =
+  | "MODERN_TRADE_HQ"
+  | "MODERN_TRADE_BRANCH"
+  | "GENERAL_TRADE_CLIENT"
+  | "DISTRIBUTOR"
+  | "VAN_SALES";
+
 export type SupplierType = "RAW_MATERIAL" | "SERVICE" | "LOGISTICS" | "OTHER";
 
 /** CoolCatch: direct farm gate vs broker/aggregator supplier. */
@@ -42,6 +51,9 @@ export type PartyRow = {
   type: "customer" | "supplier";
   roles?: PartyRole[];
   customerType?: CustomerType;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
+  parentPartyId?: string;
   supplierType?: SupplierType;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
   contactPersonFirstName?: string;

@@ -30,6 +30,7 @@ import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { KraTaxPinField } from "@/components/parties/KraTaxPinField";
 
 type ARCustomerRow = {
   id: string;
@@ -427,6 +428,10 @@ function ARCustomersContent() {
         }
       >
         <div className="space-y-4 pr-4">
+          <KraTaxPinField
+            value={form.taxId}
+            onChange={(taxId) => setForm((prev) => ({ ...prev, taxId }))}
+          />
           <div className="space-y-2">
             <Label>Name</Label>
             <Input
@@ -582,14 +587,6 @@ function ARCustomersContent() {
               </SelectContent>
             </Select>
             {errors.defaultCurrency ? <p className="text-xs text-destructive">{errors.defaultCurrency}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label>Tax PIN</Label>
-            <Input
-              placeholder="Optional"
-              value={form.taxId}
-              onChange={(e) => setForm((prev) => ({ ...prev, taxId: e.target.value }))}
-            />
           </div>
         </div>
       </EntityDrawer>

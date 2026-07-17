@@ -67,6 +67,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     template,
     orgRole,
     franchisePersona,
+    templateId,
   } = useOrgContextStore();
   const navCounts = useNavCounts();
 
@@ -103,6 +104,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
       permissions,
       orgRole,
       franchisePersona,
+      templateId,
     }),
     [
       ctxOrgType,
@@ -114,6 +116,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
       permissions,
       orgRole,
       franchisePersona,
+      templateId,
     ],
   );
 

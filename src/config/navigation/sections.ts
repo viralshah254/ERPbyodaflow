@@ -236,6 +236,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "sales-deliveries", label: "Deliveries", href: "/sales/deliveries", icon: "Truck", moduleKey: "sales", requiresPermissions: ["sales.deliveries.read"] },
       { key: "sales-invoices", label: "Invoices", href: "/sales/invoices", icon: "Receipt", moduleKey: "sales", requiresPermissions: ["sales.invoices.read"] },
       { key: "sales-customers", label: "Customers", href: "/sales/customers", icon: "Users", moduleKey: "sales", termKey: "customer", requiresPermissions: ["sales.customers.read"] },
+      { key: "sales-customer-directory", label: "Customer directory", href: "/sales/customer-directory", icon: "Building2", moduleKey: "sales", requiresPermissions: ["sales.customers.read"], requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor"] },
       { key: "sales-returns", label: "Returns / Notes", href: "/sales/returns", icon: "RotateCcw", moduleKey: "sales", requiresPermissions: ["sales.returns.read"] },
     ],
   },

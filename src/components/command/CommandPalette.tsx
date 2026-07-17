@@ -121,6 +121,7 @@ export function CommandPalette() {
     template,
     orgRole,
     franchisePersona,
+    templateId,
   } = useOrgContextStore();
 
   const [query, setQuery] = React.useState("");
@@ -153,7 +154,8 @@ export function CommandPalette() {
     permissions,
     orgRole,
     franchisePersona,
-  }), [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]);
+    templateId,
+  }), [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona, templateId]);
 
   const visibleSections = React.useMemo(() => {
     const base = computeDashboardSidebarSections(navParams);

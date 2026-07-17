@@ -1,4 +1,12 @@
-import { type CustomerType, type CoolcatchSupplierKind, type PartyRole, type PartyRow, type SupplierType } from "@/lib/types/masters";
+import {
+  type CustomerType,
+  type CoolcatchSupplierKind,
+  type PartyChannel,
+  type PartyRole,
+  type PartyRow,
+  type SfaSegment,
+  type SupplierType,
+} from "@/lib/types/masters";
 import { apiRequest, requireLiveApi, uploadFormData } from "./client";
 
 type BackendParty = {
@@ -8,7 +16,9 @@ type BackendParty = {
   roles?: PartyRole[];
   customerType?: CustomerType;
   supplierType?: SupplierType;
-  channel?: string;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
+  parentPartyId?: string;
   customerCategoryId?: string;
   email?: string;
   phone?: string;
@@ -49,6 +59,9 @@ export type PartyPayload = {
   roles: PartyRole[];
   code?: string;
   customerType?: CustomerType;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
+  parentPartyId?: string;
   supplierType?: SupplierType;
   customerCategoryId?: string;
   email?: string;
@@ -228,6 +241,9 @@ function mapParty(item: BackendParty): PartyRow {
     type: roles.includes("supplier") ? "supplier" : "customer",
     roles,
     customerType: item.customerType,
+    channel: item.channel,
+    sfaSegment: item.sfaSegment,
+    parentPartyId: item.parentPartyId,
     supplierType: item.supplierType,
     coolcatchSupplierKind: item.coolcatchSupplierKind,
     contactPersonFirstName: item.contactPersonFirstName,
@@ -270,6 +286,8 @@ export async function fetchPartiesApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
   supplierType?: SupplierType | "";
   status?: string;
   search?: string;
@@ -279,6 +297,8 @@ export async function fetchPartiesApi(filters?: {
   if (filters?.role) params.set("role", filters.role);
   if (filters?.customerType) params.set("customerType", filters.customerType);
   if (filters?.customerCategoryId) params.set("customerCategoryId", filters.customerCategoryId);
+  if (filters?.channel) params.set("channel", filters.channel);
+  if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
@@ -301,6 +321,9 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     type: payload.roles.includes("supplier") ? "supplier" : "customer",
     roles: payload.roles,
     customerType: payload.customerType,
+    channel: payload.channel,
+    sfaSegment: payload.sfaSegment,
+    parentPartyId: payload.parentPartyId,
     supplierType: payload.supplierType,
     coolcatchSupplierKind: payload.coolcatchSupplierKind,
     contactPersonFirstName: payload.contactPersonFirstName,
