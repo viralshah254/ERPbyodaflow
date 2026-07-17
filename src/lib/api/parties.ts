@@ -47,6 +47,7 @@ type BackendParty = {
   route?: string;
   latitude?: number;
   longitude?: number;
+  googlePlaceId?: string;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   pinCertificateUrl?: string;
@@ -95,6 +96,7 @@ export type PartyPayload = {
   route?: string;
   latitude?: number;
   longitude?: number;
+  googlePlaceId?: string;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   supplierPaymentMethod?: "BANK" | "MPESA" | "PAYBILL" | "TILL";
@@ -265,6 +267,7 @@ function mapParty(item: BackendParty): PartyRow {
     route: item.route,
     latitude: item.latitude,
     longitude: item.longitude,
+    googlePlaceId: item.googlePlaceId,
     pinCertificateUrl: item.pinCertificateUrl,
     companyRegistrationUrl: item.companyRegistrationUrl,
     supplierPaymentMethod: item.supplierPaymentMethod,

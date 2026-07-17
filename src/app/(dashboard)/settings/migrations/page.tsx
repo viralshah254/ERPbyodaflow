@@ -60,8 +60,14 @@ const SAMPLE_PAYLOADS: Record<ImportProvider, string> = {
           contact_name: "Acme Retail",
           contact_number: "C-001",
           email: "ops@acme.com",
-          phone: "+254700000000",
+          phone: "254700000000",
           contact_type: "customer",
+          billing_address: {
+            address: "Biashara Street",
+            city: "Nairobi",
+            state: "Nairobi",
+            country: "KE",
+          },
         },
       ],
       items: [
@@ -984,7 +990,30 @@ export default function MigrationConsolePage() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Required: <strong>code</strong>, <strong>name</strong>. See docs/CSV_IMPORT_FORMAT_SPEC.md for full format. Migrating from Tally, Zoho, or QuickBooks? Use the provider JSON import above, or export from your ERP to CSV and map columns.
+                        {csvImportType === "customers" ? (
+                          <>
+                            First row is the column headers. Required: <strong>name</strong>,{" "}
+                            <strong>customerKind</strong> (<code>modern-trade</code>,{" "}
+                            <code>general-trade</code>, <code>distributor</code>,{" "}
+                            <code>van-sales</code>). Optional: code, tradingName, phone, email,
+                            address, route, taxId, creditLimitAmount. New customers import as
+                            active. Delete the sample rows before importing your data.
+                          </>
+                        ) : csvImportType === "suppliers" ? (
+                          <>
+                            Required: <strong>code</strong>, <strong>name</strong>. Optional:
+                            phone, address, city, taxId, payment terms. Download the template for
+                            column markers.
+                          </>
+                        ) : (
+                          <>
+                            Required: <strong>code</strong>, <strong>name</strong>. Download the
+                            template for the full column list. Import products before
+                            packaging/variants.
+                          </>
+                        )}{" "}
+                        Migrating from Tally, Zoho, or QuickBooks? Use the provider JSON import
+                        above, or export from your ERP to CSV and map columns.
                       </p>
                     </>
                   )}

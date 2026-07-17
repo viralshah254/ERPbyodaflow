@@ -5,6 +5,7 @@ export type PlaceSuggestion = {
   description: string;
   mainText?: string;
   secondaryText?: string;
+  provider?: "google" | "osm";
 };
 
 export type ResolvedLocation = {
@@ -17,6 +18,7 @@ export type ResolvedLocation = {
   latitude?: number;
   longitude?: number;
   placeId?: string;
+  provider?: "google" | "osm";
 };
 
 export async function autocompletePlacesApi(

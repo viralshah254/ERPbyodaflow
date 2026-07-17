@@ -35,6 +35,11 @@ import {
 } from "@/lib/api/parties";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import type { CustomerType } from "@/lib/types/masters";
+import {
+  LocationPickerField,
+  type ResolvedLocation,
+} from "@/components/location/LocationPickerField";
+import { normalizeKenyaPhone, normalizeKenyaPhoneOptional } from "@/lib/phone";
 
 const DRAFT_STORAGE_KEY = "erp.customer-create-draft.v1";
 
@@ -62,6 +67,7 @@ type FormState = {
   route: string;
   latitude: string;
   longitude: string;
+  googlePlaceId: string;
   creditLimit: string;
   paymentTermsId: string;
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID";
@@ -84,10 +90,31 @@ const emptyForm = (kindId: CustomerKindId = "general-trade"): FormState => ({
   route: "",
   latitude: "",
   longitude: "",
+  googlePlaceId: "",
   creditLimit: "",
   paymentTermsId: "",
   creditControlMode: "AMOUNT",
 });
+
+function locationFromForm(form: FormState): ResolvedLocation | null {
+  if (
+    !form.addressLine1.trim() &&
+    !form.latitude.trim() &&
+    !form.longitude.trim() &&
+    !form.googlePlaceId.trim()
+  ) {
+    return null;
+  }
+  return {
+    formattedAddress: form.addressLine1.trim(),
+    line1: form.addressLine1.trim() || undefined,
+    city: form.city.trim() || undefined,
+    region: form.region.trim() || undefined,
+    latitude: form.latitude.trim() ? Number(form.latitude) : undefined,
+    longitude: form.longitude.trim() ? Number(form.longitude) : undefined,
+    placeId: form.googlePlaceId.trim() || undefined,
+  };
+}
 
 type DraftPayload = {
   step: number;
@@ -148,9 +175,12 @@ function FieldLabel({
 function CustomerStepper({
   step,
   steps,
+  onStepSelect,
 }: {
   step: number;
   steps: readonly { id: string; label: string; short: string }[];
+  /** Jump to a completed step (index < current). */
+  onStepSelect?: (index: number) => void;
 }) {
   const progress = ((step + 1) / steps.length) * 100;
   return (
@@ -167,20 +197,44 @@ function CustomerStepper({
           style={{ width: `${progress}%` }}
         />
       </div>
-      <div className="flex items-center justify-between gap-1">
-        {steps.map((s, index) => (
-          <div
-            key={s.id}
-            className={cn(
-              "flex-1 truncate text-center text-[10px] sm:text-xs py-1 rounded-md transition-colors",
-              index === step && "bg-primary/10 text-primary font-medium",
-              index < step && "text-muted-foreground",
-              index > step && "text-muted-foreground/50"
-            )}
-          >
-            {s.short}
-          </div>
-        ))}
+      <div className="flex items-center justify-between gap-1" role="tablist" aria-label="Customer form steps">
+        {steps.map((s, index) => {
+          const isCurrent = index === step;
+          const isCompleted = index < step;
+          const isFuture = index > step;
+          const clickable = isCompleted && Boolean(onStepSelect);
+
+          return (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={isCurrent}
+              aria-current={isCurrent ? "step" : undefined}
+              disabled={!clickable}
+              title={
+                clickable
+                  ? `Go back to ${s.label}`
+                  : isFuture
+                    ? "Complete earlier steps first"
+                    : s.label
+              }
+              onClick={() => {
+                if (clickable) onStepSelect?.(index);
+              }}
+              className={cn(
+                "flex-1 truncate text-center text-[10px] sm:text-xs py-1.5 px-0.5 rounded-md transition-colors",
+                isCurrent && "bg-primary/10 text-primary font-medium",
+                isCompleted &&
+                  "text-muted-foreground underline-offset-2 hover:bg-muted hover:text-foreground hover:underline cursor-pointer",
+                isFuture && "text-muted-foreground/50 cursor-not-allowed",
+                !clickable && !isCurrent && "pointer-events-none"
+              )}
+            >
+              {s.short}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -191,9 +245,11 @@ export type CustomerFormSheetProps = {
   onOpenChange: (open: boolean) => void;
   fmcg: boolean;
   initialKindId?: CustomerKindId;
+  /** Lock type step when creating a supermarket from the branch flow. */
+  lockKind?: boolean;
   /** Edit existing customer by id (single-page, no draft). */
   customerId?: string | null;
-  onSuccess?: () => void;
+  onSuccess?: (customer?: { id: string; name: string; kindId?: CustomerKindId }) => void;
 };
 
 export function CustomerFormSheet({
@@ -201,22 +257,26 @@ export function CustomerFormSheet({
   onOpenChange,
   fmcg,
   initialKindId,
+  lockKind = false,
   customerId = null,
   onSuccess,
 }: CustomerFormSheetProps) {
   const editing = Boolean(customerId);
+  const supermarketOnly = lockKind && initialKindId === "modern-trade";
 
-  const createSteps = React.useMemo(
-    () =>
-      [
-        { id: "type", label: "Customer type", short: "Type" },
-        { id: "identity", label: "Identity & contact", short: "Identity" },
-        { id: "location", label: "Location", short: "Location" },
-        { id: "credit", label: "Credit & billing", short: "Credit" },
-        { id: "review", label: "Review & create", short: "Review" },
-      ] as const,
-    []
-  );
+  const createSteps = React.useMemo(() => {
+    const all = [
+      { id: "type", label: "Customer type", short: "Type" },
+      { id: "identity", label: "Identity & contact", short: "Identity" },
+      { id: "location", label: "Location", short: "Location" },
+      { id: "credit", label: "Credit & billing", short: "Credit" },
+      { id: "review", label: "Review & create", short: "Review" },
+    ] as const;
+    if (supermarketOnly) {
+      return all.filter((s) => s.id !== "type");
+    }
+    return all;
+  }, [supermarketOnly]);
 
   const [step, setStep] = React.useState(0);
   const [form, setForm] = React.useState<FormState>(() => emptyForm(initialKindId ?? "general-trade"));
@@ -230,6 +290,7 @@ export function CustomerFormSheet({
 
   const kind = CUSTOMER_KIND_OPTIONS.find((k) => k.id === form.kindId) ?? CUSTOMER_KIND_OPTIONS[1];
   const showRouteAndGeo = !fmcg || form.kindId !== "modern-trade";
+  const stepId = createSteps[step]?.id ?? "identity";
 
   React.useEffect(() => {
     if (!open) {
@@ -279,6 +340,7 @@ export function CustomerFormSheet({
                 : party.lastKnownLongitude != null
                   ? String(party.lastKnownLongitude)
                   : "",
+            googlePlaceId: party.googlePlaceId ?? "",
             creditLimit:
               party.creditLimitAmount != null && Number.isFinite(party.creditLimitAmount)
                 ? String(party.creditLimitAmount)
@@ -295,20 +357,32 @@ export function CustomerFormSheet({
       return;
     }
 
-    const draft = loadDraft(fmcg);
-    if (draft) {
-      setForm(draft.form);
-      setStep(Math.min(Math.max(draft.step, 0), createSteps.length - 1));
-      setDraftRestored(true);
-    } else {
-      const kindId = initialKindId ?? "general-trade";
-      const kindOpt = CUSTOMER_KIND_OPTIONS.find((k) => k.id === kindId);
+    const kindId = initialKindId ?? "general-trade";
+    const kindOpt = CUSTOMER_KIND_OPTIONS.find((k) => k.id === kindId);
+
+    if (supermarketOnly) {
+      // Creating a supermarket from the branch flow — don't reuse a general customer draft
+      clearDraft();
       setForm({
         ...emptyForm(kindId),
         customerType: kindOpt?.customerType ?? "RETAILER",
       });
       setStep(0);
       setDraftRestored(false);
+    } else {
+      const draft = loadDraft(fmcg);
+      if (draft) {
+        setForm(draft.form);
+        setStep(Math.min(Math.max(draft.step, 0), createSteps.length - 1));
+        setDraftRestored(true);
+      } else {
+        setForm({
+          ...emptyForm(kindId),
+          customerType: kindOpt?.customerType ?? "RETAILER",
+        });
+        setStep(0);
+        setDraftRestored(false);
+      }
     }
     setStepErrors({});
     setNextCodePreview("");
@@ -316,12 +390,12 @@ export function CustomerFormSheet({
       .then((code) => setNextCodePreview(code))
       .catch(() => setNextCodePreview(""));
     hydratedRef.current = true;
-  }, [open, customerId, initialKindId, fmcg, createSteps.length]);
+  }, [open, customerId, initialKindId, fmcg, createSteps.length, supermarketOnly]);
 
   React.useEffect(() => {
-    if (!open || editing || !hydratedRef.current) return;
+    if (!open || editing || supermarketOnly || !hydratedRef.current) return;
     saveDraft({ step, form, fmcg, updatedAt: new Date().toISOString() });
-  }, [open, editing, step, form, fmcg]);
+  }, [open, editing, supermarketOnly, step, form, fmcg]);
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -339,18 +413,19 @@ export function CustomerFormSheet({
   };
 
   const validateStep = (index: number): boolean => {
+    const id = createSteps[index]?.id;
     const next: Record<string, string> = {};
-    if (index === 0) {
+    if (id === "type") {
       if (fmcg && !form.kindId) next.kindId = "Select a customer type to continue.";
       if (!fmcg && !form.customerType) next.customerType = "Select a customer type to continue.";
     }
-    if (index === 1) {
+    if (id === "identity") {
       if (!form.name.trim()) next.name = "Name is required.";
       if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
         next.email = "Enter a valid email address.";
       }
     }
-    if (index === 2) {
+    if (id === "location") {
       if (form.latitude.trim() && !Number.isFinite(Number(form.latitude))) {
         next.latitude = "Latitude must be a number.";
       }
@@ -358,7 +433,7 @@ export function CustomerFormSheet({
         next.longitude = "Longitude must be a number.";
       }
     }
-    if (index === 3) {
+    if (id === "credit") {
       if (form.creditLimit.trim()) {
         const n = Number(form.creditLimit);
         if (!Number.isFinite(n) || n < 0) next.creditLimit = "Credit limit must be zero or greater.";
@@ -384,9 +459,9 @@ export function CustomerFormSheet({
     const payload: PartyPayload = {
       name: form.name.trim(),
       roles: ["customer"],
-      tradingName: form.tradingName.trim() || undefined,
+      tradingName: form.tradingName.trim() || form.name.trim() || undefined,
       code: form.code.trim() || undefined,
-      phone: form.phone.trim() || undefined,
+      phone: normalizeKenyaPhoneOptional(form.phone),
       email: form.email.trim() || undefined,
       contactPersonFirstName: form.contactPersonFirstName.trim() || undefined,
       contactPersonLastName: form.contactPersonLastName.trim() || undefined,
@@ -399,6 +474,7 @@ export function CustomerFormSheet({
       route: form.route.trim() || undefined,
       latitude: form.latitude.trim() ? Number(form.latitude) : undefined,
       longitude: form.longitude.trim() ? Number(form.longitude) : undefined,
+      googlePlaceId: form.googlePlaceId.trim() || undefined,
       creditLimit: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
       creditLimitAmount: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
       paymentTermsId: form.paymentTermsId || undefined,
@@ -432,17 +508,21 @@ export function CustomerFormSheet({
       if (editing && customerId) {
         await updatePartyApi(customerId, payload);
         toast.success("Customer updated");
+        onOpenChange(false);
+        onSuccess?.({ id: customerId, name: payload.name, kindId: form.kindId });
       } else {
-        await createPartyApi(payload);
+        const created = await createPartyApi(payload);
         clearDraft();
         toast.success(
-          fmcg && form.kindId === "modern-trade"
-            ? "Customer created. Add branches from the customer list when ready."
-            : "Customer created"
+          supermarketOnly
+            ? "Supermarket created. Continue adding its branch."
+            : fmcg && form.kindId === "modern-trade"
+              ? "Supermarket created. You can add branches next."
+              : "Customer created"
         );
+        onOpenChange(false);
+        onSuccess?.({ id: created.id, name: created.name, kindId: form.kindId });
       }
-      onOpenChange(false);
-      onSuccess?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save customer");
     } finally {
@@ -473,14 +553,29 @@ export function CustomerFormSheet({
       <SheetContent className="w-full sm:max-w-lg flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0 space-y-3">
           <div>
-            <SheetTitle>{editing ? "Edit customer" : "New customer"}</SheetTitle>
+            <SheetTitle>
+              {editing ? "Edit customer" : supermarketOnly ? "New supermarket" : "New customer"}
+            </SheetTitle>
             <SheetDescription>
               {editing
                 ? "Update this customer’s details. Credit limit changes for existing customers are also available under Finance."
-                : "Complete each step. Your progress is saved automatically if you close or refresh."}
+                : supermarketOnly
+                  ? "Create the chain HQ, then you’ll return to add its branch."
+                  : "Complete each step. Your progress is saved automatically if you close or refresh."}
             </SheetDescription>
           </div>
-          {!editing ? <CustomerStepper step={step} steps={createSteps} /> : null}
+          {!editing ? (
+            <CustomerStepper
+              step={step}
+              steps={createSteps}
+              onStepSelect={(index) => {
+                if (index < step) {
+                  setStepErrors({});
+                  setStep(index);
+                }
+              }}
+            />
+          ) : null}
           {!editing && draftRestored ? (
             <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
               <span className="text-muted-foreground">Draft restored from this device</span>
@@ -505,7 +600,7 @@ export function CustomerFormSheet({
             />
           ) : (
             <>
-              {step === 0 ? (
+              {stepId === "type" ? (
                 <div className="space-y-3">
                   <FieldLabel required>Customer type</FieldLabel>
                   {fmcg ? (
@@ -555,7 +650,7 @@ export function CustomerFormSheet({
                 </div>
               ) : null}
 
-              {step === 1 ? (
+              {stepId === "identity" ? (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <FieldLabel htmlFor="cust-name" required>
@@ -610,7 +705,11 @@ export function CustomerFormSheet({
                         id="cust-phone"
                         value={form.phone}
                         onChange={(e) => setField("phone", e.target.value)}
-                        placeholder="07…"
+                        onBlur={() => {
+                          if (!form.phone.trim()) return;
+                          setField("phone", normalizeKenyaPhone(form.phone));
+                        }}
+                        placeholder="07… or 254…"
                       />
                     </div>
                   </div>
@@ -656,93 +755,55 @@ export function CustomerFormSheet({
                 </div>
               ) : null}
 
-              {step === 2 ? (
+              {stepId === "location" ? (
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <FieldLabel htmlFor="cust-addr" optional>
-                      Address
-                    </FieldLabel>
-                    <Input
-                      id="cust-addr"
-                      value={form.addressLine1}
-                      onChange={(e) => setField("addressLine1", e.target.value)}
-                      placeholder="Street / building"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <FieldLabel htmlFor="cust-city" optional>
-                        City / town
-                      </FieldLabel>
-                      <Input
-                        id="cust-city"
-                        value={form.city}
-                        onChange={(e) => setField("city", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <FieldLabel htmlFor="cust-region" optional>
-                        Region / county
-                      </FieldLabel>
-                      <Input
-                        id="cust-region"
-                        value={form.region}
-                        onChange={(e) => setField("region", e.target.value)}
-                      />
-                    </div>
-                  </div>
+                  <LocationPickerField
+                    optional
+                    value={locationFromForm(form)}
+                    onChange={(loc) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        addressLine1: loc?.formattedAddress ?? loc?.line1 ?? "",
+                        city: loc?.city ?? "",
+                        region: loc?.region ?? "",
+                        latitude:
+                          loc?.latitude != null && Number.isFinite(loc.latitude)
+                            ? String(loc.latitude)
+                            : "",
+                        longitude:
+                          loc?.longitude != null && Number.isFinite(loc.longitude)
+                            ? String(loc.longitude)
+                            : "",
+                        googlePlaceId: loc?.placeId ?? "",
+                      }));
+                      if (stepErrors.latitude || stepErrors.longitude) {
+                        setStepErrors((prev) => ({ ...prev, latitude: "", longitude: "" }));
+                      }
+                    }}
+                    error={stepErrors.latitude || stepErrors.longitude || undefined}
+                  />
                   {showRouteAndGeo ? (
-                    <>
-                      <div className="space-y-2">
-                        <FieldLabel htmlFor="cust-route" optional>
-                          Sales route
-                        </FieldLabel>
-                        <Input
-                          id="cust-route"
-                          value={form.route}
-                          onChange={(e) => setField("route", e.target.value)}
-                          placeholder="e.g. ATHIRIVER"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <FieldLabel htmlFor="cust-lat" optional>
-                            Latitude
-                          </FieldLabel>
-                          <Input
-                            id="cust-lat"
-                            value={form.latitude}
-                            onChange={(e) => setField("latitude", e.target.value)}
-                          />
-                          {stepErrors.latitude ? (
-                            <p className="text-xs text-destructive">{stepErrors.latitude}</p>
-                          ) : null}
-                        </div>
-                        <div className="space-y-2">
-                          <FieldLabel htmlFor="cust-lng" optional>
-                            Longitude
-                          </FieldLabel>
-                          <Input
-                            id="cust-lng"
-                            value={form.longitude}
-                            onChange={(e) => setField("longitude", e.target.value)}
-                          />
-                          {stepErrors.longitude ? (
-                            <p className="text-xs text-destructive">{stepErrors.longitude}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    </>
+                    <div className="space-y-2">
+                      <FieldLabel htmlFor="cust-route" optional>
+                        Sales route
+                      </FieldLabel>
+                      <Input
+                        id="cust-route"
+                        value={form.route}
+                        onChange={(e) => setField("route", e.target.value)}
+                        placeholder="e.g. ATHIRIVER"
+                      />
+                    </div>
                   ) : (
                     <p className="text-xs text-muted-foreground rounded-md border bg-muted/20 px-3 py-2">
                       After creating this chain, use <span className="font-medium">Add branch</span> on
-                      the customer list for each outlet.
+                      the customer list for each outlet (with its own address).
                     </p>
                   )}
                 </div>
               ) : null}
 
-              {step === 3 ? (
+              {stepId === "credit" ? (
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
                     All fields on this step are optional. You can set credit now, or leave blank — Finance
@@ -800,7 +861,7 @@ export function CustomerFormSheet({
                 </div>
               ) : null}
 
-              {step === 4 ? (
+              {stepId === "review" ? (
                 <div className="space-y-3 rounded-lg border p-4 text-sm">
                   <p className="font-medium">Review before creating</p>
                   <dl className="space-y-2 text-muted-foreground">
@@ -949,7 +1010,16 @@ function EditAllFields({
           <FieldLabel htmlFor="edit-phone" optional>
             Phone
           </FieldLabel>
-          <Input id="edit-phone" value={form.phone} onChange={(e) => setField("phone", e.target.value)} />
+          <Input
+            id="edit-phone"
+            value={form.phone}
+            onChange={(e) => setField("phone", e.target.value)}
+            onBlur={() => {
+              if (!form.phone.trim()) return;
+              setField("phone", normalizeKenyaPhone(form.phone));
+            }}
+            placeholder="07… or 254…"
+          />
         </div>
       </div>
       <div className="space-y-2">

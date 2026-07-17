@@ -74,6 +74,7 @@ export type PartyRow = {
   route?: string;
   latitude?: number;
   longitude?: number;
+  googlePlaceId?: string;
   pinCertificateUrl?: string;
   companyRegistrationUrl?: string;
   supplierPaymentMethod?: "BANK" | "MPESA" | "PAYBILL" | "TILL";

@@ -20,6 +20,7 @@ export type PartySiteRow = {
   };
   latitude?: number;
   longitude?: number;
+  googlePlaceId?: string;
   status: string;
 };
 
@@ -33,6 +34,7 @@ export type PartySitePayload = {
   address?: PartySiteRow["address"];
   latitude?: number;
   longitude?: number;
+  googlePlaceId?: string;
   status?: "ACTIVE" | "INACTIVE";
 };
 
@@ -50,10 +52,10 @@ export async function fetchPartySitesApi(params?: {
 
 export async function createPartySiteApi(payload: PartySitePayload): Promise<{ id: string }> {
   requireLiveApi("create party site");
-  return apiRequest<{ id: string }>("/api/party-sites", { method: "POST", body: JSON.stringify(payload) });
+  return apiRequest<{ id: string }>("/api/party-sites", { method: "POST", body: payload });
 }
 
 export async function updatePartySiteApi(id: string, payload: Partial<PartySitePayload>): Promise<PartySiteRow> {
   requireLiveApi("update party site");
-  return apiRequest<PartySiteRow>(`/api/party-sites/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+  return apiRequest<PartySiteRow>(`/api/party-sites/${id}`, { method: "PATCH", body: payload });
 }

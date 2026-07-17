@@ -13,11 +13,18 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import * as Icons from "lucide-react";
 import { useOrgContext } from "@/stores/orgContextStore";
-import { isFmcgOrg, type CustomerKindId } from "@/lib/fmcg/sfa-customer";
+import {
+  CUSTOMER_DIRECTORY_TABS,
+  isFmcgOrg,
+  type CustomerKindId,
+} from "@/lib/fmcg/sfa-customer";
+
+type DirectoryTabId = (typeof CUSTOMER_DIRECTORY_TABS)[number]["id"];
 import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { CustomerDirectoryPanel } from "@/components/customers/CustomerDirectoryPanel";
 import { CustomerFormSheet } from "@/components/customers/CustomerFormSheet";
+import { AddModernTradeBranchSheet } from "@/components/customers/AddModernTradeBranchSheet";
 
 export type CustomersHubProps = {
   fromFinance?: boolean;
@@ -46,7 +53,14 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [formKindId, setFormKindId] = React.useState<CustomerKindId | undefined>(undefined);
   const [formCustomerId, setFormCustomerId] = React.useState<string | null>(null);
+  const [lockKind, setLockKind] = React.useState(false);
+  const [returnToBranchAfterSupermarket, setReturnToBranchAfterSupermarket] = React.useState(false);
+  const [branchOpen, setBranchOpen] = React.useState(false);
+  const [branchSupermarketId, setBranchSupermarketId] = React.useState<string | null>(null);
+  const [newlyCreatedSupermarketId, setNewlyCreatedSupermarketId] = React.useState<string | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
+  const [directoryTab, setDirectoryTab] = React.useState<DirectoryTabId>("modern-trade");
+  const supermarketCreatedRef = React.useRef(false);
 
   const clearQueryFlags = React.useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -58,14 +72,21 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   }, [router, searchParams]);
 
   const openNewCustomer = React.useCallback(
-    (kindId?: CustomerKindId) => {
+    (kindId?: CustomerKindId, options?: { lockKind?: boolean; returnToBranch?: boolean }) => {
       setFormCustomerId(null);
       setFormKindId(kindId);
+      setLockKind(Boolean(options?.lockKind));
+      setReturnToBranchAfterSupermarket(Boolean(options?.returnToBranch));
       setFormOpen(true);
       clearQueryFlags();
     },
     [clearQueryFlags]
   );
+
+  const openBranchSheet = React.useCallback((supermarketId?: string) => {
+    setBranchSupermarketId(supermarketId ?? null);
+    setBranchOpen(true);
+  }, []);
 
   React.useEffect(() => {
     if (openCreate) openNewCustomer();
@@ -156,15 +177,20 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
 
       <div className={LIST_PAGE_BODY_CLASS}>
         <CustomerDirectoryPanel
-          key={`list-${refreshKey}`}
           fmcg={fmcg}
           segmentTabs={fmcg}
+          branchListRefreshKey={refreshKey}
+          activeTab={directoryTab}
+          onActiveTabChange={setDirectoryTab}
           onAddCustomer={(kindId) => openNewCustomer(kindId)}
           onEditCustomer={(id) => {
             setFormCustomerId(id);
             setFormKindId(undefined);
+            setLockKind(false);
+            setReturnToBranchAfterSupermarket(false);
             setFormOpen(true);
           }}
+          onAddBranch={fmcg ? openBranchSheet : undefined}
         />
       </div>
 
@@ -173,15 +199,51 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         onOpenChange={(open) => {
           setFormOpen(open);
           if (!open) {
+            const returningToBranch = returnToBranchAfterSupermarket;
+            const created = supermarketCreatedRef.current;
+            supermarketCreatedRef.current = false;
             setFormCustomerId(null);
+            setLockKind(false);
+            setReturnToBranchAfterSupermarket(false);
             if (editCustomerId) clearQueryFlags();
+            // Cancelled supermarket create → resume branch sheet (draft kept)
+            if (returningToBranch && !created) {
+              setBranchOpen(true);
+            }
           }
         }}
         fmcg={fmcg}
         initialKindId={formKindId}
+        lockKind={lockKind}
         customerId={formCustomerId}
-        onSuccess={() => setRefreshKey((k) => k + 1)}
+        onSuccess={(customer) => {
+          setRefreshKey((k) => k + 1);
+          if (customer?.kindId) {
+            const tab = CUSTOMER_DIRECTORY_TABS.find((t) => t.id === customer.kindId);
+            if (tab) setDirectoryTab(tab.id);
+          }
+          if (returnToBranchAfterSupermarket && customer?.id) {
+            supermarketCreatedRef.current = true;
+            setNewlyCreatedSupermarketId(customer.id);
+            setBranchSupermarketId(customer.id);
+            setBranchOpen(true);
+          }
+        }}
       />
+
+      {fmcg ? (
+        <AddModernTradeBranchSheet
+          open={branchOpen}
+          onOpenChange={setBranchOpen}
+          initialSupermarketId={branchSupermarketId}
+          selectSupermarketId={newlyCreatedSupermarketId}
+          onSelectSupermarketConsumed={() => setNewlyCreatedSupermarketId(null)}
+          onAddSupermarket={() => {
+            openNewCustomer("modern-trade", { lockKind: true, returnToBranch: true });
+          }}
+          onSuccess={() => setRefreshKey((k) => k + 1)}
+        />
+      ) : null}
     </PageShell>
   );
 }
