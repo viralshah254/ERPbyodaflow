@@ -109,6 +109,23 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     items: [
       { key: "masters-hub", label: "Masters", href: "/master", icon: "Database", moduleKey: "masters", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
       { key: "masters-products", label: "Products", href: "/master/products", icon: "Package", moduleKey: "masters", termKey: "product", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
+      {
+        key: "masters-categories",
+        label: "Categories",
+        href: "/master/categories",
+        icon: "Tags",
+        moduleKey: "masters",
+        requiresPermissions: ["inventory.read", "purchase.read", "sales.read"],
+      },
+      {
+        key: "masters-departments",
+        label: "Departments",
+        href: "/master/departments",
+        icon: "Layers",
+        moduleKey: "masters",
+        requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
+        requiresPermissions: ["inventory.read", "purchase.read", "sales.read"],
+      },
       { key: "masters-parties", label: "Parties", href: "/master/parties", icon: "Users", moduleKey: "masters", requiresPermissions: ["sales.read", "purchase.read", "finance.ar.read", "finance.ap.read"] },
       { key: "masters-warehouses", label: "Warehouses", href: "/master/warehouses", icon: "MapPin", moduleKey: "masters", termKey: "warehouse", requiresPermissions: ["inventory.read"] },
     ],
@@ -450,12 +467,24 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             requiresPermissions: ["sales.write", "admin.settings"],
           },
           {
+            key: "pricing-workspace-packs",
+            label: "Packs",
+            href: "/pricing/workspace/packs",
+            icon: "Package",
+            moduleKey: "pricing",
+            requiresPermissions: ["sales.write", "admin.settings"],
+            /** FMCG piece×pack pricing — manufacturer sell packs. */
+            requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
+          },
+          {
             key: "pricing-workspace-zones",
             label: "Franchise zones",
             href: "/pricing/workspace/zones",
             icon: "MapPin",
             moduleKey: "pricing",
             requiresPermissions: ["sales.write", "admin.settings"],
+            /** CoolCatch / seafood franchise pricing — hidden for FMCG. */
+            requiresTemplates: ["seafood-distributor", "cool-catch", "coolcatch"],
           },
           {
             key: "pricing-workspace-approvals",
@@ -464,6 +493,8 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             icon: "ClipboardCheck",
             moduleKey: "pricing",
             requiresPermissions: ["sales.write", "admin.settings"],
+            /** CoolCatch daily price review — seafood only. */
+            requiresTemplates: ["seafood-distributor", "cool-catch", "coolcatch"],
           },
         ],
       },

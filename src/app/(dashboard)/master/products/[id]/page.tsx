@@ -52,14 +52,16 @@ import {
 import {
   fetchProductCategoriesApi,
   createProductCategoryApi,
+  normalizeCategoryCode,
   updateProductCategoryApi,
   deleteProductCategoryApi,
 } from "@/lib/api/product-categories";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
 import type { TaxRow } from "@/lib/types/taxes";
+import { FmcgProductPacksEditor } from "@/components/products/FmcgProductPacksEditor";
 import {
-  fetchProductPackagingApi,
+  fetchProductPackagingDetailApi,
   saveProductPackagingApi,
   fetchProductPricingApi,
   saveProductPricingApi,
@@ -72,7 +74,7 @@ import {
   updateProductAttributeDefApi,
   deleteProductAttributeDefApi,
 } from "@/lib/api/product-master";
-import { fetchPriceListsForUi } from "@/lib/api/pricing";
+import { fetchPriceListsApi, fetchPriceListsForUi } from "@/lib/api/pricing";
 import {
   fetchProductVatCategoryApi,
   updateProductVatCategoryApi,
@@ -82,12 +84,22 @@ import type { ProductPackaging, ProductPrice, PricingTier } from "@/lib/products
 import type { ProductVariant, ProductAttributeDef, VariantAttribute } from "@/lib/products/types";
 import { validateProductPackaging } from "@/lib/products/validation";
 import { validateTiers } from "@/lib/pricing/validation";
-import { fetchProductUomsApi } from "@/lib/api/uom";
+import { createUomApi, fetchProductUomsApi } from "@/lib/api/uom";
+
+/** Common sell packs for FMCG manufacturers — select or create if missing. */
+const FMCG_PACK_PRESETS = ["CARTON", "OUTER", "BALE", "BOX", "PACK", "DOZEN"] as const;
 import { formatMoney } from "@/lib/money";
 import { t } from "@/lib/terminology";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { isSeafoodOrg } from "@/config/industry";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import {
+  composeFmcgSize,
+  FMCG_SIZE_UOMS,
+  parseFmcgSize,
+} from "@/lib/products/fmcg-size";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -133,6 +145,10 @@ export default function ProductDetailPage() {
   const canDelete = permissions.includes("admin.settings");
   const canWrite = useCanWriteInventory();
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
+  const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
@@ -159,6 +175,11 @@ export default function ProductDetailPage() {
   const [tierSheetOpen, setTierSheetOpen] = React.useState(false);
   const [editingTierIdx, setEditingTierIdx] = React.useState<number | null>(null);
   const [applyingTemplate, setApplyingTemplate] = React.useState(false);
+  /** FMCG: price tags that include this SKU (piece price). */
+  const [fmcgTagPrices, setFmcgTagPrices] = React.useState<
+    Array<{ id: string; name: string; currency: string; price: number; discountPercent?: number }>
+  >([]);
+  const [fmcgTagPricesLoading, setFmcgTagPricesLoading] = React.useState(false);
 
   // Variants
   const [variants, setVariants] = React.useState<ProductVariant[]>([]);
@@ -171,11 +192,14 @@ export default function ProductDetailPage() {
   const [uomOptions, setUomOptions] = React.useState<string[]>(["EA", "KG", "L", "M", "PCS"]);
   const [mounted, setMounted] = React.useState(false);
   const [nameDraft, setNameDraft] = React.useState("");
+  const [barcodeDraft, setBarcodeDraft] = React.useState("");
   const [descriptionDraft, setDescriptionDraft] = React.useState("");
   const [productFamilyDraft, setProductFamilyDraft] = React.useState("");
   const [productTypeDraft, setProductTypeDraft] = React.useState("");
   const [baseUomDraft, setBaseUomDraft] = React.useState("");
   const [categoryDraft, setCategoryDraft] = React.useState("");
+  const [sizeValueDraft, setSizeValueDraft] = React.useState("");
+  const [sizeUomDraft, setSizeUomDraft] = React.useState("g");
   const [categoryList, setCategoryList] = React.useState<{ id: string; name: string }[]>([]);
   const [familyOptions, setFamilyOptions] = React.useState<string[]>([]);
   const [savingAll, setSavingAll] = React.useState(false);
@@ -186,19 +210,26 @@ export default function ProductDetailPage() {
     if (product === undefined) return;
     if (product === null) {
       setNameDraft("");
+      setBarcodeDraft("");
       setDescriptionDraft("");
       setProductFamilyDraft("");
       setProductTypeDraft("");
       setBaseUomDraft("");
       setCategoryDraft("");
+      setSizeValueDraft("");
+      setSizeUomDraft("g");
       return;
     }
     setNameDraft(product.name ?? "");
+    setBarcodeDraft(product.barcode ?? "");
     setDescriptionDraft(product.description ?? "");
     setProductFamilyDraft(product.productFamily ?? "");
     setProductTypeDraft(product.productType ?? "");
     setBaseUomDraft(product.baseUom ?? product.unit ?? "");
     setCategoryDraft(product.category ?? "");
+    const parsed = parseFmcgSize(product.size);
+    setSizeValueDraft(parsed.value);
+    setSizeUomDraft(parsed.uom);
   }, [product]);
 
   // Load all data in parallel
@@ -207,17 +238,28 @@ export default function ProductDetailPage() {
     Promise.all([
       fetchProductApi(id),
       fetchProductVatCategoryApi(id).catch((): ProductVatCategory => "standard"),
-      fetchProductPackagingApi(id).catch(() => [] as ProductPackaging[]),
+      fetchProductPackagingDetailApi(id).catch(() => ({
+        items: [] as ProductPackaging[],
+        hasProductOverride: false,
+        defaults: [] as ProductPackaging[],
+        source: "defaults" as const,
+      })),
       fetchProductPricingApi(id).catch(() => [] as ProductPrice[]),
       fetchProductVariantsApi(id).catch(() => [] as ProductVariant[]),
       fetchProductAttributeDefsApi().catch(() => [] as ProductAttributeDef[]),
       fetchPriceListsForUi().catch(() => []),
       fetchFinancialTaxesApi().catch(() => [] as TaxRow[]),
-    ]).then(([prod, vat, pack, prices, vars, attrs, lists, taxes]) => {
+    ]).then(([prod, vat, packDetail, prices, vars, attrs, lists, taxes]) => {
       if (cancelled) return;
       setProduct(prod);
       setVatCategory(vat);
-      setPackaging(pack);
+      const effectivePack =
+        packDetail.hasProductOverride
+          ? packDetail.items
+          : packDetail.defaults.length > 0
+            ? packDetail.defaults
+            : packDetail.items;
+      setPackaging(effectivePack);
       setAllPrices(prices);
       setVariants(vars);
       setAttributeDefs(attrs);
@@ -268,6 +310,43 @@ export default function ProductDetailPage() {
     if (priceLists.length && !selectedListId) setSelectedListId(priceLists[0].id);
   }, [priceLists, selectedListId]);
 
+  React.useEffect(() => {
+    if (!fmcgOrg || !id) {
+      setFmcgTagPrices([]);
+      return;
+    }
+    let cancelled = false;
+    setFmcgTagPricesLoading(true);
+    fetchPriceListsApi()
+      .then((lists) => {
+        if (cancelled) return;
+        const rows = lists
+          .map((list) => {
+            const item = (list.items ?? []).find((i) => i.productId === id);
+            if (!item || item.price == null || !Number.isFinite(Number(item.price))) return null;
+            return {
+              id: list.id,
+              name: list.name,
+              currency: list.currency ?? "KES",
+              price: Number(item.price),
+              discountPercent: item.discountPercent,
+            };
+          })
+          .filter((r): r is NonNullable<typeof r> => r != null)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setFmcgTagPrices(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setFmcgTagPrices([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFmcgTagPricesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fmcgOrg, id]);
+
   const pl = priceLists.find((l) => l.id === selectedListId);
   const currency = pl?.currency ?? "KES";
   const baseUom = product?.baseUom ?? product?.unit ?? "EA";
@@ -309,26 +388,38 @@ export default function ProductDetailPage() {
   const overviewDirty = React.useMemo(() => {
     if (!product) return false;
     const nameChanged = nameDraft.trim() !== (product.name ?? "");
-    const familyChanged = (productFamilyDraft.trim() || "") !== (product.productFamily ?? "");
+    const barcodeChanged = (barcodeDraft.trim() || "") !== (product.barcode ?? "");
+    const familyChanged =
+      !fmcgOrg && (productFamilyDraft.trim() || "") !== (product.productFamily ?? "");
     const notesChanged = descriptionDraft !== (product.description ?? "");
     const typeChanged = Boolean(productTypeDraft) && productTypeDraft !== (product.productType ?? "");
     const taxChanged = (defaultTaxCodeId || "") !== (product.defaultTaxCodeId ?? "");
-    const uomChanged = Boolean(baseUomDraft) && baseUomDraft !== (product.baseUom ?? product.unit ?? "");
+    const uomChanged =
+      !fmcgOrg && Boolean(baseUomDraft) && baseUomDraft !== (product.baseUom ?? product.unit ?? "");
     const categoryChanged = (categoryDraft || "") !== (product.category ?? "");
+    const sizeChanged =
+      fmcgOrg &&
+      (composeFmcgSize(sizeValueDraft, sizeUomDraft) ?? "") !== (product.size ?? "");
     return (
       nameChanged ||
+      barcodeChanged ||
       familyChanged ||
       notesChanged ||
       typeChanged ||
       taxChanged ||
       uomChanged ||
-      categoryChanged
+      categoryChanged ||
+      sizeChanged
     );
   }, [
     product,
+    fmcgOrg,
     nameDraft,
+    barcodeDraft,
     productFamilyDraft,
     descriptionDraft,
+    sizeValueDraft,
+    sizeUomDraft,
     productTypeDraft,
     defaultTaxCodeId,
     baseUomDraft,
@@ -345,18 +436,26 @@ export default function ProductDetailPage() {
     }
     const patch: ProductPatchPayload = {};
     if (nameNext !== (product.name ?? "")) patch.name = nameNext;
-    const familyNext = productFamilyDraft.trim() || undefined;
-    if ((familyNext ?? "") !== (product.productFamily ?? "")) patch.productFamily = familyNext;
+    const barcodeNext = barcodeDraft.trim() || undefined;
+    if ((barcodeNext ?? "") !== (product.barcode ?? "")) patch.barcode = barcodeNext ?? "";
+    if (!fmcgOrg) {
+      const familyNext = productFamilyDraft.trim() || undefined;
+      if ((familyNext ?? "") !== (product.productFamily ?? "")) patch.productFamily = familyNext;
+      const uomNext = baseUomDraft.trim();
+      if (uomNext && uomNext !== (product.baseUom ?? product.unit ?? "")) patch.baseUom = uomNext;
+    }
     const notesNext = descriptionDraft.trim() || undefined;
     if (descriptionDraft !== (product.description ?? "")) patch.description = notesNext;
     const typeNext = (productTypeDraft || undefined) as "RAW" | "FINISHED" | "BOTH" | undefined;
     if (typeNext && typeNext !== (product.productType ?? "")) patch.productType = typeNext;
     const taxNext = defaultTaxCodeId || undefined;
     if ((taxNext ?? "") !== (product.defaultTaxCodeId ?? "")) patch.defaultTaxCodeId = taxNext;
-    const uomNext = baseUomDraft.trim();
-    if (uomNext && uomNext !== (product.baseUom ?? product.unit ?? "")) patch.baseUom = uomNext;
     const categoryNext = categoryDraft || undefined;
     if ((categoryNext ?? "") !== (product.category ?? "")) patch.category = categoryNext;
+    if (fmcgOrg) {
+      const sizeNext = composeFmcgSize(sizeValueDraft, sizeUomDraft) ?? "";
+      if (sizeNext !== (product.size ?? "")) patch.size = sizeNext;
+    }
 
     if (Object.keys(patch).length === 0) return;
     setSavingAll(true);
@@ -387,8 +486,8 @@ export default function ProductDetailPage() {
     }
     try {
       const code =
-        trimmed.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20) ||
-        `CAT${Date.now().toString().slice(-4)}`;
+        normalizeCategoryCode(trimmed.replace(/\s+/g, "-"), 20) ||
+        `CAT-${Date.now().toString().slice(-4)}`;
       const { id: newId } = await createProductCategoryApi({ code, name: trimmed });
       setCategoryList((prev) =>
         [...prev, { id: newId, name: trimmed }].sort((a, b) => a.name.localeCompare(b.name))
@@ -471,7 +570,14 @@ export default function ProductDetailPage() {
     if (editingPackIdx != null && editingPackIdx >= 0) next[editingPackIdx] = p;
     else next.push(p);
     setPackaging(next);
-    if (product) { try { await saveProductPackagingApi(product.id, next); toast.success("Packaging saved."); } catch (e) { toast.error((e as Error).message); } }
+    if (product) {
+      try {
+        await saveProductPackagingApi(product.id, next);
+        toast.success(fmcgOrg ? "Pack saved." : "Packaging saved.");
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
+    }
     setPackSheetOpen(false);
     setEditingPackIdx(null);
   };
@@ -609,7 +715,17 @@ export default function ProductDetailPage() {
     <PageShell>
       <PageHeader
         title={`${product.sku} — ${product.name}`}
-        description={`${product.categoryName ? `${product.categoryName} · ` : ""}Base UOM: ${baseUom}`}
+        description={
+          fmcgOrg
+            ? [
+                product.categoryName,
+                product.size?.trim() || composeFmcgSize(sizeValueDraft, sizeUomDraft),
+                product.barcode,
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            : `${product.categoryName ? `${product.categoryName} · ` : ""}Base UOM: ${baseUom}`
+        }
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: t("product", terminology) + "s", href: "/master/products" },
@@ -698,17 +814,19 @@ export default function ProductDetailPage() {
             </TabsTrigger>
             <TabsTrigger value="packaging">
               <Icons.Package className="mr-2 h-4 w-4" />
-              Packaging / UOM
+              {fmcgOrg ? "Packs" : "Packaging / UOM"}
             </TabsTrigger>
-            <TabsTrigger value="variants">
-              <Icons.Layers className="mr-2 h-4 w-4" />
-              Variants
-              {variants.length > 0 && (
-                <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-[10px]">
-                  {variants.length}
-                </Badge>
-              )}
-            </TabsTrigger>
+            {!fmcgOrg ? (
+              <TabsTrigger value="variants">
+                <Icons.Layers className="mr-2 h-4 w-4" />
+                Variants
+                {variants.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-[10px]">
+                    {variants.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            ) : null}
           </TabsList>
 
           {/* ── Overview Tab ──────────────────────────────────────────────── */}
@@ -724,6 +842,22 @@ export default function ProductDetailPage() {
                   <div className="grid grid-cols-[120px_1fr] gap-y-2">
                     <span className="text-muted-foreground">SKU</span>
                     <span className="font-mono font-medium">{product.sku}</span>
+                    <span className="text-muted-foreground align-top pt-1.5">Barcode</span>
+                    <div className="min-w-0">
+                      <Input
+                        id="product-barcode"
+                        value={barcodeDraft}
+                        onChange={(e) => setBarcodeDraft(e.target.value)}
+                        placeholder="EAN / UPC"
+                        className="font-mono"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void saveAllOverview();
+                          }
+                        }}
+                      />
+                    </div>
                     <span className="text-muted-foreground align-top pt-1.5">Name</span>
                     <div className="min-w-0">
                       <Input
@@ -740,23 +874,52 @@ export default function ProductDetailPage() {
                         }}
                       />
                     </div>
-                    <span className="text-muted-foreground align-top pt-1.5">Product family</span>
-                    <div className="min-w-0">
-                      <Combobox
-                        value={productFamilyDraft}
-                        onChange={setProductFamilyDraft}
-                        options={familyOptions.map((f) => ({ value: f, label: f }))}
-                        placeholder="Select or create a family"
-                        searchPlaceholder="Search or type a new family…"
-                        emptyMessage="No families yet — type to create one."
-                        onCreate={(label) => {
-                          setProductFamilyDraft(label);
-                          setFamilyOptions((prev) =>
-                            prev.includes(label) ? prev : [...prev, label].sort((a, b) => a.localeCompare(b))
-                          );
-                        }}
-                      />
-                    </div>
+                    {seafoodOrg ? (
+                      <>
+                        <span className="text-muted-foreground align-top pt-1.5">Product family</span>
+                        <div className="min-w-0">
+                          <Combobox
+                            value={productFamilyDraft}
+                            onChange={setProductFamilyDraft}
+                            options={familyOptions.map((f) => ({ value: f, label: f }))}
+                            placeholder="Select or create a family"
+                            searchPlaceholder="Search or type a new family…"
+                            emptyMessage="No families yet — type to create one."
+                            onCreate={(label) => {
+                              setProductFamilyDraft(label);
+                              setFamilyOptions((prev) =>
+                                prev.includes(label) ? prev : [...prev, label].sort((a, b) => a.localeCompare(b))
+                              );
+                            }}
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                    {fmcgOrg ? (
+                      <>
+                        <span className="text-muted-foreground align-top pt-1.5">Size</span>
+                        <div className="min-w-0 grid grid-cols-[1fr_7rem] gap-2">
+                          <Input
+                            inputMode="decimal"
+                            placeholder="e.g. 50 or 100"
+                            value={sizeValueDraft}
+                            onChange={(e) => setSizeValueDraft(e.target.value)}
+                          />
+                          <Select value={sizeUomDraft} onValueChange={setSizeUomDraft}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="UOM" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {FMCG_SIZE_UOMS.map((u) => (
+                                <SelectItem key={u} value={u}>
+                                  {u}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    ) : null}
                     <span className="text-muted-foreground align-top pt-1.5">Category</span>
                     <div className="min-w-0">
                       <Combobox
@@ -774,19 +937,23 @@ export default function ProductDetailPage() {
                         }
                       />
                     </div>
-                    <span className="text-muted-foreground align-top pt-1.5">Base UOM</span>
-                    <div className="min-w-0">
-                      <Combobox
-                        value={baseUomDraft}
-                        onChange={setBaseUomDraft}
-                        options={[
-                          ...new Set([...(baseUomDraft ? [baseUomDraft] : []), ...uomOptions]),
-                        ].map((u) => ({ value: u, label: u }))}
-                        placeholder="Select unit"
-                        searchPlaceholder="Search units…"
-                        emptyMessage="No units."
-                      />
-                    </div>
+                    {!fmcgOrg ? (
+                      <>
+                        <span className="text-muted-foreground align-top pt-1.5">Base UOM</span>
+                        <div className="min-w-0">
+                          <Combobox
+                            value={baseUomDraft}
+                            onChange={setBaseUomDraft}
+                            options={[
+                              ...new Set([...(baseUomDraft ? [baseUomDraft] : []), ...uomOptions]),
+                            ].map((u) => ({ value: u, label: u }))}
+                            placeholder="Select unit"
+                            searchPlaceholder="Search units…"
+                            emptyMessage="No units."
+                          />
+                        </div>
+                      </>
+                    ) : null}
                     <span className="text-muted-foreground">Status</span>
                     <span>
                       <Badge variant={product.status === "ACTIVE" ? "secondary" : "outline"}>
@@ -902,21 +1069,55 @@ export default function ProductDetailPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div>
-                    <CardTitle className="text-base">Packaging / UOM</CardTitle>
-                    <CardDescription className="text-xs">UOM conversions defined.</CardDescription>
+                    <CardTitle className="text-base">{fmcgOrg ? "Sell packs" : "Packaging / UOM"}</CardTitle>
+                    <CardDescription className="text-xs">
+                      {fmcgOrg
+                        ? "Inherited from manufacturer packs — toggle off or edit pieces per product."
+                        : "UOM conversions defined."}
+                    </CardDescription>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => { setEditingPackIdx(null); setPackSheetOpen(true); }}
-                  >
-                    <Icons.Plus className="mr-1 h-3.5 w-3.5" />
-                    Add UOM
-                  </Button>
+                  {!fmcgOrg ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => { setEditingPackIdx(null); setPackSheetOpen(true); }}
+                    >
+                      <Icons.Plus className="mr-1 h-3.5 w-3.5" />
+                      Add UOM
+                    </Button>
+                  ) : null}
                 </CardHeader>
                 <CardContent>
-                  {packaging.length === 0 ? (
+                  {fmcgOrg ? (
+                    packaging.length === 0 ? (
+                      <div className="space-y-2 text-sm text-muted-foreground">
+                        <p>No packs yet. Set manufacturer defaults, then tweak this product on the Packs tab.</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href="/pricing/workspace/packs">Manufacturer packs</Link>
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <ul className="text-sm space-y-2">
+                        {packaging.map((p) => (
+                          <li
+                            key={p.uom}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5"
+                          >
+                            <span className="font-mono font-medium">{p.uom}</span>
+                            <span className="text-muted-foreground">= {p.unitsPer} pieces</span>
+                          </li>
+                        ))}
+                        <li className="pt-1">
+                          <p className="text-xs text-muted-foreground">
+                            Toggle or edit per product on the Packs tab.
+                          </p>
+                        </li>
+                      </ul>
+                    )
+                  ) : packaging.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No UOM conversions yet.</p>
                   ) : (
                     <ul className="text-sm space-y-2">
@@ -924,9 +1125,13 @@ export default function ProductDetailPage() {
                         <li key={p.uom} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5">
                           <div className="flex flex-wrap items-center gap-2 min-w-0">
                             <span className="font-mono font-medium">{p.uom}</span>
-                            <span className="text-muted-foreground">= {p.unitsPer} {p.baseUom}</span>
+                            <span className="text-muted-foreground">
+                              = {p.unitsPer} {p.baseUom}
+                            </span>
                             {p.isDefaultSalesUom && <Badge variant="outline" className="text-[10px] px-1 py-0">default sales</Badge>}
-                            {p.isDefaultPurchaseUom && <Badge variant="outline" className="text-[10px] px-1 py-0">default purchase</Badge>}
+                            {p.isDefaultPurchaseUom && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">default purchase</Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             <Button
@@ -962,11 +1167,37 @@ export default function ProductDetailPage() {
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <div>
                     <CardTitle className="text-base">Pricing</CardTitle>
-                    <CardDescription className="text-xs">Price lists configured.</CardDescription>
+                    <CardDescription className="text-xs">
+                      {fmcgOrg ? "Piece prices by price tag." : "Price lists configured."}
+                    </CardDescription>
                   </div>
+                  {fmcgOrg ? (
+                    <Button variant="ghost" size="sm" className="text-xs" asChild>
+                      <Link href="/pricing/workspace/lists">Price tags</Link>
+                    </Button>
+                  ) : null}
                 </CardHeader>
                 <CardContent>
-                  {allPrices.length === 0 ? (
+                  {fmcgOrg ? (
+                    fmcgTagPricesLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading…</p>
+                    ) : fmcgTagPrices.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Not on any price tag yet. Set piece prices under Pricing → Price tags.
+                      </p>
+                    ) : (
+                      <ul className="text-sm space-y-1">
+                        {fmcgTagPrices.map((row) => (
+                          <li key={row.id} className="flex items-center gap-2">
+                            <span className="font-medium">{row.name}</span>
+                            <span className="text-muted-foreground">
+                              {formatMoney(row.price, row.currency)} / piece
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  ) : allPrices.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No pricing configured yet.</p>
                   ) : (
                     <ul className="text-sm space-y-1">
@@ -993,6 +1224,80 @@ export default function ProductDetailPage() {
 
           {/* ── Pricing Tab ───────────────────────────────────────────────── */}
           <TabsContent value="pricing" className="space-y-4">
+            {fmcgOrg ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-4 py-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium text-foreground">Prices live on price tags</p>
+                    <p className="text-sm text-muted-foreground">
+                      Customers get a tag (e.g. Naivas). Each tag has a piece price for this product —
+                      not qty tiers on the product itself.
+                    </p>
+                  </div>
+                  <Button asChild>
+                    <Link href="/pricing/workspace/lists">
+                      <Icons.Tags className="mr-2 h-4 w-4" />
+                      Open price tags
+                    </Link>
+                  </Button>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">This product on price tags</CardTitle>
+                    <CardDescription>
+                      Piece price by tag. Edit prices in Pricing → Price tags.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {fmcgTagPricesLoading ? (
+                      <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div>
+                    ) : fmcgTagPrices.length === 0 ? (
+                      <div className="p-8 text-center space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Not priced on any tag yet. Open Price tags, pick a tag, and set the piece price.
+                        </p>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href="/pricing/workspace/lists">Go to price tags</Link>
+                        </Button>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Price tag</TableHead>
+                            <TableHead>Price / piece</TableHead>
+                            <TableHead>Discount</TableHead>
+                            <TableHead className="w-[100px]" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {fmcgTagPrices.map((row) => (
+                            <TableRow key={row.id}>
+                              <TableCell className="font-medium">{row.name}</TableCell>
+                              <TableCell>
+                                {formatMoney(row.price, row.currency)}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {row.discountPercent != null && row.discountPercent > 0
+                                  ? `${row.discountPercent}%`
+                                  : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <Button variant="ghost" size="sm" asChild>
+                                  <Link href="/pricing/workspace/lists">Edit</Link>
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <>
             {/* Context banner */}
             <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
               <ProductTypeBadge type={productType} whenUnset="stock" />
@@ -1179,18 +1484,40 @@ export default function ProductDetailPage() {
                 </CardContent>
               </Card>
             )}
+              </>
+            )}
           </TabsContent>
 
-          {/* ── Packaging / UOM Tab ───────────────────────────────────────── */}
+          {/* ── Packaging / Packs Tab ───────────────────────────────────────── */}
           <TabsContent value="packaging" className="space-y-4">
-            <div className="flex items-center justify-between">
+            {fmcgOrg ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Sell packs</CardTitle>
+                  <CardDescription>
+                    Manufacturer packs are the default for every product. Toggle off packs this SKU does not
+                    use, or change pieces when this product packs differently.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <FmcgProductPacksEditor
+                    productId={id}
+                    canWrite={canWrite}
+                    onChanged={setPackaging}
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">UOM conversions</h3>
                 <p className="text-xs text-muted-foreground">
-                  Base UOM: <span className="font-mono font-medium">{baseUom}</span>. Define conversions for cartons, bundles, etc.
+                  Base UOM: <span className="font-mono font-medium">{baseUom}</span>. Define
+                  conversions for cartons, bundles, etc.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="decimals"
@@ -1284,6 +1611,8 @@ export default function ProductDetailPage() {
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
           </TabsContent>
 
           {/* ── Variants Tab ──────────────────────────────────────────────── */}
@@ -1497,9 +1826,15 @@ export default function ProductDetailPage() {
       <PackagingSheet
         open={packSheetOpen}
         onOpenChange={setPackSheetOpen}
-        baseUom={baseUom}
-        allowDecimals={allowDecimals}
+        baseUom={fmcgOrg ? "PCS" : baseUom}
+        allowDecimals={fmcgOrg ? false : allowDecimals}
         uomOptions={uomOptions}
+        fmcgMode={fmcgOrg}
+        onUomCreated={(code) => {
+          setUomOptions((prev) =>
+            prev.includes(code) ? prev : [...prev, code].sort((a, b) => a.localeCompare(b))
+          );
+        }}
         initial={editingPackagingRow}
         onSave={handleSavePackaging}
         onCancel={() => { setPackSheetOpen(false); setEditingPackIdx(null); }}
@@ -1675,6 +2010,8 @@ function PackagingSheet({
   baseUom,
   allowDecimals,
   uomOptions,
+  fmcgMode = false,
+  onUomCreated,
   initial,
   onSave,
   onCancel,
@@ -1684,15 +2021,20 @@ function PackagingSheet({
   baseUom: string;
   allowDecimals: boolean;
   uomOptions: string[];
+  fmcgMode?: boolean;
+  onUomCreated?: (code: string) => void;
   initial: ProductPackaging | null;
   onSave: (p: ProductPackaging) => void;
   onCancel: () => void;
 }) {
-  const [uom, setUom] = React.useState(initial?.uom ?? "EA");
-  const [unitsPer, setUnitsPer] = React.useState<number | string>(initial?.unitsPer ?? 1);
+  const [uom, setUom] = React.useState(initial?.uom ?? (fmcgMode ? "CARTON" : "EA"));
+  const [customPackName, setCustomPackName] = React.useState("");
+  const [useCustomPack, setUseCustomPack] = React.useState(false);
+  const [unitsPer, setUnitsPer] = React.useState<number | string>(initial?.unitsPer ?? (fmcgMode ? 24 : 1));
   const [barcode, setBarcode] = React.useState(initial?.barcode ?? "");
   const [defSales, setDefSales] = React.useState(!!initial?.isDefaultSalesUom);
   const [defPurchase, setDefPurchase] = React.useState(!!initial?.isDefaultPurchaseUom);
+  const [saving, setSaving] = React.useState(false);
   const [dimL, setDimL] = React.useState<string>(initial?.dimensions?.l != null ? String(initial.dimensions.l) : "");
   const [dimW, setDimW] = React.useState<string>(initial?.dimensions?.w != null ? String(initial.dimensions.w) : "");
   const [dimH, setDimH] = React.useState<string>(initial?.dimensions?.h != null ? String(initial.dimensions.h) : "");
@@ -1700,10 +2042,21 @@ function PackagingSheet({
   const [weightVal, setWeightVal] = React.useState<string>(initial?.weight?.value != null ? String(initial.weight.value) : "");
   const [weightUnit, setWeightUnit] = React.useState<"kg" | "g">(initial?.weight?.unit ?? "kg");
 
+  const fmcgPackOptions = React.useMemo(() => {
+    const codes = new Set<string>([...FMCG_PACK_PRESETS, ...uomOptions]);
+    // Piece UOMs are not sell packs in this sheet
+    for (const piece of ["EA", "PC", "PCS", "PIECE", "UNIT", "RRP"]) codes.delete(piece);
+    if (initial?.uom) codes.add(initial.uom.toUpperCase());
+    return [...codes].sort((a, b) => a.localeCompare(b));
+  }, [uomOptions, initial?.uom]);
+
   React.useEffect(() => {
     if (!open) return;
-    setUom(initial?.uom ?? "EA");
-    setUnitsPer(initial?.unitsPer ?? 1);
+    const startUom = (initial?.uom ?? (fmcgMode ? "CARTON" : "EA")).toUpperCase();
+    setUom(startUom);
+    setUseCustomPack(false);
+    setCustomPackName("");
+    setUnitsPer(initial?.unitsPer ?? (fmcgMode ? 24 : 1));
     setBarcode(initial?.barcode ?? "");
     setDefSales(!!initial?.isDefaultSalesUom);
     setDefPurchase(!!initial?.isDefaultPurchaseUom);
@@ -1713,34 +2066,145 @@ function PackagingSheet({
     setDimUnit(initial?.dimensions?.unit ?? "cm");
     setWeightVal(initial?.weight?.value != null ? String(initial.weight.value) : "");
     setWeightUnit(initial?.weight?.unit ?? "kg");
-  }, [open, initial]);
+    setSaving(false);
+  }, [open, initial, fmcgMode]);
 
-  const handleSubmit = () => {
-    const p: ProductPackaging = {
-      uom,
-      unitsPer: Number(unitsPer) || 1,
-      baseUom,
-      barcode: barcode.trim() || undefined,
-      isDefaultSalesUom: defSales,
-      isDefaultPurchaseUom: defPurchase,
-    };
-    if (dimL !== "" || dimW !== "" || dimH !== "") {
-      p.dimensions = { l: Number(dimL) || 0, w: Number(dimW) || 0, h: Number(dimH) || 0, unit: dimUnit };
+  const resolvedPackCode = () => {
+    if (fmcgMode && useCustomPack) {
+      return customPackName.trim().replace(/\s+/g, "_").toUpperCase();
     }
-    if (weightVal !== "") {
-      p.weight = { value: Number(weightVal) || 0, unit: weightUnit };
+    return uom.trim().toUpperCase();
+  };
+
+  const handleSubmit = async () => {
+    const code = resolvedPackCode();
+    if (!code) {
+      toast.error(fmcgMode ? "Enter or select a pack name." : "Select a UOM.");
+      return;
     }
-    onSave(p);
+    const pieces = Number(unitsPer);
+    if (!Number.isFinite(pieces) || pieces <= 0) {
+      toast.error(fmcgMode ? "Enter pieces packed (greater than 0)." : "Enter units per base UOM.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (fmcgMode && !uomOptions.some((c) => c.toUpperCase() === code)) {
+        try {
+          await createUomApi({
+            code,
+            name: code.replace(/_/g, " "),
+            category: "count",
+            decimals: 0,
+            isBase: true,
+          });
+          onUomCreated?.(code);
+        } catch (e) {
+          const msg = (e as Error)?.message ?? "";
+          // Already exists / no settings write — still attach pack on the product
+          if (/already|duplicate|exists/i.test(msg)) {
+            onUomCreated?.(code);
+          } else {
+            onUomCreated?.(code);
+            toast.message("Pack will save on the product; UOM catalog create was skipped.", {
+              description: msg || undefined,
+            });
+          }
+        }
+      }
+
+      const p: ProductPackaging = {
+        uom: code,
+        unitsPer: pieces,
+        baseUom: fmcgMode ? "PCS" : baseUom,
+        barcode: barcode.trim() || undefined,
+        isDefaultSalesUom: defSales,
+        isDefaultPurchaseUom: fmcgMode ? false : defPurchase,
+      };
+      if (!fmcgMode) {
+        if (dimL !== "" || dimW !== "" || dimH !== "") {
+          p.dimensions = { l: Number(dimL) || 0, w: Number(dimW) || 0, h: Number(dimH) || 0, unit: dimUnit };
+        }
+        if (weightVal !== "") {
+          p.weight = { value: Number(weightVal) || 0, unit: weightUnit };
+        }
+      }
+      onSave(p);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{initial ? "Edit UOM" : "Add UOM"}</SheetTitle>
-          <SheetDescription>Conversion to base UOM ({baseUom}), barcode, dimensions.</SheetDescription>
+          <SheetTitle>
+            {fmcgMode
+              ? initial
+                ? "Edit pack"
+                : "Add pack"
+              : initial
+                ? "Edit UOM"
+                : "Add UOM"}
+          </SheetTitle>
+          <SheetDescription>
+            {fmcgMode
+              ? "Pick a pack name (or create one), then how many pieces are inside. Orders in that pack price as pieces × price/pc."
+              : `Conversion to base UOM (${baseUom}), barcode, dimensions.`}
+          </SheetDescription>
         </SheetHeader>
         <div className="space-y-4 py-4">
+          {fmcgMode ? (
+            <>
+              <div className="space-y-2">
+                <Label>Pack name</Label>
+                <Select
+                  value={useCustomPack ? "__custom__" : uom}
+                  onValueChange={(v) => {
+                    if (v === "__custom__") {
+                      setUseCustomPack(true);
+                      return;
+                    }
+                    setUseCustomPack(false);
+                    setUom(v);
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select pack" /></SelectTrigger>
+                  <SelectContent>
+                    {fmcgPackOptions.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">Other — type a new name…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {useCustomPack ? (
+                  <Input
+                    value={customPackName}
+                    onChange={(e) => setCustomPackName(e.target.value)}
+                    placeholder="e.g. HALF_CARTON, SHRINK"
+                    autoFocus
+                  />
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label>Pieces packed</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={unitsPer}
+                  onChange={(e) => setUnitsPer(e.target.value)}
+                  placeholder="e.g. 24"
+                />
+                <p className="text-xs text-muted-foreground">
+                  1 {useCustomPack ? (customPackName.trim() || "pack") : uom} = {unitsPer || "?"} pieces
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
           <div className="space-y-2">
             <Label>UOM</Label>
             <Select value={uom} onValueChange={setUom}>
@@ -1760,52 +2224,64 @@ function PackagingSheet({
               onChange={(e) => setUnitsPer(e.target.value)}
             />
           </div>
+            </>
+          )}
           <div className="space-y-2">
-            <Label>Barcode (optional)</Label>
+            <Label>{fmcgMode ? "Pack barcode (optional)" : "Barcode (optional)"}</Label>
             <Input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Optional" />
           </div>
           <div className="flex gap-4">
             <div className="flex items-center gap-2">
               <Checkbox id="ds" checked={defSales} onCheckedChange={(c) => setDefSales(c === true)} />
-              <Label htmlFor="ds" className="text-sm">Default sales UOM</Label>
+              <Label htmlFor="ds" className="text-sm">
+                {fmcgMode ? "Default sell pack" : "Default sales UOM"}
+              </Label>
             </div>
+            {!fmcgMode ? (
             <div className="flex items-center gap-2">
               <Checkbox id="dp" checked={defPurchase} onCheckedChange={(c) => setDefPurchase(c === true)} />
               <Label htmlFor="dp" className="text-sm">Default purchase UOM</Label>
             </div>
+            ) : null}
           </div>
-          <div className="space-y-2">
-            <Label>Dimensions L × W × H (optional)</Label>
-            <div className="flex gap-2">
-              <Input type="number" placeholder="L" value={dimL} onChange={(e) => setDimL(e.target.value)} />
-              <Input type="number" placeholder="W" value={dimW} onChange={(e) => setDimW(e.target.value)} />
-              <Input type="number" placeholder="H" value={dimH} onChange={(e) => setDimH(e.target.value)} />
-              <Select value={dimUnit} onValueChange={(v) => setDimUnit(v as "cm" | "in")}>
-                <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cm">cm</SelectItem>
-                  <SelectItem value="in">in</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Weight (optional)</Label>
-            <div className="flex gap-2">
-              <Input type="number" placeholder="Value" value={weightVal} onChange={(e) => setWeightVal(e.target.value)} />
-              <Select value={weightUnit} onValueChange={(v) => setWeightUnit(v as "kg" | "g")}>
-                <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="kg">kg</SelectItem>
-                  <SelectItem value="g">g</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          {!fmcgMode ? (
+            <>
+              <div className="space-y-2">
+                <Label>Dimensions L × W × H (optional)</Label>
+                <div className="flex gap-2">
+                  <Input type="number" placeholder="L" value={dimL} onChange={(e) => setDimL(e.target.value)} />
+                  <Input type="number" placeholder="W" value={dimW} onChange={(e) => setDimW(e.target.value)} />
+                  <Input type="number" placeholder="H" value={dimH} onChange={(e) => setDimH(e.target.value)} />
+                  <Select value={dimUnit} onValueChange={(v) => setDimUnit(v as "cm" | "in")}>
+                    <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cm">cm</SelectItem>
+                      <SelectItem value="in">in</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Weight (optional)</Label>
+                <div className="flex gap-2">
+                  <Input type="number" placeholder="Value" value={weightVal} onChange={(e) => setWeightVal(e.target.value)} />
+                  <Select value={weightUnit} onValueChange={(v) => setWeightUnit(v as "kg" | "g")}>
+                    <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kg">kg</SelectItem>
+                      <SelectItem value="g">g</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
         <SheetFooter>
-          <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button onClick={handleSubmit}>Save</Button>
+          <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
+          <Button onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

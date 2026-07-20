@@ -67,8 +67,12 @@ import {
   setCustomerDefaultPriceList,
   fetchPriceListByIdApi,
   fetchDailyPricesApi,
+  fetchCatalogPricesApi,
+  resolveCustomerPriceListApi,
   type PricingOption,
 } from "@/lib/api/pricing";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
@@ -382,6 +386,8 @@ export function DocumentCreateWizard({
   const router = useRouter();
   const terminology = useTerminology();
   const orgRole = useOrgContextStore((s) => s.orgRole);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const fmcgOrg = isFmcgOrg(templateId);
   const copilotEnabled = useCopilotFeatureEnabled();
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const { settings: financialSettings } = useFinancialSettings();
@@ -434,6 +440,8 @@ export function DocumentCreateWizard({
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
   const [costPricingByProductId, setCostPricingByProductId] = React.useState<Record<string, ProductPrice[]>>({});
   const [dailyPricesByProductId, setDailyPricesByProductId] = React.useState<Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }>>({});
+  const [catalogPricesByProductId, setCatalogPricesByProductId] = React.useState<Record<string, number>>({});
+  const [fmcgCatalogByProductId, setFmcgCatalogByProductId] = React.useState<Record<string, FmcgCatalogItem>>({});
   const [dailyPriceStaleCount, setDailyPriceStaleCount] = React.useState(0);
   const [dailyPriceListName, setDailyPriceListName] = React.useState("");
   const [linkedPoId, setLinkedPoId] = React.useState<string | null>(() =>
@@ -970,6 +978,26 @@ export function DocumentCreateWizard({
         branchId: form.getValues("branch") || undefined,
         partyId: form.getValues("party") || undefined,
         warehouseId: form.getValues("warehouse") || undefined,
+        priceListId: (() => {
+          // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
+          if (!fmcgOrg) return undefined;
+          const isSalesDoc = ![
+            "bill",
+            "purchase-order",
+            "grn",
+            "purchase-request",
+            "purchase-credit-note",
+            "purchase-debit-note",
+          ].includes(type);
+          if (!isSalesDoc) return undefined;
+          const party = form.getValues("party") || "";
+          return (
+            overridePriceListId ??
+            (party ? customerDefaultPriceLists[party] : undefined) ??
+            fallbackPriceListId ??
+            undefined
+          );
+        })(),
         poRef: form.getValues("poRef") || undefined,
         reference: form.getValues("reference") || undefined,
         dueDate: form.getValues("dueDate") || undefined,
@@ -1005,7 +1033,18 @@ export function DocumentCreateWizard({
         linesAreTaxInclusive: form.getValues("linesAreTaxInclusive") ?? false,
       };
     },
-    [baseCurrency, form, lines, linkedPoId, type, billSourceLink]
+    [
+      baseCurrency,
+      form,
+      lines,
+      linkedPoId,
+      type,
+      billSourceLink,
+      overridePriceListId,
+      customerDefaultPriceLists,
+      fallbackPriceListId,
+      fmcgOrg,
+    ]
   );
 
   const onReview = async () => {
@@ -1129,45 +1168,110 @@ export function DocumentCreateWizard({
     ? costPricingByProductId
     : pricingByProductId;
 
-  // Fetch daily prices for the active sales price list when entering the Lines step.
+  // Pricing load: FMCG uses piece-based catalog; seafood/CoolCatch uses daily prices only.
   React.useEffect(() => {
     if (step !== 2 || lineEditorMode !== "sales" || !lineEditorPriceListId || !isApiConfigured()) {
       setDailyPricesByProductId({});
+      setCatalogPricesByProductId({});
+      setFmcgCatalogByProductId({});
       setDailyPriceStaleCount(0);
       setDailyPriceListName("");
       return;
     }
     let cancelled = false;
-    fetchDailyPricesApi(lineEditorPriceListId)
-      .then((res) => {
-        if (cancelled) return;
-        const map: Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }> = {};
-        for (const item of res.items) {
-          map[item.productId] = {
-            effectivePrice: item.effectivePrice,
-            isStale: item.isStale,
-            fallbackDate: item.fallbackDate,
-          };
-        }
-        setDailyPricesByProductId(map);
-        setDailyPriceStaleCount(res.staleCount);
-        setDailyPriceListName(res.priceListName);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDailyPricesByProductId({});
-          setDailyPriceStaleCount(0);
-          setDailyPriceListName("");
-        }
-      });
+
+    if (fmcgOrg) {
+      // FMCG: piece prices + discount from price tag (no CoolCatch daily path).
+      setDailyPricesByProductId({});
+      setDailyPriceStaleCount(0);
+      fetchCatalogPricesApi(lineEditorPriceListId)
+        .then((catalogRes) => {
+          if (cancelled) return;
+          const fmap: Record<string, FmcgCatalogItem> = {};
+          for (const item of catalogRes.items) {
+            if (item.price == null || item.price <= 0) continue;
+            fmap[item.productId] = {
+              productId: item.productId,
+              pricePerPiece: item.pricePerPiece ?? item.price,
+              discountPercent: item.discountPercent ?? 0,
+              packPrices: item.packPrices,
+            };
+          }
+          setFmcgCatalogByProductId(fmap);
+          setCatalogPricesByProductId({});
+          setDailyPriceListName(catalogRes.priceListName);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setFmcgCatalogByProductId({});
+            setCatalogPricesByProductId({});
+            setDailyPriceListName("");
+          }
+        });
+    } else {
+      // Seafood / other: CoolCatch daily prices only — do not inject FMCG catalog.
+      setFmcgCatalogByProductId({});
+      setCatalogPricesByProductId({});
+      fetchDailyPricesApi(lineEditorPriceListId)
+        .then((dailyRes) => {
+          if (cancelled) return;
+          const map: Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }> = {};
+          for (const item of dailyRes.items) {
+            map[item.productId] = {
+              effectivePrice: item.effectivePrice,
+              isStale: item.isStale,
+              fallbackDate: item.fallbackDate,
+            };
+          }
+          setDailyPricesByProductId(map);
+          const hasAnyDaily = dailyRes.items.some(
+            (i) => i.todayPrice != null || i.fallbackPrice != null || i.inheritedPrice != null
+          );
+          setDailyPriceStaleCount(hasAnyDaily ? dailyRes.staleCount : 0);
+          setDailyPriceListName(dailyRes.priceListName);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setDailyPricesByProductId({});
+            setDailyPriceStaleCount(0);
+            setDailyPriceListName("");
+          }
+        });
+    }
+
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, lineEditorPriceListId, lineEditorMode]);
+  }, [step, lineEditorPriceListId, lineEditorMode, fmcgOrg]);
 
   React.useEffect(() => {
     // When customer changes, clear the price list override so it re-derives from the new customer's default.
     setOverridePriceListId(null);
   }, [selectedPartyId]);
+
+  // Resolve party → category → org price tag (FMCG tags; harmless for seafood if lists exist).
+  React.useEffect(() => {
+    if (!fmcgOrg || !selectedPartyId || lineEditorMode !== "sales" || !isApiConfigured()) return;
+    let cancelled = false;
+    resolveCustomerPriceListApi(selectedPartyId)
+      .then((resolved) => {
+        if (cancelled || !resolved.priceListId) return;
+        setCustomerDefaultPriceLists((prev) => ({
+          ...prev,
+          [selectedPartyId]: resolved.priceListId!,
+        }));
+        setCustomerPriceListSources((prev) => ({
+          ...prev,
+          [selectedPartyId]: resolved.source === "none" ? "party" : resolved.source === "org" ? "party" : resolved.source,
+        }));
+        if (resolved.source === "org") {
+          setFallbackPriceListId(resolved.priceListId);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPartyId, lineEditorMode, fmcgOrg]);
 
   React.useEffect(() => {
     if (!selectedPartyId) {
@@ -1467,10 +1571,10 @@ export function DocumentCreateWizard({
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>2. Lines</CardTitle>
             <div className="flex items-center gap-2">
-              {lineEditorMode === "sales" && priceListOptions.length > 0 && (
+              {lineEditorMode === "sales" && fmcgOrg && priceListOptions.length > 0 && (
                 <div className="flex flex-col items-end gap-0.5">
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Price list</Label>
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Price tag</Label>
                     <Select
                       value={effectiveSalesPriceListId}
                       onValueChange={(newId) => {
@@ -1547,7 +1651,15 @@ export function DocumentCreateWizard({
               packagingByProductId={packagingByProductId}
               catalogUomCodes={catalogUomCodes}
               pricingByProductId={lineEditorPricingByProductId}
-              dailyPricesByProductId={lineEditorMode === "sales" ? dailyPricesByProductId : undefined}
+              dailyPricesByProductId={
+                lineEditorMode === "sales" && !fmcgOrg ? dailyPricesByProductId : undefined
+              }
+              catalogPricesByProductId={
+                lineEditorMode === "sales" && !fmcgOrg ? catalogPricesByProductId : undefined
+              }
+              fmcgCatalogByProductId={
+                lineEditorMode === "sales" && fmcgOrg ? fmcgCatalogByProductId : undefined
+              }
               taxCodes={taxCodes}
               defaultLineTaxCodeId={defaultLineTaxCodeId}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}

@@ -34,6 +34,7 @@ import {
   type PartyPayload,
 } from "@/lib/api/parties";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { fetchPriceListOptions } from "@/lib/api/pricing";
 import type { CustomerType } from "@/lib/types/masters";
 import {
   LocationPickerField,
@@ -70,6 +71,7 @@ type FormState = {
   googlePlaceId: string;
   creditLimit: string;
   paymentTermsId: string;
+  defaultPriceListId: string;
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID";
 };
 
@@ -93,6 +95,7 @@ const emptyForm = (kindId: CustomerKindId = "general-trade"): FormState => ({
   googlePlaceId: "",
   creditLimit: "",
   paymentTermsId: "",
+  defaultPriceListId: "",
   creditControlMode: "AMOUNT",
 });
 
@@ -284,6 +287,7 @@ export function CustomerFormSheet({
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [priceLists, setPriceLists] = React.useState<Array<{ id: string; name: string }>>([]);
   const [nextCodePreview, setNextCodePreview] = React.useState("");
   const [draftRestored, setDraftRestored] = React.useState(false);
   const hydratedRef = React.useRef(false);
@@ -301,6 +305,9 @@ export function CustomerFormSheet({
     void fetchPaymentTermsApi()
       .then((items) => setTerms(items.map((t) => ({ id: t.id, name: t.name }))))
       .catch(() => setTerms([]));
+    void fetchPriceListOptions()
+      .then(setPriceLists)
+      .catch(() => setPriceLists([]));
 
     if (customerId) {
       setDraftRestored(false);
@@ -346,6 +353,7 @@ export function CustomerFormSheet({
                 ? String(party.creditLimitAmount)
                 : "",
             paymentTermsId: party.paymentTermsId ?? "",
+            defaultPriceListId: party.defaultPriceListId ?? "",
             creditControlMode: party.creditControlMode ?? "AMOUNT",
           });
         })
@@ -485,6 +493,7 @@ export function CustomerFormSheet({
     if (fmcg) {
       payload.sfaSegment = kind.sfaSegment;
       payload.channel = kind.channel;
+      payload.defaultPriceListId = form.defaultPriceListId || undefined;
     }
     return payload;
   };
@@ -544,6 +553,9 @@ export function CustomerFormSheet({
     toast.message("Draft discarded");
   };
 
+  const priceTagName = form.defaultPriceListId
+    ? priceLists.find((pl) => pl.id === form.defaultPriceListId)?.name ?? form.defaultPriceListId
+    : "Org default";
   const termName = form.paymentTermsId
     ? terms.find((t) => t.id === form.paymentTermsId)?.name ?? "Selected"
     : "None";
@@ -821,6 +833,30 @@ export function CustomerFormSheet({
                       <p className="text-xs text-destructive">{stepErrors.creditLimit}</p>
                     ) : null}
                   </div>
+                  {fmcg ? (
+                    <div className="space-y-2">
+                      <FieldLabel optional>Price tag</FieldLabel>
+                      <Select
+                        value={form.defaultPriceListId || "__none__"}
+                        onValueChange={(v) => setField("defaultPriceListId", v === "__none__" ? "" : v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Org default" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Org default</SelectItem>
+                          {priceLists.map((pl) => (
+                            <SelectItem key={pl.id} value={pl.id}>
+                              {pl.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        FMCG price tag (e.g. Naivas, Premium). Piece prices on the tag; pack prices calculate from packaging.
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="space-y-2">
                     <FieldLabel optional>Payment terms</FieldLabel>
                     <Select
@@ -891,6 +927,12 @@ export function CustomerFormSheet({
                         {form.creditLimit.trim() || "Not set"}
                       </dd>
                     </div>
+                    {fmcg ? (
+                      <div className="flex justify-between gap-3">
+                        <dt>Price tag</dt>
+                        <dd className="text-foreground text-right">{priceTagName}</dd>
+                      </div>
+                    ) : null}
                     <div className="flex justify-between gap-3">
                       <dt>Payment terms</dt>
                       <dd className="text-foreground text-right">{termName}</dd>

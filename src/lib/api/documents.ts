@@ -240,6 +240,8 @@ export type DocumentDraftPayload = {
   branchId?: string;
   partyId?: string;
   warehouseId?: string;
+  /** Customer price tag / price list used for sales lines. */
+  priceListId?: string;
   poRef?: string;
   reference?: string;
   dueDate?: string;

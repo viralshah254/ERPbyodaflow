@@ -2,10 +2,33 @@ import { apiRequest, requireLiveApi } from "@/lib/api/client";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import type { ProductAttributeDef, ProductVariant } from "@/lib/products/types";
 
+export type ProductPackagingPayload = {
+  items: ProductPackaging[];
+  hasProductOverride: boolean;
+  defaults: ProductPackaging[];
+  source: "product" | "defaults";
+};
+
+/** Effective packs for the product (override if saved, else manufacturer defaults). */
 export async function fetchProductPackagingApi(productId: string): Promise<ProductPackaging[]> {
+  const payload = await fetchProductPackagingDetailApi(productId);
+  if (payload.hasProductOverride) return payload.items;
+  return payload.defaults.length > 0 ? payload.defaults : payload.items;
+}
+
+export async function fetchProductPackagingDetailApi(
+  productId: string,
+): Promise<ProductPackagingPayload> {
   requireLiveApi("Product packaging");
-  const payload = await apiRequest<{ items: ProductPackaging[] }>(`/api/settings/products/${encodeURIComponent(productId)}/packaging`);
-  return payload.items ?? [];
+  const payload = await apiRequest<ProductPackagingPayload>(
+    `/api/settings/products/${encodeURIComponent(productId)}/packaging`,
+  );
+  return {
+    items: payload.items ?? [],
+    hasProductOverride: Boolean(payload.hasProductOverride),
+    defaults: payload.defaults ?? [],
+    source: payload.source === "product" ? "product" : "defaults",
+  };
 }
 
 export async function saveProductPackagingApi(productId: string, items: ProductPackaging[]): Promise<void> {
@@ -14,6 +37,26 @@ export async function saveProductPackagingApi(productId: string, items: ProductP
     method: "PUT",
     body: { items },
   });
+}
+
+export async function fetchPackagingDefaultsApi(): Promise<ProductPackaging[]> {
+  requireLiveApi("Packaging defaults");
+  const payload = await apiRequest<{ items: ProductPackaging[] }>(
+    "/api/settings/products/packaging-defaults",
+  );
+  return payload.items ?? [];
+}
+
+export async function savePackagingDefaultsApi(items: ProductPackaging[]): Promise<ProductPackaging[]> {
+  requireLiveApi("Save packaging defaults");
+  const payload = await apiRequest<{ items: ProductPackaging[] }>(
+    "/api/settings/products/packaging-defaults",
+    {
+      method: "PUT",
+      body: { items },
+    },
+  );
+  return payload.items ?? [];
 }
 
 export async function fetchProductPricingApi(productId: string, priceListId?: string): Promise<ProductPrice[]> {

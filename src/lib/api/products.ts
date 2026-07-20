@@ -5,6 +5,8 @@ type BackendProduct = {
   id: string;
   sku?: string;
   name: string;
+  barcode?: string | null;
+  size?: string | null;
   productFamily?: string | null;
   category?: string;
   categoryName?: string;
@@ -24,6 +26,8 @@ export type ProductPayload = {
   sku?: string;
   code?: string;
   name: string;
+  barcode?: string;
+  size?: string;
   productFamily?: string;
   category?: string;
   unit?: string;
@@ -41,6 +45,8 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
     id: item.id,
     sku: item.sku ?? item.id,
     name: item.name,
+    barcode: item.barcode ?? undefined,
+    size: item.size ?? undefined,
     productFamily: item.productFamily ?? undefined,
     category,
     categoryName: item.categoryName ?? undefined,
@@ -64,6 +70,7 @@ export type FetchProductsOptions = {
   sellable?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
   categoryId?: string;
+  departmentId?: string;
   productFamily?: string;
   stockBand?: "low" | "out" | "in_stock";
   /** Server caps at 100; use for document line pickers. */
@@ -95,6 +102,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.sellable) params.set("sellable", "true");
   if (opts.productType) params.set("productType", opts.productType);
   if (opts.categoryId?.trim()) params.set("categoryId", opts.categoryId.trim());
+  if (opts.departmentId?.trim()) params.set("departmentId", opts.departmentId.trim());
   if (opts.productFamily?.trim()) params.set("productFamily", opts.productFamily.trim());
   if (opts.stockBand) params.set("stockBand", opts.stockBand);
   if (opts.includeStock !== undefined) params.set("includeStock", opts.includeStock ? "true" : "false");
@@ -187,6 +195,8 @@ export async function createProductApi(payload: ProductPayload): Promise<{ id: s
       sku: payload.sku,
       code: payload.code,
       name: payload.name,
+      barcode: payload.barcode,
+      size: payload.size,
       productFamily: payload.productFamily,
       category: payload.category,
       unit: payload.unit,
@@ -199,7 +209,24 @@ export async function createProductApi(payload: ProductPayload): Promise<{ id: s
   });
 }
 
-export type ProductPatchPayload = Partial<Pick<ProductPayload, "sku" | "code" | "name" | "productFamily" | "category" | "unit" | "baseUom" | "productType" | "defaultTaxCodeId" | "status" | "description">>;
+export type ProductPatchPayload = Partial<
+  Pick<
+    ProductPayload,
+    | "sku"
+    | "code"
+    | "name"
+    | "barcode"
+    | "size"
+    | "productFamily"
+    | "category"
+    | "unit"
+    | "baseUom"
+    | "productType"
+    | "defaultTaxCodeId"
+    | "status"
+    | "description"
+  >
+>;
 
 export async function patchProductApi(id: string, payload: ProductPatchPayload): Promise<void> {
   requireLiveApi("Product patch");
@@ -209,6 +236,8 @@ export async function patchProductApi(id: string, payload: ProductPatchPayload):
       sku: payload.sku,
       code: payload.code,
       name: payload.name,
+      barcode: payload.barcode,
+      size: payload.size,
       productFamily: payload.productFamily,
       category: payload.category,
       unit: payload.unit,

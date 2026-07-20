@@ -42,17 +42,23 @@ export function downloadImportTemplateApi(
 }
 
 /**
- * Generate and download the minimal products import template entirely client-side.
- * Kept here (not from the API) so it is always the current, minimal fish example and
- * never depends on a backend deploy.
+ * Generate and download a products import template client-side.
+ * FMCG uses SFA-aligned columns (barcode, size); seafood keeps CoolCatch samples.
  */
-export function downloadProductsTemplateCsv(): void {
-  const csv = [
-    "code,name,baseUom,productType,category,productFamily",
-    "00001,Tilapia Whole,KG,Finished product,Fish,Tilapia",
-    "00002,Ice 5kg Bag,EA,Purchased product,Packaging,",
-    "00003,Nile Perch Fillet,KG,Stock product,Fish,Nile Perch",
-  ].join("\n");
+export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
+  const csv = opts?.fmcg
+    ? [
+        "sku,name,barcode,size,baseUom,productType,category",
+        "COLA-500,Classic Cola 500ml,6001234567890,500ml,PCS,Finished product,Beverages",
+        "COLA-12X330,Classic Cola 12x330ml,6001234567891,12x330ml,CARTON,Finished product,Beverages",
+        "OIL-2L,Cooking Oil 2L,6009876543210,2L,PCS,Finished product,Edible Oils",
+      ].join("\n")
+    : [
+        "code,name,baseUom,productType,category,productFamily",
+        "00001,Tilapia Whole,KG,Finished product,Fish,Tilapia",
+        "00002,Ice 5kg Bag,EA,Purchased product,Packaging,",
+        "00003,Nile Perch Fillet,KG,Stock product,Fish,Nile Perch",
+      ].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

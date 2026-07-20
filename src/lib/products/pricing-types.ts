@@ -51,6 +51,8 @@ export interface PriceList {
   parentName?: string;
   markupType?: "PERCENT" | "FLAT";
   markupValue?: number;
+  /** Count of products with a price on this list (from list items). */
+  pricedSkuCount?: number;
 }
 
 export interface PricingTier {

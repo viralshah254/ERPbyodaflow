@@ -50,6 +50,8 @@ export interface PriceListDetail {
     productId: string;
     price: number;
     currency?: string;
+    /** FMCG: discount % on this tag for the SKU. */
+    discountPercent?: number;
   }>;
   channel?: string;
   tier?: string;
@@ -208,6 +210,7 @@ export async function fetchPriceListsForUi(): Promise<PriceList[]> {
     parentName: d.parentName,
     markupType: d.markupType,
     markupValue: d.markupValue,
+    pricedSkuCount: (d.items ?? []).filter((i) => i.price != null && Number(i.price) >= 0).length,
   }));
 }
 
@@ -220,11 +223,47 @@ export async function fetchPriceListByIdApi(id: string): Promise<PriceListDetail
   }
 }
 
+export type CatalogPriceItem = {
+  productId: string;
+  sku?: string;
+  barcode?: string;
+  name: string;
+  uom: string;
+  price: number | null;
+  /** FMCG: same as price (per piece). */
+  pricePerPiece?: number | null;
+  discountPercent?: number;
+  packPrices?: Array<{ uom: string; unitsPer: number; unitPrice: number; unitPriceNet?: number }>;
+  source: "price_list" | "product" | "none";
+};
+
+/** List prices from PriceList.items. FMCG responses include pricingMode=fmcg_piece + pack matrix. */
+export async function fetchCatalogPricesApi(priceListId: string): Promise<{
+  priceListId: string;
+  priceListName: string;
+  currency: string;
+  pricingMode?: "fmcg_piece" | "flat";
+  items: CatalogPriceItem[];
+}> {
+  requireLiveApi("Catalog prices");
+  return apiRequest(`/api/pricing/price-lists/${encodeURIComponent(priceListId)}/catalog-prices`);
+}
+
+export async function resolveCustomerPriceListApi(partyId: string): Promise<{
+  priceListId: string | null;
+  source: "party" | "category" | "org" | "none";
+  priceListName?: string;
+}> {
+  requireLiveApi("Resolve customer price list");
+  const params = new URLSearchParams({ partyId });
+  return apiRequest(`/api/pricing/resolve-customer-price-list?${params.toString()}`);
+}
+
 export async function createPriceListApi(body: {
   name: string;
   code?: string;
   currency?: string;
-  items?: Array<{ productId: string; price: number; currency?: string }>;
+  items?: Array<{ productId: string; price: number; currency?: string; discountPercent?: number }>;
   parentPriceListId?: string;
   markupType?: "PERCENT" | "FLAT";
   markupValue?: number;
@@ -245,7 +284,7 @@ export async function updatePriceListApi(
     name: string;
     code?: string;
     currency: string;
-    items: Array<{ productId: string; price: number; currency?: string }>;
+    items: Array<{ productId: string; price: number; currency?: string; discountPercent?: number }>;
     parentPriceListId: string | null;
     markupType: "PERCENT" | "FLAT" | null;
     markupValue: number | null;

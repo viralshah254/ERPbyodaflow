@@ -2,6 +2,10 @@ export type ProductRow = {
   id: string;
   sku: string;
   name: string;
+  /** Commercial barcode / EAN — unique per org; join key for SFA MT+GT. */
+  barcode?: string;
+  /** FMCG / SFA size label (e.g. 500ml, 12x330ml). */
+  size?: string;
   /** High-level line for grouping in pickers and grids (e.g. Tilapia, Nile Perch). */
   productFamily?: string;
   /** Category id (raw reference). */
@@ -89,6 +93,8 @@ export type PartyRow = {
   maxOutstandingInvoiceAgeDays?: number;
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
+  /** Customer price tag (PriceList id). */
+  defaultPriceListId?: string;
   status: string;
 };
 

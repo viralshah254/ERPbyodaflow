@@ -84,6 +84,13 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     links: [
       { href: "/settings/inventory/costing", label: "Costing", description: "Inventory costing policies", icon: "Calculator", requiresPermissions: ["settings.inventory.read"] },
       { href: "/settings/uom", label: "UOM catalog", description: "Units of measure", icon: "Ruler", requiresPermissions: ["settings.inventory.read"] },
+      {
+        href: "/pricing/workspace/packs",
+        label: "Manufacturer packs",
+        description: "Default carton, outer, bale… and pieces (also under Pricing → Packs)",
+        icon: "Package",
+        requiresPermissions: ["settings.inventory.read"],
+      },
       { href: "/settings/products/pricing-rules", label: "Pricing rules", description: "Product pricing rules", icon: "Tag", requiresPermissions: ["settings.inventory.read"] },
     ],
   },

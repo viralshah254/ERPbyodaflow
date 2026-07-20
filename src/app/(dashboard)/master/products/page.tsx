@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -33,16 +34,25 @@ import {
 import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, fetchProductFamiliesApi, deleteProductApi } from "@/lib/api/products";
 import { importProductsApi, exportProductsCsvApi, downloadProductsTemplateCsv } from "@/lib/api/import-export";
 import type { ImportProductsResult } from "@/lib/api/import-export";
-import { fetchProductCategoriesApi, createProductCategoryApi } from "@/lib/api/product-categories";
+import {
+  fetchProductCategoriesApi,
+  createProductCategoryApi,
+  normalizeCategoryCode,
+  suggestCategoryCodeFromName,
+} from "@/lib/api/product-categories";
+import { fetchProductDepartmentsApi } from "@/lib/api/product-departments";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
 import type { TaxRow } from "@/lib/types/taxes";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
 import { productTypeLabel } from "@/lib/products/product-type";
+import { composeFmcgSize, FMCG_SIZE_UOMS } from "@/lib/products/fmcg-size";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { t } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { isSeafoodOrg } from "@/config/industry";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -51,11 +61,11 @@ const productIcon = "Package" as const;
 const PRODUCTS_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
 
-/** Derive next sequential SKU from existing SKUs. */
+/** Next sequential SKU (SKU-001, SKU-002…). Ignores barcode-style SKUs. */
 function suggestNextSku(existing: string[]): string {
   const numbers = existing
     .map((s) => {
-      const m = s.match(/(\d+)(?:\D*)$/);
+      const m = s.trim().match(/^SKU-(\d+)$/i);
       return m ? parseInt(m[1], 10) : 0;
     })
     .filter((n) => n > 0);
@@ -77,7 +87,12 @@ function suggestNextCode(existing: string[]): string {
 
 export default function MasterProductsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
+  const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const permissions = useAuthStore((s) => s.permissions);
   const canDeleteProduct = permissions.includes("admin.settings");
   const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
@@ -88,6 +103,8 @@ export default function MasterProductsPage() {
   const [statusFilter, setStatusFilter] = React.useState("");
   const [productTypeFilter, setProductTypeFilter] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
   const [categoryFilter, setCategoryFilter] = React.useState("");
+  const [departmentFilter, setDepartmentFilter] = React.useState("");
+  const [departments, setDepartments] = React.useState<Array<{ id: string; name: string }>>([]);
   const [familyFilter, setFamilyFilter] = React.useState("");
   const [families, setFamilies] = React.useState<string[]>([]);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -105,10 +122,16 @@ export default function MasterProductsPage() {
   const [step, setStep] = React.useState<1 | 2>(1);
   const [sku, setSku] = React.useState("");
   const [code, setCode] = React.useState("");
+  const [barcode, setBarcode] = React.useState("");
+  /** Seafood / legacy free-text size; FMCG uses sizeValue + sizeUom → composed `size`. */
+  const [size, setSize] = React.useState("");
+  const [sizeValue, setSizeValue] = React.useState("");
+  const [sizeUom, setSizeUom] = React.useState<string>("g");
   const [name, setName] = React.useState("");
   const [productType, setProductType] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
   const [categoryId, setCategoryId] = React.useState("");
   const [productFamily, setProductFamily] = React.useState("");
+  /** Stock / packing unit (PCS, CARTON…). Not size UOM (g, ml…). */
   const [unit, setUnit] = React.useState("");
 
   const [taxCodes, setTaxCodes] = React.useState<TaxRow[]>([]);
@@ -118,6 +141,8 @@ export default function MasterProductsPage() {
   const [deleteConfirmProductId, setDeleteConfirmProductId] = React.useState<string | null>(null);
   const [newCategoryCode, setNewCategoryCode] = React.useState("");
   const [newCategoryName, setNewCategoryName] = React.useState("");
+  /** When false, code tracks name automatically; flip true once the user edits code. */
+  const [categoryCodeManual, setCategoryCodeManual] = React.useState(false);
   const [addingCategory, setAddingCategory] = React.useState(false);
   const [uomOptions, setUomOptions] = React.useState<string[]>([]);
 
@@ -128,6 +153,15 @@ export default function MasterProductsPage() {
   const [importResult, setImportResult] = React.useState<ImportProductsResult | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Deep-link from Pricing empty state: /master/products?import=1
+  React.useEffect(() => {
+    if (searchParams.get("import") === "1" && canWriteProduct) {
+      setImportFile(null);
+      setImportResult(null);
+      setImportOpen(true);
+    }
+  }, [searchParams, canWriteProduct]);
 
   const ACCEPTED_IMPORT = ".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -153,6 +187,19 @@ export default function MasterProductsPage() {
     } catch { setCategories([]); }
   }, []);
 
+  const loadDepartments = React.useCallback(async () => {
+    if (!fmcgOrg) {
+      setDepartments([]);
+      return;
+    }
+    try {
+      const list = await fetchProductDepartmentsApi();
+      setDepartments(list.filter((d) => d.isActive).map((d) => ({ id: d.id, name: d.name })));
+    } catch {
+      setDepartments([]);
+    }
+  }, [fmcgOrg]);
+
   const loadUoms = React.useCallback(async () => {
     try {
       const list = await fetchProductUomsApi();
@@ -168,6 +215,7 @@ export default function MasterProductsPage() {
   }, []);
 
   React.useEffect(() => { void loadCategories(); }, [loadCategories]);
+  React.useEffect(() => { void loadDepartments(); }, [loadDepartments]);
   React.useEffect(() => { void loadUoms(); }, [loadUoms]);
   React.useEffect(() => { void loadFamilies(); }, [loadFamilies]);
 
@@ -175,7 +223,7 @@ export default function MasterProductsPage() {
     setListCursor("0");
     setListCursorStack([]);
     setListNextCursor(null);
-  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, familyFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, pageSize]);
 
   const refreshProducts = React.useCallback(async () => {
     setLoading(true);
@@ -185,6 +233,7 @@ export default function MasterProductsPage() {
         status: statusFilter || undefined,
         productType: productTypeFilter || undefined,
         categoryId: categoryFilter || undefined,
+        departmentId: departmentFilter || undefined,
         productFamily: familyFilter || undefined,
         limit: pageSize,
         cursor: listCursor,
@@ -200,7 +249,7 @@ export default function MasterProductsPage() {
       setLoading(false);
       setHasLoadedOnce(true);
     }
-  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, familyFilter, listCursor, pageSize]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, listCursor, pageSize]);
 
   React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
@@ -234,34 +283,102 @@ export default function MasterProductsPage() {
 
   const columns = React.useMemo(
     () => [
-      {
-        id: "sku",
-        header: "SKU",
-        accessor: (r: ProductRow) => (
-          <div>
-            <span className="font-mono font-medium">{r.sku}</span>
-          </div>
-        ),
-        sticky: true,
-      },
-      {
-        id: "productFamily",
-        header: "Product family",
-        accessor: (r: ProductRow) => r.productFamily?.trim() || "—",
-      },
-      { id: "name", header: "Name", accessor: "name" as keyof ProductRow },
-      {
-        id: "category",
-        header: "Category",
-        accessor: (r: ProductRow) =>
-          r.categoryName ?? (r.category ? categoryNameById.get(r.category) : undefined) ?? "—",
-      },
+      ...(fmcgOrg
+        ? [
+            {
+              id: "name",
+              header: "Product name",
+              accessor: "name" as keyof ProductRow,
+              sticky: true,
+            },
+            {
+              id: "barcode",
+              header: "Barcode",
+              accessor: (r: ProductRow) =>
+                r.barcode ? (
+                  <span className="font-mono text-xs font-medium">{r.barcode}</span>
+                ) : (
+                  "—"
+                ),
+            },
+            {
+              id: "category",
+              header: "Category",
+              accessor: (r: ProductRow) =>
+                r.categoryName ??
+                (r.category ? categoryNameById.get(r.category) : undefined) ??
+                "—",
+            },
+            {
+              id: "size",
+              header: "Size",
+              accessor: (r: ProductRow) => r.size?.trim() || "—",
+            },
+            {
+              id: "sku",
+              header: "SKU",
+              accessor: (r: ProductRow) => (
+                <span className="font-mono text-muted-foreground">{r.sku}</span>
+              ),
+            },
+          ]
+        : [
+            {
+              id: "sku",
+              header: "SKU",
+              accessor: (r: ProductRow) => (
+                <div>
+                  <span className="font-mono font-medium">{r.sku}</span>
+                </div>
+              ),
+              sticky: true,
+            },
+            { id: "name", header: "Name", accessor: "name" as keyof ProductRow },
+            {
+              id: "barcode",
+              header: "Barcode",
+              accessor: (r: ProductRow) =>
+                r.barcode ? <span className="font-mono text-xs">{r.barcode}</span> : "—",
+            },
+            ...(seafoodOrg
+              ? [
+                  {
+                    id: "productFamily",
+                    header: "Product family",
+                    accessor: (r: ProductRow) => r.productFamily?.trim() || "—",
+                  },
+                ]
+              : [
+                  {
+                    id: "size",
+                    header: "Size",
+                    accessor: (r: ProductRow) => r.size?.trim() || "—",
+                  },
+                ]),
+            {
+              id: "category",
+              header: "Category",
+              accessor: (r: ProductRow) =>
+                r.categoryName ??
+                (r.category ? categoryNameById.get(r.category) : undefined) ??
+                "—",
+            },
+          ]),
       {
         id: "productType",
         header: "Type",
         accessor: (r: ProductRow) => <ProductTypeBadge type={r.productType} />,
       },
-      { id: "unit", header: "Unit", accessor: "unit" as keyof ProductRow },
+      // FMCG sells finished packs by barcode — packing UOM is not a list concern.
+      ...(!fmcgOrg
+        ? [
+            {
+              id: "unit",
+              header: !seafoodOrg ? "Packing" : "Unit",
+              accessor: "unit" as keyof ProductRow,
+            },
+          ]
+        : []),
       {
         id: "currentStock",
         header: "Stock",
@@ -306,30 +423,44 @@ export default function MasterProductsPage() {
         className: "w-[50px]",
       },
     ],
-    [categoryNameById, router, canDeleteProduct]
+    [categoryNameById, router, canDeleteProduct, fmcgOrg, seafoodOrg]
   );
 
   const resetForm = () => {
     setStep(1);
     setSku("");
     setCode("");
+    setBarcode("");
+    setSize("");
+    setSizeValue("");
+    setSizeUom("g");
     setName("");
     setCategoryId("");
     setProductFamily("");
-    setProductType("");
-    setUnit("");
+    setProductType(fmcgOrg ? "FINISHED" : "");
+    setUnit(fmcgOrg ? "PCS" : "");
     setDefaultTaxCodeId("");
   };
 
   const handleCreate = async () => {
-    const trimmedSku = sku.trim();
-    if (!trimmedSku || !name.trim()) {
-      toast.error("SKU and Name are required.");
+    if (!name.trim()) {
+      toast.error("Product name is required.");
+      return;
+    }
+    const trimmedBarcode = barcode.trim();
+    if (fmcgOrg && !trimmedBarcode) {
+      toast.error("Barcode is required — it is the product code on the pack.");
       return;
     }
     setSaving(true);
+    let trimmedSku = sku.trim();
     try {
       const freshSkus = await fetchProductSkusApi();
+      // Auto-generate if the field was cleared.
+      if (!trimmedSku) {
+        trimmedSku = suggestNextSku(freshSkus);
+        setSku(trimmedSku);
+      }
       if (freshSkus.some((s) => s.toLowerCase() === trimmedSku.toLowerCase())) {
         toast.error("This SKU is already in use.");
         setSaving(false);
@@ -339,14 +470,24 @@ export default function MasterProductsPage() {
       setSaving(false);
       return;
     }
-    const selectedUnit = unit.trim() || (uomOptions[0] ?? "EA");
+    // FMCG create stays pricing-focused; packing defaults to PCS (refine on packaging tab).
+    const selectedUnit = fmcgOrg ? "PCS" : unit.trim() || (uomOptions[0] ?? "EA");
+    const composedSize = fmcgOrg
+      ? composeFmcgSize(sizeValue, sizeUom)
+      : size.trim() || undefined;
+    // FMCG: product code = barcode (trade identity). Seafood keeps separate product code.
+    const resolvedCode = fmcgOrg
+      ? trimmedBarcode || trimmedSku
+      : code.trim() || undefined;
     const payload = {
       sku: trimmedSku,
-      code: code.trim() || undefined,
+      code: resolvedCode,
+      barcode: trimmedBarcode || undefined,
+      size: composedSize,
       name: name.trim(),
-      productFamily: productFamily.trim() || undefined,
+      productFamily: seafoodOrg ? productFamily.trim() || undefined : undefined,
       category: categoryId.trim() || undefined,
-      productType: productType || undefined,
+      productType: productType || (fmcgOrg ? "FINISHED" : undefined),
       defaultTaxCodeId: defaultTaxCodeId || undefined,
       unit: selectedUnit,
       baseUom: selectedUnit,
@@ -438,7 +579,11 @@ export default function MasterProductsPage() {
     <PageShell>
       <PageHeader
         title={productLabel + "s"}
-        description="Manage your product catalogue, pricing and variants"
+        description={
+          fmcgOrg
+            ? "Product catalogue — name, barcode (product code), size, category. Set piece prices on Price tags."
+            : "Manage your product catalogue, pricing and variants"
+        }
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: productLabel + "s" },
@@ -514,16 +659,34 @@ export default function MasterProductsPage() {
               value: categoryFilter,
               onChange: (v) => setCategoryFilter(v),
             },
-            {
-              id: "family",
-              label: "Product family",
-              options: [
-                { label: "All families", value: "" },
-                ...families.map((f) => ({ label: f, value: f })),
-              ],
-              value: familyFilter,
-              onChange: (v) => setFamilyFilter(v),
-            },
+            ...(fmcgOrg
+              ? [
+                  {
+                    id: "department",
+                    label: "Department",
+                    options: [
+                      { label: "All departments", value: "" },
+                      ...departments.map((d) => ({ label: d.name, value: d.id })),
+                    ],
+                    value: departmentFilter,
+                    onChange: (v: string) => setDepartmentFilter(v),
+                  },
+                ]
+              : []),
+            ...(seafoodOrg
+              ? [
+                  {
+                    id: "family",
+                    label: "Product family",
+                    options: [
+                      { label: "All families", value: "" },
+                      ...families.map((f) => ({ label: f, value: f })),
+                    ],
+                    value: familyFilter,
+                    onChange: (v: string) => setFamilyFilter(v),
+                  },
+                ]
+              : []),
           ]}
         />
         {!hasLoadedOnce ? (
@@ -630,10 +793,28 @@ export default function MasterProductsPage() {
         open={drawerOpen}
         onOpenChange={(o) => { if (!o) resetForm(); setDrawerOpen(o); }}
         title={`New ${productLabel}`}
-        description={step === 1 ? "Step 1 of 2 — Product identity" : "Step 2 of 2 — Classification (optional)"}
+        description={
+          fmcgOrg
+            ? "Name, barcode (product code), size. Category optional."
+            : step === 1
+              ? "Step 1 of 2 — Product identity"
+              : "Step 2 of 2 — Classification (optional)"
+        }
         mode="create"
         footer={
-          step === 1 ? (
+          fmcgOrg ? (
+            <>
+              <Button variant="outline" onClick={() => { resetForm(); setDrawerOpen(false); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void handleCreate()}
+                disabled={saving || !name.trim() || !barcode.trim()}
+              >
+                {saving ? "Creating..." : "Create"}
+              </Button>
+            </>
+          ) : step === 1 ? (
             <>
               <Button variant="outline" onClick={() => { resetForm(); setDrawerOpen(false); }}>
                 Cancel
@@ -659,63 +840,224 @@ export default function MasterProductsPage() {
           )
         }
       >
-        <div className="space-y-4 pr-4">
-          {step === 1 ? (
-            <>
-              {/* SKU */}
-              <div className="space-y-2">
-                <Label>SKU</Label>
-                <Input
-                  placeholder="e.g. SKU-001"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Auto-suggested. Edit if needed.
-                </p>
-              </div>
-              {/* Product code */}
-              <div className="space-y-2">
-                <Label>Product code</Label>
-                <Input
-                  placeholder="00001"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Auto-suggested. Edit if needed.
-                </p>
-              </div>
-              {/* Name */}
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input
-                  placeholder="Product name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-              {/* Base UOM */}
-              <div className="space-y-2">
-                <Label>Base unit of measure</Label>
-                <Select
-                  value={unit || (uomOptions[0] ?? "EA")}
-                  onValueChange={(v) => setUnit(v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uomOptions.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
+        <form
+          className="space-y-4 pr-4"
+          autoComplete="off"
+          onSubmit={(e) => e.preventDefault()}
+        >
+          {fmcgOrg ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="erp-product-name">Product name</Label>
+                  <Input
+                    id="erp-product-name"
+                    name="erp-product-name"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    placeholder="e.g. BEEF MASALA 50GM (POUCH)"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Full product description shown on lists and documents.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="erp-product-barcode">
+                    Barcode <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="erp-product-barcode"
+                    name="erp-product-barcode"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    inputMode="numeric"
+                    placeholder="e.g. 6161105846376"
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Required. The product code on the pack (EAN/UPC) — the main trade identifier.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="erp-product-sku">SKU</Label>
+                  <Input
+                    id="erp-product-sku"
+                    name="erp-product-sku"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    placeholder="e.g. SKU-001"
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Auto-generated. Edit if you prefer your own code.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Size</Label>
+                  <div className="grid grid-cols-[1fr_7rem] gap-2">
+                    <Input
+                      inputMode="decimal"
+                      placeholder="e.g. 50 or 100"
+                      value={sizeValue}
+                      onChange={(e) => setSizeValue(e.target.value)}
+                    />
+                    <Select value={sizeUom} onValueChange={setSizeUom}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="UOM" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FMCG_SIZE_UOMS.map((u) => (
+                          <SelectItem key={u} value={u}>
+                            {u}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Preview:{" "}
+                    <span className="font-medium text-foreground">
+                      {composeFmcgSize(sizeValue, sizeUom) || "—"}
+                    </span>
+                    {" "}(e.g. 50g, 100g, 2L).
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Category (optional)</Label>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        asChild
+                      >
+                        <Link href="/master/categories">Manage</Link>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setNewCategoryCode("");
+                          setNewCategoryName("");
+                          setCategoryCodeManual(false);
+                          setAddCategoryOpen(true);
+                        }}
+                      >
+                        <Icons.Plus className="h-3.5 w-3.5 mr-1" />
+                        Add category
+                      </Button>
+                    </div>
+                  </div>
+                  <Select
+                    value={categoryId || "__none__"}
+                    onValueChange={(v) => setCategoryId(v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({c.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Optional grouping (e.g. Beverages, Edible Oils). Leave as None if not needed.
+                  </p>
+                </div>
+              </>
+          ) : step === 1 ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="erp-product-sku">SKU</Label>
+                  <Input
+                    id="erp-product-sku"
+                    name="erp-product-sku"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    placeholder="e.g. SKU-001"
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Auto-suggested. Edit if needed.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="erp-product-code">Product code</Label>
+                  <Input
+                    id="erp-product-code"
+                    name="erp-product-code"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    placeholder="00001"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Auto-suggested. Edit if needed.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="erp-product-barcode">Barcode</Label>
+                  <Input
+                    id="erp-product-barcode"
+                    name="erp-product-barcode"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    placeholder="EAN / UPC (optional)"
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="erp-product-name">Product name</Label>
+                  <Input
+                    id="erp-product-name"
+                    name="erp-product-name"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    placeholder="Product name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Base unit of measure</Label>
+                  <Select
+                    value={unit || (uomOptions[0] ?? "EA")}
+                    onValueChange={(v) => setUnit(v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uomOptions.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
           ) : (
             <>
-              {/* Product type visual selector */}
               <div className="space-y-2">
                 <Label>Product type</Label>
                 <div className="space-y-2">
@@ -745,37 +1087,54 @@ export default function MasterProductsPage() {
                   })}
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Product family (optional)</Label>
-                <Input
-                  placeholder="e.g. Tilapia, Nile Perch — groups SKUs in pickers"
-                  value={productFamily}
-                  onChange={(e) => setProductFamily(e.target.value)}
-                  list="product-family-suggestions"
-                />
-                <datalist id="product-family-suggestions">
-                  {existingProductFamilies.map((f) => (
-                    <option key={f} value={f} />
-                  ))}
-                </datalist>
-                <p className="text-xs text-muted-foreground">
-                  Used for document lines and stock views (Product → SKU). Leave blank if not needed.
-                </p>
-              </div>
-              {/* Category — Add category available to any authenticated user (no role-specific permission) */}
+              {seafoodOrg ? (
+                <div className="space-y-2">
+                  <Label>Product family (optional)</Label>
+                  <Input
+                    placeholder="e.g. Tilapia, Nile Perch — groups SKUs in pickers"
+                    value={productFamily}
+                    onChange={(e) => setProductFamily(e.target.value)}
+                    list="product-family-suggestions"
+                  />
+                  <datalist id="product-family-suggestions">
+                    {existingProductFamilies.map((f) => (
+                      <option key={f} value={f} />
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-muted-foreground">
+                    CoolCatch species / line grouping. Leave blank if not needed.
+                  </p>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label>Category (optional)</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => { setNewCategoryCode(""); setNewCategoryName(""); setAddCategoryOpen(true); }}
-                  >
-                    <Icons.Plus className="h-3.5 w-3.5 mr-1" />
-                    Add category
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      asChild
+                    >
+                      <Link href="/master/categories">Manage</Link>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setNewCategoryCode("");
+                        setNewCategoryName("");
+                        setCategoryCodeManual(false);
+                        setAddCategoryOpen(true);
+                      }}
+                    >
+                      <Icons.Plus className="h-3.5 w-3.5 mr-1" />
+                      Add category
+                    </Button>
+                  </div>
                 </div>
                 <Select
                   value={categoryId || "__none__"}
@@ -794,7 +1153,6 @@ export default function MasterProductsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Default tax code */}
               <div className="space-y-2">
                 <Label>Default tax code (optional)</Label>
                 <Select
@@ -819,54 +1177,129 @@ export default function MasterProductsPage() {
               </div>
             </>
           )}
-        </div>
+        </form>
       </EntityDrawer>
 
       {/* Add category sheet */}
-      <Sheet open={addCategoryOpen} onOpenChange={setAddCategoryOpen}>
+      <Sheet
+        open={addCategoryOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setNewCategoryCode("");
+            setNewCategoryName("");
+            setCategoryCodeManual(false);
+          }
+          setAddCategoryOpen(o);
+        }}
+      >
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Add category</SheetTitle>
           </SheetHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Code</Label>
+              <Label>Name</Label>
               <Input
-                placeholder="e.g. FISH"
-                value={newCategoryCode}
-                onChange={(e) => setNewCategoryCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 24))}
+                placeholder={fmcgOrg ? "e.g. Beverages" : "e.g. Fish & Seafood"}
+                value={newCategoryName}
+                onChange={(e) => {
+                  const nextName = e.target.value;
+                  setNewCategoryName(nextName);
+                  if (!categoryCodeManual) {
+                    setNewCategoryCode(
+                      suggestCategoryCodeFromName(
+                        nextName,
+                        categories.map((c) => c.code)
+                      )
+                    );
+                  }
+                }}
+                autoFocus
               />
             </div>
             <div className="space-y-2">
-              <Label>Name</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label>Code (optional)</Label>
+                {categoryCodeManual ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setCategoryCodeManual(false);
+                      setNewCategoryCode(
+                        suggestCategoryCodeFromName(
+                          newCategoryName,
+                          categories.map((c) => c.code)
+                        )
+                      );
+                    }}
+                  >
+                    Use auto
+                  </Button>
+                ) : null}
+              </div>
               <Input
-                placeholder="e.g. Fish & Seafood"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder={fmcgOrg ? "e.g. 0008 or BEV-01" : "e.g. 0008 or FISH-01"}
+                value={newCategoryCode}
+                onChange={(e) => {
+                  // Any edit (including clear) stays manual so auto does not fight the user.
+                  setCategoryCodeManual(true);
+                  setNewCategoryCode(
+                    normalizeCategoryCode(e.target.value, 32, { trimEnds: false })
+                  );
+                }}
+                className="font-mono"
               />
+              <p className="text-xs text-muted-foreground">
+                {categoryCodeManual
+                  ? "Your code — letters, digits, - and _ (e.g. 0008). Leave blank to auto on Add."
+                  : "Auto-filled from the name. Edit anytime to type your own (e.g. 0008)."}
+              </p>
             </div>
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => setAddCategoryOpen(false)}>Cancel</Button>
             <Button
-              disabled={!newCategoryCode.trim() || !newCategoryName.trim() || addingCategory}
+              variant="outline"
+              onClick={() => {
+                setAddCategoryOpen(false);
+                setNewCategoryCode("");
+                setNewCategoryName("");
+                setCategoryCodeManual(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!newCategoryName.trim() || addingCategory}
               onClick={async () => {
-                if (!newCategoryCode.trim() || !newCategoryName.trim()) return;
+                const nameTrim = newCategoryName.trim();
+                if (!nameTrim) return;
+                const codeTrim =
+                  normalizeCategoryCode(newCategoryCode, 32, { trimEnds: true }) ||
+                  suggestCategoryCodeFromName(
+                    nameTrim,
+                    categories.map((c) => c.code)
+                  );
                 setAddingCategory(true);
                 try {
                   const { id } = await createProductCategoryApi({
-                    code: newCategoryCode.trim(),
-                    name: newCategoryName.trim(),
+                    code: codeTrim,
+                    name: nameTrim,
                   });
-                  setCategories((prev) => [...prev, { id, code: newCategoryCode.trim(), name: newCategoryName.trim() }]);
+                  setCategories((prev) => [...prev, { id, code: codeTrim, name: nameTrim }]);
                   setCategoryId(id);
                   setAddCategoryOpen(false);
                   setNewCategoryCode("");
                   setNewCategoryName("");
+                  setCategoryCodeManual(false);
                   toast.success("Category added.");
                 } catch (err) {
                   toast.error(err instanceof Error ? err.message : "Failed to add category.");
-                } finally { setAddingCategory(false); }
+                } finally {
+                  setAddingCategory(false);
+                }
               }}
             >
               {addingCategory ? "Adding..." : "Add"}
@@ -910,15 +1343,29 @@ export default function MasterProductsPage() {
           <div className="space-y-5 py-4">
             <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground space-y-2">
               <p className="font-medium text-foreground">Columns</p>
-              <ul className="list-disc pl-4 space-y-1">
-                <li><span className="font-medium text-foreground">code</span> <span className="text-red-500">(required)</span> — each product&apos;s unique identity, like a barcode. Numbers (<code>00001</code>) or text (<code>FISH-TIL</code>) both work. No two products can share it.</li>
-                <li><span className="font-medium text-foreground">name</span> <span className="text-red-500">(required)</span> — the product name.</li>
-                <li><span className="font-medium text-foreground">baseUom</span> — base unit of measure the product is tracked in (KG, EA, L…). Defaults to EA.</li>
-                <li><span className="font-medium text-foreground">productType</span> — <code>Purchased product</code> (buy), <code>Finished product</code> (sell) or <code>Stock product</code> (buy &amp; sell).</li>
-                <li><span className="font-medium text-foreground">category</span> — optional group name (e.g. <code>Fish</code>). Created automatically if it&apos;s new.</li>
-                <li><span className="font-medium text-foreground">productFamily</span> — optional. Groups related SKUs together (e.g. <code>Tilapia</code> for whole + fillet). Leave blank to skip; edit later per product.</li>
-              </ul>
-              <p className="pt-1">Upload the same <span className="font-medium text-foreground">code</span> again to update that product instead of creating a duplicate. No price needed — set prices via price lists.</p>
+              {fmcgOrg ? (
+                <ul className="list-disc pl-4 space-y-1">
+                  <li><span className="font-medium text-foreground">name</span> <span className="text-red-500">(required)</span> — product name / description.</li>
+                  <li><span className="font-medium text-foreground">barcode</span> <span className="text-red-500">(required)</span> — product code on the pack (EAN), e.g. <code>6161105846376</code>.</li>
+                  <li><span className="font-medium text-foreground">sku</span> — optional; auto-generated as <code>SKU-001</code> if omitted.</li>
+                  <li><span className="font-medium text-foreground">size</span> — e.g. <code>50g</code>, <code>100g</code>, <code>2L</code>.</li>
+                  <li><span className="font-medium text-foreground">baseUom</span> — packing: <code>PCS</code>, <code>CARTON</code>, <code>OUTER</code>, etc.</li>
+                  <li><span className="font-medium text-foreground">category</span> — optional; created if new.</li>
+                </ul>
+              ) : (
+                <ul className="list-disc pl-4 space-y-1">
+                  <li><span className="font-medium text-foreground">code</span> <span className="text-red-500">(required)</span> — unique identity. Numbers (<code>00001</code>) or text (<code>FISH-TIL</code>).</li>
+                  <li><span className="font-medium text-foreground">name</span> <span className="text-red-500">(required)</span> — the product name.</li>
+                  <li><span className="font-medium text-foreground">baseUom</span> — KG, EA, L… Defaults to EA.</li>
+                  <li><span className="font-medium text-foreground">productType</span> — Purchased / Finished / Stock product.</li>
+                  <li><span className="font-medium text-foreground">category</span> — optional (e.g. Fish).</li>
+                  <li><span className="font-medium text-foreground">productFamily</span> — optional CoolCatch line (e.g. Tilapia).</li>
+                </ul>
+              )}
+              <p className="pt-1">
+                Re-upload the same <span className="font-medium text-foreground">code</span> to update.
+                {fmcgOrg ? " Set piece prices on Price tags after import." : " No price needed — set prices via price lists."}
+              </p>
             </div>
 
             <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-3">
@@ -930,7 +1377,7 @@ export default function MasterProductsPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => downloadProductsTemplateCsv()}
+                onClick={() => downloadProductsTemplateCsv({ fmcg: fmcgOrg })}
               >
                 <Icons.Download className="mr-2 h-3.5 w-3.5" />
                 Template

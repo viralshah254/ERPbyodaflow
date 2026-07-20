@@ -12,6 +12,9 @@ const SEAFOOD_TEMPLATE_IDS = new Set([
   "coolcatch",
 ]);
 
+/** Template ids that unlock CoolCatch / franchise pricing (zones, commissions, daily kg pricing). */
+export const SEAFOOD_ORG_TEMPLATE_IDS = [...SEAFOOD_TEMPLATE_IDS];
+
 export function industryCategoryLabel(category: IndustryCategory): string {
   if (category === "FMCG") return "FMCG";
   if (category === "SEAFOOD") return "Seafood";
@@ -24,6 +27,20 @@ export function resolveIndustryCategoryFromTemplateId(templateId?: string | null
   if (FMCG_TEMPLATE_IDS.has(id)) return "FMCG";
   if (SEAFOOD_TEMPLATE_IDS.has(id)) return "SEAFOOD";
   return "OTHER";
+}
+
+/**
+ * Franchise zones, commissions, CoolCatch daily kg pricing — seafood templates only.
+ * Prefer `industryCategory` from org context when present so FMCG orgs never see seafood UI
+ * even if templateId is missing/stale.
+ */
+export function isSeafoodOrg(
+  templateId?: string | null,
+  industryCategory?: IndustryCategory | null
+): boolean {
+  if (industryCategory === "SEAFOOD") return true;
+  if (industryCategory === "FMCG") return false;
+  return resolveIndustryCategoryFromTemplateId(templateId) === "SEAFOOD";
 }
 
 export const INDUSTRY_CATEGORIES: Array<{

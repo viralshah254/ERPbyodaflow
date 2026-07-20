@@ -31,6 +31,7 @@ type BackendParty = {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  defaultPriceListId?: string;
   defaultCurrency?: string;
   status?: string;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
@@ -80,6 +81,7 @@ export type PartyPayload = {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  defaultPriceListId?: string;
   defaultCurrency?: string;
   status?: "ACTIVE" | "INACTIVE";
   coolcatchSupplierKind?: CoolcatchSupplierKind;
@@ -116,6 +118,7 @@ export type PartyDetail = PartyRow & {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  defaultPriceListId?: string;
   defaultCurrency?: string;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
   contactPersonFirstName?: string;
@@ -277,6 +280,7 @@ function mapParty(item: BackendParty): PartyRow {
     supplierBankBranchName: item.supplierBankBranchName,
     lastKnownLatitude: item.lastKnownLatitude,
     lastKnownLongitude: item.lastKnownLongitude,
+    defaultPriceListId: item.defaultPriceListId,
     status: item.status ?? "ACTIVE",
   };
 }
@@ -354,6 +358,7 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     route: payload.route,
     latitude: payload.latitude,
     longitude: payload.longitude,
+    defaultPriceListId: payload.defaultPriceListId,
     status: payload.status ?? "ACTIVE",
   };
 }
@@ -382,6 +387,7 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
     creditWarningThresholdPct: data.creditWarningThresholdPct,
     customerCategoryId: data.customerCategoryId,
     paymentTermsId: data.paymentTermsId,
+    defaultPriceListId: data.defaultPriceListId,
     defaultCurrency: data.defaultCurrency,
     coolcatchSupplierKind: data.coolcatchSupplierKind,
     contactPersonFirstName: data.contactPersonFirstName,
@@ -440,6 +446,8 @@ export async function searchPartyLookupOptionsApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
   supplierType?: SupplierType | "";
   status?: string;
   search?: string;
@@ -450,6 +458,8 @@ export async function searchPartyLookupOptionsApi(filters?: {
   if (filters?.role) params.set("role", filters.role);
   if (filters?.customerType) params.set("customerType", filters.customerType);
   if (filters?.customerCategoryId) params.set("customerCategoryId", filters.customerCategoryId);
+  if (filters?.channel) params.set("channel", filters.channel);
+  if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());

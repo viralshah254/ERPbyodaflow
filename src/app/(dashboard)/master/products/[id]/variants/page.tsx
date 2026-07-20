@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -45,7 +45,8 @@ import type { ProductVariant, VariantAttribute } from "@/lib/products/types";
 import { canDeleteEntity } from "@/lib/permissions";
 import { t } from "@/lib/terminology";
 import { useAuthStore } from "@/stores/auth-store";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
@@ -56,13 +57,21 @@ import * as Icons from "lucide-react";
 /** @deprecated Variants are now managed on the main product page (/master/products/[id]?tab=variants). This page is kept for backward compatibility. */
 export default function ProductVariantsPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const user = useAuthStore((s) => s.user);
   const canDelete = canDeleteEntity(user);
   const canWrite = useCanWriteInventory();
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
+
+  React.useEffect(() => {
+    if (fmcgOrg) router.replace(`/master/products/${id}`);
+  }, [fmcgOrg, id, router]);
 
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
   const [variants, setVariants] = React.useState<ProductVariant[]>([]);

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,20 +21,32 @@ import {
   putOrgCommissionDefaultsApi,
   putZoneCommissionDefaultsApi,
 } from "@/lib/api/franchise-commission-defaults";
+import { isSeafoodOrg } from "@/config/industry";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 
 export default function PricingCommissionsPage() {
+  const router = useRouter();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafood = isSeafoodOrg(templateId, industryCategory);
+
+  React.useEffect(() => {
+    if (!seafood) router.replace("/pricing/workspace/lists");
+  }, [seafood, router]);
+
   const [zones, setZones] = React.useState<Awaited<ReturnType<typeof fetchPricingZones>>>([]);
   const [scope, setScope] = React.useState<"org" | "zone">("org");
   const [zoneId, setZoneId] = React.useState("");
 
   React.useEffect(() => {
+    if (!seafood) return;
     fetchPricingZones()
       .then((z) => {
         setZones(z);
         if (z.length && !zoneId) setZoneId(z[0].id);
       })
       .catch(() => setZones([]));
-  }, [zoneId]);
+  }, [zoneId, seafood]);
 
   const fetchOrgDefaults = React.useCallback(
     (params: Parameters<typeof fetchOrgCommissionDefaultsApi>[0]) => fetchOrgCommissionDefaultsApi(params),
@@ -62,6 +75,8 @@ export default function PricingCommissionsPage() {
     },
     [zoneId]
   );
+
+  if (!seafood) return null;
 
   return (
     <PageShell>

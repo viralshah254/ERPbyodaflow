@@ -34,6 +34,10 @@ import { isApiConfigured } from "@/lib/api/client";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import {
+  resolveFmcgClientLinePrice,
+  type FmcgCatalogItem,
+} from "@/lib/fmcg/pricing";
+import {
   UNCATEGORIZED_FAMILY,
   productFamilyKey,
   productFamilyLabel,
@@ -125,6 +129,16 @@ interface DocumentLineEditorProps {
    * isStale=true means no price was set today — the effective price is from a prior day.
    */
   dailyPricesByProductId?: Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }>;
+  /**
+   * Flat catalog prices from PriceList.items (non-FMCG fallback).
+   * Used when daily prices are absent — after daily, before tiered product_pricing.
+   */
+  catalogPricesByProductId?: Record<string, number>;
+  /**
+   * FMCG only: piece price + discount on the customer's price tag.
+   * Pack unit price = pricePerPiece × packaging.unitsPer. Never use for CoolCatch.
+   */
+  fmcgCatalogByProductId?: Record<string, FmcgCatalogItem>;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -137,7 +151,9 @@ function productMatchesLineSearch(p: ProductRow, query: string): boolean {
     .split(/\s+/)
     .filter(Boolean);
   if (tokens.length === 0) return true;
-  const hay = [p.sku, p.name, p.category ?? "", p.description ?? "", p.productFamily ?? ""].join(" ").toLowerCase();
+  const hay = [p.sku, p.barcode ?? "", p.name, p.category ?? "", p.description ?? "", p.productFamily ?? ""]
+    .join(" ")
+    .toLowerCase();
   return tokens.every((t) => hay.includes(t));
 }
 
@@ -202,6 +218,8 @@ export function DocumentLineEditor({
   catalogUomCodes = [],
   lineColumnLabels,
   dailyPricesByProductId,
+  catalogPricesByProductId,
+  fmcgCatalogByProductId,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
@@ -369,7 +387,7 @@ export function DocumentLineEditor({
   }, []);
   const priceListIdResolved = useCostPricing ? "" : (priceListId || priceLists[0]?.id || "pl-retail");
 
-  // Resolve price: daily price takes priority over tier-based pricing.
+  // Resolve price: daily (seafood) → FMCG piece×pack → flat catalog → tiered product_pricing.
   const resolvePrice = React.useCallback(
     (productId: string, qty: number, uom: string): { price: number; reason: string } => {
       if (useCostPricing) return { price: 0, reason: "Manual" };
@@ -380,14 +398,41 @@ export function DocumentLineEditor({
           : "Daily price";
         return { price: daily.effectivePrice, reason: label };
       }
+      const fmcgItem = fmcgCatalogByProductId?.[productId];
+      if (fmcgItem?.pricePerPiece != null && fmcgItem.pricePerPiece > 0) {
+        const product = products.find((p) => p.id === productId);
+        const resolved = resolveFmcgClientLinePrice({
+          pricePerPiece: fmcgItem.pricePerPiece,
+          uom,
+          quantity: qty,
+          discountPercent: fmcgItem.discountPercent,
+          packaging: packagingByProductId?.[productId],
+          productBaseUom: product?.baseUom ?? product?.unit,
+        });
+        // Store gross unit price; discount shown in reason (invoice discount column later).
+        return { price: resolved.unitPriceGross, reason: resolved.reason };
+      }
+      const catalog = catalogPricesByProductId?.[productId];
+      if (catalog != null && catalog > 0) {
+        return { price: catalog, reason: "Price list" };
+      }
       const tier = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
       if (tier.price > 0) return tier;
-      if (daily && daily.effectivePrice == null) {
+      if (daily && daily.effectivePrice == null && catalog == null && !fmcgItem) {
         return { price: 0, reason: "Not priced on list" };
       }
       return tier;
     },
-    [useCostPricing, dailyPricesByProductId, priceListIdResolved, pricingByProductId]
+    [
+      useCostPricing,
+      dailyPricesByProductId,
+      fmcgCatalogByProductId,
+      catalogPricesByProductId,
+      priceListIdResolved,
+      pricingByProductId,
+      packagingByProductId,
+      products,
+    ]
   );
 
   const resolvePriceRef = React.useRef(resolvePrice);
@@ -494,11 +539,20 @@ export function DocumentLineEditor({
     });
   }, [taxCodesKey, linesAreTaxInclusive, taxCodes.length]);
 
-  /** Re-apply prices when daily prices or tier data finish loading (avoids stuck KES 0.00). */
+  /** Re-apply prices when daily / catalog / tier data finish loading (avoids stuck KES 0.00). */
   React.useEffect(() => {
     if (useCostPricing) return;
     const dailyKeys = Object.keys(dailyPricesByProductId ?? {});
-    if (dailyKeys.length === 0 && Object.keys(pricingByProductId ?? {}).length === 0) return;
+    const catalogKeys = Object.keys(catalogPricesByProductId ?? {});
+    const fmcgKeys = Object.keys(fmcgCatalogByProductId ?? {});
+    if (
+      dailyKeys.length === 0 &&
+      catalogKeys.length === 0 &&
+      fmcgKeys.length === 0 &&
+      Object.keys(pricingByProductId ?? {}).length === 0
+    ) {
+      return;
+    }
     onLinesChangeRef.current((prev) => {
       if (prev.length === 0) return prev;
       let changed = false;
@@ -513,7 +567,17 @@ export function DocumentLineEditor({
       });
       return changed ? next : prev;
     });
-  }, [dailyPricesByProductId, priceListIdResolved, pricingByProductId, useCostPricing, taxCodes, linesAreTaxInclusive]);
+  }, [
+    dailyPricesByProductId,
+    catalogPricesByProductId,
+    fmcgCatalogByProductId,
+    priceListIdResolved,
+    pricingByProductId,
+    packagingByProductId,
+    useCostPricing,
+    taxCodes,
+    linesAreTaxInclusive,
+  ]);
 
   const setProduct = (lineId: string, productId: string) => {
     const applyRow = (row: ProductRow) => {
