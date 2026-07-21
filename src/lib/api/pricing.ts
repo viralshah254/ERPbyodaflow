@@ -27,6 +27,8 @@ export function resolveCatalogLabel(code?: string, engineChannel?: string): Pric
 export interface CustomerDefaultPriceListRow {
   customerId: string;
   customerName?: string;
+  customerCode?: string;
+  channel?: string;
   priceListId: string;
   priceListName?: string;
   customerCategoryId?: string;
@@ -105,9 +107,18 @@ export async function requestPolicyApproval(id: string, comment?: string): Promi
 
 // ——— Customer default price list ———
 
-export async function fetchCustomerDefaultPriceLists(): Promise<CustomerDefaultPriceListRow[]> {
+export async function fetchCustomerDefaultPriceLists(opts?: {
+  search?: string;
+  channel?: string;
+}): Promise<CustomerDefaultPriceListRow[]> {
   requireLiveApi("Customer default price lists");
-  const res = await apiRequest<{ items: CustomerDefaultPriceListRow[] }>("/api/pricing/customer-default-price-lists");
+  const params = new URLSearchParams();
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  if (opts?.channel?.trim()) params.set("channel", opts.channel.trim());
+  const res = await apiRequest<{ items: CustomerDefaultPriceListRow[] }>(
+    "/api/pricing/customer-default-price-lists",
+    { params },
+  );
   return res.items ?? [];
 }
 
@@ -119,17 +130,33 @@ export async function setCustomerDefaultPriceList(customerId: string, priceListI
   });
 }
 
+export async function clearCustomerDefaultPriceList(customerId: string): Promise<void> {
+  requireLiveApi("Clear customer default price list");
+  await apiRequest(
+    `/api/pricing/customer-default-price-lists/${encodeURIComponent(customerId)}`,
+    { method: "DELETE" },
+  );
+}
+
 /** Supplier default cost list (for purchase orders). */
 export interface SupplierDefaultCostListRow {
   supplierId: string;
   supplierName?: string;
+  supplierCode?: string;
   costListId: string;
   costListName?: string;
 }
 
-export async function fetchSupplierDefaultCostLists(): Promise<SupplierDefaultCostListRow[]> {
+export async function fetchSupplierDefaultCostLists(opts?: {
+  search?: string;
+}): Promise<SupplierDefaultCostListRow[]> {
   requireLiveApi("Supplier default cost lists");
-  const res = await apiRequest<{ items: SupplierDefaultCostListRow[] }>("/api/pricing/supplier-default-cost-lists");
+  const params = new URLSearchParams();
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  const res = await apiRequest<{ items: SupplierDefaultCostListRow[] }>(
+    "/api/pricing/supplier-default-cost-lists",
+    { params },
+  );
   return res.items ?? [];
 }
 
@@ -141,35 +168,41 @@ export async function setSupplierDefaultCostList(supplierId: string, costListId:
   });
 }
 
+export async function clearSupplierDefaultCostList(supplierId: string): Promise<void> {
+  requireLiveApi("Clear supplier default cost list");
+  await apiRequest(
+    `/api/pricing/supplier-default-cost-lists/${encodeURIComponent(supplierId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export async function fetchPriceListOptions(): Promise<PricingOption[]> {
   requireLiveApi("Price list options");
   const res = await apiRequest<{ items: Array<{ id: string; name: string }> }>("/api/pricing/price-lists");
   return (res.items ?? []).map((item) => ({ id: item.id, name: item.name }));
 }
 
-export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
-  requireLiveApi("Price lists");
-  const res = await apiRequest<{
-    items: Array<{
-      id: string;
-      name: string;
-      code?: string;
-      currency?: string;
-      channel?: string;
-      tier?: string;
-      zoneId?: string;
-      customerId?: string;
-      franchiseId?: string;
-      lastCalculatedAt?: string;
-      updatedAt?: string;
-      parentPriceListId?: string;
-      parentName?: string;
-      markupType?: "PERCENT" | "FLAT";
-      markupValue?: number;
-      items?: Array<{ productId: string; price: number; currency?: string }>;
-    }>;
-  }>("/api/pricing/price-lists");
-  return (res.items ?? []).map((item) => ({
+type PriceListApiItem = {
+  id: string;
+  name: string;
+  code?: string;
+  currency?: string;
+  channel?: string;
+  tier?: string;
+  zoneId?: string;
+  customerId?: string;
+  franchiseId?: string;
+  lastCalculatedAt?: string;
+  updatedAt?: string;
+  parentPriceListId?: string;
+  parentName?: string;
+  markupType?: "PERCENT" | "FLAT";
+  markupValue?: number;
+  items?: Array<{ productId: string; price: number; currency?: string }>;
+};
+
+function mapPriceListDetail(item: PriceListApiItem): PriceListDetail {
+  return {
     id: item.id,
     name: item.name,
     code: item.code,
@@ -186,13 +219,11 @@ export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
     parentName: item.parentName,
     markupType: item.markupType,
     markupValue: item.markupValue,
-  }));
+  };
 }
 
-/** Price lists as UI type (id, name, currency, channel). */
-export async function fetchPriceListsForUi(): Promise<PriceList[]> {
-  const list = await fetchPriceListsApi();
-  return list.map((d) => ({
+function mapPriceListForUi(d: PriceListDetail): PriceList {
+  return {
     id: d.id,
     name: d.name,
     currency: d.currency ?? "KES",
@@ -211,7 +242,68 @@ export async function fetchPriceListsForUi(): Promise<PriceList[]> {
     markupType: d.markupType,
     markupValue: d.markupValue,
     pricedSkuCount: (d.items ?? []).filter((i) => i.price != null && Number(i.price) >= 0).length,
-  }));
+  };
+}
+
+export async function fetchPriceListsApi(): Promise<PriceListDetail[]> {
+  requireLiveApi("Price lists");
+  const res = await apiRequest<{ items: PriceListApiItem[] }>("/api/pricing/price-lists");
+  return (res.items ?? []).map(mapPriceListDetail);
+}
+
+export type PriceListsPage = {
+  items: PriceList[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  totalCount?: number;
+};
+
+/** Paginated price lists / tags (backend search + limit/cursor). */
+export async function fetchPriceListsPageForUi(opts?: {
+  search?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<PriceListsPage> {
+  requireLiveApi("Price lists");
+  const params = new URLSearchParams();
+  const lim = opts?.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 25;
+  params.set("limit", String(lim));
+  if (opts?.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);
+  if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  const res = await apiRequest<{
+    items: PriceListApiItem[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+    totalCount?: number;
+  }>("/api/pricing/price-lists", { params });
+  const items = (res.items ?? []).map((item) => mapPriceListForUi(mapPriceListDetail(item)));
+  const limit = typeof res.limit === "number" ? res.limit : lim;
+  const offset =
+    typeof res.offset === "number"
+      ? res.offset
+      : opts?.cursor != null && opts.cursor !== ""
+        ? Number(opts.cursor) || 0
+        : 0;
+  const hasMore =
+    typeof res.hasMore === "boolean" ? res.hasMore : items.length === limit && limit > 0;
+  return {
+    items,
+    limit,
+    offset,
+    hasMore,
+    nextCursor: res.nextCursor ?? (hasMore ? String(offset + items.length) : null),
+    totalCount: typeof res.totalCount === "number" ? res.totalCount : undefined,
+  };
+}
+
+/** Price lists as UI type (id, name, currency, channel). */
+export async function fetchPriceListsForUi(): Promise<PriceList[]> {
+  const list = await fetchPriceListsApi();
+  return list.map(mapPriceListForUi);
 }
 
 export async function fetchPriceListByIdApi(id: string): Promise<PriceListDetail | null> {

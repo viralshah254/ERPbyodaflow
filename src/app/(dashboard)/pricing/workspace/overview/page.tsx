@@ -7,6 +7,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Table,
   TableBody,
@@ -17,11 +21,13 @@ import {
 } from "@/components/ui/table";
 import {
   fetchPriceListsForUi,
+  fetchPriceListsPageForUi,
   fetchDiscountPolicies,
   fetchDailyPriceStatusApi,
   fetchCustomerDefaultPriceLists,
   type DailyPriceStatusResponse,
 } from "@/lib/api/pricing";
+import type { PriceList } from "@/lib/products/pricing-types";
 import { fetchProductsApi } from "@/lib/api/products";
 import { fetchProductPricingApi } from "@/lib/api/product-master";
 import { fetchBatchCostingReportApi, type BatchCostingRow } from "@/lib/api/reports";
@@ -30,10 +36,15 @@ import {
   type FranchiseOutletSellPublishAlertRow,
 } from "@/lib/api/franchise-pricing";
 import type { ProductRow } from "@/lib/types/masters";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 
 function fmtKes(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -57,6 +68,20 @@ export default function PricingOverviewPage() {
   const [outletPublishToday, setOutletPublishToday] = React.useState<string | null>(null);
   const [customerTagCount, setCustomerTagCount] = React.useState(0);
 
+  const [tagSearchInput, setTagSearchInput] = React.useState("");
+  const [tagDebouncedSearch, setTagDebouncedSearch] = React.useState("");
+  const [tagRows, setTagRows] = React.useState<PriceList[]>([]);
+  const [tagPageOffset, setTagPageOffset] = React.useState(0);
+  const [tagPageSize, setTagPageSize] = React.useState(25);
+  const [tagHasMore, setTagHasMore] = React.useState(false);
+  /** Unfiltered catalog size for the summary card. */
+  const [tagCatalogCount, setTagCatalogCount] = React.useState(0);
+  /** Matching rows for the current search (pagination summary). */
+  const [tagFilteredTotal, setTagFilteredTotal] = React.useState(0);
+  const [tagInitialLoading, setTagInitialLoading] = React.useState(true);
+  const [tagFetching, setTagFetching] = React.useState(false);
+  const tagLoadedOnce = React.useRef(false);
+
   React.useEffect(() => {
     if (!seafoodOrg) {
       setOutletPublishAlerts([]);
@@ -79,16 +104,15 @@ export default function PricingOverviewPage() {
 
   React.useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPriceListsForUi(), fetchDiscountPolicies()])
-      .then(([lists, pols]) => {
-        if (!cancelled) {
-          setPriceLists(lists);
-          setPolicies(pols);
-        }
-      })
-      .catch(() => {});
-
     if (seafoodOrg) {
+      Promise.all([fetchPriceListsForUi(), fetchDiscountPolicies()])
+        .then(([lists, pols]) => {
+          if (!cancelled) {
+            setPriceLists(lists);
+            setPolicies(pols);
+          }
+        })
+        .catch(() => {});
       fetchBatchCostingReportApi({ margin: 30 })
         .then((data) => {
           if (!cancelled) setBatchCosts(data.items.slice(0, 6));
@@ -102,6 +126,7 @@ export default function PricingOverviewPage() {
     } else {
       setBatchCosts([]);
       setDailyStatus(null);
+      setPriceLists([]);
       fetchCustomerDefaultPriceLists()
         .then((rows) => {
           if (!cancelled) setCustomerTagCount(rows.length);
@@ -114,6 +139,48 @@ export default function PricingOverviewPage() {
       cancelled = true;
     };
   }, [seafoodOrg]);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setTagDebouncedSearch(tagSearchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [tagSearchInput]);
+
+  const loadTagPage = React.useCallback(
+    async (offset: number) => {
+      if (seafoodOrg) return;
+      const isFirstLoad = !tagLoadedOnce.current;
+      if (isFirstLoad) setTagInitialLoading(true);
+      else setTagFetching(true);
+      try {
+        const page = await fetchPriceListsPageForUi({
+          limit: tagPageSize,
+          cursor: String(offset),
+          search: tagDebouncedSearch || undefined,
+        });
+        setTagRows(page.items);
+        setTagPageOffset(page.offset);
+        setTagHasMore(page.hasMore);
+        if (page.totalCount != null) {
+          setTagFilteredTotal(page.totalCount);
+          if (!tagDebouncedSearch) setTagCatalogCount(page.totalCount);
+        }
+        tagLoadedOnce.current = true;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to load price tags.");
+        setTagRows([]);
+        setTagHasMore(false);
+      } finally {
+        setTagInitialLoading(false);
+        setTagFetching(false);
+      }
+    },
+    [seafoodOrg, tagDebouncedSearch, tagPageSize]
+  );
+
+  React.useEffect(() => {
+    if (seafoodOrg) return;
+    void loadTagPage(0);
+  }, [seafoodOrg, loadTagPage]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -145,6 +212,8 @@ export default function PricingOverviewPage() {
 
   const tagLabel = fmcgOrg ? "Price tags" : "Price lists";
   const tagSingular = fmcgOrg ? "price tag" : "price list";
+  const tagSearchPending = tagSearchInput.trim() !== tagDebouncedSearch.trim();
+  const tagTableBusy = tagFetching || tagSearchPending;
 
   if (!seafoodOrg) {
     return (
@@ -153,8 +222,8 @@ export default function PricingOverviewPage() {
           title="Pricing overview"
           description={
             fmcgOrg
-              ? "Named price tags (e.g. Naivas, Premium). Set price per piece; assign a tag to each customer."
-              : "Named price lists and customer defaults."
+              ? "Named price tags (e.g. Naivas, Premium). Set price per piece, then pick a tag on each order or invoice. Customer defaults are optional."
+              : "Named price lists and optional customer defaults."
           }
           breadcrumbs={[{ label: "Pricing" }, { label: "Overview" }]}
           sticky
@@ -168,7 +237,7 @@ export default function PricingOverviewPage() {
                 <Link href="/pricing/rules">Customer tags</Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link href="/master/customers">Customers</Link>
+                <Link href="/sales/customers">Customers</Link>
               </Button>
             </div>
           }
@@ -176,9 +245,11 @@ export default function PricingOverviewPage() {
         <div className="p-6 space-y-6">
           <Card className="border-primary/15 bg-muted/20">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">How FMCG pricing works</CardTitle>
+              <CardTitle className="text-base">How pricing works</CardTitle>
               <CardDescription>
-                No franchise zones, daily kg prices, or pricing channels — those are for seafood.
+                Named {tagLabel.toLowerCase()} hold piece prices for your products. On a sales order or
+                invoice you pick which tag to use — linking a tag to a customer is optional (it only sets
+                their default).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -190,19 +261,25 @@ export default function PricingOverviewPage() {
                   </Link>{" "}
                   (e.g. Premium, Naivas).
                 </li>
-                <li>Open it and set <strong className="text-foreground">price per piece</strong> for each product.</li>
                 <li>
-                  Assign that tag on the{" "}
-                  <Link href="/master/customers" className="text-primary underline">
+                  Open it and set <strong className="text-foreground">price per piece</strong> for each
+                  product. Pack and case prices come from pieces × pack size.
+                </li>
+                <li>
+                  When recording an order or invoice, choose the {tagSingular} for that sale. You can
+                  change it per document.
+                </li>
+                <li>
+                  Optionally set a default tag on the{" "}
+                  <Link href="/sales/customers" className="text-primary underline">
                     customer
                   </Link>{" "}
                   (or under{" "}
                   <Link href="/pricing/rules" className="text-primary underline">
                     Customer tags
                   </Link>
-                  ).
+                  ) so new orders start with that tag pre-selected.
                 </li>
-                <li>Sales orders pick the customer&apos;s tag and calculate pack prices from packaging.</li>
               </ol>
             </CardContent>
           </Card>
@@ -213,7 +290,9 @@ export default function PricingOverviewPage() {
                 <CardTitle className="text-sm font-medium text-muted-foreground">{tagLabel}</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">{priceLists.length}</p>
+                <p className="text-2xl font-bold">
+                  {tagInitialLoading && tagCatalogCount === 0 ? "—" : tagCatalogCount}
+                </p>
                 <Button variant="link" className="h-auto p-0 mt-1" asChild>
                   <Link href="/pricing/workspace/lists">Manage</Link>
                 </Button>
@@ -244,55 +323,102 @@ export default function PricingOverviewPage() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{tagLabel}</CardTitle>
-              <CardDescription>
-                {fmcgOrg
-                  ? "Open a tag to set piece prices. Pack / carton / bale calculate from product packaging."
-                  : "Open a list to manage product prices."}
-              </CardDescription>
+            <CardHeader className="space-y-3">
+              <div>
+                <CardTitle className="text-base">{tagLabel}</CardTitle>
+                <CardDescription>
+                  {fmcgOrg
+                    ? "Open a tag to set piece prices. Pack / carton / bale calculate from product packaging."
+                    : "Open a list to manage product prices."}
+                </CardDescription>
+              </div>
+              <DataTableToolbar
+                searchPlaceholder={`Search ${tagLabel.toLowerCase()}…`}
+                searchValue={tagSearchInput}
+                onSearchChange={setTagSearchInput}
+                className="border-0 bg-transparent p-0 shadow-none"
+              />
             </CardHeader>
-            <CardContent className="p-0">
-              {priceLists.length === 0 ? (
+            <CardContent className="relative p-0">
+              {tagInitialLoading ? (
+                <div className="p-4">
+                  <SkeletonDataTable
+                    rows={Math.min(tagPageSize, 8)}
+                    columnWidths={["w-40", "w-20", "w-16", "w-28"]}
+                  />
+                </div>
+              ) : tagRows.length === 0 ? (
                 <div className="px-6 py-10 text-center space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    No {tagLabel.toLowerCase()} yet. Create one to start pricing products.
+                    {tagDebouncedSearch
+                      ? `No ${tagLabel.toLowerCase()} match “${tagDebouncedSearch}”.`
+                      : `No ${tagLabel.toLowerCase()} yet. Create one to start pricing products.`}
                   </p>
-                  <Button size="sm" asChild>
-                    <Link href="/pricing/workspace/lists">
-                      <Icons.Plus className="mr-2 h-4 w-4" />
-                      {fmcgOrg ? "Add price tag" : "Add price list"}
-                    </Link>
-                  </Button>
+                  {!tagDebouncedSearch ? (
+                    <Button size="sm" asChild>
+                      <Link href="/pricing/workspace/lists">
+                        <Icons.Plus className="mr-2 h-4 w-4" />
+                        {fmcgOrg ? "Add price tag" : "Add price list"}
+                      </Link>
+                    </Button>
+                  ) : null}
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Currency</TableHead>
-                      <TableHead>Default</TableHead>
-                      <TableHead className="w-36"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {priceLists.map((pl) => (
-                      <TableRow key={pl.id}>
-                        <TableCell className="font-medium">{pl.name}</TableCell>
-                        <TableCell>{pl.currency}</TableCell>
-                        <TableCell>{pl.isDefault ? "Yes" : "—"}</TableCell>
-                        <TableCell>
-                          <Button variant="default" size="sm" asChild>
-                            <Link href={`/pricing/workspace/lists?list=${pl.id}`}>
-                              {fmcgOrg ? "Set piece prices" : "Open"}
-                            </Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <>
+                  <TableLinearProgress active={tagTableBusy} />
+                  <div className={cn(tagTableBusy && "pointer-events-none opacity-60")}>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Default</TableHead>
+                          <TableHead className="w-36"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tagRows.map((pl) => (
+                          <TableRow key={pl.id}>
+                            <TableCell className="font-medium">{pl.name}</TableCell>
+                            <TableCell>{pl.currency}</TableCell>
+                            <TableCell>{pl.isDefault ? "Yes" : "—"}</TableCell>
+                            <TableCell>
+                              <Button variant="default" size="sm" asChild>
+                                <Link href={`/pricing/workspace/lists?list=${pl.id}`}>
+                                  {fmcgOrg ? "Set piece prices" : "Open"}
+                                </Link>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
+              <div className="border-t p-3">
+                <TablePagination
+                  pageOffset={tagPageOffset}
+                  pageSize={tagPageSize}
+                  itemCount={tagInitialLoading ? 0 : tagRows.length}
+                  hasMore={tagHasMore}
+                  loading={tagInitialLoading}
+                  busy={tagTableBusy}
+                  totalCount={tagFilteredTotal}
+                  onPrevious={() => {
+                    if (tagPageOffset <= 0 || tagInitialLoading || tagFetching) return;
+                    void loadTagPage(Math.max(0, tagPageOffset - tagPageSize));
+                  }}
+                  onNext={() => {
+                    if (!tagHasMore || tagInitialLoading || tagFetching) return;
+                    void loadTagPage(tagPageOffset + tagPageSize);
+                  }}
+                  entityLabel={tagLabel.toLowerCase()}
+                  pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+                  onPageSizeChange={setTagPageSize}
+                  className="border-0 bg-transparent shadow-none"
+                />
+              </div>
             </CardContent>
           </Card>
         </div>

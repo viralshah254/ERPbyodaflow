@@ -43,15 +43,17 @@ export function downloadImportTemplateApi(
 
 /**
  * Generate and download a products import template client-side.
- * FMCG uses SFA-aligned columns (barcode, size); seafood keeps CoolCatch samples.
+ * FMCG matches the New Finished SKU form (name, barcode, sku, size, category).
+ * Type/base UOM are implied (FINISHED + PCS) and not collected in the file.
+ * Seafood keeps CoolCatch samples with explicit type/UOM.
  */
 export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
   const csv = opts?.fmcg
     ? [
-        "sku,name,barcode,size,baseUom,productType,category",
-        "COLA-500,Classic Cola 500ml,6001234567890,500ml,PCS,Finished product,Beverages",
-        "COLA-12X330,Classic Cola 12x330ml,6001234567891,12x330ml,CARTON,Finished product,Beverages",
-        "OIL-2L,Cooking Oil 2L,6009876543210,2L,PCS,Finished product,Edible Oils",
+        "name,barcode,sku,size,category",
+        "Classic Cola 500ml,6001234567890,COLA-500,500ml,Beverages",
+        "Classic Cola 12x330ml,6001234567891,COLA-12X330,12x330ml,Beverages",
+        "Cooking Oil 2L,6009876543210,OIL-2L,2L,Edible Oils",
       ].join("\n")
     : [
         "code,name,baseUom,productType,category,productFamily",

@@ -1349,7 +1349,6 @@ export default function MasterProductsPage() {
                   <li><span className="font-medium text-foreground">barcode</span> <span className="text-red-500">(required)</span> — product code on the pack (EAN), e.g. <code>6161105846376</code>.</li>
                   <li><span className="font-medium text-foreground">sku</span> — optional; auto-generated as <code>SKU-001</code> if omitted.</li>
                   <li><span className="font-medium text-foreground">size</span> — e.g. <code>50g</code>, <code>100g</code>, <code>2L</code>.</li>
-                  <li><span className="font-medium text-foreground">baseUom</span> — packing: <code>PCS</code>, <code>CARTON</code>, <code>OUTER</code>, etc.</li>
                   <li><span className="font-medium text-foreground">category</span> — optional; created if new.</li>
                 </ul>
               ) : (
@@ -1363,8 +1362,18 @@ export default function MasterProductsPage() {
                 </ul>
               )}
               <p className="pt-1">
-                Re-upload the same <span className="font-medium text-foreground">code</span> to update.
-                {fmcgOrg ? " Set piece prices on Price tags after import." : " No price needed — set prices via price lists."}
+                {fmcgOrg ? (
+                  <>
+                    Same fields as New Finished SKU. Type is Finished and packing defaults to PCS.
+                    Re-upload the same <span className="font-medium text-foreground">barcode</span> to update.
+                    {" "}Set piece prices on Price tags after import.
+                  </>
+                ) : (
+                  <>
+                    Re-upload the same <span className="font-medium text-foreground">code</span> to update.
+                    {" "}No price needed — set prices via price lists.
+                  </>
+                )}
               </p>
             </div>
 

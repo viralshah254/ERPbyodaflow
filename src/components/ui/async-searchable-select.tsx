@@ -61,6 +61,10 @@ interface AsyncSearchableSelectProps {
   onCreateNew?: (searchQuery: string) => void;
   /** Label for the create-new button. Defaults to "Add new". */
   createNewLabel?: string;
+  /** Rendered under the search input (e.g. filter chips). Stays inside the search panel. */
+  listHeader?: React.ReactNode;
+  /** When this value changes while open, reload options (e.g. external filter changed). */
+  reloadToken?: string | number;
 }
 
 export function AsyncSearchableSelect({
@@ -86,6 +90,8 @@ export function AsyncSearchableSelect({
   recentItemsLabel = "Recent",
   onCreateNew,
   createNewLabel = "Add new",
+  listHeader,
+  reloadToken,
 }: AsyncSearchableSelectProps) {
   const orgId = useAuthStore((s) => s.org?.orgId);
   // Scope recent items per org so selections from one org never bleed into another
@@ -273,7 +279,7 @@ export function AsyncSearchableSelect({
     }
     const timeoutId = window.setTimeout(runLoad, searchDebounceMs);
     return () => window.clearTimeout(timeoutId);
-  }, [minSearchLength, open, query, searchDebounceMs]);
+  }, [minSearchLength, open, query, searchDebounceMs, reloadToken]);
 
   const hint =
     query.trim().length > 0 && query.trim().length < minSearchLength
@@ -352,6 +358,7 @@ export function AsyncSearchableSelect({
         autoFocus
         className="bg-background"
       />
+      {listHeader ? <div className="mt-2">{listHeader}</div> : null}
       <div
         className={cn(
           "mt-2 overflow-auto rounded-md border bg-muted/20",

@@ -45,19 +45,28 @@ import {
   type SupplierDefaultCostListRow,
 } from "@/lib/api/pricing";
 import { searchPartyLookupOptionsApi, type PartyLookupOption } from "@/lib/api/parties";
-import type { PartyChannel } from "@/lib/types/masters";
 import type { DiscountPolicy } from "@/lib/products/pricing-types";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { CustomerPriceTagsWorkspace } from "@/components/pricing/CustomerPriceTagsWorkspace";
 
 export default function PricingRulesPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
+
+  if (!seafoodOrg) {
+    return <CustomerPriceTagsWorkspace fmcgOrg={fmcgOrg} />;
+  }
+
+  return <SeafoodPricingRulesPage />;
+}
+
+function SeafoodPricingRulesPage() {
   const [policies, setPolicies] = React.useState<DiscountPolicy[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [addPolicyOpen, setAddPolicyOpen] = React.useState(false);
@@ -78,7 +87,6 @@ export default function PricingRulesPage() {
   const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
   const [configPriceListId, setConfigPriceListId] = React.useState("");
   const [priceListOptions, setPriceListOptions] = React.useState<Array<{ id: string; name: string }>>([]);
-  const [customerChannelFilter, setCustomerChannelFilter] = React.useState<"" | PartyChannel>("");
   const [configureSheetPortalHost, setConfigureSheetPortalHost] = React.useState<HTMLElement | null>(null);
 
   // Configure supplier default cost list
@@ -117,16 +125,9 @@ export default function PricingRulesPage() {
         status: "ACTIVE",
         search: query,
         limit: 20,
-        ...(customerChannelFilter ? { channel: customerChannelFilter } : {}),
       }),
-    [customerChannelFilter]
+    []
   );
-
-  const setCustomerChannelFilterAndClear = React.useCallback((next: "" | PartyChannel) => {
-    setCustomerChannelFilter(next);
-    setConfigCustomerId("");
-    setSelectedCustomerOption(null);
-  }, []);
 
   const loadSupplierLookupOptions = React.useCallback(
     (query: string) =>
@@ -140,10 +141,7 @@ export default function PricingRulesPage() {
   );
 
   React.useEffect(() => {
-    if (!configureOpen) {
-      setCustomerChannelFilter("");
-      return;
-    }
+    if (!configureOpen) return;
     loadCustomerDefaults();
     fetchPriceListOptions()
       .then(setPriceListOptions)
@@ -229,272 +227,6 @@ export default function PricingRulesPage() {
       setSavingSupplierDefault(false);
     }
   };
-
-  if (!seafoodOrg) {
-    return (
-      <PageShell>
-        <PageHeader
-          title={fmcgOrg ? "Customer price tags" : "Customer defaults"}
-          description={
-            fmcgOrg
-              ? "Assign which price tag each customer uses on sales orders. Prefer setting the tag on the customer form."
-              : "Assign a default price list per customer."
-          }
-          breadcrumbs={[
-            { label: "Pricing", href: "/pricing/workspace/overview" },
-            { label: fmcgOrg ? "Customer tags" : "Defaults" },
-          ]}
-          sticky
-          showCommandHint
-          actions={
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/pricing/workspace/overview">Overview</Link>
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/pricing/workspace/lists">{fmcgOrg ? "Price tags" : "Price lists"}</Link>
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/master/customers">Customers</Link>
-              </Button>
-            </div>
-          }
-        />
-        <div className="p-6 space-y-6">
-          <Card className="border-primary/15 bg-muted/20">
-            <CardContent className="py-4 text-sm text-muted-foreground">
-              {fmcgOrg ? (
-                <>
-                  Create tags under{" "}
-                  <Link href="/pricing/workspace/lists" className="text-primary underline">
-                    Price tags
-                  </Link>
-                  , set piece prices there, then assign the tag on each customer (or use Configure below).
-                </>
-              ) : (
-                <>Assign which price list is used by default for each customer.</>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                {fmcgOrg ? "Customer → price tag" : "Customer default price list"}
-              </CardTitle>
-              <CardDescription>
-                {fmcgOrg
-                  ? "Orders and invoices use this tag’s piece prices (pack prices calculate from packaging)."
-                  : "Assign default price list per customer."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Sheet open={configureOpen} onOpenChange={setConfigureOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    Configure
-                  </Button>
-                </SheetTrigger>
-                <SheetContent className="overflow-y-auto">
-                  <div ref={setConfigureSheetPortalHost} className="space-y-6 py-6">
-                    <SheetHeader>
-                      <SheetTitle>{fmcgOrg ? "Customer price tag" : "Customer default price list"}</SheetTitle>
-                      <SheetDescription>
-                        {fmcgOrg
-                          ? "Set which price tag is used by default per customer."
-                          : "Set which price list is used by default per customer."}
-                      </SheetDescription>
-                    </SheetHeader>
-                    <div className="grid gap-2">
-                      <Label>Current assignments</Label>
-                      {customerDefaults.length === 0 ? (
-                        <p className="text-muted-foreground text-sm">No assignments yet.</p>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Customer</TableHead>
-                              <TableHead>{fmcgOrg ? "Price tag" : "Price list"}</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {customerDefaults.map((r) => (
-                              <TableRow key={r.customerId}>
-                                <TableCell className="font-medium">{r.customerName ?? r.customerId}</TableCell>
-                                <TableCell>{r.priceListName ?? r.priceListId}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </div>
-                    <div className="border-t pt-4 space-y-4">
-                      <Label>Set default</Label>
-                      {fmcgOrg ? (
-                        <div className="grid gap-2">
-                          <Label className="text-muted-foreground text-xs">Channel</Label>
-                          <div className="flex flex-wrap gap-2">
-                            {(
-                              [
-                                { id: "" as const, label: "All" },
-                                { id: "MODERN_TRADE" as const, label: "Modern trade" },
-                                { id: "GENERAL_TRADE" as const, label: "General trade" },
-                              ] as const
-                            ).map((opt) => (
-                              <Button
-                                key={opt.id || "all"}
-                                type="button"
-                                size="sm"
-                                variant={customerChannelFilter === opt.id ? "default" : "outline"}
-                                onClick={() => setCustomerChannelFilterAndClear(opt.id)}
-                              >
-                                {opt.label}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                      <div className="grid gap-2">
-                        <Label htmlFor="configCustomerIdFmcg" className="text-muted-foreground text-xs">
-                          Customer
-                        </Label>
-                        <AsyncSearchableSelect
-                          key={`customer-channel-${customerChannelFilter || "all"}`}
-                          value={configCustomerId}
-                          onValueChange={(value) => {
-                            setConfigCustomerId(value);
-                            if (!value) setSelectedCustomerOption(null);
-                          }}
-                          onOptionSelect={(option) => setSelectedCustomerOption(option)}
-                          loadOptions={loadCustomerLookupOptions}
-                          selectedOption={selectedCustomerOption}
-                          placeholder="Select customer"
-                          searchPlaceholder="Type name, code, phone, or email"
-                          emptyMessage="No customers found."
-                          recentStorageKey="lookup:recent-customers"
-                          portalContainer={configureSheetPortalHost}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="configPriceListFmcg">{fmcgOrg ? "Price tag" : "Price list"}</Label>
-                        <Select value={configPriceListId} onValueChange={setConfigPriceListId}>
-                          <SelectTrigger id="configPriceListFmcg">
-                            <SelectValue placeholder={fmcgOrg ? "Select price tag" : "Select price list"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {priceListOptions.map((pl) => (
-                              <SelectItem key={pl.id} value={pl.id}>
-                                {pl.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button onClick={handleSetCustomerDefault} disabled={savingDefault}>
-                        {savingDefault ? "Saving…" : "Set default"}
-                      </Button>
-                    </div>
-                  </div>
-                </SheetContent>
-              </Sheet>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Supplier default cost list</CardTitle>
-              <CardDescription>
-                Optional — default cost list per supplier for purchase orders.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Sheet open={configSupplierOpen} onOpenChange={setConfigSupplierOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    Configure
-                  </Button>
-                </SheetTrigger>
-                <SheetContent className="overflow-y-auto">
-                  <div ref={setSupplierSheetPortalHost} className="space-y-6 py-6">
-                    <SheetHeader>
-                      <SheetTitle>Supplier default cost list</SheetTitle>
-                      <SheetDescription>
-                        Set which cost list is used by default per supplier on purchase orders.
-                      </SheetDescription>
-                    </SheetHeader>
-                    <div className="grid gap-2">
-                      <Label>Current assignments</Label>
-                      {supplierCostDefaults.length === 0 ? (
-                        <p className="text-muted-foreground text-sm">No assignments yet.</p>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Supplier</TableHead>
-                              <TableHead>Cost list</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {supplierCostDefaults.map((r) => (
-                              <TableRow key={r.supplierId}>
-                                <TableCell className="font-medium">{r.supplierName ?? r.supplierId}</TableCell>
-                                <TableCell>{r.costListName ?? r.costListId}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </div>
-                    <div className="border-t pt-4 space-y-4">
-                      <Label>Set default</Label>
-                      <div className="grid gap-2">
-                        <Label htmlFor="configSupplierIdFmcg" className="text-muted-foreground text-xs">
-                          Supplier
-                        </Label>
-                        <AsyncSearchableSelect
-                          value={configSupplierId}
-                          onValueChange={(value) => {
-                            setConfigSupplierId(value);
-                            if (!value) setSelectedSupplierOption(null);
-                          }}
-                          onOptionSelect={(option) => setSelectedSupplierOption(option)}
-                          loadOptions={loadSupplierLookupOptions}
-                          selectedOption={selectedSupplierOption}
-                          placeholder="Select supplier"
-                          searchPlaceholder="Type name, code, phone, or email"
-                          emptyMessage="No suppliers found."
-                          recentStorageKey="lookup:recent-suppliers"
-                          portalContainer={supplierSheetPortalHost}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="configCostListFmcg">Cost list</Label>
-                        <Select value={configCostListId} onValueChange={setConfigCostListId}>
-                          <SelectTrigger id="configCostListFmcg">
-                            <SelectValue placeholder="Select cost list" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {priceListOptions.map((pl) => (
-                              <SelectItem key={pl.id} value={pl.id}>
-                                {pl.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button onClick={handleSetSupplierCostList} disabled={savingSupplierDefault}>
-                        {savingSupplierDefault ? "Saving…" : "Set default"}
-                      </Button>
-                    </div>
-                  </div>
-                </SheetContent>
-              </Sheet>
-            </CardContent>
-          </Card>
-        </div>
-      </PageShell>
-    );
-  }
 
   return (
     <PageShell>

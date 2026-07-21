@@ -2160,33 +2160,63 @@ function PackagingSheet({
             <>
               <div className="space-y-2">
                 <Label>Pack name</Label>
-                <Select
-                  value={useCustomPack ? "__custom__" : uom}
-                  onValueChange={(v) => {
-                    if (v === "__custom__") {
-                      setUseCustomPack(true);
-                      return;
-                    }
-                    setUseCustomPack(false);
-                    setUom(v);
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select pack" /></SelectTrigger>
-                  <SelectContent>
-                    {fmcgPackOptions.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                    <SelectItem value="__custom__">Other — type a new name…</SelectItem>
-                  </SelectContent>
-                </Select>
                 {useCustomPack ? (
-                  <Input
-                    value={customPackName}
-                    onChange={(e) => setCustomPackName(e.target.value)}
-                    placeholder="e.g. HALF_CARTON, SHRINK"
-                    autoFocus
-                  />
-                ) : null}
+                  <div className="space-y-2">
+                    <Input
+                      value={customPackName}
+                      onChange={(e) => setCustomPackName(e.target.value)}
+                      placeholder="Type new pack name…"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-0 text-xs"
+                      onClick={() => {
+                        setUseCustomPack(false);
+                        setCustomPackName("");
+                      }}
+                    >
+                      Choose from list instead
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Select
+                      value={uom}
+                      onValueChange={(v) => {
+                        setUseCustomPack(false);
+                        setUom(v);
+                      }}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select pack" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fmcgPackOptions.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0"
+                      title="Add pack name"
+                      aria-label="Add pack name"
+                      onClick={() => {
+                        setUseCustomPack(true);
+                        setCustomPackName("");
+                      }}
+                    >
+                      <Icons.Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Pieces packed</Label>
