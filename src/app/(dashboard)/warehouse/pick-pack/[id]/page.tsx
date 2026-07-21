@@ -54,6 +54,18 @@ import {
 } from "@/components/ui/sheet";
 import { Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+
+function formatPickQty(n: number, fmcg: boolean, unit = "PCS"): string {
+  const v = formatKg(n);
+  if (!fmcg) return v;
+  return `${v} ${unit}`;
+}
+
+function formatPickQtyWithUnit(n: number, fmcg: boolean): string {
+  return fmcg ? formatPickQty(n, true, "PCS") : `${formatKg(n)} kg`;
+}
 
 /** 400 from pick-pack action may include shortLines (same shape as dispatch). */
 function toastPickPackInsufficientError(e: unknown) {
@@ -163,6 +175,8 @@ export default function PickPackDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const canWrite = useCanWriteInventory();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const fmcg = isFmcgOrg(templateId);
   const [task, setTask] = React.useState<WarehousePickPackRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [cartons, setCartons] = React.useState("0");
@@ -459,7 +473,9 @@ export default function PickPackDetailPage() {
       });
       if (line && stock.remaining + 1e-9 < line.quantity) {
         toast.warning(
-          `Only ${formatKg(stock.remaining)} kg left on this pick for that product (ordered ${formatKg(line.quantity)} kg).`,
+          fmcg
+            ? `Only ${formatPickQty(stock.remaining, true)} left on this pick for that product (need ${formatPickQty(line.quantity, true)}).`
+            : `Only ${formatKg(stock.remaining)} kg left on this pick for that product (ordered ${formatKg(line.quantity)} kg).`,
           { duration: 10000 }
         );
       }
@@ -474,7 +490,7 @@ export default function PickPackDetailPage() {
         setLineEditSaving(null);
       }
     },
-    [task, taskStockSnapshot, refresh]
+    [task, taskStockSnapshot, refresh, fmcg]
   );
 
   const removeAddedLine = React.useCallback(
@@ -650,10 +666,13 @@ export default function PickPackDetailPage() {
   const qtyColumnLabel = packedOrLater ? "Packed" : "Picked";
   /** After dispatch, ledger avails already reflect issues — show delta only pre-dispatch. */
   const showAvailPickDelta = taskStatusUpper === "PICKED" || taskStatusUpper === "PACKED";
+  const packagingMissing = fmcg && task.lines.some((l) => l.packagingConversionMissing);
   const workflowHint = (() => {
     if (isCancelled) return "This task was cancelled.";
     if (taskStatusUpper === "PENDING")
-      return "Change the product on a line to substitute (dropdown), set picked qty, then confirm pick & pack. Set picked to 0 to skip.";
+      return fmcg
+        ? "Pick quantities are in pieces (base UOM). Set picked qty, then confirm pick & pack. Set picked to 0 to skip a line."
+        : "Change the product on a line to substitute (dropdown), set picked qty, then confirm pick & pack. Set picked to 0 to skip.";
     if (taskStatusUpper === "PICKED") return "Pick saved — adjust cartons if needed, then confirm pack.";
     if (taskStatusUpper === "PACKED") return "Packed — add courier/tracking and mark dispatched to issue stock from the fulfilment warehouse.";
     if (taskStatusUpper === "DISPATCHED")
@@ -736,6 +755,12 @@ export default function PickPackDetailPage() {
                 ) : null}
               </p>
             ) : null}
+            {packagingMissing ? (
+              <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-950 dark:text-amber-100">
+                A line uses a pack UOM (e.g. carton) but packaging has no pieces-per-pack. Pick is treating it as 1 piece — open the
+                product&apos;s packaging and set e.g. 1 CARTON = 24 PCS, then reload this pick.
+              </p>
+            ) : null}
             {task.suggestedFulfilmentWarehouseId &&
             task.suggestedFulfilmentWarehouseLabel &&
             !fulfilmentWarehouseUi.locked &&
@@ -806,12 +831,24 @@ export default function PickPackDetailPage() {
               ) : null}
             </div>
             <CardDescription>
-              <strong>Most substitutions:</strong> use the product dropdown on the line (e.g. change Size 3 → Size 10 when Size 3
-              is out of stock), then enter picked qty. Set picked to 0 to skip a line entirely.{" "}
-              <strong>Can pick</strong> and <strong>Avail. (MAIN)</strong> show how much is left for that line after other rows on this order claim the same SKU.{" "}
-              <strong>Round fish mix:</strong> use &quot;Break down by size&quot; on that line.{" "}
-              Only use &quot;Add extra product line&quot; when you need a second product on the shipment while keeping the original
-              line at 0 for the record.
+              {fmcg ? (
+                <>
+                  Quantities to pick are in <strong>pieces (base UOM)</strong> — the same unit as Stock In. If the sales order was in
+                  cartons, packaging converts cartons → pieces here. Use the product dropdown to substitute when needed; set picked to
+                  0 to skip a line. <strong>Can pick</strong> and <strong>Avail. (MAIN)</strong> show remaining pieces after other lines
+                  on this order claim the same SKU. Only use &quot;Add extra product line&quot; when you need a second product while
+                  keeping the original line at 0.
+                </>
+              ) : (
+                <>
+                  <strong>Most substitutions:</strong> use the product dropdown on the line (e.g. change Size 3 → Size 10 when Size 3
+                  is out of stock), then enter picked qty. Set picked to 0 to skip a line entirely.{" "}
+                  <strong>Can pick</strong> and <strong>Avail. (MAIN)</strong> show how much is left for that line after other rows on
+                  this order claim the same SKU. <strong>Round fish mix:</strong> use &quot;Break down by size&quot; on that line. Only
+                  use &quot;Add extra product line&quot; when you need a second product on the shipment while keeping the original line
+                  at 0 for the record.
+                </>
+              )}
               {dispatchedOrComplete ? (
                 <span className="mt-2 block font-medium text-foreground">
                   This shipment has been dispatched from stock; remaining columns still show ledger availability before this task&apos;s
@@ -879,7 +916,7 @@ export default function PickPackDetailPage() {
                         ) : (
                           line.productName ?? line.productId
                         )}
-                        {canEditPicked && isRoundFishMixLine(line) ? (
+                        {!fmcg && canEditPicked && isRoundFishMixLine(line) ? (
                           <Button
                             type="button"
                             variant="link"
@@ -889,9 +926,31 @@ export default function PickPackDetailPage() {
                             Break down by size
                           </Button>
                         ) : null}
+                        {fmcg && line.packagingConversionMissing ? (
+                          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                            Pack UOM {line.documentUnit} has no pieces-per-pack on packaging — treating as 1. Set packaging on the
+                            product.
+                          </p>
+                        ) : null}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">{line.sku ?? "—"}</TableCell>
-                      <TableCell className="tabular-nums">{formatKg(line.quantity)}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {fmcg ? (
+                          <div>
+                            <div>{formatPickQty(line.quantity, true, line.baseUom || "PCS")}</div>
+                            {line.documentUnit &&
+                            line.documentQuantity != null &&
+                            String(line.documentUnit).toUpperCase() !== String(line.baseUom || "PCS").toUpperCase() ? (
+                              <div className="text-[11px] text-muted-foreground">
+                                {formatKg(line.documentQuantity)} {line.documentUnit}
+                                {(line.unitsPer ?? 0) > 1 ? ` × ${line.unitsPer}` : ""}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          formatKg(line.quantity)
+                        )}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {lineStock ? (
                           <LineCanPickCell stock={lineStock} />
@@ -946,7 +1005,7 @@ export default function PickPackDetailPage() {
                             />
                             {lineStock?.overPickThisLine ? (
                               <p className="text-[10px] leading-tight text-amber-600">
-                                Only {formatKg(lineStock.remainingForLine)} kg left for this line
+                                Only {formatPickQtyWithUnit(lineStock.remainingForLine, fmcg)} left for this line
                               </p>
                             ) : null}
                           </div>
@@ -988,10 +1047,20 @@ export default function PickPackDetailPage() {
                   Add extra product line
                 </Button>
                 <p className="text-[11px] text-muted-foreground max-w-xl">
-                  Optional — only if you ship an additional product while leaving the original line at picked 0. For a simple swap
-                  (Size 9 → Size 10), use the product dropdown on that row instead. Lines from &quot;Break down by size&quot; stay
-                  on the pick list without a remove icon; manually added lines show{" "}
-                  <Trash2 className="inline h-3 w-3 align-text-bottom" aria-hidden /> on the right.
+                  {fmcg ? (
+                    <>
+                      Optional — only if you ship an additional product while leaving the original line at picked 0. For a simple
+                      SKU swap, use the product dropdown on that row instead. Manually added lines show{" "}
+                      <Trash2 className="inline h-3 w-3 align-text-bottom" aria-hidden /> on the right.
+                    </>
+                  ) : (
+                    <>
+                      Optional — only if you ship an additional product while leaving the original line at picked 0. For a simple
+                      swap (Size 9 → Size 10), use the product dropdown on that row instead. Lines from &quot;Break down by
+                      size&quot; stay on the pick list without a remove icon; manually added lines show{" "}
+                      <Trash2 className="inline h-3 w-3 align-text-bottom" aria-hidden /> on the right.
+                    </>
+                  )}
                 </p>
               </div>
             ) : null}
@@ -1151,8 +1220,9 @@ export default function PickPackDetailPage() {
                 {partialPickSummary.sharedShortfall.map((s, idx) => (
                   <li key={`shared-${idx}`}>
                     {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} —{" "}
-                    {formatKg(s.totalPicked)} kg across {s.lineCount} line{s.lineCount === 1 ? "" : "s"},{" "}
-                    {formatKg(s.warehouse)} kg at warehouse ({formatKg(s.shortfall)} kg over)
+                    {formatPickQtyWithUnit(s.totalPicked, fmcg)} across {s.lineCount} line
+                    {s.lineCount === 1 ? "" : "s"}, {formatPickQtyWithUnit(s.warehouse, fmcg)} at warehouse (
+                    {formatPickQtyWithUnit(s.shortfall, fmcg)} over)
                   </li>
                 ))}
               </ul>
@@ -1178,8 +1248,8 @@ export default function PickPackDetailPage() {
                 <ul className="mt-2 list-disc pl-5 space-y-1">
                   {partialPickSummary.partial.map((s, idx) => (
                     <li key={`part-${idx}`}>
-                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · shipping {formatKg(s.picked)}{" "}
-                      of {formatKg(s.ordered)} kg
+                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · shipping{" "}
+                      {formatPickQtyWithUnit(s.picked, fmcg)} of {formatPickQtyWithUnit(s.ordered, fmcg)}
                     </li>
                   ))}
                 </ul>
@@ -1188,8 +1258,12 @@ export default function PickPackDetailPage() {
                 <ul className="mt-2 list-disc pl-5 space-y-1">
                   {partialPickSummary.overPick.map((s, idx) => (
                     <li key={`over-${idx}`}>
-                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · picked {formatKg(s.picked)}{" "}
-                      kg but only {formatKg(typeof s.remainingForLine === "number" ? s.remainingForLine : s.available)} kg
+                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · picked{" "}
+                      {formatPickQtyWithUnit(s.picked, fmcg)} but only{" "}
+                      {formatPickQtyWithUnit(
+                        typeof s.remainingForLine === "number" ? s.remainingForLine : s.available,
+                        fmcg
+                      )}{" "}
                       left on this line — will cap on confirm
                     </li>
                   ))}

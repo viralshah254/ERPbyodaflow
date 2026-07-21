@@ -45,8 +45,20 @@ export const CUSTOMER_KIND_OPTIONS = [
   {
     id: "modern-trade",
     label: "Modern trade",
-    description: "Supermarket or chain — bill to HQ, deliver to branches",
+    description: "Supermarket or chain HQ — branches are separate customers that can order too",
     sfaSegment: "MODERN_TRADE_HQ" as SfaSegment,
+    channel: "MODERN_TRADE" as PartyChannel,
+    customerType: "RETAILER" as const,
+  },
+  /**
+   * Branch under a supermarket HQ. Full AR customer (same stepper as HQ).
+   * Not offered on the Type step — created via Branches → Add branch.
+   */
+  {
+    id: "modern-trade-branch",
+    label: "Modern trade branch",
+    description: "Outlet under a supermarket — orders and invoices like any customer",
+    sfaSegment: "MODERN_TRADE_BRANCH" as SfaSegment,
     channel: "MODERN_TRADE" as PartyChannel,
     customerType: "RETAILER" as const,
   },
@@ -77,6 +89,11 @@ export const CUSTOMER_KIND_OPTIONS = [
 ] as const;
 
 export type CustomerKindId = (typeof CUSTOMER_KIND_OPTIONS)[number]["id"];
+
+/** Kinds shown on the New customer Type step (branches use Add branch under a supermarket). */
+export const CUSTOMER_KIND_OPTIONS_FOR_CREATE = CUSTOMER_KIND_OPTIONS.filter(
+  (k) => k.id !== "modern-trade-branch"
+);
 
 export function channelLabel(channel?: PartyChannel | null): string {
   switch (channel) {

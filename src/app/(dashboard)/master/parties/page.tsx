@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as Icons from "lucide-react";
 import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -49,13 +50,17 @@ import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-ter
 import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { t } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContext, useTerminology } from "@/stores/orgContextStore";
 import { useAuthStore } from "@/stores/auth-store";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { toast } from "sonner";
 
 
 export default function MasterPartiesPage() {
+  const router = useRouter();
   const terminology = useTerminology();
+  const { templateId } = useOrgContext();
+  const fmcgOrg = isFmcgOrg(templateId);
   const permissions = useAuthStore((s) => s.permissions);
   const canWriteParty = permissions.includes("sales.write") || permissions.includes("purchase.write") || permissions.includes("admin.settings") || permissions.includes("*");
   /** Always "Customer" on this screen — franchisees have their own tab and Franchise → Manage franchisees. */
@@ -64,6 +69,11 @@ export default function MasterPartiesPage() {
   const franchiseeLabel = t("franchisee", terminology);
 
   const [tab, setTab] = React.useState<"customers" | "franchisees" | "suppliers">("customers");
+
+  // FMCG has no franchise network — never stay on the franchisees tab.
+  React.useEffect(() => {
+    if (fmcgOrg && tab === "franchisees") setTab("customers");
+  }, [fmcgOrg, tab]);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -311,7 +321,20 @@ export default function MasterPartiesPage() {
     setFormCreditWarningThresholdPct("");
   };
 
+  /** FMCG: customers are created in Sales → Customers (segment stepper), not this legacy drawer. */
+  const goToSalesNewCustomer = () => {
+    router.push("/sales/customers?new=1");
+  };
+
+  const goToSalesEditCustomer = (customerId: string) => {
+    router.push(`/sales/customers?id=${encodeURIComponent(customerId)}`);
+  };
+
   const openCreateDrawer = () => {
+    if (fmcgOrg && tab === "customers") {
+      goToSalesNewCustomer();
+      return;
+    }
     setEditingId(null);
     setFormName("");
     setFormCode("");
@@ -347,7 +370,8 @@ export default function MasterPartiesPage() {
 
   /** Load next customer code (001, …) when creating a customer only (franchisees are added under Franchise → Manage franchisees). */
   React.useEffect(() => {
-    if (!drawerOpen || editingId !== null || tab !== "customers") return;
+    // FMCG never creates customers from this drawer — Sales → Customers owns that flow.
+    if (fmcgOrg || !drawerOpen || editingId !== null || tab !== "customers") return;
     setCustomerCodeLoading(true);
     void fetchNextCustomerCodeApi()
       .then((code) => setFormCode(code))
@@ -356,9 +380,13 @@ export default function MasterPartiesPage() {
         toast.error("Could not load the next customer code. Check your connection and try again.");
       })
       .finally(() => setCustomerCodeLoading(false));
-  }, [drawerOpen, editingId, tab]);
+  }, [drawerOpen, editingId, tab, fmcgOrg]);
 
   const openEditDrawer = async (row: PartyRow) => {
+    if (fmcgOrg && tab === "customers") {
+      goToSalesEditCustomer(row.id);
+      return;
+    }
     setEditingId(row.id);
     setFormName(row.name);
     setFormCode(row.code ?? "");
@@ -516,7 +544,11 @@ export default function MasterPartiesPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Parties"
-        description={`Customers, ${franchiseeLabel}s and ${supplierLabel}s. One place to manage every external counterparty.`}
+        description={
+          fmcgOrg
+            ? `Customers and ${supplierLabel.toLowerCase()}s. Add or edit customers under Sales → Customers; use this list to browse and open them. Suppliers stay here.`
+            : `Customers, ${franchiseeLabel}s and ${supplierLabel}s. One place to manage every external counterparty.`
+        }
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: "Parties" },
@@ -534,10 +566,25 @@ export default function MasterPartiesPage() {
               </Button>
             ) : undefined
           ) : canWriteParty ? (
-            <Button onClick={openCreateDrawer}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Add {label}
-            </Button>
+            fmcgOrg && tab === "customers" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" asChild>
+                  <Link href="/sales/customers">
+                    <Icons.Users className="mr-2 h-4 w-4" />
+                    Sales customers
+                  </Link>
+                </Button>
+                <Button onClick={goToSalesNewCustomer}>
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Add {label}
+                </Button>
+              </div>
+            ) : (
+              <Button onClick={openCreateDrawer}>
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Add {label}
+              </Button>
+            )
           ) : undefined
         }
       />
@@ -545,10 +592,22 @@ export default function MasterPartiesPage() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as "customers" | "franchisees" | "suppliers")}>
           <TabsList>
             <TabsTrigger value="customers">{customerOnlyLabel}s</TabsTrigger>
-            <TabsTrigger value="franchisees">{franchiseeLabel}s</TabsTrigger>
+            {!fmcgOrg ? (
+              <TabsTrigger value="franchisees">{franchiseeLabel}s</TabsTrigger>
+            ) : null}
             <TabsTrigger value="suppliers">{supplierLabel}s</TabsTrigger>
           </TabsList>
           <TabsContent value="customers" className="mt-4 space-y-4">
+            {fmcgOrg ? (
+              <p className="text-sm text-muted-foreground rounded-md border bg-muted/20 px-3 py-2">
+                FMCG customers (modern trade, general trade, distributors, van sales, and branches) are
+                managed in{" "}
+                <Link href="/sales/customers" className="font-medium text-primary hover:underline">
+                  Sales → Customers
+                </Link>
+                . Click a row here to edit in that hub.
+              </p>
+            ) : null}
             <DataTableToolbar className="shrink-0"
               searchPlaceholder={`Search ${customerOnlyLabel.toLowerCase()}s...`}
               searchValue={search}
@@ -585,10 +644,14 @@ export default function MasterPartiesPage() {
               <EmptyState
                 icon="Users"
                 title={`No ${customerOnlyLabel.toLowerCase()}s`}
-                description="Add your first customer."
+                description={
+                  fmcgOrg
+                    ? "Add customers from Sales → Customers (modern trade, general trade, and more)."
+                    : "Add your first customer."
+                }
                 action={{
-                  label: `Add ${customerOnlyLabel}`,
-                  onClick: openCreateDrawer,
+                  label: fmcgOrg ? "Go to Sales customers" : `Add ${customerOnlyLabel}`,
+                  onClick: fmcgOrg ? goToSalesNewCustomer : openCreateDrawer,
                 }}
               />
             ) : (
@@ -656,45 +719,49 @@ export default function MasterPartiesPage() {
                 />
             )}
           </TabsContent>
-          <TabsContent value="franchisees" className="mt-4 space-y-4">
-            <DataTableToolbar
-              searchPlaceholder={`Search ${franchiseeLabel.toLowerCase()}s...`}
-              searchValue={search}
-              onSearchChange={setSearch}
-              actions={
-                <Link
-                  href="/settings/customizer/fields"
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Custom fields
-                </Link>
-              }
-            />
-            {loading ? (
-              <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
-                Loading {franchiseeLabel.toLowerCase()}s...
-              </div>
-            ) : filteredFranchisees.length === 0 ? (
-              <EmptyState
-                icon="Users"
-                title={`No ${franchiseeLabel.toLowerCase()}s`}
-                description="Franchisees are added via Franchise → Manage franchisees. They appear here automatically once created."
-                action={{
-                  label: "Go to Manage franchisees",
-                  onClick: () => { window.location.href = "/franchise/outlets"; },
-                }}
+          {!fmcgOrg ? (
+            <TabsContent value="franchisees" className="mt-4 space-y-4">
+              <DataTableToolbar
+                searchPlaceholder={`Search ${franchiseeLabel.toLowerCase()}s...`}
+                searchValue={search}
+                onSearchChange={setSearch}
+                actions={
+                  <Link
+                    href="/settings/customizer/fields"
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Custom fields
+                  </Link>
+                }
               />
-            ) : (
-              <DataTable<PartyRow>
-                data={filteredFranchisees}
-                columns={columns}
-                onRowClick={openEditDrawer}
-                emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
-                scrollMode="natural"
-                size="comfortable"
+              {loading ? (
+                <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+                  Loading {franchiseeLabel.toLowerCase()}s...
+                </div>
+              ) : filteredFranchisees.length === 0 ? (
+                <EmptyState
+                  icon="Users"
+                  title={`No ${franchiseeLabel.toLowerCase()}s`}
+                  description="Franchisees are added via Franchise → Manage franchisees. They appear here automatically once created."
+                  action={{
+                    label: "Go to Manage franchisees",
+                    onClick: () => {
+                      window.location.href = "/franchise/outlets";
+                    },
+                  }}
                 />
-            )}
-          </TabsContent>
+              ) : (
+                <DataTable<PartyRow>
+                  data={filteredFranchisees}
+                  columns={columns}
+                  onRowClick={openEditDrawer}
+                  emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
+                  scrollMode="natural"
+                  size="comfortable"
+                />
+              )}
+            </TabsContent>
+          ) : null}
         </Tabs>
       </div>
 
@@ -813,7 +880,9 @@ export default function MasterPartiesPage() {
                     <SelectItem value="DISTRIBUTOR">Distributor</SelectItem>
                     <SelectItem value="WHOLESALER">Wholesaler</SelectItem>
                     <SelectItem value="RETAILER">Retailer</SelectItem>
-                    <SelectItem value="FRANCHISEE">Franchisee</SelectItem>
+                    {!fmcgOrg ? (
+                      <SelectItem value="FRANCHISEE">Franchisee</SelectItem>
+                    ) : null}
                     <SelectItem value="END_CUSTOMER">End customer</SelectItem>
                   </SelectContent>
                 </Select>

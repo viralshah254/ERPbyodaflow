@@ -477,6 +477,16 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
           },
           {
+            key: "pricing-workspace-tax-tags",
+            label: "Tax tags",
+            href: "/pricing/workspace/tax-tags",
+            icon: "Receipt",
+            moduleKey: "pricing",
+            requiresPermissions: ["sales.write", "admin.settings"],
+            /** FMCG VAT configurations (exclusive / inclusive) for invoicing. */
+            requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
+          },
+          {
             key: "pricing-workspace-zones",
             label: "Franchise zones",
             href: "/pricing/workspace/zones",

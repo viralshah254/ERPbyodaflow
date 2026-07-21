@@ -34,7 +34,17 @@ import {
   type FranchiseNetworkStockItem,
   type FranchiseOutletStockRow,
 } from "@/lib/api/inventory-stock";
+import { fetchProductsApi } from "@/lib/api/products";
+import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { compareProductFamilyKeys, UNCATEGORIZED_FAMILY } from "@/lib/products/product-family";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
@@ -44,6 +54,8 @@ export default function StockLevelsPage() {
   const router = useRouter();
   const canWrite = useCanWriteInventory();
   const orgRole = useOrgContextStore((s) => s.orgRole);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const fmcg = isFmcgOrg(templateId);
   const isFranchisor = orgRole === "FRANCHISOR";
 
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -60,6 +72,16 @@ export default function StockLevelsPage() {
   const [adjustDelta, setAdjustDelta] = React.useState<string>("");
   const [adjustReason, setAdjustReason] = React.useState("");
   const [adjustMode, setAdjustMode] = React.useState<"INCREASE" | "DECREASE">("DECREASE");
+
+  // Stock In (create level + qty) — Tally-style putaway / opening
+  const [stockInOpen, setStockInOpen] = React.useState(false);
+  const [stockInProductId, setStockInProductId] = React.useState("");
+  const [stockInWarehouseId, setStockInWarehouseId] = React.useState("");
+  const [stockInQty, setStockInQty] = React.useState("");
+  const [stockInReason, setStockInReason] = React.useState("Opening / production putaway");
+  const [stockInSaving, setStockInSaving] = React.useState(false);
+  const [productOptions, setProductOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+  const [warehouseLookup, setWarehouseLookup] = React.useState<LookupOption[]>([]);
 
   // Franchise drill-down sheet state
   const [franchiseDrillRow, setFranchiseDrillRow] = React.useState<FranchiseNetworkStockItem | null>(null);
@@ -95,6 +117,67 @@ export default function StockLevelsPage() {
     void refreshStock();
   }, [refreshStock]);
 
+  React.useEffect(() => {
+    if (!canWrite) return;
+    void fetchWarehouseOptions()
+      .then((opts) => {
+        setWarehouseLookup(opts);
+        setStockInWarehouseId((prev) => prev || opts[0]?.id || "");
+      })
+      .catch(() => setWarehouseLookup([]));
+    void fetchProductsApi({ status: "ACTIVE", limit: 200 })
+      .then((items) =>
+        setProductOptions(
+          items.map((p) => ({
+            id: p.id,
+            label: `${p.sku ? `${p.sku} — ` : ""}${p.name}`,
+          }))
+        )
+      )
+      .catch(() => setProductOptions([]));
+  }, [canWrite]);
+
+  const openStockIn = () => {
+    setStockInOpen(true);
+    setStockInQty("");
+    setStockInReason(fmcg ? "Opening / production putaway" : "Opening stock");
+    if (!stockInWarehouseId && warehouseLookup[0]?.id) {
+      setStockInWarehouseId(warehouseLookup[0].id);
+    }
+  };
+
+  const handleStockIn = async () => {
+    const qty = parseFloat(stockInQty);
+    if (!stockInProductId) {
+      toast.error("Select a product.");
+      return;
+    }
+    if (!stockInWarehouseId) {
+      toast.error("Select a warehouse.");
+      return;
+    }
+    if (!qty || Number.isNaN(qty) || qty <= 0) {
+      toast.error("Enter a positive quantity.");
+      return;
+    }
+    try {
+      setStockInSaving(true);
+      const res = await createStockAdjustmentApi({
+        productId: stockInProductId,
+        warehouseId: stockInWarehouseId,
+        quantityDelta: qty,
+        reason: stockInReason.trim() || "Stock In",
+      });
+      toast.success(`Stock In posted (${res.number}). Pick & pack can use this quantity.`);
+      setStockInOpen(false);
+      await refreshStock();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setStockInSaving(false);
+    }
+  };
+
   const filteredItems = React.useMemo(() => {
     const arr = [...stockItems];
     const famKey = (f: string | null | undefined) => {
@@ -111,11 +194,12 @@ export default function StockLevelsPage() {
 
   const warehouseOptions = React.useMemo(() => {
     const options = new Map<string, string>();
+    warehouseLookup.forEach((w) => options.set(w.id, w.label));
     stockItems.forEach((item) => {
       options.set(item.warehouseId ?? item.warehouse, item.warehouse);
     });
     return Array.from(options.entries()).map(([value, label]) => ({ value, label }));
-  }, [stockItems]);
+  }, [stockItems, warehouseLookup]);
 
   const openStockDetail = (row: InventoryStockRow) => {
     router.push(`/inventory/stock-levels/${row.id}`);
@@ -304,7 +388,11 @@ export default function StockLevelsPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Stock Levels"
-        description="View current inventory levels across all warehouses"
+        description={
+          fmcg
+            ? "On-hand quantity by warehouse. Stock In puts finished goods into MAIN so pick & pack can ship."
+            : "View current inventory levels across all warehouses"
+        }
         sticky
         showCommandHint
         actions={
@@ -314,15 +402,30 @@ export default function StockLevelsPage() {
               Export
             </Button>
             {canWrite && (
-              <Button>
+              <Button onClick={openStockIn}>
                 <Icons.Plus className="mr-2 h-4 w-4" />
-                Stock Adjustment
+                {fmcg ? "Stock In" : "Stock In / Opening"}
               </Button>
             )}
           </>
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+      {fmcg && !loading && stockItems.length === 0 && canWrite ? (
+        <div className="shrink-0 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+          <p className="font-medium flex items-start gap-2">
+            <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
+            No stock yet — Pick &amp; Pack cannot ship until goods are in a warehouse.
+          </p>
+          <p className="mt-1 text-xs opacity-90 pl-6">
+            Tally-style flow: <span className="font-medium">Stock In</span> (production / opening) → Sales order →
+            Delivery note → Pick &amp; pack → Dispatch. Purchased goods can also enter via GRN later.
+          </p>
+          <Button size="sm" className="mt-3 ml-6" onClick={openStockIn}>
+            Stock In to MAIN
+          </Button>
+        </div>
+      ) : null}
       {isFranchisor && networkAgg.length > 0 && (
         <div className="shrink-0 flex flex-wrap gap-3">
           <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm">
@@ -550,7 +653,7 @@ export default function StockLevelsPage() {
                 <Input
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="Cycle count, damage, write-off (stub)"
+                  placeholder="Cycle count, damage, write-off"
                 />
               </div>
             </div>
@@ -568,6 +671,83 @@ export default function StockLevelsPage() {
           </SheetContent>
         </Sheet>
       )}
+
+      {/* Stock In — create warehouse quantity for a product (unblocks pick & pack) */}
+      <Sheet open={stockInOpen} onOpenChange={setStockInOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Stock In</SheetTitle>
+            <SheetDescription>
+              {fmcg
+                ? "Put finished goods into a warehouse (opening balance or production putaway). Same idea as Tally stock journal / godown receipt."
+                : "Create or increase on-hand quantity for a product in a warehouse."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Product</Label>
+              <Select value={stockInProductId || undefined} onValueChange={setStockInProductId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select product" />
+                </SelectTrigger>
+                <SelectContent>
+                  {productOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Warehouse</Label>
+              <Select value={stockInWarehouseId || undefined} onValueChange={setStockInWarehouseId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouseLookup.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Quantity</Label>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={stockInQty}
+                onChange={(e) => setStockInQty(e.target.value)}
+                placeholder="e.g. 100"
+              />
+              <p className="text-xs text-muted-foreground">
+                Always post in <span className="font-medium text-foreground">pieces (smallest / base UOM)</span> — the warehouse
+                ledger. Sales orders may use cartons; pick &amp; pack converts using product packaging (e.g. 1 carton = 24 pcs).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Input
+                value={stockInReason}
+                onChange={(e) => setStockInReason(e.target.value)}
+                placeholder="Opening / production putaway"
+              />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setStockInOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleStockIn()} disabled={stockInSaving}>
+              {stockInSaving ? "Posting…" : "Post Stock In"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

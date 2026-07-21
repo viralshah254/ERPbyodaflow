@@ -95,6 +95,8 @@ export type PartyRow = {
   creditWarningThresholdPct?: number;
   /** Customer price tag (PriceList id). */
   defaultPriceListId?: string;
+  /** FMCG tax tag (TaxConfig id). */
+  defaultTaxConfigId?: string;
   status: string;
 };
 

@@ -38,13 +38,18 @@ import {
   type FmcgCatalogItem,
 } from "@/lib/fmcg/pricing";
 import {
-  UNCATEGORIZED_FAMILY,
   productFamilyKey,
   productFamilyLabel,
   compareProductFamilyKeys,
   lineProductFamilyKey,
   productFamilySortRank,
 } from "@/lib/products/product-family";
+import {
+  productCategoryKey,
+  productCategoryLabelFromKey,
+  lineProductCategoryKey,
+  compareProductCategoryKeys,
+} from "@/lib/products/product-category-group";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
 import {
@@ -139,6 +144,11 @@ interface DocumentLineEditorProps {
    * Pack unit price = pricePerPiece × packaging.unitsPer. Never use for CoolCatch.
    */
   fmcgCatalogByProductId?: Record<string, FmcgCatalogItem>;
+  /**
+   * FMCG orgs group lines by product category (not CoolCatch product family).
+   * Seafood / other templates must leave this false/undefined.
+   */
+  fmcgOrg?: boolean;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -220,6 +230,7 @@ export function DocumentLineEditor({
   dailyPricesByProductId,
   catalogPricesByProductId,
   fmcgCatalogByProductId,
+  fmcgOrg = false,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
@@ -323,12 +334,17 @@ export function DocumentLineEditor({
   }, [productFilter]);
   const loadSkuOptionsForLine = React.useCallback(
     async (line: DocumentLine, query: string): Promise<AsyncSearchableSelectOption[]> => {
-      const famKey = lineProductFamilyKey(products, line.productId);
+      const groupKey = fmcgOrg
+        ? lineProductCategoryKey(products, line.productId)
+        : lineProductFamilyKey(products, line.productId);
       const q = query.trim();
       const mapRows = (rows: ProductRow[]) => {
-        const filtered = rows.filter(
-          (p) => productFamilyKey(p) === famKey && productMatchesLineSearch(p, query)
-        );
+        const filtered = rows.filter((p) => {
+          const inGroup = fmcgOrg
+            ? productCategoryKey(p) === groupKey
+            : productFamilyKey(p) === groupKey;
+          return inGroup && productMatchesLineSearch(p, query);
+        });
         const sorted =
           q.length === 0
             ? [...filtered].sort((a, b) => {
@@ -340,15 +356,17 @@ export function DocumentLineEditor({
                   const rB = b.productType === "RAW" ? 0 : 1;
                   if (rA !== rB) return rA - rB;
                 }
-                const famCmp = productFamilySortRank(a.productFamily) - productFamilySortRank(b.productFamily);
-                if (famCmp !== 0) return famCmp;
+                if (!fmcgOrg) {
+                  const famCmp = productFamilySortRank(a.productFamily) - productFamilySortRank(b.productFamily);
+                  if (famCmp !== 0) return famCmp;
+                }
                 return a.sku.localeCompare(b.sku);
               }).slice(0, 100)
             : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
         return sorted.map((p) => ({
           id: p.id,
           label: `${p.sku} — ${p.name}`,
-          description: p.category?.trim() || undefined,
+          description: (p.categoryName ?? p.category)?.trim() || undefined,
         }));
       };
       if (isApiConfigured() && productFilter && productFilter !== "all") {
@@ -367,20 +385,25 @@ export function DocumentLineEditor({
       }
       return mapRows(products);
     },
-    [products, productFilter]
+    [products, productFilter, fmcgOrg, mode]
   );
-  const familyOptions = React.useMemo(() => {
+  /** CoolCatch: product family. FMCG: product category. */
+  const groupOptions = React.useMemo(() => {
     const keys = new Set<string>();
-    for (const p of products) keys.add(productFamilyKey(p));
+    for (const p of products) {
+      keys.add(fmcgOrg ? productCategoryKey(p) : productFamilyKey(p));
+    }
     return [...keys].sort((a, b) => {
-      if (mode === "purchasing") {
+      if (mode === "purchasing" && !fmcgOrg) {
         const hasRawA = products.some((p) => productFamilyKey(p) === a && p.productType === "RAW") ? 0 : 1;
         const hasRawB = products.some((p) => productFamilyKey(p) === b && p.productType === "RAW") ? 0 : 1;
         if (hasRawA !== hasRawB) return hasRawA - hasRawB;
       }
-      return compareProductFamilyKeys(a, b);
+      return fmcgOrg
+        ? compareProductCategoryKeys(a, b, products)
+        : compareProductFamilyKeys(a, b);
     });
-  }, [products, mode]);
+  }, [products, mode, fmcgOrg]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
@@ -620,13 +643,13 @@ export function DocumentLineEditor({
     }
   };
 
-  const setLineFamily = (lineId: string, newKey: string) => {
+  const setLineGroup = (lineId: string, newKey: string) => {
     const line = linesRef.current.find((l) => l.id === lineId);
     if (!line) return;
     const candidates = products
-      .filter((p) => productFamilyKey(p) === newKey)
+      .filter((p) => (fmcgOrg ? productCategoryKey(p) === newKey : productFamilyKey(p) === newKey))
       .sort((a, b) => {
-        if (mode === "purchasing") {
+        if (mode === "purchasing" && !fmcgOrg) {
           const aS = a.name.toLowerCase().includes("sourcing") ? 0 : 1;
           const bS = b.name.toLowerCase().includes("sourcing") ? 0 : 1;
           if (aS !== bS) return aS - bS;
@@ -637,11 +660,14 @@ export function DocumentLineEditor({
         return a.sku.localeCompare(b.sku);
       });
     if (candidates.length === 0) {
-      toast.error("No SKUs in this product family.");
+      toast.error(fmcgOrg ? "No SKUs in this category." : "No SKUs in this product family.");
       return;
     }
     const cur = products.find((p) => p.id === line.productId);
-    if (cur && productFamilyKey(cur) === newKey) return;
+    if (cur) {
+      const curKey = fmcgOrg ? productCategoryKey(cur) : productFamilyKey(cur);
+      if (curKey === newKey) return;
+    }
     setProduct(lineId, candidates[0]!.id);
   };
 
@@ -757,8 +783,8 @@ export function DocumentLineEditor({
       {lines.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {useCostPricing
-            ? `No lines. Add a line above. Product family, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, cost per unit (enter manually).`
-            : `No lines. Add a line above. Product family, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, price (from price list), price reason.`}
+            ? `No lines. Add a line above. ${fmcgOrg ? "Category" : "Product family"}, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, cost per unit (enter manually).`
+            : `No lines. Add a line above. ${fmcgOrg ? "Category" : "Product family"}, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, price (${fmcgOrg ? "from price tag" : "from price list"}), price reason.`}
         </div>
       ) : (
         <>
@@ -766,7 +792,7 @@ export function DocumentLineEditor({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[8rem] w-[12%]">Product</TableHead>
+                  <TableHead className="min-w-[8rem] w-[12%]">{fmcgOrg ? "Category" : "Product"}</TableHead>
                   <TableHead className="min-w-[8rem] sm:min-w-[11rem] w-[24%]">SKU</TableHead>
                   {showVariantColumn && <TableHead className="min-w-[7rem]">Packaging variant</TableHead>}
                   <TableHead>UOM</TableHead>
@@ -823,16 +849,22 @@ export function DocumentLineEditor({
                   <TableRow key={l.id}>
                     <TableCell>
                       <Select
-                        value={lineProductFamilyKey(products, l.productId)}
-                        onValueChange={(v) => setLineFamily(l.id, v)}
+                        value={
+                          fmcgOrg
+                            ? lineProductCategoryKey(products, l.productId)
+                            : lineProductFamilyKey(products, l.productId)
+                        }
+                        onValueChange={(v) => setLineGroup(l.id, v)}
                       >
                         <SelectTrigger className="w-[10rem] sm:w-[12rem]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {familyOptions.map((k) => (
+                          {groupOptions.map((k) => (
                             <SelectItem key={k} value={k}>
-                              {productFamilyLabel(k)}
+                              {fmcgOrg
+                                ? productCategoryLabelFromKey(k, products)
+                                : productFamilyLabel(k)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -851,15 +883,25 @@ export function DocumentLineEditor({
                           placeholder={
                             productListLoading ? "Loading products…" : "Search SKU…"
                           }
-                          searchPlaceholder="Type SKU, name, product family, or any words…"
+                          searchPlaceholder={
+                            fmcgOrg
+                              ? "Type SKU, barcode, name, category, or any words…"
+                              : "Type SKU, name, product family, or any words…"
+                          }
                           emptyMessage={
                             productListLoading
                               ? "Loading products…"
-                              : productFilter === "purchasable"
-                                ? "No purchasable SKUs match in this product family. Try another search."
-                                : productFilter === "sellable"
-                                  ? "No sellable SKUs match in this product family. Try another search."
-                                  : "No SKUs match in this product family. Try different words."
+                              : fmcgOrg
+                                ? productFilter === "purchasable"
+                                  ? "No purchasable SKUs match in this category. Try another search."
+                                  : productFilter === "sellable"
+                                    ? "No sellable SKUs match in this category. Try another search."
+                                    : "No SKUs match in this category. Try different words."
+                                : productFilter === "purchasable"
+                                  ? "No purchasable SKUs match in this product family. Try another search."
+                                  : productFilter === "sellable"
+                                    ? "No sellable SKUs match in this product family. Try another search."
+                                    : "No SKUs match in this product family. Try different words."
                           }
                           minSearchLength={0}
                           searchDebounceMs={150}

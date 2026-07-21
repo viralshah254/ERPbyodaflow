@@ -33,8 +33,16 @@ export type WarehousePickPackRow = {
     variantId?: string;
     sku?: string;
     productName?: string;
+    /** Qty to pick/issue in warehouse base UOM (PCS for FMCG). */
     quantity: number;
     pickedQty?: number;
+    /** Sales/DN UOM (e.g. CARTON) — display; stock uses `quantity`. */
+    documentUnit?: string;
+    documentQuantity?: number;
+    unitsPer?: number;
+    baseUom?: string;
+    /** True when pack UOM has no unitsPer > 1 on packaging (FMCG). */
+    packagingConversionMissing?: boolean;
     suggestedBin?: string;
     locationId?: string;
     /** Available quantity at fulfilment warehouse (on-hand minus reserved). */

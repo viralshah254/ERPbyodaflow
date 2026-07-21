@@ -37,8 +37,10 @@ export type CustomerDirectoryPanelProps = {
   segmentTabs?: boolean;
   onAddCustomer?: (kindId?: CustomerKindId) => void;
   onEditCustomer?: (customerId: string) => void;
-  /** Open modern-trade branch flow; optional supermarket preselect. */
-  onAddBranch?: (supermarketId?: string) => void;
+  /** Open modern-trade branch create (full customer stepper) under a supermarket. */
+  onAddBranch?: (supermarketId: string, supermarketName?: string) => void;
+  /** Edit a branch customer under a supermarket. */
+  onEditBranch?: (branchId: string, supermarket: PartyRow) => void;
   /** Reload supermarket list after branch create (from hub). */
   branchListRefreshKey?: number;
   /** Controlled tab — e.g. switch to Distributors after creating one. */
@@ -52,6 +54,7 @@ export function CustomerDirectoryPanel({
   onAddCustomer,
   onEditCustomer,
   onAddBranch,
+  onEditBranch,
   branchListRefreshKey = 0,
   activeTab: activeTabProp,
   onActiveTabChange,
@@ -128,7 +131,7 @@ export function CustomerDirectoryPanel({
         <EmptyState
           icon="Users"
           title="No modern trade yet"
-          description="Add a supermarket (chain HQ), then open Branches to add outlets."
+          description="Add a supermarket (chain HQ), then open Branches to add outlets as full customers."
           action={{
             label: "Add supermarket",
             onClick: () => requestAdd("modern-trade"),
@@ -341,7 +344,12 @@ export function CustomerDirectoryPanel({
           supermarket={branchesSupermarket}
           refreshKey={branchListRefreshKey}
           onAddBranch={(supermarketId) => {
-            onAddBranch(supermarketId);
+            onAddBranch(supermarketId, branchesSupermarket?.name);
+            setBranchesOpen(false);
+          }}
+          onEditBranch={(branchId, supermarket) => {
+            onEditBranch?.(branchId, supermarket);
+            setBranchesOpen(false);
           }}
         />
       ) : null}

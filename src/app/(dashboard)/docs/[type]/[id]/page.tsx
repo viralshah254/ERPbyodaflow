@@ -11,6 +11,7 @@ import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { DocumentAttachments } from "@/components/docs/DocumentAttachments";
 import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
+import { DocumentTabLoading } from "@/components/docs/DocumentTabLoading";
 import { PodSignaturePad } from "@/components/docs/PodSignaturePad";
 import { SignatureAttachmentViewButton } from "@/components/docs/SignatureAttachmentViewButton";
 import { PrintPreviewDrawer } from "@/components/docs/PrintPreviewDrawer";
@@ -232,6 +233,8 @@ export default function DocViewPage() {
   const [initialLoading, setInitialLoading] = React.useState(true);
   /** True when re-fetching after an action; existing document stays visible. */
   const [refreshing, setRefreshing] = React.useState(false);
+  /** Secondary payload (attachments / comments / audit) still loading after core detail. */
+  const [extrasLoading, setExtrasLoading] = React.useState(true);
   const loading = initialLoading;
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
   const [notesDraft, setNotesDraft] = React.useState("");
@@ -468,6 +471,9 @@ export default function DocViewPage() {
         setRefreshing(true);
       } else {
         setInitialLoading(true);
+        setExtrasLoading(true);
+        // Clear previous SO/DN so switching documents never flashes stale totals/tabs.
+        setDocument(null);
       }
       try {
         const detail = await fetchDocumentDetailApi(type as DocTypeKey, id, {
@@ -488,6 +494,7 @@ export default function DocViewPage() {
   React.useEffect(() => {
     if (initialLoading || !document?.id) return;
     let cancelled = false;
+    setExtrasLoading(true);
     void fetchDocumentDetailApi(type as DocTypeKey, id, {
       include: ["attachments", "comments", "audit"],
     })
@@ -509,14 +516,18 @@ export default function DocViewPage() {
           };
         });
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setExtrasLoading(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [type, id, document?.id, initialLoading]);
 
   React.useEffect(() => {
-    void refreshDocument(false);
+    // Core first (header/lines), then extras load with tab-level spinners.
+    void refreshDocument(false, false);
   }, [refreshDocument]);
 
   React.useEffect(() => {
@@ -1503,6 +1514,7 @@ export default function DocViewPage() {
               typeKey: type,
               number: document.number ?? id,
               status: document.status ?? "DRAFT",
+              total: document.total,
             }}
             currency={document.currency ?? "KES"}
             exchangeRate={document.exchangeRate}
@@ -1541,6 +1553,7 @@ export default function DocViewPage() {
         })()}
 
         <DocumentTabs
+          key={`${type}-${id}`}
           lines={
             <Card>
               <CardContent className="pt-4">
@@ -1769,10 +1782,22 @@ export default function DocViewPage() {
               </CardContent>
             </Card>
           }
-          taxes={<DocumentTaxesPanel docType={type} docId={id} currency="KES" />}
+          taxes={
+            initialLoading || !document ? (
+              <DocumentTabLoading label="Loading taxes & charges…" rows={4} />
+            ) : (
+              <DocumentTaxesPanel
+                key={`tax-${type}-${id}`}
+                docType={type}
+                docId={id}
+                currency={document.currency ?? "KES"}
+              />
+            )
+          }
           attachments={
             <DocumentAttachments
               files={document?.attachments}
+              loading={extrasLoading || initialLoading}
               onUpload={async (file) => {
                 await uploadDocumentAttachmentApi(type as DocTypeKey, id, file);
                 await refreshDocument(true);
@@ -1790,6 +1815,7 @@ export default function DocViewPage() {
               <CardContent className="pt-4">
                 <DocumentComments
                   comments={document?.comments}
+                  loading={extrasLoading || initialLoading}
                   onAddComment={async (body) => {
                     await addDocumentCommentApi(type as DocTypeKey, id, body);
                     await refreshDocument(true);
@@ -1801,14 +1827,22 @@ export default function DocViewPage() {
           approval={
             <Card>
               <CardContent className="pt-4">
-                <DocumentTimeline entries={document?.approvalHistory ?? []} />
+                {extrasLoading || initialLoading ? (
+                  <DocumentTabLoading label="Loading approval history…" rows={2} />
+                ) : (
+                  <DocumentTimeline entries={document?.approvalHistory ?? []} />
+                )}
               </CardContent>
             </Card>
           }
           audit={
             <Card>
               <CardContent className="pt-4">
-                <DocumentTimeline entries={document?.auditHistory ?? []} />
+                {extrasLoading || initialLoading ? (
+                  <DocumentTabLoading label="Loading audit trail…" rows={2} />
+                ) : (
+                  <DocumentTimeline entries={document?.auditHistory ?? []} />
+                )}
               </CardContent>
             </Card>
           }

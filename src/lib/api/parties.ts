@@ -32,6 +32,7 @@ type BackendParty = {
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
   defaultPriceListId?: string;
+  defaultTaxConfigId?: string;
   defaultCurrency?: string;
   status?: string;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
@@ -82,6 +83,7 @@ export type PartyPayload = {
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
   defaultPriceListId?: string;
+  defaultTaxConfigId?: string;
   defaultCurrency?: string;
   status?: "ACTIVE" | "INACTIVE";
   coolcatchSupplierKind?: CoolcatchSupplierKind;
@@ -119,6 +121,7 @@ export type PartyDetail = PartyRow & {
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
   defaultPriceListId?: string;
+  defaultTaxConfigId?: string;
   defaultCurrency?: string;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
   contactPersonFirstName?: string;
@@ -199,6 +202,9 @@ export function toPartyLookupOption(item: {
   creditLimit?: number;
   creditLimitAmount?: number;
   outstandingBalance?: number;
+  sfaSegment?: SfaSegment | string | null;
+  parentPartyId?: string | null;
+  parentPartyName?: string | null;
 }): PartyLookupOption {
   const effectiveCreditLimit = item.creditLimitAmount ?? item.creditLimit;
   const isOverCredit =
@@ -206,8 +212,16 @@ export function toPartyLookupOption(item: {
     effectiveCreditLimit > 0 &&
     (item.outstandingBalance ?? 0) > effectiveCreditLimit;
 
+  const segmentBadge =
+    item.sfaSegment === "MODERN_TRADE_HQ"
+      ? { label: "Supermarket", variant: "secondary" as const }
+      : item.sfaSegment === "MODERN_TRADE_BRANCH"
+        ? { label: "Branch", variant: "outline" as const }
+        : null;
+
   const badges: PartyLookupOption["badges"] = [
-    item.customerType
+    segmentBadge,
+    item.customerType && !segmentBadge
       ? {
           label: item.customerType.replace(/_/g, " ").toLowerCase().replace(/(^|\s)\w/g, (match) => match.toUpperCase()),
           variant: "secondary",
@@ -233,10 +247,19 @@ export function toPartyLookupOption(item: {
       : null,
   ].filter(Boolean) as NonNullable<PartyLookupOption["badges"]>;
 
+  const baseDescription = buildPartyLookupDescription(item);
+  const branchUnder =
+    item.sfaSegment === "MODERN_TRADE_BRANCH" && item.parentPartyName?.trim()
+      ? `Under ${item.parentPartyName.trim()}`
+      : item.sfaSegment === "MODERN_TRADE_BRANCH"
+        ? "Branch"
+        : null;
+  const description = [branchUnder, baseDescription].filter(Boolean).join(" · ") || undefined;
+
   return {
     id: item.id ?? item.partyId ?? "",
     label: item.name,
-    description: buildPartyLookupDescription(item),
+    description,
     code: item.code,
     email: item.email,
     phone: item.phone,
@@ -281,6 +304,7 @@ function mapParty(item: BackendParty): PartyRow {
     lastKnownLatitude: item.lastKnownLatitude,
     lastKnownLongitude: item.lastKnownLongitude,
     defaultPriceListId: item.defaultPriceListId,
+    defaultTaxConfigId: item.defaultTaxConfigId,
     status: item.status ?? "ACTIVE",
   };
 }
@@ -309,9 +333,12 @@ export async function fetchPartiesApi(filters?: {
   customerCategoryId?: string;
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
+  /** Modern-trade branches under this supermarket HQ. */
+  parentPartyId?: string;
   supplierType?: SupplierType | "";
   status?: string;
   search?: string;
+  limit?: number;
 }): Promise<PartyRow[]> {
   requireLiveApi("Parties");
   const params = new URLSearchParams();
@@ -320,9 +347,11 @@ export async function fetchPartiesApi(filters?: {
   if (filters?.customerCategoryId) params.set("customerCategoryId", filters.customerCategoryId);
   if (filters?.channel) params.set("channel", filters.channel);
   if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
+  if (filters?.parentPartyId) params.set("parentPartyId", filters.parentPartyId);
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.limit) params.set("limit", String(Math.min(Math.max(filters.limit, 1), 100)));
   const data = await apiRequest<{ items: BackendParty[] }>("/api/parties", {
     params,
   });
@@ -359,6 +388,7 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     latitude: payload.latitude,
     longitude: payload.longitude,
     defaultPriceListId: payload.defaultPriceListId,
+    defaultTaxConfigId: payload.defaultTaxConfigId,
     status: payload.status ?? "ACTIVE",
   };
 }
@@ -388,6 +418,7 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
     customerCategoryId: data.customerCategoryId,
     paymentTermsId: data.paymentTermsId,
     defaultPriceListId: data.defaultPriceListId,
+    defaultTaxConfigId: data.defaultTaxConfigId,
     defaultCurrency: data.defaultCurrency,
     coolcatchSupplierKind: data.coolcatchSupplierKind,
     contactPersonFirstName: data.contactPersonFirstName,
@@ -448,6 +479,7 @@ export async function searchPartyLookupOptionsApi(filters?: {
   customerCategoryId?: string;
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
+  parentPartyId?: string;
   supplierType?: SupplierType | "";
   status?: string;
   search?: string;
@@ -460,6 +492,7 @@ export async function searchPartyLookupOptionsApi(filters?: {
   if (filters?.customerCategoryId) params.set("customerCategoryId", filters.customerCategoryId);
   if (filters?.channel) params.set("channel", filters.channel);
   if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
+  if (filters?.parentPartyId) params.set("parentPartyId", filters.parentPartyId);
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
@@ -467,7 +500,36 @@ export async function searchPartyLookupOptionsApi(filters?: {
   const data = await apiRequest<{ items: BackendParty[] }>("/api/parties", {
     params,
   });
-  return sortPartyLookupOptions(data.items.map((item) => toPartyLookupOption(item)), filters?.search ?? "");
+  // Resolve supermarket names for branch rows so pickers can show "Under Naivas".
+  const parentIds = [
+    ...new Set(
+      data.items
+        .map((p) => p.parentPartyId)
+        .filter((id): id is string => Boolean(id?.trim()))
+    ),
+  ];
+  const parentNameById = new Map<string, string>();
+  if (parentIds.length > 0) {
+    const parents = await Promise.all(
+      parentIds.map((id) =>
+        apiRequest<BackendParty>(`/api/parties/${encodeURIComponent(id)}`).catch(() => null)
+      )
+    );
+    for (const p of parents) {
+      if (p?.id) parentNameById.set(p.id, p.name);
+    }
+  }
+  return sortPartyLookupOptions(
+    data.items.map((item) =>
+      toPartyLookupOption({
+        ...item,
+        parentPartyName: item.parentPartyId
+          ? parentNameById.get(item.parentPartyId) ?? undefined
+          : undefined,
+      })
+    ),
+    filters?.search ?? ""
+  );
 }
 
 export async function uploadPartyPinCertificateApi(partyId: string, file: File): Promise<{ storageKey: string; fileName: string }> {

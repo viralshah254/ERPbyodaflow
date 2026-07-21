@@ -142,6 +142,7 @@ type BackendDocumentDetail = {
     number: string;
     status: string;
     date: string;
+    total?: number;
   } | null;
   linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{
@@ -242,6 +243,8 @@ export type DocumentDraftPayload = {
   warehouseId?: string;
   /** Customer price tag / price list used for sales lines. */
   priceListId?: string;
+  /** Tax tag (VAT configuration) applied to sales lines. */
+  taxConfigId?: string;
   poRef?: string;
   reference?: string;
   dueDate?: string;

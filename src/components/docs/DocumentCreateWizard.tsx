@@ -33,7 +33,11 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import * as Icons from "lucide-react";
 import Link from "next/link";
-import { DocumentLineEditor, type DocumentLine } from "@/components/docs/DocumentLineEditor";
+import {
+  DocumentLineEditor,
+  applyLineTax,
+  type DocumentLine,
+} from "@/components/docs/DocumentLineEditor";
 import {
   documentLinesOperational,
   documentLinesOperationalErrorMessage,
@@ -50,12 +54,15 @@ import {
 } from "@/lib/api/documents";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
+  fetchPartiesApi,
   fetchPartyByIdApi,
   fetchPartyCreditSummaryApi,
   searchPartyLookupOptionsApi,
+  sortPartyLookupOptions,
   toPartyLookupOption,
   type PartyDetail,
   type PartyCreditSummary,
+  type PartyLookupOption,
 } from "@/lib/api/parties";
 import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchFranchiseOutletHqSupplier } from "@/lib/api/cool-catch";
@@ -69,7 +76,11 @@ import {
   fetchDailyPricesApi,
   fetchCatalogPricesApi,
   resolveCustomerPriceListApi,
+  fetchTaxConfigsApi,
+  resolveCustomerTaxConfigApi,
+  setCustomerDefaultTaxConfig,
   type PricingOption,
+  type TaxConfigRow,
 } from "@/lib/api/pricing";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
@@ -186,6 +197,7 @@ function PartyEntityField({
   selectedPartyOption,
   onCreateNewCustomer,
   onCreateNewSupplier,
+  fmcgOrg = false,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
@@ -193,8 +205,25 @@ function PartyEntityField({
   selectedPartyOption?: { id: string; label: string; description?: string } | null;
   onCreateNewCustomer?: (searchQuery: string) => void;
   onCreateNewSupplier?: (searchQuery: string) => void;
+  /** FMCG: optional supermarket filter so HQ + branches are easy to pick. */
+  fmcgOrg?: boolean;
 }) {
   const key = fieldIdToKey(field.id);
+  const [supermarketFilterId, setSupermarketFilterId] = React.useState<string>("__all__");
+  const [supermarkets, setSupermarkets] = React.useState<Array<{ id: string; name: string }>>([]);
+
+  React.useEffect(() => {
+    if (!fmcgOrg || role !== "customer") return;
+    void fetchPartiesApi({
+      role: "customer",
+      sfaSegment: "MODERN_TRADE_HQ",
+      status: "ACTIVE",
+      limit: 100,
+    })
+      .then((items) => setSupermarkets(items.map((p) => ({ id: p.id, name: p.name }))))
+      .catch(() => setSupermarkets([]));
+  }, [fmcgOrg, role]);
+
   /** Stable reference required: AsyncSearchableSelect effect depends on loadOptions; inline arrows retrigger search every parent render. */
   const loadPartyLookupOptions = React.useCallback(
     (query: string) =>
@@ -206,6 +235,60 @@ function PartyEntityField({
       }),
     [role]
   );
+
+  const loadFmcgCustomerOptions = React.useCallback(
+    async (query: string): Promise<PartyLookupOption[]> => {
+      const q = query.trim();
+      // Narrow to one supermarket: HQ itself + its branch customers.
+      if (supermarketFilterId && supermarketFilterId !== "__all__") {
+        const hq = supermarkets.find((s) => s.id === supermarketFilterId);
+        const [hqMatch, branches] = await Promise.all([
+          searchPartyLookupOptionsApi({
+            role: "customer",
+            status: "ACTIVE",
+            search: q || undefined,
+            limit: 20,
+          }).then((rows) => rows.filter((r) => r.id === supermarketFilterId)),
+          searchPartyLookupOptionsApi({
+            role: "customer",
+            status: "ACTIVE",
+            parentPartyId: supermarketFilterId,
+            sfaSegment: "MODERN_TRADE_BRANCH",
+            search: q || undefined,
+            limit: 50,
+          }),
+        ]);
+        // If search excluded the HQ name, still offer HQ when query empty.
+        const hqOption: PartyLookupOption | null =
+          hqMatch[0] ??
+          (!q && hq
+            ? toPartyLookupOption({
+                id: hq.id,
+                name: hq.name,
+                sfaSegment: "MODERN_TRADE_HQ",
+              })
+            : null);
+        const combined = [...(hqOption ? [hqOption] : []), ...branches.filter((b) => b.id !== supermarketFilterId)];
+        return sortPartyLookupOptions(combined, q);
+      }
+      // All customers — parties lookup includes segment badges (Supermarket / Branch).
+      return searchPartyLookupOptionsApi({
+        role: "customer",
+        status: "ACTIVE",
+        search: q || undefined,
+        limit: 40,
+      });
+    },
+    [supermarketFilterId, supermarkets]
+  );
+
+  const loadOptions =
+    role === "customer"
+      ? fmcgOrg
+        ? loadFmcgCustomerOptions
+        : searchArCustomerOptionsApi
+      : loadPartyLookupOptions;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1">
@@ -218,14 +301,43 @@ function PartyEntityField({
           label={`Explain ${field.label}`}
         />
       </div>
+      {fmcgOrg && role === "customer" && supermarkets.length > 0 ? (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground font-normal">
+            Narrow by supermarket (optional)
+          </Label>
+          <Select value={supermarketFilterId} onValueChange={setSupermarketFilterId}>
+            <SelectTrigger>
+              <SelectValue placeholder="All customers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All customers</SelectItem>
+              {supermarkets.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <AsyncSearchableSelect
+        key={`party-${role}-${supermarketFilterId}`}
         value={(form.watch(key) as string | undefined) || ""}
         onValueChange={(value) => form.setValue(key, value)}
-        loadOptions={role === "customer" ? searchArCustomerOptionsApi : loadPartyLookupOptions}
+        loadOptions={loadOptions}
         selectedOption={selectedPartyOption}
         placeholder={`Select ${field.label.toLowerCase()}`}
-        searchPlaceholder="Type name, code, phone, or email"
-        emptyMessage={`No ${field.label.toLowerCase()}s found.`}
+        searchPlaceholder={
+          fmcgOrg && role === "customer"
+            ? "Type supermarket, branch, code, phone…"
+            : "Type name, code, phone, or email"
+        }
+        emptyMessage={
+          fmcgOrg && role === "customer" && supermarketFilterId !== "__all__"
+            ? "No branches (or HQ) match. Try another search or clear the supermarket filter."
+            : `No ${field.label.toLowerCase()}s found.`
+        }
         recentStorageKey={role === "customer" ? "lookup:recent-customers" : "lookup:recent-suppliers"}
         onCreateNew={role === "customer" ? onCreateNewCustomer : onCreateNewSupplier}
         createNewLabel={role === "customer" ? "Add new customer" : "Add new supplier"}
@@ -246,6 +358,7 @@ function RenderField({
   selectedPartyOption,
   onCreateNewCustomer,
   onCreateNewSupplier,
+  fmcgOrg = false,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
@@ -253,6 +366,7 @@ function RenderField({
   selectedPartyOption?: { id: string; label: string; description?: string } | null;
   onCreateNewCustomer?: (searchQuery: string) => void;
   onCreateNewSupplier?: (searchQuery: string) => void;
+  fmcgOrg?: boolean;
 }) {
   const key = fieldIdToKey(field.id);
   const isDate = field.type === "date";
@@ -270,6 +384,7 @@ function RenderField({
         selectedPartyOption={selectedPartyOption}
         onCreateNewCustomer={onCreateNewCustomer}
         onCreateNewSupplier={onCreateNewSupplier}
+        fmcgOrg={fmcgOrg}
       />
     );
   }
@@ -427,13 +542,24 @@ export function DocumentCreateWizard({
   const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
   const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
   const [taxCodes, setTaxCodes] = React.useState<Array<{ id: string; code: string; name: string; rate: number }>>([]);
+  /** FMCG tax tags (VAT configurations). */
+  const [taxConfigOptions, setTaxConfigOptions] = React.useState<TaxConfigRow[]>([]);
+  const [overrideTaxConfigId, setOverrideTaxConfigId] = React.useState<string | null>(null);
+  const [resolvedTaxConfigId, setResolvedTaxConfigId] = React.useState<string | null>(null);
+  const [taxConfigSource, setTaxConfigSource] = React.useState<"party" | "org" | "first" | null>(null);
   // Org-level default tax: KE-VAT0 for the Cool Catch org.
   const DEFAULT_TAX_ORG_ID = "ada28a32-8d06-4559-be60-add8d1ab038f";
   const DEFAULT_TAX_CODE = "KE-VAT0";
+  const effectiveTaxConfigId = overrideTaxConfigId ?? resolvedTaxConfigId;
+  const effectiveTaxConfig = React.useMemo(
+    () => taxConfigOptions.find((t) => t.id === effectiveTaxConfigId) ?? null,
+    [taxConfigOptions, effectiveTaxConfigId]
+  );
   const defaultLineTaxCodeId = React.useMemo(() => {
+    if (fmcgOrg && effectiveTaxConfig?.taxCodeId) return effectiveTaxConfig.taxCodeId;
     if (currentOrgId !== DEFAULT_TAX_ORG_ID) return undefined;
     return taxCodes.find((t) => t.code === DEFAULT_TAX_CODE)?.id;
-  }, [currentOrgId, taxCodes]);
+  }, [currentOrgId, taxCodes, fmcgOrg, effectiveTaxConfig?.taxCodeId]);
   const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>>>({});
   /** Org catalog UOM codes (same source as Settings → UOM) for line dropdown merge. */
   const [catalogUomCodes, setCatalogUomCodes] = React.useState<string[]>([]);
@@ -471,6 +597,22 @@ export function DocumentCreateWizard({
     resolver: zodResolver(schema),
     defaultValues: defaults,
   });
+
+  const applyTaxConfigToLines = React.useCallback(
+    (cfg: TaxConfigRow | null, codes: typeof taxCodes) => {
+      if (!cfg) return;
+      form.setValue("linesAreTaxInclusive", cfg.pricesAreTaxInclusive);
+      setLines((prev) => {
+        if (prev.length === 0) return prev;
+        return prev.map((l) => {
+          const merged = { ...l, taxCodeId: cfg.taxCodeId };
+          const taxed = applyLineTax(merged, codes, cfg.pricesAreTaxInclusive);
+          return { ...merged, tax: taxed.tax, amount: taxed.amount };
+        });
+      });
+    },
+    [form]
+  );
 
   const watchedBranch = form.watch("branch");
 
@@ -998,6 +1140,19 @@ export function DocumentCreateWizard({
             undefined
           );
         })(),
+        taxConfigId: (() => {
+          if (!fmcgOrg) return undefined;
+          const isSalesDoc = ![
+            "bill",
+            "purchase-order",
+            "grn",
+            "purchase-request",
+            "purchase-credit-note",
+            "purchase-debit-note",
+          ].includes(type);
+          if (!isSalesDoc) return undefined;
+          return effectiveTaxConfigId ?? undefined;
+        })(),
         poRef: form.getValues("poRef") || undefined,
         reference: form.getValues("reference") || undefined,
         dueDate: form.getValues("dueDate") || undefined,
@@ -1044,6 +1199,7 @@ export function DocumentCreateWizard({
       customerDefaultPriceLists,
       fallbackPriceListId,
       fmcgOrg,
+      effectiveTaxConfigId,
     ]
   );
 
@@ -1246,6 +1402,7 @@ export function DocumentCreateWizard({
   React.useEffect(() => {
     // When customer changes, clear the price list override so it re-derives from the new customer's default.
     setOverridePriceListId(null);
+    setOverrideTaxConfigId(null);
   }, [selectedPartyId]);
 
   // Resolve party → category → org price tag (FMCG tags; harmless for seafood if lists exist).
@@ -1272,6 +1429,49 @@ export function DocumentCreateWizard({
       cancelled = true;
     };
   }, [selectedPartyId, lineEditorMode, fmcgOrg]);
+
+  // Load FMCG tax tags once; seed Kenya VAT16 exclusive/inclusive on first visit.
+  React.useEffect(() => {
+    if (!fmcgOrg || lineEditorMode !== "sales" || !isApiConfigured()) return;
+    let cancelled = false;
+    fetchTaxConfigsApi()
+      .then((items) => {
+        if (!cancelled) setTaxConfigOptions(items.filter((t) => t.isActive !== false));
+      })
+      .catch(() => {
+        if (!cancelled) setTaxConfigOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fmcgOrg, lineEditorMode]);
+
+  // Resolve party → org tax tag and apply to lines / inclusive flag.
+  React.useEffect(() => {
+    if (!fmcgOrg || lineEditorMode !== "sales" || !isApiConfigured()) return;
+    let cancelled = false;
+    resolveCustomerTaxConfigApi(selectedPartyId || undefined)
+      .then((resolved) => {
+        if (cancelled || !resolved.config) return;
+        setResolvedTaxConfigId(resolved.taxConfigId);
+        setTaxConfigSource(resolved.source);
+        if (!overrideTaxConfigId) {
+          applyTaxConfigToLines(resolved.config, taxCodes);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally omit overrideTaxConfigId / taxCodes from deps — apply on party resolve only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPartyId, lineEditorMode, fmcgOrg, applyTaxConfigToLines]);
+
+  // When tax codes finish loading, re-apply the active tax tag so VAT amounts compute correctly.
+  React.useEffect(() => {
+    if (!fmcgOrg || !effectiveTaxConfig || taxCodes.length === 0) return;
+    applyTaxConfigToLines(effectiveTaxConfig, taxCodes);
+  }, [fmcgOrg, effectiveTaxConfig?.id, taxCodes.length, applyTaxConfigToLines]);
 
   React.useEffect(() => {
     if (!selectedPartyId) {
@@ -1460,6 +1660,7 @@ export function DocumentCreateWizard({
                       form={form}
                       options={fieldOptions[f.id]}
                       selectedPartyOption={selectedPartyOption}
+                      fmcgOrg={fmcgOrg}
                       onCreateNewCustomer={(query) => {
                         setQuickAddInitialName(query);
                         setShowQuickAddCustomer(true);
@@ -1571,37 +1772,79 @@ export function DocumentCreateWizard({
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>2. Lines</CardTitle>
             <div className="flex items-center gap-2">
-              {lineEditorMode === "sales" && fmcgOrg && priceListOptions.length > 0 && (
-                <div className="flex flex-col items-end gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Price tag</Label>
-                    <Select
-                      value={effectiveSalesPriceListId}
-                      onValueChange={(newId) => {
-                        setOverridePriceListId(newId);
-                        if (selectedPartyId) {
-                          setCustomerDefaultPriceLists((prev) => ({ ...prev, [selectedPartyId]: newId }));
-                          setCustomerPriceListSources((prev) => ({ ...prev, [selectedPartyId]: "party" }));
-                          setCustomerDefaultPriceList(selectedPartyId, newId).catch(() => {});
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="h-8 w-[160px] text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {priceListOptions.map((pl) => (
-                          <SelectItem key={pl.id} value={pl.id} className="text-xs">
-                            {pl.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {selectedPartyId && !overridePriceListId && customerPriceListSources[selectedPartyId] === "category" && (
-                    <span className="text-[10px] text-muted-foreground pr-0.5">
-                      From customer category
-                    </span>
+              {lineEditorMode === "sales" && fmcgOrg && (
+                <div className="flex flex-wrap items-end justify-end gap-3">
+                  {priceListOptions.length > 0 && (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">Price tag</Label>
+                        <Select
+                          value={effectiveSalesPriceListId}
+                          onValueChange={(newId) => {
+                            setOverridePriceListId(newId);
+                            if (selectedPartyId) {
+                              setCustomerDefaultPriceLists((prev) => ({ ...prev, [selectedPartyId]: newId }));
+                              setCustomerPriceListSources((prev) => ({ ...prev, [selectedPartyId]: "party" }));
+                              setCustomerDefaultPriceList(selectedPartyId, newId).catch(() => {});
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-[160px] text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {priceListOptions.map((pl) => (
+                              <SelectItem key={pl.id} value={pl.id} className="text-xs">
+                                {pl.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {selectedPartyId && !overridePriceListId && customerPriceListSources[selectedPartyId] === "category" && (
+                        <span className="text-[10px] text-muted-foreground pr-0.5">
+                          From customer category
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {taxConfigOptions.length > 0 && (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">Tax tag</Label>
+                        <Select
+                          value={effectiveTaxConfigId ?? undefined}
+                          onValueChange={(newId) => {
+                            setOverrideTaxConfigId(newId);
+                            const cfg = taxConfigOptions.find((t) => t.id === newId) ?? null;
+                            applyTaxConfigToLines(cfg, taxCodes);
+                            if (selectedPartyId && cfg) {
+                              setTaxConfigSource("party");
+                              setCustomerDefaultTaxConfig(selectedPartyId, newId).catch(() => {});
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-[180px] text-xs">
+                            <SelectValue placeholder="Select tax tag" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {taxConfigOptions.map((tc) => (
+                              <SelectItem key={tc.id} value={tc.id} className="text-xs">
+                                {tc.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {effectiveTaxConfig ? (
+                        <span className="text-[10px] text-muted-foreground pr-0.5">
+                          {effectiveTaxConfig.rate}% ·{" "}
+                          {effectiveTaxConfig.pricesAreTaxInclusive ? "Inclusive" : "Exclusive"}
+                          {!overrideTaxConfigId && taxConfigSource === "party" ? " · Customer default" : null}
+                          {!overrideTaxConfigId && taxConfigSource === "org" ? " · Org default" : null}
+                        </span>
+                      ) : null}
+                    </div>
                   )}
                 </div>
               )}
@@ -1660,6 +1903,7 @@ export function DocumentCreateWizard({
               fmcgCatalogByProductId={
                 lineEditorMode === "sales" && fmcgOrg ? fmcgCatalogByProductId : undefined
               }
+              fmcgOrg={fmcgOrg}
               taxCodes={taxCodes}
               defaultLineTaxCodeId={defaultLineTaxCodeId}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
@@ -1676,18 +1920,31 @@ export function DocumentCreateWizard({
                   : undefined
               }
             />
-            <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border p-3">
-              <div className="space-y-0.5">
-                <Label className="text-sm font-medium">Prices are tax-inclusive</Label>
-                <p className="text-xs text-muted-foreground">
-                  Enable if unit prices already include VAT. Tax will be back-calculated.
+            {fmcgOrg && effectiveTaxConfig ? (
+              <div className="mt-4 rounded-lg border p-3 text-sm">
+                <p className="font-medium">
+                  Tax: {effectiveTaxConfig.name} ({effectiveTaxConfig.rate}%{" "}
+                  {effectiveTaxConfig.pricesAreTaxInclusive ? "inclusive" : "exclusive"})
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Change the tax tag above to switch exclusive / inclusive VAT. Manage tags under Pricing → Tax
+                  tags.
                 </p>
               </div>
-              <Switch
-                checked={form.watch("linesAreTaxInclusive") ?? false}
-                onCheckedChange={(v) => form.setValue("linesAreTaxInclusive", v)}
-              />
-            </div>
+            ) : (
+              <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border p-3">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Prices are tax-inclusive</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enable if unit prices already include VAT. Tax will be back-calculated.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.watch("linesAreTaxInclusive") ?? false}
+                  onCheckedChange={(v) => form.setValue("linesAreTaxInclusive", v)}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1727,7 +1984,13 @@ export function DocumentCreateWizard({
                 <div className="space-y-1">
                   <span className="text-muted-foreground">Tax pricing</span>
                   <p className="font-medium">
-                    {form.watch("linesAreTaxInclusive") ? "Tax-inclusive (VAT in price)" : "Tax-exclusive (VAT added on top)"}
+                    {fmcgOrg && effectiveTaxConfig
+                      ? `${effectiveTaxConfig.name} · ${effectiveTaxConfig.rate}% ${
+                          effectiveTaxConfig.pricesAreTaxInclusive ? "inclusive" : "exclusive"
+                        }`
+                      : form.watch("linesAreTaxInclusive")
+                        ? "Tax-inclusive (VAT in price)"
+                        : "Tax-exclusive (VAT added on top)"}
                   </p>
                 </div>
                 {type === "delivery-note" ? (

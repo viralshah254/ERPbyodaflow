@@ -543,3 +543,81 @@ export async function fetchDailyPriceStatusApi(): Promise<DailyPriceStatusRespon
   requireLiveApi("Daily price status");
   return apiRequest<DailyPriceStatusResponse>("/api/pricing/daily-prices/status");
 }
+
+// ——— FMCG tax tags (VAT configurations) ———
+
+export interface TaxConfigRow {
+  id: string;
+  name: string;
+  code?: string;
+  taxCodeId: string;
+  taxCode?: string;
+  taxName?: string;
+  rate: number;
+  pricesAreTaxInclusive: boolean;
+  isActive: boolean;
+  isDefault: boolean;
+}
+
+export async function fetchTaxConfigsApi(): Promise<TaxConfigRow[]> {
+  requireLiveApi("Tax tags");
+  const res = await apiRequest<{ items: TaxConfigRow[] }>("/api/pricing/tax-configs");
+  return res.items ?? [];
+}
+
+export async function createTaxConfigApi(body: {
+  name: string;
+  code?: string;
+  taxCodeId: string;
+  pricesAreTaxInclusive?: boolean;
+  isDefault?: boolean;
+  isActive?: boolean;
+}): Promise<{ id: string }> {
+  requireLiveApi("Create tax tag");
+  return apiRequest<{ id: string }>("/api/pricing/tax-configs", { method: "POST", body });
+}
+
+export async function updateTaxConfigApi(
+  id: string,
+  body: Partial<{
+    name: string;
+    code: string;
+    taxCodeId: string;
+    pricesAreTaxInclusive: boolean;
+    isDefault: boolean;
+    isActive: boolean;
+  }>
+): Promise<{ id: string }> {
+  requireLiveApi("Update tax tag");
+  return apiRequest<{ id: string }>(`/api/pricing/tax-configs/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export async function deleteTaxConfigApi(id: string): Promise<void> {
+  requireLiveApi("Delete tax tag");
+  await apiRequest(`/api/pricing/tax-configs/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function resolveCustomerTaxConfigApi(partyId?: string): Promise<{
+  taxConfigId: string | null;
+  source: "party" | "org" | "first" | null;
+  config: TaxConfigRow | null;
+}> {
+  requireLiveApi("Resolve tax tag");
+  const params = new URLSearchParams();
+  if (partyId?.trim()) params.set("partyId", partyId.trim());
+  return apiRequest("/api/pricing/tax-configs/resolve", { params });
+}
+
+export async function setCustomerDefaultTaxConfig(
+  customerId: string,
+  taxConfigId: string
+): Promise<void> {
+  requireLiveApi("Set customer default tax tag");
+  await apiRequest("/api/pricing/customer-default-tax-configs", {
+    method: "POST",
+    body: { customerId, taxConfigId },
+  });
+}

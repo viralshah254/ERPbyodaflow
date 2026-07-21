@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   CUSTOMER_KIND_OPTIONS,
+  CUSTOMER_KIND_OPTIONS_FOR_CREATE,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
 import {
@@ -34,7 +35,11 @@ import {
   type PartyPayload,
 } from "@/lib/api/parties";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
-import { fetchPriceListOptions } from "@/lib/api/pricing";
+import {
+  fetchPriceListOptions,
+  fetchTaxConfigsApi,
+  type TaxConfigRow,
+} from "@/lib/api/pricing";
 import type { CustomerType } from "@/lib/types/masters";
 import {
   LocationPickerField,
@@ -72,6 +77,7 @@ type FormState = {
   creditLimit: string;
   paymentTermsId: string;
   defaultPriceListId: string;
+  defaultTaxConfigId: string;
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID";
 };
 
@@ -96,6 +102,7 @@ const emptyForm = (kindId: CustomerKindId = "general-trade"): FormState => ({
   creditLimit: "",
   paymentTermsId: "",
   defaultPriceListId: "",
+  defaultTaxConfigId: "",
   creditControlMode: "AMOUNT",
 });
 
@@ -250,9 +257,21 @@ export type CustomerFormSheetProps = {
   initialKindId?: CustomerKindId;
   /** Lock type step when creating a supermarket from the branch flow. */
   lockKind?: boolean;
+  /**
+   * When set, create/edit a modern-trade branch under this supermarket HQ.
+   * Uses the full customer stepper; branch is a real AR customer.
+   */
+  parentPartyId?: string | null;
+  parentPartyName?: string | null;
   /** Edit existing customer by id (single-page, no draft). */
   customerId?: string | null;
-  onSuccess?: (customer?: { id: string; name: string; kindId?: CustomerKindId }) => void;
+  onSuccess?: (customer?: {
+    id: string;
+    name: string;
+    kindId?: CustomerKindId;
+    /** True when a new party was created (not an update). */
+    created?: boolean;
+  }) => void;
 };
 
 export function CustomerFormSheet({
@@ -261,11 +280,16 @@ export function CustomerFormSheet({
   fmcg,
   initialKindId,
   lockKind = false,
+  parentPartyId = null,
+  parentPartyName = null,
   customerId = null,
   onSuccess,
 }: CustomerFormSheetProps) {
   const editing = Boolean(customerId);
-  const supermarketOnly = lockKind && initialKindId === "modern-trade";
+  const kindIdForMode = initialKindId as CustomerKindId | undefined;
+  const supermarketOnly = lockKind && kindIdForMode === "modern-trade" && !parentPartyId;
+  const branchMode =
+    Boolean(parentPartyId?.trim()) || kindIdForMode === "modern-trade-branch";
 
   const createSteps = React.useMemo(() => {
     const all = [
@@ -275,11 +299,11 @@ export function CustomerFormSheet({
       { id: "credit", label: "Credit & billing", short: "Credit" },
       { id: "review", label: "Review & create", short: "Review" },
     ] as const;
-    if (supermarketOnly) {
+    if (supermarketOnly || branchMode) {
       return all.filter((s) => s.id !== "type");
     }
     return all;
-  }, [supermarketOnly]);
+  }, [supermarketOnly, branchMode]);
 
   const [step, setStep] = React.useState(0);
   const [form, setForm] = React.useState<FormState>(() => emptyForm(initialKindId ?? "general-trade"));
@@ -288,13 +312,21 @@ export function CustomerFormSheet({
   const [loading, setLoading] = React.useState(false);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string }>>([]);
   const [priceLists, setPriceLists] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [taxConfigs, setTaxConfigs] = React.useState<TaxConfigRow[]>([]);
   const [nextCodePreview, setNextCodePreview] = React.useState("");
   const [draftRestored, setDraftRestored] = React.useState(false);
+  const [loadedParentPartyId, setLoadedParentPartyId] = React.useState<string | null>(null);
+  const [loadedParentPartyName, setLoadedParentPartyName] = React.useState<string | null>(null);
   const hydratedRef = React.useRef(false);
 
   const kind = CUSTOMER_KIND_OPTIONS.find((k) => k.id === form.kindId) ?? CUSTOMER_KIND_OPTIONS[1];
+  // HQ hides route/geo; branches need outlet address/location like any customer.
   const showRouteAndGeo = !fmcg || form.kindId !== "modern-trade";
   const stepId = createSteps[step]?.id ?? "identity";
+  const lockedParentPartyId = parentPartyId?.trim() || loadedParentPartyId;
+  const displayParentName = parentPartyName?.trim() || loadedParentPartyName;
+  const isBranchCustomer =
+    branchMode || form.kindId === "modern-trade-branch" || Boolean(lockedParentPartyId);
 
   React.useEffect(() => {
     if (!open) {
@@ -308,18 +340,40 @@ export function CustomerFormSheet({
     void fetchPriceListOptions()
       .then(setPriceLists)
       .catch(() => setPriceLists([]));
+    if (fmcg) {
+      void fetchTaxConfigsApi()
+        .then((items) => setTaxConfigs(items.filter((t) => t.isActive !== false)))
+        .catch(() => setTaxConfigs([]));
+    } else {
+      setTaxConfigs([]);
+    }
 
     if (customerId) {
       setDraftRestored(false);
       setStep(0);
       setStepErrors({});
+      setLoadedParentPartyId(null);
+      setLoadedParentPartyName(null);
       setLoading(true);
       void fetchPartyByIdApi(customerId)
-        .then((party) => {
+        .then(async (party) => {
           if (!party) return;
           const matchedKind =
             CUSTOMER_KIND_OPTIONS.find((k) => k.sfaSegment === party.sfaSegment)?.id ??
-            (party.channel === "MODERN_TRADE" ? "modern-trade" : "general-trade");
+            (party.channel === "MODERN_TRADE"
+              ? party.parentPartyId
+                ? "modern-trade-branch"
+                : "modern-trade"
+              : "general-trade");
+          if (party.parentPartyId) {
+            setLoadedParentPartyId(party.parentPartyId);
+            try {
+              const parent = await fetchPartyByIdApi(party.parentPartyId);
+              if (parent?.name) setLoadedParentPartyName(parent.name);
+            } catch {
+              /* parent name is optional for display */
+            }
+          }
           setForm({
             kindId: matchedKind,
             customerType: party.customerType ?? "RETAILER",
@@ -354,6 +408,7 @@ export function CustomerFormSheet({
                 : "",
             paymentTermsId: party.paymentTermsId ?? "",
             defaultPriceListId: party.defaultPriceListId ?? "",
+            defaultTaxConfigId: party.defaultTaxConfigId ?? "",
             creditControlMode: party.creditControlMode ?? "AMOUNT",
           });
         })
@@ -365,11 +420,13 @@ export function CustomerFormSheet({
       return;
     }
 
-    const kindId = initialKindId ?? "general-trade";
+    const kindId: CustomerKindId = branchMode
+      ? "modern-trade-branch"
+      : (initialKindId ?? "general-trade");
     const kindOpt = CUSTOMER_KIND_OPTIONS.find((k) => k.id === kindId);
 
-    if (supermarketOnly) {
-      // Creating a supermarket from the branch flow — don't reuse a general customer draft
+    if (supermarketOnly || branchMode) {
+      // Supermarket/branch from dedicated flows — don't reuse a general customer draft
       clearDraft();
       setForm({
         ...emptyForm(kindId),
@@ -398,12 +455,12 @@ export function CustomerFormSheet({
       .then((code) => setNextCodePreview(code))
       .catch(() => setNextCodePreview(""));
     hydratedRef.current = true;
-  }, [open, customerId, initialKindId, fmcg, createSteps.length, supermarketOnly]);
+  }, [open, customerId, initialKindId, fmcg, createSteps.length, supermarketOnly, branchMode]);
 
   React.useEffect(() => {
-    if (!open || editing || supermarketOnly || !hydratedRef.current) return;
+    if (!open || editing || supermarketOnly || branchMode || !hydratedRef.current) return;
     saveDraft({ step, form, fmcg, updatedAt: new Date().toISOString() });
-  }, [open, editing, supermarketOnly, step, form, fmcg]);
+  }, [open, editing, supermarketOnly, branchMode, step, form, fmcg]);
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -491,9 +548,17 @@ export function CustomerFormSheet({
       customerType: fmcg ? kind.customerType : form.customerType,
     };
     if (fmcg) {
-      payload.sfaSegment = kind.sfaSegment;
-      payload.channel = kind.channel;
+      const effectiveKind = branchMode
+        ? CUSTOMER_KIND_OPTIONS.find((k) => k.id === "modern-trade-branch")!
+        : kind;
+      payload.sfaSegment = effectiveKind.sfaSegment;
+      payload.channel = effectiveKind.channel;
+      payload.customerType = effectiveKind.customerType;
       payload.defaultPriceListId = form.defaultPriceListId || undefined;
+      payload.defaultTaxConfigId = form.defaultTaxConfigId || undefined;
+      if ((branchMode || form.kindId === "modern-trade-branch") && lockedParentPartyId) {
+        payload.parentPartyId = lockedParentPartyId;
+      }
     }
     return payload;
   };
@@ -509,6 +574,12 @@ export function CustomerFormSheet({
     } else if (!form.name.trim()) {
       toast.error("Name is required.");
       return;
+    } else if (form.creditLimit.trim()) {
+      const n = Number(form.creditLimit);
+      if (!Number.isFinite(n) || n < 0) {
+        toast.error("Credit limit must be zero or greater.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -516,21 +587,33 @@ export function CustomerFormSheet({
       const payload = buildPayload();
       if (editing && customerId) {
         await updatePartyApi(customerId, payload);
-        toast.success("Customer updated");
+        toast.success(isBranchCustomer ? "Branch updated" : "Customer updated");
         onOpenChange(false);
-        onSuccess?.({ id: customerId, name: payload.name, kindId: form.kindId });
+        onSuccess?.({
+          id: customerId,
+          name: payload.name,
+          kindId: isBranchCustomer ? "modern-trade-branch" : form.kindId,
+          created: false,
+        });
       } else {
         const created = await createPartyApi(payload);
         clearDraft();
         toast.success(
           supermarketOnly
             ? "Supermarket created. Continue adding its branch."
-            : fmcg && form.kindId === "modern-trade"
-              ? "Supermarket created. You can add branches next."
-              : "Customer created"
+            : branchMode
+              ? "Branch created — it can be selected on sales orders and invoices."
+              : fmcg && form.kindId === "modern-trade"
+                ? "Supermarket created. You can add branches next."
+                : "Customer created"
         );
         onOpenChange(false);
-        onSuccess?.({ id: created.id, name: created.name, kindId: form.kindId });
+        onSuccess?.({
+          id: created.id,
+          name: created.name,
+          kindId: branchMode ? "modern-trade-branch" : form.kindId,
+          created: true,
+        });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save customer");
@@ -556,6 +639,9 @@ export function CustomerFormSheet({
   const priceTagName = form.defaultPriceListId
     ? priceLists.find((pl) => pl.id === form.defaultPriceListId)?.name ?? form.defaultPriceListId
     : "Org default";
+  const taxTagName = form.defaultTaxConfigId
+    ? taxConfigs.find((t) => t.id === form.defaultTaxConfigId)?.name ?? form.defaultTaxConfigId
+    : "Org default";
   const termName = form.paymentTermsId
     ? terms.find((t) => t.id === form.paymentTermsId)?.name ?? "Selected"
     : "None";
@@ -566,14 +652,30 @@ export function CustomerFormSheet({
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0 space-y-3">
           <div>
             <SheetTitle>
-              {editing ? "Edit customer" : supermarketOnly ? "New supermarket" : "New customer"}
+              {editing
+                ? isBranchCustomer
+                  ? "Edit branch"
+                  : "Edit customer"
+                : supermarketOnly
+                  ? "New supermarket"
+                  : branchMode
+                    ? "New branch"
+                    : "New customer"}
             </SheetTitle>
             <SheetDescription>
               {editing
-                ? "Update this customer’s details. Credit limit changes for existing customers are also available under Finance."
+                ? isBranchCustomer
+                  ? displayParentName
+                    ? `Outlet under ${displayParentName}. Same fields as any customer — credit, price tag, and contact.`
+                    : "Outlet customer — same fields as any customer for ordering and invoicing."
+                  : "Update identity, Google address, credit, and price tag. Finance can also raise credit limits later."
                 : supermarketOnly
                   ? "Create the chain HQ, then you’ll return to add its branch."
-                  : "Complete each step. Your progress is saved automatically if you close or refresh."}
+                  : branchMode
+                    ? displayParentName
+                      ? `Full customer under ${displayParentName}. Completes the same steps as a normal customer.`
+                      : "Full customer under a supermarket. Completes the same steps as a normal customer."
+                    : "Complete each step. Your progress is saved automatically if you close or refresh."}
             </SheetDescription>
           </div>
           {!editing ? (
@@ -609,6 +711,11 @@ export function CustomerFormSheet({
               showRouteAndGeo={showRouteAndGeo}
               stepErrors={stepErrors}
               setField={setField}
+              setForm={setForm}
+              setStepErrors={setStepErrors}
+              terms={terms}
+              priceLists={priceLists}
+              taxConfigs={taxConfigs}
             />
           ) : (
             <>
@@ -617,7 +724,7 @@ export function CustomerFormSheet({
                   <FieldLabel required>Customer type</FieldLabel>
                   {fmcg ? (
                     <div className="grid gap-2">
-                      {CUSTOMER_KIND_OPTIONS.map((option) => {
+                      {CUSTOMER_KIND_OPTIONS_FOR_CREATE.map((option) => {
                         const selected = form.kindId === option.id;
                         return (
                           <button
@@ -666,14 +773,22 @@ export function CustomerFormSheet({
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <FieldLabel htmlFor="cust-name" required>
-                      {form.kindId === "modern-trade" ? "Company / chain name" : "Name"}
+                      {form.kindId === "modern-trade-branch" || branchMode
+                        ? "Branch name"
+                        : form.kindId === "modern-trade"
+                          ? "Company / chain name"
+                          : "Name"}
                     </FieldLabel>
                     <Input
                       id="cust-name"
                       value={form.name}
                       onChange={(e) => setField("name", e.target.value)}
                       placeholder={
-                        form.kindId === "modern-trade" ? "e.g. Naivas Limited" : "Customer name"
+                        form.kindId === "modern-trade-branch" || branchMode
+                          ? "e.g. Naivas Westlands"
+                          : form.kindId === "modern-trade"
+                            ? "e.g. Naivas Limited"
+                            : "Customer name"
                       }
                       autoFocus
                     />
@@ -857,6 +972,30 @@ export function CustomerFormSheet({
                       </p>
                     </div>
                   ) : null}
+                  {fmcg ? (
+                    <div className="space-y-2">
+                      <FieldLabel optional>Tax tag</FieldLabel>
+                      <Select
+                        value={form.defaultTaxConfigId || "__none__"}
+                        onValueChange={(v) => setField("defaultTaxConfigId", v === "__none__" ? "" : v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Org default" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Org default</SelectItem>
+                          {taxConfigs.map((tc) => (
+                            <SelectItem key={tc.id} value={tc.id}>
+                              {tc.name} ({tc.rate}% {tc.pricesAreTaxInclusive ? "incl." : "excl."})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Default VAT configuration on sales orders and invoices (exclusive vs inclusive).
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="space-y-2">
                     <FieldLabel optional>Payment terms</FieldLabel>
                     <Select
@@ -931,6 +1070,8 @@ export function CustomerFormSheet({
                       <div className="flex justify-between gap-3">
                         <dt>Price tag</dt>
                         <dd className="text-foreground text-right">{priceTagName}</dd>
+                        <dt>Tax tag</dt>
+                        <dd className="text-foreground text-right">{taxTagName}</dd>
                       </div>
                     ) : null}
                     <div className="flex justify-between gap-3">
@@ -981,7 +1122,7 @@ export function CustomerFormSheet({
   );
 }
 
-/** Compact edit mode — identity fields (credit raises live under Finance). */
+/** Compact edit mode — identity, Google address, and credit / price tag (same as create). */
 function EditAllFields({
   fmcg,
   form,
@@ -989,6 +1130,11 @@ function EditAllFields({
   showRouteAndGeo,
   stepErrors,
   setField,
+  setForm,
+  setStepErrors,
+  terms,
+  priceLists,
+  taxConfigs,
 }: {
   fmcg: boolean;
   form: FormState;
@@ -996,6 +1142,11 @@ function EditAllFields({
   showRouteAndGeo: boolean;
   stepErrors: Record<string, string>;
   setField: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  setStepErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  terms: Array<{ id: string; name: string }>;
+  priceLists: Array<{ id: string; name: string }>;
+  taxConfigs: TaxConfigRow[];
 }) {
   return (
     <div className="space-y-4">
@@ -1075,31 +1226,180 @@ function EditAllFields({
           onChange={(e) => setField("email", e.target.value)}
         />
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <FieldLabel htmlFor="edit-contact-first" optional>
+            Contact first name
+          </FieldLabel>
+          <Input
+            id="edit-contact-first"
+            value={form.contactPersonFirstName}
+            onChange={(e) => setField("contactPersonFirstName", e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <FieldLabel htmlFor="edit-contact-last" optional>
+            Contact last name
+          </FieldLabel>
+          <Input
+            id="edit-contact-last"
+            value={form.contactPersonLastName}
+            onChange={(e) => setField("contactPersonLastName", e.target.value)}
+          />
+        </div>
+      </div>
       <div className="space-y-2">
         <FieldLabel optional>KRA PIN</FieldLabel>
         <KraTaxPinField value={form.taxId} onChange={(taxId) => setField("taxId", taxId)} />
       </div>
-      <div className="space-y-2">
-        <FieldLabel htmlFor="edit-addr" optional>
-          Address
-        </FieldLabel>
-        <Input
-          id="edit-addr"
-          value={form.addressLine1}
-          onChange={(e) => setField("addressLine1", e.target.value)}
+
+      <div className="space-y-1.5">
+        <LocationPickerField
+          optional
+          label="Address"
+          placeholder="Search Google Places or type manually…"
+          value={locationFromForm(form)}
+          onChange={(loc) => {
+            setForm((prev) => ({
+              ...prev,
+              addressLine1: loc?.formattedAddress ?? loc?.line1 ?? "",
+              city: loc?.city ?? "",
+              region: loc?.region ?? "",
+              latitude:
+                loc?.latitude != null && Number.isFinite(loc.latitude) ? String(loc.latitude) : "",
+              longitude:
+                loc?.longitude != null && Number.isFinite(loc.longitude)
+                  ? String(loc.longitude)
+                  : "",
+              googlePlaceId: loc?.placeId ?? "",
+            }));
+            if (stepErrors.latitude || stepErrors.longitude) {
+              setStepErrors((prev) => ({ ...prev, latitude: "", longitude: "" }));
+            }
+          }}
+          error={stepErrors.latitude || stepErrors.longitude || undefined}
         />
+        <p className="text-xs text-muted-foreground">
+          Start typing to see place suggestions. You can also use current location or paste coordinates.
+        </p>
       </div>
+
       {showRouteAndGeo ? (
         <div className="space-y-2">
           <FieldLabel htmlFor="edit-route" optional>
             Sales route
           </FieldLabel>
-          <Input id="edit-route" value={form.route} onChange={(e) => setField("route", e.target.value)} />
+          <Input
+            id="edit-route"
+            value={form.route}
+            onChange={(e) => setField("route", e.target.value)}
+            placeholder="e.g. ATHIRIVER"
+          />
         </div>
       ) : null}
-      <p className="text-xs text-muted-foreground rounded-md border bg-muted/20 px-3 py-2">
-        To raise or change credit limits, use <span className="font-medium">Finance → Customer credit</span>.
-      </p>
+
+      <div className="space-y-3 pt-2 border-t">
+        <p className="text-sm font-medium">Credit &amp; billing</p>
+        <p className="text-xs text-muted-foreground">
+          Optional. Finance can also raise limits later under Customer credit.
+        </p>
+        <div className="space-y-2">
+          <FieldLabel optional>Credit limit</FieldLabel>
+          <Input
+            type="number"
+            placeholder="Leave blank for cash / no limit"
+            value={form.creditLimit}
+            onChange={(e) => setField("creditLimit", e.target.value)}
+          />
+          {stepErrors.creditLimit ? (
+            <p className="text-xs text-destructive">{stepErrors.creditLimit}</p>
+          ) : null}
+        </div>
+        {fmcg ? (
+          <div className="space-y-2">
+            <FieldLabel optional>Price tag</FieldLabel>
+            <Select
+              value={form.defaultPriceListId || "__none__"}
+              onValueChange={(v) => setField("defaultPriceListId", v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Org default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Org default</SelectItem>
+                {priceLists.map((pl) => (
+                  <SelectItem key={pl.id} value={pl.id}>
+                    {pl.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              FMCG price tag (e.g. Naivas, Premium). Piece prices on the tag; pack prices calculate from
+              packaging.
+            </p>
+          </div>
+        ) : null}
+        {fmcg ? (
+          <div className="space-y-2">
+            <FieldLabel optional>Tax tag</FieldLabel>
+            <Select
+              value={form.defaultTaxConfigId || "__none__"}
+              onValueChange={(v) => setField("defaultTaxConfigId", v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Org default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Org default</SelectItem>
+                {taxConfigs.map((tc) => (
+                  <SelectItem key={tc.id} value={tc.id}>
+                    {tc.name} ({tc.rate}% {tc.pricesAreTaxInclusive ? "incl." : "excl."})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Default VAT configuration on sales orders and invoices (exclusive vs inclusive).
+            </p>
+          </div>
+        ) : null}
+        <div className="space-y-2">
+          <FieldLabel optional>Payment terms</FieldLabel>
+          <Select
+            value={form.paymentTermsId || "__none__"}
+            onValueChange={(v) => setField("paymentTermsId", v === "__none__" ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None</SelectItem>
+              {terms.map((term) => (
+                <SelectItem key={term.id} value={term.id}>
+                  {term.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <FieldLabel optional>Credit control</FieldLabel>
+          <Select
+            value={form.creditControlMode}
+            onValueChange={(v) => setField("creditControlMode", v as "AMOUNT" | "DAYS" | "HYBRID")}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="AMOUNT">Amount</SelectItem>
+              <SelectItem value="DAYS">Days</SelectItem>
+              <SelectItem value="HYBRID">Hybrid</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
     </div>
   );
 }

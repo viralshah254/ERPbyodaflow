@@ -240,6 +240,7 @@ export type DocumentDetailRecord = {
     number: string;
     status: string;
     date: string;
+    total?: number;
   } | null;
   linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{

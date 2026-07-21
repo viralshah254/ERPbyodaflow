@@ -8,6 +8,8 @@ import * as Icons from "lucide-react";
 
 interface DocumentAttachmentsProps {
   files?: { id: string; name: string; size?: string }[];
+  /** When true, show a loading state instead of “No attachments”. */
+  loading?: boolean;
   onUpload?: (file: File) => void | Promise<void>;
   onDownload?: (file: { id: string; name: string; size?: string }) => void;
 }
@@ -19,12 +21,14 @@ const MOCK_FILES = [
 
 /** Attachments panel: list + lightweight demo upload/download behavior. */
 export function DocumentAttachments({
-  files = MOCK_FILES,
+  files,
+  loading = false,
   onUpload,
   onDownload,
 }: DocumentAttachmentsProps) {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const list = files ?? (onUpload ? [] : MOCK_FILES);
 
   const handleFiles = async (fileList: FileList | null) => {
     const file = fileList?.[0];
@@ -73,11 +77,16 @@ export function DocumentAttachments({
           Upload file
         </Button>
       </div>
-      {files.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground" role="status">
+          <Icons.Loader2 className="h-4 w-4 animate-spin" />
+          Loading attachments…
+        </div>
+      ) : list.length === 0 ? (
         <p className="text-sm text-muted-foreground">No attachments.</p>
       ) : (
         <ul className="space-y-2">
-          {files.map((f) => (
+          {list.map((f) => (
             <li
               key={f.id}
               className="flex items-center justify-between gap-2 rounded border px-3 py-2 text-sm"
