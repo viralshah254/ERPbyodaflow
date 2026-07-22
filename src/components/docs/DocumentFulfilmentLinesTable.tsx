@@ -5,6 +5,7 @@ import { Package, PackageCheck, PackageX, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { deliveryLinePrimaryLabel } from "@/lib/documents/format-delivery-line";
+import { resolveSalesUomQty, scaleQtyWithHeal } from "@/lib/documents/sales-uom-qty";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ type ResolvedLine = {
   ordered: number;
   shipped: number;
   backorder: number;
+  remaining: number | null;
   pct: number;
   state: LineState;
   label: string;
@@ -77,12 +79,28 @@ function resolveLine(
   docType?: "sales-order" | "delivery-note",
   sourceDocStatus?: string
 ): ResolvedLine {
-  const ordered = line.orderedQuantity ?? line.sourceQuantity ?? line.qty ?? 0;
-  const shipped =
+  const rawPrimary = line.qty ?? 0;
+  const healedPrimary = resolveSalesUomQty({
+    qty: rawPrimary,
+    uom: line.unit,
+    unitPrice: line.unitPrice,
+    amount: line.amount,
+    tax: line.tax,
+  });
+
+  const rawOrdered = line.orderedQuantity ?? line.sourceQuantity ?? rawPrimary;
+  const rawShipped =
     docType === "delivery-note"
-      ? (line.shippedQuantity ?? line.qty ?? 0)
+      ? (line.shippedQuantity ?? rawPrimary)
       : (line.shippedQuantity ?? line.convertedQuantity ?? 0);
+
+  const ordered = scaleQtyWithHeal(rawOrdered, healedPrimary, rawPrimary);
+  const shipped = scaleQtyWithHeal(rawShipped, healedPrimary, rawPrimary);
   const backorder = Math.max(0, Math.round((ordered - shipped) * 100) / 100);
+  const remaining =
+    line.remainingQuantity != null
+      ? scaleQtyWithHeal(line.remainingQuantity, healedPrimary, rawPrimary)
+      : null;
   const pct = ordered > 1e-9 ? Math.min(100, Math.round((shipped / ordered) * 100)) : 0;
 
   let state: LineState = "PENDING";
@@ -105,6 +123,7 @@ function resolveLine(
     ordered,
     shipped,
     backorder,
+    remaining,
     pct,
     state,
     label: deliveryLinePrimaryLabel({
@@ -138,21 +157,21 @@ function LineProgressBar({ pct, state }: { pct: number; state: LineState }) {
 
 const FULFIL_COLGROUP = (
   <colgroup>
-    <col style={{ width: "22%" }} />
+    <col style={{ width: "20%" }} />
     <col style={{ width: "10%" }} />
-    <col style={{ width: "4%" }} />
+    <col style={{ width: "5%" }} />
     <col style={{ width: "6%" }} />
     <col style={{ width: "6%" }} />
     <col style={{ width: "7%" }} />
-    <col style={{ width: "14%" }} />
-    <col style={{ width: "6%" }} />
+    <col style={{ width: "12%" }} />
     <col style={{ width: "9%" }} />
-    <col style={{ width: "16%" }} />
+    <col style={{ width: "10%" }} />
+    <col style={{ width: "15%" }} />
   </colgroup>
 );
 
 const thClass =
-  "px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground align-middle";
+  "px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground align-middle whitespace-nowrap";
 const tdClass = "px-3 py-3 align-middle";
 
 export function DocumentFulfilmentLinesTable({
@@ -205,7 +224,7 @@ export function DocumentFulfilmentLinesTable({
               {summary.pct}% {isDn ? "on this truck" : "shipped"}
             </p>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {fmtQty(summary.totalShipped)} of {fmtQty(summary.totalOrdered)} units{" "}
+              {fmtQty(summary.totalShipped)} of {fmtQty(summary.totalOrdered)}{" "}
               {isDn ? "on this delivery note" : "on this order"}
             </p>
           </div>
@@ -284,7 +303,7 @@ export function DocumentFulfilmentLinesTable({
       {/* Table — table-fixed keeps header and body columns aligned */}
       <div className="rounded-xl border overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px] table-fixed border-collapse">
+          <table className="w-full min-w-[1120px] table-fixed border-collapse">
             {FULFIL_COLGROUP}
             <thead className="border-b bg-muted/40">
               <tr>
@@ -357,7 +376,7 @@ export function DocumentFulfilmentLinesTable({
                     </td>
 
                     <td className={cn(tdClass, "text-right tabular-nums text-muted-foreground")}>
-                      {r.line.remainingQuantity != null ? fmtQty(r.line.remainingQuantity) : "—"}
+                      {r.remaining != null ? fmtQty(r.remaining) : "—"}
                     </td>
 
                     <td className={cn(tdClass, "text-xs text-muted-foreground truncate")} title={r.line.taxCodeName}>

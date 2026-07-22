@@ -169,9 +169,9 @@ export default function SalesInvoicesPage() {
               </Link>
             </Button>
             <Button asChild>
-              <Link href="/docs/invoice/new" data-tour-step="create-button">
+              <Link href="/docs/invoice/new" data-tour-step="create-button" title="Pickup / ad-hoc invoice — for delivery sales, convert from the delivery note after POD">
                 <Icons.Plus className="mr-2 h-4 w-4" />
-                Create Invoice
+                Pickup / ad-hoc invoice
               </Link>
             </Button>
           </div>

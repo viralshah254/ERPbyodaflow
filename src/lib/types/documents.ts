@@ -111,6 +111,13 @@ export type FranchiseeWeightSplitReportRecord = {
   splitNote?: string;
 };
 
+export type PodEvidenceVerificationRecord = {
+  status: "pending" | "passed" | "failed" | "skipped";
+  reason?: string;
+  checkedAt?: string;
+  method?: "human" | "ai" | "none";
+};
+
 export type PodConfirmationRecord = {
   confirmedAt: string;
   confirmedByUserId?: string;
@@ -126,6 +133,12 @@ export type PodConfirmationRecord = {
   lines: PodConfirmationLineRecord[];
   extraReceiptLines?: FranchiseeExtraReceiptLineRecord[];
   franchiseeWeightSplit?: FranchiseeWeightSplitReportRecord;
+  /** mobile | signed_copy (desk scan) | desk */
+  source?: "mobile" | "signed_copy" | "desk";
+  /** Scanned / photographed customer-signed DN uploaded from ERP. */
+  signedCopyAttachmentId?: string;
+  /** Human today; AI verification stub for future invoice gate. */
+  evidenceVerification?: PodEvidenceVerificationRecord;
 };
 
 /** Driver pickup at collection / processing (before IN_TRANSIT). */
@@ -195,12 +208,18 @@ export type DocumentDetailRecord = {
   /** FMCG: pack UOM lines missing pieces-per-pack — convert to DN blocked. */
   packagingBlockingConversion?: boolean;
   packagingMissingLines?: Array<{ productId: string; unit: string; description?: string }>;
+  subtotal?: number;
+  /** Document-level discount amount when offered. */
+  discount?: number;
+  tax?: number;
   lines: Array<{
     id?: string;
     description: string;
     qty?: number;
     unit?: string;
     unitPrice?: number;
+    /** Line discount percent when offered. */
+    discount?: number;
     amount?: number;
     tax?: number;
     productId?: string;

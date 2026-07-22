@@ -14,6 +14,7 @@ export type WarehousePickPackRow = {
   packingNote?: string;
   courier?: string;
   trackingRef?: string;
+  batchLabel?: string;
   vehicleId?: string;
   vehicleCode?: string;
   vehicleMode?: "LEASED" | "SPOT_HIRE";
@@ -158,7 +159,7 @@ export async function runPickPackAction(
     courier?: string;
     trackingRef?: string;
     lines?: Array<{ lineId: string; pickedQty?: number; locationId?: string }>;
-    vehicleId?: string;
+    vehicleId?: string | null;
     vehicleMode?: "LEASED" | "SPOT_HIRE";
     carrier?: string;
     batchLabel?: string;
@@ -175,6 +176,24 @@ export async function patchPickPackWarehouse(id: string, warehouseId: string): P
   await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: { warehouseId },
+  });
+}
+
+/** Persist dispatch draft fields (waybill, batch, vehicle) before Mark dispatched. */
+export async function patchPickPackDispatchDraft(
+  id: string,
+  body: {
+    trackingRef?: string;
+    courier?: string;
+    batchLabel?: string;
+    vehicleId?: string | null;
+    vehicleMode?: "LEASED" | "SPOT_HIRE";
+  }
+): Promise<void> {
+  requireLiveApi("Pick-pack dispatch draft");
+  await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body,
   });
 }
 

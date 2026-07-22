@@ -11,7 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchPickPackTask, patchPickPackLines, patchPickPackWarehouse, runPickPackAction, stagePickPackStock, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import {
+  fetchPickPackTask,
+  patchPickPackDispatchDraft,
+  patchPickPackLines,
+  patchPickPackWarehouse,
+  runPickPackAction,
+  stagePickPackStock,
+  type WarehousePickPackRow,
+} from "@/lib/api/warehouse-execution";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { patchDocumentApi } from "@/lib/api/documents";
 import { fetchProductsPageApi } from "@/lib/api/products";
@@ -34,7 +42,11 @@ import {
   isRoundFishMixLine,
   sizeProductsForBreakdown,
 } from "@/lib/warehouse/pick-pack-round-fish";
-import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
+import {
+  createDistributionVehicle,
+  fetchDistributionVehicles,
+  type DistributionVehicleRow,
+} from "@/lib/api/logistics";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import {
@@ -52,7 +64,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
@@ -231,6 +243,18 @@ export default function PickPackDetailPage() {
   const [vehicleMode, setVehicleMode] = React.useState<"LEASED" | "SPOT_HIRE">("LEASED");
   const [selectedVehicleId, setSelectedVehicleId] = React.useState<string>("");
   const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
+  const [addVehicleOpen, setAddVehicleOpen] = React.useState(false);
+  const [addVehicleSaving, setAddVehicleSaving] = React.useState(false);
+  const [addVehicleForm, setAddVehicleForm] = React.useState({
+    code: "",
+    name: "",
+    registration: "",
+    monthlyCost: "",
+  });
+  const fleetVehicles = React.useMemo(
+    () => vehicles.filter((v) => !v.type || String(v.type).toUpperCase() === "LEASED"),
+    [vehicles]
+  );
 
   const [warehouseOptions, setWarehouseOptions] = React.useState<LookupOption[]>([]);
   const [warehouseSaving, setWarehouseSaving] = React.useState(false);
@@ -262,6 +286,13 @@ export default function PickPackDetailPage() {
       setPackingNote(payload?.packingNote ?? "");
       setCourier(payload?.courier ?? "");
       setTrackingRef(payload?.trackingRef ?? "");
+      setBatchLabel(payload?.batchLabel ?? "");
+      setVehicleMode(
+        payload?.vehicleMode === "SPOT_HIRE" || payload?.vehicleMode === "LEASED"
+          ? payload.vehicleMode
+          : "LEASED"
+      );
+      setSelectedVehicleId(payload?.vehicleId ?? "");
     } catch (error) {
       setTask(null);
       const err = error as Error & { status?: number };
@@ -339,13 +370,109 @@ export default function PickPackDetailPage() {
       });
   }, []);
 
-  React.useEffect(() => {
-    void fetchDistributionVehicles({ active: true })
-      .then(setVehicles)
-      .catch(() => {
-        /* Non-critical; fleet vehicles are optional */
-      });
+  const reloadVehicles = React.useCallback(async () => {
+    try {
+      const items = await fetchDistributionVehicles({ active: true });
+      setVehicles(items);
+      return items;
+    } catch {
+      /* Non-critical; fleet vehicles are optional */
+      return [] as DistributionVehicleRow[];
+    }
   }, []);
+
+  React.useEffect(() => {
+    void reloadVehicles();
+  }, [reloadVehicles]);
+
+  const suggestFleetVehicleCode = React.useCallback(() => {
+    const existing = vehicles
+      .map((v) => {
+        const m = v.code?.match(/^LSE-(\d+)$/i);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const next = existing.length ? Math.max(...existing) + 1 : 1;
+    return `LSE-${String(next).padStart(3, "0")}`;
+  }, [vehicles]);
+
+  const openAddVehicle = () => {
+    setAddVehicleForm({
+      code: suggestFleetVehicleCode(),
+      name: "",
+      registration: "",
+      monthlyCost: "",
+    });
+    setAddVehicleOpen(true);
+  };
+
+  const buildDispatchPayload = React.useCallback(
+    (overrides?: {
+      trackingRef?: string;
+      courier?: string;
+      batchLabel?: string;
+      vehicleMode?: "LEASED" | "SPOT_HIRE";
+      vehicleId?: string;
+    }) => {
+      const mode = overrides?.vehicleMode ?? vehicleMode;
+      const vehicleId = overrides?.vehicleId ?? selectedVehicleId;
+      return {
+        trackingRef: overrides?.trackingRef ?? trackingRef,
+        courier: overrides?.courier ?? courier,
+        batchLabel: (overrides?.batchLabel ?? batchLabel).trim(),
+        vehicleMode: mode,
+        vehicleId: mode === "LEASED" ? vehicleId || null : null,
+      };
+    },
+    [trackingRef, courier, batchLabel, vehicleMode, selectedVehicleId]
+  );
+
+  const saveDispatchDraft = React.useCallback(
+    async (overrides?: Parameters<typeof buildDispatchPayload>[0]) => {
+      if (!task?.id) return;
+      const st = (task.status ?? "").trim().toUpperCase();
+      if (st === "DISPATCHED" || st === "COMPLETED" || st === "CANCELLED") return;
+      try {
+        await patchPickPackDispatchDraft(task.id, buildDispatchPayload(overrides));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to save dispatch details.");
+      }
+    },
+    [task?.id, task?.status, buildDispatchPayload]
+  );
+
+  const handleCreateVehicle = async () => {
+    const code = addVehicleForm.code.trim().toUpperCase();
+    if (!code) {
+      toast.error("Vehicle code is required.");
+      return;
+    }
+    setAddVehicleSaving(true);
+    try {
+      const created = await createDistributionVehicle({
+        code,
+        name: addVehicleForm.name.trim() || undefined,
+        type: "LEASED",
+        registration: addVehicleForm.registration.trim() || undefined,
+        monthlyCost: addVehicleForm.monthlyCost.trim()
+          ? Number(addVehicleForm.monthlyCost)
+          : undefined,
+        assumedTripsPerMonth: 12,
+        currency: "KES",
+      });
+      const items = await reloadVehicles();
+      const id = created?.id || items.find((v) => v.code?.toUpperCase() === code)?.id;
+      if (id) setSelectedVehicleId(id);
+      setVehicleMode("LEASED");
+      setAddVehicleOpen(false);
+      if (id) void saveDispatchDraft({ vehicleMode: "LEASED", vehicleId: id });
+      toast.success("Vehicle added to fleet.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to add vehicle.");
+    } finally {
+      setAddVehicleSaving(false);
+    }
+  };
 
   const runWarehouseAction = React.useCallback(
     async (successMessage: string, fn: () => Promise<void>) => {
@@ -1251,7 +1378,10 @@ export default function PickPackDetailPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setVehicleMode("LEASED")}
+                  onClick={() => {
+                    setVehicleMode("LEASED");
+                    void saveDispatchDraft({ vehicleMode: "LEASED" });
+                  }}
                   className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                     vehicleMode === "LEASED"
                       ? "border-primary bg-primary text-primary-foreground"
@@ -1262,7 +1392,10 @@ export default function PickPackDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVehicleMode("SPOT_HIRE")}
+                  onClick={() => {
+                    setVehicleMode("SPOT_HIRE");
+                    void saveDispatchDraft({ vehicleMode: "SPOT_HIRE", vehicleId: "" });
+                  }}
                   className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                     vehicleMode === "SPOT_HIRE"
                       ? "border-primary bg-primary text-primary-foreground"
@@ -1275,26 +1408,64 @@ export default function PickPackDetailPage() {
 
               {vehicleMode === "LEASED" ? (
                 <div className="space-y-2">
-                  <Label>Vehicle</Label>
-                  <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Vehicle</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={openAddVehicle}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      Add vehicle
+                    </Button>
+                  </div>
+                  <Select
+                    value={selectedVehicleId}
+                    onValueChange={(v) => {
+                      setSelectedVehicleId(v);
+                      void saveDispatchDraft({ vehicleMode: "LEASED", vehicleId: v });
+                    }}
+                  >
                     <SelectTrigger className="w-full" aria-label="Fleet vehicle">
-                      <SelectValue placeholder={vehicles.length ? "Select vehicle…" : "No fleet vehicles found"} />
+                      <SelectValue
+                        placeholder={
+                          fleetVehicles.length ? "Select vehicle…" : "No fleet vehicles found"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicles.map((v) => (
+                      {fleetVehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id}>
                           {v.code}
                           {v.name ? ` — ${v.name}` : ""}
                           {v.registration ? ` (${v.registration})` : ""}
                         </SelectItem>
                       ))}
+                      <div className="border-t border-border mt-1 pt-1">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          onPointerDown={(e) => e.preventDefault()}
+                          onClick={openAddVehicle}
+                        >
+                          <Plus className="h-3.5 w-3.5 shrink-0" />
+                          Add vehicle…
+                        </button>
+                      </div>
                     </SelectContent>
                   </Select>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <Label>Carrier name</Label>
-                  <Input value={courier} onChange={(e) => setCourier(e.target.value)} placeholder="Carrier / driver name" />
+                  <Input
+                    value={courier}
+                    onChange={(e) => setCourier(e.target.value)}
+                    onBlur={() => void saveDispatchDraft()}
+                    placeholder="Carrier / driver name"
+                  />
                 </div>
               )}
 
@@ -1303,13 +1474,23 @@ export default function PickPackDetailPage() {
                 <Input
                   value={batchLabel}
                   onChange={(e) => setBatchLabel(e.target.value)}
+                  onBlur={() => void saveDispatchDraft()}
                   placeholder="e.g. Kitengela, Ruiru, Mathare"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Tracking reference</Label>
-                <Input value={trackingRef} onChange={(e) => setTrackingRef(e.target.value)} placeholder="Optional" />
+                <Label>Waybill / courier tracking</Label>
+                <Input
+                  value={trackingRef}
+                  onChange={(e) => setTrackingRef(e.target.value)}
+                  onBlur={() => void saveDispatchDraft()}
+                  placeholder="Optional — waybill, AWB, or your trip sheet ref"
+                />
+                <p className="text-xs text-muted-foreground">
+                  External reference from the carrier or your own books. Leave blank if none. All
+                  Dispatch fields save when you change them, confirm pack, or mark dispatched.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -1413,6 +1594,11 @@ export default function PickPackDetailPage() {
                       action: "pack",
                       cartonsCount: Math.max(1, Number(cartons) || 1),
                       packingNote,
+                      ...buildDispatchPayload(),
+                      vehicleId:
+                        vehicleMode === "LEASED" && selectedVehicleId
+                          ? selectedVehicleId
+                          : "",
                     });
                     toast.success("Pick and pack confirmed.");
                     await refresh();
@@ -1445,6 +1631,11 @@ export default function PickPackDetailPage() {
                       action: "pack",
                       cartonsCount: Math.max(1, Number(cartons) || 1),
                       packingNote,
+                      ...buildDispatchPayload(),
+                      vehicleId:
+                        vehicleMode === "LEASED" && selectedVehicleId
+                          ? selectedVehicleId
+                          : "",
                     });
                     toast.success("Pack confirmed.");
                     await refresh();
@@ -1466,14 +1657,18 @@ export default function PickPackDetailPage() {
             onClick={() => {
               void (async () => {
                 try {
+                  const draft = buildDispatchPayload();
                   await runPickPackAction(task.id, {
                     action: "dispatch",
-                    vehicleMode,
-                    vehicleId: vehicleMode === "LEASED" && selectedVehicleId ? selectedVehicleId : undefined,
-                    carrier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
-                    courier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
-                    batchLabel: batchLabel.trim() || undefined,
-                    trackingRef,
+                    ...draft,
+                    vehicleId:
+                      draft.vehicleMode === "LEASED" && draft.vehicleId
+                        ? draft.vehicleId
+                        : undefined,
+                    carrier: draft.vehicleMode === "SPOT_HIRE" ? draft.courier : undefined,
+                    courier: draft.courier,
+                    batchLabel: draft.batchLabel,
+                    trackingRef: draft.trackingRef,
                   });
                   toast.success("Dispatch recorded.");
                   await refresh();
@@ -1686,6 +1881,91 @@ export default function PickPackDetailPage() {
               </Button>
             </SheetFooter>
             </div>
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
+          <SheetContent className="sm:max-w-md overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Add fleet vehicle</SheetTitle>
+              <SheetDescription>
+                Register a leased vehicle for dispatch. It will be selected on this pick automatically.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 py-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="pp-vehicle-code">Code *</Label>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    onClick={() =>
+                      setAddVehicleForm((f) => ({ ...f, code: suggestFleetVehicleCode() }))
+                    }
+                  >
+                    Use suggested
+                  </button>
+                </div>
+                <Input
+                  id="pp-vehicle-code"
+                  value={addVehicleForm.code}
+                  onChange={(e) =>
+                    setAddVehicleForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))
+                  }
+                  placeholder="Your fleet / tally code"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Prefilled with a suggested code (e.g. LSE-001). Replace it with your own code from
+                  tally or an existing vehicle register if you already have one.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pp-vehicle-name">Name / description</Label>
+                <Input
+                  id="pp-vehicle-name"
+                  value={addVehicleForm.name}
+                  onChange={(e) => setAddVehicleForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Isuzu NQR"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pp-vehicle-reg">Registration plate</Label>
+                <Input
+                  id="pp-vehicle-reg"
+                  value={addVehicleForm.registration}
+                  onChange={(e) =>
+                    setAddVehicleForm((f) => ({ ...f, registration: e.target.value }))
+                  }
+                  placeholder="e.g. KDA 123A"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pp-vehicle-cost">Monthly cost (optional)</Label>
+                <Input
+                  id="pp-vehicle-cost"
+                  type="number"
+                  min={0}
+                  value={addVehicleForm.monthlyCost}
+                  onChange={(e) =>
+                    setAddVehicleForm((f) => ({ ...f, monthlyCost: e.target.value }))
+                  }
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <SheetFooter>
+              <Button type="button" variant="outline" onClick={() => setAddVehicleOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={addVehicleSaving || !addVehicleForm.code.trim()}
+                onClick={() => void handleCreateVehicle()}
+              >
+                {addVehicleSaving ? "Saving…" : "Save vehicle"}
+              </Button>
+            </SheetFooter>
           </SheetContent>
         </Sheet>
 

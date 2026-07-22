@@ -107,7 +107,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
       { id: "has-lines", message: "At least one line required" },
       { id: "customer-required", message: "Customer is required" },
     ],
-    totals: { total: true },
+    // Goods value only — VAT belongs on the tax invoice after POD.
+    totals: { subtotal: true, discount: true, total: true },
     actions: ["submit", "cancel"],
   },
   "credit-note": {

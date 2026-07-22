@@ -40,12 +40,15 @@ import { getDocTypeConfig } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
 import { formatMoney, kesEquivalent } from "@/lib/money";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { documentExportFileName } from "@/lib/documents/export-filename";
 import { t } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import {
   addDocumentCommentApi,
   amendDeliveryNoteDispatchApi,
   confirmDeliveryPodApi,
+  confirmDeliveryPodFromSignedCopyApi,
   convertDocumentApi,
   documentActionApi,
   downloadDocumentPdfApi,
@@ -84,8 +87,8 @@ const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
 
 /**
- * Proof of delivery (signatures, received weights) is intentional mobile-app only —
- * dispatch / outlet apps. Web ERP stays view-coordination; do not expose the POD form here.
+ * Line-level mobile POD (qty variance / live signature pad) stays mobile-first.
+ * FMCG desk ERP can upload a signed DN copy (see signedPodSheetOpen). Seafood stays mobile-only.
  */
 const DELIVERY_NOTE_POD_WEB_ENABLED = false;
 
@@ -195,10 +198,15 @@ export default function DocViewPage() {
   const type = params.type as string;
   const id = params.id as string;
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcgOrg =
+    industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
   const authUser = useAuthStore((s) => s.user);
+  const org = useAuthStore((s) => s.org);
   const [amendOpen, setAmendOpen] = React.useState(false);
   const [amendReason, setAmendReason] = React.useState("");
   const [amendLineRows, setAmendLineRows] = React.useState<
@@ -250,6 +258,11 @@ export default function DocViewPage() {
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
   const [deliveryNoteWarehouseLabel, setDeliveryNoteWarehouseLabel] = React.useState<string | null>(null);
   const [podSheetOpen, setPodSheetOpen] = React.useState(false);
+  const [signedPodSheetOpen, setSignedPodSheetOpen] = React.useState(false);
+  const [signedPodFile, setSignedPodFile] = React.useState<File | null>(null);
+  const [signedPodReceiverName, setSignedPodReceiverName] = React.useState("");
+  const [signedPodNote, setSignedPodNote] = React.useState("");
+  const [signedPodSaving, setSignedPodSaving] = React.useState(false);
   const [podReceiverName, setPodReceiverName] = React.useState("");
   const [podReceiverPhone, setPodReceiverPhone] = React.useState("");
   const [podNote, setPodNote] = React.useState("");
@@ -323,6 +336,18 @@ export default function DocViewPage() {
         can(authUser, Permissions.ADMIN_SETTINGS)),
     [type, document?.dispatchAmendEligibility?.allowed, authUser]
   );
+
+  const canRecordSignedPod = React.useMemo(() => {
+    if (!fmcgOrg) return false;
+    if (type !== "delivery-note" || !document) return false;
+    if (document.podConfirmation?.confirmedAt) return false;
+    const st = String(document.status ?? "").toUpperCase();
+    if (!["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) return false;
+    return (
+      can(authUser, Permissions.SALES_DELIVERIES_POD) ||
+      can(authUser, Permissions.SALES_WRITE)
+    );
+  }, [fmcgOrg, type, document, authUser]);
 
   React.useEffect(() => {
     if (!amendOpen || !document?.lines?.length) return;
@@ -451,18 +476,24 @@ export default function DocViewPage() {
       party: displayPartyName,
       reference: document?.sourceDocument?.number,
       total: document?.total ?? 0,
-      subtotal: document?.total ?? 0,
+      subtotal: document?.subtotal ?? document?.total ?? 0,
+      tax: document?.tax,
+      discount: document?.discount,
       currency: document?.currency ?? "KES",
       notes: document?.notes,
+      orgName: org?.name,
+      orgTaxId: org?.taxId,
       lines: document?.lines?.map((line) => ({
         description: line.description || line.productName || String(line.productId ?? ""),
         qty: line.qty,
         uom: line.unit,
         unitPrice: line.unitPrice,
+        discount: line.discount,
         amount: line.amount,
+        tax: line.tax,
       })),
     }),
-    [type, id, label, document, displayPartyName]
+    [type, id, label, document, displayPartyName, org?.name, org?.taxId]
   );
 
   const refreshDocument = React.useCallback(
@@ -718,6 +749,15 @@ export default function DocViewPage() {
       remainingLineSummaries={remainingLineSummaries}
       warehouseTaskLink={warehouseTaskLink}
       actionLoading={actionLoading}
+      fmcgOrg={fmcgOrg}
+      canRecordSignedPod={canRecordSignedPod}
+      onPrintDn={() => setPrintOpen(true)}
+      onUploadSignedDn={() => {
+        setSignedPodFile(null);
+        setSignedPodReceiverName("");
+        setSignedPodNote("");
+        setSignedPodSheetOpen(true);
+      }}
       onAction={async (action) => {
         setActionLoading(true);
         try {
@@ -1025,6 +1065,48 @@ export default function DocViewPage() {
               Apply to invoice
             </Button>
           )}
+          {type === "delivery-note" ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)}>
+                <Icons.Printer className="mr-2 h-4 w-4" />
+                Print DN
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  downloadDocumentPdfApi(
+                    type as DocTypeKey,
+                    id,
+                    documentExportFileName({
+                      type,
+                      number: document?.number,
+                      partyName: displayPartyName !== "—" ? displayPartyName : document?.party,
+                      ext: "pdf",
+                    }),
+                    (msg) => toast.info(msg || "Export not available.")
+                  )
+                }
+              >
+                <Icons.FileDown className="mr-2 h-4 w-4" />
+                Download PDF
+              </Button>
+              {canRecordSignedPod ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSignedPodFile(null);
+                    setSignedPodReceiverName("");
+                    setSignedPodNote("");
+                    setSignedPodSheetOpen(true);
+                  }}
+                >
+                  <Icons.Upload className="mr-2 h-4 w-4" />
+                  Upload signed DN
+                </Button>
+              ) : null}
+            </>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -1035,8 +1117,16 @@ export default function DocViewPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 onClick={() =>
-                  downloadDocumentPdfApi(type as DocTypeKey, id, `${document?.number ?? type}-${id}.pdf`, (msg) =>
-                    toast.info(msg || "Export not available.")
+                  downloadDocumentPdfApi(
+                    type as DocTypeKey,
+                    id,
+                    documentExportFileName({
+                      type,
+                      number: document?.number,
+                      partyName: displayPartyName !== "—" ? displayPartyName : document?.party,
+                      ext: "pdf",
+                    }),
+                    (msg) => toast.info(msg || "Export not available.")
                   )
                 }
               >
@@ -1045,8 +1135,16 @@ export default function DocViewPage() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() =>
-                  downloadDocumentExcelApi(type as DocTypeKey, id, `${document?.number ?? type}-${id}.xlsx`, (msg) =>
-                    toast.info(msg || "Export not available.")
+                  downloadDocumentExcelApi(
+                    type as DocTypeKey,
+                    id,
+                    documentExportFileName({
+                      type,
+                      number: document?.number,
+                      partyName: displayPartyName !== "—" ? displayPartyName : document?.party,
+                      ext: "xlsx",
+                    }),
+                    (msg) => toast.info(msg || "Export not available.")
                   )
                 }
               >
@@ -1178,16 +1276,27 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-blue-300/70 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
-                      Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app; invoices follow POD once recorded.
-                      {canAmendDispatch ? (
-                        <span className="block mt-1 font-normal">
-                          Administrators can use <strong>Amend dispatch</strong> above to correct a dispatch mistake before POD (updates stock, pick & pack, and any draft invoice).
-                        </span>
-                      ) : document.dispatchAmendEligibility?.reason ? (
-                        <span className="block mt-1 font-normal text-blue-900/80 dark:text-blue-100/80">
-                          {document.dispatchAmendEligibility.reason}
-                        </span>
-                      ) : null}
+                      <span>
+                        {fmcgOrg ? (
+                          <>
+                            Shipped quantities are frozen from warehouse issue. Print or download this delivery note (stamp / signature boxes included), get the customer copy signed, then{" "}
+                            <strong>Upload signed DN</strong> here — or record POD from the mobile dispatch app. Invoice from this DN only after POD.
+                          </>
+                        ) : (
+                          <>
+                            Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app; invoices follow POD once recorded.
+                          </>
+                        )}
+                        {canAmendDispatch ? (
+                          <span className="block mt-1 font-normal">
+                            Administrators can use <strong>Amend dispatch</strong> above to correct a dispatch mistake before POD (updates stock, pick & pack, and any draft invoice).
+                          </span>
+                        ) : document.dispatchAmendEligibility?.reason ? (
+                          <span className="block mt-1 font-normal text-blue-900/80 dark:text-blue-100/80">
+                            {document.dispatchAmendEligibility.reason}
+                          </span>
+                        ) : null}
+                      </span>
                     </p>
                   </div>
                 ) : null}
@@ -1306,6 +1415,11 @@ export default function DocViewPage() {
                               dateStyle: "medium",
                               timeStyle: "short",
                             })}
+                            {document.podConfirmation.source === "signed_copy"
+                              ? " · Signed copy (desk)"
+                              : document.podConfirmation.source === "mobile"
+                                ? " · Mobile"
+                                : ""}
                             {document.podConfirmation.receiverName
                               ? ` · Received by ${document.podConfirmation.receiverName}`
                               : ""}
@@ -1315,6 +1429,34 @@ export default function DocViewPage() {
                           </p>
                           {document.podConfirmation.note ? (
                             <p className="text-muted-foreground whitespace-pre-wrap">{document.podConfirmation.note}</p>
+                          ) : null}
+                          {document.podConfirmation.signedCopyAttachmentId ? (
+                            <p className="text-muted-foreground">
+                              Signed delivery note:&nbsp;
+                              <button
+                                type="button"
+                                className="text-primary underline-offset-4 hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer"
+                                onClick={() =>
+                                  downloadDocumentAttachmentApi(
+                                    "delivery-note",
+                                    id,
+                                    document.podConfirmation!.signedCopyAttachmentId!,
+                                    `${document.number ?? id}-signed-dn`,
+                                    (msg) => toast.info(msg || "Download not available.")
+                                  )
+                                }
+                              >
+                                Download signed copy
+                              </button>
+                            </p>
+                          ) : null}
+                          {document.podConfirmation.evidenceVerification ? (
+                            <p className="text-xs text-muted-foreground">
+                              Evidence check: {document.podConfirmation.evidenceVerification.status}
+                              {document.podConfirmation.evidenceVerification.reason
+                                ? ` — ${document.podConfirmation.evidenceVerification.reason}`
+                                : ""}
+                            </p>
                           ) : null}
                           <p className="text-muted-foreground">
                             Customer / receiver signature:&nbsp;
@@ -2129,6 +2271,104 @@ export default function DocViewPage() {
         </SheetContent>
       </Sheet>
 
+      {fmcgOrg ? (
+      <Sheet open={signedPodSheetOpen} onOpenChange={setSignedPodSheetOpen} modal={false}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Upload signed delivery note</SheetTitle>
+            <SheetDescription>
+              Upload the customer-signed (and stamped) delivery note scan or photo. This confirms proof of delivery as
+              shipped quantities and unlocks Create Invoice from this DN. AI verification of the scan is planned later.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="signed-dn-file">Signed DN file</Label>
+              <Input
+                id="signed-dn-file"
+                type="file"
+                accept="image/*,application/pdf"
+                disabled={signedPodSaving}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setSignedPodFile(f);
+                }}
+              />
+              {signedPodFile ? (
+                <p className="text-xs text-muted-foreground truncate">{signedPodFile.name}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">PDF or image of the signed / stamped copy.</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signed-dn-receiver">Receiver name (optional)</Label>
+              <Input
+                id="signed-dn-receiver"
+                value={signedPodReceiverName}
+                onChange={(e) => setSignedPodReceiverName(e.target.value)}
+                placeholder="Who signed, if known"
+                autoComplete="name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signed-dn-note">Note (optional)</Label>
+              <Textarea
+                id="signed-dn-note"
+                value={signedPodNote}
+                onChange={(e) => setSignedPodNote(e.target.value)}
+                placeholder="Vehicle, condition, offload details…"
+                rows={2}
+              />
+            </div>
+          </div>
+          <SheetFooter className="mt-8">
+            <Button variant="outline" onClick={() => setSignedPodSheetOpen(false)} disabled={signedPodSaving}>
+              Cancel
+            </Button>
+            <Button
+              disabled={signedPodSaving || !signedPodFile}
+              onClick={async () => {
+                if (!signedPodFile) {
+                  toast.error("Choose the signed delivery note file first.");
+                  return;
+                }
+                setSignedPodSaving(true);
+                try {
+                  const { id: attId } = await uploadDocumentAttachmentApi(
+                    "delivery-note",
+                    id,
+                    signedPodFile
+                  );
+                  await confirmDeliveryPodFromSignedCopyApi(id, {
+                    signedCopyAttachmentId: attId,
+                    ...(signedPodReceiverName.trim()
+                      ? { receiverName: signedPodReceiverName.trim() }
+                      : {}),
+                    ...(signedPodNote.trim() ? { note: signedPodNote.trim() } : {}),
+                  });
+                  toast.success("Signed delivery note saved — POD confirmed. You can create the invoice.");
+                  setSignedPodSheetOpen(false);
+                  setSignedPodFile(null);
+                  await refreshDocument(true);
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setSignedPodSaving(false);
+                }
+              }}
+            >
+              {signedPodSaving ? (
+                <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Icons.Check className="mr-2 h-4 w-4" />
+              )}
+              Confirm POD
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      ) : null}
+
       {DELIVERY_NOTE_POD_WEB_ENABLED ? (
       <Sheet open={podSheetOpen} onOpenChange={setPodSheetOpen} modal={false}>
         <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
@@ -2566,6 +2806,10 @@ function DynamicNextStepsPanel({
   remainingLineSummaries,
   warehouseTaskLink,
   actionLoading,
+  fmcgOrg = false,
+  canRecordSignedPod = false,
+  onPrintDn,
+  onUploadSignedDn,
   onAction,
   onConvert,
   onSendEmail,
@@ -2579,6 +2823,10 @@ function DynamicNextStepsPanel({
   remainingLineSummaries: string[];
   warehouseTaskLink: { label: string; href: string } | null;
   actionLoading: boolean;
+  fmcgOrg?: boolean;
+  canRecordSignedPod?: boolean;
+  onPrintDn?: () => void;
+  onUploadSignedDn?: () => void;
   onAction: (action: string) => Promise<void>;
   onConvert: (target: DocTypeKey) => void | Promise<void>;
   onSendEmail: () => void;
@@ -2671,18 +2919,38 @@ function DynamicNextStepsPanel({
       }
     } else if (["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) {
       if (!hasPod) {
-        steps.push({
-          icon: <Icons.Smartphone className="h-4 w-4 text-amber-600" />,
-          text:
-            "Proof of delivery is recorded only in the Odaflow mobile app (dispatch/driver or outlet). After POD, create the invoice here from acknowledged quantities.",
-        });
+        if (fmcgOrg) {
+          steps.push({
+            icon: <Icons.Printer className="h-4 w-4 text-blue-600" />,
+            text: "Print or download the delivery note (includes stamp / signature boxes), get it signed at drop-off.",
+            action: onPrintDn,
+            actionLabel: onPrintDn ? "Print DN" : undefined,
+            variant: "outline",
+          });
+          steps.push({
+            icon: <Icons.Upload className="h-4 w-4 text-amber-600" />,
+            text:
+              "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
+            action: canRecordSignedPod ? onUploadSignedDn : undefined,
+            actionLabel: canRecordSignedPod ? "Upload signed DN" : undefined,
+            variant: "default",
+          });
+        } else {
+          steps.push({
+            icon: <Icons.Smartphone className="h-4 w-4 text-amber-600" />,
+            text:
+              "Proof of delivery is recorded in the Odaflow mobile app (dispatch/driver or outlet). After POD, create the invoice here from acknowledged quantities.",
+          });
+        }
       }
       if (hasPod && convertTargets.includes("invoice")) {
         steps.push({
           icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />,
-          text: "Create invoice from quantities acknowledged at delivery.",
+          text: fmcgOrg
+            ? "POD recorded — create the invoice from acknowledged (delivered) quantities. Blank Create Invoice is for pickup / ad-hoc only."
+            : "Create invoice from quantities acknowledged at delivery.",
           action: () => onConvert("invoice"),
-          actionLabel: "Create Invoice",
+          actionLabel: fmcgOrg ? "Create Invoice from DN" : "Create Invoice",
           variant: "default",
         });
       }

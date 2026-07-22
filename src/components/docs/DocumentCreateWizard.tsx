@@ -1214,6 +1214,7 @@ export function DocumentCreateWizard({
           quantity: line.qty,
           unit: line.uom,
           unitPrice: line.price,
+          ...(line.discount != null && line.discount > 0 ? { discount: line.discount } : {}),
           ...(line.taxCodeId && { taxCodeId: line.taxCodeId }),
           ...(line.tax != null && line.tax > 0 && { tax: line.tax }),
           amount: line.amount,

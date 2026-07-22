@@ -76,6 +76,8 @@ export interface DocumentLine {
   baseQty: number;
   price: number;
   priceReason: string;
+  /** Price-tag / offered discount percent (0–100). */
+  discount?: number;
   amount: number;
   /** Computed tax amount for this line (0 when no tax code or rate is 0). */
   tax?: number;
@@ -462,7 +464,7 @@ export function DocumentLineEditor({
 
   // Resolve price: daily (seafood) → FMCG piece×pack → flat catalog → tiered product_pricing.
   const resolvePrice = React.useCallback(
-    (productId: string, qty: number, uom: string): { price: number; reason: string } => {
+    (productId: string, qty: number, uom: string): { price: number; reason: string; discount?: number } => {
       if (useCostPricing) return { price: 0, reason: "Manual" };
       const daily = dailyPricesByProductId?.[productId];
       if (daily?.effectivePrice != null && daily.effectivePrice > 0) {
@@ -482,8 +484,12 @@ export function DocumentLineEditor({
           packaging: packagingByProductId?.[productId],
           productBaseUom: product?.baseUom ?? product?.unit,
         });
-        // Store gross unit price; discount shown in reason (invoice discount column later).
-        return { price: resolved.unitPriceGross, reason: resolved.reason };
+        // Net unit price after price-tag discount; percent kept for print / audit.
+        return {
+          price: resolved.unitPriceNet,
+          reason: resolved.reason,
+          ...(resolved.discountPercent > 0 ? { discount: resolved.discountPercent } : {}),
+        };
       }
       const catalog = catalogPricesByProductId?.[productId];
       if (catalog != null && catalog > 0) {
@@ -535,7 +541,7 @@ export function DocumentLineEditor({
         const packaging = packagingByProductId?.[p.id] ?? [];
         const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
         const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
-        const { price, reason } = resolvePrice(p.id, 1, uom);
+        const { price, reason, discount } = resolvePrice(p.id, 1, uom);
         const newLine: DocumentLine = {
           id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
           productId: p.id,
@@ -546,6 +552,7 @@ export function DocumentLineEditor({
           baseQty,
           price,
           priceReason: reason,
+          ...(discount != null && discount > 0 ? { discount } : {}),
           amount: price,
           taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
         };
@@ -607,10 +614,12 @@ export function DocumentLineEditor({
         if (useCostPricing && patch.productId != null) {
           next.price = 0;
           next.priceReason = "Manual";
+          next.discount = undefined;
         } else if (!useCostPricing) {
-          const { price, reason } = resolvePrice(productId, qty, uom);
+          const { price, reason, discount } = resolvePrice(productId, qty, uom);
           next.price = price;
           next.priceReason = reason;
+          next.discount = discount != null && discount > 0 ? discount : undefined;
         }
         next.amount = next.qty * next.price;
       }
@@ -657,10 +666,17 @@ export function DocumentLineEditor({
       let changed = false;
       const next = prev.map((l) => {
         if (!l.productId) return l;
-        const { price, reason } = resolvePriceRef.current(l.productId, l.qty, l.uom);
-        if (price === l.price && reason === l.priceReason) return l;
+        const { price, reason, discount } = resolvePriceRef.current(l.productId, l.qty, l.uom);
+        const nextDiscount = discount != null && discount > 0 ? discount : undefined;
+        if (price === l.price && reason === l.priceReason && nextDiscount === l.discount) return l;
         changed = true;
-        const merged = { ...l, price, priceReason: reason, amount: l.qty * price };
+        const merged = {
+          ...l,
+          price,
+          priceReason: reason,
+          discount: nextDiscount,
+          amount: l.qty * price,
+        };
         const taxed = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
         return { ...merged, tax: taxed.tax, amount: taxed.amount };
       });
@@ -685,7 +701,7 @@ export function DocumentLineEditor({
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
       const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
-      const { price, reason } = resolvePrice(productId, qty, uom);
+      const { price, reason, discount } = resolvePrice(productId, qty, uom);
       updateLine(lineId, {
         productId: row.id,
         sku: row.sku,
@@ -694,6 +710,7 @@ export function DocumentLineEditor({
         baseQty,
         price,
         priceReason: reason,
+        discount: discount != null && discount > 0 ? discount : undefined,
         amount: qty * price,
         taxCodeId: row.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
         variantId: undefined,
@@ -764,9 +781,10 @@ export function DocumentLineEditor({
       patch.uom = uom;
       patch.baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
       if (!useCostPricing) {
-        const { price, reason } = resolvePrice(line.productId, line.qty, uom);
+        const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom);
         patch.price = price;
         patch.priceReason = reason;
+        patch.discount = discount != null && discount > 0 ? discount : undefined;
         patch.amount = line.qty * price;
       }
     }
@@ -780,8 +798,15 @@ export function DocumentLineEditor({
     if (useCostPricing) {
       updateLine(lineId, { uom, baseQty, amount: line.qty * line.price });
     } else {
-      const { price, reason } = resolvePrice(line.productId, line.qty, uom);
-      updateLine(lineId, { uom, baseQty, price, priceReason: reason, amount: line.qty * price });
+      const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom);
+      updateLine(lineId, {
+        uom,
+        baseQty,
+        price,
+        priceReason: reason,
+        discount: discount != null && discount > 0 ? discount : undefined,
+        amount: line.qty * price,
+      });
     }
   };
 
@@ -792,15 +817,23 @@ export function DocumentLineEditor({
     if (useCostPricing) {
       updateLine(lineId, { qty, baseQty, amount: qty * line.price });
     } else {
-      const { price, reason } = resolvePrice(line.productId, qty, line.uom);
-      updateLine(lineId, { qty, baseQty, price, priceReason: reason, amount: qty * price });
+      const { price, reason, discount } = resolvePrice(line.productId, qty, line.uom);
+      updateLine(lineId, {
+        qty,
+        baseQty,
+        price,
+        priceReason: reason,
+        discount: discount != null && discount > 0 ? discount : undefined,
+        amount: qty * price,
+      });
     }
   };
 
   const setPrice = (lineId: string, price: number) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    updateLine(lineId, { price, amount: line.qty * price });
+    // Manual override clears price-tag discount.
+    updateLine(lineId, { price, discount: undefined, amount: line.qty * price });
   };
 
   const removeLine = (id: string) => {
@@ -810,6 +843,7 @@ export function DocumentLineEditor({
   const subtotalSum = lines.reduce((s, l) => s + l.qty * l.price, 0);
   const totalTax = lines.reduce((s, l) => s + (l.tax ?? 0), 0);
   const total = lines.reduce((s, l) => s + l.amount, 0);
+  const showDiscountCol = lines.some((l) => (l.discount ?? 0) > 0);
 
   const showVariantColumn = React.useMemo(
     () =>
@@ -912,6 +946,7 @@ export function DocumentLineEditor({
                     )}
                   </TableHead>
                   <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
+                  {showDiscountCol ? <TableHead className="w-20">Disc%</TableHead> : null}
                   <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
                   {taxCodes.length > 0 && <TableHead className="w-36">Tax</TableHead>}
                   {taxCodes.length > 0 && <TableHead className="w-28">Tax amount</TableHead>}
@@ -1048,6 +1083,11 @@ export function DocumentLineEditor({
                         formatMoney(l.price, currency)
                       )}
                     </TableCell>
+                    {showDiscountCol ? (
+                      <TableCell className="text-muted-foreground tabular-nums text-xs">
+                        {(l.discount ?? 0) > 0 ? `${l.discount}%` : "—"}
+                      </TableCell>
+                    ) : null}
                     <TableCell className="text-muted-foreground text-xs">{l.priceReason}</TableCell>
                     {taxCodes.length > 0 && (
                       <TableCell>
