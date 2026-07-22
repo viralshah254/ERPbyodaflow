@@ -31,6 +31,8 @@ import type { ProductKind } from "@/lib/products/product-type";
 import { productTypeSortKey } from "@/lib/products/product-type";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { useAuthStore } from "@/stores/auth-store";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
@@ -103,6 +105,13 @@ export default function ProductsPage() {
   const canWrite = useCanWriteInventory();
   const permissions = useAuthStore((s) => s.permissions);
   const canDelete = permissions.includes("admin.settings");
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const fmcg = isFmcgOrg(templateId);
+
+  // FMCG: catalogue under Masters; stock + avg cost on Stock Levels — no second Finished Goods menu.
+  React.useEffect(() => {
+    if (fmcg) router.replace("/inventory/stock-levels");
+  }, [fmcg, router]);
 
   const [searchInput, setSearchInput] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -453,6 +462,14 @@ export default function ProductsPage() {
     ],
     [canDelete, categoryNameById],
   );
+
+  if (fmcg) {
+    return (
+      <PageShell className={LIST_PAGE_SHELL_CLASS}>
+        <PageHeader title="Stock Levels" description="Redirecting…" sticky />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>

@@ -38,9 +38,6 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
             "/workspace/lists"
           )}
           {!seafood
-            ? tab("/pricing/workspace/packs", "Packs", "/workspace/packs")
-            : null}
-          {!seafood
             ? tab("/pricing/workspace/tax-tags", "Tax tags", "/workspace/tax-tags")
             : null}
           {seafood ? tab("/pricing/workspace/zones", "Franchise zones", "/workspace/zones") : null}

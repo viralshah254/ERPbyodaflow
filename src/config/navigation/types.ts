@@ -15,6 +15,8 @@ export interface NavItemConfig {
   requiresOrgRole?: string;
   /** Show only when org template id matches one of these (e.g. FMCG-only screens). */
   requiresTemplates?: string[];
+  /** Hide when org template id matches one of these (e.g. hide Inventory Products for FMCG). */
+  excludesTemplates?: string[];
   children?: NavItemConfig[];
   badge?: { type: "count" | "text"; value: string };
   /** Terminology key for label override when t() is used */

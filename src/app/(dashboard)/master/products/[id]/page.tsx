@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -140,7 +140,21 @@ function crossProduct(arrays: string[][]): string[][] {
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const tabParam = (searchParams.get("tab") ?? "").trim().toLowerCase();
+  const initialTab =
+    tabParam === "packaging" || tabParam === "packs"
+      ? "packaging"
+      : tabParam === "pricing"
+        ? "pricing"
+        : tabParam === "variants"
+          ? "variants"
+          : "overview";
+  const [activeTab, setActiveTab] = React.useState(initialTab);
+  React.useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
   const permissions = useAuthStore((s) => s.permissions);
   const canDelete = permissions.includes("admin.settings");
   const canWrite = useCanWriteInventory();
@@ -802,7 +816,7 @@ export default function ProductDetailPage() {
       />
 
       <div className="p-6">
-        <Tabs defaultValue="overview">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
             <TabsTrigger value="overview">
               <Icons.Info className="mr-2 h-4 w-4" />
@@ -1092,12 +1106,10 @@ export default function ProductDetailPage() {
                   {fmcgOrg ? (
                     packaging.length === 0 ? (
                       <div className="space-y-2 text-sm text-muted-foreground">
-                        <p>No packs yet. Set manufacturer defaults, then tweak this product on the Packs tab.</p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" asChild>
-                            <Link href="/pricing/workspace/packs">Manufacturer packs</Link>
-                          </Button>
-                        </div>
+                        <p>
+                          No packs yet. Open the Packs tab and set pieces per carton/bale/outer for this
+                          product — there is no company-wide default.
+                        </p>
                       </div>
                     ) : (
                       <ul className="text-sm space-y-2">
@@ -1112,7 +1124,7 @@ export default function ProductDetailPage() {
                         ))}
                         <li className="pt-1">
                           <p className="text-xs text-muted-foreground">
-                            Toggle or edit per product on the Packs tab.
+                            Edit on the Packs tab. Required before converting sales orders that use these packs.
                           </p>
                         </li>
                       </ul>
@@ -1495,8 +1507,8 @@ export default function ProductDetailPage() {
                 <CardHeader>
                   <CardTitle className="text-base">Sell packs</CardTitle>
                   <CardDescription>
-                    Manufacturer packs are the default for every product. Toggle off packs this SKU does not
-                    use, or change pieces when this product packs differently.
+                    Set packing for this product only — how many pieces are in each carton, bale, or outer.
+                    Counts vary by SKU; there is no company-wide default.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

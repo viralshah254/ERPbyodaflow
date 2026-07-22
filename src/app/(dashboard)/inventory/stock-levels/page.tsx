@@ -34,6 +34,10 @@ import {
   type FranchiseNetworkStockItem,
   type FranchiseOutletStockRow,
 } from "@/lib/api/inventory-stock";
+import {
+  fetchLatestInventoryCosting,
+  type InventoryCostingSnapshot,
+} from "@/lib/api/inventory-costing";
 import { fetchProductsApi } from "@/lib/api/products";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import {
@@ -47,8 +51,28 @@ import { compareProductFamilyKeys, UNCATEGORIZED_FAMILY } from "@/lib/products/p
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+/** Weighted average book cost per product from latest inventory costing run. */
+function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null): Map<string, number> {
+  const result = new Map<string, number>();
+  if (!costing?.items?.length) return result;
+  const agg = new Map<string, { q: number; v: number }>();
+  for (const item of costing.items) {
+    const q = item.quantity ?? 0;
+    if (q <= 0) continue;
+    const cur = agg.get(item.productId) ?? { q: 0, v: 0 };
+    cur.q += q;
+    cur.v += item.inventoryValue ?? 0;
+    agg.set(item.productId, cur);
+  }
+  for (const [pid, { q, v }] of agg) {
+    if (q > 0) result.set(pid, v / q);
+  }
+  return result;
+}
 
 export default function StockLevelsPage() {
   const router = useRouter();
@@ -64,6 +88,8 @@ export default function StockLevelsPage() {
   const [stockItems, setStockItems] = React.useState<InventoryStockRow[]>([]);
   const [networkAgg, setNetworkAgg] = React.useState<FranchiseNetworkStockItem[]>([]);
   const [networkAggByProduct, setNetworkAggByProduct] = React.useState<Map<string, FranchiseNetworkStockItem>>(new Map());
+  const [avgCostByProduct, setAvgCostByProduct] = React.useState<Map<string, number>>(new Map());
+  const [costingRanAt, setCostingRanAt] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   // Stock adjustment state
@@ -89,7 +115,11 @@ export default function StockLevelsPage() {
   const refreshStock = React.useCallback(async () => {
     setLoading(true);
     try {
-      const requests: [Promise<InventoryStockRow[]>, Promise<{ items: FranchiseNetworkStockItem[] } | null>] = [
+      const requests: [
+        Promise<InventoryStockRow[]>,
+        Promise<{ items: FranchiseNetworkStockItem[] } | null>,
+        Promise<InventoryCostingSnapshot | null>,
+      ] = [
         fetchStockLevelsApi({
           warehouseId: warehouseFilter === "all" ? undefined : warehouseFilter,
           status: statusFilter as "In Stock" | "Low Stock" | "Out of Stock" | "all",
@@ -98,20 +128,25 @@ export default function StockLevelsPage() {
         isFranchisor
           ? fetchFranchiseNetworkStockAggregate({ search: searchQuery })
           : Promise.resolve(null),
+        fmcg ? fetchLatestInventoryCosting().catch(() => null) : Promise.resolve(null),
       ];
 
-      const [hqItems, aggResult] = await Promise.all(requests);
+      const [hqItems, aggResult, costing] = await Promise.all(requests);
       setStockItems(hqItems);
 
       const aggItems = aggResult?.items ?? [];
       setNetworkAgg(aggItems);
       setNetworkAggByProduct(new Map(aggItems.map((i) => [i.productId, i])));
+      if (fmcg) {
+        setAvgCostByProduct(weightedAvgBookCostByProduct(costing));
+        setCostingRanAt(costing?.ranAt ?? null);
+      }
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, statusFilter, warehouseFilter, isFranchisor]);
+  }, [searchQuery, statusFilter, warehouseFilter, isFranchisor, fmcg]);
 
   React.useEffect(() => {
     void refreshStock();
@@ -251,21 +286,26 @@ export default function StockLevelsPage() {
   );
 
   const columns = [
+    // Seafood: "Product" = product family (e.g. Tilapia). FMCG has no family — show product name.
     {
-      id: "productFamily",
+      id: fmcg ? "name" : "productFamily",
       header: "Product",
-      accessor: (row: InventoryStockRow) => row.productFamily?.trim() || "—",
+      accessor: (row: InventoryStockRow) =>
+        fmcg ? row.name?.trim() || "—" : row.productFamily?.trim() || "—",
       sticky: true,
     },
     {
       id: "sku",
       header: "SKU",
-      accessor: (row: InventoryStockRow) => (
-        <div>
+      accessor: (row: InventoryStockRow) =>
+        fmcg ? (
           <div className="font-medium font-mono">{row.sku}</div>
-          <div className="text-xs text-muted-foreground">{row.name}</div>
-        </div>
-      ),
+        ) : (
+          <div>
+            <div className="font-medium font-mono">{row.sku}</div>
+            <div className="text-xs text-muted-foreground">{row.name}</div>
+          </div>
+        ),
     },
     {
       id: "warehouse",
@@ -301,6 +341,40 @@ export default function StockLevelsPage() {
         <div className="text-right font-semibold">{row.available}</div>
       ),
     },
+    ...(fmcg
+      ? [
+          {
+            id: "avgCost",
+            header: "Avg inventory cost",
+            accessor: (row: InventoryStockRow) => {
+              const pid = row.productId;
+              const v = pid ? avgCostByProduct.get(pid) : undefined;
+              if (v == null) {
+                return <div className="text-right text-muted-foreground">—</div>;
+              }
+              return (
+                <div className="text-right tabular-nums text-sm">{formatMoney(v, "KES")}</div>
+              );
+            },
+          },
+          {
+            id: "inventoryValue",
+            header: "Inventory value",
+            accessor: (row: InventoryStockRow) => {
+              const pid = row.productId;
+              const unit = pid ? avgCostByProduct.get(pid) : undefined;
+              if (unit == null) {
+                return <div className="text-right text-muted-foreground">—</div>;
+              }
+              return (
+                <div className="text-right tabular-nums text-sm font-medium">
+                  {formatMoney(unit * (row.quantity ?? 0), "KES")}
+                </div>
+              );
+            },
+          },
+        ]
+      : []),
     ...(isFranchisor
       ? [
           {
@@ -390,7 +464,7 @@ export default function StockLevelsPage() {
         title="Stock Levels"
         description={
           fmcg
-            ? "On-hand quantity by warehouse. Stock In puts finished goods into MAIN so pick & pack can ship."
+            ? "On-hand by warehouse, with avg inventory cost and value from the latest costing run. Stock In puts finished goods into MAIN for pick & pack."
             : "View current inventory levels across all warehouses"
         }
         sticky
@@ -425,6 +499,15 @@ export default function StockLevelsPage() {
             Stock In to MAIN
           </Button>
         </div>
+      ) : null}
+      {fmcg && !loading && stockItems.length > 0 && !costingRanAt ? (
+        <p className="shrink-0 text-xs text-muted-foreground">
+          Run{" "}
+          <Link href="/inventory/costing" className="text-primary underline underline-offset-2">
+            inventory costing
+          </Link>{" "}
+          so avg inventory cost and value populate on this list.
+        </p>
       ) : null}
       {isFranchisor && networkAgg.length > 0 && (
         <div className="shrink-0 flex flex-wrap gap-3">

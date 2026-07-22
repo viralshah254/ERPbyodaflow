@@ -56,6 +56,7 @@ import { Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { isPieceUom } from "@/lib/fmcg/pricing";
 
 function formatPickQty(n: number, fmcg: boolean, unit = "PCS"): string {
   const v = formatKg(n);
@@ -65,6 +66,47 @@ function formatPickQty(n: number, fmcg: boolean, unit = "PCS"): string {
 
 function formatPickQtyWithUnit(n: number, fmcg: boolean): string {
   return fmcg ? formatPickQty(n, true, "PCS") : `${formatKg(n)} kg`;
+}
+
+/** Human label for pack UOM count field (Carton vs Bale vs …). */
+function packUomCountLabel(uom: string): { unit: string; countLabel: string; plural: string } {
+  const u = String(uom ?? "").trim().toUpperCase();
+  if (u === "BALE" || u === "BALES" || u === "BL") {
+    return { unit: "BALE", countLabel: "Bales count", plural: "bales" };
+  }
+  if (u === "OUTER" || u === "OUTERS" || u === "OTR") {
+    return { unit: "OUTER", countLabel: "Outers count", plural: "outers" };
+  }
+  if (u === "CTN" || u === "CARTON" || u === "CARTONS" || u === "CS") {
+    return { unit: "CARTON", countLabel: "Cartons count", plural: "cartons" };
+  }
+  if (u === "PK" || u === "PACK" || u === "PACKS") {
+    return { unit: "PACK", countLabel: "Packs count", plural: "packs" };
+  }
+  const nice = u ? u.charAt(0) + u.slice(1).toLowerCase() : "Carton";
+  return { unit: u || "CARTON", countLabel: `${nice}s count`, plural: `${nice.toLowerCase()}s` };
+}
+
+function resolveShipmentPackUom(
+  lines: Array<{ documentUnit?: string; unitsPer?: number; documentQuantity?: number }>
+): string {
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    const u = String(line.documentUnit ?? "").trim();
+    if (!u || isPieceUom(u)) continue;
+    if ((line.unitsPer ?? 0) <= 1 && (line.documentQuantity ?? 0) <= 0) continue;
+    const key = u.toUpperCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = "CARTON";
+  let bestN = 0;
+  for (const [u, n] of counts) {
+    if (n > bestN) {
+      best = u;
+      bestN = n;
+    }
+  }
+  return best;
 }
 
 /** 400 from pick-pack action may include shortLines (same shape as dispatch). */
@@ -176,7 +218,9 @@ export default function PickPackDetailPage() {
   const id = params.id as string;
   const canWrite = useCanWriteInventory();
   const templateId = useOrgContextStore((s) => s.templateId);
-  const fmcg = isFmcgOrg(templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  // Prefer industryCategory so FMCG orgs never see seafood kg copy if templateId is stale.
+  const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
   const [task, setTask] = React.useState<WarehousePickPackRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [cartons, setCartons] = React.useState("0");
@@ -599,6 +643,23 @@ export default function PickPackDetailPage() {
     return !hasAnyPick;
   }, [task, linePickedDraft]);
 
+  const shipmentPackUom = React.useMemo(
+    () => (fmcg && task ? resolveShipmentPackUom(task.lines) : "CARTON"),
+    [fmcg, task]
+  );
+  const packCountUi = packUomCountLabel(shipmentPackUom);
+  const orderedPackCount = React.useMemo(() => {
+    if (!fmcg || !task) return null;
+    let sum = 0;
+    for (const line of task.lines) {
+      const u = String(line.documentUnit ?? "").trim();
+      if (!u || isPieceUom(u)) continue;
+      if (packUomCountLabel(u).unit !== packCountUi.unit) continue;
+      sum += Number(line.documentQuantity ?? 0);
+    }
+    return sum > 0 ? sum : null;
+  }, [fmcg, task, packCountUi.unit]);
+
   if (!task && loading) {
     return <PageShell><PageHeader title="Loading task..." /></PageShell>;
   }
@@ -757,8 +818,24 @@ export default function PickPackDetailPage() {
             ) : null}
             {packagingMissing ? (
               <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-950 dark:text-amber-100">
-                A line uses a pack UOM (e.g. carton) but packaging has no pieces-per-pack. Pick is treating it as 1 piece — open the
-                product&apos;s packaging and set e.g. 1 CARTON = 24 PCS, then reload this pick.
+                A line uses a pack UOM (e.g. carton) but packaging has no pieces-per-pack. Pick is treating it as 1 piece —{" "}
+                {task.lines
+                  .filter((l) => l.packagingConversionMissing && l.productId)
+                  .filter(
+                    (l, i, arr) => arr.findIndex((x) => x.productId === l.productId) === i
+                  )
+                  .map((l, i) => (
+                    <span key={l.productId}>
+                      {i > 0 ? ", " : null}
+                      <Link
+                        href={`/master/products/${l.productId}?tab=packaging`}
+                        className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-50"
+                      >
+                        {l.productName ?? l.sku ?? "open product"}
+                      </Link>
+                    </span>
+                  ))}
+                {" "}→ Packs, set e.g. 1 CARTON = 24 PCS, then reload this pick.
               </p>
             ) : null}
             {task.suggestedFulfilmentWarehouseId &&
@@ -863,7 +940,7 @@ export default function PickPackDetailPage() {
                 <TableRow>
                   <TableHead className="min-w-[12rem]">Product (substitute)</TableHead>
                   <TableHead>SKU</TableHead>
-                  <TableHead>Qty</TableHead>
+                  <TableHead>{fmcg ? "To pick" : "Qty"}</TableHead>
                   <TableHead className="text-right">Can pick</TableHead>
                   <TableHead className="text-right">Avail. (MAIN)</TableHead>
                   <TableHead className="text-right">Avail. (all sites)</TableHead>
@@ -928,24 +1005,46 @@ export default function PickPackDetailPage() {
                         ) : null}
                         {fmcg && line.packagingConversionMissing ? (
                           <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
-                            Pack UOM {line.documentUnit} has no pieces-per-pack on packaging — treating as 1. Set packaging on the
-                            product.
+                            Pack UOM {line.documentUnit} has no pieces-per-pack on packaging — treating as 1.{" "}
+                            {line.productId ? (
+                              <Link
+                                href={`/master/products/${line.productId}?tab=packaging`}
+                                className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200"
+                              >
+                                Set packaging on the product
+                              </Link>
+                            ) : (
+                              "Set packaging on the product"
+                            )}
+                            .
                           </p>
                         ) : null}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">{line.sku ?? "—"}</TableCell>
                       <TableCell className="tabular-nums">
                         {fmcg ? (
-                          <div>
-                            <div>{formatPickQty(line.quantity, true, line.baseUom || "PCS")}</div>
+                          <div className="space-y-0.5">
                             {line.documentUnit &&
                             line.documentQuantity != null &&
-                            String(line.documentUnit).toUpperCase() !== String(line.baseUom || "PCS").toUpperCase() ? (
-                              <div className="text-[11px] text-muted-foreground">
-                                {formatKg(line.documentQuantity)} {line.documentUnit}
-                                {(line.unitsPer ?? 0) > 1 ? ` × ${line.unitsPer}` : ""}
+                            !isPieceUom(line.documentUnit) ? (
+                              <>
+                                <div className="font-medium">
+                                  Ordered {formatKg(line.documentQuantity)} {line.documentUnit}
+                                </div>
+                                <div className="text-[11px] text-foreground">
+                                  → pick {formatPickQty(line.quantity, true, line.baseUom || "PCS")}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">
+                                  {formatKg(line.documentQuantity)} {line.documentUnit} ×{" "}
+                                  {line.unitsPer ?? "?"} {line.baseUom || "PCS"} ={" "}
+                                  {formatKg(line.quantity)} {line.baseUom || "PCS"} from stock
+                                </div>
+                              </>
+                            ) : (
+                              <div className="font-medium">
+                                {formatPickQty(line.quantity, true, line.baseUom || "PCS")}
                               </div>
-                            ) : null}
+                            )}
                           </div>
                         ) : (
                           formatKg(line.quantity)
@@ -1113,10 +1212,25 @@ export default function PickPackDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Cartons count</Label>
+                <Label>{fmcg ? packCountUi.countLabel : "Cartons count"}</Label>
                 <Input value={cartons} onChange={(e) => setCartons(e.target.value)} />
                 <p className="text-[11px] text-muted-foreground">
-                  Leave as 0 or empty to default to 1 when you confirm pick &amp; pack.
+                  {fmcg ? (
+                    <>
+                      How many {packCountUi.plural} on this shipment (pack UOM from the order
+                      {orderedPackCount != null ? (
+                        <>
+                          ; ordered{" "}
+                          <span className="font-medium text-foreground">
+                            {formatKg(orderedPackCount)} {packCountUi.unit}
+                          </span>
+                        </>
+                      ) : null}
+                      ). Leave 0 or empty to default to 1 when you confirm pick &amp; pack.
+                    </>
+                  ) : (
+                    "Leave as 0 or empty to default to 1 when you confirm pick & pack."
+                  )}
                 </p>
               </div>
               <div className="space-y-2">
@@ -1523,7 +1637,7 @@ export default function PickPackDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Quantity (kg)</Label>
+                <Label>{fmcg ? "Quantity (PCS)" : "Quantity (kg)"}</Label>
                 <Input
                   type="number"
                   min={0}
@@ -1531,6 +1645,12 @@ export default function PickPackDetailPage() {
                   value={addLineQty}
                   onChange={(e) => setAddLineQty(e.target.value)}
                 />
+                {fmcg ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Enter pieces (base UOM) — same unit as Stock In and the pick list. Pack/carton conversion applies on sales
+                    order lines, not here.
+                  </p>
+                ) : null}
               </div>
             </div>
             <SheetFooter>

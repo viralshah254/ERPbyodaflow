@@ -69,6 +69,9 @@ function itemPasses(item: NavItemConfig, input: BuildVisibleNavInput): boolean {
   if (item.requiresTemplates?.length) {
     if (!input.templateId || !item.requiresTemplates.includes(input.templateId)) return false;
   }
+  if (item.excludesTemplates?.length) {
+    if (input.templateId && item.excludesTemplates.includes(input.templateId)) return false;
+  }
   return true;
 }
 

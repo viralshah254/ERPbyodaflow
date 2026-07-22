@@ -9,11 +9,10 @@ export type ProductPackagingPayload = {
   source: "product" | "defaults";
 };
 
-/** Effective packs for the product (override if saved, else manufacturer defaults). */
+/** Packs defined on this product only (no org-wide defaults). */
 export async function fetchProductPackagingApi(productId: string): Promise<ProductPackaging[]> {
   const payload = await fetchProductPackagingDetailApi(productId);
-  if (payload.hasProductOverride) return payload.items;
-  return payload.defaults.length > 0 ? payload.defaults : payload.items;
+  return payload.items ?? [];
 }
 
 export async function fetchProductPackagingDetailApi(

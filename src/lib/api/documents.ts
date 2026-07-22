@@ -14,6 +14,7 @@ type BackendDocumentLine = {
   productId?: string;
   productName?: string;
   productSku?: string;
+  packagingMissing?: boolean;
   accountId?: string;
   accountName?: string;
   accountCode?: string;
@@ -135,6 +136,8 @@ type BackendDocumentDetail = {
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
+  packagingBlockingConversion?: boolean;
+  packagingMissingLines?: Array<{ productId: string; unit: string; description?: string }>;
   lines?: BackendDocumentLine[];
   sourceDocument?: {
     id: string;
@@ -387,6 +390,8 @@ function mapDocumentDetail(
     }),
     availableActions: payload.availableActions ?? [],
     availableConversionTargets: payload.availableConversionTargets ?? [],
+    packagingBlockingConversion: payload.packagingBlockingConversion,
+    packagingMissingLines: payload.packagingMissingLines,
     outputTemplateId: payload.outputTemplateId,
     lines: (payload.lines ?? []).map((line) => ({
       id: line.id,
@@ -394,6 +399,7 @@ function mapDocumentDetail(
       productId: line.productId,
       productName: line.productName,
       productSku: line.productSku,
+      packagingMissing: line.packagingMissing,
       accountId: line.accountId,
       accountName: line.accountName,
       accountCode: line.accountCode,

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
@@ -34,6 +35,7 @@ import { isApiConfigured } from "@/lib/api/client";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import {
+  isPieceUom,
   resolveFmcgClientLinePrice,
   type FmcgCatalogItem,
 } from "@/lib/fmcg/pricing";
@@ -167,32 +169,74 @@ function productMatchesLineSearch(p: ProductRow, query: string): boolean {
   return tokens.every((t) => hay.includes(t));
 }
 
+/** Packs that are actually configured (pieces-per-pack > 1). */
+function configuredPackUoms(packaging: ProductPackaging[] | undefined): string[] {
+  return (packaging ?? [])
+    .filter((p) => Number.isFinite(p.unitsPer) && p.unitsPer > 1 && !isPieceUom(p.uom))
+    .map((p) => String(p.uom).trim().toUpperCase())
+    .filter(Boolean);
+}
+
 /** Default UOM from product packaging (purchase vs sales). */
 function pickDefaultUomFromPackaging(
   packaging: ProductPackaging[],
-  mode: "sales" | "purchasing"
+  mode: "sales" | "purchasing",
+  opts?: { fmcgOrg?: boolean }
 ): string | undefined {
-  if (!packaging.length) return undefined;
+  const usable = opts?.fmcgOrg
+    ? packaging.filter((p) => Number.isFinite(p.unitsPer) && p.unitsPer > 1)
+    : packaging;
+  if (!usable.length) return undefined;
   if (mode === "purchasing") {
-    const p = packaging.find((x) => x.isDefaultPurchaseUom);
+    const p = usable.find((x) => x.isDefaultPurchaseUom);
     if (p) return p.uom;
   }
-  const s = packaging.find((x) => x.isDefaultSalesUom);
+  const s = usable.find((x) => x.isDefaultSalesUom);
   if (s) return s.uom;
-  return packaging[0]?.uom;
+  return usable[0]?.uom;
 }
 
+/**
+ * Line UOM options.
+ * FMCG: base piece UOM (PCS) + only packs saved on that product (no org catalog / defaults).
+ * Seafood / other: packaging UOMs merged with org UOM catalog.
+ */
 function mergeLineUomOptions(
   packagingForProduct: ProductPackaging[] | undefined,
   catalogUomCodes: string[],
-  currentValue?: string
+  currentValue?: string,
+  opts?: { fmcgOrg?: boolean; baseUom?: string }
 ): string[] {
+  if (opts?.fmcgOrg) {
+    const base = String(opts.baseUom ?? "PCS").trim().toUpperCase() || "PCS";
+    const merged = new Set<string>([base, ...configuredPackUoms(packagingForProduct)]);
+    if (currentValue) merged.add(String(currentValue).trim().toUpperCase());
+    const arr = [...merged].filter(Boolean);
+    arr.sort((a, b) => {
+      if (isPieceUom(a) && !isPieceUom(b)) return -1;
+      if (!isPieceUom(a) && isPieceUom(b)) return 1;
+      return a.localeCompare(b);
+    });
+    return arr.length ? arr : ["PCS"];
+  }
   const fromPack = (packagingForProduct ?? []).map((p) => p.uom);
   const merged = new Set<string>([...fromPack, ...catalogUomCodes]);
   if (currentValue) merged.add(currentValue);
   const arr = [...merged].filter(Boolean);
   arr.sort((a, b) => a.localeCompare(b));
   return arr.length ? arr : ["EA"];
+}
+
+function defaultLineUom(
+  packaging: ProductPackaging[],
+  mode: "sales" | "purchasing",
+  product: Pick<ProductRow, "unit" | "baseUom">,
+  fmcgOrg: boolean
+): string {
+  const fromPack = pickDefaultUomFromPackaging(packaging, mode, { fmcgOrg });
+  if (fromPack) return fromPack;
+  if (fmcgOrg) return "PCS";
+  return product.unit ?? product.baseUom ?? "EA";
 }
 
 export function applyLineTax(
@@ -479,7 +523,7 @@ export function DocumentLineEditor({
     // Prefetch variants so the Variant column is ready without an extra beat after paint.
     ensureVariantsLoaded(p.id);
     const packaging = packagingByProductId?.[p.id] ?? [];
-    const uom = pickDefaultUomFromPackaging(packaging, mode) ?? p.unit ?? p.baseUom ?? "EA";
+    const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
     const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
     const { price, reason } = resolvePrice(p.id, 1, uom);
     const newLine: DocumentLine = {
@@ -605,7 +649,7 @@ export function DocumentLineEditor({
   const setProduct = (lineId: string, productId: string) => {
     const applyRow = (row: ProductRow) => {
       const packaging = packagingByProductId?.[productId] ?? [];
-      const uom = pickDefaultUomFromPackaging(packaging, mode) ?? row.unit ?? row.baseUom ?? "EA";
+      const uom = defaultLineUom(packaging, mode, row, fmcgOrg);
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
       const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
@@ -938,6 +982,12 @@ export function DocumentLineEditor({
                         onChange={setUom}
                         packagingForProduct={packagingByProductId?.[l.productId]}
                         catalogUomCodes={catalogUomCodes}
+                        fmcgOrg={fmcgOrg}
+                        baseUom={
+                          products.find((p) => p.id === l.productId)?.baseUom ||
+                          products.find((p) => p.id === l.productId)?.unit ||
+                          "PCS"
+                        }
                       />
                     </TableCell>
                     <TableCell>
@@ -1030,11 +1080,13 @@ export function DocumentLineEditor({
 
 function UomSelect({
   lineId,
-  productId: _productId,
+  productId,
   value,
   onChange,
   packagingForProduct = [],
   catalogUomCodes = [],
+  fmcgOrg = false,
+  baseUom = "PCS",
 }: {
   lineId: string;
   productId: string;
@@ -1042,18 +1094,52 @@ function UomSelect({
   onChange: (lineId: string, uom: string) => void;
   packagingForProduct?: ProductPackaging[];
   catalogUomCodes?: string[];
+  fmcgOrg?: boolean;
+  baseUom?: string;
 }) {
-  const options = mergeLineUomOptions(packagingForProduct, catalogUomCodes, value);
+  // FMCG: do not keep a stale catalog pack (e.g. CARTON) when the product has no pack counts yet.
+  const options = mergeLineUomOptions(
+    packagingForProduct,
+    catalogUomCodes,
+    fmcgOrg ? undefined : value,
+    { fmcgOrg, baseUom }
+  );
+  const normalizedValue = String(value ?? "").trim().toUpperCase();
+  const selectValue = options.includes(normalizedValue)
+    ? normalizedValue
+    : options.includes(value)
+      ? value
+      : options[0] ?? value;
+
+  React.useEffect(() => {
+    if (!fmcgOrg) return;
+    if (!selectValue || selectValue === value) return;
+    onChange(lineId, selectValue);
+  }, [fmcgOrg, lineId, onChange, selectValue, value]);
 
   return (
-    <Select value={value} onValueChange={(v) => onChange(lineId, v)}>
-      <SelectTrigger className="w-24 min-w-[5.5rem]">
+    <Select value={selectValue} onValueChange={(v) => onChange(lineId, v)}>
+      <SelectTrigger className="w-28 min-w-[6rem]">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {options.map((u) => (
-          <SelectItem key={u} value={u}>{u}</SelectItem>
+          <SelectItem key={u} value={u}>
+            {u}
+          </SelectItem>
         ))}
+        {fmcgOrg && productId ? (
+          <div className="border-t border-border mt-1 pt-1">
+            <Link
+              href={`/master/products/${productId}?tab=packaging`}
+              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              onPointerDown={(e) => e.preventDefault()}
+            >
+              <Icons.Plus className="h-3.5 w-3.5 shrink-0" />
+              Add pack UOM…
+            </Link>
+          </div>
+        ) : null}
       </SelectContent>
     </Select>
   );

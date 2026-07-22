@@ -137,7 +137,17 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     tier: "primary",
     order: 3,
     items: [
-      { key: "inventory-products", label: "Products", href: "/inventory/products", icon: "Package", moduleKey: "inventory", termKey: "product", requiresPermissions: ["inventory.read"] },
+      {
+        key: "inventory-products",
+        label: "Products",
+        href: "/inventory/products",
+        icon: "Package",
+        moduleKey: "inventory",
+        termKey: "product",
+        requiresPermissions: ["inventory.read"],
+        // FMCG: catalogue lives under Masters → Finished SKU; stock+cost on Stock Levels.
+        excludesTemplates: ["fmcg-manufacturer", "fmcg-distributor"],
+      },
       { key: "inventory-stock-levels", label: "Stock Levels", href: "/inventory/stock-levels", icon: "Warehouse", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-movements", label: "Stock Movements", href: "/inventory/movements", icon: "ArrowLeftRight", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-receipts", label: "Receipts (GRN)", href: "/inventory/receipts", icon: "PackageCheck", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
@@ -466,16 +476,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             moduleKey: "pricing",
             requiresPermissions: ["sales.write", "admin.settings"],
           },
-          {
-            key: "pricing-workspace-packs",
-            label: "Packs",
-            href: "/pricing/workspace/packs",
-            icon: "Package",
-            moduleKey: "pricing",
-            requiresPermissions: ["sales.write", "admin.settings"],
-            /** FMCG piece×pack pricing — manufacturer sell packs. */
-            requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
-          },
+          // Org-wide manufacturer packs removed — packing is set per product only.
           {
             key: "pricing-workspace-tax-tags",
             label: "Tax tags",

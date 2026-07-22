@@ -32,6 +32,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, fetchProductFamiliesApi, deleteProductApi } from "@/lib/api/products";
+import { saveProductPackagingApi } from "@/lib/api/product-master";
 import { importProductsApi, exportProductsCsvApi, downloadProductsTemplateCsv } from "@/lib/api/import-export";
 import type { ImportProductsResult } from "@/lib/api/import-export";
 import {
@@ -136,6 +137,12 @@ export default function MasterProductsPage() {
 
   const [taxCodes, setTaxCodes] = React.useState<TaxRow[]>([]);
   const [defaultTaxCodeId, setDefaultTaxCodeId] = React.useState("");
+  /** FMCG: optional packing rows on create (pack name + pieces per pack). */
+  const [createPackRows, setCreatePackRows] = React.useState<Array<{ uom: string; unitsPer: string }>>([
+    { uom: "CARTON", unitsPer: "" },
+    { uom: "BALE", unitsPer: "" },
+    { uom: "OUTER", unitsPer: "" },
+  ]);
   const [categories, setCategories] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [addCategoryOpen, setAddCategoryOpen] = React.useState(false);
   const [deleteConfirmProductId, setDeleteConfirmProductId] = React.useState<string | null>(null);
@@ -440,6 +447,11 @@ export default function MasterProductsPage() {
     setProductType(fmcgOrg ? "FINISHED" : "");
     setUnit(fmcgOrg ? "PCS" : "");
     setDefaultTaxCodeId("");
+    setCreatePackRows([
+      { uom: "CARTON", unitsPer: "" },
+      { uom: "BALE", unitsPer: "" },
+      { uom: "OUTER", unitsPer: "" },
+    ]);
   };
 
   const handleCreate = async () => {
@@ -470,7 +482,7 @@ export default function MasterProductsPage() {
       setSaving(false);
       return;
     }
-    // FMCG create stays pricing-focused; packing defaults to PCS (refine on packaging tab).
+    // FMCG stock base is PCS; sell packs (CARTON/BALE/…) are set per product below.
     const selectedUnit = fmcgOrg ? "PCS" : unit.trim() || (uomOptions[0] ?? "EA");
     const composedSize = fmcgOrg
       ? composeFmcgSize(sizeValue, sizeUom)
@@ -479,6 +491,25 @@ export default function MasterProductsPage() {
     const resolvedCode = fmcgOrg
       ? trimmedBarcode || trimmedSku
       : code.trim() || undefined;
+
+    if (fmcgOrg) {
+      for (const row of createPackRows) {
+        const uom = row.uom.trim();
+        const pieces = Number(row.unitsPer);
+        if (!uom && !row.unitsPer.trim()) continue;
+        if (!uom) {
+          toast.error("Packing: enter a pack name (e.g. CARTON).");
+          setSaving(false);
+          return;
+        }
+        if (!Number.isFinite(pieces) || pieces <= 1) {
+          toast.error(`Packing: pieces for ${uom} must be greater than 1.`);
+          setSaving(false);
+          return;
+        }
+      }
+    }
+
     const payload = {
       sku: trimmedSku,
       code: resolvedCode,
@@ -495,6 +526,18 @@ export default function MasterProductsPage() {
     };
     try {
       const created = await createProductApi(payload);
+      if (fmcgOrg) {
+        const packItems = createPackRows
+          .map((row) => ({
+            uom: row.uom.trim().toUpperCase(),
+            unitsPer: Number(row.unitsPer),
+            baseUom: "PCS" as const,
+          }))
+          .filter((row) => row.uom && Number.isFinite(row.unitsPer) && row.unitsPer > 1);
+        if (packItems.length > 0) {
+          await saveProductPackagingApi(created.id, packItems);
+        }
+      }
       toast.success(`${productTypeLabel(productType || undefined)} created.`);
       resetForm();
       setDrawerOpen(false);
@@ -795,7 +838,7 @@ export default function MasterProductsPage() {
         title={`New ${productLabel}`}
         description={
           fmcgOrg
-            ? "Name, barcode (product code), size. Category optional."
+            ? "Name, barcode (product code), size. Packing optional — set pieces per carton/bale/outer for this SKU."
             : step === 1
               ? "Step 1 of 2 — Product identity"
               : "Step 2 of 2 — Classification (optional)"
@@ -978,6 +1021,65 @@ export default function MasterProductsPage() {
                   <p className="text-xs text-muted-foreground">
                     Optional grouping (e.g. Beverages, Edible Oils). Leave as None if not needed.
                   </p>
+                </div>
+                <div className="space-y-2 rounded-md border border-border/70 bg-muted/20 p-3">
+                  <div>
+                    <Label>Packing (optional)</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Pieces per pack for this product only (e.g. 1 CARTON = 24 PCS). No company-wide default — each SKU can differ. Required before converting sales orders that sell in that pack.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {createPackRows.map((row, idx) => (
+                      <div key={idx} className="grid grid-cols-[1fr_100px_auto] gap-2 items-end">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Pack name</Label>
+                          <Input
+                            value={row.uom}
+                            onChange={(e) => {
+                              const next = [...createPackRows];
+                              next[idx] = { ...next[idx], uom: e.target.value };
+                              setCreatePackRows(next);
+                            }}
+                            placeholder="CARTON / BALE / OUTER…"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Pieces</Label>
+                          <Input
+                            type="number"
+                            min={2}
+                            step={1}
+                            value={row.unitsPer}
+                            onChange={(e) => {
+                              const next = [...createPackRows];
+                              next[idx] = { ...next[idx], unitsPer: e.target.value };
+                              setCreatePackRows(next);
+                            }}
+                            placeholder="24"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mb-0.5"
+                          disabled={createPackRows.length <= 1}
+                          onClick={() => setCreatePackRows((rows) => rows.filter((_, i) => i !== idx))}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCreatePackRows((rows) => [...rows, { uom: "", unitsPer: "" }])}
+                  >
+                    Add pack
+                  </Button>
                 </div>
               </>
           ) : step === 1 ? (
@@ -1350,6 +1452,9 @@ export default function MasterProductsPage() {
                   <li><span className="font-medium text-foreground">sku</span> — optional; auto-generated as <code>SKU-001</code> if omitted.</li>
                   <li><span className="font-medium text-foreground">size</span> — e.g. <code>50g</code>, <code>100g</code>, <code>2L</code>.</li>
                   <li><span className="font-medium text-foreground">category</span> — optional; created if new.</li>
+                  <li><span className="font-medium text-foreground">carton (optional)</span> — pieces in one carton for this SKU (e.g. <code>24</code>). Varies by product; leave blank if unused.</li>
+                  <li><span className="font-medium text-foreground">bale (optional)</span> — pieces in one bale for this SKU.</li>
+                  <li><span className="font-medium text-foreground">outer (optional)</span> — pieces in one outer for this SKU.</li>
                 </ul>
               ) : (
                 <ul className="list-disc pl-4 space-y-1">
@@ -1364,9 +1469,9 @@ export default function MasterProductsPage() {
               <p className="pt-1">
                 {fmcgOrg ? (
                   <>
-                    Same fields as New Finished SKU. Type is Finished and packing defaults to PCS.
+                    Type is Finished; stock base is PCS. Pack counts are per product (no company default) — set carton/bale/outer when you sell in those packs, or add them later on the product Packs tab.
                     Re-upload the same <span className="font-medium text-foreground">barcode</span> to update.
-                    {" "}Set piece prices on Price tags after import.
+                    {" "}Set piece prices on Price tags after import. Sales orders in a pack UOM cannot convert to a delivery note until that pack&apos;s piece count is set.
                   </>
                 ) : (
                   <>

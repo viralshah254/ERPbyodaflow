@@ -1147,6 +1147,29 @@ export default function DocViewPage() {
                     </p>
                   </div>
                 ) : null}
+                {type === "sales-order" && document?.packagingBlockingConversion ? (
+                  <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+                    <p className="font-medium flex items-start gap-2 leading-snug">
+                      <Icons.AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      Cannot create a delivery note yet — one or more lines use a pack UOM (carton/bale/outer) without pieces-per-pack on the product. Set packing on each product below, then refresh this order.
+                    </p>
+                    {(document.packagingMissingLines?.length ?? 0) > 0 ? (
+                      <ul className="mt-2 list-disc pl-8 text-xs space-y-1">
+                        {document.packagingMissingLines!.map((m) => (
+                          <li key={`${m.productId}-${m.unit}`}>
+                            {m.description || m.productId}: set pieces per {m.unit} —{" "}
+                            <Link
+                              href={`/master/products/${m.productId}`}
+                              className="underline font-medium underline-offset-2"
+                            >
+                              open product
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
                 {type === "delivery-note" &&
                 document &&
                 document.status !== "DRAFT" &&
@@ -1697,6 +1720,18 @@ export default function DocViewPage() {
                                 {(line.shippedQuantity ?? 0) <= 0
                                   ? "Not shipped — out of stock at warehouse"
                                   : `Partially shipped (${line.shippedQuantity} of ${line.orderedQuantity ?? line.qty})`}
+                              </p>
+                            ) : null}
+                            {line.packagingMissing && line.productId ? (
+                              <p className="mt-1 text-xs text-amber-800 dark:text-amber-200 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1">
+                                Packing count missing for {line.unit ?? "pack"} —{" "}
+                                <Link
+                                  href={`/master/products/${line.productId}`}
+                                  className="underline font-medium underline-offset-2"
+                                >
+                                  open product
+                                </Link>{" "}
+                                and set pieces per {line.unit ?? "pack"} before creating a delivery note.
                               </p>
                             ) : null}
                           </div>

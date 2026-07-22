@@ -3,11 +3,11 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-/** Moved under Pricing → Packs for FMCG discoverability. */
+/** Org packaging defaults removed — set packing on each product. */
 export default function PackagingDefaultsSettingsRedirectPage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/pricing/workspace/packs");
+    router.replace("/master/products");
   }, [router]);
   return null;
 }

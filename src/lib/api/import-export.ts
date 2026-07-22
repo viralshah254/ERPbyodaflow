@@ -50,10 +50,10 @@ export function downloadImportTemplateApi(
 export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
   const csv = opts?.fmcg
     ? [
-        "name,barcode,sku,size,category",
-        "Classic Cola 500ml,6001234567890,COLA-500,500ml,Beverages",
-        "Classic Cola 12x330ml,6001234567891,COLA-12X330,12x330ml,Beverages",
-        "Cooking Oil 2L,6009876543210,OIL-2L,2L,Edible Oils",
+        "name,barcode,sku,size,category,carton (optional),bale (optional),outer (optional)",
+        "Classic Cola 500ml,6001234567890,COLA-500,500ml,Beverages,24,,",
+        "Classic Cola 12x330ml,6001234567891,COLA-12X330,12x330ml,Beverages,12,,",
+        "Cooking Oil 2L,6009876543210,OIL-2L,2L,Edible Oils,,,",
       ].join("\n")
     : [
         "code,name,baseUom,productType,category,productFamily",

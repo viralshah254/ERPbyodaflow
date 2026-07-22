@@ -192,6 +192,9 @@ export type DocumentDetailRecord = {
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
+  /** FMCG: pack UOM lines missing pieces-per-pack — convert to DN blocked. */
+  packagingBlockingConversion?: boolean;
+  packagingMissingLines?: Array<{ productId: string; unit: string; description?: string }>;
   lines: Array<{
     id?: string;
     description: string;
@@ -203,6 +206,8 @@ export type DocumentDetailRecord = {
     productId?: string;
     productName?: string;
     productSku?: string;
+    /** FMCG: this line's pack UOM has no pieces count on the product. */
+    packagingMissing?: boolean;
     accountId?: string;
     accountName?: string;
     accountCode?: string;
