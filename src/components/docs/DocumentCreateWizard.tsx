@@ -943,6 +943,45 @@ export function DocumentCreateWizard({
     [form]
   );
 
+  /** Fetch packaging / pricing for SKUs added via the product picker (beyond the initial cache page). */
+  const handleProductsAdded = React.useCallback(
+    (productIds: string[]) => {
+      const isPurchasingDoc =
+        type === "bill" ||
+        type === "purchase-order" ||
+        type === "grn" ||
+        type === "purchase-request" ||
+        type === "purchase-credit-note" ||
+        type === "purchase-debit-note";
+      if (isPurchasingDoc) return;
+      const missing = productIds.filter(
+        (id) => packagingByProductId[id] === undefined || pricingByProductId[id] === undefined
+      );
+      if (!missing.length) return;
+      void Promise.all(
+        missing.map((id) =>
+          Promise.all([fetchProductPackagingApi(id), fetchProductPricingApi(id)]).then(
+            ([packaging, pricing]) => ({ id, packaging, pricing })
+          )
+        )
+      )
+        .then((rows) => {
+          setPackagingByProductId((prev) => {
+            const next = { ...prev };
+            for (const row of rows) next[row.id] = row.packaging;
+            return next;
+          });
+          setPricingByProductId((prev) => {
+            const next = { ...prev };
+            for (const row of rows) next[row.id] = row.pricing;
+            return next;
+          });
+        })
+        .catch(() => {});
+    },
+    [packagingByProductId, pricingByProductId, type]
+  );
+
   const handlePoSelect = React.useCallback(
     async (poId: string, option: PurchaseOrderLookupOption | null) => {
       setLinkedPoId(poId);
@@ -1907,6 +1946,7 @@ export function DocumentCreateWizard({
               taxCodes={taxCodes}
               defaultLineTaxCodeId={defaultLineTaxCodeId}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
+              onProductsAdded={handleProductsAdded}
               lineColumnLabels={
                 type === "grn"
                   ? {

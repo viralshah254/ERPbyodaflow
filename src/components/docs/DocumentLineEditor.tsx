@@ -27,6 +27,7 @@ import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-type
 import {
   listProducts,
   fetchProductsForDocumentLines,
+  setProductsCache,
   subscribeProductsCache,
 } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
@@ -39,6 +40,7 @@ import {
   resolveFmcgClientLinePrice,
   type FmcgCatalogItem,
 } from "@/lib/fmcg/pricing";
+import { DocumentProductPickerSheet } from "@/components/docs/DocumentProductPickerSheet";
 import {
   productFamilyKey,
   productFamilyLabel,
@@ -151,6 +153,8 @@ interface DocumentLineEditorProps {
    * Seafood / other templates must leave this false/undefined.
    */
   fmcgOrg?: boolean;
+  /** Load packaging / pricing for products just added from the picker. */
+  onProductsAdded?: (productIds: string[]) => void;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -275,9 +279,11 @@ export function DocumentLineEditor({
   catalogPricesByProductId,
   fmcgCatalogByProductId,
   fmcgOrg = false,
+  onProductsAdded,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
+  const [productPickerOpen, setProductPickerOpen] = React.useState(false);
 
   /** In-progress qty/price text while typing (avoids coercing `3.` → 3 mid-entry). */
   const [lineFieldDrafts, setLineFieldDrafts] = React.useState<
@@ -514,52 +520,78 @@ export function DocumentLineEditor({
       .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })));
   }, [variantsByProductId]);
 
-  const addRow = () => {
-    const p = products[0];
-    if (!p) {
-      toast.error("No products found. Add products in Masters > Finished Good / SKU first.");
-      return;
-    }
-    // Prefetch variants so the Variant column is ready without an extra beat after paint.
-    ensureVariantsLoaded(p.id);
-    const packaging = packagingByProductId?.[p.id] ?? [];
-    const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
-    const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
-    const { price, reason } = resolvePrice(p.id, 1, uom);
-    const newLine: DocumentLine = {
-      id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      productId: p.id,
-      sku: p.sku,
-      name: p.name,
-      uom,
-      qty: 1,
-      baseQty,
-      price,
-      priceReason: reason,
-      amount: price,
-      taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
-    };
-    const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
-    onLinesChange((prev) => [...prev, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
-    // Enrich from API in the background if default tax differs (no blocking the UI).
-    if (isApiConfigured()) {
-      void fetchProductApi(p.id).then((full) => {
-        if (!full?.id || (full.defaultTaxCodeId ?? defaultLineTaxCodeId) === (p.defaultTaxCodeId ?? defaultLineTaxCodeId)) return;
-        onLinesChange((prev) => {
-          const idx = prev.findIndex((l) => l.id === newLine.id);
-          if (idx < 0) return prev;
-          const line = prev[idx];
-          if (line.productId !== full.id) return prev;
-          const merged = { ...line, taxCodeId: full.defaultTaxCodeId ?? line.taxCodeId };
-          const t = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
-          const next = { ...merged, tax: t.tax, amount: t.amount };
-          const copy = [...prev];
-          copy[idx] = next;
-          return copy;
-        });
-      }).catch(() => {});
-    }
-  };
+  const addProductsAsLines = React.useCallback(
+    (picked: ProductRow[]) => {
+      if (!picked.length) return;
+      // Keep category / SKU dropdowns aware of products loaded via search pagination.
+      const cached = listProducts();
+      const byId = new Map(cached.map((p) => [p.id, p]));
+      for (const p of picked) byId.set(p.id, p);
+      setProductsCache([...byId.values()]);
+
+      const stamp = Date.now();
+      const newLines: DocumentLine[] = picked.map((p, i) => {
+        ensureVariantsLoaded(p.id);
+        const packaging = packagingByProductId?.[p.id] ?? [];
+        const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
+        const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
+        const { price, reason } = resolvePrice(p.id, 1, uom);
+        const newLine: DocumentLine = {
+          id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+          productId: p.id,
+          sku: p.sku,
+          name: p.name,
+          uom,
+          qty: 1,
+          baseQty,
+          price,
+          priceReason: reason,
+          amount: price,
+          taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
+        };
+        const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
+        return { ...newLine, tax: taxed.tax, amount: taxed.amount };
+      });
+      onLinesChange((prev) => [...prev, ...newLines]);
+      onProductsAdded?.(picked.map((p) => p.id));
+
+      if (isApiConfigured()) {
+        for (const newLine of newLines) {
+          void fetchProductApi(newLine.productId)
+            .then((full) => {
+              if (!full?.id) return;
+              onLinesChange((prev) => {
+                const idx = prev.findIndex((l) => l.id === newLine.id);
+                if (idx < 0) return prev;
+                const line = prev[idx];
+                if (line.productId !== full.id) return prev;
+                const nextTax =
+                  full.defaultTaxCodeId ?? line.taxCodeId ?? defaultLineTaxCodeId ?? undefined;
+                if (nextTax === line.taxCodeId) return prev;
+                const merged = { ...line, taxCodeId: nextTax };
+                const t = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
+                const copy = [...prev];
+                copy[idx] = { ...merged, tax: t.tax, amount: t.amount };
+                return copy;
+              });
+            })
+            .catch(() => {});
+        }
+      }
+    },
+    [
+      defaultLineTaxCodeId,
+      ensureVariantsLoaded,
+      fmcgOrg,
+      linesAreTaxInclusive,
+      mode,
+      onLinesChange,
+      onProductsAdded,
+      packagingByProductId,
+      resolvePrice,
+      taxCodes,
+    ]
+  );
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -810,25 +842,26 @@ export function DocumentLineEditor({
           type="button"
           variant="outline"
           size="sm"
-          onClick={addRow}
-          disabled={products.length === 0 || productListLoading}
-          title={
-            productListLoading
-              ? "Loading product list…"
-              : products.length === 0
-                ? "Add products in Masters first"
-                : undefined
-          }
+          onClick={() => setProductPickerOpen(true)}
+          disabled={productListLoading}
+          title={productListLoading ? "Loading product list…" : "Search and select products to add"}
         >
           <Icons.Plus className="mr-2 h-4 w-4" />
           Add line
         </Button>
       </div>
+      <DocumentProductPickerSheet
+        open={productPickerOpen}
+        onOpenChange={setProductPickerOpen}
+        productFilter={productFilter ?? (mode === "purchasing" ? "purchasable" : "sellable")}
+        fmcgOrg={fmcgOrg}
+        onConfirm={addProductsAsLines}
+      />
       {lines.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {useCostPricing
-            ? `No lines. Add a line above. ${fmcgOrg ? "Category" : "Product family"}, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, cost per unit (enter manually).`
-            : `No lines. Add a line above. ${fmcgOrg ? "Category" : "Product family"}, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, price (${fmcgOrg ? "from price tag" : "from price list"}), price reason.`}
+            ? `No lines yet. Use Add line to search and select products. Then set ${fmcgOrg ? "category" : "product family"} / SKU if needed, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, and cost per unit.`
+            : `No lines yet. Use Add line to search and check products to add. Then set UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, and confirm price (${fmcgOrg ? "from price tag" : "from price list"}).`}
         </div>
       ) : (
         <>
