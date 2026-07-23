@@ -14,6 +14,8 @@ type BackendProduct = {
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
   defaultTaxCodeId?: string;
+  grossWeightKg?: number | null;
+  grossVolumeM3?: number | null;
   status?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -34,6 +36,8 @@ export type ProductPayload = {
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
   defaultTaxCodeId?: string;
+  grossWeightKg?: number | null;
+  grossVolumeM3?: number | null;
   status?: "ACTIVE" | "INACTIVE";
   description?: string;
 };
@@ -54,6 +58,8 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
     baseUom: uom,
     productType: item.productType,
     defaultTaxCodeId: item.defaultTaxCodeId,
+    grossWeightKg: typeof item.grossWeightKg === "number" ? item.grossWeightKg : undefined,
+    grossVolumeM3: typeof item.grossVolumeM3 === "number" ? item.grossVolumeM3 : undefined,
     status: item.status ?? "ACTIVE",
     description: item.description,
     currentStock: typeof item.currentStock === "number" ? item.currentStock : undefined,
@@ -223,6 +229,8 @@ export type ProductPatchPayload = Partial<
     | "baseUom"
     | "productType"
     | "defaultTaxCodeId"
+    | "grossWeightKg"
+    | "grossVolumeM3"
     | "status"
     | "description"
   >
@@ -244,6 +252,8 @@ export async function patchProductApi(id: string, payload: ProductPatchPayload):
       baseUom: payload.baseUom,
       productType: payload.productType,
       defaultTaxCodeId: payload.defaultTaxCodeId,
+      ...(payload.grossWeightKg !== undefined ? { grossWeightKg: payload.grossWeightKg } : {}),
+      ...(payload.grossVolumeM3 !== undefined ? { grossVolumeM3: payload.grossVolumeM3 } : {}),
       status: payload.status,
       description: payload.description,
     },

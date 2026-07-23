@@ -69,6 +69,20 @@ import * as Icons from "lucide-react";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { useAuthStore } from "@/stores/auth-store";
 import { fetchRuntimeSession } from "@/lib/api/context";
+import { isSeafoodOrg } from "@/config/industry";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+
+/** Roles that belong to seafood / franchise verticals — hide for FMCG orgs. */
+function isFranchiseOrSeafoodOnlyRole(role: {
+  templateKey?: string | null;
+  name: string;
+}): boolean {
+  const key = role.templateKey?.trim() ?? "";
+  if (key === "franchise_manager" || key.startsWith("coolcatch_")) return true;
+  const name = role.name.toLowerCase();
+  return name.includes("franchise");
+}
 
 export default function UsersRolesPage() {
   const copilotProductEnabled = useCopilotFeatureEnabled();
@@ -77,6 +91,17 @@ export default function UsersRolesPage() {
   const deepLinkUserId = searchParams.get("userId")?.trim() ?? "";
   const currentUserId = useAuthStore((s) => s.user?.userId);
   const setSession = useAuthStore((s) => s.setSession);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const hasFranchiseNetworkFlag = useOrgContextStore((s) =>
+    s.hasFlag("franchiseNetworkMonitoring"),
+  );
+  const fmcgOrg =
+    industryCategory === "FMCG" ||
+    (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
+  const showFranchisees =
+    !fmcgOrg &&
+    (isSeafoodOrg(templateId, industryCategory) || hasFranchiseNetworkFlag);
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [roles, setRoles] = React.useState<RoleDetailRow[]>([]);
   const [franchiseOutlets, setFranchiseOutlets] = React.useState<
@@ -117,10 +142,21 @@ export default function UsersRolesPage() {
     }
   }, [router, searchParams]);
 
+  const visibleRoles = React.useMemo(() => {
+    if (showFranchisees) return roles;
+    return roles.filter((r) => !isFranchiseOrSeafoodOnlyRole(r));
+  }, [roles, showFranchisees]);
+
   const sortedRoles = React.useMemo(
-    () => [...roles].sort((a, b) => a.name.localeCompare(b.name)),
-    [roles],
+    () => [...visibleRoles].sort((a, b) => a.name.localeCompare(b.name)),
+    [visibleRoles],
   );
+
+  const standardCatalogueCopy = fmcgOrg
+    ? "Owner, IT / Org Admin, Finance, Procurement, Dispatch, Logistics Coordinator, Sales, plus FMCG roles (Manufacturing, Production Planner, QC, Warehouse, Distribution)"
+    : showFranchisees
+      ? "Owner, IT / Org Admin, Finance, Procurement, Dispatch, Logistics Coordinator, Sales, Franchise Network Manager"
+      : "Owner, IT / Org Admin, Finance, Procurement, Dispatch, Logistics Coordinator, Sales";
   const refreshUsers = React.useCallback(async () => {
     setUsers(await fetchUsersApi());
   }, []);
@@ -420,9 +456,11 @@ export default function UsersRolesPage() {
               ) : null}
             </TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
-            <TabsTrigger value="franchisees" onClick={loadFranchiseOutlets}>
-              Franchisees
-            </TabsTrigger>
+            {showFranchisees ? (
+              <TabsTrigger value="franchisees" onClick={loadFranchiseOutlets}>
+                Franchisees
+              </TabsTrigger>
+            ) : null}
           </TabsList>
 
           <TabsContent value="users" className="space-y-4">
@@ -676,10 +714,9 @@ export default function UsersRolesPage() {
                 <div>
                   <CardTitle>Roles</CardTitle>
                   <CardDescription>
-                    {roles.length} role(s). Standard catalogue: Owner, IT / Org
-                    Admin, Finance, Procurement, Dispatch, Logistics
-                    Coordinator, Sales, Franchise Network Manager — use
-                    &quot;Provision standard roles&quot; to seed them.
+                    {visibleRoles.length} role(s). Standard catalogue:{" "}
+                    {standardCatalogueCopy} — use &quot;Provision standard
+                    roles&quot; to seed them.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -728,17 +765,17 @@ export default function UsersRolesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loading && roles.length === 0 ? (
+                    {loading && visibleRoles.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={4}
+                          colSpan={5}
                           className="text-muted-foreground"
                         >
                           Loading roles...
                         </TableCell>
                       </TableRow>
                     ) : null}
-                    {roles.map((r) => (
+                    {visibleRoles.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">
                           <span>{r.name}</span>
@@ -788,7 +825,8 @@ export default function UsersRolesPage() {
             </Card>
           </TabsContent>
 
-          {/* ── Franchisees tab ─────────────────────────────────────── */}
+          {/* ── Franchisees tab (seafood / franchise network only) ── */}
+          {showFranchisees ? (
           <TabsContent value="franchisees" className="space-y-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -928,6 +966,7 @@ export default function UsersRolesPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          ) : null}
         </Tabs>
       </div>
 

@@ -32,9 +32,19 @@ export function exportProductVariantsCsvApi(onError: (msg: string) => void): voi
   downloadFile("/api/import/product-variants/export", `product-variants-export-${new Date().toISOString().slice(0, 10)}.csv`, onError);
 }
 
+export type ImportTemplateEntity =
+  | "customers"
+  | "suppliers"
+  | "products"
+  | "product-packaging"
+  | "product-variants"
+  | "price-lists"
+  | "opening-stock"
+  | "ar-opening-balances";
+
 /** Download CSV template for import. */
 export function downloadImportTemplateApi(
-  entityType: "customers" | "suppliers" | "products" | "product-packaging" | "product-variants",
+  entityType: ImportTemplateEntity,
   onError: (msg: string) => void
 ): void {
   requireLiveApi("Import template");
@@ -50,16 +60,16 @@ export function downloadImportTemplateApi(
 export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
   const csv = opts?.fmcg
     ? [
-        "name,barcode,sku,size,category,carton (optional),bale (optional),outer (optional)",
-        "Classic Cola 500ml,6001234567890,COLA-500,500ml,Beverages,24,,",
-        "Classic Cola 12x330ml,6001234567891,COLA-12X330,12x330ml,Beverages,12,,",
-        "Cooking Oil 2L,6009876543210,OIL-2L,2L,Edible Oils,,,",
+        "name,barcode,sku,size,category,vatCategory,grossWeightKg,grossVolumeM3,carton (optional),bale (optional),outer (optional)",
+        "Classic Cola 500ml,6001234567890,COLA-500,500ml,Beverages,standard,0.55,0.0012,24,,",
+        "Classic Cola 12x330ml,6001234567891,COLA-12X330,12x330ml,Beverages,standard,4.2,0.008,12,,",
+        "Cooking Oil 2L,6009876543210,OIL-2L,2L,Edible Oils,zero,2.1,0.0025,,,",
       ].join("\n")
     : [
-        "code,name,baseUom,productType,category,productFamily",
-        "00001,Tilapia Whole,KG,Finished product,Fish,Tilapia",
-        "00002,Ice 5kg Bag,EA,Purchased product,Packaging,",
-        "00003,Nile Perch Fillet,KG,Stock product,Fish,Nile Perch",
+        "code,name,baseUom,productType,category,productFamily,vatCategory,grossWeightKg,grossVolumeM3",
+        "00001,Tilapia Whole,KG,Finished product,Fish,Tilapia,standard,,",
+        "00002,Ice 5kg Bag,EA,Purchased product,Packaging,,zero,,",
+        "00003,Nile Perch Fillet,KG,Stock product,Fish,Nile Perch,export,,",
       ].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -70,6 +80,17 @@ export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+async function toCsvUploadFile(file: File): Promise<File> {
+  if (!isExcelFile(file)) return file;
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const firstSheetName = wb.SheetNames[0];
+  if (!firstSheetName) throw new Error("The Excel file has no sheets.");
+  const csv = XLSX.utils.sheet_to_csv(wb.Sheets[firstSheetName]);
+  return new File([csv], file.name.replace(/\.(xlsx|xls)$/i, ".csv"), { type: "text/csv" });
 }
 
 export interface ImportPartiesResult {
@@ -122,21 +143,56 @@ function isExcelFile(file: File): boolean {
  */
 export async function importProductsApi(file: File): Promise<ImportProductsResult> {
   requireLiveApi("Products import");
-  let uploadFile = file;
-  if (isExcelFile(file)) {
-    const XLSX = await import("xlsx");
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const firstSheetName = wb.SheetNames[0];
-    if (!firstSheetName) {
-      throw new Error("The Excel file has no sheets.");
-    }
-    const csv = XLSX.utils.sheet_to_csv(wb.Sheets[firstSheetName]);
-    uploadFile = new File([csv], file.name.replace(/\.(xlsx|xls)$/i, ".csv"), { type: "text/csv" });
-  }
+  const uploadFile = await toCsvUploadFile(file);
   const formData = new FormData();
   formData.append("file", uploadFile);
   return uploadFormData<ImportProductsResult>("/api/import/products", formData);
+}
+
+export interface ImportPriceListsResult {
+  tagsCreated: number;
+  tagsUpdated: number;
+  pricesUpserted: number;
+  skipped?: Array<{ row: number; reason: string }>;
+}
+
+export interface ImportOpeningStockResult {
+  imported: number;
+  adjustmentId?: string;
+  adjustmentNumber?: string;
+  skipped?: Array<{ row: number; reason: string }>;
+}
+
+export interface ImportArOpeningBalancesResult {
+  imported: number;
+  skipped?: Array<{ row: number; reason: string }>;
+}
+
+/** Bulk create/fill price tags from CSV (priceTag, sku/barcode, price). */
+export async function importPriceListsApi(file: File): Promise<ImportPriceListsResult> {
+  requireLiveApi("Price tags import");
+  const uploadFile = await toCsvUploadFile(file);
+  const formData = new FormData();
+  formData.append("file", uploadFile);
+  return uploadFormData<ImportPriceListsResult>("/api/import/price-lists", formData);
+}
+
+/** Opening stock quantities (sku/barcode, warehouse, quantity). */
+export async function importOpeningStockApi(file: File): Promise<ImportOpeningStockResult> {
+  requireLiveApi("Opening stock import");
+  const uploadFile = await toCsvUploadFile(file);
+  const formData = new FormData();
+  formData.append("file", uploadFile);
+  return uploadFormData<ImportOpeningStockResult>("/api/import/opening-stock", formData);
+}
+
+/** Customer AR opening balances (transfer balances). */
+export async function importArOpeningBalancesApi(file: File): Promise<ImportArOpeningBalancesResult> {
+  requireLiveApi("AR opening balances import");
+  const uploadFile = await toCsvUploadFile(file);
+  const formData = new FormData();
+  formData.append("file", uploadFile);
+  return uploadFormData<ImportArOpeningBalancesResult>("/api/import/ar-opening-balances", formData);
 }
 
 /** Import product packaging from CSV file. */

@@ -16,6 +16,10 @@ export type ProductRow = {
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
   defaultTaxCodeId?: string;
+  /** Catalog logistics weight (kg) per sellable unit / pack. */
+  grossWeightKg?: number;
+  /** Catalog logistics volume (m³) per sellable unit / pack. */
+  grossVolumeM3?: number;
   status: string;
   currentStock?: number;
   /** Available at fulfilment warehouse when fetched with includeStock + warehouseId. */

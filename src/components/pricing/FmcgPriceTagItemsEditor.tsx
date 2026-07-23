@@ -27,6 +27,10 @@ import {
   type PriceListDetail,
 } from "@/lib/api/pricing";
 import { fetchProductsPageApi } from "@/lib/api/products";
+import {
+  downloadImportTemplateApi,
+  importPriceListsApi,
+} from "@/lib/api/import-export";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -78,6 +82,8 @@ export function FmcgPriceTagItemsEditor({
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [softLoading, setSoftLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const csvInputRef = React.useRef<HTMLInputElement>(null);
   const hasLoadedOnce = React.useRef(false);
   const editsRef = React.useRef(edits);
   editsRef.current = edits;
@@ -311,6 +317,27 @@ export function FmcgPriceTagItemsEditor({
     rows.length === 0 && Boolean(debouncedSearch.trim()) && !softLoading;
   const tagLabel = list?.name ?? "this tag";
 
+  const handleCsvImport = async (file: File | undefined) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const result = await importPriceListsApi(file);
+      const skipped = result.skipped?.length ?? 0;
+      toast.success(
+        `Imported prices: ${result.pricesUpserted} row(s), ${result.tagsCreated} tag(s) created, ${result.tagsUpdated} updated` +
+          (skipped ? ` · ${skipped} skipped` : "")
+      );
+      onSaved?.();
+      await loadPriceList();
+      await loadProductsPage();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Price CSV import failed");
+    } finally {
+      setImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
@@ -318,6 +345,40 @@ export function FmcgPriceTagItemsEditor({
         <span className="font-medium text-foreground">{tagLabel}</span> in the grid
         below. Optional discount % can show on the customer invoice.
       </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv,.xlsx,.xls,text/csv"
+          className="hidden"
+          onChange={(e) => void handleCsvImport(e.target.files?.[0])}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={importing}
+          onClick={() => csvInputRef.current?.click()}
+        >
+          <Icons.Upload className="mr-1.5 h-3.5 w-3.5" />
+          {importing ? "Importing…" : "Import CSV"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() =>
+            downloadImportTemplateApi("price-lists", (msg) => toast.info(msg || "Template unavailable."))
+          }
+        >
+          <Icons.Download className="mr-1.5 h-3.5 w-3.5" />
+          CSV template
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          Columns: priceTag, sku or barcode, price, discountPercent (optional)
+        </span>
+      </div>
 
       <div className="relative">
         <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

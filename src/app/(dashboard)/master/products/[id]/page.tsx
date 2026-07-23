@@ -214,6 +214,8 @@ export default function ProductDetailPage() {
   const [categoryDraft, setCategoryDraft] = React.useState("");
   const [sizeValueDraft, setSizeValueDraft] = React.useState("");
   const [sizeUomDraft, setSizeUomDraft] = React.useState("g");
+  const [grossWeightDraft, setGrossWeightDraft] = React.useState("");
+  const [grossVolumeDraft, setGrossVolumeDraft] = React.useState("");
   const [categoryList, setCategoryList] = React.useState<{ id: string; name: string }[]>([]);
   const [familyOptions, setFamilyOptions] = React.useState<string[]>([]);
   const [savingAll, setSavingAll] = React.useState(false);
@@ -232,6 +234,8 @@ export default function ProductDetailPage() {
       setCategoryDraft("");
       setSizeValueDraft("");
       setSizeUomDraft("g");
+      setGrossWeightDraft("");
+      setGrossVolumeDraft("");
       return;
     }
     setNameDraft(product.name ?? "");
@@ -244,6 +248,16 @@ export default function ProductDetailPage() {
     const parsed = parseFmcgSize(product.size);
     setSizeValueDraft(parsed.value);
     setSizeUomDraft(parsed.uom);
+    setGrossWeightDraft(
+      product.grossWeightKg != null && Number.isFinite(product.grossWeightKg)
+        ? String(product.grossWeightKg)
+        : ""
+    );
+    setGrossVolumeDraft(
+      product.grossVolumeM3 != null && Number.isFinite(product.grossVolumeM3)
+        ? String(product.grossVolumeM3)
+        : ""
+    );
   }, [product]);
 
   // Load all data in parallel
@@ -414,6 +428,16 @@ export default function ProductDetailPage() {
     const sizeChanged =
       fmcgOrg &&
       (composeFmcgSize(sizeValueDraft, sizeUomDraft) ?? "") !== (product.size ?? "");
+    const gwNext =
+      grossWeightDraft.trim() === "" ? undefined : Number(grossWeightDraft.replace(/,/g, "."));
+    const gvNext =
+      grossVolumeDraft.trim() === "" ? undefined : Number(grossVolumeDraft.replace(/,/g, "."));
+    const weightChanged =
+      (gwNext ?? undefined) !== (product.grossWeightKg ?? undefined) &&
+      !(gwNext == null && product.grossWeightKg == null);
+    const volumeChanged =
+      (gvNext ?? undefined) !== (product.grossVolumeM3 ?? undefined) &&
+      !(gvNext == null && product.grossVolumeM3 == null);
     return (
       nameChanged ||
       barcodeChanged ||
@@ -423,7 +447,9 @@ export default function ProductDetailPage() {
       taxChanged ||
       uomChanged ||
       categoryChanged ||
-      sizeChanged
+      sizeChanged ||
+      weightChanged ||
+      volumeChanged
     );
   }, [
     product,
@@ -438,6 +464,8 @@ export default function ProductDetailPage() {
     defaultTaxCodeId,
     baseUomDraft,
     categoryDraft,
+    grossWeightDraft,
+    grossVolumeDraft,
   ]);
 
   /** Single CTA: commit every editable Overview field in one PATCH. */
@@ -469,6 +497,28 @@ export default function ProductDetailPage() {
     if (fmcgOrg) {
       const sizeNext = composeFmcgSize(sizeValueDraft, sizeUomDraft) ?? "";
       if (sizeNext !== (product.size ?? "")) patch.size = sizeNext;
+    }
+    const gwRaw = grossWeightDraft.trim();
+    const gvRaw = grossVolumeDraft.trim();
+    if (gwRaw === "") {
+      if (product.grossWeightKg != null) patch.grossWeightKg = null;
+    } else {
+      const gw = Number(gwRaw.replace(/,/g, "."));
+      if (!Number.isFinite(gw) || gw < 0) {
+        toast.error("Gross weight must be a number ≥ 0 (kg).");
+        return;
+      }
+      if (gw !== product.grossWeightKg) patch.grossWeightKg = gw;
+    }
+    if (gvRaw === "") {
+      if (product.grossVolumeM3 != null) patch.grossVolumeM3 = null;
+    } else {
+      const gv = Number(gvRaw.replace(/,/g, "."));
+      if (!Number.isFinite(gv) || gv < 0) {
+        toast.error("Gross volume must be a number ≥ 0 (m³).");
+        return;
+      }
+      if (gv !== product.grossVolumeM3) patch.grossVolumeM3 = gv;
     }
 
     if (Object.keys(patch).length === 0) return;
@@ -1073,6 +1123,35 @@ export default function ProductDetailPage() {
                     <p className="text-xs text-muted-foreground">
                       Auto-applied when this product is added to a sales or purchase document line.
                     </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="gross-weight-kg">Gross weight (kg)</Label>
+                      <Input
+                        id="gross-weight-kg"
+                        inputMode="decimal"
+                        value={grossWeightDraft}
+                        onChange={(e) => setGrossWeightDraft(e.target.value)}
+                        placeholder="e.g. 12.5"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Catalog weight for logistics (truck load). Not used for stock count.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gross-volume-m3">Gross volume (m³)</Label>
+                      <Input
+                        id="gross-volume-m3"
+                        inputMode="decimal"
+                        value={grossVolumeDraft}
+                        onChange={(e) => setGrossVolumeDraft(e.target.value)}
+                        placeholder="e.g. 0.048"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Catalog volume for logistics / capacity planning.
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

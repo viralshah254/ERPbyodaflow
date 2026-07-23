@@ -48,6 +48,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { compareProductFamilyKeys, UNCATEGORIZED_FAMILY } from "@/lib/products/product-family";
+import {
+  downloadImportTemplateApi,
+  importOpeningStockApi,
+} from "@/lib/api/import-export";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
@@ -108,6 +112,8 @@ export default function StockLevelsPage() {
   const [stockInSaving, setStockInSaving] = React.useState(false);
   const [productOptions, setProductOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseLookup, setWarehouseLookup] = React.useState<LookupOption[]>([]);
+  const [importingOpening, setImportingOpening] = React.useState(false);
+  const openingStockInputRef = React.useRef<HTMLInputElement>(null);
 
   // Franchise drill-down sheet state
   const [franchiseDrillRow, setFranchiseDrillRow] = React.useState<FranchiseNetworkStockItem | null>(null);
@@ -147,6 +153,26 @@ export default function StockLevelsPage() {
       setLoading(false);
     }
   }, [searchQuery, statusFilter, warehouseFilter, isFranchisor, fmcg]);
+
+  const handleOpeningStockImport = async (file: File | undefined) => {
+    if (!file) return;
+    setImportingOpening(true);
+    try {
+      const result = await importOpeningStockApi(file);
+      const skipped = result.skipped?.length ?? 0;
+      toast.success(
+        `Opening stock imported: ${result.imported} line(s)` +
+          (result.adjustmentNumber ? ` (${result.adjustmentNumber})` : "") +
+          (skipped ? ` · ${skipped} skipped` : "")
+      );
+      await refreshStock();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Opening stock import failed");
+    } finally {
+      setImportingOpening(false);
+      if (openingStockInputRef.current) openingStockInputRef.current.value = "";
+    }
+  };
 
   React.useEffect(() => {
     void refreshStock();
@@ -476,10 +502,38 @@ export default function StockLevelsPage() {
               Export
             </Button>
             {canWrite && (
-              <Button onClick={openStockIn}>
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                {fmcg ? "Stock In" : "Stock In / Opening"}
-              </Button>
+              <>
+                <input
+                  ref={openingStockInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls,text/csv"
+                  className="hidden"
+                  onChange={(e) => void handleOpeningStockImport(e.target.files?.[0])}
+                />
+                <Button
+                  variant="outline"
+                  disabled={importingOpening}
+                  onClick={() => openingStockInputRef.current?.click()}
+                >
+                  <Icons.Upload className="mr-2 h-4 w-4" />
+                  {importingOpening ? "Importing…" : "Import opening stock"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    downloadImportTemplateApi("opening-stock", (msg) =>
+                      toast.info(msg || "Template unavailable.")
+                    )
+                  }
+                >
+                  CSV template
+                </Button>
+                <Button onClick={openStockIn}>
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  {fmcg ? "Stock In" : "Stock In / Opening"}
+                </Button>
+              </>
             )}
           </>
         }
