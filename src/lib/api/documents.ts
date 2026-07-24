@@ -6,6 +6,7 @@ import type {
   DocumentTimelineEntry,
 } from "@/lib/types/documents";
 import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
+import type { KraSigningRecord } from "@/lib/kra/kra-signing";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
 import type { DownloadProgressUpdate } from "./client";
 
@@ -191,6 +192,7 @@ type BackendDocumentDetail = {
   deliveryCheckIn?: BackendDeliveryCheckIn;
   warehouseDrop?: BackendWarehouseDrop;
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
+  kraSigning?: KraSigningRecord | null;
 };
 
 type ChainNode = {
@@ -246,6 +248,7 @@ type BackendDocumentListItem = {
   poRef?: string;
   reference?: string;
   pendingApprovalReason?: string;
+  kraSigning?: KraSigningRecord | null;
 };
 
 type BackendDocumentListResponse = {
@@ -570,6 +573,7 @@ function mapDocumentDetail(
         }
       : undefined,
     dispatchAmendEligibility: payload.dispatchAmendEligibility,
+    kraSigning: payload.kraSigning ?? undefined,
   };
 }
 
@@ -603,6 +607,7 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     poRef: item.poRef,
     reference: item.reference,
     pendingApprovalReason: item.pendingApprovalReason,
+    kraSigning: item.kraSigning ?? undefined,
   };
 }
 

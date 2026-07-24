@@ -44,6 +44,9 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { formatMoney } from "@/lib/money";
 import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
+import { KraSigningBadge } from "@/components/kra/KraSigningBadge";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE = 25;
@@ -86,6 +89,7 @@ const STATUS_OPTIONS_BY_TYPE: Partial<
 function buildColumns(
   type: string,
   _terminology: ReturnType<typeof useTerminology>,
+  showKraColumn: boolean,
 ): {
   id: string;
   header: string;
@@ -94,7 +98,9 @@ function buildColumns(
 }[] {
   const config = getDocTypeConfig(type);
   if (!config) return [];
-  return config.listColumns.map((col) => {
+  return config.listColumns
+    .filter((col) => showKraColumn || col.id !== "kraSigning")
+    .map((col) => {
     const accessor = col.accessor as keyof DocListRow;
     let acc: keyof DocListRow | ((r: DocListRow) => React.ReactNode) = accessor;
     if (accessor === "total") {
@@ -115,6 +121,14 @@ function buildColumns(
             </span>
           )}
         </div>
+      );
+    } else if (accessor === "kraSigning") {
+      acc = (r) => (
+        <KraSigningBadge
+          kraSigning={r.kraSigning}
+          documentStatus={r.status}
+          compact
+        />
       );
     } else if (accessor === "number") {
       acc = (r) => (
@@ -149,6 +163,8 @@ export default function DocTypeListPage() {
   const router = useRouter();
   const type = params.type as string;
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const showKraColumn = isFmcgOrg(templateId);
   const config = getDocTypeConfig(type);
   const canWrite = useCanWriteDocType(type);
   const labelKey = (config?.termKey ?? TYPE_LABELS[type]) as string;
@@ -247,8 +263,8 @@ export default function DocTypeListPage() {
   };
 
   const columns = React.useMemo(
-    () => buildColumns(type, terminology),
-    [type, terminology],
+    () => buildColumns(type, terminology, showKraColumn),
+    [type, terminology, showKraColumn],
   );
 
   const statusOptions = React.useMemo(

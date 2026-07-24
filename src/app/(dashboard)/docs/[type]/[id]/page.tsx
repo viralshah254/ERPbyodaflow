@@ -80,10 +80,12 @@ import * as Icons from "lucide-react";
 import { downloadProgressLabel } from "@/lib/api/client";
 import SignatureCanvas from "react-signature-canvas";
 import { useUIStore } from "@/stores/ui-store";
-import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
+import { useCanWriteDocType, useCanWriteFinance } from "@/lib/rbac/use-write-guard";
 import { can, Permissions } from "@/lib/permissions";
 import { useAuthStore } from "@/stores/auth-store";
 import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
+import { KraSigningPanel } from "@/components/kra/KraSigningPanel";
+import { isIncotexSignableDocType } from "@/lib/kra/kra-signing";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -207,6 +209,7 @@ export default function DocViewPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
+  const canWriteFinance = useCanWriteFinance();
   const authUser = useAuthStore((s) => s.user);
   const org = useAuthStore((s) => s.org);
   const [amendOpen, setAmendOpen] = React.useState(false);
@@ -1470,6 +1473,18 @@ export default function DocViewPage() {
             }}
             currency={document.currency ?? "KES"}
             exchangeRate={document.exchangeRate}
+          />
+        ) : null}
+        {fmcgOrg && isIncotexSignableDocType(type) && !loading && document ? (
+          <KraSigningPanel
+            typeKey={type}
+            documentId={id}
+            documentStatus={document.status}
+            kraSigning={document.kraSigning}
+            canRetry={canWrite || canWriteFinance}
+            onUpdated={(kraSigning) =>
+              setDocument((prev) => (prev ? { ...prev, kraSigning } : prev))
+            }
           />
         ) : null}
         {type === "bill" && landedAllocation && (() => {

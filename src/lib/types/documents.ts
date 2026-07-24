@@ -1,4 +1,5 @@
 import type { DocTypeKey } from "@/config/documents/types";
+import type { KraSigningRecord } from "@/lib/kra/kra-signing";
 
 export type DocListRow = {
   id: string;
@@ -42,6 +43,7 @@ export type DocListRow = {
   warehouse?: string;
   reference?: string;
   pendingApprovalReason?: string;
+  kraSigning?: KraSigningRecord | null;
 };
 
 export type DocumentAttachmentRecord = {
@@ -301,6 +303,8 @@ export type DocumentDetailRecord = {
   warehouseDrop?: WarehouseDropRecord;
   /** Admin can amend in-transit dispatch when allowed (delivery-note only). */
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
+  /** KRA / Incotex signing (invoice, credit note, debit note). */
+  kraSigning?: KraSigningRecord | null;
 };
 
 export type DocumentChainNode = {

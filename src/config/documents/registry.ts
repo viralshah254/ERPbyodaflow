@@ -120,6 +120,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
       { id: "party", header: "Customer", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
       { id: "status", header: "Status", accessor: "status" },
+      { id: "kraSigning", header: "KRA", accessor: "kraSigning" },
     ],
     createFormSections: [
       {
@@ -153,6 +154,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
       { id: "party", header: "Customer", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
       { id: "status", header: "Status", accessor: "status" },
+      { id: "kraSigning", header: "KRA", accessor: "kraSigning" },
     ],
     createFormSections: [
       {
@@ -387,6 +389,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
       { id: "party", header: "Customer", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
       { id: "status", header: "Status", accessor: "status" },
+      { id: "kraSigning", header: "KRA", accessor: "kraSigning" },
     ],
     createFormSections: [
       {

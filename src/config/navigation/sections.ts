@@ -410,6 +410,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "ap-three-way-match", label: "3-way match", href: "/ap/three-way-match", icon: "GitCompare", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "finance-payments", label: "Payments & Receipts", href: "/finance/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.payments.read"] },
       { key: "finance-tax", label: "Tax / VAT", href: "/finance/tax", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.tax.read"] },
+      { key: "finance-kra-signing", label: "KRA signing monitor", href: "/finance/kra-signing", icon: "ShieldCheck", moduleKey: "finance", requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"], requiresPermissions: ["finance.read"] },
       { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
       { key: "finance-mpesa-recon", label: "M-Pesa Till Reconciliation", href: "/finance/mpesa-recon", icon: "Smartphone", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
