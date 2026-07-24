@@ -267,8 +267,8 @@ function applyDiscountToPreservedLine(
   const net = Math.round(gross * (1 - disc / 100) * 100) / 100;
   return {
     price: net,
-    discount: disc > 0 ? disc : undefined,
-    priceReason: disc > 0 ? `Existing (−${disc}%)` : "Existing",
+    discount: disc,
+    priceReason: disc > 0 ? `Existing (−${disc}%)` : "Existing (0% discount)",
     amount: line.qty * net,
   };
 }
@@ -288,6 +288,13 @@ export function applyLineTax(
   }
   const tax = Math.round(subtotal * (rate / 100) * 100) / 100;
   return { tax, amount: Math.round((subtotal + tax) * 100) / 100 };
+}
+
+/** Net unit price in base UOM (e.g. per piece when line UOM is DOZEN). */
+function computeBaseUnitPrice(line: Pick<DocumentLine, "price" | "qty" | "baseQty">): number | null {
+  if (line.qty <= 0 || line.baseQty <= 0) return null;
+  if (Math.abs(line.baseQty - line.qty) < 0.0001) return null;
+  return Math.round(((line.price * line.qty) / line.baseQty) * 100) / 100;
 }
 
 export function DocumentLineEditor({
@@ -536,11 +543,19 @@ export function DocumentLineEditor({
           packaging: packagingByProductId?.[productId],
           productBaseUom: product?.baseUom ?? product?.unit,
         });
+        const effectiveDiscount =
+          discountOverride != null && Number.isFinite(discountOverride)
+            ? discountOverride
+            : (fmcgItem.discountPercent ?? 0);
         // Net unit price after price-tag discount; percent kept for print / audit.
         return {
           price: resolved.unitPriceNet,
           reason: resolved.reason,
-          ...(resolved.discountPercent > 0 ? { discount: resolved.discountPercent } : {}),
+          ...(discountOverride != null
+            ? { discount: effectiveDiscount }
+            : effectiveDiscount > 0
+              ? { discount: effectiveDiscount }
+              : {}),
         };
       }
       const catalog = catalogPricesByProductId?.[productId];
@@ -744,6 +759,11 @@ export function DocumentLineEditor({
         }
         const nextBaseQty = computeBaseQty(l.productId, l.uom, l.qty);
         if (isPreservedCommercialLine(l) && l.price > 0) {
+          if (l.discount != null) {
+            if (nextBaseQty === l.baseQty) return l;
+            changed = true;
+            return { ...l, baseQty: nextBaseQty };
+          }
           const catalog = resolvePriceRef.current(l.productId, l.qty, l.uom, l.discount);
           const looksUnderPriced =
             fmcgOrg &&
@@ -763,11 +783,11 @@ export function DocumentLineEditor({
           l.uom,
           l.discount
         );
-        const nextDiscount = discount != null && discount > 0 ? discount : undefined;
+        const nextDiscount = discount;
         if (
           price === l.price &&
           reason === l.priceReason &&
-          nextDiscount === l.discount &&
+          (nextDiscount ?? null) === (l.discount ?? null) &&
           nextBaseQty === l.baseQty
         ) {
           return l;
@@ -961,7 +981,7 @@ export function DocumentLineEditor({
       updateLine(lineId, {
         price,
         priceReason: reason,
-        discount: discount != null && discount > 0 ? discount : undefined,
+        ...(discount != null ? { discount } : {}),
         amount: line.qty * price,
       });
       return;
@@ -975,8 +995,8 @@ export function DocumentLineEditor({
     const net = Math.round(gross * (1 - disc / 100) * 100) / 100;
     updateLine(lineId, {
       price: net,
-      discount: disc > 0 ? disc : undefined,
-      priceReason: disc > 0 ? `Manual (−${disc}%)` : line.priceReason,
+      discount: disc,
+      priceReason: disc > 0 ? `Manual (−${disc}%)` : "Existing (0% discount)",
       amount: line.qty * net,
     });
   };
@@ -1111,6 +1131,27 @@ export function DocumentLineEditor({
                       "Base qty"
                     )}
                   </TableHead>
+                  {!lineColumnLabels ? (
+                    <TableHead className="w-28">
+                      {fmcgOrg ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 cursor-default">
+                                Base price
+                                <Icons.HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+                              Net unit price per piece (base UOM) for the selected pack UOM and discount.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        "Base price"
+                      )}
+                    </TableHead>
+                  ) : null}
                   <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
                   {showDiscountCol ? (
                     <TableHead className="w-20 whitespace-nowrap">Disc %</TableHead>
@@ -1239,6 +1280,14 @@ export function DocumentLineEditor({
                         ? formatDecimalDisplay(String(l.poQty))
                         : formatDecimalDisplay(String(l.baseQty))}
                     </TableCell>
+                    {!lineColumnLabels ? (
+                      <TableCell className="text-muted-foreground tabular-nums">
+                        {(() => {
+                          const baseUnitPrice = computeBaseUnitPrice(l);
+                          return baseUnitPrice != null ? formatMoney(baseUnitPrice, currency) : "—";
+                        })()}
+                      </TableCell>
+                    ) : null}
                     <TableCell>
                       {useCostPricing ? (
                         <FormattedDecimalInput

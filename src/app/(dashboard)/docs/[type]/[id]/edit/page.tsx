@@ -92,7 +92,7 @@ export default function DocEditPage() {
     <PageShell>
       <PageHeader
         title={`Edit ${label} ${document.number}`}
-        description="Modify header and line items. Changes are saved when you click Save changes."
+        description="Modify header and line items. Use the numbered steps to go back; changes autosave as you work."
         breadcrumbs={[
           { label: "Documents", href: "/docs" },
           { label, href: `/docs/${type}` },

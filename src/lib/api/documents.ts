@@ -432,7 +432,9 @@ function mapDocumentDetail(
       qty: line.qty ?? line.quantity,
       unit: line.unit,
       unitPrice: line.unitPrice,
-      ...(typeof line.discount === "number" && line.discount > 0 ? { discount: line.discount } : {}),
+      ...(typeof line.discount === "number" && Number.isFinite(line.discount) && line.discount >= 0
+        ? { discount: line.discount }
+        : {}),
       tax: line.tax,
       amount: line.amount,
       sourceDocumentId: line.sourceDocumentId,

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Progress } from "@/components/ui/progress";
+import { DocumentStepper } from "@/components/docs/DocumentStepper";
 import { getDocTypeConfig } from "@/config/documents";
 import type { DocTypeKey } from "@/config/documents/types";
 import type { FormFieldConfig } from "@/config/documents/types";
@@ -488,7 +488,43 @@ const STEPS = [
   { id: "header", label: "Header" },
   { id: "lines", label: "Lines" },
   { id: "review", label: "Review & Submit" },
-];
+] as const;
+
+const WIZARD_DRAFT_DEBOUNCE_MS = 800;
+const EDIT_AUTOSAVE_DEBOUNCE_MS = 1500;
+
+function parseDraftLines(raw: unknown): DocumentLine[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const parsed: DocumentLine[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i];
+    if (!row || typeof row !== "object") continue;
+    const line = row as Record<string, unknown>;
+    const productId = typeof line.productId === "string" ? line.productId : "";
+    const name = typeof line.name === "string" ? line.name : "";
+    if (!productId && !name) continue;
+    parsed.push({
+      id: typeof line.id === "string" ? line.id : `draft-line-${i}`,
+      productId,
+      sku: typeof line.sku === "string" ? line.sku : "",
+      name,
+      uom: typeof line.uom === "string" ? line.uom : "EA",
+      qty: typeof line.qty === "number" && Number.isFinite(line.qty) ? line.qty : 1,
+      baseQty: typeof line.baseQty === "number" && Number.isFinite(line.baseQty) ? line.baseQty : 1,
+      price: typeof line.price === "number" && Number.isFinite(line.price) ? line.price : 0,
+      priceReason: typeof line.priceReason === "string" ? line.priceReason : "Draft",
+      ...(typeof line.discount === "number" && Number.isFinite(line.discount) && line.discount >= 0
+        ? { discount: line.discount }
+        : {}),
+      amount: typeof line.amount === "number" && Number.isFinite(line.amount) ? line.amount : 0,
+      ...(typeof line.tax === "number" ? { tax: line.tax } : {}),
+      ...(typeof line.taxCodeId === "string" ? { taxCodeId: line.taxCodeId } : {}),
+      ...(typeof line.sourceLineId === "string" ? { sourceLineId: line.sourceLineId } : {}),
+      ...(typeof line.poQty === "number" ? { poQty: line.poQty } : {}),
+    });
+  }
+  return parsed.length > 0 ? parsed : null;
+}
 
 export function DocumentCreateWizard({
   type,
@@ -513,6 +549,13 @@ export function DocumentCreateWizard({
 
   const isHqDoc = orgRole === "FRANCHISEE" && (type === "purchase-order" || type === "purchase-request");
   const [step, setStep] = React.useState(isHqDoc ? 2 : 1);
+  const [maxStepReached, setMaxStepReached] = React.useState(isHqDoc ? 2 : 1);
+  const createDraftSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editAutosaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editHydratedRef = React.useRef(false);
+  const draftRestoredRef = React.useRef(false);
+  const draftRestoreDoneRef = React.useRef(isEditMode);
+  const skipEditAutosaveRef = React.useRef(false);
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const linesOperational = React.useMemo(
@@ -617,31 +660,50 @@ export function DocumentCreateWizard({
   const watchedBranch = form.watch("branch");
 
   React.useEffect(() => {
-    if (isEditMode) return; // skip local-draft restore when editing an existing document
+    if (isEditMode) return;
     let cancelled = false;
     fetchDocumentDraftApi(type)
       .then((draft) => {
-        if (cancelled || !draft) return;
-        form.reset({ ...defaults, ...(draft as Partial<FormValues>) });
+        if (cancelled || !draft || draftRestoredRef.current) return;
+        draftRestoredRef.current = true;
+        const { wizardStep, maxStepReached: savedMaxStep, lines: savedLines, overridePriceListId: savedPriceListId, overrideTaxConfigId: savedTaxConfigId, linkedPoId: savedLinkedPoId, savedAt: _savedAt, ...formDraft } = draft;
+        form.reset({ ...defaults, ...(formDraft as Partial<FormValues>) });
+        const restoredLines = parseDraftLines(savedLines);
+        if (restoredLines) setLines(restoredLines);
+        if (typeof savedPriceListId === "string") setOverridePriceListId(savedPriceListId);
+        if (savedPriceListId === null) setOverridePriceListId(null);
+        if (typeof savedTaxConfigId === "string") setOverrideTaxConfigId(savedTaxConfigId);
+        if (savedTaxConfigId === null) setOverrideTaxConfigId(null);
+        if (typeof savedLinkedPoId === "string") setLinkedPoId(savedLinkedPoId);
+        const restoredStep =
+          typeof wizardStep === "number" && wizardStep >= 1 && wizardStep <= STEPS.length
+            ? wizardStep
+            : restoredLines?.length
+              ? 2
+              : 1;
+        const restoredMax =
+          typeof savedMaxStep === "number" && savedMaxStep >= restoredStep
+            ? savedMaxStep
+            : restoredStep;
+        if (!isHqDoc) {
+          setStep(restoredStep);
+          setMaxStepReached(restoredMax);
+        }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) draftRestoreDoneRef.current = true;
+      });
     return () => {
       cancelled = true;
     };
-  }, [defaults, form, type, isEditMode]);
-
-  React.useEffect(() => {
-    if (isEditMode) return; // skip local-draft autosave when editing an existing document
-    const sub = form.watch((data) => {
-      const payload = data as Record<string, unknown>;
-      void saveDocumentDraftApi(type, payload).catch(() => {});
-    });
-    return () => sub.unsubscribe();
-  }, [type, form, isEditMode]);
+  }, [defaults, form, type, isEditMode, isHqDoc]);
 
   // Pre-populate from existingDocument when in edit mode
   React.useEffect(() => {
     if (!isEditMode || !existingDocument) return;
+    editHydratedRef.current = false;
+    skipEditAutosaveRef.current = true;
     const doc = existingDocument;
     const storedRate = doc.exchangeRate ?? 1;
     form.reset({
@@ -663,7 +725,7 @@ export function DocumentCreateWizard({
       const qty = l.qty ?? 1;
       const price = l.unitPrice ?? (qty > 0 && l.amount ? l.amount / qty : 0);
       const discount =
-        typeof l.discount === "number" && Number.isFinite(l.discount) && l.discount > 0
+        typeof l.discount === "number" && Number.isFinite(l.discount) && l.discount >= 0
           ? l.discount
           : undefined;
       return {
@@ -675,7 +737,12 @@ export function DocumentCreateWizard({
         qty,
         baseQty: qty,
         price,
-        priceReason: discount != null ? `Existing (−${discount}%)` : "Existing",
+        priceReason:
+          discount != null && discount > 0
+            ? `Existing (−${discount}%)`
+            : discount === 0
+              ? "Existing (0% discount)"
+              : "Existing",
         ...(discount != null ? { discount } : {}),
         amount: l.amount ?? 0,
         tax: l.tax ?? 0,
@@ -691,6 +758,11 @@ export function DocumentCreateWizard({
       setOverrideTaxConfigId(doc.taxConfigId);
     }
     setStep(1);
+    setMaxStepReached(prefilled.length > 0 ? STEPS.length : 1);
+    editHydratedRef.current = true;
+    queueMicrotask(() => {
+      skipEditAutosaveRef.current = false;
+    });
     deliveryNoteWarehouseDefaultAppliedRef.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, existingDocument?.id]);
@@ -1225,7 +1297,7 @@ export function DocumentCreateWizard({
           quantity: line.qty,
           unit: line.uom,
           unitPrice: line.price,
-          ...(line.discount != null && line.discount > 0 ? { discount: line.discount } : {}),
+          ...(line.discount != null && Number.isFinite(line.discount) ? { discount: line.discount } : {}),
           ...(line.taxCodeId && { taxCodeId: line.taxCodeId }),
           ...(line.tax != null && line.tax > 0 && { tax: line.tax }),
           amount: line.amount,
@@ -1254,6 +1326,132 @@ export function DocumentCreateWizard({
     ]
   );
 
+  const buildWizardDraftPayload = React.useCallback((): Record<string, unknown> => {
+    return {
+      ...form.getValues(),
+      wizardStep: step,
+      maxStepReached,
+      lines,
+      overridePriceListId,
+      overrideTaxConfigId,
+      linkedPoId,
+      savedAt: new Date().toISOString(),
+    };
+  }, [form, step, maxStepReached, lines, overridePriceListId, overrideTaxConfigId, linkedPoId]);
+
+  const persistCreateDraft = React.useCallback(
+    (immediate = false) => {
+      if (isEditMode || !isApiConfigured() || !draftRestoreDoneRef.current) return;
+      const doSave = () => {
+        void saveDocumentDraftApi(type, buildWizardDraftPayload()).catch(() => {});
+      };
+      if (createDraftSaveTimerRef.current) {
+        clearTimeout(createDraftSaveTimerRef.current);
+        createDraftSaveTimerRef.current = null;
+      }
+      if (immediate) {
+        doSave();
+        return;
+      }
+      createDraftSaveTimerRef.current = setTimeout(doSave, WIZARD_DRAFT_DEBOUNCE_MS);
+    },
+    [buildWizardDraftPayload, isEditMode, type]
+  );
+
+  const persistEditDraft = React.useCallback(
+    (immediate = false) => {
+      if (!isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
+      const doSave = () => {
+        void patchDocumentApi(type as DocTypeKey, existingDocument.id, buildDraftPayload()).catch(() => {});
+      };
+      if (editAutosaveTimerRef.current) {
+        clearTimeout(editAutosaveTimerRef.current);
+        editAutosaveTimerRef.current = null;
+      }
+      if (immediate) {
+        doSave();
+        return;
+      }
+      editAutosaveTimerRef.current = setTimeout(doSave, EDIT_AUTOSAVE_DEBOUNCE_MS);
+    },
+    [buildDraftPayload, existingDocument, isEditMode, type]
+  );
+
+  const persistWizardProgress = React.useCallback(
+    (immediate = false) => {
+      if (isEditMode) persistEditDraft(immediate);
+      else persistCreateDraft(immediate);
+    },
+    [isEditMode, persistCreateDraft, persistEditDraft]
+  );
+
+  React.useEffect(() => {
+    if (isEditMode) return;
+    const sub = form.watch(() => {
+      persistCreateDraft();
+    });
+    return () => sub.unsubscribe();
+  }, [form, isEditMode, persistCreateDraft]);
+
+  React.useEffect(() => {
+    if (isEditMode) return;
+    persistCreateDraft();
+  }, [step, maxStepReached, lines, overridePriceListId, overrideTaxConfigId, linkedPoId, isEditMode, persistCreateDraft]);
+
+  React.useEffect(() => {
+    if (!isEditMode) return;
+    const sub = form.watch(() => {
+      persistEditDraft();
+    });
+    return () => sub.unsubscribe();
+  }, [form, isEditMode, persistEditDraft]);
+
+  React.useEffect(() => {
+    if (!isEditMode) return;
+    persistEditDraft();
+  }, [step, lines, overridePriceListId, overrideTaxConfigId, isEditMode, persistEditDraft]);
+
+  React.useEffect(() => {
+    return () => {
+      if (createDraftSaveTimerRef.current) clearTimeout(createDraftSaveTimerRef.current);
+      if (editAutosaveTimerRef.current) clearTimeout(editAutosaveTimerRef.current);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    setMaxStepReached((prev) => Math.max(prev, step));
+  }, [step]);
+
+  const goToStep = React.useCallback(
+    async (targetStep: number) => {
+      if (targetStep === step || targetStep < 1 || targetStep > STEPS.length) return;
+
+      if (targetStep < step || targetStep <= maxStepReached) {
+        persistWizardProgress(true);
+        setStep(targetStep);
+        return;
+      }
+
+      if (targetStep === step + 1) {
+        if (step === 1) {
+          const valid = await form.trigger(["date", "party", "branch", "warehouse", "dueDate", "poRef", "reference"]);
+          if (!valid) return;
+          if (type === "grn" && !String(form.getValues("warehouse") ?? "").trim()) {
+            toast.error("Select a warehouse — stock must be received into a specific location.");
+            return;
+          }
+        }
+        if (step === 2 && !linesOperational) {
+          toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+          return;
+        }
+        persistWizardProgress(true);
+        setStep(targetStep);
+      }
+    },
+    [form, lines, linesOperational, maxStepReached, persistWizardProgress, step, type]
+  );
+
   const onReview = async () => {
     if (!linesOperational) {
       toast.error(documentLinesOperationalErrorMessage(lines, "review"));
@@ -1270,6 +1468,7 @@ export function DocumentCreateWizard({
       return;
     }
     setStep(3);
+    persistWizardProgress(true);
     setPostingPreviewError(null);
     try {
       setLoadingPostingPreview(true);
@@ -1304,6 +1503,7 @@ export function DocumentCreateWizard({
       return;
     }
     setStep((s) => Math.min(3, s + 1));
+    persistWizardProgress(true);
   };
 
   const onSubmit = async () => {
@@ -1619,12 +1819,7 @@ export function DocumentCreateWizard({
           <span>Ordering from <strong>{hqSupplierName}</strong></span>
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <Progress value={(step / 3) * 100} className="max-w-xs" />
-        <span className="text-sm text-muted-foreground">
-          Step {step} of 3 · {STEPS[step - 1]?.label}
-        </span>
-      </div>
+      <DocumentStepper step={step} maxStepReached={maxStepReached} steps={STEPS} onStepSelect={(s) => void goToStep(s)} />
 
       {step === 1 && (
         <Card>
@@ -2149,7 +2344,13 @@ export function DocumentCreateWizard({
       <div className="flex justify-between">
         <div className="flex gap-2">
           {step > 1 && (
-            <Button variant="outline" onClick={() => setStep((s) => s - 1)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                persistWizardProgress(true);
+                setStep((s) => s - 1);
+              }}
+            >
               Back
             </Button>
           )}
