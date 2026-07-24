@@ -662,6 +662,10 @@ export function DocumentCreateWizard({
     const prefilled: DocumentLine[] = (doc.lines ?? []).map((l, i) => {
       const qty = l.qty ?? 1;
       const price = l.unitPrice ?? (qty > 0 && l.amount ? l.amount / qty : 0);
+      const discount =
+        typeof l.discount === "number" && Number.isFinite(l.discount) && l.discount > 0
+          ? l.discount
+          : undefined;
       return {
         id: l.id ?? `edit-line-${i}`,
         productId: l.productId ?? "",
@@ -671,7 +675,8 @@ export function DocumentCreateWizard({
         qty,
         baseQty: qty,
         price,
-        priceReason: "Existing",
+        priceReason: discount != null ? `Existing (−${discount}%)` : "Existing",
+        ...(discount != null ? { discount } : {}),
         amount: l.amount ?? 0,
         tax: l.tax ?? 0,
         taxCodeId: l.taxCodeId ?? l.effectiveTaxCodeId ?? undefined,
@@ -679,6 +684,12 @@ export function DocumentCreateWizard({
       };
     });
     setLines(prefilled);
+    if (doc.priceListId) {
+      setOverridePriceListId(doc.priceListId);
+    }
+    if (doc.taxConfigId) {
+      setOverrideTaxConfigId(doc.taxConfigId);
+    }
     setStep(1);
     deliveryNoteWarehouseDefaultAppliedRef.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps

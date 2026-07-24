@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { downloadFile, fetchApiBinary, isApiConfigured } from "@/lib/api/client";
+import { downloadFile, downloadProgressLabel, fetchApiBinary, isApiConfigured } from "@/lib/api/client";
 import { documentExportFileName } from "@/lib/documents/export-filename";
 import { resolveSalesUomQty } from "@/lib/documents/sales-uom-qty";
 
@@ -92,6 +92,7 @@ export function PrintPreviewDrawer({
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
   const [pdfBlob, setPdfBlob] = React.useState<Blob | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [pdfDownloading, setPdfDownloading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const revokeBlobUrl = React.useCallback(() => {
@@ -158,9 +159,9 @@ export function PrintPreviewDrawer({
 
   React.useEffect(() => () => revokeBlobUrl(), [revokeBlobUrl]);
 
-  const handleDownloadPDF = () => {
-    if (!doc) {
-      toast.info("No document selected for download.");
+  const handleDownloadPDF = async () => {
+    if (!doc || pdfDownloading) {
+      if (!doc) toast.info("No document selected for download.");
       return;
     }
     if (pdfBlob && pdfUrl) {
@@ -168,15 +169,27 @@ export function PrintPreviewDrawer({
       a.href = pdfUrl;
       a.download = pdfFileName(doc);
       a.click();
+      toast.success("PDF downloaded.");
       return;
     }
-    if (isApiConfigured()) {
-      void downloadFile(pdfApiPath(doc), pdfFileName(doc), (msg) =>
-        toast.info(msg || "PDF not yet available.")
+    if (!isApiConfigured()) {
+      toast.info("PDF download requires API connection.");
+      return;
+    }
+
+    const toastId = toast.loading("Preparing PDF…");
+    setPdfDownloading(true);
+    try {
+      const ok = await downloadFile(
+        pdfApiPath(doc),
+        pdfFileName(doc),
+        (msg) => toast.error(msg || "PDF not yet available.", { id: toastId }),
+        (update) => toast.loading(downloadProgressLabel(update), { id: toastId })
       );
-      return;
+      if (ok) toast.success("PDF downloaded.", { id: toastId });
+    } finally {
+      setPdfDownloading(false);
     }
-    toast.info("PDF download requires API connection.");
   };
 
   const handleDownloadExcel = () => {
@@ -292,9 +305,13 @@ export function PrintPreviewDrawer({
             <Icons.Sheet className="mr-2 h-4 w-4" />
             Excel
           </Button>
-          <Button onClick={handleDownloadPDF} disabled={!doc || loading}>
-            <Icons.Download className="mr-2 h-4 w-4" />
-            PDF
+          <Button onClick={() => void handleDownloadPDF()} disabled={!doc || loading || pdfDownloading}>
+            {pdfDownloading ? (
+              <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Icons.Download className="mr-2 h-4 w-4" />
+            )}
+            {pdfDownloading ? "Downloading…" : "PDF"}
           </Button>
         </SheetFooter>
       </SheetContent>

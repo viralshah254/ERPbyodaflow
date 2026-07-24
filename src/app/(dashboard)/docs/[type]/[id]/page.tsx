@@ -13,7 +13,7 @@ import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
 import { DocumentTabLoading } from "@/components/docs/DocumentTabLoading";
 import { PodSignaturePad } from "@/components/docs/PodSignaturePad";
-import { SignatureAttachmentViewButton } from "@/components/docs/SignatureAttachmentViewButton";
+import { DeliveryEvidencePanel } from "@/components/docs/DeliveryEvidencePanel";
 import { PrintPreviewDrawer } from "@/components/docs/PrintPreviewDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,7 @@ import {
   fetchDocumentDetailApi,
   patchDocumentApi,
   requestDocumentApprovalApi,
+  sendInvoiceEmailApi,
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
 import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
@@ -76,6 +77,7 @@ import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execu
 import { WarehouseProductPicker } from "@/components/warehouse/warehouse-product-picker";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { downloadProgressLabel } from "@/lib/api/client";
 import SignatureCanvas from "react-signature-canvas";
 import { useUIStore } from "@/stores/ui-store";
 import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
@@ -231,6 +233,7 @@ export default function DocViewPage() {
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
   const [emailTo, setEmailTo] = React.useState("");
   const [emailSending, setEmailSending] = React.useState(false);
+  const [pdfDownloading, setPdfDownloading] = React.useState(false);
   const [applyDialogOpen, setApplyDialogOpen] = React.useState(false);
   const [openInvoices, setOpenInvoices] = React.useState<Array<{ id: string; number: string; openAmount: number; currency: string }>>([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = React.useState("");
@@ -439,6 +442,35 @@ export default function DocViewPage() {
   }, [document, isFulfilmentDoc, type]);
   const counterpartyLabel = isPurchaseDoc ? "Supplier" : "Customer / Supplier";
   const displayPartyName = resolvedPartyName ?? document?.party ?? "—";
+
+  const pdfExportFileName = React.useMemo(
+    () =>
+      documentExportFileName({
+        type,
+        number: document?.number,
+        partyName: displayPartyName !== "—" ? displayPartyName : document?.party,
+        ext: "pdf",
+      }),
+    [type, document?.number, displayPartyName, document?.party]
+  );
+
+  const handleDownloadPdf = React.useCallback(async () => {
+    if (pdfDownloading) return;
+    const toastId = toast.loading("Preparing PDF…");
+    setPdfDownloading(true);
+    try {
+      const ok = await downloadDocumentPdfApi(
+        type as DocTypeKey,
+        id,
+        pdfExportFileName,
+        (msg) => toast.error(msg || "Export not available.", { id: toastId }),
+        (update) => toast.loading(downloadProgressLabel(update), { id: toastId })
+      );
+      if (ok) toast.success("PDF downloaded.", { id: toastId });
+    } finally {
+      setPdfDownloading(false);
+    }
+  }, [pdfDownloading, type, id, pdfExportFileName]);
 
   React.useEffect(() => {
     setResolvedPartyName(null);
@@ -1065,32 +1097,33 @@ export default function DocViewPage() {
               Apply to invoice
             </Button>
           )}
-          {type === "delivery-note" ? (
+          {type === "delivery-note" || type === "invoice" || type === "credit-note" || type === "debit-note" ? (
             <>
               <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)}>
                 <Icons.Printer className="mr-2 h-4 w-4" />
-                Print DN
+                {type === "delivery-note"
+                  ? "Print DN"
+                  : type === "invoice"
+                    ? "Print invoice"
+                    : "Print"}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  downloadDocumentPdfApi(
-                    type as DocTypeKey,
-                    id,
-                    documentExportFileName({
-                      type,
-                      number: document?.number,
-                      partyName: displayPartyName !== "—" ? displayPartyName : document?.party,
-                      ext: "pdf",
-                    }),
-                    (msg) => toast.info(msg || "Export not available.")
-                  )
-                }
+                disabled={pdfDownloading}
+                onClick={() => void handleDownloadPdf()}
               >
-                <Icons.FileDown className="mr-2 h-4 w-4" />
-                Download PDF
+                {pdfDownloading ? (
+                  <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.FileDown className="mr-2 h-4 w-4" />
+                )}
+                {pdfDownloading ? "Downloading…" : "Download PDF"}
               </Button>
+            </>
+          ) : null}
+          {type === "delivery-note" ? (
+            <>
               {canRecordSignedPod ? (
                 <Button
                   size="sm"
@@ -1116,22 +1149,15 @@ export default function DocViewPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem
-                onClick={() =>
-                  downloadDocumentPdfApi(
-                    type as DocTypeKey,
-                    id,
-                    documentExportFileName({
-                      type,
-                      number: document?.number,
-                      partyName: displayPartyName !== "—" ? displayPartyName : document?.party,
-                      ext: "pdf",
-                    }),
-                    (msg) => toast.info(msg || "Export not available.")
-                  )
-                }
+                disabled={pdfDownloading}
+                onClick={() => void handleDownloadPdf()}
               >
-                <Icons.FileDown className="mr-2 h-4 w-4" />
-                Export PDF
+                {pdfDownloading ? (
+                  <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Icons.FileDown className="mr-2 h-4 w-4" />
+                )}
+                {pdfDownloading ? "Downloading…" : "Export PDF"}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() =>
@@ -1207,6 +1233,16 @@ export default function DocViewPage() {
                 label: counterpartyLabel,
                 value: displayPartyName !== "—" ? displayPartyName : "Internal document",
               },
+              ...(fmcgOrg &&
+              ["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) &&
+              (document?.priceListName || document?.priceListId)
+                ? [
+                    {
+                      label: "Price tag",
+                      value: document?.priceListName ?? document?.priceListId ?? "—",
+                    },
+                  ]
+                : []),
               {
                 label: "Total",
                 value: (
@@ -1306,273 +1342,24 @@ export default function DocViewPage() {
                     document.deliveryCheckIn ||
                     document.warehouseDrop ||
                     document.podConfirmation?.confirmedAt) && (
-                    <div className="mt-4 pt-4 border-t space-y-6 text-sm">
-                      {document.dispatchPickup ? (
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Pickup / collection
-                          </p>
-                          <p>
-                            Dispatched{" "}
-                            {new Date(document.dispatchPickup.dispatchedAt).toLocaleString(undefined, {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
-                            {document.dispatchPickup.dispatcherName
-                              ? ` · ${document.dispatchPickup.dispatcherName}`
-                              : ""}
-                          </p>
-                          <p className="text-muted-foreground">
-                            Driver signature (pickup):{" "}
-                            {document.dispatchPickup.signatureAttachmentId ? (
-                              <SignatureAttachmentViewButton
-                                docType="delivery-note"
-                                documentId={id}
-                                attachmentId={document.dispatchPickup.signatureAttachmentId}
-                              />
-                            ) : (
-                              "—"
-                            )}
-                          </p>
-                          <div className="rounded border divide-y max-w-3xl">
-                            {(document.dispatchPickup.lines ?? []).map((pl) => {
-                              const docLine = document.lines.find((l) => l.id === pl.lineId);
-                              const shippedW = docLine?.weightKg;
-                              return (
-                                <div
-                                  key={pl.lineId}
-                                  className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs"
-                                >
-                                  <span className="min-w-0">{docLine?.description ?? pl.lineId}</span>
-                                  <span className="shrink-0 text-muted-foreground text-right">
-                                    {typeof shippedW === "number"
-                                      ? `Shipped weight ${shippedW} kg · `
-                                      : ""}
-                                    Loaded at pickup {pl.loadedWeightKg} kg
-                                    {pl.varianceReason ? ` — ${pl.varianceReason}` : ""}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {document.deliveryCheckIn ? (
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Customer check-in
-                          </p>
-                          <p>
-                            {new Date(document.deliveryCheckIn.checkedInAt).toLocaleString(undefined, {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
-                            {document.deliveryCheckIn.withinGeofence
-                              ? ` · On premises (${Math.round(document.deliveryCheckIn.distanceM)} m)`
-                              : " · Outside geofence"}
-                          </p>
-                        </div>
-                      ) : null}
-
-                      {document.warehouseDrop ? (
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Warehouse return
-                          </p>
-                          <p>
-                            Dropped{" "}
-                            {new Date(document.warehouseDrop.droppedAt).toLocaleString(undefined, {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
-                            {document.warehouseDrop.dispatcherName
-                              ? ` · ${document.warehouseDrop.dispatcherName}`
-                              : ""}
-                          </p>
-                          {document.warehouseDrop.receivedAt ? (
-                            <p className="text-muted-foreground">
-                              Stock posted{" "}
-                              {new Date(document.warehouseDrop.receivedAt).toLocaleString(undefined, {
-                                dateStyle: "medium",
-                                timeStyle: "short",
-                              })}
-                            </p>
-                          ) : (
-                            <p className="text-amber-700 dark:text-amber-400">Awaiting warehouse weigh & post</p>
-                          )}
-                        </div>
-                      ) : null}
-
-                      {document.podConfirmation?.confirmedAt ? (
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Proof of delivery
-                          </p>
-                          <p>
-                            Confirmed{" "}
-                            {new Date(document.podConfirmation.confirmedAt).toLocaleString(undefined, {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
-                            {document.podConfirmation.source === "signed_copy"
-                              ? " · Signed copy (desk)"
-                              : document.podConfirmation.source === "mobile"
-                                ? " · Mobile"
-                                : ""}
-                            {document.podConfirmation.receiverName
-                              ? ` · Received by ${document.podConfirmation.receiverName}`
-                              : ""}
-                            {document.podConfirmation.receiverPhone
-                              ? ` · ${document.podConfirmation.receiverPhone}`
-                              : ""}
-                          </p>
-                          {document.podConfirmation.note ? (
-                            <p className="text-muted-foreground whitespace-pre-wrap">{document.podConfirmation.note}</p>
-                          ) : null}
-                          {document.podConfirmation.signedCopyAttachmentId ? (
-                            <p className="text-muted-foreground">
-                              Signed delivery note:&nbsp;
-                              <button
-                                type="button"
-                                className="text-primary underline-offset-4 hover:underline font-medium bg-transparent border-0 p-0 cursor-pointer"
-                                onClick={() =>
-                                  downloadDocumentAttachmentApi(
-                                    "delivery-note",
-                                    id,
-                                    document.podConfirmation!.signedCopyAttachmentId!,
-                                    `${document.number ?? id}-signed-dn`,
-                                    (msg) => toast.info(msg || "Download not available.")
-                                  )
-                                }
-                              >
-                                Download signed copy
-                              </button>
-                            </p>
-                          ) : null}
-                          {document.podConfirmation.evidenceVerification ? (
-                            <p className="text-xs text-muted-foreground">
-                              Evidence check: {document.podConfirmation.evidenceVerification.status}
-                              {document.podConfirmation.evidenceVerification.reason
-                                ? ` — ${document.podConfirmation.evidenceVerification.reason}`
-                                : ""}
-                            </p>
-                          ) : null}
-                          <p className="text-muted-foreground">
-                            Customer / receiver signature:&nbsp;
-                            {document.podConfirmation.receiverSignatureAttachmentId ? (
-                              <SignatureAttachmentViewButton
-                                docType="delivery-note"
-                                documentId={id}
-                                attachmentId={document.podConfirmation.receiverSignatureAttachmentId}
-                              />
-                            ) : (
-                              "—"
-                            )}
-                          </p>
-                          {(document.podConfirmation.dispatcherName ||
-                            document.podConfirmation.dispatcherSignatureAttachmentId) && (
-                            <p className="text-muted-foreground">
-                              Delivery person (drop-off)
-                              {document.podConfirmation.dispatcherName
-                                ? ` · ${document.podConfirmation.dispatcherName}`
-                                : ""}
-                              :{" "}
-                              {document.podConfirmation.dispatcherSignatureAttachmentId ? (
-                                <SignatureAttachmentViewButton
-                                  docType="delivery-note"
-                                  documentId={id}
-                                  attachmentId={document.podConfirmation.dispatcherSignatureAttachmentId}
-                                />
-                              ) : (
-                                "—"
-                              )}
-                            </p>
-                          )}
-                          <div className="rounded border divide-y max-w-3xl">
-                            {(document.podConfirmation.lines ?? []).map((ln) => {
-                              const docLine = document.lines.find((l) => l.id === ln.lineId);
-                              const pickupLine = document.dispatchPickup?.lines?.find((p) => p.lineId === ln.lineId);
-                              const shippedW = docLine?.weightKg;
-                              const parts: string[] = [];
-                              parts.push(`Received ${ln.qtyReceived} of ${ln.qtyShipped}`);
-                              if (typeof shippedW === "number") parts.push(`shipped ${shippedW} kg`);
-                              if (pickupLine) parts.push(`loaded at pickup ${pickupLine.loadedWeightKg} kg`);
-                              if (typeof ln.receivedWeightKg === "number") parts.push(`received ${ln.receivedWeightKg} kg`);
-                              if (ln.varianceReason) parts.push(ln.varianceReason);
-                              if ((ln.varianceEvidenceAttachmentIds?.length ?? 0) > 0) {
-                                parts.push(`${ln.varianceEvidenceAttachmentIds!.length} variance photo(s)`);
-                              }
-                              return (
-                                <div key={ln.lineId} className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs">
-                                  <span className="min-w-0">{docLine?.description ?? ln.lineId}</span>
-                                  <span className="shrink-0 text-muted-foreground text-right">{parts.join(" · ")}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          {(document.podConfirmation.extraReceiptLines?.length ?? 0) > 0 ? (
-                            <div className="mt-4 space-y-2">
-                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Extra receipt (not on delivery note)
-                              </p>
-                              <div className="rounded border divide-y max-w-3xl">
-                                {(document.podConfirmation.extraReceiptLines ?? []).map((row) => (
-                                  <div
-                                    key={row.lineId}
-                                    className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs"
-                                  >
-                                    <span className="min-w-0">
-                                      {row.description ?? row.productId ?? row.lineId}
-                                      {row.productId ? ` · ${row.productId}` : ""}
-                                    </span>
-                                    <span className="shrink-0 text-muted-foreground text-right">
-                                      {typeof row.receivedWeightKg === "number"
-                                        ? `${row.receivedWeightKg} kg`
-                                        : ""}
-                                      {row.qtyReceived != null ? ` · qty ${row.qtyReceived}` : ""}
-                                      {row.note ? ` — ${row.note}` : ""}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                          {document.podConfirmation.franchiseeWeightSplit ? (
-                            <div className="mt-4 space-y-2">
-                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Outlet weight split
-                              </p>
-                              <p className="text-muted-foreground text-xs">
-                                Reference total{" "}
-                                {document.podConfirmation.franchiseeWeightSplit.referenceTotalWeightKg} kg
-                                {document.podConfirmation.franchiseeWeightSplit.splitNote
-                                  ? ` — ${document.podConfirmation.franchiseeWeightSplit.splitNote}`
-                                  : ""}
-                              </p>
-                              <div className="rounded border divide-y max-w-3xl">
-                                {(document.podConfirmation.franchiseeWeightSplit.lines ?? []).map(
-                                  (sl, i) => (
-                                    <div
-                                      key={`${sl.description}-${i}`}
-                                      className="flex flex-wrap gap-2 justify-between px-3 py-2 text-xs"
-                                    >
-                                      <span className="min-w-0">
-                                        {sl.description}
-                                        {sl.productId ? ` · ${sl.productId}` : ""}
-                                      </span>
-                                      <span className="shrink-0 text-muted-foreground text-right">
-                                        {sl.weightKg} kg{sl.note ? ` · ${sl.note}` : ""}
-                                      </span>
-                                    </div>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
+                    <DeliveryEvidencePanel
+                      documentId={id}
+                      documentNumber={document.number}
+                      lines={document.lines}
+                      dispatchPickup={document.dispatchPickup}
+                      deliveryCheckIn={document.deliveryCheckIn}
+                      warehouseDrop={document.warehouseDrop}
+                      podConfirmation={document.podConfirmation}
+                      onDownloadSignedCopy={(attachmentId, fileBase) =>
+                        downloadDocumentAttachmentApi(
+                          "delivery-note",
+                          id,
+                          attachmentId,
+                          fileBase,
+                          (msg) => toast.info(msg || "Download not available.")
+                        )
+                      }
+                    />
                   )}
                 {/* Invoice payment status bar */}
                 {document?.status === "DRAFT" && (
@@ -1766,7 +1553,7 @@ export default function DocViewPage() {
                           ? "min-w-[920px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                           : isPurchaseDoc
                           ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                          : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                          : "min-w-[792px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                       }
                     >
                       <span>Description</span>
@@ -1788,6 +1575,9 @@ export default function DocViewPage() {
                       )}
                       <span className="text-right">{isGrnDoc ? "Unbilled" : "Remaining"}</span>
                       {isPurchaseDoc ? <span className="text-right">Unit price</span> : null}
+                      {!isPurchaseDoc && !isGrnDoc ? (
+                        <span className="text-right whitespace-nowrap">Disc %</span>
+                      ) : null}
                       <span>Tax</span>
                       <span className="text-right">Amount</span>
                     </div>
@@ -1831,7 +1621,7 @@ export default function DocViewPage() {
                                 }`
                               : isPurchaseDoc
                               ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
-                              : "min-w-[720px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                              : "min-w-[792px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                           }
                         >
                           <div className="min-w-0">
@@ -1932,6 +1722,11 @@ export default function DocViewPage() {
                               ) : (
                                 "—"
                               )}
+                            </span>
+                          ) : null}
+                          {!isPurchaseDoc && !isGrnDoc ? (
+                            <span className="text-right tabular-nums text-muted-foreground text-xs">
+                              {(line.discount ?? 0) > 0 ? `${line.discount}%` : "—"}
                             </span>
                           ) : null}
                           <span className="text-xs text-muted-foreground truncate" title={taxTitle}>
@@ -2760,18 +2555,9 @@ export default function DocViewPage() {
                 onClick={async () => {
                   setEmailSending(true);
                   try {
-                    const body: Record<string, string> = {};
-                    if (emailTo.trim()) body.overrideTo = emailTo.trim();
-                    const resp = await fetch(`/api/documents/invoice/${id}/email`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(body),
+                    const result = await sendInvoiceEmailApi(id, {
+                      overrideTo: emailTo.trim() || undefined,
                     });
-                    if (!resp.ok) {
-                      const err = await resp.json().catch(() => ({ error: "Failed to send" }));
-                      throw new Error((err as { error?: string }).error || "Failed to send");
-                    }
-                    const result = await resp.json() as { to?: string };
                     toast.success(`Invoice sent to ${result.to ?? "customer"}`);
                     setEmailDialogOpen(false);
                     await refreshDocument(true);

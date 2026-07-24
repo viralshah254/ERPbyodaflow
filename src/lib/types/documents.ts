@@ -198,6 +198,11 @@ export type DocumentDetailRecord = {
   party?: string;
   branchId?: string;
   warehouseId?: string;
+  /** Customer price tag used for FMCG sales pricing (resolved from doc, chain, or party default). */
+  priceListId?: string;
+  priceListName?: string;
+  /** Tax tag applied to sales lines. */
+  taxConfigId?: string;
   total?: number;
   currency: string;
   exchangeRate?: number;

@@ -7,6 +7,7 @@ import type {
 } from "@/lib/types/documents";
 import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
+import type { DownloadProgressUpdate } from "./client";
 
 type BackendDocumentLine = {
   id?: string;
@@ -137,6 +138,9 @@ type BackendDocumentDetail = {
   party?: string;
   branchId?: string;
   warehouseId?: string;
+  priceListId?: string;
+  priceListName?: string;
+  taxConfigId?: string;
   total?: number;
   currency?: string;
   exchangeRate?: number;
@@ -392,6 +396,9 @@ function mapDocumentDetail(
     party: payload.party,
     branchId: payload.branchId,
     warehouseId: payload.warehouseId,
+    ...(payload.priceListId ? { priceListId: payload.priceListId } : {}),
+    ...(payload.priceListName ? { priceListName: payload.priceListName } : {}),
+    ...(payload.taxConfigId ? { taxConfigId: payload.taxConfigId } : {}),
     total: resolvedTotal,
     currency: payload.currency ?? "KES",
     exchangeRate: payload.exchangeRate,
@@ -882,14 +889,15 @@ export async function documentActionApi(
   });
 }
 
-export function downloadDocumentPdfApi(
+export async function downloadDocumentPdfApi(
   type: DocTypeKey,
   id: string,
   fileName: string,
-  onNotAvailable: (message: string) => void
-): void {
+  onNotAvailable: (message: string) => void,
+  onProgress?: (update: DownloadProgressUpdate) => void
+): Promise<boolean> {
   requireLiveApi("Document PDF export");
-  downloadFile(`/api/documents/${type}/${id}/pdf`, fileName, onNotAvailable);
+  return downloadFile(`/api/documents/${type}/${id}/pdf`, fileName, onNotAvailable, onProgress);
 }
 
 export function downloadDocumentExcelApi(
@@ -957,6 +965,20 @@ export async function deleteDocumentCommentApi(
   await apiRequest(`/api/docs/${type}/${id}/comments/${encodeURIComponent(commentId)}`, {
     method: "DELETE",
   });
+}
+
+export async function sendInvoiceEmailApi(
+  invoiceId: string,
+  options?: { overrideTo?: string }
+): Promise<{ sent: boolean; to: string }> {
+  requireLiveApi("Send invoice email");
+  return apiRequest<{ sent: boolean; to: string }>(
+    `/api/documents/invoice/${encodeURIComponent(invoiceId)}/email`,
+    {
+      method: "POST",
+      body: options?.overrideTo?.trim() ? { overrideTo: options.overrideTo.trim() } : {},
+    }
+  );
 }
 
 export async function uploadDocumentAttachmentApi(

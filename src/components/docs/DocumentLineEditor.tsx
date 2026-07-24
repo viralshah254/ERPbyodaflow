@@ -38,6 +38,7 @@ import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import {
   isPieceUom,
   resolveFmcgClientLinePrice,
+  resolveUnitsPerPiece,
   type FmcgCatalogItem,
 } from "@/lib/fmcg/pricing";
 import { DocumentProductPickerSheet } from "@/components/docs/DocumentProductPickerSheet";
@@ -245,6 +246,33 @@ function defaultLineUom(
   return product.unit ?? product.baseUom ?? "EA";
 }
 
+function isPreservedCommercialLine(line: Pick<DocumentLine, "priceReason">): boolean {
+  return (
+    line.priceReason === "Existing" ||
+    (typeof line.priceReason === "string" && line.priceReason.startsWith("Existing"))
+  );
+}
+
+/** Apply Disc% to a line loaded from an existing doc — uses stored unit price, not price tag. */
+function applyDiscountToPreservedLine(
+  line: Pick<DocumentLine, "price" | "discount" | "qty">,
+  discountPercent: number
+): { price: number; discount?: number; priceReason: string; amount: number } {
+  const disc = Math.min(100, Math.max(0, Number.isFinite(discountPercent) ? discountPercent : 0));
+  const oldDisc = line.discount ?? 0;
+  const gross =
+    oldDisc > 0 && oldDisc < 100
+      ? Math.round((line.price / (1 - oldDisc / 100)) * 100) / 100
+      : line.price;
+  const net = Math.round(gross * (1 - disc / 100) * 100) / 100;
+  return {
+    price: net,
+    discount: disc > 0 ? disc : undefined,
+    priceReason: disc > 0 ? `Existing (−${disc}%)` : "Existing",
+    amount: line.qty * net,
+  };
+}
+
 export function applyLineTax(
   line: DocumentLine,
   taxCodes: Array<{ id: string; code: string; name: string; rate: number }>,
@@ -287,9 +315,9 @@ export function DocumentLineEditor({
   linesRef.current = lines;
   const [productPickerOpen, setProductPickerOpen] = React.useState(false);
 
-  /** In-progress qty/price text while typing (avoids coercing `3.` → 3 mid-entry). */
+  /** In-progress qty/price/discount text while typing (avoids coercing `3.` → 3 mid-entry). */
   const [lineFieldDrafts, setLineFieldDrafts] = React.useState<
-    Record<string, { qty?: string; price?: string }>
+    Record<string, { qty?: string; price?: string; discount?: string }>
   >({});
 
   const lineQtyValue = (line: DocumentLine) =>
@@ -297,6 +325,9 @@ export function DocumentLineEditor({
 
   const linePriceValue = (line: DocumentLine) =>
     lineFieldDrafts[line.id]?.price ?? String(line.price);
+
+  const lineDiscountValue = (line: DocumentLine) =>
+    lineFieldDrafts[line.id]?.discount ?? String(line.discount ?? 0);
 
   const handleLineQtyDraft = (lineId: string, raw: string) => {
     setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], qty: raw } }));
@@ -462,9 +493,27 @@ export function DocumentLineEditor({
   }, []);
   const priceListIdResolved = useCostPricing ? "" : (priceListId || priceLists[0]?.id || "pl-retail");
 
+  const computeBaseQty = React.useCallback(
+    (productId: string, uom: string, qty: number): number => {
+      const packaging = packagingByProductId?.[productId];
+      if (fmcgOrg) {
+        const product = products.find((p) => p.id === productId);
+        const unitsPer = resolveUnitsPerPiece(uom, packaging, product?.baseUom ?? product?.unit);
+        return Math.round(qty * unitsPer * 1000) / 1000;
+      }
+      return getBaseQty(productId, uom, qty, packaging);
+    },
+    [fmcgOrg, packagingByProductId, products]
+  );
+
   // Resolve price: daily (seafood) → FMCG piece×pack → flat catalog → tiered product_pricing.
   const resolvePrice = React.useCallback(
-    (productId: string, qty: number, uom: string): { price: number; reason: string; discount?: number } => {
+    (
+      productId: string,
+      qty: number,
+      uom: string,
+      discountOverride?: number
+    ): { price: number; reason: string; discount?: number } => {
       if (useCostPricing) return { price: 0, reason: "Manual" };
       const daily = dailyPricesByProductId?.[productId];
       if (daily?.effectivePrice != null && daily.effectivePrice > 0) {
@@ -480,7 +529,10 @@ export function DocumentLineEditor({
           pricePerPiece: fmcgItem.pricePerPiece,
           uom,
           quantity: qty,
-          discountPercent: fmcgItem.discountPercent,
+          discountPercent:
+            discountOverride != null && Number.isFinite(discountOverride)
+              ? discountOverride
+              : fmcgItem.discountPercent,
           packaging: packagingByProductId?.[productId],
           productBaseUom: product?.baseUom ?? product?.unit,
         });
@@ -540,7 +592,7 @@ export function DocumentLineEditor({
         ensureVariantsLoaded(p.id);
         const packaging = packagingByProductId?.[p.id] ?? [];
         const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
-        const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
+        const baseQty = computeBaseQty(p.id, uom, 1);
         const { price, reason, discount } = resolvePrice(p.id, 1, uom);
         const newLine: DocumentLine = {
           id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
@@ -610,18 +662,24 @@ export function DocumentLineEditor({
         const productId = patch.productId ?? prev.productId;
         const uom = patch.uom ?? prev.uom;
         const qty = patch.qty ?? prev.qty;
-        next.baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
+        next.baseQty = patch.baseQty ?? computeBaseQty(productId, uom, qty);
         if (useCostPricing && patch.productId != null) {
           next.price = 0;
           next.priceReason = "Manual";
           next.discount = undefined;
-        } else if (!useCostPricing) {
-          const { price, reason, discount } = resolvePrice(productId, qty, uom);
+        } else if (!useCostPricing && patch.price == null) {
+          // Only auto-resolve when caller did not already set a pack-aware price.
+          const { price, reason, discount } = resolvePrice(
+            productId,
+            qty,
+            uom,
+            patch.discount ?? prev.discount
+          );
           next.price = price;
           next.priceReason = reason;
           next.discount = discount != null && discount > 0 ? discount : undefined;
         }
-        next.amount = next.qty * next.price;
+        if (patch.amount == null) next.amount = next.qty * next.price;
       }
       const taxed = applyLineTax(next, taxCodes, linesAreTaxInclusive);
       next.tax = taxed.tax;
@@ -647,7 +705,20 @@ export function DocumentLineEditor({
     });
   }, [taxCodesKey, linesAreTaxInclusive, taxCodes.length]);
 
-  /** Re-apply prices when daily / catalog / tier data finish loading (avoids stuck KES 0.00). */
+  /** Ensure packaging is fetched for products already on the document (edit / convert prefills). */
+  const lineProductIdsKey = React.useMemo(
+    () =>
+      [...new Set(lines.map((l) => l.productId).filter(Boolean))]
+        .sort()
+        .join(","),
+    [lines]
+  );
+  React.useEffect(() => {
+    if (!lineProductIdsKey) return;
+    onProductsAdded?.(lineProductIdsKey.split(","));
+  }, [lineProductIdsKey, onProductsAdded]);
+
+  /** Re-apply prices when daily / catalog / tier / packaging finish loading (avoids stuck KES 0.00). */
   React.useEffect(() => {
     if (useCostPricing) return;
     const dailyKeys = Object.keys(dailyPricesByProductId ?? {});
@@ -666,15 +737,48 @@ export function DocumentLineEditor({
       let changed = false;
       const next = prev.map((l) => {
         if (!l.productId) return l;
-        const { price, reason, discount } = resolvePriceRef.current(l.productId, l.qty, l.uom);
+        // Wait for packaging before re-pricing pack UOMs (avoids 1×piece flash on edit).
+        if (fmcgOrg && !isPieceUom(l.uom)) {
+          const packs = packagingByProductId?.[l.productId];
+          if (!packs?.length) return l;
+        }
+        const nextBaseQty = computeBaseQty(l.productId, l.uom, l.qty);
+        if (isPreservedCommercialLine(l) && l.price > 0) {
+          const catalog = resolvePriceRef.current(l.productId, l.qty, l.uom, l.discount);
+          const looksUnderPriced =
+            fmcgOrg &&
+            !isPieceUom(l.uom) &&
+            catalog.price > 0 &&
+            l.price * 1.5 < catalog.price;
+          if (!looksUnderPriced) {
+            if (nextBaseQty === l.baseQty) return l;
+            changed = true;
+            return { ...l, baseQty: nextBaseQty };
+          }
+        }
+        // Keep line Disc% when set (edit / manual); otherwise use price-tag default.
+        const { price, reason, discount } = resolvePriceRef.current(
+          l.productId,
+          l.qty,
+          l.uom,
+          l.discount
+        );
         const nextDiscount = discount != null && discount > 0 ? discount : undefined;
-        if (price === l.price && reason === l.priceReason && nextDiscount === l.discount) return l;
+        if (
+          price === l.price &&
+          reason === l.priceReason &&
+          nextDiscount === l.discount &&
+          nextBaseQty === l.baseQty
+        ) {
+          return l;
+        }
         changed = true;
         const merged = {
           ...l,
           price,
           priceReason: reason,
           discount: nextDiscount,
+          baseQty: nextBaseQty,
           amount: l.qty * price,
         };
         const taxed = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
@@ -692,6 +796,8 @@ export function DocumentLineEditor({
     useCostPricing,
     taxCodes,
     linesAreTaxInclusive,
+    computeBaseQty,
+    fmcgOrg,
   ]);
 
   const setProduct = (lineId: string, productId: string) => {
@@ -700,7 +806,7 @@ export function DocumentLineEditor({
       const uom = defaultLineUom(packaging, mode, row, fmcgOrg);
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
-      const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
+      const baseQty = computeBaseQty(productId, uom, qty);
       const { price, reason, discount } = resolvePrice(productId, qty, uom);
       updateLine(lineId, {
         productId: row.id,
@@ -779,9 +885,9 @@ export function DocumentLineEditor({
     if (variant.packagingUomCode) {
       const uom = variant.packagingUomCode;
       patch.uom = uom;
-      patch.baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
+      patch.baseQty = computeBaseQty(line.productId, uom, line.qty);
       if (!useCostPricing) {
-        const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom);
+        const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom, line.discount);
         patch.price = price;
         patch.priceReason = reason;
         patch.discount = discount != null && discount > 0 ? discount : undefined;
@@ -794,11 +900,11 @@ export function DocumentLineEditor({
   const setUom = (lineId: string, uom: string) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
+    const baseQty = computeBaseQty(line.productId, uom, line.qty);
     if (useCostPricing) {
       updateLine(lineId, { uom, baseQty, amount: line.qty * line.price });
     } else {
-      const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom);
+      const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom, line.discount);
       updateLine(lineId, {
         uom,
         baseQty,
@@ -813,11 +919,13 @@ export function DocumentLineEditor({
   const setQty = (lineId: string, qty: number) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const baseQty = getBaseQty(line.productId, line.uom, qty, packagingByProductId?.[line.productId]);
+    const baseQty = computeBaseQty(line.productId, line.uom, qty);
     if (useCostPricing) {
       updateLine(lineId, { qty, baseQty, amount: qty * line.price });
+    } else if (isPreservedCommercialLine(line)) {
+      updateLine(lineId, { qty, baseQty, amount: qty * line.price });
     } else {
-      const { price, reason, discount } = resolvePrice(line.productId, qty, line.uom);
+      const { price, reason, discount } = resolvePrice(line.productId, qty, line.uom, line.discount);
       updateLine(lineId, {
         qty,
         baseQty,
@@ -836,6 +944,63 @@ export function DocumentLineEditor({
     updateLine(lineId, { price, discount: undefined, amount: line.qty * price });
   };
 
+  /** Edit Disc% — on existing docs, discount off stored price; on new lines, use price tag. */
+  const setDiscount = (lineId: string, discountPercent: number) => {
+    const line = lines.find((l) => l.id === lineId);
+    if (!line || useCostPricing) return;
+    const disc = Math.min(100, Math.max(0, Number.isFinite(discountPercent) ? discountPercent : 0));
+
+    if (isPreservedCommercialLine(line) && line.price > 0) {
+      const next = applyDiscountToPreservedLine(line, disc);
+      updateLine(lineId, next);
+      return;
+    }
+
+    const { price, reason, discount } = resolvePrice(line.productId, line.qty, line.uom, disc);
+    if (price > 0) {
+      updateLine(lineId, {
+        price,
+        priceReason: reason,
+        discount: discount != null && discount > 0 ? discount : undefined,
+        amount: line.qty * price,
+      });
+      return;
+    }
+    // Fallback when catalog not loaded: reverse existing net → gross, then apply new %.
+    const oldDisc = line.discount ?? 0;
+    const gross =
+      oldDisc > 0 && oldDisc < 100
+        ? Math.round((line.price / (1 - oldDisc / 100)) * 100) / 100
+        : line.price;
+    const net = Math.round(gross * (1 - disc / 100) * 100) / 100;
+    updateLine(lineId, {
+      price: net,
+      discount: disc > 0 ? disc : undefined,
+      priceReason: disc > 0 ? `Manual (−${disc}%)` : line.priceReason,
+      amount: line.qty * net,
+    });
+  };
+
+  const handleLineDiscountDraft = (lineId: string, raw: string) => {
+    setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], discount: raw } }));
+    const partial = parsePartialDecimalString(raw);
+    if (partial != null && partial >= 0 && partial <= 100) setDiscount(lineId, partial);
+  };
+
+  const finalizeLineDiscountDraft = (lineId: string, raw: string) => {
+    const n = parseDecimalString(raw);
+    setDiscount(lineId, Number.isFinite(n) && n >= 0 ? Math.min(100, n) : 0);
+    setLineFieldDrafts((prev) => {
+      const next = { ...prev };
+      const row = next[lineId];
+      if (!row) return next;
+      const { discount: _discount, ...rest } = row;
+      if (Object.keys(rest).length === 0) delete next[lineId];
+      else next[lineId] = rest;
+      return next;
+    });
+  };
+
   const removeLine = (id: string) => {
     onLinesChange((prev) => prev.filter((l) => l.id !== id));
   };
@@ -843,7 +1008,8 @@ export function DocumentLineEditor({
   const subtotalSum = lines.reduce((s, l) => s + l.qty * l.price, 0);
   const totalTax = lines.reduce((s, l) => s + (l.tax ?? 0), 0);
   const total = lines.reduce((s, l) => s + l.amount, 0);
-  const showDiscountCol = lines.some((l) => (l.discount ?? 0) > 0);
+  // Sales docs: always show Disc% so draft invoices/SOs can edit offered discount.
+  const showDiscountCol = !useCostPricing;
 
   const showVariantColumn = React.useMemo(
     () =>
@@ -946,7 +1112,9 @@ export function DocumentLineEditor({
                     )}
                   </TableHead>
                   <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
-                  {showDiscountCol ? <TableHead className="w-20">Disc%</TableHead> : null}
+                  {showDiscountCol ? (
+                    <TableHead className="w-20 whitespace-nowrap">Disc %</TableHead>
+                  ) : null}
                   <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
                   {taxCodes.length > 0 && <TableHead className="w-36">Tax</TableHead>}
                   {taxCodes.length > 0 && <TableHead className="w-28">Tax amount</TableHead>}
@@ -1084,8 +1252,13 @@ export function DocumentLineEditor({
                       )}
                     </TableCell>
                     {showDiscountCol ? (
-                      <TableCell className="text-muted-foreground tabular-nums text-xs">
-                        {(l.discount ?? 0) > 0 ? `${l.discount}%` : "—"}
+                      <TableCell>
+                        <FormattedDecimalInput
+                          className="w-16"
+                          value={lineDiscountValue(l)}
+                          onValueChange={(raw) => handleLineDiscountDraft(l.id, raw)}
+                          onBlur={() => finalizeLineDiscountDraft(l.id, lineDiscountValue(l))}
+                        />
                       </TableCell>
                     ) : null}
                     <TableCell className="text-muted-foreground text-xs">{l.priceReason}</TableCell>
@@ -1170,11 +1343,12 @@ function UomSelect({
   fmcgOrg?: boolean;
   baseUom?: string;
 }) {
-  // FMCG: do not keep a stale catalog pack (e.g. CARTON) when the product has no pack counts yet.
+  // Always keep the line's current UOM in options (e.g. CARTON from SO/DN/invoice)
+  // so edit mode does not collapse to PCS before packaging finishes loading.
   const options = mergeLineUomOptions(
     packagingForProduct,
     catalogUomCodes,
-    fmcgOrg ? undefined : value,
+    value,
     { fmcgOrg, baseUom }
   );
   const normalizedValue = String(value ?? "").trim().toUpperCase();
@@ -1186,9 +1360,12 @@ function UomSelect({
 
   React.useEffect(() => {
     if (!fmcgOrg) return;
-    if (!selectValue || selectValue === value) return;
+    if (!selectValue || selectValue === normalizedValue || selectValue === value) return;
+    // Never strip a pack UOM before product packaging has loaded.
+    const packsLoaded = (packagingForProduct?.length ?? 0) > 0;
+    if (!packsLoaded && normalizedValue && !isPieceUom(normalizedValue)) return;
     onChange(lineId, selectValue);
-  }, [fmcgOrg, lineId, onChange, selectValue, value]);
+  }, [fmcgOrg, lineId, onChange, packagingForProduct, selectValue, value, normalizedValue]);
 
   return (
     <Select value={selectValue} onValueChange={(v) => onChange(lineId, v)}>

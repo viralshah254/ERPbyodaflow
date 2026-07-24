@@ -157,16 +157,17 @@ function LineProgressBar({ pct, state }: { pct: number; state: LineState }) {
 
 const FULFIL_COLGROUP = (
   <colgroup>
-    <col style={{ width: "20%" }} />
-    <col style={{ width: "10%" }} />
+    <col style={{ width: "18%" }} />
+    <col style={{ width: "9%" }} />
     <col style={{ width: "5%" }} />
     <col style={{ width: "6%" }} />
     <col style={{ width: "6%" }} />
-    <col style={{ width: "7%" }} />
-    <col style={{ width: "12%" }} />
-    <col style={{ width: "9%" }} />
+    <col style={{ width: "6%" }} />
+    <col style={{ width: "11%" }} />
+    <col style={{ width: "8%" }} />
+    <col style={{ width: "5%" }} />
     <col style={{ width: "10%" }} />
-    <col style={{ width: "15%" }} />
+    <col style={{ width: "16%" }} />
   </colgroup>
 );
 
@@ -315,6 +316,7 @@ export function DocumentFulfilmentLinesTable({
                 <th className={cn(thClass, "text-right")}>{isDn ? "Not packed" : "Backorder"}</th>
                 <th className={cn(thClass, "text-left")}>Progress</th>
                 <th className={cn(thClass, "text-right")}>{isDn ? "Uninvoiced" : "Open"}</th>
+                <th className={cn(thClass, "text-right whitespace-nowrap")}>Disc %</th>
                 <th className={cn(thClass, "text-left")}>Tax</th>
                 <th className={cn(thClass, "text-right")}>Amount</th>
               </tr>
@@ -377,6 +379,10 @@ export function DocumentFulfilmentLinesTable({
 
                     <td className={cn(tdClass, "text-right tabular-nums text-muted-foreground")}>
                       {r.remaining != null ? fmtQty(r.remaining) : "—"}
+                    </td>
+
+                    <td className={cn(tdClass, "text-right tabular-nums text-muted-foreground text-xs")}>
+                      {(r.line.discount ?? 0) > 0 ? `${r.line.discount}%` : "—"}
                     </td>
 
                     <td className={cn(tdClass, "text-xs text-muted-foreground truncate")} title={r.line.taxCodeName}>
