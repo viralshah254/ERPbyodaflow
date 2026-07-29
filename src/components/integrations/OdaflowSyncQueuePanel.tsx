@@ -44,14 +44,32 @@ function channelLabel(eventType: string) {
 
 function issueSummary(item: OdaflowQueueItem): string {
   const mappings = item.unresolvedMappings ?? [];
-  if (mappings.length === 0) return item.blockReason ?? "Needs review";
-  return mappings
-    .map((m) => {
-      if (m.type === "customer") return `Customer not matched: ${m.displayName ?? m.odaflowId}`;
-      if (m.type === "product") return `Product not matched: ${m.displayName ?? m.odaflowId}`;
-      return `${m.type}: ${m.displayName ?? m.odaflowId}`;
-    })
-    .join(" · ");
+  const rawLines = (item.rawPayload as { lines?: Array<{ erpProductId?: string }> } | undefined)?.lines ?? [];
+  const matched = rawLines.filter((line) => line.erpProductId).length;
+  const total = rawLines.length;
+
+  const parts: string[] = [];
+  if (total > 0 && matched > 0 && matched < total) {
+    parts.push(`${matched}/${total} products matched`);
+  }
+
+  for (const mapping of mappings) {
+    if (mapping.reason) {
+      parts.push(mapping.reason);
+      continue;
+    }
+    if (mapping.type === "customer") {
+      parts.push(`Customer not matched: ${mapping.displayName ?? mapping.odaflowId}`);
+    } else if (mapping.type === "product") {
+      parts.push(`Product not matched: ${mapping.displayName ?? mapping.odaflowId}`);
+    } else if (mapping.type === "price") {
+      parts.push(`Price missing: ${mapping.displayName ?? mapping.odaflowId}`);
+    } else {
+      parts.push(`${mapping.type}: ${mapping.displayName ?? mapping.odaflowId}`);
+    }
+  }
+
+  return parts.join(" · ") || item.blockReason || "Needs review";
 }
 
 type OdaflowSyncQueuePanelProps = {

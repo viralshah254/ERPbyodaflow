@@ -32,6 +32,11 @@ import {
   type OdaflowQueueItem,
   type OdaflowQueueOrderPreview,
 } from "@/lib/api/odaflow-integration";
+import {
+  filterConflictingProductMappings,
+  hasSameCatalogConflict,
+  sfaProductKindFromOrderChannel,
+} from "@/lib/odaflow-mapping-utils";
 import { fetchPartiesApi } from "@/lib/api/parties";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { PartyRow, ProductRow } from "@/lib/types/masters";
@@ -53,6 +58,7 @@ type MappingConflictState =
       lineIndex: number;
       option: AsyncSearchableSelectOption;
       existingMappings: OdaflowErmLookupMapping[];
+      conflictReason: "same_catalog" | "size_mismatch";
     }
   | {
       kind: "customer";
@@ -244,9 +250,24 @@ export function OdaflowQueueOrderSheet({
         entityType: "product",
         entityId: option.id,
       });
-      const others = mappings.filter((m) => m.externalId !== odaflowProductId);
-      if (others.length > 0) {
-        setMappingConflict({ kind: "product", lineIndex, option, existingMappings: others });
+      const currentKind = sfaProductKindFromOrderChannel(order?.channel);
+      const conflicts = filterConflictingProductMappings(
+        odaflowProductId,
+        line?.packSize,
+        currentKind,
+        mappings
+      );
+      if (conflicts.length > 0) {
+        const sameCatalog = conflicts.some((m) =>
+          hasSameCatalogConflict(currentKind, odaflowProductId, m)
+        );
+        setMappingConflict({
+          kind: "product",
+          lineIndex,
+          option,
+          existingMappings: conflicts,
+          conflictReason: sameCatalog ? "same_catalog" : "size_mismatch",
+        });
         return;
       }
     } catch {
@@ -428,9 +449,11 @@ export function OdaflowQueueOrderSheet({
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Label>Order lines</Label>
-                  <span className="text-xs text-muted-foreground">{order.lines.length} item(s)</span>
+                  <span className="text-xs text-muted-foreground">
+                    {order.matchedLineCount}/{order.totalLineCount} matched · {order.lines.length} item(s)
+                  </span>
                 </div>
                 <div className="rounded-md border overflow-hidden">
                   <table className="w-full text-sm">
@@ -443,15 +466,29 @@ export function OdaflowQueueOrderSheet({
                     </thead>
                     <tbody>
                       {order.lines.map((line) => (
-                        <tr key={line.index} className="border-t align-top">
+                        <tr
+                          key={line.index}
+                          className={
+                            line.hasIssue
+                              ? "border-t align-top bg-red-50/70 dark:bg-red-950/20 border-l-2 border-l-red-300 dark:border-l-red-700"
+                              : line.isAutoMatched
+                                ? "border-t align-top bg-green-50/50 dark:bg-green-950/15 border-l-2 border-l-green-300 dark:border-l-green-800"
+                                : "border-t align-top"
+                          }
+                        >
                           <td className="px-3 py-3">
                             <p className="font-medium">{line.productName ?? "Unknown product"}</p>
+                            {line.packSize && (
+                              <p className="text-xs text-muted-foreground mt-0.5">Size {line.packSize}</p>
+                            )}
                             {line.odaflowProductId && (
                               <p className="text-xs text-muted-foreground mt-0.5">Odaflow ID {line.odaflowProductId}</p>
                             )}
                             {line.barcode && <p className="text-xs text-muted-foreground">Barcode {line.barcode}</p>}
-                            {!line.barcode && line.needsProductMatch ? (
-                              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">No barcode from SFA</p>
+                            {line.hasIssue && line.blockReason ? (
+                              <p className="text-xs text-red-700 dark:text-red-300 mt-1">{line.blockReason}</p>
+                            ) : line.isAutoMatched ? (
+                              <p className="text-xs text-green-700 dark:text-green-300 mt-1">Matched automatically</p>
                             ) : null}
                           </td>
                           <td className="px-3 py-3">
@@ -484,7 +521,13 @@ export function OdaflowQueueOrderSheet({
                               emptyMessage="No products found."
                               allowClear
                               portalContainer={sheetPortalHost}
-                              triggerClassName={line.needsProductMatch ? "border-amber-300" : undefined}
+                              triggerClassName={
+                                line.hasIssue
+                                  ? "border-red-300 dark:border-red-700"
+                                  : line.isAutoMatched
+                                    ? "border-green-300 dark:border-green-700"
+                                    : undefined
+                              }
                               onCreateNew={goCreateProduct}
                               createNewLabel="Create new product"
                             />
@@ -542,8 +585,9 @@ export function OdaflowQueueOrderSheet({
             ? (order?.customerName ?? "Unknown customer")
             : (conflictLine?.productName ?? "Unknown product")
         }
-        odaflowExternalId={
-          mappingConflict?.kind === "customer" ? order?.odaflowCustomerId : conflictLine?.odaflowProductId
+        odaflowPackSize={mappingConflict?.kind === "product" ? conflictLine?.packSize : undefined}
+        productConflictReason={
+          mappingConflict?.kind === "product" ? mappingConflict.conflictReason : undefined
         }
         existingMappings={mappingConflict?.existingMappings ?? []}
         onConfirmLink={() => {

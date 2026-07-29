@@ -63,6 +63,8 @@ export interface OdaflowQueueItem {
     type: string;
     odaflowId: string;
     displayName?: string;
+    reason?: string;
+    lineIndex?: number;
   }>;
   erpDocumentId?: string;
   attemptCount: number;
@@ -81,6 +83,10 @@ export interface OdaflowQueueOrderLinePreview {
   unitPrice?: number;
   subTotal?: number;
   needsProductMatch: boolean;
+  needsPriceMatch: boolean;
+  hasIssue: boolean;
+  blockReason?: string;
+  isAutoMatched: boolean;
   erpProductId?: string;
   erpProductName?: string;
 }
@@ -103,6 +109,8 @@ export interface OdaflowQueueOrderPreview {
   customerNeedsMatch: boolean;
   erpPartyId?: string;
   erpPartyName?: string;
+  matchedLineCount: number;
+  totalLineCount: number;
   lines: OdaflowQueueOrderLinePreview[];
 }
 
@@ -218,6 +226,11 @@ export interface OdaflowErmLookupMapping {
   externalId: string;
   externalKey?: string;
   lastSyncedAt?: string;
+  odaflowName?: string;
+  odaflowPackSize?: string;
+  odaflowBarcode?: string;
+  sfaProductKind?: "modern_trade" | "general_trade";
+  displayLabel?: string;
 }
 
 export async function lookupOdaflowErmByEntityId(params: {
