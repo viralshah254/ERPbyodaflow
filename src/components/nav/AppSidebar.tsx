@@ -142,6 +142,8 @@ export function AppSidebar({ className }: AppSidebarProps) {
     () =>
       visibleSections.map((section) => ({
         ...section,
+        badgeCount:
+          section.key === "sales" ? (navCounts["odaflow-sync-queue"] ?? 0) : undefined,
         items: applyCountsToItems(
           section.items,
           navCounts,

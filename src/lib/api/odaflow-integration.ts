@@ -68,6 +68,43 @@ export interface OdaflowQueueItem {
   attemptCount: number;
   lastAttemptAt?: string;
   createdAt: string;
+  rawPayload?: Record<string, unknown>;
+}
+
+export interface OdaflowQueueOrderLinePreview {
+  index: number;
+  odaflowProductId?: string;
+  productName?: string;
+  barcode?: string;
+  packSize?: string;
+  qty: number;
+  unitPrice?: number;
+  subTotal?: number;
+  needsProductMatch: boolean;
+  erpProductId?: string;
+  erpProductName?: string;
+}
+
+export interface OdaflowQueueOrderPreview {
+  odaflowOrderId: string;
+  purchaseOrderNumber?: string;
+  channel?: string;
+  customerName?: string;
+  odaflowCustomerId?: string;
+  orderDate?: string;
+  expectedDeliveryDate?: string;
+  currency?: string;
+  totalAmount?: number;
+  notes?: string;
+  customerNeedsMatch: boolean;
+  erpPartyId?: string;
+  erpPartyName?: string;
+  lines: OdaflowQueueOrderLinePreview[];
+}
+
+export interface OdaflowQueueDetailResponse {
+  item: OdaflowQueueItem;
+  order: OdaflowQueueOrderPreview | null;
 }
 
 export interface OdaflowQueueResponse {
@@ -140,6 +177,27 @@ export async function fetchOdaflowQueue(params: {
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
   return apiRequest<OdaflowQueueResponse>(`/api/integrations/odaflow/sync/queue?${qs.toString()}`);
+}
+
+export async function fetchOdaflowQueueItem(id: string): Promise<OdaflowQueueDetailResponse> {
+  requireLiveApi("Odaflow integration");
+  return apiRequest<OdaflowQueueDetailResponse>(`/api/integrations/odaflow/sync/queue/${encodeURIComponent(id)}`);
+}
+
+export async function createSalesOrderFromQueueItem(
+  id: string,
+  body: {
+    erpPartyId?: string;
+    lineProducts?: Array<{ lineIndex: number; erpProductId: string }>;
+    lineQty?: Array<{ lineIndex: number; qty: number }>;
+    saveMappings?: boolean;
+  }
+): Promise<{ success: true; erpDocumentId: string; action: string }> {
+  requireLiveApi("Odaflow integration");
+  return apiRequest(`/api/integrations/odaflow/sync/queue/${encodeURIComponent(id)}/create-sales-order`, {
+    method: "POST",
+    body,
+  });
 }
 
 export async function retryQueueItem(id: string): Promise<void> {

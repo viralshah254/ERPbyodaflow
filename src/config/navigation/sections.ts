@@ -260,6 +260,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "sales-overview", label: "Sales Overview", href: "/sales/overview", icon: "LayoutDashboard", moduleKey: "sales", requiresPermissions: ["sales.read"] },
       { key: "sales-quotes", label: "Quotes", href: "/sales/quotes", icon: "FileText", moduleKey: "sales", requiresPermissions: ["sales.orders.read"] },
       { key: "sales-orders", label: "Orders", href: "/sales/orders", icon: "ShoppingCart", moduleKey: "sales", termKey: "salesOrder", requiresPermissions: ["sales.orders.read"] },
+      { key: "odaflow-sync-queue", label: "Odaflow orders to review", href: "/sales/odaflow-sync-queue", icon: "AlertTriangle", moduleKey: "sales", requiresPermissions: ["automation.integrations.read"] },
       { key: "sales-deliveries", label: "Deliveries", href: "/sales/deliveries", icon: "Truck", moduleKey: "sales", requiresPermissions: ["sales.deliveries.read"] },
       { key: "sales-invoices", label: "Invoices", href: "/sales/invoices", icon: "Receipt", moduleKey: "sales", requiresPermissions: ["sales.invoices.read"] },
       { key: "sales-customers", label: "Customers", href: "/sales/customers", icon: "Users", moduleKey: "sales", termKey: "customer", requiresPermissions: ["sales.customers.read"] },
