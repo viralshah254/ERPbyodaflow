@@ -57,9 +57,22 @@ function issueSummary(item: OdaflowQueueItem): string {
 type OdaflowSyncQueuePanelProps = {
   refreshKey?: number;
   onQueueChanged?: () => void;
+  initialOpenQueueId?: string | null;
+  initialCustomerId?: string | null;
+  initialCustomerName?: string | null;
+  showPricingReminder?: boolean;
+  onDeepLinkConsumed?: () => void;
 };
 
-export function OdaflowSyncQueuePanel({ refreshKey = 0, onQueueChanged }: OdaflowSyncQueuePanelProps) {
+export function OdaflowSyncQueuePanel({
+  refreshKey = 0,
+  onQueueChanged,
+  initialOpenQueueId = null,
+  initialCustomerId = null,
+  initialCustomerName = null,
+  showPricingReminder = false,
+  onDeepLinkConsumed,
+}: OdaflowSyncQueuePanelProps) {
   const [queueItems, setQueueItems] = React.useState<OdaflowQueueItem[]>([]);
   const [queueTotal, setQueueTotal] = React.useState(0);
   const [queueLoading, setQueueLoading] = React.useState(true);
@@ -68,6 +81,11 @@ export function OdaflowSyncQueuePanel({ refreshKey = 0, onQueueChanged }: Odaflo
   const [queuePage, setQueuePage] = React.useState(1);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [latchedReturnContext, setLatchedReturnContext] = React.useState<{
+    customerId: string;
+    customerName: string | null;
+    showPricingReminder: boolean;
+  } | null>(null);
 
   const loadQueue = React.useCallback(async () => {
     setQueueLoading(true);
@@ -91,7 +109,21 @@ export function OdaflowSyncQueuePanel({ refreshKey = 0, onQueueChanged }: Odaflo
     void loadQueue();
   }, [loadQueue, refreshKey]);
 
+  React.useEffect(() => {
+    if (!initialOpenQueueId) return;
+    setSelectedId(initialOpenQueueId);
+    setSheetOpen(true);
+    if (initialCustomerId) {
+      setLatchedReturnContext({
+        customerId: initialCustomerId,
+        customerName: initialCustomerName,
+        showPricingReminder,
+      });
+    }
+  }, [initialOpenQueueId, initialCustomerId, initialCustomerName, showPricingReminder]);
+
   function openOrder(id: string) {
+    setLatchedReturnContext(null);
     setSelectedId(id);
     setSheetOpen(true);
   }
@@ -214,6 +246,10 @@ export function OdaflowSyncQueuePanel({ refreshKey = 0, onQueueChanged }: Odaflo
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         onChanged={handleSheetChanged}
+        initialCustomerId={latchedReturnContext?.customerId ?? null}
+        initialCustomerName={latchedReturnContext?.customerName ?? null}
+        showPricingReminder={latchedReturnContext?.showPricingReminder ?? false}
+        onDeepLinkConsumed={onDeepLinkConsumed}
       />
     </>
   );

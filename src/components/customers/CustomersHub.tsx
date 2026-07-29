@@ -39,6 +39,9 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
 
   const editCustomerId = searchParams.get("id");
   const openCreate = searchParams.get("new") === "1";
+  const returnTo = searchParams.get("returnTo");
+  const odaflowQueue = searchParams.get("odaflowQueue");
+  const prefillName = searchParams.get("name");
 
   // Finance users land on the dedicated credit page — send them there.
   React.useEffect(() => {
@@ -53,6 +56,7 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   const [formOpen, setFormOpen] = React.useState(false);
   const [formKindId, setFormKindId] = React.useState<CustomerKindId | undefined>(undefined);
   const [formCustomerId, setFormCustomerId] = React.useState<string | null>(null);
+  const [formInitialName, setFormInitialName] = React.useState<string | null>(null);
   const [lockKind, setLockKind] = React.useState(false);
   const [branchParentId, setBranchParentId] = React.useState<string | null>(null);
   const [branchParentName, setBranchParentName] = React.useState<string | null>(null);
@@ -64,15 +68,19 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
     params.delete("new");
     params.delete("id");
     params.delete("tab");
+    params.delete("returnTo");
+    params.delete("odaflowQueue");
+    params.delete("name");
     const qs = params.toString();
     router.replace(qs ? `/sales/customers?${qs}` : "/sales/customers", { scroll: false });
   }, [router, searchParams]);
 
   const openNewCustomer = React.useCallback(
-    (kindId?: CustomerKindId, options?: { lockKind?: boolean }) => {
+    (kindId?: CustomerKindId, options?: { lockKind?: boolean; initialName?: string | null }) => {
       setFormCustomerId(null);
       setFormKindId(kindId);
       setLockKind(Boolean(options?.lockKind));
+      setFormInitialName(options?.initialName ?? null);
       setBranchParentId(null);
       setBranchParentName(null);
       setFormOpen(true);
@@ -118,8 +126,8 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   );
 
   React.useEffect(() => {
-    if (openCreate) openNewCustomer();
-  }, [openCreate, openNewCustomer]);
+    if (openCreate) openNewCustomer(undefined, { initialName: prefillName });
+  }, [openCreate, openNewCustomer, prefillName]);
 
   React.useEffect(() => {
     if (!editCustomerId || fromFinance) return;
@@ -238,8 +246,19 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         parentPartyId={branchParentId}
         parentPartyName={branchParentName}
         customerId={formCustomerId}
+        initialName={formInitialName}
         onSuccess={(customer) => {
           setRefreshKey((k) => k + 1);
+          if (returnTo && odaflowQueue && customer?.created && customer.id) {
+            const params = new URLSearchParams({
+              open: odaflowQueue,
+              newCustomer: customer.id,
+              newCustomerName: customer.name,
+              setupPricing: "1",
+            });
+            router.push(`${returnTo}?${params.toString()}`);
+            return;
+          }
           if (customer?.kindId === "modern-trade-branch" || customer?.kindId === "modern-trade") {
             setDirectoryTab("modern-trade");
           } else if (customer?.kindId) {

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
@@ -17,9 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  AsyncSearchableSelect,
+  type AsyncSearchableSelectOption,
+} from "@/components/ui/async-searchable-select";
+import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
+import { OdaflowMappingConflictDialog } from "@/components/integrations/OdaflowMappingConflictDialog";
+import {
   createSalesOrderFromQueueItem,
   fetchOdaflowQueueItem,
   ignoreQueueItem,
+  lookupOdaflowErmByEntityId,
+  type OdaflowErmLookupMapping,
   type OdaflowQueueItem,
   type OdaflowQueueOrderPreview,
 } from "@/lib/api/odaflow-integration";
@@ -32,117 +41,88 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged?: () => void;
+  initialCustomerId?: string | null;
+  initialCustomerName?: string | null;
+  showPricingReminder?: boolean;
+  onDeepLinkConsumed?: () => void;
 };
+
+type MappingConflictState =
+  | {
+      kind: "product";
+      lineIndex: number;
+      option: AsyncSearchableSelectOption;
+      existingMappings: OdaflowErmLookupMapping[];
+    }
+  | {
+      kind: "customer";
+      option: AsyncSearchableSelectOption;
+      existingMappings: OdaflowErmLookupMapping[];
+    };
 
 function channelLabel(channel?: string) {
   const map: Record<string, string> = {
     modern_trade: "Modern Trade",
     distributor: "Distributor",
-    direct: "Direct",
+    direct: "General Trade",
     van_sales: "Van Sales",
   };
-  return channel ? (map[channel] ?? channel) : "—";
+  return channel ? (map[channel] ?? channel.replace(/_/g, " ")) : "—";
 }
 
-function EntityPicker<T extends { id: string; label: string; hint?: string }>({
-  label,
-  placeholder,
-  valueId,
-  valueLabel,
-  onSelect,
-  onSearch,
-  tone = "default",
-}: {
-  label: string;
-  placeholder: string;
-  valueId?: string;
-  valueLabel?: string;
-  onSelect: (item: T | null) => void;
-  onSearch: (query: string) => Promise<T[]>;
-  tone?: "default" | "warning";
-}) {
-  const [query, setQuery] = React.useState("");
-  const [results, setResults] = React.useState<T[]>([]);
-  const [loading, setLoading] = React.useState(false);
-
-  React.useEffect(() => {
-    if (valueLabel) setQuery(valueLabel);
-  }, [valueLabel]);
-
-  React.useEffect(() => {
-    const q = query.trim();
-    if (!q || (valueId && q === valueLabel)) {
-      setResults([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      setLoading(true);
-      onSearch(q)
-        .then(setResults)
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [query, onSearch, valueId, valueLabel]);
-
-  return (
-    <div className="space-y-2">
-      {label ? (
-        <Label className={tone === "warning" ? "text-amber-800 dark:text-amber-200" : undefined}>{label}</Label>
-      ) : null}
-      {valueId && valueLabel ? (
-        <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-          <Icons.CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
-          <span className="flex-1 truncate font-medium">{valueLabel}</span>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => onSelect(null)}>
-            Change
-          </Button>
-        </div>
-      ) : (
-        <>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={placeholder}
-            className={tone === "warning" ? "border-amber-300" : undefined}
-          />
-          {loading && <p className="text-xs text-muted-foreground">Searching…</p>}
-          {results.length > 0 && (
-            <div className="max-h-40 overflow-y-auto rounded-md border divide-y">
-              {results.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-muted/60"
-                  onClick={() => {
-                    onSelect(item);
-                    setQuery(item.label);
-                    setResults([]);
-                  }}
-                >
-                  <span className="font-medium">{item.label}</span>
-                  {item.hint && <span className="text-xs text-muted-foreground">{item.hint}</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
+function buildCustomerCreateUrl(queueId: string, customerName?: string) {
+  const params = new URLSearchParams({
+    new: "1",
+    returnTo: "/sales/odaflow-sync-queue",
+    odaflowQueue: queueId,
+  });
+  if (customerName?.trim()) params.set("name", customerName.trim());
+  return `/sales/customers?${params.toString()}`;
 }
 
-export function OdaflowQueueOrderSheet({ queueId, open, onOpenChange, onChanged }: Props) {
+function buildProductCreateReturnUrl(queueId: string) {
+  const params = new URLSearchParams({ open: queueId });
+  return `/sales/odaflow-sync-queue?${params.toString()}`;
+}
+
+export function OdaflowQueueOrderSheet({
+  queueId,
+  open,
+  onOpenChange,
+  onChanged,
+  initialCustomerId,
+  initialCustomerName,
+  showPricingReminder = false,
+  onDeepLinkConsumed,
+}: Props) {
   const router = useRouter();
+  const [sheetPortalHost, setSheetPortalHost] = React.useState<HTMLElement | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [item, setItem] = React.useState<OdaflowQueueItem | null>(null);
   const [order, setOrder] = React.useState<OdaflowQueueOrderPreview | null>(null);
   const [erpPartyId, setErpPartyId] = React.useState<string | undefined>();
-  const [erpPartyName, setErpPartyName] = React.useState<string | undefined>();
-  const [lineProducts, setLineProducts] = React.useState<Record<number, { id: string; name: string }>>({});
+  const [selectedCustomer, setSelectedCustomer] = React.useState<AsyncSearchableSelectOption | null>(null);
+  const [lineProducts, setLineProducts] = React.useState<Record<number, AsyncSearchableSelectOption>>({});
   const [lineQty, setLineQty] = React.useState<Record<number, number>>({});
   const [saveMappings, setSaveMappings] = React.useState(true);
+  const [mappingConflict, setMappingConflict] = React.useState<MappingConflictState | null>(null);
+  const [pricingReminderDismissed, setPricingReminderDismissed] = React.useState(false);
+  const deepLinkAppliedRef = React.useRef(false);
+
+  const applyCustomer = React.useCallback((option: AsyncSearchableSelectOption | null) => {
+    setSelectedCustomer(option);
+    setErpPartyId(option?.id);
+  }, []);
+
+  const applyProduct = React.useCallback((lineIndex: number, option: AsyncSearchableSelectOption | null) => {
+    setLineProducts((prev) => {
+      const next = { ...prev };
+      if (option) next[lineIndex] = option;
+      else delete next[lineIndex];
+      return next;
+    });
+  }, []);
 
   const load = React.useCallback(async () => {
     if (!queueId) return;
@@ -152,21 +132,27 @@ export function OdaflowQueueOrderSheet({ queueId, open, onOpenChange, onChanged 
       setItem(data.item);
       setOrder(data.order);
       if (data.order) {
-        setErpPartyId(data.order.erpPartyId);
-        setErpPartyName(data.order.erpPartyName ?? data.order.customerName);
+        const customerId = initialCustomerId ?? data.order.erpPartyId;
+        const customerLabel = initialCustomerName ?? data.order.erpPartyName ?? data.order.customerName;
+        setErpPartyId(customerId);
+        setSelectedCustomer(customerId && customerLabel ? { id: customerId, label: customerLabel } : null);
+
         const qty: Record<number, number> = {};
-        const products: Record<number, { id: string; name: string }> = {};
+        const products: Record<number, AsyncSearchableSelectOption> = {};
         for (const line of data.order.lines) {
           qty[line.index] = line.qty;
           if (line.erpProductId) {
             products[line.index] = {
               id: line.erpProductId,
-              name: line.erpProductName ?? line.productName ?? line.erpProductId,
+              label: line.erpProductName ?? line.productName ?? line.erpProductId,
             };
           }
         }
         setLineQty(qty);
         setLineProducts(products);
+      }
+      if (initialCustomerId || showPricingReminder) {
+        onDeepLinkConsumed?.();
       }
     } catch {
       toast.error("Could not load order details");
@@ -174,47 +160,113 @@ export function OdaflowQueueOrderSheet({ queueId, open, onOpenChange, onChanged 
     } finally {
       setLoading(false);
     }
-  }, [queueId, onOpenChange]);
+  }, [queueId, onOpenChange, initialCustomerId, initialCustomerName, showPricingReminder, onDeepLinkConsumed]);
 
   React.useEffect(() => {
-    if (open && queueId) void load();
+    if (open && queueId) {
+      deepLinkAppliedRef.current = false;
+      void load();
+    }
     if (!open) {
       setItem(null);
       setOrder(null);
+      setMappingConflict(null);
+      setPricingReminderDismissed(false);
     }
   }, [open, queueId, load]);
 
-  const searchCustomers = React.useCallback(async (query: string) => {
-    const rows: PartyRow[] = await fetchPartiesApi({ role: "customer", search: query, status: "ACTIVE", limit: 8 });
+  React.useEffect(() => {
+    if (!open || !initialCustomerId || deepLinkAppliedRef.current) return;
+    deepLinkAppliedRef.current = true;
+    applyCustomer({
+      id: initialCustomerId,
+      label: initialCustomerName ?? initialCustomerId,
+    });
+  }, [open, initialCustomerId, initialCustomerName, applyCustomer]);
+
+  const loadCustomerOptions = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+    const rows: PartyRow[] = await fetchPartiesApi({
+      role: "customer",
+      search: query,
+      status: "ACTIVE",
+      limit: 20,
+    });
     return rows.map((p) => ({
       id: p.id,
       label: p.name,
-      hint: p.code ? `Code ${p.code}` : undefined,
+      description: p.code ? `Code ${p.code}` : undefined,
     }));
   }, []);
 
-  const searchProducts = React.useCallback(async (query: string) => {
-    const page = await fetchProductsPageApi({ search: query, status: "ACTIVE", sellable: true, limit: 8 });
+  const loadProductOptions = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+    const page = await fetchProductsPageApi({ search: query, status: "ACTIVE", sellable: true, limit: 20 });
     return page.items.map((p: ProductRow) => ({
       id: p.id,
       label: p.name,
-      hint: [p.sku, p.barcode].filter(Boolean).join(" · ") || undefined,
+      description: [p.sku, p.barcode].filter(Boolean).join(" · ") || undefined,
     }));
   }, []);
 
-  const customerReady = Boolean(erpPartyId) || (order != null && !order.customerNeedsMatch);
-  const allProductsReady =
-    order?.lines.every((line) => !line.needsProductMatch || Boolean(lineProducts[line.index]?.id)) ?? false;
+  async function checkCustomerMapping(option: AsyncSearchableSelectOption | null) {
+    if (!option || !order?.odaflowCustomerId) {
+      applyCustomer(option);
+      return;
+    }
+    try {
+      const { mappings } = await lookupOdaflowErmByEntityId({
+        entityType: "party",
+        entityId: option.id,
+      });
+      const others = mappings.filter((m) => m.externalId !== order.odaflowCustomerId);
+      if (others.length > 0) {
+        setMappingConflict({ kind: "customer", option, existingMappings: others });
+        return;
+      }
+    } catch {
+      /* proceed without blocking */
+    }
+    applyCustomer(option);
+  }
+
+  async function checkProductMapping(lineIndex: number, option: AsyncSearchableSelectOption | null) {
+    if (!option) {
+      applyProduct(lineIndex, null);
+      return;
+    }
+    const line = order?.lines.find((l) => l.index === lineIndex);
+    const odaflowProductId = line?.odaflowProductId;
+    if (!odaflowProductId) {
+      applyProduct(lineIndex, option);
+      return;
+    }
+    try {
+      const { mappings } = await lookupOdaflowErmByEntityId({
+        entityType: "product",
+        entityId: option.id,
+      });
+      const others = mappings.filter((m) => m.externalId !== odaflowProductId);
+      if (others.length > 0) {
+        setMappingConflict({ kind: "product", lineIndex, option, existingMappings: others });
+        return;
+      }
+    } catch {
+      /* proceed without blocking */
+    }
+    applyProduct(lineIndex, option);
+  }
+
+  const customerReady = Boolean(erpPartyId);
+  const allProductsReady = order?.lines.every((line) => Boolean(lineProducts[line.index]?.id)) ?? false;
   const canSubmit = customerReady && allProductsReady && !submitting;
 
   async function handleCreateSalesOrder() {
-    if (!queueId || !order) return;
+    if (!queueId || !order || !erpPartyId) return;
     setSubmitting(true);
     try {
       const result = await createSalesOrderFromQueueItem(queueId, {
-        erpPartyId: order.customerNeedsMatch ? erpPartyId : undefined,
+        erpPartyId,
         lineProducts: order.lines
-          .filter((line) => line.needsProductMatch && lineProducts[line.index]?.id)
+          .filter((line) => lineProducts[line.index]?.id)
           .map((line) => ({ lineIndex: line.index, erpProductId: lineProducts[line.index]!.id })),
         lineQty: order.lines.map((line) => ({ lineIndex: line.index, qty: lineQty[line.index] ?? line.qty })),
         saveMappings,
@@ -243,168 +295,287 @@ export function OdaflowQueueOrderSheet({ queueId, open, onOpenChange, onChanged 
     }
   }
 
+  function goCreateCustomer() {
+    if (!queueId) return;
+    onOpenChange(false);
+    router.push(buildCustomerCreateUrl(queueId, order?.customerName));
+  }
+
+  function goCreateProduct() {
+    if (!queueId) return;
+    onOpenChange(false);
+    router.push(`/master/products?returnTo=${encodeURIComponent(buildProductCreateReturnUrl(queueId))}`);
+  }
+
+  const odaflowSource = order
+    ? {
+        orderTitle: order.orderTitle ?? `${channelLabel(order.channel)} Order`,
+        odaflowChannel: order.channel,
+        salesRepName: order.salesRepName,
+        salesRepPhone: order.salesRepPhone,
+        sourcePdfUrl: order.documentUrl,
+        externalOrderId: order.odaflowOrderId,
+      }
+    : null;
+
+  const conflictLine =
+    mappingConflict?.kind === "product"
+      ? order?.lines.find((l) => l.index === mappingConflict.lineIndex)
+      : undefined;
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{order?.purchaseOrderNumber ?? item?.displayRef ?? "Odaflow order"}</SheetTitle>
-          <SheetDescription>
-            Review this order from Odaflow, match the customer and products to your ERP catalog, then send it to Sales
-            Orders.
-          </SheetDescription>
-        </SheetHeader>
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          <div ref={setSheetPortalHost} className="contents" />
+          <SheetHeader>
+            <SheetTitle>{order?.purchaseOrderNumber ?? item?.displayRef ?? "Odaflow order"}</SheetTitle>
+            <SheetDescription>
+              Match Odaflow customer and products to your ERP catalog. Saved matches are reused on future orders.
+            </SheetDescription>
+          </SheetHeader>
 
-        {loading || !order ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">Loading order…</div>
-        ) : (
-          <div className="mt-6 space-y-6">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground">Channel</p>
-                <p className="font-medium">{channelLabel(order.channel)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Order date</p>
-                <p className="font-medium">{order.orderDate ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Currency</p>
-                <p className="font-medium">{order.currency ?? "KES"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Odaflow total</p>
-                <p className="font-medium">
-                  {order.totalAmount != null
-                    ? `${order.currency ?? "KES"} ${order.totalAmount.toLocaleString()}`
-                    : "—"}
-                </p>
-              </div>
-            </div>
+          {loading || !order ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Loading order…</div>
+          ) : (
+            <div className="mt-6 space-y-6">
+              {showPricingReminder && initialCustomerId && !pricingReminderDismissed ? (
+                <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+                  <p className="font-medium flex items-start gap-2">
+                    <Icons.Tags className="h-4 w-4 shrink-0 mt-0.5" />
+                    Set a price tag for {initialCustomerName ?? "this customer"}
+                  </p>
+                  <p className="text-xs mt-1 text-sky-900/80 dark:text-sky-100/80">
+                    New customers need a pricing tag before Odaflow orders price correctly in the ERP.
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <Button type="button" size="sm" variant="default" asChild>
+                      <Link href={`/sales/customers?id=${initialCustomerId}`}>Configure customer pricing</Link>
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" asChild>
+                      <Link href="/pricing/rules">Pricing rules</Link>
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setPricingReminderDismissed(true)}>
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
 
-            {item?.blockReason && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30">
-                {item.blockReason}
-              </div>
-            )}
+              {odaflowSource ? <OdaflowSourceCard info={odaflowSource} compact /> : null}
 
-            {order.customerNeedsMatch ? (
-              <EntityPicker
-                label="Match to ERP customer"
-                placeholder={`Search customers — Odaflow sent “${order.customerName ?? "Unknown"}”`}
-                valueId={erpPartyId}
-                valueLabel={erpPartyName}
-                tone="warning"
-                onSelect={(picked) => {
-                  setErpPartyId(picked?.id);
-                  setErpPartyName(picked?.label);
-                }}
-                onSearch={searchCustomers}
-              />
-            ) : (
-              <div className="rounded-md border px-3 py-2 text-sm">
-                <p className="text-xs text-muted-foreground">Customer</p>
-                <p className="font-medium">{erpPartyName ?? order.customerName ?? "—"}</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Order date</p>
+                  <p className="font-medium">{order.orderDate ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Currency</p>
+                  <p className="font-medium">{order.currency ?? "KES"}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground">Odaflow total</p>
+                  <p className="font-medium">
+                    {order.totalAmount != null
+                      ? `${order.currency ?? "KES"} ${order.totalAmount.toLocaleString()}`
+                      : "—"}
+                  </p>
+                </div>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Order lines</Label>
-                <span className="text-xs text-muted-foreground">{order.lines.length} item(s)</span>
+              {item?.blockReason && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30">
+                  {item.blockReason}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className={order.customerNeedsMatch ? "text-amber-800 dark:text-amber-200" : undefined}>
+                    ERP customer
+                  </Label>
+                  {queueId ? (
+                    <Button type="button" variant="outline" size="sm" className="h-8" onClick={goCreateCustomer}>
+                      <Icons.Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Add customer
+                    </Button>
+                  ) : null}
+                </div>
+                {order.customerName && !selectedCustomer ? (
+                  <p className="text-xs text-muted-foreground">
+                    Odaflow sent “{order.customerName}” — pick your matching customer below or add a new one.
+                  </p>
+                ) : null}
+                <AsyncSearchableSelect
+                  value={erpPartyId}
+                  selectedOption={selectedCustomer}
+                  onValueChange={(id) => {
+                    if (!id) applyCustomer(null);
+                  }}
+                  onOptionSelect={(opt) => void checkCustomerMapping(opt)}
+                  loadOptions={loadCustomerOptions}
+                  minSearchLength={0}
+                  searchDebounceMs={200}
+                  placeholder="Select customer"
+                  searchPlaceholder="Search customers…"
+                  emptyMessage="No customers found."
+                  allowClear
+                  portalContainer={sheetPortalHost}
+                  triggerClassName={order.customerNeedsMatch ? "border-amber-300" : undefined}
+                  onCreateNew={goCreateCustomer}
+                  createNewLabel="Add new customer"
+                />
               </div>
-              <div className="rounded-md border overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Product from Odaflow</th>
-                      <th className="px-3 py-2 font-medium w-20">Qty</th>
-                      <th className="px-3 py-2 font-medium">Your ERP product</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {order.lines.map((line) => (
-                      <tr key={line.index} className="border-t align-top">
-                        <td className="px-3 py-3">
-                          <p className="font-medium">{line.productName ?? "Unknown product"}</p>
-                          {line.odaflowProductId && (
-                            <p className="text-xs text-muted-foreground mt-0.5">Odaflow ID {line.odaflowProductId}</p>
-                          )}
-                          {line.barcode && <p className="text-xs text-muted-foreground">Barcode {line.barcode}</p>}
-                        </td>
-                        <td className="px-3 py-3">
-                          <Input
-                            type="number"
-                            min={1}
-                            className="h-8 w-16"
-                            value={lineQty[line.index] ?? line.qty}
-                            onChange={(e) =>
-                              setLineQty((prev) => ({
-                                ...prev,
-                                [line.index]: Math.max(1, Number(e.target.value) || 1),
-                              }))
-                            }
-                          />
-                        </td>
-                        <td className="px-3 py-3 min-w-[12rem]">
-                          {line.needsProductMatch ? (
-                            <EntityPicker
-                              label=""
-                              placeholder="Search your products…"
-                              valueId={lineProducts[line.index]?.id}
-                              valueLabel={lineProducts[line.index]?.name}
-                              tone="warning"
-                              onSelect={(picked) => {
-                                setLineProducts((prev) => {
-                                  const next = { ...prev };
-                                  if (picked) next[line.index] = { id: picked.id, name: picked.label };
-                                  else delete next[line.index];
-                                  return next;
-                                });
-                              }}
-                              onSearch={searchProducts}
-                            />
-                          ) : (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Icons.CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                              <span>{line.erpProductName ?? line.productName ?? "Matched"}</span>
-                            </div>
-                          )}
-                        </td>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Order lines</Label>
+                  <span className="text-xs text-muted-foreground">{order.lines.length} item(s)</span>
+                </div>
+                <div className="rounded-md border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Product from Odaflow</th>
+                        <th className="px-3 py-2 font-medium w-20">Qty</th>
+                        <th className="px-3 py-2 font-medium min-w-[12rem]">Your ERP product</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {order.lines.map((line) => (
+                        <tr key={line.index} className="border-t align-top">
+                          <td className="px-3 py-3">
+                            <p className="font-medium">{line.productName ?? "Unknown product"}</p>
+                            {line.odaflowProductId && (
+                              <p className="text-xs text-muted-foreground mt-0.5">Odaflow ID {line.odaflowProductId}</p>
+                            )}
+                            {line.barcode && <p className="text-xs text-muted-foreground">Barcode {line.barcode}</p>}
+                            {!line.barcode && line.needsProductMatch ? (
+                              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">No barcode from SFA</p>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-3">
+                            <Input
+                              type="number"
+                              min={1}
+                              className="h-8 w-16"
+                              value={lineQty[line.index] ?? line.qty}
+                              onChange={(e) =>
+                                setLineQty((prev) => ({
+                                  ...prev,
+                                  [line.index]: Math.max(1, Number(e.target.value) || 1),
+                                }))
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-3">
+                            <AsyncSearchableSelect
+                              value={lineProducts[line.index]?.id}
+                              selectedOption={lineProducts[line.index] ?? null}
+                              onValueChange={(id) => {
+                                if (!id) applyProduct(line.index, null);
+                              }}
+                              onOptionSelect={(opt) => void checkProductMapping(line.index, opt)}
+                              loadOptions={loadProductOptions}
+                              minSearchLength={0}
+                              searchDebounceMs={200}
+                              placeholder="Select product"
+                              searchPlaceholder="Search products…"
+                              emptyMessage="No products found."
+                              allowClear
+                              portalContainer={sheetPortalHost}
+                              triggerClassName={line.needsProductMatch ? "border-amber-300" : undefined}
+                              onCreateNew={goCreateProduct}
+                              createNewLabel="Create new product"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="save-mappings"
+                  checked={saveMappings}
+                  onCheckedChange={(v) => setSaveMappings(v === true)}
+                />
+                <Label htmlFor="save-mappings" className="font-normal leading-snug cursor-pointer">
+                  Remember these customer and product matches for future Odaflow orders
+                </Label>
               </div>
             </div>
+          )}
 
-            <div className="flex items-start gap-2">
-              <Checkbox
-                id="save-mappings"
-                checked={saveMappings}
-                onCheckedChange={(v) => setSaveMappings(v === true)}
-              />
-              <Label htmlFor="save-mappings" className="font-normal leading-snug cursor-pointer">
-                Remember these customer and product matches for future Odaflow orders
-              </Label>
-            </div>
-          </div>
-        )}
+          <SheetFooter className="mt-8 gap-2 sm:gap-2">
+            <Button type="button" variant="ghost" onClick={() => void handleDismiss()} disabled={submitting}>
+              Remove from list
+            </Button>
+            <Button type="button" onClick={() => void handleCreateSalesOrder()} disabled={!canSubmit}>
+              {submitting ? "Creating…" : "Create sales order"}
+            </Button>
+          </SheetFooter>
 
-        <SheetFooter className="mt-8 gap-2 sm:gap-2">
-          <Button type="button" variant="ghost" onClick={() => void handleDismiss()} disabled={submitting}>
-            Remove from list
-          </Button>
-          <Button type="button" onClick={() => void handleCreateSalesOrder()} disabled={!canSubmit}>
-            {submitting ? "Creating…" : "Create sales order"}
-          </Button>
-        </SheetFooter>
+          {order && !canSubmit && !loading && (
+            <p className="text-xs text-muted-foreground text-center pb-2">
+              Select the ERP customer and every product above to continue.
+            </p>
+          )}
+        </SheetContent>
+      </Sheet>
 
-        {order && !canSubmit && !loading && (
-          <p className="text-xs text-muted-foreground text-center pb-2">
-            Select the ERP customer and products above to continue.
-          </p>
-        )}
-      </SheetContent>
-    </Sheet>
+      <OdaflowMappingConflictDialog
+        open={mappingConflict != null}
+        onOpenChange={(next) => {
+          if (!next) setMappingConflict(null);
+        }}
+        kind={mappingConflict?.kind === "customer" ? "customer" : "product"}
+        erpLabel={
+          mappingConflict?.kind === "customer"
+            ? mappingConflict.option.label
+            : (mappingConflict?.option.label ?? "")
+        }
+        odaflowLabel={
+          mappingConflict?.kind === "customer"
+            ? (order?.customerName ?? "Unknown customer")
+            : (conflictLine?.productName ?? "Unknown product")
+        }
+        odaflowExternalId={
+          mappingConflict?.kind === "customer" ? order?.odaflowCustomerId : conflictLine?.odaflowProductId
+        }
+        existingMappings={mappingConflict?.existingMappings ?? []}
+        onConfirmLink={() => {
+          if (!mappingConflict) return;
+          if (mappingConflict.kind === "customer") {
+            applyCustomer(mappingConflict.option);
+          } else {
+            applyProduct(mappingConflict.lineIndex, mappingConflict.option);
+          }
+          setMappingConflict(null);
+        }}
+        onSearchAgain={() => {
+          if (!mappingConflict) return;
+          if (mappingConflict.kind === "customer") {
+            applyCustomer(null);
+          } else {
+            applyProduct(mappingConflict.lineIndex, null);
+          }
+          setMappingConflict(null);
+        }}
+        onCreateNew={
+          mappingConflict?.kind === "product"
+            ? () => {
+                setMappingConflict(null);
+                goCreateProduct();
+              }
+            : () => {
+                setMappingConflict(null);
+                goCreateCustomer();
+              }
+        }
+      />
+    </>
   );
 }

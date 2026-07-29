@@ -265,6 +265,8 @@ export type CustomerFormSheetProps = {
   parentPartyName?: string | null;
   /** Edit existing customer by id (single-page, no draft). */
   customerId?: string | null;
+  /** Pre-fill legal / display name when creating from another flow (e.g. Odaflow order). */
+  initialName?: string | null;
   onSuccess?: (customer?: {
     id: string;
     name: string;
@@ -283,6 +285,7 @@ export function CustomerFormSheet({
   parentPartyId = null,
   parentPartyName = null,
   customerId = null,
+  initialName = null,
   onSuccess,
 }: CustomerFormSheetProps) {
   const editing = Boolean(customerId);
@@ -431,6 +434,7 @@ export function CustomerFormSheet({
       setForm({
         ...emptyForm(kindId),
         customerType: kindOpt?.customerType ?? "RETAILER",
+        ...(initialName?.trim() ? { name: initialName.trim() } : {}),
       });
       setStep(0);
       setDraftRestored(false);
@@ -444,6 +448,7 @@ export function CustomerFormSheet({
         setForm({
           ...emptyForm(kindId),
           customerType: kindOpt?.customerType ?? "RETAILER",
+          ...(initialName?.trim() ? { name: initialName.trim() } : {}),
         });
         setStep(0);
         setDraftRestored(false);
@@ -455,7 +460,7 @@ export function CustomerFormSheet({
       .then((code) => setNextCodePreview(code))
       .catch(() => setNextCodePreview(""));
     hydratedRef.current = true;
-  }, [open, customerId, initialKindId, fmcg, createSteps.length, supermarketOnly, branchMode]);
+  }, [open, customerId, initialKindId, initialName, fmcg, createSteps.length, supermarketOnly, branchMode]);
 
   React.useEffect(() => {
     if (!open || editing || supermarketOnly || branchMode || !hydratedRef.current) return;

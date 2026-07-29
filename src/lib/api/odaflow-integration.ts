@@ -89,6 +89,7 @@ export interface OdaflowQueueOrderPreview {
   odaflowOrderId: string;
   purchaseOrderNumber?: string;
   channel?: string;
+  orderTitle?: string;
   customerName?: string;
   odaflowCustomerId?: string;
   orderDate?: string;
@@ -96,6 +97,9 @@ export interface OdaflowQueueOrderPreview {
   currency?: string;
   totalAmount?: number;
   notes?: string;
+  documentUrl?: string;
+  salesRepName?: string;
+  salesRepPhone?: string;
   customerNeedsMatch: boolean;
   erpPartyId?: string;
   erpPartyName?: string;
@@ -208,6 +212,24 @@ export async function retryQueueItem(id: string): Promise<void> {
 export async function ignoreQueueItem(id: string): Promise<void> {
   requireLiveApi("Odaflow integration");
   await apiRequest(`/api/integrations/odaflow/sync/queue/${id}/ignore`, { method: "POST" });
+}
+
+export interface OdaflowErmLookupMapping {
+  externalId: string;
+  externalKey?: string;
+  lastSyncedAt?: string;
+}
+
+export async function lookupOdaflowErmByEntityId(params: {
+  entityType: "product" | "party";
+  entityId: string;
+}): Promise<{ mappings: OdaflowErmLookupMapping[] }> {
+  requireLiveApi("Odaflow integration");
+  const qs = new URLSearchParams({
+    entityType: params.entityType,
+    entityId: params.entityId,
+  });
+  return apiRequest(`/api/integrations/odaflow/mappings/lookup?${qs.toString()}`);
 }
 
 export async function fetchOdaflowProductMappings(): Promise<{ items: OdaflowMapping[] }> {

@@ -287,6 +287,7 @@ export type DocumentDraftPayload = {
     debit?: number;
     credit?: number;
     sourceLineId?: string;
+    lineId?: string;
   }>;
   subtotal?: number;
   discount?: number;
@@ -297,6 +298,7 @@ export type DocumentDraftPayload = {
   exchangeRate?: number;
   linesAreTaxInclusive?: boolean;
   outputTemplateId?: string;
+  odaflowMappingCorrections?: import("@/lib/odaflow-mapping-corrections").OdaflowMappingCorrectionsPayload;
 };
 
 export type PurchaseOrderLookupOption = {

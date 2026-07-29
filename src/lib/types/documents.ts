@@ -264,6 +264,9 @@ export type DocumentDetailRecord = {
     paidVarianceKg?: number;
     varianceReasonCode?: string;
     varianceReason?: string;
+    odaflowProductId?: string;
+    odaflowPackSize?: string;
+    odaflowBarcode?: string;
   }>;
   sourceDocument?: {
     id: string;
@@ -305,6 +308,15 @@ export type DocumentDetailRecord = {
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
   /** KRA / Incotex signing (invoice, credit note, debit note). */
   kraSigning?: KraSigningRecord | null;
+  /** Odaflow SFA source metadata (sales orders synced from Odaflow). */
+  externalSource?: string;
+  externalOrderId?: string;
+  odaflowChannel?: string;
+  odaflowOrderTitle?: string;
+  odaflowSalesRepName?: string;
+  odaflowSalesRepPhone?: string;
+  odaflowSourcePdfUrl?: string;
+  odaflowCustomerId?: string;
 };
 
 export type DocumentChainNode = {

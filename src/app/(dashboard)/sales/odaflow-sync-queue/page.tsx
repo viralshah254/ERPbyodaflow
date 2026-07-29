@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,20 @@ import { subscribeRealtimeInbox } from "@/lib/realtime-client";
 import { fetchOdaflowSyncStatus } from "@/lib/api/odaflow-integration";
 import * as Icons from "lucide-react";
 
-export default function OdaflowSyncQueuePage() {
+function OdaflowSyncQueuePageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [pendingCount, setPendingCount] = React.useState<number | null>(null);
+
+  const initialOpenQueueId = searchParams.get("open");
+  const initialCustomerId = searchParams.get("newCustomer");
+  const initialCustomerName = searchParams.get("newCustomerName");
+  const showPricingReminder = searchParams.get("setupPricing") === "1";
+
+  const clearDeepLinkParams = React.useCallback(() => {
+    router.replace("/sales/odaflow-sync-queue", { scroll: false });
+  }, [router]);
 
   const refreshSummary = React.useCallback(async () => {
     try {
@@ -65,11 +77,24 @@ export default function OdaflowSyncQueuePage() {
 
         <OdaflowSyncQueuePanel
           refreshKey={refreshKey}
+          initialOpenQueueId={initialOpenQueueId}
+          initialCustomerId={initialCustomerId}
+          initialCustomerName={initialCustomerName}
+          showPricingReminder={showPricingReminder}
+          onDeepLinkConsumed={clearDeepLinkParams}
           onQueueChanged={() => {
             setRefreshKey((k) => k + 1);
           }}
         />
       </div>
     </PageShell>
+  );
+}
+
+export default function OdaflowSyncQueuePage() {
+  return (
+    <React.Suspense fallback={null}>
+      <OdaflowSyncQueuePageContent />
+    </React.Suspense>
   );
 }

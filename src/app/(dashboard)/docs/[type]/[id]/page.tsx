@@ -86,6 +86,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
 import { KraSigningPanel } from "@/components/kra/KraSigningPanel";
 import { isIncotexSignableDocType } from "@/lib/kra/kra-signing";
+import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -1272,6 +1273,18 @@ export default function DocViewPage() {
             ]}
           />
         )}
+        {type === "sales-order" && document?.externalSource === "odaflow" ? (
+          <OdaflowSourceCard
+            info={{
+              orderTitle: document.odaflowOrderTitle,
+              odaflowChannel: document.odaflowChannel,
+              salesRepName: document.odaflowSalesRepName,
+              salesRepPhone: document.odaflowSalesRepPhone,
+              sourcePdfUrl: document.odaflowSourcePdfUrl,
+              externalOrderId: document.externalOrderId,
+            }}
+          />
+        ) : null}
         <Card className="border-0 shadow-none bg-transparent p-0">
           <CardContent className="p-0 space-y-4">
             {loading ? null : (
