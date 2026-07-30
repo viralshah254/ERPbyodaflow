@@ -128,7 +128,14 @@ export function OdaflowSyncQueuePanel({
         customer: debouncedCustomer || undefined,
         salesRep: debouncedSalesRep || undefined,
       });
-      setQueueItems(res.items.filter((i) => i.eventType.startsWith("order.")));
+      setQueueItems(
+        res.items
+          .filter((i) => i.eventType.startsWith("order."))
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+      );
       setQueueTotal(res.total);
     } catch {
       toast.error("Failed to load orders");

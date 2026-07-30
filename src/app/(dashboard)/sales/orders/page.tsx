@@ -429,7 +429,13 @@ function SalesOrdersPanel() {
           status: statusFilter || undefined,
           orderChannels: channelFilter === "whatsapp" ? "WHATSAPP,COOLCATCH_WA" : undefined,
         });
-        setRows(page.items);
+        setRows(
+          [...page.items].sort((a, b) => {
+            const ta = new Date(a.createdAt ?? `${a.date}T00:00:00`).getTime();
+            const tb = new Date(b.createdAt ?? `${b.date}T00:00:00`).getTime();
+            return tb - ta;
+          })
+        );
         setPageOffset(page.offset);
         setHasMore(page.hasMore);
         setSelectedIds([]);
