@@ -10,6 +10,8 @@ import { getDocTypeConfig } from "@/config/documents";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
+import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
+import { odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -88,6 +90,8 @@ export default function DocEditPage() {
     );
   }
 
+  const odaflowSource = odaflowSourceFromDetail(document);
+
   return (
     <PageShell>
       <PageHeader
@@ -101,7 +105,8 @@ export default function DocEditPage() {
         ]}
         sticky
       />
-      <div className="p-6 w-full max-w-screen-2xl mx-auto">
+      <div className="p-6 w-full max-w-screen-2xl mx-auto space-y-4">
+        {odaflowSource ? <OdaflowSourceCard info={odaflowSource} showPdfPreview /> : null}
         <DocumentCreateWizard
           type={type}
           mode="edit"

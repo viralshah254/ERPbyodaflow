@@ -1,8 +1,10 @@
 "use client";
 
+import * as React from "react";
 import * as Icons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export type OdaflowSourceInfo = {
   orderTitle?: string;
@@ -23,13 +25,75 @@ function channelLabel(channel?: string) {
   return channel ? (map[channel] ?? channel.replace(/_/g, " ")) : undefined;
 }
 
-export function OdaflowSourceCard({ info, compact = false }: { info: OdaflowSourceInfo; compact?: boolean }) {
+function OdaflowPdfPreview({ url, title }: { url: string; title: string }) {
+  const [expanded, setExpanded] = React.useState(true);
+
+  return (
+    <div className="space-y-2 pt-1 border-t border-sky-200/60 dark:border-sky-900/40">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground flex-1 min-w-[12rem]">
+          Original SFA order PDF — confirm quantities and customer before approving.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? (
+              <>
+                <Icons.ChevronUp className="mr-1.5 h-3.5 w-3.5" />
+                Hide preview
+              </>
+            ) : (
+              <>
+                <Icons.ChevronDown className="mr-1.5 h-3.5 w-3.5" />
+                Show preview
+              </>
+            )}
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8" asChild>
+            <a href={url} target="_blank" rel="noopener noreferrer">
+              <Icons.ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Open in new tab
+            </a>
+          </Button>
+        </div>
+      </div>
+      {expanded ? (
+        <div className="overflow-hidden rounded-md border bg-white dark:bg-muted/20">
+          <iframe title={title} src={url} className="h-[min(70vh,640px)] w-full border-0" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function OdaflowSourceCard({
+  info,
+  compact = false,
+  showPdfPreview = true,
+  className,
+}: {
+  info: OdaflowSourceInfo;
+  compact?: boolean;
+  /** Inline iframe preview when a PDF URL exists (detail/edit pages). */
+  showPdfPreview?: boolean;
+  className?: string;
+}) {
   const title = info.orderTitle ?? (info.odaflowChannel ? `${channelLabel(info.odaflowChannel)} Order` : "Odaflow order");
   const channel = channelLabel(info.odaflowChannel);
 
   if (compact) {
     return (
-      <div className="rounded-md border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/30">
+      <div
+        className={cn(
+          "rounded-md border border-sky-200/80 bg-sky-50/80 px-3 py-2 text-sm dark:border-sky-900/50 dark:bg-sky-950/30",
+          className
+        )}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="font-medium text-sky-950 dark:text-sky-100">{title}</p>
@@ -41,17 +105,22 @@ export function OdaflowSourceCard({ info, compact = false }: { info: OdaflowSour
             <Button type="button" size="sm" variant="outline" className="h-8 shrink-0" asChild>
               <a href={info.sourcePdfUrl} target="_blank" rel="noopener noreferrer">
                 <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
-                Preview original PDF
+                View PDF
               </a>
             </Button>
           ) : null}
         </div>
+        {showPdfPreview && info.sourcePdfUrl ? (
+          <div className="mt-3">
+            <OdaflowPdfPreview url={info.sourcePdfUrl} title={`Original SFA order — ${title}`} />
+          </div>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <Card className="border-sky-200/80 bg-sky-50/50 dark:border-sky-900/50 dark:bg-sky-950/20">
+    <Card className={cn("border-sky-200/80 bg-sky-50/50 dark:border-sky-900/50 dark:bg-sky-950/20", className)}>
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Icons.ShoppingBag className="h-4 w-4 text-sky-700 dark:text-sky-300" />
@@ -70,6 +139,12 @@ export function OdaflowSourceCard({ info, compact = false }: { info: OdaflowSour
               <p className="font-medium">{channel}</p>
             </div>
           ) : null}
+          {info.externalOrderId ? (
+            <div>
+              <p className="text-xs text-muted-foreground">SFA order ID</p>
+              <p className="font-medium font-mono text-xs break-all">{info.externalOrderId}</p>
+            </div>
+          ) : null}
           {info.salesRepName ? (
             <div>
               <p className="text-xs text-muted-foreground">Sales rep</p>
@@ -84,17 +159,21 @@ export function OdaflowSourceCard({ info, compact = false }: { info: OdaflowSour
           ) : null}
         </div>
         {info.sourcePdfUrl ? (
-          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-sky-200/60 dark:border-sky-900/40">
-            <p className="text-xs text-muted-foreground flex-1 min-w-[12rem]">
-              Confirm the original SFA order PDF before posting — quantities and customer details should match.
-            </p>
-            <Button type="button" size="sm" variant="default" asChild>
-              <a href={info.sourcePdfUrl} target="_blank" rel="noopener noreferrer">
-                <Icons.ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                Preview original PDF
-              </a>
-            </Button>
-          </div>
+          showPdfPreview ? (
+            <OdaflowPdfPreview url={info.sourcePdfUrl} title={`Original SFA order — ${title}`} />
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-sky-200/60 dark:border-sky-900/40">
+              <p className="text-xs text-muted-foreground flex-1 min-w-[12rem]">
+                Confirm the original SFA order PDF before posting — quantities and customer details should match.
+              </p>
+              <Button type="button" size="sm" variant="default" asChild>
+                <a href={info.sourcePdfUrl} target="_blank" rel="noopener noreferrer">
+                  <Icons.ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                  Preview original PDF
+                </a>
+              </Button>
+            </div>
+          )
         ) : (
           <p className="text-xs text-muted-foreground border-t border-sky-200/60 dark:border-sky-900/40 pt-2">
             No PDF was attached from Odaflow for this order.

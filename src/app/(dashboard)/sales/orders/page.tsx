@@ -43,6 +43,7 @@ import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -65,6 +66,10 @@ function isWhatsAppStyleSalesOrder(r: SalesDocRow): boolean {
     r.orderChannel === "COOLCATCH_WA" ||
     (r.reference?.startsWith("WA:") ?? false)
   );
+}
+
+function isOdaflowStyleSalesOrder(r: SalesDocRow): boolean {
+  return isOdaflowSalesOrder(r);
 }
 
 const scope = "sales-orders";
@@ -496,6 +501,12 @@ function SalesOrdersPanel() {
         accessor: (r: SalesDocRow) => (
           <div className="flex items-center gap-2">
             <StatusBadge status={r.status} />
+            {isOdaflowStyleSalesOrder(r) && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 text-sky-700 border-sky-300 dark:text-sky-300 dark:border-sky-700">
+                <Icons.ShoppingBag className="h-2.5 w-2.5" />
+                Odaflow SFA
+              </Badge>
+            )}
             {isWhatsAppStyleSalesOrder(r) && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 text-green-700 border-green-300 dark:text-green-400 dark:border-green-700">
                 <Icons.MessageCircle className="h-2.5 w-2.5" />
@@ -522,6 +533,14 @@ function SalesOrdersPanel() {
                   View
                 </Link>
               </DropdownMenuItem>
+              {isOdaflowStyleSalesOrder(r) && r.odaflowSourcePdfUrl ? (
+                <DropdownMenuItem asChild>
+                  <a href={r.odaflowSourcePdfUrl} target="_blank" rel="noopener noreferrer">
+                    <Icons.FileText className="mr-2 h-4 w-4" />
+                    Original SFA PDF
+                  </a>
+                </DropdownMenuItem>
+              ) : null}
               {r.status === "PENDING_APPROVAL" && (
                 <DropdownMenuItem
                   disabled={actionLoadingId === r.id}

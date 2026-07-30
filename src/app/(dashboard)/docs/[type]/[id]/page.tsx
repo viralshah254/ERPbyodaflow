@@ -87,6 +87,8 @@ import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by
 import { KraSigningPanel } from "@/components/kra/KraSigningPanel";
 import { isIncotexSignableDocType } from "@/lib/kra/kra-signing";
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
+import { OdaflowApprovalConfirmDialog } from "@/components/integrations/OdaflowApprovalConfirmDialog";
+import { isOdaflowSalesOrder, odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -244,6 +246,8 @@ export default function DocViewPage() {
   const [applyAmount, setApplyAmount] = React.useState("");
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
+  const [odaflowApprovalOpen, setOdaflowApprovalOpen] = React.useState(false);
+  const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | null>(null);
   /** True only for the very first fetch when document is still null — drives skeleton vs empty-state decisions. */
   const [initialLoading, setInitialLoading] = React.useState(true);
   /** True when re-fetching after an action; existing document stays visible. */
@@ -501,6 +505,35 @@ export default function DocViewPage() {
   const canPost = availableActions.includes("post");
   const canCancel = availableActions.includes("cancel");
   const canReverse = availableActions.includes("reverse");
+  const odaflowSalesOrder = type === "sales-order" && isOdaflowSalesOrder(document);
+  const odaflowSource = odaflowSourceFromDetail(document);
+
+  function openOdaflowApproval(action: "request" | "approve") {
+    setOdaflowApprovalAction(action);
+    setOdaflowApprovalOpen(true);
+  }
+
+  async function runOdaflowApprovalConfirm() {
+    if (!odaflowApprovalAction) return;
+    setActionLoading(true);
+    try {
+      if (odaflowApprovalAction === "request") {
+        await requestDocumentApprovalApi(type as DocTypeKey, id);
+        await refreshDocument(true);
+        toast.success("Approval requested.");
+      } else {
+        await documentActionApi(type as DocTypeKey, id, "approve");
+        await refreshDocument(true);
+        toast.success(type === "bill" ? "Bill approved." : "Document approved.");
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+      throw e;
+    } finally {
+      setActionLoading(false);
+      setOdaflowApprovalAction(null);
+    }
+  }
   const printDoc = React.useMemo(
     () => ({
       type,
@@ -959,17 +992,23 @@ export default function DocViewPage() {
               variant="outline"
               size="sm"
               disabled={actionLoading}
-              onClick={async () => {
-                setActionLoading(true);
-                try {
-                  await requestDocumentApprovalApi(type as DocTypeKey, id);
-                  await refreshDocument(true);
-                  toast.success("Approval requested.");
-                } catch (e) {
-                  toast.error((e as Error).message);
-                } finally {
-                  setActionLoading(false);
+              onClick={() => {
+                if (odaflowSalesOrder) {
+                  openOdaflowApproval("request");
+                  return;
                 }
+                void (async () => {
+                  setActionLoading(true);
+                  try {
+                    await requestDocumentApprovalApi(type as DocTypeKey, id);
+                    await refreshDocument(true);
+                    toast.success("Approval requested.");
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setActionLoading(false);
+                  }
+                })();
               }}
             >
               <Icons.CheckCircle2 className="mr-2 h-4 w-4" />
@@ -989,17 +1028,23 @@ export default function DocViewPage() {
                 variant="outline"
                 size="sm"
                 disabled={actionLoading}
-                onClick={async () => {
-                  setActionLoading(true);
-                  try {
-                    await documentActionApi(type as DocTypeKey, id, "approve");
-                    await refreshDocument(true);
-                    toast.success(type === "bill" ? "Bill approved." : "Document approved.");
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  } finally {
-                    setActionLoading(false);
+                onClick={() => {
+                  if (odaflowSalesOrder) {
+                    openOdaflowApproval("approve");
+                    return;
                   }
+                  void (async () => {
+                    setActionLoading(true);
+                    try {
+                      await documentActionApi(type as DocTypeKey, id, "approve");
+                      await refreshDocument(true);
+                      toast.success(type === "bill" ? "Bill approved." : "Document approved.");
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    } finally {
+                      setActionLoading(false);
+                    }
+                  })();
                 }}
               >
                 <Icons.Check className="mr-2 h-4 w-4" />
@@ -1273,17 +1318,8 @@ export default function DocViewPage() {
             ]}
           />
         )}
-        {type === "sales-order" && document?.externalSource === "odaflow" ? (
-          <OdaflowSourceCard
-            info={{
-              orderTitle: document.odaflowOrderTitle,
-              odaflowChannel: document.odaflowChannel,
-              salesRepName: document.odaflowSalesRepName,
-              salesRepPhone: document.odaflowSalesRepPhone,
-              sourcePdfUrl: document.odaflowSourcePdfUrl,
-              externalOrderId: document.externalOrderId,
-            }}
-          />
+        {odaflowSource ? (
+          <OdaflowSourceCard info={odaflowSource} showPdfPreview />
         ) : null}
         <Card className="border-0 shadow-none bg-transparent p-0">
           <CardContent className="p-0 space-y-4">
@@ -2603,6 +2639,15 @@ export default function DocViewPage() {
           </div>
         </div>
       )}
+      <OdaflowApprovalConfirmDialog
+        open={odaflowApprovalOpen}
+        onOpenChange={setOdaflowApprovalOpen}
+        sourcePdfUrl={odaflowSource?.sourcePdfUrl}
+        orderNumber={document?.number}
+        confirmLabel={odaflowApprovalAction === "request" ? "Request approval" : "Approve"}
+        loading={actionLoading}
+        onConfirm={runOdaflowApprovalConfirm}
+      />
     </DocumentPageShell>
     </>
   );

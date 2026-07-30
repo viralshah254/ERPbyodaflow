@@ -193,6 +193,15 @@ type BackendDocumentDetail = {
   warehouseDrop?: BackendWarehouseDrop;
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
   kraSigning?: KraSigningRecord | null;
+  orderChannel?: string;
+  externalSource?: string;
+  externalOrderId?: string;
+  odaflowChannel?: string;
+  odaflowOrderTitle?: string;
+  odaflowSalesRepName?: string;
+  odaflowSalesRepPhone?: string;
+  odaflowSourcePdfUrl?: string;
+  odaflowCustomerId?: string;
 };
 
 type ChainNode = {
@@ -576,6 +585,15 @@ function mapDocumentDetail(
       : undefined,
     dispatchAmendEligibility: payload.dispatchAmendEligibility,
     kraSigning: payload.kraSigning ?? undefined,
+    ...(payload.orderChannel ? { orderChannel: payload.orderChannel } : {}),
+    ...(payload.externalSource ? { externalSource: payload.externalSource } : {}),
+    ...(payload.externalOrderId ? { externalOrderId: payload.externalOrderId } : {}),
+    ...(payload.odaflowChannel ? { odaflowChannel: payload.odaflowChannel } : {}),
+    ...(payload.odaflowOrderTitle ? { odaflowOrderTitle: payload.odaflowOrderTitle } : {}),
+    ...(payload.odaflowSalesRepName ? { odaflowSalesRepName: payload.odaflowSalesRepName } : {}),
+    ...(payload.odaflowSalesRepPhone ? { odaflowSalesRepPhone: payload.odaflowSalesRepPhone } : {}),
+    ...(payload.odaflowSourcePdfUrl ? { odaflowSourcePdfUrl: payload.odaflowSourcePdfUrl } : {}),
+    ...(payload.odaflowCustomerId ? { odaflowCustomerId: payload.odaflowCustomerId } : {}),
   };
 }
 

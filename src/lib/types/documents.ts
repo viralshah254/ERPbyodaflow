@@ -309,6 +309,7 @@ export type DocumentDetailRecord = {
   /** KRA / Incotex signing (invoice, credit note, debit note). */
   kraSigning?: KraSigningRecord | null;
   /** Odaflow SFA source metadata (sales orders synced from Odaflow). */
+  orderChannel?: string;
   externalSource?: string;
   externalOrderId?: string;
   odaflowChannel?: string;

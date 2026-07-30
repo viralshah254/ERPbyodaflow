@@ -13,6 +13,9 @@ type BackendSalesDoc = {
   status?: string;
   orderChannel?: string;
   reference?: string;
+  externalSource?: string;
+  odaflowChannel?: string;
+  odaflowSourcePdfUrl?: string;
 };
 
 type SalesDocType = "quote" | "sales-order" | "delivery-note" | "invoice";
@@ -30,6 +33,9 @@ function mapSalesDoc(item: BackendSalesDoc): SalesDocRow {
     status: item.status ?? "DRAFT",
     orderChannel: item.orderChannel,
     reference: item.reference,
+    externalSource: item.externalSource,
+    odaflowChannel: item.odaflowChannel,
+    odaflowSourcePdfUrl: item.odaflowSourcePdfUrl,
   };
 }
 
