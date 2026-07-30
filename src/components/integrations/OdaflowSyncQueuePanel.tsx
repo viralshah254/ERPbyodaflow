@@ -4,6 +4,7 @@ import * as React from "react";
 import * as Icons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -14,6 +15,14 @@ import {
 import { toast } from "sonner";
 import { fetchOdaflowQueue, type OdaflowQueueItem } from "@/lib/api/odaflow-integration";
 import { OdaflowQueueOrderSheet } from "@/components/integrations/OdaflowQueueOrderSheet";
+import { formatNairobiRelativeTime } from "@/lib/format/nairobi-datetime";
+import {
+  formatOrderAmount,
+  orderTypeLabel,
+  resolveCustomerLabel,
+  resolveSalesRepLabel,
+  resolveSalesRepPhone,
+} from "@/lib/odaflow/queue-display";
 
 const QUEUE_STATUS_OPTIONS = [
   { value: "pending", label: "Needs review" },
@@ -31,16 +40,6 @@ const EVENT_TYPE_OPTIONS = [
   { value: "order.direct", label: "Direct Customer" },
   { value: "order.van_sales", label: "Van Sales" },
 ];
-
-function channelLabel(eventType: string) {
-  const map: Record<string, string> = {
-    "order.modern_trade": "Modern Trade",
-    "order.distributor": "Distributor",
-    "order.direct": "Direct",
-    "order.van_sales": "Van Sales",
-  };
-  return map[eventType] ?? eventType;
-}
 
 function issueSummary(item: OdaflowQueueItem): string {
   const mappings = item.unresolvedMappings ?? [];
@@ -72,6 +71,15 @@ function issueSummary(item: OdaflowQueueItem): string {
   return parts.join(" · ") || item.blockReason || "Needs review";
 }
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = React.useState(value);
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 type OdaflowSyncQueuePanelProps = {
   refreshKey?: number;
   onQueueChanged?: () => void;
@@ -97,6 +105,10 @@ export function OdaflowSyncQueuePanel({
   const [queueStatus, setQueueStatus] = React.useState("pending");
   const [queueEventType, setQueueEventType] = React.useState(ALL_CHANNELS);
   const [queuePage, setQueuePage] = React.useState(1);
+  const [customerSearch, setCustomerSearch] = React.useState("");
+  const [salesRepSearch, setSalesRepSearch] = React.useState("");
+  const debouncedCustomer = useDebouncedValue(customerSearch, 300);
+  const debouncedSalesRep = useDebouncedValue(salesRepSearch, 300);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [latchedReturnContext, setLatchedReturnContext] = React.useState<{
@@ -113,6 +125,8 @@ export function OdaflowSyncQueuePanel({
         eventType: queueEventType === ALL_CHANNELS ? undefined : queueEventType,
         page: queuePage,
         limit: 20,
+        customer: debouncedCustomer || undefined,
+        salesRep: debouncedSalesRep || undefined,
       });
       setQueueItems(res.items.filter((i) => i.eventType.startsWith("order.")));
       setQueueTotal(res.total);
@@ -121,11 +135,15 @@ export function OdaflowSyncQueuePanel({
     } finally {
       setQueueLoading(false);
     }
-  }, [queueStatus, queueEventType, queuePage]);
+  }, [queueStatus, queueEventType, queuePage, debouncedCustomer, debouncedSalesRep]);
 
   React.useEffect(() => {
     void loadQueue();
   }, [loadQueue, refreshKey]);
+
+  React.useEffect(() => {
+    setQueuePage(1);
+  }, [debouncedCustomer, debouncedSalesRep]);
 
   React.useEffect(() => {
     if (!initialOpenQueueId) return;
@@ -150,6 +168,8 @@ export function OdaflowSyncQueuePanel({
     void loadQueue();
     onQueueChanged?.();
   }
+
+  const hasSearch = Boolean(debouncedCustomer || debouncedSalesRep);
 
   return (
     <>
@@ -201,6 +221,30 @@ export function OdaflowSyncQueuePanel({
               </SelectContent>
             </Select>
           </div>
+          <div className="min-w-[180px] flex-1">
+            <label className="text-xs text-muted-foreground block mb-1">Search customer</label>
+            <div className="relative">
+              <Icons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                placeholder="Customer name or SFA ID"
+                className="pl-8"
+              />
+            </div>
+          </div>
+          <div className="min-w-[180px] flex-1">
+            <label className="text-xs text-muted-foreground block mb-1">Search sales rep</label>
+            <div className="relative">
+              <Icons.UserRound className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={salesRepSearch}
+                onChange={(e) => setSalesRepSearch(e.target.value)}
+                placeholder="Rep name or phone"
+                className="pl-8"
+              />
+            </div>
+          </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue()} disabled={queueLoading}>
             <Icons.RefreshCw className={`h-3.5 w-3.5 mr-1 ${queueLoading ? "animate-spin" : ""}`} />
             Refresh
@@ -210,32 +254,66 @@ export function OdaflowSyncQueuePanel({
         {queueLoading ? (
           <div className="text-muted-foreground text-sm py-4">Loading orders…</div>
         ) : queueItems.length === 0 ? (
-          <div className="text-muted-foreground text-sm py-6 text-center">No orders in this view.</div>
+          <div className="text-muted-foreground text-sm py-6 text-center">
+            {hasSearch ? "No orders match your search." : "No orders in this view."}
+          </div>
         ) : (
           <div className="space-y-3">
-            {queueItems.map((item) => (
-              <Card
-                key={item._id}
-                className="cursor-pointer transition-colors hover:border-primary/40 hover:bg-muted/20"
-                onClick={() => openOrder(item._id)}
-              >
-                <CardContent className="pt-4 pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-                          {channelLabel(item.eventType)}
-                        </span>
-                        <span className="text-sm font-semibold truncate">{item.displayRef ?? item.odaflowId}</span>
+            {queueItems.map((item) => {
+              const summary = item.orderSummary;
+              const customer = resolveCustomerLabel(item, summary);
+              const salesRep = resolveSalesRepLabel(item, summary);
+              const salesRepPhone = resolveSalesRepPhone(item, summary);
+              const orderType = orderTypeLabel(item, summary);
+              const amount = formatOrderAmount(summary);
+              const when = formatNairobiRelativeTime(item.createdAt);
+
+              return (
+                <Card
+                  key={item._id}
+                  className="cursor-pointer transition-colors hover:border-primary/40 hover:bg-muted/20"
+                  onClick={() => openOrder(item._id)}
+                >
+                  <CardContent className="pt-4 pb-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div className="min-w-0">
+                            <p className="text-base font-semibold truncate">{customer}</p>
+                            <p className="text-sm text-muted-foreground truncate">{orderType}</p>
+                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                            {when}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                          {salesRep ? (
+                            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                              <Icons.UserRound className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{salesRep}</span>
+                              {salesRepPhone ? (
+                                <span className="text-xs opacity-80">· {salesRepPhone}</span>
+                              ) : null}
+                            </span>
+                          ) : null}
+                          {amount ? (
+                            <span className="text-muted-foreground">{amount}</span>
+                          ) : null}
+                          <span className="text-xs font-mono text-muted-foreground/80">
+                            {item.displayRef ?? item.odaflowId}
+                          </span>
+                        </div>
+
+                        <p className="text-sm text-amber-800 dark:text-amber-200">{issueSummary(item)}</p>
+                        <p className="text-xs text-muted-foreground">Tap to review products and create sales order</p>
                       </div>
-                      <p className="text-sm text-amber-800 dark:text-amber-200">{issueSummary(item)}</p>
-                      <p className="text-xs text-muted-foreground mt-2">Tap to review products and create sales order</p>
+                      <Icons.ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground mt-1" />
                     </div>
-                    <Icons.ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground mt-1" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 

@@ -52,6 +52,19 @@ export interface OdaflowSyncStatus {
   };
 }
 
+export interface OdaflowQueueOrderSummary {
+  customerName?: string;
+  odaflowCustomerId?: string;
+  salesRepName?: string;
+  salesRepPhone?: string;
+  orderTitle?: string;
+  channel?: string;
+  purchaseOrderNumber?: string;
+  totalAmount?: number;
+  currency?: string;
+  orderDate?: string;
+}
+
 export interface OdaflowQueueItem {
   _id: string;
   eventType: string;
@@ -71,6 +84,7 @@ export interface OdaflowQueueItem {
   lastAttemptAt?: string;
   createdAt: string;
   rawPayload?: Record<string, unknown>;
+  orderSummary?: OdaflowQueueOrderSummary | null;
 }
 
 export interface OdaflowQueueOrderLinePreview {
@@ -181,6 +195,9 @@ export async function fetchOdaflowQueue(params: {
   eventType?: string;
   page?: number;
   limit?: number;
+  q?: string;
+  customer?: string;
+  salesRep?: string;
 }): Promise<OdaflowQueueResponse> {
   requireLiveApi("Odaflow integration");
   const qs = new URLSearchParams();
@@ -188,6 +205,9 @@ export async function fetchOdaflowQueue(params: {
   if (params.eventType) qs.set("eventType", params.eventType);
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
+  if (params.q?.trim()) qs.set("q", params.q.trim());
+  if (params.customer?.trim()) qs.set("customer", params.customer.trim());
+  if (params.salesRep?.trim()) qs.set("salesRep", params.salesRep.trim());
   return apiRequest<OdaflowQueueResponse>(`/api/integrations/odaflow/sync/queue?${qs.toString()}`);
 }
 
