@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatMoney } from "@/lib/money";
+import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
@@ -478,7 +479,15 @@ function SalesOrdersPanel() {
         accessor: (r: SalesDocRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
       },
-      { id: "date", header: "Date", accessor: "date" as keyof SalesDocRow },
+      {
+        id: "date",
+        header: "Created",
+        accessor: (r: SalesDocRow) => (
+          <span className="text-muted-foreground whitespace-nowrap">
+            {formatDocumentCreatedLabel(r.createdAt, r.date)}
+          </span>
+        ),
+      },
       { id: "party", header: "Customer", accessor: "party" as keyof SalesDocRow },
       {
         id: "total",

@@ -103,3 +103,21 @@ export function formatNairobiRelativeTime(iso: string | Date | undefined | null)
 
   return `${dayLabel} ${dateParts.year}, ${clock}`;
 }
+
+/** Prefer createdAt timestamp; fall back to document date (date-only). */
+export function formatDocumentCreatedLabel(
+  createdAt?: string | null,
+  dateFallback?: string | null
+): string {
+  if (createdAt) {
+    const label = formatNairobiRelativeTime(createdAt);
+    if (label) return label;
+  }
+  const dateOnly = dateFallback?.trim().slice(0, 10);
+  if (!dateOnly || !/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) return dateOnly ?? "—";
+  const [, y, m, d] = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/) ?? [];
+  const monthLabel = MONTH_NAMES[Number(m) - 1] ?? "";
+  const nowYear = nairobiParts(new Date()).year;
+  const dayLabel = `${ordinal(Number(d))} ${monthLabel}`;
+  return Number(y) === nowYear ? dayLabel : `${dayLabel} ${y}`;
+}

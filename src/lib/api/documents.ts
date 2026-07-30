@@ -202,6 +202,8 @@ type BackendDocumentDetail = {
   odaflowSalesRepPhone?: string;
   odaflowSourcePdfUrl?: string;
   odaflowCustomerId?: string;
+  odaflowCustomerName?: string;
+  createdAt?: string;
 };
 
 type ChainNode = {
@@ -594,6 +596,8 @@ function mapDocumentDetail(
     ...(payload.odaflowSalesRepPhone ? { odaflowSalesRepPhone: payload.odaflowSalesRepPhone } : {}),
     ...(payload.odaflowSourcePdfUrl ? { odaflowSourcePdfUrl: payload.odaflowSourcePdfUrl } : {}),
     ...(payload.odaflowCustomerId ? { odaflowCustomerId: payload.odaflowCustomerId } : {}),
+    ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
+    ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };
 }
 

@@ -11,6 +11,7 @@ export type OdaflowSalesOrderFields = {
   odaflowSalesRepName?: string;
   odaflowSalesRepPhone?: string;
   odaflowSourcePdfUrl?: string;
+  odaflowCustomerName?: string;
 };
 
 export function isOdaflowSalesOrder(doc: OdaflowSalesOrderFields | null | undefined): boolean {
@@ -27,6 +28,7 @@ export function odaflowSourceFromDocument(
   return {
     orderTitle: doc.odaflowOrderTitle,
     odaflowChannel: doc.odaflowChannel,
+    sfaCustomerName: doc.odaflowCustomerName,
     salesRepName: doc.odaflowSalesRepName,
     salesRepPhone: doc.odaflowSalesRepPhone,
     sourcePdfUrl: doc.odaflowSourcePdfUrl,

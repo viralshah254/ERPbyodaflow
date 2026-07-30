@@ -20,7 +20,7 @@ import {
   formatOrderAmount,
   orderTypeLabel,
   resolveCustomerLabel,
-  resolveSalesRepLabel,
+  resolveSalesRepName,
   resolveSalesRepPhone,
 } from "@/lib/odaflow/queue-display";
 
@@ -262,10 +262,10 @@ export function OdaflowSyncQueuePanel({
             {queueItems.map((item) => {
               const summary = item.orderSummary;
               const customer = resolveCustomerLabel(item, summary);
-              const salesRep = resolveSalesRepLabel(item, summary);
+              const salesRep = resolveSalesRepName(item, summary);
               const salesRepPhone = resolveSalesRepPhone(item, summary);
               const orderType = orderTypeLabel(item, summary);
-              const amount = formatOrderAmount(summary);
+              const amount = formatOrderAmount(item, summary);
               const when = formatNairobiRelativeTime(item.createdAt);
 
               return (
@@ -282,23 +282,31 @@ export function OdaflowSyncQueuePanel({
                             <p className="text-base font-semibold truncate">{customer}</p>
                             <p className="text-sm text-muted-foreground truncate">{orderType}</p>
                           </div>
-                          <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                            {when}
-                          </span>
+                          <div className="text-right shrink-0">
+                            {amount ? (
+                              <p className="text-sm font-semibold whitespace-nowrap">{amount}</p>
+                            ) : null}
+                            <span className="text-xs text-muted-foreground whitespace-nowrap block">
+                              {when}
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
                           {salesRep ? (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground">
-                              <Icons.UserRound className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{salesRep}</span>
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              <Icons.UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span className="text-muted-foreground">
+                                Placed by{" "}
+                                <span className="font-medium text-foreground">{salesRep}</span>
+                              </span>
+                              <span className="text-[10px] uppercase tracking-wide rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                                Sales rep
+                              </span>
                               {salesRepPhone ? (
-                                <span className="text-xs opacity-80">· {salesRepPhone}</span>
+                                <span className="text-xs text-muted-foreground">{salesRepPhone}</span>
                               ) : null}
                             </span>
-                          ) : null}
-                          {amount ? (
-                            <span className="text-muted-foreground">{amount}</span>
                           ) : null}
                           <span className="text-xs font-mono text-muted-foreground/80">
                             {item.displayRef ?? item.odaflowId}

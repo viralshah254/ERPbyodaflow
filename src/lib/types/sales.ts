@@ -2,6 +2,8 @@ export type SalesDocRow = {
   id: string;
   number: string;
   date: string;
+  /** ISO timestamp when the document was created (preferred for list display). */
+  createdAt?: string;
   party?: string;
   partyId?: string;
   total?: number;

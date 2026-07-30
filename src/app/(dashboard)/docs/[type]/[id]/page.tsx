@@ -17,6 +17,7 @@ import { DeliveryEvidencePanel } from "@/components/docs/DeliveryEvidencePanel";
 import { PrintPreviewDrawer } from "@/components/docs/PrintPreviewDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,6 +90,8 @@ import { isIncotexSignableDocType } from "@/lib/kra/kra-signing";
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
 import { OdaflowApprovalConfirmDialog } from "@/components/integrations/OdaflowApprovalConfirmDialog";
 import { isOdaflowSalesOrder, odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
+import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
+import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/channel-labels";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -507,6 +510,15 @@ export default function DocViewPage() {
   const canReverse = availableActions.includes("reverse");
   const odaflowSalesOrder = type === "sales-order" && isOdaflowSalesOrder(document);
   const odaflowSource = odaflowSourceFromDetail(document);
+  const odaflowHeaderExtraFields =
+    (odaflowSalesOrder && document?.odaflowSalesRepName ? 1 : 0) +
+    (fmcgOrg &&
+    ["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) &&
+    (document?.priceListName || document?.priceListId)
+      ? 1
+      : 0) +
+    (type === "delivery-note" ? 1 : 0);
+  const detailHeaderColumns = Math.min(4 + odaflowHeaderExtraFields, 6);
 
   function openOdaflowApproval(action: "request" | "approve") {
     setOdaflowApprovalAction(action);
@@ -1259,9 +1271,16 @@ export default function DocViewPage() {
     >
       <div className="space-y-4">
         {loading ? (
-          <DocumentDetailHeaderSkeleton columns={type === "delivery-note" ? 5 : 4} />
+          <DocumentDetailHeaderSkeleton
+            columns={type === "sales-order" || type === "delivery-note" ? 5 : 4}
+          />
         ) : (
           <DocumentDetailHeader
+            className={
+              detailHeaderColumns >= 5
+                ? "sm:grid-cols-2 lg:grid-cols-5"
+                : undefined
+            }
             fields={[
               {
                 label: "Number",
@@ -1269,19 +1288,66 @@ export default function DocViewPage() {
                 mono: true,
               },
               {
-                label: "Date",
-                value: document?.date
-                  ? new Date(document.date as string).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })
-                  : "—",
+                label: document?.createdAt ? "Created" : "Date",
+                value: document?.createdAt
+                  ? formatDocumentCreatedLabel(document.createdAt, document.date)
+                  : document?.date
+                    ? new Date(document.date as string).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "—",
               },
               {
-                label: counterpartyLabel,
-                value: displayPartyName !== "—" ? displayPartyName : "Internal document",
+                label: odaflowSalesOrder ? "Customer" : counterpartyLabel,
+                value:
+                  displayPartyName !== "—" || odaflowSalesOrder ? (
+                    <div className="space-y-1.5">
+                      <span>{displayPartyName !== "—" ? displayPartyName : "—"}</span>
+                      {odaflowSalesOrder ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] font-semibold uppercase tracking-wide"
+                          >
+                            {odaflowBuyerTypeLabel(document?.odaflowChannel)}
+                          </Badge>
+                          {document?.odaflowCustomerName &&
+                          document.odaflowCustomerName !== displayPartyName ? (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              SFA: {document.odaflowCustomerName}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    "Internal document"
+                  ),
               },
+              ...(odaflowSalesOrder && document?.odaflowSalesRepName
+                ? [
+                    {
+                      label: "Placed by",
+                      value: (
+                        <div className="space-y-1">
+                          <span>{document.odaflowSalesRepName}</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              {ODAFLOW_SALES_REP_ROLE}
+                            </Badge>
+                            {document.odaflowSalesRepPhone ? (
+                              <span className="text-xs font-normal text-muted-foreground">
+                                {document.odaflowSalesRepPhone}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ),
+                    },
+                  ]
+                : []),
               ...(fmcgOrg &&
               ["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) &&
               (document?.priceListName || document?.priceListId)

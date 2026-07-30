@@ -318,6 +318,9 @@ export type DocumentDetailRecord = {
   odaflowSalesRepPhone?: string;
   odaflowSourcePdfUrl?: string;
   odaflowCustomerId?: string;
+  /** Customer name as captured on the SFA order (may differ from mapped ERP party). */
+  odaflowCustomerName?: string;
+  createdAt?: string;
 };
 
 export type DocumentChainNode = {
