@@ -2330,18 +2330,6 @@ export function DocumentCreateWizard({
 
   return (
     <div className="space-y-4">
-      {isOdaflowFmcgEdit ? (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
-          <p className="font-medium flex items-center gap-2">
-            <Icons.FileText className="h-4 w-4 shrink-0" />
-            Odaflow SFA order — review against the original PDF before saving
-          </p>
-          <p className="text-xs mt-1 text-sky-900/80 dark:text-sky-100/80">
-            If you change the matched customer or products, we will ask why so future Odaflow orders can learn the
-            correct mapping. Use the PDF preview above to confirm quantities and customer details.
-          </p>
-        </div>
-      ) : null}
       {hqSupplierName && (type === "purchase-order" || type === "purchase-request") && (
         <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm">
           <Icons.Store className="h-4 w-4 text-primary shrink-0" />

@@ -156,7 +156,13 @@ type BackendDocumentDetail = {
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
   packagingBlockingConversion?: boolean;
-  packagingMissingLines?: Array<{ productId: string; unit: string; description?: string }>;
+  packagingMissingLines?: Array<{
+    productId: string;
+    unit: string;
+    description?: string;
+    productName?: string;
+    productSku?: string;
+  }>;
   subtotal?: number;
   discount?: number;
   tax?: number;

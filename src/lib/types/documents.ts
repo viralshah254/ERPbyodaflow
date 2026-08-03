@@ -214,7 +214,13 @@ export type DocumentDetailRecord = {
   outputTemplateId?: string;
   /** FMCG: pack UOM lines missing pieces-per-pack — convert to DN blocked. */
   packagingBlockingConversion?: boolean;
-  packagingMissingLines?: Array<{ productId: string; unit: string; description?: string }>;
+  packagingMissingLines?: Array<{
+    productId: string;
+    unit: string;
+    description?: string;
+    productName?: string;
+    productSku?: string;
+  }>;
   subtotal?: number;
   /** Document-level discount amount when offered. */
   discount?: number;

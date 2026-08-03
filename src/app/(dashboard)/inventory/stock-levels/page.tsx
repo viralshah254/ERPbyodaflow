@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   LIST_PAGE_BODY_CLASS,
   LIST_PAGE_SHELL_CLASS,
@@ -38,7 +38,7 @@ import {
   fetchLatestInventoryCosting,
   type InventoryCostingSnapshot,
 } from "@/lib/api/inventory-costing";
-import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import {
   Select,
@@ -80,6 +80,8 @@ function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null):
 
 export default function StockLevelsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkHandledRef = React.useRef(false);
   const canWrite = useCanWriteInventory();
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -197,6 +199,40 @@ export default function StockLevelsPage() {
       )
       .catch(() => setProductOptions([]));
   }, [canWrite]);
+
+  React.useEffect(() => {
+    if (deepLinkHandledRef.current) return;
+    const action = searchParams.get("action");
+    const productId = searchParams.get("productId");
+    const warehouseId = searchParams.get("warehouseId");
+    const search = searchParams.get("search");
+    if (!action && !productId && !warehouseId && !search) return;
+
+    deepLinkHandledRef.current = true;
+    if (search) setSearchQuery(search);
+    if (warehouseId) setStockInWarehouseId(warehouseId);
+    if (productId) {
+      setStockInProductId(productId);
+      void fetchProductApi(productId)
+        .then((product) => {
+          if (!product) return;
+          setProductOptions((prev) => {
+            if (prev.some((p) => p.id === product.id)) return prev;
+            return [
+              { id: product.id, label: `${product.sku ? `${product.sku} — ` : ""}${product.name}` },
+              ...prev,
+            ];
+          });
+        })
+        .catch(() => undefined);
+    }
+    if (action === "stockIn" && canWrite) {
+      setStockInOpen(true);
+      setStockInQty("");
+      setStockInReason(fmcg ? "Opening / production putaway" : "Opening stock");
+    }
+    router.replace("/inventory/stock-levels", { scroll: false });
+  }, [searchParams, canWrite, fmcg, router]);
 
   const openStockIn = () => {
     setStockInOpen(true);

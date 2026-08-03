@@ -94,6 +94,11 @@ import { OdaflowApprovalConfirmDialog } from "@/components/integrations/OdaflowA
 import { isOdaflowSalesOrder, odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/channel-labels";
+import {
+  FmcgPackagingConversionBlocker,
+  packagingMissingLineLabel,
+  productPackagingHref,
+} from "@/components/docs/FmcgPackagingConversionBlocker";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -318,11 +323,6 @@ export default function DocViewPage() {
     [type, document?.relatedDocuments]
   );
 
-  const canCreateDeliveryNote = React.useMemo(
-    () => type !== "sales-order" || salesOrderCanCreateDeliveryNote(document, linkedDeliveryNote),
-    [type, document, linkedDeliveryNote]
-  );
-
   const fulfilmentInProgress = React.useMemo(
     () => type === "sales-order" && salesOrderFulfilmentInProgress(linkedDeliveryNote),
     [type, linkedDeliveryNote]
@@ -331,6 +331,36 @@ export default function DocViewPage() {
   const remainingLineSummaries = React.useMemo(
     () => (type === "sales-order" ? salesOrderRemainingLineSummaries(document) : []),
     [type, document]
+  );
+
+  const packagingMissingLines = React.useMemo(() => {
+    if (type !== "sales-order" || !document) return [];
+    if (document.packagingMissingLines?.length) return document.packagingMissingLines;
+    return (
+      document.lines
+        ?.filter((line) => line.packagingMissing && line.productId)
+        .map((line) => ({
+          productId: line.productId!,
+          unit: String(line.unit ?? "pack").trim().toUpperCase(),
+          description: line.productName
+            ? line.productSku
+              ? `${line.productSku} — ${line.productName}`
+              : line.productName
+            : line.description,
+          productName: line.productName,
+          productSku: line.productSku,
+        })) ?? []
+    );
+  }, [type, document]);
+
+  const packagingBlocksConversion = packagingMissingLines.length > 0;
+
+  const canCreateDeliveryNote = React.useMemo(
+    () =>
+      type !== "sales-order" ||
+      (!packagingBlocksConversion &&
+        salesOrderCanCreateDeliveryNote(document, linkedDeliveryNote)),
+    [type, document, linkedDeliveryNote, packagingBlocksConversion]
   );
 
   const effectiveConvertTargets = React.useMemo(() => {
@@ -805,10 +835,18 @@ export default function DocViewPage() {
 
       setConvertWarehouseId(document?.warehouseId ?? "");
       setOutputTemplateId(document?.outputTemplateId ?? "");
+      if (targetType === "delivery-note" && packagingBlocksConversion) {
+        toast.error("Set product packaging before creating a delivery note.", {
+          description:
+            "Open each product's Packs tab and define pieces per carton/bale. The submitted sales order does not need editing.",
+          duration: 12000,
+        });
+        return;
+      }
       convertSheetDismissShieldUntilRef.current = Date.now() + 600;
       setConvertOpen(true);
     },
-    [document, displayPartyName, type, id, router]
+    [document, displayPartyName, type, id, router, packagingBlocksConversion]
   );
 
   /** Deferred past dropdown teardown + next frame so Sheet / quick modal does not get stray outside-dismiss. */
@@ -828,6 +866,8 @@ export default function DocViewPage() {
       convertTargets={effectiveConvertTargets}
       linkedDeliveryNote={linkedDeliveryNote}
       canCreateDeliveryNote={canCreateDeliveryNote}
+      packagingMissingLines={packagingMissingLines}
+      packagingBlocksConversion={packagingBlocksConversion}
       fulfilmentInProgress={fulfilmentInProgress}
       remainingLineSummaries={remainingLineSummaries}
       warehouseTaskLink={warehouseTaskLink}
@@ -939,6 +979,16 @@ export default function DocViewPage() {
               Edit
             </Button>
           )}
+          {type === "sales-order" && packagingBlocksConversion
+            ? packagingMissingLines.map((missing) => (
+                <Button key={`${missing.productId}-${missing.unit}`} size="sm" variant="default" asChild>
+                  <Link href={productPackagingHref(missing.productId)}>
+                    <Icons.Package className="mr-2 h-4 w-4" />
+                    Set {missing.unit} packaging
+                  </Link>
+                </Button>
+              ))
+            : null}
           {type === "delivery-note" &&
             warehouseTaskLink &&
             !rightPanelOpen &&
@@ -1400,6 +1450,12 @@ export default function DocViewPage() {
             pdfPreviewDefaultExpanded={type !== "delivery-note"}
           />
         ) : null}
+        {type === "sales-order" && packagingBlocksConversion ? (
+          <FmcgPackagingConversionBlocker
+            missingLines={packagingMissingLines}
+            className="mt-4"
+          />
+        ) : null}
         <Card className="border-0 shadow-none bg-transparent p-0">
           <CardContent className="p-0 space-y-4">
             {loading ? null : (
@@ -1420,29 +1476,6 @@ export default function DocViewPage() {
                     canEdit={canWrite}
                     onUpdated={() => refreshDocument(true)}
                   />
-                ) : null}
-                {type === "sales-order" && document?.packagingBlockingConversion ? (
-                  <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
-                    <p className="font-medium flex items-start gap-2 leading-snug">
-                      <Icons.AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                      Cannot create a delivery note yet — one or more lines use a pack UOM (carton/bale/outer) without pieces-per-pack on the product. Set packing on each product below, then refresh this order.
-                    </p>
-                    {(document.packagingMissingLines?.length ?? 0) > 0 ? (
-                      <ul className="mt-2 list-disc pl-8 text-xs space-y-1">
-                        {document.packagingMissingLines!.map((m) => (
-                          <li key={`${m.productId}-${m.unit}`}>
-                            {m.description || m.productId}: set pieces per {m.unit} —{" "}
-                            <Link
-                              href={`/master/products/${m.productId}`}
-                              className="underline font-medium underline-offset-2"
-                            >
-                              open product
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
                 ) : null}
                 {type === "delivery-note" &&
                 document &&
@@ -1802,12 +1835,12 @@ export default function DocViewPage() {
                               <p className="mt-1 text-xs text-amber-800 dark:text-amber-200 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1">
                                 Packing count missing for {line.unit ?? "pack"} —{" "}
                                 <Link
-                                  href={`/master/products/${line.productId}`}
+                                  href={productPackagingHref(line.productId)}
                                   className="underline font-medium underline-offset-2"
                                 >
-                                  open product
+                                  Set packaging
                                 </Link>{" "}
-                                and set pieces per {line.unit ?? "pack"} before creating a delivery note.
+                                on the product (Packs tab), then refresh this order.
                               </p>
                             ) : null}
                           </div>
@@ -2053,6 +2086,9 @@ export default function DocViewPage() {
                 />
               </div>
             ) : null}
+            {convertType === "delivery-note" && packagingBlocksConversion ? (
+              <FmcgPackagingConversionBlocker missingLines={packagingMissingLines} compact />
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="convert-template">Output template</Label>
               <Input
@@ -2068,7 +2104,11 @@ export default function DocViewPage() {
               Cancel
             </Button>
             <Button
-              disabled={actionLoading || !convertType}
+              disabled={
+                actionLoading ||
+                !convertType ||
+                (convertType === "delivery-note" && packagingBlocksConversion)
+              }
               onClick={async () => {
                 if (!convertType) return;
                 setActionLoading(true);
@@ -2088,7 +2128,11 @@ export default function DocViewPage() {
                   }
                   await refreshDocument(true);
                 } catch (e) {
-                  toast.error((e as Error).message);
+                  const msg = e instanceof Error ? e.message : "Conversion failed";
+                  if (/packing counts missing|pieces per/i.test(msg)) {
+                    void refreshDocument(true);
+                  }
+                  toast.error(msg, { duration: 15000 });
                 } finally {
                   setActionLoading(false);
                 }
@@ -2748,6 +2792,8 @@ function DynamicNextStepsPanel({
   convertTargets,
   linkedDeliveryNote,
   canCreateDeliveryNote,
+  packagingMissingLines,
+  packagingBlocksConversion,
   fulfilmentInProgress,
   remainingLineSummaries,
   warehouseTaskLink,
@@ -2765,6 +2811,14 @@ function DynamicNextStepsPanel({
   convertTargets: DocTypeKey[];
   linkedDeliveryNote: LinkedDocSummary | null;
   canCreateDeliveryNote: boolean;
+  packagingMissingLines: Array<{
+    productId: string;
+    unit: string;
+    description?: string;
+    productName?: string;
+    productSku?: string;
+  }>;
+  packagingBlocksConversion: boolean;
   fulfilmentInProgress: boolean;
   remainingLineSummaries: string[];
   warehouseTaskLink: { label: string; href: string } | null;
@@ -2812,6 +2866,16 @@ function DynamicNextStepsPanel({
             text: `${dn.number} is waiting in the warehouse. Open it to continue fulfilment.`,
             href: `/docs/delivery-note/${dn.id}`,
             actionLabel: `View ${dn.number}`,
+            variant: "default",
+          });
+        }
+      } else if (packagingBlocksConversion) {
+        for (const missing of packagingMissingLines) {
+          steps.push({
+            icon: <Icons.AlertTriangle className="h-4 w-4 text-amber-500" />,
+            text: `${packagingMissingLineLabel(missing)} — set pieces per ${missing.unit} on the ERP product (Packs tab).`,
+            href: productPackagingHref(missing.productId),
+            actionLabel: "Set packaging",
             variant: "default",
           });
         }

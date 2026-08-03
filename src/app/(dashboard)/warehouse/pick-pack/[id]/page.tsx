@@ -69,6 +69,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { isPieceUom } from "@/lib/fmcg/pricing";
+import { buildStockLevelsHref } from "@/lib/inventory/stock-levels-nav";
 
 function formatPickQty(n: number, fmcg: boolean, unit = "PCS"): string {
   const v = formatKg(n);
@@ -927,21 +928,64 @@ export default function PickPackDetailPage() {
               </p>
             ) : null}
             {fulfilmentWarehouseUi.showPrimaryStockMismatch ? (
-              <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-100">
-                Available stock is showing in your <strong>MAIN</strong> (primary) warehouse — the fulfilment site above shows no
-                available quantity. Either switch the fulfilment warehouse to MAIN / primary stock location, or move stock
-                into the selected warehouse with a transfer.
-              </p>
+              <div className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-100 space-y-2">
+                <p>
+                  Available stock is showing in your <strong>MAIN</strong> (primary) warehouse — the fulfilment site above shows no
+                  available quantity. Either switch the fulfilment warehouse to MAIN / primary stock location, or move stock
+                  into the selected warehouse with a transfer.
+                </p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link
+                    href={buildStockLevelsHref({
+                      search: task.lines.find((l) => l.sku)?.sku,
+                      warehouseId: task.warehouseId,
+                    })}
+                  >
+                    View stock levels
+                  </Link>
+                </Button>
+              </div>
             ) : null}
             {pickPackStockHintMessage(task.stockLookupHint) ? (
-              <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-                {pickPackStockHintMessage(task.stockLookupHint)}
+              <div className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive space-y-2">
+                <p>{pickPackStockHintMessage(task.stockLookupHint)}</p>
                 {task.productIdsWithoutStockLevels?.length ? (
-                  <span className="mt-2 block font-mono text-xs opacity-90">
+                  <span className="block font-mono text-xs opacity-90">
                     IDs without stock records: {task.productIdsWithoutStockLevels.join(", ")}
                   </span>
                 ) : null}
-              </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {canWrite ? (
+                    <Button variant="secondary" size="sm" asChild>
+                      <Link
+                        href={buildStockLevelsHref({
+                          action: "stockIn",
+                          productId:
+                            task.productIdsWithoutStockLevels?.[0] ??
+                            task.lines.find((l) => l.productId)?.productId,
+                          warehouseId: task.warehouseId,
+                          search: task.lines.find((l) => l.sku)?.sku,
+                        })}
+                      >
+                        Stock In
+                      </Link>
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" size="sm" asChild>
+                    <Link
+                      href={buildStockLevelsHref({
+                        productId:
+                          task.productIdsWithoutStockLevels?.[0] ??
+                          task.lines.find((l) => l.productId)?.productId,
+                        warehouseId: task.warehouseId,
+                        search: task.lines.find((l) => l.sku)?.sku,
+                      })}
+                    >
+                      View stock levels
+                    </Link>
+                  </Button>
+                </div>
+              </div>
             ) : null}
             {packagingMissing ? (
               <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-950 dark:text-amber-100">

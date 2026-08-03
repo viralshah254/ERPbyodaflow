@@ -18,7 +18,15 @@ function normalizeUom(uom: string | undefined | null): string {
 
 export function isPieceUom(uom: string): boolean {
   const u = normalizeUom(uom);
-  return u === "EA" || u === "PC" || u === "PCS" || u === "PIECE" || u === "RRP" || u === "UNIT";
+  return (
+    u === "EA" ||
+    u === "PC" ||
+    u === "PCS" ||
+    u === "PIECE" ||
+    u === "RRP" ||
+    u === "UNIT" ||
+    u === "WHOLESALE"
+  );
 }
 
 export function resolveUnitsPerPiece(
