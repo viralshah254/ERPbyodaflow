@@ -73,6 +73,8 @@ import {
   DocumentNumberField,
 } from "@/components/docs/document-detail-header";
 import { DocumentChainTimeline } from "@/components/docs/document-chain-timeline";
+import { DocumentLineProductDescription } from "@/components/docs/DocumentLineProductDescription";
+import { DeliveryNoteWarehousePanel } from "@/components/docs/DeliveryNoteWarehousePanel";
 import { deliveryLinePrimaryLabel, deliveryLineSku } from "@/lib/documents/format-delivery-line";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import { WarehouseProductPicker } from "@/components/warehouse/warehouse-product-picker";
@@ -1380,8 +1382,11 @@ export default function DocViewPage() {
                       label: "Warehouse",
                       value:
                         deliveryNoteWarehouseLabel ??
-                        document?.warehouseId ??
-                        "Default from branch after save",
+                        (document?.warehouseId
+                          ? document.warehouseId
+                          : document?.status === "DRAFT"
+                            ? "Not set — select below"
+                            : "—"),
                     },
                   ]
                 : []),
@@ -1389,7 +1394,11 @@ export default function DocViewPage() {
           />
         )}
         {odaflowSource ? (
-          <OdaflowSourceCard info={odaflowSource} showPdfPreview />
+          <OdaflowSourceCard
+            info={odaflowSource}
+            showPdfPreview
+            pdfPreviewDefaultExpanded={type !== "delivery-note"}
+          />
         ) : null}
         <Card className="border-0 shadow-none bg-transparent p-0">
           <CardContent className="p-0 space-y-4">
@@ -1402,6 +1411,15 @@ export default function DocViewPage() {
                       Draft lines are editable via Edit below. Once this delivery note is approved and dispatched, you cannot amend shipped quantities here; POD (what the customer received) is recorded in the Odaflow mobile app and becomes the invoicing basis.
                     </p>
                   </div>
+                ) : null}
+                {type === "delivery-note" && document?.status === "DRAFT" && document?.id ? (
+                  <DeliveryNoteWarehousePanel
+                    documentId={document.id}
+                    branchId={document.branchId}
+                    warehouseId={document.warehouseId}
+                    canEdit={canWrite}
+                    onUpdated={() => refreshDocument(true)}
+                  />
                 ) : null}
                 {type === "sales-order" && document?.packagingBlockingConversion ? (
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
@@ -1676,6 +1694,7 @@ export default function DocViewPage() {
                     docStatus={document?.status}
                     sourceDocStatus={document?.sourceDocument?.status}
                     showAlternateCurrency={type !== "delivery-note"}
+                    fmcgOrg={fmcgOrg}
                   />
                 ) : (
                   <div className="rounded border overflow-x-auto">
@@ -1759,16 +1778,7 @@ export default function DocViewPage() {
                           }
                         >
                           <div className="min-w-0">
-                            <span>
-                              {deliveryLinePrimaryLabel({
-                                productName: line.productName,
-                                productSku: line.productSku,
-                                description: line.description,
-                              })}
-                            </span>
-                            {line.productSku?.trim() ? (
-                              <p className="text-xs text-muted-foreground font-mono truncate">{line.productSku}</p>
-                            ) : null}
+                            <DocumentLineProductDescription line={line} fmcgOrg={fmcgOrg} />
                             {line.sourceDocumentType && line.sourceDocumentId ? (
                               <p className="text-xs text-muted-foreground">
                                 From {line.sourceDocumentType.replace(/-/g, " ")}
@@ -2844,8 +2854,8 @@ function DynamicNextStepsPanel({
         });
       } else if (!document?.warehouseId?.trim()) {
         steps.push({
-          icon: <Icons.Info className="h-4 w-4 text-amber-500" />,
-          text: "Save this delivery note from Edit — a fulfilment warehouse is applied automatically from your branch so pick-pack can run.",
+          icon: <Icons.Warehouse className="h-4 w-4 text-amber-500" />,
+          text: "Select a fulfilment warehouse on this delivery note (above) so pick & pack can run.",
         });
       } else {
         steps.push({

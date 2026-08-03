@@ -95,6 +95,7 @@ import {
 } from "@/lib/api/product-master";
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import type { ProductPrice } from "@/lib/products/pricing-types";
+import { cn } from "@/lib/utils";
 import {
   deleteDocumentDraftApi,
   fetchDocumentDraftApi,
@@ -105,7 +106,6 @@ import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { QuickAddSupplierSheet } from "@/components/suppliers/QuickAddSupplierSheet";
 import { OdaflowSalesOrderCorrectionDialog } from "@/components/integrations/OdaflowSalesOrderCorrectionDialog";
-import { OdaflowPdfPreview } from "@/components/integrations/OdaflowSourceCard";
 import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
 import {
   filterUnconfirmedOdaflowChanges,
@@ -360,28 +360,128 @@ function PartyEntityField({
   );
 }
 
+function WarehouseField({
+  field,
+  form,
+  options = [],
+  branchId,
+  selectedWarehouseOption,
+  optionsLoading = false,
+  onCreateNewWarehouse,
+}: {
+  field: FormFieldConfig;
+  form: ReturnType<typeof useForm<FormValues>>;
+  options?: LookupOption[];
+  branchId?: string;
+  selectedWarehouseOption?: { id: string; label: string } | null;
+  optionsLoading?: boolean;
+  onCreateNewWarehouse?: () => void;
+}) {
+  const key = fieldIdToKey(field.id);
+
+  const branchWarehouses = React.useMemo(() => {
+    if (!branchId?.trim()) return options;
+    const inBranch = options.filter((w) => w.branchId === branchId);
+    return inBranch.length ? inBranch : options;
+  }, [branchId, options]);
+
+  const loadWarehouseOptions = React.useCallback(
+    async (query: string) => {
+      const q = query.trim().toLowerCase();
+      const filtered = q
+        ? branchWarehouses.filter((option) => option.label.toLowerCase().includes(q))
+        : branchWarehouses;
+      return filtered.map((option) => ({ id: option.id, label: option.label }));
+    },
+    [branchWarehouses]
+  );
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1">
+        <Label>
+          {field.label}
+          {field.required ? " *" : ""}
+        </Label>
+        <ExplainThis
+          prompt={`Explain: ${field.label} in document context.`}
+          label={`Explain ${field.label}`}
+        />
+      </div>
+      <AsyncSearchableSelect
+        value={(form.watch(key) as string | undefined) || ""}
+        onValueChange={(value) => form.setValue(key, value, { shouldDirty: true })}
+        loadOptions={loadWarehouseOptions}
+        selectedOption={selectedWarehouseOption}
+        placeholder={optionsLoading ? "Loading warehouses…" : `Select ${field.label.toLowerCase()}`}
+        searchPlaceholder="Search warehouses…"
+        emptyMessage={
+          branchId
+            ? "No warehouses for this branch — add one or choose another branch."
+            : "No warehouses found."
+        }
+        disabled={optionsLoading}
+        allowClear={!field.required}
+        searchDebounceMs={0}
+        recentStorageKey="lookup:recent-warehouses"
+        onCreateNew={onCreateNewWarehouse}
+        createNewLabel="Add warehouse"
+        reloadToken={`${branchId ?? ""}:${branchWarehouses.length}:${optionsLoading ? "loading" : "ready"}`}
+      />
+      {form.formState.errors[key] && (
+        <p className="text-sm text-destructive">
+          {form.formState.errors[key]?.message as string}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function RenderField({
   field,
   form,
   options,
   selectedPartyOption,
+  selectedWarehouseOption,
+  warehouseOptionsLoading = false,
+  branchId,
   onCreateNewCustomer,
   onCreateNewSupplier,
+  onCreateNewWarehouse,
   fmcgOrg = false,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
   options?: LookupOption[];
   selectedPartyOption?: { id: string; label: string; description?: string } | null;
+  selectedWarehouseOption?: { id: string; label: string } | null;
+  warehouseOptionsLoading?: boolean;
+  branchId?: string;
   onCreateNewCustomer?: (searchQuery: string) => void;
   onCreateNewSupplier?: (searchQuery: string) => void;
+  onCreateNewWarehouse?: () => void;
   fmcgOrg?: boolean;
 }) {
   const key = fieldIdToKey(field.id);
   const isDate = field.type === "date";
   const isNum = field.type === "number";
   const isPartyEntity = field.type === "entity" && (field.id === "customer" || field.id === "supplier");
+  const isWarehouseField = field.id === "warehouse";
   const hasOptions = Boolean(options?.length) && (field.type === "entity" || field.type === "select");
+
+  if (isWarehouseField) {
+    return (
+      <WarehouseField
+        field={field}
+        form={form}
+        options={options}
+        branchId={branchId}
+        selectedWarehouseOption={selectedWarehouseOption}
+        optionsLoading={warehouseOptionsLoading}
+        onCreateNewWarehouse={onCreateNewWarehouse}
+      />
+    );
+  }
 
   if (isPartyEntity) {
     const role = field.id === "supplier" ? "supplier" : "customer";
@@ -580,7 +680,6 @@ export function DocumentCreateWizard({
   const [odaflowConfirmedCorrections, setOdaflowConfirmedCorrections] =
     React.useState<OdaflowMappingCorrectionsPayload>({});
   const odaflowDialogLockRef = React.useRef(false);
-  const [odaflowSaveAfterConfirm, setOdaflowSaveAfterConfirm] = React.useState(false);
   const odaflowPendingRevertRef = React.useRef<{ lineIds: string[]; revertCustomer: boolean } | null>(null);
   const draftRestoredRef = React.useRef(false);
   const draftRestoreDoneRef = React.useRef(isEditMode);
@@ -656,6 +755,17 @@ export function DocumentCreateWizard({
   const [showQuickAddSupplier, setShowQuickAddSupplier] = React.useState(false);
   const [quickAddSupplierInitialName, setQuickAddSupplierInitialName] = React.useState("");
   const [loadingPo, setLoadingPo] = React.useState(false);
+  const [branchWarehouseReady, setBranchWarehouseReady] = React.useState(false);
+  const [partyDetailLoading, setPartyDetailLoading] = React.useState(false);
+  const [lineCatalogReady, setLineCatalogReady] = React.useState(true);
+  const [linePackagingReady, setLinePackagingReady] = React.useState(true);
+  const [salesPricingReady, setSalesPricingReady] = React.useState(true);
+  const [linesLoadingUiActive, setLinesLoadingUiActive] = React.useState(false);
+  const [linesLoadProgress, setLinesLoadProgress] = React.useState(0);
+  const packagingByProductIdRef = React.useRef(packagingByProductId);
+  const pricingByProductIdRef = React.useRef(pricingByProductId);
+  packagingByProductIdRef.current = packagingByProductId;
+  pricingByProductIdRef.current = pricingByProductId;
   /** Resolve GRN warehouse after warehouse options load (PO may have branchId but no warehouseId). */
   const pendingGrnWarehouseFromPoRef = React.useRef<{ warehouseId?: string; branchId?: string } | null>(null);
   /** Apply retail POS primary warehouse once for new delivery notes when warehouse is unset. */
@@ -687,6 +797,8 @@ export function DocumentCreateWizard({
   );
 
   const watchedBranch = form.watch("branch");
+  const selectedPartyId = form.watch("party");
+  const watchedWarehouse = form.watch("warehouse");
 
   React.useEffect(() => {
     if (isEditMode) return;
@@ -809,7 +921,7 @@ export function DocumentCreateWizard({
       setOverrideTaxConfigId(doc.taxConfigId);
     }
     setStep(1);
-    setMaxStepReached(prefilled.length > 0 ? STEPS.length : 1);
+    setMaxStepReached(prefilled.length > 0 ? 2 : 1);
     editHydratedRef.current = true;
     queueMicrotask(() => {
       skipEditAutosaveRef.current = false;
@@ -826,9 +938,13 @@ export function DocumentCreateWizard({
       .then(([branches, warehouses]) => {
         if (cancelled) return;
         setFieldOptions({ branch: branches, warehouse: warehouses });
+        setBranchWarehouseReady(true);
       })
       .catch(() => {
-        if (!cancelled) setFieldOptions({});
+        if (!cancelled) {
+          setFieldOptions({});
+          setBranchWarehouseReady(true);
+        }
       });
     // Deferred: secondary metadata (price lists, party defaults, categories, products).
     // These are needed for step 2 but must not block branch/warehouse rendering.
@@ -979,6 +1095,57 @@ export function DocumentCreateWizard({
   }, [step]);
 
   React.useEffect(() => {
+    if (step !== 2) {
+      setLineCatalogReady(true);
+      return;
+    }
+    setLineCatalogReady(false);
+  }, [step]);
+
+  const prefetchLineProductData = React.useCallback(
+    async (productIds: string[], isCancelled?: () => boolean) => {
+      if (!productIds.length) {
+        setLinePackagingReady(true);
+        return;
+      }
+      const missing = productIds.filter(
+        (id) =>
+          packagingByProductIdRef.current[id] === undefined ||
+          pricingByProductIdRef.current[id] === undefined
+      );
+      if (!missing.length) {
+        setLinePackagingReady(true);
+        return;
+      }
+      setLinePackagingReady(false);
+      try {
+        const rows = await Promise.all(
+          missing.map((id) =>
+            Promise.all([fetchProductPackagingApi(id), fetchProductPricingApi(id)]).then(
+              ([packaging, pricing]) => ({ id, packaging, pricing })
+            )
+          )
+        );
+        if (isCancelled?.()) return;
+        setPackagingByProductId((prev) => {
+          const next = { ...prev };
+          for (const row of rows) next[row.id] = row.packaging;
+          return next;
+        });
+        setPricingByProductId((prev) => {
+          const next = { ...prev };
+          for (const row of rows) next[row.id] = row.pricing;
+          return next;
+        });
+        setLinePackagingReady(true);
+      } catch {
+        if (!isCancelled?.()) setLinePackagingReady(true);
+      }
+    },
+    []
+  );
+
+  React.useEffect(() => {
     if (step !== 2) return;
     // Purchasing docs use cost-based / manual pricing; bulk prefetching all packaging
     // and price-list data for every product creates hundreds of parallel API calls.
@@ -989,43 +1156,76 @@ export function DocumentCreateWizard({
     if (isPurchasingDoc) {
       setPackagingByProductId({});
       setPricingByProductId({});
+      setLinePackagingReady(true);
       return;
     }
-    const products = listProducts();
-    if (!products.length) {
-      setPackagingByProductId({});
-      setPricingByProductId({});
+    const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))] as string[];
+    if (!productIds.length) {
+      setLinePackagingReady(true);
       return;
     }
     let cancelled = false;
-    Promise.all(
-      products.map((p) =>
-        Promise.all([fetchProductPackagingApi(p.id), fetchProductPricingApi(p.id)])
-      )
-    )
-      .then((results) => {
-        if (cancelled) return;
-        const packaging: Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>> = {};
-        const pricing: Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>> = {};
-        products.forEach((p, i) => {
-          packaging[p.id] = results[i][0];
-          pricing[p.id] = results[i][1];
-        });
-        setPackagingByProductId(packaging);
-        setPricingByProductId(pricing);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPackagingByProductId({});
-          setPricingByProductId({});
-        }
-      });
+    void prefetchLineProductData(productIds, () => cancelled);
     return () => {
       cancelled = true;
     };
-  }, [step, type]);
+  }, [step, type, lines, prefetchLineProductData]);
 
-  const selectedPartyIdForCost = form.watch("party");
+  const selectedPartyOption = React.useMemo(() => {
+    if (selectedPartyDetail) return toPartyLookupOption(selectedPartyDetail);
+    if (isEditMode && existingDocument?.partyId && selectedPartyId === existingDocument.partyId) {
+      const label = existingDocument.party?.trim() || existingDocument.partyId;
+      return { id: existingDocument.partyId, label };
+    }
+    return null;
+  }, [selectedPartyDetail, isEditMode, existingDocument?.partyId, existingDocument?.party, selectedPartyId]);
+
+  const selectedWarehouseOption = React.useMemo(() => {
+    const warehouseId = (watchedWarehouse as string | undefined) || "";
+    if (!warehouseId) return null;
+    const fromOptions = (fieldOptions["warehouse"] ?? []).find((w) => w.id === warehouseId);
+    if (fromOptions) return { id: fromOptions.id, label: fromOptions.label };
+    return { id: warehouseId, label: warehouseId };
+  }, [fieldOptions, watchedWarehouse]);
+
+  const headerStepReady = React.useMemo(() => {
+    if (!branchWarehouseReady) return false;
+    if (!selectedPartyId) return true;
+    if (isEditMode && existingDocument?.partyId === selectedPartyId && existingDocument?.party) {
+      return true;
+    }
+    return !partyDetailLoading;
+  }, [
+    branchWarehouseReady,
+    selectedPartyId,
+    isEditMode,
+    existingDocument?.partyId,
+    existingDocument?.party,
+    partyDetailLoading,
+  ]);
+
+  const linesStepReady = lineCatalogReady && linePackagingReady && salesPricingReady;
+
+  React.useEffect(() => {
+    if (step !== 2) {
+      setLinesLoadingUiActive(false);
+      setLinesLoadProgress(0);
+      return;
+    }
+    if (!linesStepReady) {
+      setLinesLoadingUiActive(true);
+      const done = [lineCatalogReady, linePackagingReady, salesPricingReady].filter(Boolean).length;
+      setLinesLoadProgress((prev) => Math.max(prev, Math.round((done / 3) * 100)));
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setLinesLoadingUiActive(false);
+      setLinesLoadProgress(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [step, linesStepReady, lineCatalogReady, linePackagingReady, salesPricingReady]);
+
+  const selectedPartyIdForCost = selectedPartyId;
   const lineEditorModeForCost =
     type === "bill" || type === "purchase-order" || type === "grn" ||
     type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note"
@@ -1487,7 +1687,27 @@ export function DocumentCreateWizard({
     async (targetStep: number) => {
       if (targetStep === step || targetStep < 1 || targetStep > STEPS.length) return;
 
-      if (targetStep < step || targetStep <= maxStepReached) {
+      if (targetStep < step) {
+        persistWizardProgress(true);
+        setStep(targetStep);
+        return;
+      }
+
+      if (targetStep === 3) {
+        if (!linesStepReady) {
+          toast.error("Line items are still loading. Please wait a moment.");
+          return;
+        }
+        if (!linesOperational) {
+          toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+          return;
+        }
+        persistWizardProgress(true);
+        setStep(3);
+        return;
+      }
+
+      if (targetStep <= maxStepReached) {
         persistWizardProgress(true);
         setStep(targetStep);
         return;
@@ -1495,6 +1715,10 @@ export function DocumentCreateWizard({
 
       if (targetStep === step + 1) {
         if (step === 1) {
+          if (!headerStepReady) {
+            toast.error("Header fields are still loading. Please wait a moment.");
+            return;
+          }
           const valid = await form.trigger(["date", "party", "branch", "warehouse", "dueDate", "poRef", "reference"]);
           if (!valid) return;
           if (type === "grn" && !String(form.getValues("warehouse") ?? "").trim()) {
@@ -1502,18 +1726,39 @@ export function DocumentCreateWizard({
             return;
           }
         }
-        if (step === 2 && !linesOperational) {
-          toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
-          return;
+        if (step === 2) {
+          if (!linesStepReady) {
+            toast.error("Line items are still loading. Please wait a moment.");
+            return;
+          }
+          if (!linesOperational) {
+            toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+            return;
+          }
         }
         persistWizardProgress(true);
         setStep(targetStep);
       }
     },
-    [form, lines, linesOperational, maxStepReached, persistWizardProgress, step, type]
+    [
+      form,
+      headerStepReady,
+      lines,
+      linesOperational,
+      linesStepReady,
+      maxStepReached,
+      persistWizardProgress,
+      step,
+      type,
+    ]
   );
 
   const onReview = async () => {
+    if (!linesStepReady) {
+      toast.error("Line items are still loading. Please wait a moment.");
+      setStep(2);
+      return;
+    }
     if (!linesOperational) {
       toast.error(documentLinesOperationalErrorMessage(lines, "review"));
       setStep(2);
@@ -1552,6 +1797,10 @@ export function DocumentCreateWizard({
 
   const validateAndNext = async () => {
     if (step === 1) {
+      if (!headerStepReady) {
+        toast.error("Header fields are still loading. Please wait a moment.");
+        return;
+      }
       const valid = await form.trigger(["date", "party", "branch", "warehouse", "dueDate", "poRef", "reference"]);
       if (!valid) return;
       if (type === "grn" && !String(form.getValues("warehouse") ?? "").trim()) {
@@ -1559,9 +1808,15 @@ export function DocumentCreateWizard({
         return;
       }
     }
-    if (step === 2 && !linesOperational) {
-      toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
-      return;
+    if (step === 2) {
+      if (!linesStepReady) {
+        toast.error("Line items are still loading. Please wait a moment.");
+        return;
+      }
+      if (!linesOperational) {
+        toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+        return;
+      }
     }
     setStep((s) => Math.min(3, s + 1));
     persistWizardProgress(true);
@@ -1604,18 +1859,14 @@ export function DocumentCreateWizard({
     return preview;
   }, [form, isOdaflowFmcgEdit, lines, selectedPartyDetail, existingDocument]);
 
-  const openOdaflowCorrectionDialog = React.useCallback(
-    (preview: OdaflowEditChangePreview, saveAfterConfirm = false) => {
-      odaflowPendingRevertRef.current = {
-        lineIds: preview.products.map((product) => product.lineId),
-        revertCustomer: Boolean(preview.customer),
-      };
-      setOdaflowSaveAfterConfirm(saveAfterConfirm);
-      setOdaflowChangePreview(preview);
-      setOdaflowCorrectionOpen(true);
-    },
-    []
-  );
+  const openOdaflowCorrectionDialog = React.useCallback((preview: OdaflowEditChangePreview) => {
+    odaflowPendingRevertRef.current = {
+      lineIds: preview.products.map((product) => product.lineId),
+      revertCustomer: Boolean(preview.customer),
+    };
+    setOdaflowChangePreview(preview);
+    setOdaflowCorrectionOpen(true);
+  }, []);
 
   const revertOdaflowPendingChanges = React.useCallback(() => {
     const pending = odaflowPendingRevertRef.current;
@@ -1643,11 +1894,34 @@ export function DocumentCreateWizard({
       );
     }
     odaflowPendingRevertRef.current = null;
-    setOdaflowSaveAfterConfirm(false);
     window.setTimeout(() => {
       odaflowDialogLockRef.current = false;
     }, 0);
   }, [form]);
+
+  const applyConfirmedCorrectionsToBaseline = React.useCallback(
+    (corrections: OdaflowMappingCorrectionsPayload) => {
+      const baseline = odaflowBaselineRef.current;
+      if (!baseline) return;
+
+      if (corrections.customer) {
+        baseline.partyId = corrections.customer.newPartyId;
+        baseline.partyLabel = selectedPartyDetail?.name ?? corrections.customer.newPartyId;
+      }
+
+      for (const product of corrections.products ?? []) {
+        const previous = baseline.lines[product.lineId];
+        if (!previous) continue;
+        const line = lines.find((entry) => (entry.sourceLineId ?? entry.id) === product.lineId);
+        baseline.lines[product.lineId] = {
+          ...previous,
+          productId: product.newProductId,
+          label: line?.name ?? previous.label,
+        };
+      }
+    },
+    [lines, selectedPartyDetail]
+  );
 
   const saveEditedDocument = React.useCallback(
     async (corrections?: OdaflowMappingCorrectionsPayload) => {
@@ -1664,38 +1938,17 @@ export function DocumentCreateWizard({
     [buildDraftPayload, existingDocument, label, router, type]
   );
 
-  const saveWithOdaflowCorrections = React.useCallback(
-    async (corrections: OdaflowMappingCorrectionsPayload) => {
-      try {
-        setSubmitting(true);
-        await saveEditedDocument(corrections);
-        setOdaflowConfirmedCorrections({});
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Could not save order");
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [saveEditedDocument]
-  );
-
   const confirmOdaflowCorrectionReasons = React.useCallback(
     (corrections: OdaflowMappingCorrectionsPayload) => {
       const merged = mergeOdaflowMappingCorrections(odaflowConfirmedCorrections, corrections);
+      applyConfirmedCorrectionsToBaseline(merged);
       setOdaflowConfirmedCorrections(merged);
       setOdaflowCorrectionOpen(false);
       setOdaflowChangePreview(null);
       odaflowPendingRevertRef.current = null;
-
-      if (odaflowSaveAfterConfirm) {
-        setOdaflowSaveAfterConfirm(false);
-        void saveWithOdaflowCorrections(merged);
-        return;
-      }
-
       toast.success("Reason saved for this change.");
     },
-    [odaflowConfirmedCorrections, odaflowSaveAfterConfirm, saveWithOdaflowCorrections]
+    [applyConfirmedCorrectionsToBaseline, odaflowConfirmedCorrections]
   );
 
   const handleOdaflowCorrectionOpenChange = React.useCallback(
@@ -1706,10 +1959,13 @@ export function DocumentCreateWizard({
       setOdaflowCorrectionOpen(open);
       if (!open) {
         setOdaflowChangePreview(null);
-        setOdaflowSaveAfterConfirm(false);
       }
     },
     [odaflowCorrectionOpen, revertOdaflowPendingChanges]
+  );
+
+  const hasOdaflowConfirmedCorrections = Boolean(
+    odaflowConfirmedCorrections.customer || (odaflowConfirmedCorrections.products?.length ?? 0) > 0
   );
 
   const onSubmit = async () => {
@@ -1724,16 +1980,14 @@ export function DocumentCreateWizard({
         if (mappingChanges) {
           const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
           if (unconfirmed.customer || unconfirmed.products.length) {
-            openOdaflowCorrectionDialog(unconfirmed, true);
+            toast.error("Choose a reason for each Odaflow customer or product change before saving.");
             return;
           }
-          setSubmitting(true);
-          await saveEditedDocument(odaflowConfirmedCorrections);
-          setOdaflowConfirmedCorrections({});
-          return;
         }
         setSubmitting(true);
-        await saveEditedDocument();
+        await saveEditedDocument(hasOdaflowConfirmedCorrections ? odaflowConfirmedCorrections : undefined);
+        setOdaflowConfirmedCorrections({});
+        return;
       } else {
         setSubmitting(true);
         const payload = buildDraftPayload();
@@ -1760,15 +2014,13 @@ export function DocumentCreateWizard({
 
   const headerSection = config?.createFormSections.find((s) => s.id === "header");
   const headerFields = headerSection?.fields ?? [];
-  const selectedPartyId = form.watch("party");
 
   React.useEffect(() => {
     if (
       !isOdaflowFmcgEdit ||
       !editHydratedRef.current ||
       odaflowDialogLockRef.current ||
-      odaflowCorrectionOpen ||
-      odaflowSaveAfterConfirm
+      odaflowCorrectionOpen
     ) {
       return;
     }
@@ -1779,23 +2031,18 @@ export function DocumentCreateWizard({
     const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
     if (!unconfirmed.customer && unconfirmed.products.length === 0) return;
 
-    openOdaflowCorrectionDialog(unconfirmed, false);
+    openOdaflowCorrectionDialog(unconfirmed);
   }, [
     buildOdaflowChangePreview,
     isOdaflowFmcgEdit,
     lines,
     odaflowConfirmedCorrections,
     odaflowCorrectionOpen,
-    odaflowSaveAfterConfirm,
     openOdaflowCorrectionDialog,
     selectedPartyId,
   ]);
 
   const selectedCurrency = form.watch("currency") || baseCurrency;
-  const selectedPartyOption = React.useMemo(
-    () => (selectedPartyDetail ? toPartyLookupOption(selectedPartyDetail) : null),
-    [selectedPartyDetail]
-  );
   const selectedFxDate = form.watch("fxDate") || form.watch("date") || new Date().toISOString().slice(0, 10);
   /** Stored: base per 1 doc unit. Shown in UI: doc per 1 base (inverse). */
   const storedExchangeRate = form.watch("exchangeRate") ?? 1;
@@ -1829,9 +2076,11 @@ export function DocumentCreateWizard({
       setFmcgCatalogByProductId({});
       setDailyPriceStaleCount(0);
       setDailyPriceListName("");
+      setSalesPricingReady(true);
       return;
     }
     let cancelled = false;
+    setSalesPricingReady(false);
 
     if (fmcgOrg) {
       // FMCG: piece prices + discount from price tag (no CoolCatch daily path).
@@ -1860,6 +2109,9 @@ export function DocumentCreateWizard({
             setCatalogPricesByProductId({});
             setDailyPriceListName("");
           }
+        })
+        .finally(() => {
+          if (!cancelled) setSalesPricingReady(true);
         });
     } else {
       // Seafood / other: CoolCatch daily prices only — do not inject FMCG catalog.
@@ -1889,6 +2141,9 @@ export function DocumentCreateWizard({
             setDailyPriceStaleCount(0);
             setDailyPriceListName("");
           }
+        })
+        .finally(() => {
+          if (!cancelled) setSalesPricingReady(true);
         });
     }
 
@@ -1975,9 +2230,11 @@ export function DocumentCreateWizard({
       setSelectedPartyDetail(null);
       setCreditSummary(null);
       setCreditOverrideGranted(false);
+      setPartyDetailLoading(false);
       return;
     }
     let cancelled = false;
+    setPartyDetailLoading(true);
     Promise.all([
       fetchPartyByIdApi(selectedPartyId),
       fetchPartyCreditSummaryApi(selectedPartyId),
@@ -1986,11 +2243,13 @@ export function DocumentCreateWizard({
         setSelectedPartyDetail(party);
         setCreditSummary(credit);
         setCreditOverrideGranted(false);
+        setPartyDetailLoading(false);
       }
     }).catch(() => {
       if (!cancelled) {
         setSelectedPartyDetail(null);
         setCreditSummary(null);
+        setPartyDetailLoading(false);
       }
     });
     return () => { cancelled = true; };
@@ -2057,30 +2316,30 @@ export function DocumentCreateWizard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgRole, type]);
 
+  const stepAdvanceBlocked =
+    (step === 1 && !headerStepReady) ||
+    (step === 2 && (!linesStepReady || !linesOperational));
+  const stepAdvanceBlockReason =
+    step === 1 && !headerStepReady
+      ? "Loading header fields…"
+      : step === 2 && !linesStepReady
+        ? "Loading line items and product catalog…"
+        : step === 2 && !linesOperational
+          ? documentLinesOperationalErrorMessage(lines, "continue")
+          : undefined;
+
   return (
     <div className="space-y-4">
       {isOdaflowFmcgEdit ? (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100 space-y-3">
-          <div>
-            <p className="font-medium flex items-center gap-2">
-              <Icons.FileText className="h-4 w-4 shrink-0" />
-              Odaflow SFA order — review against the original PDF before saving
-            </p>
-            <p className="text-xs mt-1 text-sky-900/80 dark:text-sky-100/80">
-              If you change the matched customer or products, we will ask why so future Odaflow orders can learn the
-              correct mapping.
-            </p>
-          </div>
-          {existingDocument?.odaflowSourcePdfUrl ? (
-            <OdaflowPdfPreview
-              url={existingDocument.odaflowSourcePdfUrl}
-              title={`Original SFA order — ${existingDocument.number ?? existingDocument.id}`}
-            />
-          ) : (
-            <p className="text-xs text-amber-800 dark:text-amber-200">
-              No original PDF was attached from Odaflow for this order.
-            </p>
-          )}
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+          <p className="font-medium flex items-center gap-2">
+            <Icons.FileText className="h-4 w-4 shrink-0" />
+            Odaflow SFA order — review against the original PDF before saving
+          </p>
+          <p className="text-xs mt-1 text-sky-900/80 dark:text-sky-100/80">
+            If you change the matched customer or products, we will ask why so future Odaflow orders can learn the
+            correct mapping. Use the PDF preview above to confirm quantities and customer details.
+          </p>
         </div>
       ) : null}
       {hqSupplierName && (type === "purchase-order" || type === "purchase-request") && (
@@ -2089,7 +2348,13 @@ export function DocumentCreateWizard({
           <span>Ordering from <strong>{hqSupplierName}</strong></span>
         </div>
       )}
-      <DocumentStepper step={step} maxStepReached={maxStepReached} steps={STEPS} onStepSelect={(s) => void goToStep(s)} />
+      <DocumentStepper
+        step={step}
+        maxStepReached={maxStepReached}
+        maxForwardStep={linesStepReady ? STEPS.length : Math.min(maxStepReached, 2)}
+        steps={STEPS}
+        onStepSelect={(s) => void goToStep(s)}
+      />
 
       {step === 1 && (
         <Card>
@@ -2103,10 +2368,16 @@ export function DocumentCreateWizard({
             ) : null}
           </CardHeader>
           <CardContent className="pt-2 pb-4">
+            {!headerStepReady ? (
+              <div className="mb-4 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                <Icons.Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                Loading header fields…
+              </div>
+            ) : null}
             {type === "bill" && loadingPo && (
               <p className="mb-3 text-xs text-muted-foreground">Loading supplier and lines from linked document…</p>
             )}
-            <form className="space-y-4">
+            <form className={cn("space-y-4", !headerStepReady && "pointer-events-none opacity-60")}>
               {type === "grn" && (
                 <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-start gap-2">
@@ -2176,6 +2447,9 @@ export function DocumentCreateWizard({
                       form={form}
                       options={fieldOptions[f.id]}
                       selectedPartyOption={selectedPartyOption}
+                      selectedWarehouseOption={selectedWarehouseOption}
+                      warehouseOptionsLoading={!branchWarehouseReady}
+                      branchId={watchedBranch}
                       fmcgOrg={fmcgOrg}
                       onCreateNewCustomer={(query) => {
                         setQuickAddInitialName(query);
@@ -2184,6 +2458,9 @@ export function DocumentCreateWizard({
                       onCreateNewSupplier={(query) => {
                         setQuickAddSupplierInitialName(query);
                         setShowQuickAddSupplier(true);
+                      }}
+                      onCreateNewWarehouse={() => {
+                        window.open("/master/warehouses", "_blank", "noopener,noreferrer");
                       }}
                     />
                 ))}
@@ -2284,7 +2561,30 @@ export function DocumentCreateWizard({
       )}
 
       {step === 2 && (
-        <Card>
+        <Card className="relative overflow-hidden">
+          {linesLoadingUiActive ? (
+            <>
+              <div
+                className="h-1 w-full overflow-hidden bg-muted"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={linesLoadProgress}
+                aria-label="Loading line items"
+              >
+                <div
+                  className="h-full bg-primary transition-[width] duration-500 ease-out"
+                  style={{ width: `${linesLoadProgress}%` }}
+                />
+              </div>
+              <div className="flex items-center gap-2 border-b border-border/60 bg-muted/30 px-6 py-2.5 text-sm text-muted-foreground">
+                <Icons.Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                <span aria-live="polite">
+                  Loading products, pricing, and line details… {linesLoadProgress}%
+                </span>
+              </div>
+            </>
+          ) : null}
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>2. Lines</CardTitle>
             <div className="flex items-center gap-2">
@@ -2399,6 +2699,7 @@ export function DocumentCreateWizard({
                 </a>
               </div>
             )}
+            <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
             <DocumentLineEditor
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}
@@ -2424,6 +2725,7 @@ export function DocumentCreateWizard({
               defaultLineTaxCodeId={defaultLineTaxCodeId}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
               onProductsAdded={handleProductsAdded}
+              onCatalogReadyChange={setLineCatalogReady}
               lineColumnLabels={
                 type === "grn"
                   ? {
@@ -2437,6 +2739,7 @@ export function DocumentCreateWizard({
                   : undefined
               }
             />
+            </div>
             {fmcgOrg && effectiveTaxConfig ? (
               <div className="mt-4 rounded-lg border p-3 text-sm">
                 <p className="font-medium">
@@ -2634,12 +2937,8 @@ export function DocumentCreateWizard({
           {step < 3 ? (
             <Button
               onClick={() => void validateAndNext()}
-              disabled={step === 2 && !linesOperational}
-              title={
-                step === 2 && !linesOperational
-                  ? documentLinesOperationalErrorMessage(lines, "continue")
-                  : undefined
-              }
+              disabled={stepAdvanceBlocked}
+              title={stepAdvanceBlockReason}
             >
               Next
             </Button>
@@ -2652,11 +2951,13 @@ export function DocumentCreateWizard({
             <Button
               variant="outline"
               onClick={() => void onReview()}
-              disabled={step === 2 && !linesOperational}
+              disabled={step === 2 && (!linesStepReady || !linesOperational)}
               title={
-                step === 2 && !linesOperational
-                  ? documentLinesOperationalErrorMessage(lines, "review")
-                  : undefined
+                step === 2 && !linesStepReady
+                  ? "Loading line items and product catalog…"
+                  : step === 2 && !linesOperational
+                    ? documentLinesOperationalErrorMessage(lines, "review")
+                    : undefined
               }
             >
               Review & Submit
@@ -2751,7 +3052,7 @@ export function DocumentCreateWizard({
         onOpenChange={handleOdaflowCorrectionOpenChange}
         changes={odaflowChangePreview}
         submitting={submitting}
-        confirmLabel={odaflowSaveAfterConfirm ? "Save order" : "Confirm"}
+        confirmLabel="Confirm"
         onConfirm={confirmOdaflowCorrectionReasons}
       />
     </div>

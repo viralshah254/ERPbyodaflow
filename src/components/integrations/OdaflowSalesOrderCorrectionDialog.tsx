@@ -113,11 +113,14 @@ export function OdaflowSalesOrderCorrectionDialog({
                 </div>
                 <div className="space-y-1.5">
                   <Label>Reason</Label>
-                  <Select value={customerReason} onValueChange={(v) => setCustomerReason(v as OdaflowMappingCorrectionReason)}>
+                  <Select
+                    value={customerReason || undefined}
+                    onValueChange={(v) => setCustomerReason(v as OdaflowMappingCorrectionReason)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a reason…" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100]">
                       {ODAFLOW_CUSTOMER_CORRECTION_REASONS.map((reason) => (
                         <SelectItem key={reason.id} value={reason.id}>
                           {reason.label}
@@ -157,7 +160,7 @@ export function OdaflowSalesOrderCorrectionDialog({
                 <div className="space-y-1.5">
                   <Label>Reason</Label>
                   <Select
-                    value={productReasons[product.lineId] ?? ""}
+                    value={productReasons[product.lineId] || undefined}
                     onValueChange={(v) =>
                       setProductReasons((prev) => ({
                         ...prev,
@@ -168,7 +171,7 @@ export function OdaflowSalesOrderCorrectionDialog({
                     <SelectTrigger>
                       <SelectValue placeholder="Select a reason…" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100]">
                       {ODAFLOW_PRODUCT_CORRECTION_REASONS.map((reason) => (
                         <SelectItem key={reason.id} value={reason.id}>
                           {reason.label}

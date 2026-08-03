@@ -14,12 +14,21 @@ type DocumentStepperProps = {
   step: number;
   /** Furthest step the user has reached in this session (1-based). */
   maxStepReached: number;
+  /** Furthest step the user may jump forward to (1-based). Defaults to all steps. */
+  maxForwardStep?: number;
   steps: readonly DocumentStepperStep[];
   /** Navigate to another step (target is 1-based). */
   onStepSelect?: (step: number) => void;
 };
 
-export function DocumentStepper({ step, maxStepReached, steps, onStepSelect }: DocumentStepperProps) {
+export function DocumentStepper({
+  step,
+  maxStepReached,
+  maxForwardStep,
+  steps,
+  onStepSelect,
+}: DocumentStepperProps) {
+  const forwardLimit = maxForwardStep ?? steps.length;
   const progress = (step / steps.length) * 100;
 
   return (
@@ -47,6 +56,7 @@ export function DocumentStepper({ step, maxStepReached, steps, onStepSelect }: D
           const isCompleted = stepNumber < step;
           const isReachableForward =
             stepNumber > step &&
+            stepNumber <= forwardLimit &&
             (stepNumber <= maxStepReached || stepNumber === step + 1);
           const isBlockedFuture = stepNumber > step && !isReachableForward;
           const clickable =

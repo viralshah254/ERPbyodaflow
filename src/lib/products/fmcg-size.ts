@@ -27,3 +27,21 @@ export function parseFmcgSize(size?: string | null): { value: string; uom: strin
   else uom = "pcs";
   return { value: m[1], uom };
 }
+
+/** Resolve FMCG pack size for line pickers — product.size first, then variant size. */
+export function resolveFmcgProductSizeLabel(
+  product?: { size?: string | null } | null,
+  variants?: Array<{ size?: string | null; attributes?: Array<{ key?: string; value?: string }> }>
+): string | undefined {
+  const fromProduct = product?.size?.trim();
+  if (fromProduct) return fromProduct;
+
+  for (const variant of variants ?? []) {
+    const direct = variant.size?.trim();
+    if (direct) return direct;
+    const fromAttr = variant.attributes?.find((a) => a.key === "size" && a.value?.trim())?.value?.trim();
+    if (fromAttr) return fromAttr;
+  }
+
+  return undefined;
+}

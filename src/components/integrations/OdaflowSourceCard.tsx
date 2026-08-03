@@ -24,8 +24,16 @@ export type OdaflowSourceInfo = {
   externalOrderId?: string;
 };
 
-export function OdaflowPdfPreview({ url, title }: { url: string; title: string }) {
-  const [expanded, setExpanded] = React.useState(true);
+export function OdaflowPdfPreview({
+  url,
+  title,
+  defaultExpanded = true,
+}: {
+  url: string;
+  title: string;
+  defaultExpanded?: boolean;
+}) {
+  const [expanded, setExpanded] = React.useState(defaultExpanded);
 
   return (
     <div className="space-y-2 pt-1 border-t border-sky-200/60 dark:border-sky-900/40">
@@ -111,11 +119,14 @@ export function OdaflowSourceCard({
   info,
   compact = false,
   showPdfPreview = true,
+  pdfPreviewDefaultExpanded = true,
   className,
 }: {
   info: OdaflowSourceInfo;
   compact?: boolean;
   showPdfPreview?: boolean;
+  /** When showPdfPreview is true, start with the inline iframe collapsed if false. */
+  pdfPreviewDefaultExpanded?: boolean;
   className?: string;
 }) {
   const title =
@@ -159,7 +170,11 @@ export function OdaflowSourceCard({
         </div>
         {showPdfPreview && info.sourcePdfUrl ? (
           <div className="mt-3">
-            <OdaflowPdfPreview url={info.sourcePdfUrl} title={`Original SFA order — ${title}`} />
+            <OdaflowPdfPreview
+              url={info.sourcePdfUrl}
+              title={`Original SFA order — ${title}`}
+              defaultExpanded={pdfPreviewDefaultExpanded}
+            />
           </div>
         ) : null}
       </div>
@@ -216,7 +231,11 @@ export function OdaflowSourceCard({
 
         {info.sourcePdfUrl ? (
           showPdfPreview ? (
-            <OdaflowPdfPreview url={info.sourcePdfUrl} title={`Original SFA order — ${title}`} />
+            <OdaflowPdfPreview
+              url={info.sourcePdfUrl}
+              title={`Original SFA order — ${title}`}
+              defaultExpanded={pdfPreviewDefaultExpanded}
+            />
           ) : (
             <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-sky-200/60 dark:border-sky-900/40">
               <p className="text-xs text-muted-foreground flex-1 min-w-[12rem]">

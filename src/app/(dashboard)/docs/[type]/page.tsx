@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { KraSigningBadge } from "@/components/kra/KraSigningBadge";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { SalesOrdersListPanel } from "@/components/sales/SalesOrdersListPanel";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE = 25;
@@ -480,6 +481,32 @@ export default function DocTypeListPage() {
         />
         <div className="p-6">
           <p className="text-muted-foreground">Unknown document type.</p>
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (type === "sales-order") {
+    return (
+      <PageShell className={LIST_PAGE_SHELL_CLASS}>
+        <PageHeader
+          title={label}
+          description="Orders and fulfillment"
+          breadcrumbs={[{ label: "Documents", href: "/docs" }, { label }]}
+          showCommandHint
+          actions={
+            canWrite ? (
+              <Button asChild>
+                <Link href="/docs/sales-order/new" data-tour-step="create-button">
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Create {label}
+                </Link>
+              </Button>
+            ) : undefined
+          }
+        />
+        <div className={LIST_PAGE_BODY_CLASS}>
+          <SalesOrdersListPanel savedViewsScope="doc-sales-order" />
         </div>
       </PageShell>
     );

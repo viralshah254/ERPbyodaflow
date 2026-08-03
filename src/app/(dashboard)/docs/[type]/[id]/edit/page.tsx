@@ -5,11 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DocumentCreateWizard } from "@/components/docs/DocumentCreateWizard";
+import { DocumentEditWizardSkeleton } from "@/components/docs/DocumentEditWizardSkeleton";
 import { fetchDocumentDetailApi } from "@/lib/api/documents";
 import { getDocTypeConfig } from "@/config/documents";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
+import { DeliveryNoteWarehousePanel } from "@/components/docs/DeliveryNoteWarehousePanel";
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
 import { odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
@@ -33,7 +35,9 @@ export default function DocEditPage() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchDocumentDetailApi(type as import("@/config/documents/types").DocTypeKey, id)
+    fetchDocumentDetailApi(type as import("@/config/documents/types").DocTypeKey, id, {
+      include: ["core"],
+    })
       .then((doc) => {
         if (cancelled) return;
         if (!doc) {
@@ -56,6 +60,13 @@ export default function DocEditPage() {
     return () => { cancelled = true; };
   }, [type, id, router]);
 
+  const refreshDocument = React.useCallback(async () => {
+    const detail = await fetchDocumentDetailApi(type as import("@/config/documents/types").DocTypeKey, id, {
+      include: ["core"],
+    });
+    if (detail) setDocument(detail);
+  }, [type, id]);
+
   if (!canWrite) {
     return (
       <PageShell>
@@ -68,18 +79,7 @@ export default function DocEditPage() {
     );
   }
 
-  if (loading) {
-    return (
-      <PageShell>
-        <div className="flex items-center justify-center py-24 gap-3 text-muted-foreground">
-          <Icons.Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-sm">Loading document…</span>
-        </div>
-      </PageShell>
-    );
-  }
-
-  if (error || !document) {
+  if (error && !loading) {
     return (
       <PageShell>
         <div className="flex flex-col items-center justify-center py-24 gap-2 text-muted-foreground">
@@ -90,28 +90,53 @@ export default function DocEditPage() {
     );
   }
 
-  const odaflowSource = odaflowSourceFromDetail(document);
+  const odaflowSource = document ? odaflowSourceFromDetail(document) : null;
 
   return (
     <PageShell>
       <PageHeader
-        title={`Edit ${label} ${document.number}`}
+        title={document ? `Edit ${label} ${document.number}` : `Edit ${label}`}
         description="Modify header and line items. Use the numbered steps to go back; changes autosave as you work."
         breadcrumbs={[
           { label: "Documents", href: "/docs" },
           { label, href: `/docs/${type}` },
-          { label: document.number ?? id, href: `/docs/${type}/${id}` },
+          ...(document
+            ? [{ label: document.number ?? id, href: `/docs/${type}/${id}` }]
+            : []),
           { label: "Edit" },
         ]}
         sticky
       />
       <div className="p-6 w-full max-w-screen-2xl mx-auto space-y-4">
-        {odaflowSource ? <OdaflowSourceCard info={odaflowSource} showPdfPreview={false} /> : null}
-        <DocumentCreateWizard
-          type={type}
-          mode="edit"
-          existingDocument={document}
-        />
+        {loading ? (
+          <DocumentEditWizardSkeleton />
+        ) : document ? (
+          <>
+            {odaflowSource ? (
+              <OdaflowSourceCard
+                info={odaflowSource}
+                showPdfPreview={Boolean(odaflowSource.sourcePdfUrl)}
+                pdfPreviewDefaultExpanded={false}
+              />
+            ) : null}
+            {type === "delivery-note" && document.status === "DRAFT" ? (
+              <DeliveryNoteWarehousePanel
+                documentId={document.id}
+                branchId={document.branchId}
+                warehouseId={document.warehouseId}
+                canEdit={canWrite}
+                compact
+                onUpdated={refreshDocument}
+              />
+            ) : null}
+            <DocumentCreateWizard type={type} mode="edit" existingDocument={document} />
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-24 gap-2 text-muted-foreground">
+            <Icons.AlertTriangle className="h-8 w-8" />
+            <p className="text-sm">{error ?? "Document not found."}</p>
+          </div>
+        )}
       </div>
     </PageShell>
   );

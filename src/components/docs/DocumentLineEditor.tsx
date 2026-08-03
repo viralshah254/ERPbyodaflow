@@ -57,6 +57,7 @@ import {
 } from "@/lib/products/product-category-group";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
+import { resolveFmcgProductSizeLabel } from "@/lib/products/fmcg-size";
 import {
   Tooltip,
   TooltipContent,
@@ -158,9 +159,64 @@ interface DocumentLineEditorProps {
   fmcgOrg?: boolean;
   /** Load packaging / pricing for products just added from the picker. */
   onProductsAdded?: (productIds: string[]) => void;
+  /** Fires when the sellable/purchasable product catalog finishes loading (or is not needed). */
+  onCatalogReadyChange?: (ready: boolean) => void;
 }
 
 const defaultPriceListId = "pl-retail";
+
+function fmcgSizeBadges(sizeLabel: string | undefined): AsyncSearchableSelectOption["badges"] {
+  return sizeLabel ? [{ label: sizeLabel, variant: "secondary" }] : undefined;
+}
+
+function productSkuSelectOption(
+  p: ProductRow,
+  fmcgOrg: boolean,
+  variantsByProductId?: Record<string, ProductVariant[]>
+): AsyncSearchableSelectOption {
+  if (fmcgOrg) {
+    const sizeLabel = resolveFmcgProductSizeLabel(p, variantsByProductId?.[p.id]);
+    return {
+      id: p.id,
+      label: p.name,
+      badges: fmcgSizeBadges(sizeLabel),
+    };
+  }
+  return {
+    id: p.id,
+    label: `${p.sku} — ${p.name}`,
+    description: (p.categoryName ?? p.category)?.trim() || undefined,
+  };
+}
+
+function lineSkuSelectedOption(
+  line: DocumentLine,
+  product: ProductRow | undefined,
+  fmcgOrg: boolean,
+  variantsByProductId?: Record<string, ProductVariant[]>
+): AsyncSearchableSelectOption {
+  if (fmcgOrg) {
+    const sizeLabel = resolveFmcgProductSizeLabel(product, variantsByProductId?.[line.productId]);
+    return {
+      id: line.productId,
+      label: line.name || product?.name || line.sku,
+      badges: fmcgSizeBadges(sizeLabel),
+    };
+  }
+  return {
+    id: line.productId,
+    label: `${line.sku} — ${line.name}`,
+  };
+}
+
+function mergeProductIntoCache(product: ProductRow): void {
+  const existing = listProducts();
+  if (existing.some((row) => row.id === product.id)) {
+    setProductsCache(existing.map((row) => (row.id === product.id ? { ...row, ...product } : row)));
+    return;
+  }
+  setProductsCache([...existing, product]);
+}
 
 /** Multi-word search: every token must appear somewhere in sku, name, category, description, or productFamily (case-insensitive). */
 function productMatchesLineSearch(p: ProductRow, query: string): boolean {
@@ -170,7 +226,7 @@ function productMatchesLineSearch(p: ProductRow, query: string): boolean {
     .split(/\s+/)
     .filter(Boolean);
   if (tokens.length === 0) return true;
-  const hay = [p.sku, p.barcode ?? "", p.name, p.category ?? "", p.description ?? "", p.productFamily ?? ""]
+  const hay = [p.sku, p.barcode ?? "", p.name, p.size ?? "", p.category ?? "", p.description ?? "", p.productFamily ?? ""]
     .join(" ")
     .toLowerCase();
   return tokens.every((t) => hay.includes(t));
@@ -317,6 +373,7 @@ export function DocumentLineEditor({
   fmcgCatalogByProductId,
   fmcgOrg = false,
   onProductsAdded,
+  onCatalogReadyChange,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
@@ -392,6 +449,29 @@ export function DocumentLineEditor({
     return cachedProducts;
   }, [productFilter, filteredProducts, cachedProducts]);
 
+  const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
+  const ensureVariantsLoaded = React.useCallback((productId: string) => {
+    if (variantsByProductId[productId] !== undefined) return;
+    fetchProductVariantsApi(productId)
+      .then((items) => setVariantsByProductId((prev) => ({ ...prev, [productId]: items })))
+      .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })));
+  }, [variantsByProductId]);
+
+  React.useEffect(() => {
+    if (!fmcgOrg || !isApiConfigured()) return;
+    const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))];
+    for (const productId of productIds) {
+      ensureVariantsLoaded(productId);
+      const cached = products.find((p) => p.id === productId);
+      if (resolveFmcgProductSizeLabel(cached, variantsByProductId[productId])) continue;
+      void fetchProductApi(productId)
+        .then((full) => {
+          if (full) mergeProductIntoCache(full);
+        })
+        .catch(() => {});
+    }
+  }, [ensureVariantsLoaded, fmcgOrg, lines, products, variantsByProductId]);
+
   React.useEffect(() => {
     if (!productFilter || productFilter === "all") {
       setFilteredProducts(null);
@@ -421,7 +501,13 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter]);
+  }, [productFilter, mode]);
+
+  React.useEffect(() => {
+    const catalogReady = !productFilter || productFilter === "all" || filteredProducts !== null;
+    onCatalogReadyChange?.(catalogReady);
+  }, [productFilter, filteredProducts, onCatalogReadyChange]);
+
   const loadSkuOptionsForLine = React.useCallback(
     async (line: DocumentLine, query: string): Promise<AsyncSearchableSelectOption[]> => {
       const groupKey = fmcgOrg
@@ -453,11 +539,7 @@ export function DocumentLineEditor({
                 return a.sku.localeCompare(b.sku);
               }).slice(0, 100)
             : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
-        return sorted.map((p) => ({
-          id: p.id,
-          label: `${p.sku} — ${p.name}`,
-          description: (p.categoryName ?? p.category)?.trim() || undefined,
-        }));
+        return sorted.map((p) => productSkuSelectOption(p, fmcgOrg, variantsByProductId));
       };
       if (isApiConfigured() && productFilter && productFilter !== "all") {
         try {
@@ -475,7 +557,7 @@ export function DocumentLineEditor({
       }
       return mapRows(products);
     },
-    [products, productFilter, fmcgOrg, mode]
+    [products, productFilter, fmcgOrg, mode, variantsByProductId]
   );
   /** CoolCatch: product family. FMCG: product category. */
   const groupOptions = React.useMemo(() => {
@@ -583,15 +665,6 @@ export function DocumentLineEditor({
 
   const resolvePriceRef = React.useRef(resolvePrice);
   resolvePriceRef.current = resolvePrice;
-
-  // Variants per product — loaded lazily when a product with variants is selected
-  const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
-  const ensureVariantsLoaded = React.useCallback((productId: string) => {
-    if (variantsByProductId[productId] !== undefined) return;
-    fetchProductVariantsApi(productId)
-      .then((items) => setVariantsByProductId((prev) => ({ ...prev, [productId]: items })))
-      .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })));
-  }, [variantsByProductId]);
 
   const addProductsAsLines = React.useCallback(
     (picked: ProductRow[]) => {
@@ -847,7 +920,12 @@ export function DocumentLineEditor({
     const p = products.find((x) => x.id === productId);
     if (p) {
       if (isApiConfigured()) {
-        void fetchProductApi(productId).then((full) => applyRow(full ?? p)).catch(() => applyRow(p));
+        void fetchProductApi(productId)
+          .then((full) => {
+            if (full) mergeProductIntoCache(full);
+            applyRow(full ?? p);
+          })
+          .catch(() => applyRow(p));
       } else {
         applyRow(p);
       }
@@ -856,7 +934,10 @@ export function DocumentLineEditor({
     if (isApiConfigured()) {
       void fetchProductApi(productId)
         .then((full) => {
-          if (full) applyRow(full);
+          if (full) {
+            mergeProductIntoCache(full);
+            applyRow(full);
+          }
         })
         .catch(() => {});
     }
@@ -1090,7 +1171,7 @@ export function DocumentLineEditor({
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[8rem] w-[12%]">{fmcgOrg ? "Category" : "Product"}</TableHead>
-                  <TableHead className="min-w-[8rem] sm:min-w-[11rem] w-[24%]">SKU</TableHead>
+                  <TableHead className="min-w-[8rem] sm:min-w-[11rem] w-[24%]">{fmcgOrg ? "Product" : "SKU"}</TableHead>
                   {showVariantColumn && <TableHead className="min-w-[7rem]">Packaging variant</TableHead>}
                   <TableHead>UOM</TableHead>
                   <TableHead className="w-28">
@@ -1197,12 +1278,14 @@ export function DocumentLineEditor({
                           value={l.productId}
                           onValueChange={(v) => setProduct(l.id, v)}
                           loadOptions={(q) => loadSkuOptionsForLine(l, q)}
-                          selectedOption={{
-                            id: l.productId,
-                            label: `${l.sku} — ${l.name}`,
-                          }}
+                          selectedOption={lineSkuSelectedOption(
+                            l,
+                            products.find((p) => p.id === l.productId),
+                            fmcgOrg,
+                            variantsByProductId
+                          )}
                           placeholder={
-                            productListLoading ? "Loading products…" : "Search SKU…"
+                            productListLoading ? "Loading products…" : fmcgOrg ? "Search product…" : "Search SKU…"
                           }
                           searchPlaceholder={
                             fmcgOrg

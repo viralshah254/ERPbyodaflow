@@ -413,14 +413,25 @@ export function AsyncSearchableSelect({
                     {recentItemsLabel}
                   </span>
                 ) : null}
-                <span
-                  className={cn(
-                    "block",
-                    wrapLabels ? "whitespace-normal break-words" : "truncate"
-                  )}
-                >
-                  {option.label}
-                </span>
+                <div className="flex items-start justify-between gap-2">
+                  <span
+                    className={cn(
+                      "block flex-1 min-w-0",
+                      wrapLabels ? "whitespace-normal break-words" : "truncate"
+                    )}
+                  >
+                    {option.label}
+                  </span>
+                  {option.badges?.length ? (
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1 max-w-[42%]">
+                      {option.badges.map((badge: { label: string; variant?: "default" | "secondary" | "destructive" | "outline" }) => (
+                        <Badge key={`${option.id}-${badge.label}`} variant={badge.variant ?? "outline"} className="px-1.5 py-0 text-[10px] font-normal">
+                          {badge.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 {option.description ? (
                   <span
                     className={cn(
@@ -430,15 +441,6 @@ export function AsyncSearchableSelect({
                   >
                     {option.description}
                   </span>
-                ) : null}
-                {option.badges?.length ? (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {option.badges.map((badge: { label: string; variant?: "default" | "secondary" | "destructive" | "outline" }) => (
-                      <Badge key={`${option.id}-${badge.label}`} variant={badge.variant ?? "outline"} className="px-1.5 py-0 text-[10px]">
-                        {badge.label}
-                      </Badge>
-                    ))}
-                  </div>
                 ) : null}
               </div>
               {option.id === value ? <Icons.Check className="mt-0.5 h-4 w-4 shrink-0" /> : null}
@@ -505,12 +507,33 @@ export function AsyncSearchableSelect({
       >
         <span
           className={cn(
-            "text-left flex-1 min-w-0",
-            wrapLabels ? "whitespace-normal break-words line-clamp-2" : "truncate"
+            "text-left flex-1 min-w-0 relative",
+            effectiveSelected?.badges?.length ? "pr-1" : ""
           )}
-          title={wrapLabels ? (effectiveSelected?.label ?? undefined) : undefined}
         >
-          {effectiveSelected?.label ?? placeholder}
+          {effectiveSelected?.badges?.length ? (
+            <span className="absolute right-0 top-0 flex flex-wrap justify-end gap-1 max-w-[45%]">
+              {effectiveSelected.badges.map((badge) => (
+                <Badge
+                  key={`${effectiveSelected.id}-${badge.label}`}
+                  variant={badge.variant ?? "outline"}
+                  className="px-1.5 py-0 text-[10px] font-normal"
+                >
+                  {badge.label}
+                </Badge>
+              ))}
+            </span>
+          ) : null}
+          <span
+            className={cn(
+              "block",
+              wrapLabels ? "whitespace-normal break-words line-clamp-2" : "truncate",
+              effectiveSelected?.badges?.length ? "pr-14" : ""
+            )}
+            title={wrapLabels ? (effectiveSelected?.label ?? undefined) : undefined}
+          >
+            {effectiveSelected?.label ?? placeholder}
+          </span>
         </span>
         <Icons.ChevronsUpDown className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
       </Button>

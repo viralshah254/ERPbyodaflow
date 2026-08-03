@@ -232,6 +232,8 @@ export type DocumentDetailRecord = {
     productId?: string;
     productName?: string;
     productSku?: string;
+    productSize?: string;
+    productBarcode?: string;
     /** FMCG: this line's pack UOM has no pieces count on the product. */
     packagingMissing?: boolean;
     accountId?: string;

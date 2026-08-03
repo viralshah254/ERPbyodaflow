@@ -4,6 +4,7 @@ import * as React from "react";
 import { Package, PackageCheck, PackageX, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { DocumentLineProductDescription } from "@/components/docs/DocumentLineProductDescription";
 import { deliveryLinePrimaryLabel } from "@/lib/documents/format-delivery-line";
 import { resolveSalesUomQty, scaleQtyWithHeal } from "@/lib/documents/sales-uom-qty";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
@@ -183,6 +184,7 @@ export function DocumentFulfilmentLinesTable({
   docStatus,
   sourceDocStatus,
   showAlternateCurrency = true,
+  fmcgOrg = false,
 }: {
   lines: FulfilmentLine[];
   currency: string;
@@ -191,6 +193,7 @@ export function DocumentFulfilmentLinesTable({
   docStatus?: string;
   sourceDocStatus?: string;
   showAlternateCurrency?: boolean;
+  fmcgOrg?: boolean;
 }) {
   const isDn = docType === "delivery-note";
   const resolved = React.useMemo(() => {
@@ -334,10 +337,11 @@ export function DocumentFulfilmentLinesTable({
                 return (
                   <tr key={r.line.id ?? r.label} className={cn("border-b last:border-b-0 text-sm", meta.row)}>
                     <td className={cn(tdClass, "border-l-4", meta.border)}>
-                      <p className="font-medium leading-snug truncate">{r.label}</p>
-                      {r.line.productSku?.trim() ? (
-                        <p className="text-[11px] text-muted-foreground font-mono truncate mt-0.5">{r.line.productSku}</p>
-                      ) : null}
+                      <DocumentLineProductDescription
+                        line={r.line}
+                        fmcgOrg={fmcgOrg}
+                        nameClassName="font-medium leading-snug truncate"
+                      />
                     </td>
 
                     <td className={tdClass}>

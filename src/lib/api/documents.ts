@@ -16,6 +16,10 @@ type BackendDocumentLine = {
   productId?: string;
   productName?: string;
   productSku?: string;
+  productSize?: string;
+  productBarcode?: string;
+  odaflowPackSize?: string;
+  odaflowBarcode?: string;
   packagingMissing?: boolean;
   accountId?: string;
   accountName?: string;
@@ -441,6 +445,10 @@ function mapDocumentDetail(
       productId: line.productId,
       productName: line.productName,
       productSku: line.productSku,
+      ...(line.productSize ? { productSize: line.productSize } : {}),
+      ...(line.productBarcode ? { productBarcode: line.productBarcode } : {}),
+      ...(line.odaflowPackSize ? { odaflowPackSize: line.odaflowPackSize } : {}),
+      ...(line.odaflowBarcode ? { odaflowBarcode: line.odaflowBarcode } : {}),
       packagingMissing: line.packagingMissing,
       accountId: line.accountId,
       accountName: line.accountName,
