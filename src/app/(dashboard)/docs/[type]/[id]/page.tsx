@@ -250,7 +250,7 @@ export default function DocViewPage() {
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
   const [odaflowApprovalOpen, setOdaflowApprovalOpen] = React.useState(false);
-  const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | null>(null);
+  const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | "submit" | null>(null);
   /** True only for the very first fetch when document is still null — drives skeleton vs empty-state decisions. */
   const [initialLoading, setInitialLoading] = React.useState(true);
   /** True when re-fetching after an action; existing document stays visible. */
@@ -520,7 +520,7 @@ export default function DocViewPage() {
     (type === "delivery-note" ? 1 : 0);
   const detailHeaderColumns = Math.min(4 + odaflowHeaderExtraFields, 6);
 
-  function openOdaflowApproval(action: "request" | "approve") {
+  function openOdaflowApproval(action: "request" | "approve" | "submit") {
     setOdaflowApprovalAction(action);
     setOdaflowApprovalOpen(true);
   }
@@ -529,10 +529,10 @@ export default function DocViewPage() {
     if (!odaflowApprovalAction) return;
     setActionLoading(true);
     try {
-      if (odaflowApprovalAction === "request") {
+      if (odaflowApprovalAction === "request" || odaflowApprovalAction === "submit") {
         await requestDocumentApprovalApi(type as DocTypeKey, id);
         await refreshDocument(true);
-        toast.success("Approval requested.");
+        toast.success(odaflowApprovalAction === "submit" ? "Submitted for approval." : "Approval requested.");
       } else {
         await documentActionApi(type as DocTypeKey, id, "approve");
         await refreshDocument(true);
@@ -840,6 +840,10 @@ export default function DocViewPage() {
         setSignedPodSheetOpen(true);
       }}
       onAction={async (action) => {
+        if (action === "submit" && odaflowSalesOrder) {
+          openOdaflowApproval("submit");
+          return;
+        }
         setActionLoading(true);
         try {
           await documentActionApi(type as DocTypeKey, id, action as "approve" | "post" | "cancel");
@@ -2710,7 +2714,14 @@ export default function DocViewPage() {
         onOpenChange={setOdaflowApprovalOpen}
         sourcePdfUrl={odaflowSource?.sourcePdfUrl}
         orderNumber={document?.number}
-        confirmLabel={odaflowApprovalAction === "request" ? "Request approval" : "Approve"}
+        confirmLabel={
+          odaflowApprovalAction === "approve"
+            ? "Approve"
+            : odaflowApprovalAction === "submit"
+              ? "Submit"
+              : "Request approval"
+        }
+        intent={odaflowApprovalAction === "approve" ? "approve" : "submit"}
         loading={actionLoading}
         onConfirm={runOdaflowApprovalConfirm}
       />

@@ -12,6 +12,8 @@ type OdaflowApprovalConfirmDialogProps = {
   sourcePdfUrl?: string;
   orderNumber?: string;
   confirmLabel?: string;
+  /** Affects body copy — submit/request vs approve. */
+  intent?: "submit" | "approve";
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
 };
@@ -22,6 +24,7 @@ export function OdaflowApprovalConfirmDialog({
   sourcePdfUrl,
   orderNumber,
   confirmLabel = "Approve",
+  intent = "approve",
   onConfirm,
   loading = false,
 }: OdaflowApprovalConfirmDialogProps) {
@@ -56,8 +59,9 @@ export function OdaflowApprovalConfirmDialog({
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>
                 This sales order was synced from Odaflow SFA
-                {orderNumber ? ` (${orderNumber})` : ""}. Before approving, confirm quantities, products, and customer
-                details match the original field order.
+                {orderNumber ? ` (${orderNumber})` : ""}. Before{" "}
+                {intent === "approve" ? "approving" : "submitting for approval"}, confirm quantities, products, and
+                customer details match the original field order.
               </p>
               {sourcePdfUrl ? (
                 <p>

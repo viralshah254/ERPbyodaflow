@@ -24,7 +24,7 @@ export type OdaflowSourceInfo = {
   externalOrderId?: string;
 };
 
-function OdaflowPdfPreview({ url, title }: { url: string; title: string }) {
+export function OdaflowPdfPreview({ url, title }: { url: string; title: string }) {
   const [expanded, setExpanded] = React.useState(true);
 
   return (

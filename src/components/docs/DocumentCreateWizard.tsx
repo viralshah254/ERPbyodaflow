@@ -105,9 +105,13 @@ import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { QuickAddSupplierSheet } from "@/components/suppliers/QuickAddSupplierSheet";
 import { OdaflowSalesOrderCorrectionDialog } from "@/components/integrations/OdaflowSalesOrderCorrectionDialog";
-import type {
-  OdaflowEditChangePreview,
-  OdaflowMappingCorrectionsPayload,
+import { OdaflowPdfPreview } from "@/components/integrations/OdaflowSourceCard";
+import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
+import {
+  filterUnconfirmedOdaflowChanges,
+  mergeOdaflowMappingCorrections,
+  type OdaflowEditChangePreview,
+  type OdaflowMappingCorrectionsPayload,
 } from "@/lib/odaflow-mapping-corrections";
 
 /** Client-side mirror of backend fulfilment warehouse ranking within a branch. */
@@ -545,7 +549,10 @@ export function DocumentCreateWizard({
   const templateId = useOrgContextStore((s) => s.templateId);
   const fmcgOrg = isFmcgOrg(templateId);
   const isOdaflowFmcgEdit =
-    isEditMode && type === "sales-order" && fmcgOrg && existingDocument?.externalSource === "odaflow";
+    isEditMode &&
+    type === "sales-order" &&
+    fmcgOrg &&
+    isOdaflowSalesOrder(existingDocument);
   const copilotEnabled = useCopilotFeatureEnabled();
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const { settings: financialSettings } = useFinancialSettings();
@@ -570,6 +577,11 @@ export function DocumentCreateWizard({
   } | null>(null);
   const [odaflowCorrectionOpen, setOdaflowCorrectionOpen] = React.useState(false);
   const [odaflowChangePreview, setOdaflowChangePreview] = React.useState<OdaflowEditChangePreview | null>(null);
+  const [odaflowConfirmedCorrections, setOdaflowConfirmedCorrections] =
+    React.useState<OdaflowMappingCorrectionsPayload>({});
+  const odaflowDialogLockRef = React.useRef(false);
+  const [odaflowSaveAfterConfirm, setOdaflowSaveAfterConfirm] = React.useState(false);
+  const odaflowPendingRevertRef = React.useRef<{ lineIds: string[]; revertCustomer: boolean } | null>(null);
   const draftRestoredRef = React.useRef(false);
   const draftRestoreDoneRef = React.useRef(isEditMode);
   const skipEditAutosaveRef = React.useRef(false);
@@ -1401,6 +1413,16 @@ export function DocumentCreateWizard({
     (immediate = false) => {
       if (!isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
       const doSave = () => {
+        if (isOdaflowFmcgEdit && odaflowBaselineRef.current) {
+          const baseline = odaflowBaselineRef.current;
+          const partyChanged = (form.getValues("party") || "") !== baseline.partyId;
+          const productChanged = lines.some((line) => {
+            const lineKey = line.sourceLineId ?? line.id;
+            const previous = baseline.lines[lineKey];
+            return Boolean(previous && line.productId && previous.productId !== line.productId);
+          });
+          if (partyChanged || productChanged) return;
+        }
         void patchDocumentApi(type as DocTypeKey, existingDocument.id, buildDraftPayload()).catch(() => {});
       };
       if (editAutosaveTimerRef.current) {
@@ -1413,7 +1435,7 @@ export function DocumentCreateWizard({
       }
       editAutosaveTimerRef.current = setTimeout(doSave, EDIT_AUTOSAVE_DEBOUNCE_MS);
     },
-    [buildDraftPayload, existingDocument, isEditMode, type]
+    [buildDraftPayload, existingDocument, form, isEditMode, isOdaflowFmcgEdit, lines, type]
   );
 
   const persistWizardProgress = React.useCallback(
@@ -1582,6 +1604,51 @@ export function DocumentCreateWizard({
     return preview;
   }, [form, isOdaflowFmcgEdit, lines, selectedPartyDetail, existingDocument]);
 
+  const openOdaflowCorrectionDialog = React.useCallback(
+    (preview: OdaflowEditChangePreview, saveAfterConfirm = false) => {
+      odaflowPendingRevertRef.current = {
+        lineIds: preview.products.map((product) => product.lineId),
+        revertCustomer: Boolean(preview.customer),
+      };
+      setOdaflowSaveAfterConfirm(saveAfterConfirm);
+      setOdaflowChangePreview(preview);
+      setOdaflowCorrectionOpen(true);
+    },
+    []
+  );
+
+  const revertOdaflowPendingChanges = React.useCallback(() => {
+    const pending = odaflowPendingRevertRef.current;
+    const baseline = odaflowBaselineRef.current;
+    if (!pending || !baseline) return;
+
+    odaflowDialogLockRef.current = true;
+    if (pending.revertCustomer) {
+      form.setValue("party", baseline.partyId, { shouldDirty: true });
+    }
+    if (pending.lineIds.length) {
+      setLines((prev) =>
+        prev.map((line) => {
+          const lineKey = line.sourceLineId ?? line.id;
+          if (!pending.lineIds.includes(lineKey)) return line;
+          const previous = baseline.lines[lineKey];
+          if (!previous) return line;
+          return {
+            ...line,
+            productId: previous.productId,
+            name: previous.label,
+            sku: previous.label,
+          };
+        })
+      );
+    }
+    odaflowPendingRevertRef.current = null;
+    setOdaflowSaveAfterConfirm(false);
+    window.setTimeout(() => {
+      odaflowDialogLockRef.current = false;
+    }, 0);
+  }, [form]);
+
   const saveEditedDocument = React.useCallback(
     async (corrections?: OdaflowMappingCorrectionsPayload) => {
       if (!existingDocument) return;
@@ -1597,6 +1664,54 @@ export function DocumentCreateWizard({
     [buildDraftPayload, existingDocument, label, router, type]
   );
 
+  const saveWithOdaflowCorrections = React.useCallback(
+    async (corrections: OdaflowMappingCorrectionsPayload) => {
+      try {
+        setSubmitting(true);
+        await saveEditedDocument(corrections);
+        setOdaflowConfirmedCorrections({});
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not save order");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [saveEditedDocument]
+  );
+
+  const confirmOdaflowCorrectionReasons = React.useCallback(
+    (corrections: OdaflowMappingCorrectionsPayload) => {
+      const merged = mergeOdaflowMappingCorrections(odaflowConfirmedCorrections, corrections);
+      setOdaflowConfirmedCorrections(merged);
+      setOdaflowCorrectionOpen(false);
+      setOdaflowChangePreview(null);
+      odaflowPendingRevertRef.current = null;
+
+      if (odaflowSaveAfterConfirm) {
+        setOdaflowSaveAfterConfirm(false);
+        void saveWithOdaflowCorrections(merged);
+        return;
+      }
+
+      toast.success("Reason saved for this change.");
+    },
+    [odaflowConfirmedCorrections, odaflowSaveAfterConfirm, saveWithOdaflowCorrections]
+  );
+
+  const handleOdaflowCorrectionOpenChange = React.useCallback(
+    (open: boolean) => {
+      if (!open && odaflowCorrectionOpen) {
+        revertOdaflowPendingChanges();
+      }
+      setOdaflowCorrectionOpen(open);
+      if (!open) {
+        setOdaflowChangePreview(null);
+        setOdaflowSaveAfterConfirm(false);
+      }
+    },
+    [odaflowCorrectionOpen, revertOdaflowPendingChanges]
+  );
+
   const onSubmit = async () => {
     if (!linesOperational) {
       toast.error(documentLinesOperationalErrorMessage(lines, "submit"));
@@ -1607,8 +1722,14 @@ export function DocumentCreateWizard({
       if (isEditMode && existingDocument) {
         const mappingChanges = buildOdaflowChangePreview();
         if (mappingChanges) {
-          setOdaflowChangePreview(mappingChanges);
-          setOdaflowCorrectionOpen(true);
+          const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
+          if (unconfirmed.customer || unconfirmed.products.length) {
+            openOdaflowCorrectionDialog(unconfirmed, true);
+            return;
+          }
+          setSubmitting(true);
+          await saveEditedDocument(odaflowConfirmedCorrections);
+          setOdaflowConfirmedCorrections({});
           return;
         }
         setSubmitting(true);
@@ -1637,22 +1758,39 @@ export function DocumentCreateWizard({
     }
   };
 
-  async function confirmOdaflowCorrections(corrections: OdaflowMappingCorrectionsPayload) {
-    try {
-      setSubmitting(true);
-      await saveEditedDocument(corrections);
-      setOdaflowCorrectionOpen(false);
-      setOdaflowChangePreview(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save order");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   const headerSection = config?.createFormSections.find((s) => s.id === "header");
   const headerFields = headerSection?.fields ?? [];
   const selectedPartyId = form.watch("party");
+
+  React.useEffect(() => {
+    if (
+      !isOdaflowFmcgEdit ||
+      !editHydratedRef.current ||
+      odaflowDialogLockRef.current ||
+      odaflowCorrectionOpen ||
+      odaflowSaveAfterConfirm
+    ) {
+      return;
+    }
+
+    const mappingChanges = buildOdaflowChangePreview();
+    if (!mappingChanges) return;
+
+    const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
+    if (!unconfirmed.customer && unconfirmed.products.length === 0) return;
+
+    openOdaflowCorrectionDialog(unconfirmed, false);
+  }, [
+    buildOdaflowChangePreview,
+    isOdaflowFmcgEdit,
+    lines,
+    odaflowConfirmedCorrections,
+    odaflowCorrectionOpen,
+    odaflowSaveAfterConfirm,
+    openOdaflowCorrectionDialog,
+    selectedPartyId,
+  ]);
+
   const selectedCurrency = form.watch("currency") || baseCurrency;
   const selectedPartyOption = React.useMemo(
     () => (selectedPartyDetail ? toPartyLookupOption(selectedPartyDetail) : null),
@@ -1922,26 +2060,27 @@ export function DocumentCreateWizard({
   return (
     <div className="space-y-4">
       {isOdaflowFmcgEdit ? (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
-          <p className="font-medium flex items-center gap-2">
-            <Icons.FileText className="h-4 w-4 shrink-0" />
-            Odaflow SFA order — review against the original PDF before saving
-          </p>
-          <p className="text-xs mt-1 text-sky-900/80 dark:text-sky-100/80">
-            If you change the matched customer or products, we will ask why so future Odaflow orders can learn the
-            correct mapping.
-          </p>
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100 space-y-3">
+          <div>
+            <p className="font-medium flex items-center gap-2">
+              <Icons.FileText className="h-4 w-4 shrink-0" />
+              Odaflow SFA order — review against the original PDF before saving
+            </p>
+            <p className="text-xs mt-1 text-sky-900/80 dark:text-sky-100/80">
+              If you change the matched customer or products, we will ask why so future Odaflow orders can learn the
+              correct mapping.
+            </p>
+          </div>
           {existingDocument?.odaflowSourcePdfUrl ? (
-            <a
-              href={existingDocument.odaflowSourcePdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-medium mt-2 text-sky-800 underline dark:text-sky-200"
-            >
-              Preview original Odaflow PDF
-              <Icons.ExternalLink className="h-3 w-3" />
-            </a>
-          ) : null}
+            <OdaflowPdfPreview
+              url={existingDocument.odaflowSourcePdfUrl}
+              title={`Original SFA order — ${existingDocument.number ?? existingDocument.id}`}
+            />
+          ) : (
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              No original PDF was attached from Odaflow for this order.
+            </p>
+          )}
         </div>
       ) : null}
       {hqSupplierName && (type === "purchase-order" || type === "purchase-request") && (
@@ -2609,13 +2748,11 @@ export function DocumentCreateWizard({
 
       <OdaflowSalesOrderCorrectionDialog
         open={odaflowCorrectionOpen}
-        onOpenChange={(open) => {
-          setOdaflowCorrectionOpen(open);
-          if (!open) setOdaflowChangePreview(null);
-        }}
+        onOpenChange={handleOdaflowCorrectionOpenChange}
         changes={odaflowChangePreview}
         submitting={submitting}
-        onConfirm={(corrections) => void confirmOdaflowCorrections(corrections)}
+        confirmLabel={odaflowSaveAfterConfirm ? "Save order" : "Confirm"}
+        onConfirm={confirmOdaflowCorrectionReasons}
       />
     </div>
   );

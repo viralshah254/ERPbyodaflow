@@ -26,6 +26,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   changes: OdaflowEditChangePreview | null;
   submitting?: boolean;
+  confirmLabel?: string;
   onConfirm: (corrections: OdaflowMappingCorrectionsPayload) => void;
 };
 
@@ -34,6 +35,7 @@ export function OdaflowSalesOrderCorrectionDialog({
   onOpenChange,
   changes,
   submitting = false,
+  confirmLabel = "Confirm",
   onConfirm,
 }: Props) {
   const [customerReason, setCustomerReason] = React.useState<OdaflowMappingCorrectionReason | "">("");
@@ -84,12 +86,12 @@ export function OdaflowSalesOrderCorrectionDialog({
           )}
         >
           <Dialog.Title className="text-lg font-semibold flex items-center gap-2">
-            <Icons.BrainCircuit className="h-5 w-5 text-sky-600 shrink-0" />
-            Update Odaflow matching?
+            <Icons.ArrowLeftRight className="h-5 w-5 text-sky-600 shrink-0" />
+            Why did you change this product?
           </Dialog.Title>
           <Dialog.Description className="text-sm text-muted-foreground">
-            This sales order came from Odaflow SFA. Tell us why you changed the customer or products so we know
-            whether to improve automatic matching for future orders.
+            This sales order came from Odaflow SFA. Choose a reason for each product swap so we know whether to update
+            automatic matching for future orders.
           </Dialog.Description>
 
           <div className="overflow-y-auto space-y-4 pr-1 -mr-1">
@@ -178,6 +180,10 @@ export function OdaflowSalesOrderCorrectionDialog({
                     <p className="text-xs text-sky-700 dark:text-sky-300">
                       Future Odaflow orders for this SFA product will map to {product.toLabel}.
                     </p>
+                  ) : productReasons[product.lineId] === "substitution" ? (
+                    <p className="text-xs text-muted-foreground">
+                      Replacement on this order only — saved Odaflow matching stays as it was.
+                    </p>
                   ) : productReasons[product.lineId] ? (
                     <p className="text-xs text-muted-foreground">
                       Only this order changes — saved Odaflow matching stays as it was.
@@ -193,7 +199,7 @@ export function OdaflowSalesOrderCorrectionDialog({
               Cancel
             </Button>
             <Button type="button" disabled={!canConfirm} onClick={handleConfirm}>
-              {submitting ? "Saving…" : "Save order"}
+              {submitting ? "Working…" : confirmLabel}
             </Button>
           </div>
         </Dialog.Content>

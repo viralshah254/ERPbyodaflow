@@ -106,7 +106,7 @@ export default function DocEditPage() {
         sticky
       />
       <div className="p-6 w-full max-w-screen-2xl mx-auto space-y-4">
-        {odaflowSource ? <OdaflowSourceCard info={odaflowSource} showPdfPreview /> : null}
+        {odaflowSource ? <OdaflowSourceCard info={odaflowSource} showPdfPreview={false} /> : null}
         <DocumentCreateWizard
           type={type}
           mode="edit"
