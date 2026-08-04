@@ -114,7 +114,20 @@ export function OdaflowQueueOrderSheet({
   const [saveMappings, setSaveMappings] = React.useState(true);
   const [mappingConflict, setMappingConflict] = React.useState<MappingConflictState | null>(null);
   const [pricingReminderDismissed, setPricingReminderDismissed] = React.useState(false);
+  /** True while ERM conflict lookup runs after customer pick — keeps the UI responsive. */
+  const [checkingCustomer, setCheckingCustomer] = React.useState(false);
+  /** Line indexes currently checking product ERM conflicts. */
+  const [checkingProductLines, setCheckingProductLines] = React.useState<Set<number>>(() => new Set());
   const deepLinkAppliedRef = React.useRef(false);
+
+  const setProductLineChecking = React.useCallback((lineIndex: number, busy: boolean) => {
+    setCheckingProductLines((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(lineIndex);
+      else next.delete(lineIndex);
+      return next;
+    });
+  }, []);
 
   const applyCustomer = React.useCallback((option: AsyncSearchableSelectOption | null) => {
     setSelectedCustomer(option);
@@ -178,6 +191,8 @@ export function OdaflowQueueOrderSheet({
       setOrder(null);
       setMappingConflict(null);
       setPricingReminderDismissed(false);
+      setCheckingCustomer(false);
+      setCheckingProductLines(new Set());
     }
   }, [open, queueId, load]);
 
@@ -218,6 +233,9 @@ export function OdaflowQueueOrderSheet({
       applyCustomer(option);
       return;
     }
+    // Optimistic: show the pick immediately so the dropdown does not look stuck.
+    applyCustomer(option);
+    setCheckingCustomer(true);
     try {
       const { mappings } = await lookupOdaflowErmByEntityId({
         entityType: "party",
@@ -225,13 +243,14 @@ export function OdaflowQueueOrderSheet({
       });
       const others = mappings.filter((m) => m.externalId !== order.odaflowCustomerId);
       if (others.length > 0) {
+        applyCustomer(null);
         setMappingConflict({ kind: "customer", option, existingMappings: others });
-        return;
       }
     } catch {
-      /* proceed without blocking */
+      /* proceed without blocking — selection already applied */
+    } finally {
+      setCheckingCustomer(false);
     }
-    applyCustomer(option);
   }
 
   async function checkProductMapping(lineIndex: number, option: AsyncSearchableSelectOption | null) {
@@ -241,10 +260,11 @@ export function OdaflowQueueOrderSheet({
     }
     const line = order?.lines.find((l) => l.index === lineIndex);
     const odaflowProductId = line?.odaflowProductId;
-    if (!odaflowProductId) {
-      applyProduct(lineIndex, option);
-      return;
-    }
+    // Optimistic: show the pick immediately.
+    applyProduct(lineIndex, option);
+    if (!odaflowProductId) return;
+
+    setProductLineChecking(lineIndex, true);
     try {
       const { mappings } = await lookupOdaflowErmByEntityId({
         entityType: "product",
@@ -258,6 +278,7 @@ export function OdaflowQueueOrderSheet({
         mappings
       );
       if (conflicts.length > 0) {
+        applyProduct(lineIndex, null);
         const sameCatalog = conflicts.some((m) =>
           hasSameCatalogConflict(currentKind, odaflowProductId, m)
         );
@@ -268,17 +289,18 @@ export function OdaflowQueueOrderSheet({
           existingMappings: conflicts,
           conflictReason: sameCatalog ? "same_catalog" : "size_mismatch",
         });
-        return;
       }
     } catch {
-      /* proceed without blocking */
+      /* proceed without blocking — selection already applied */
+    } finally {
+      setProductLineChecking(lineIndex, false);
     }
-    applyProduct(lineIndex, option);
   }
 
+  const mappingCheckBusy = checkingCustomer || checkingProductLines.size > 0;
   const customerReady = Boolean(erpPartyId);
   const allProductsReady = order?.lines.every((line) => Boolean(lineProducts[line.index]?.id)) ?? false;
-  const canSubmit = customerReady && allProductsReady && !submitting;
+  const canSubmit = customerReady && allProductsReady && !submitting && !mappingCheckBusy;
 
   async function handleCreateSalesOrder() {
     if (!queueId || !order || !erpPartyId) return;
@@ -441,11 +463,18 @@ export function OdaflowQueueOrderSheet({
                   searchPlaceholder="Search customers…"
                   emptyMessage="No customers found."
                   allowClear
+                  disabled={checkingCustomer || submitting}
                   portalContainer={sheetPortalHost}
                   triggerClassName={order.customerNeedsMatch ? "border-amber-300" : undefined}
                   onCreateNew={goCreateCustomer}
                   createNewLabel="Add new customer"
                 />
+                {checkingCustomer ? (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Icons.Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    Checking customer mapping…
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -520,6 +549,7 @@ export function OdaflowQueueOrderSheet({
                               searchPlaceholder="Search products…"
                               emptyMessage="No products found."
                               allowClear
+                              disabled={checkingProductLines.has(line.index) || submitting}
                               portalContainer={sheetPortalHost}
                               triggerClassName={
                                 line.hasIssue
@@ -531,6 +561,12 @@ export function OdaflowQueueOrderSheet({
                               onCreateNew={goCreateProduct}
                               createNewLabel="Create new product"
                             />
+                            {checkingProductLines.has(line.index) ? (
+                              <p className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
+                                <Icons.Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                                Checking product mapping…
+                              </p>
+                            ) : null}
                           </td>
                         </tr>
                       ))}
@@ -557,13 +593,27 @@ export function OdaflowQueueOrderSheet({
               Remove from list
             </Button>
             <Button type="button" onClick={() => void handleCreateSalesOrder()} disabled={!canSubmit}>
-              {submitting ? "Creating…" : "Create sales order"}
+              {submitting ? (
+                <>
+                  <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating…
+                </>
+              ) : mappingCheckBusy ? (
+                <>
+                  <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Checking…
+                </>
+              ) : (
+                "Create sales order"
+              )}
             </Button>
           </SheetFooter>
 
           {order && !canSubmit && !loading && (
             <p className="text-xs text-muted-foreground text-center pb-2">
-              Select the ERP customer and every product above to continue.
+              {mappingCheckBusy
+                ? "Checking your selection against existing mappings…"
+                : "Select the ERP customer and every product above to continue."}
             </p>
           )}
         </SheetContent>
