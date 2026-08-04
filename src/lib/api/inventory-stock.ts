@@ -226,7 +226,66 @@ export type FranchiseNetworkStockItem = {
 export type FranchiseNetworkStockAggregate = {
   items: FranchiseNetworkStockItem[];
   costingRanAt: string | null;
+  total?: number;
+  totals?: {
+    totalAvailable: number;
+    networkValueKes: number;
+  };
 };
+
+export async function fetchFranchiseNetworkStockAggregatePage(filters?: {
+  search?: string;
+  productId?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<{
+  items: FranchiseNetworkStockItem[];
+  costingRanAt: string | null;
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  totals: { totalAvailable: number; networkValueKes: number };
+}> {
+  requireLiveApi("Franchise network stock aggregate");
+  const lim = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 25;
+  const params = new URLSearchParams();
+  params.set("limit", String(lim));
+  if (filters?.cursor) params.set("cursor", filters.cursor);
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.productId) params.set("productId", filters.productId);
+  const payload = await apiRequest<
+    FranchiseNetworkStockAggregate & {
+      limit?: number;
+      offset?: number;
+      hasMore?: boolean;
+      nextCursor?: string | null;
+    }
+  >("/api/franchise/network/stock-aggregate", {
+    params,
+  });
+  const items = payload.items ?? [];
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const offset =
+    typeof payload.offset === "number" ? payload.offset : filters?.cursor ? Number(filters.cursor) || 0 : 0;
+  const total = typeof payload.total === "number" ? payload.total : items.length;
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : offset + items.length < total;
+  return {
+    items,
+    costingRanAt: payload.costingRanAt,
+    total,
+    limit,
+    offset,
+    hasMore,
+    nextCursor: payload.nextCursor ?? (hasMore ? String(offset + items.length) : null),
+    totals: payload.totals ?? {
+      totalAvailable: items.reduce((sum, row) => sum + row.totalAvailable, 0),
+      networkValueKes: items.reduce((sum, row) => sum + row.networkValueKes, 0),
+    },
+  };
+}
 
 export async function fetchFranchiseNetworkStockAggregate(filters?: {
   search?: string;

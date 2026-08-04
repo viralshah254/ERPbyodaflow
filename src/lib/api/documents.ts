@@ -5,6 +5,7 @@ import type {
   DocumentStatusActor,
   DocumentTimelineEntry,
 } from "@/lib/types/documents";
+import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
 
 type BackendDocumentLine = {
@@ -56,6 +57,7 @@ type BackendTimelineEntry = {
   by: string;
   at: string;
   note?: string;
+  requesterBy?: string;
 };
 
 type BackendPodConfirmationLine = {
@@ -129,6 +131,7 @@ type BackendDocumentDetail = {
   exchangeRate?: number;
   status: string;
   statusActor?: DocumentStatusActor | null;
+  createdByName?: string;
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
@@ -166,6 +169,7 @@ type BackendDocumentDetail = {
   dispatchPickup?: BackendDispatchPickup;
   deliveryCheckIn?: BackendDeliveryCheckIn;
   warehouseDrop?: BackendWarehouseDrop;
+  dispatchAmendEligibility?: { allowed: boolean; reason?: string };
 };
 
 type ChainNode = {
@@ -342,6 +346,7 @@ function mapTimeline(entries?: BackendTimelineEntry[]): DocumentTimelineEntry[] 
     action: entry.action,
     by: entry.by,
     at: new Date(entry.at).toLocaleString(),
+    requesterBy: entry.requesterBy,
   }));
 }
 
@@ -370,6 +375,11 @@ function mapDocumentDetail(
     exchangeRate: payload.exchangeRate,
     status: payload.status,
     statusActor: payload.statusActor ?? null,
+    createdByName: resolveDocumentCreatedByName({
+      createdByName: payload.createdByName,
+      auditHistory: mapTimeline(payload.auditHistory),
+      approvalHistory: mapTimeline(payload.approvalHistory),
+    }),
     availableActions: payload.availableActions ?? [],
     availableConversionTargets: payload.availableConversionTargets ?? [],
     outputTemplateId: payload.outputTemplateId,
@@ -501,6 +511,7 @@ function mapDocumentDetail(
           receivedByUserId: payload.warehouseDrop.receivedByUserId,
         }
       : undefined,
+    dispatchAmendEligibility: payload.dispatchAmendEligibility,
   };
 }
 
@@ -727,6 +738,20 @@ export async function convertDocumentApi(
   });
 }
 
+export async function amendDeliveryNoteDispatchApi(
+  deliveryNoteId: string,
+  payload: {
+    reason: string;
+    lines: Array<{ lineId: string; productId?: string; quantity: number }>;
+  }
+): Promise<DocumentWriteResponse> {
+  requireLiveApi("Amend delivery dispatch");
+  return apiRequest<DocumentWriteResponse>(`/api/documents/delivery-note/${deliveryNoteId}/amend-dispatch`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function confirmDeliveryPodApi(
   deliveryNoteId: string,
   payload: {
@@ -792,6 +817,16 @@ export function downloadDocumentPdfApi(
 ): void {
   requireLiveApi("Document PDF export");
   downloadFile(`/api/documents/${type}/${id}/pdf`, fileName, onNotAvailable);
+}
+
+export function downloadDocumentExcelApi(
+  type: DocTypeKey,
+  id: string,
+  fileName: string,
+  onNotAvailable: (message: string) => void
+): void {
+  requireLiveApi("Document Excel export");
+  downloadFile(`/api/documents/${type}/${id}/xlsx`, fileName, onNotAvailable);
 }
 
 export function exportDocumentListApi(

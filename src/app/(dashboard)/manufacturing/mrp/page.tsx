@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -287,11 +287,11 @@ export default function MrpPage() {
             columnWidths={["w-20", "w-44", "w-20", "w-20", "w-20", "w-20", "w-48"]}
           />
         ) : (
-          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="relative rounded-xl border bg-card shadow-sm">
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
-                LIST_TABLE_SCROLL_BODY_CLASS,
+                "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
                 tableBusy && "pointer-events-none opacity-60"
               )}
             >

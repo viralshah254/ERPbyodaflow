@@ -1,7 +1,9 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { DocumentStatusActor } from "@/lib/types/documents";
+import { UserRound } from "lucide-react";
 
 const ROLE_LABEL: Record<string, string> = {
   drafted: "Drafted by",
@@ -18,14 +20,25 @@ interface DocumentStatusBarProps {
   className?: string;
   /** When set, shows e.g. "Approved by Jane Doe" next to the status. */
   statusActor?: DocumentStatusActor | null;
+  /** Creator display name — shown as a badge when status is past draft. */
+  createdByName?: string | null;
 }
 
 /** Horizontal status bar below document header. */
-export function DocumentStatusBar({ status, statusActor, className }: DocumentStatusBarProps) {
+export function DocumentStatusBar({
+  status,
+  statusActor,
+  createdByName,
+  className,
+}: DocumentStatusBarProps) {
   const actorLabel =
     statusActor?.name && statusActor.role
       ? `${ROLE_LABEL[statusActor.role] ?? "By"} ${statusActor.name}`
       : null;
+  const showCreatedBadge =
+    !!createdByName?.trim() &&
+    status !== "DRAFT" &&
+    !(statusActor?.role === "drafted" && statusActor.name === createdByName);
 
   return (
     <div
@@ -53,6 +66,12 @@ export function DocumentStatusBar({ status, statusActor, className }: DocumentSt
         <span className="text-muted-foreground">
           <span className="text-foreground/90">{actorLabel}</span>
         </span>
+      )}
+      {showCreatedBadge && (
+        <Badge variant="secondary" className="gap-1 font-normal normal-case tracking-normal">
+          <UserRound className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+          Created by {createdByName}
+        </Badge>
       )}
     </div>
   );

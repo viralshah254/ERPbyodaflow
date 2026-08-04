@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -433,7 +433,7 @@ export default function APBillsPage() {
           </div>
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         <div className="flex flex-col rounded-xl border bg-card shadow-sm">
           {tab === "open" && (
             <div className="shrink-0 px-4 pt-4">
@@ -571,11 +571,11 @@ export default function APBillsPage() {
               <SkeletonDataTable rows={pageSize} columnWidths={skeletonWidths} />
             </div>
           ) : (
-            <div className={cn(LIST_TABLE_SURFACE_CLASS, "border-0 border-t rounded-none shadow-none")}>
+            <div className={cn("relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm", "border-0 border-t rounded-none shadow-none")}>
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(
-                  LIST_TABLE_SCROLL_BODY_CLASS,
+                  "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >

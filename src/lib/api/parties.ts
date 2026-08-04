@@ -37,6 +37,7 @@ type BackendParty = {
   lastKnownLongitude?: number;
   pinCertificateUrl?: string;
   companyRegistrationUrl?: string;
+  supplierPaymentMethod?: "BANK" | "MPESA" | "PAYBILL" | "TILL";
   supplierBankName?: string;
   supplierBankAccountName?: string;
   supplierBankAccountNumber?: string;
@@ -75,6 +76,7 @@ export type PartyPayload = {
   };
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
+  supplierPaymentMethod?: "BANK" | "MPESA" | "PAYBILL" | "TILL";
   supplierBankName?: string;
   supplierBankAccountName?: string;
   supplierBankAccountNumber?: string;
@@ -237,6 +239,7 @@ function mapParty(item: BackendParty): PartyRow {
     address: item.address,
     pinCertificateUrl: item.pinCertificateUrl,
     companyRegistrationUrl: item.companyRegistrationUrl,
+    supplierPaymentMethod: item.supplierPaymentMethod,
     supplierBankName: item.supplierBankName,
     supplierBankAccountName: item.supplierBankAccountName,
     supplierBankAccountNumber: item.supplierBankAccountNumber,
@@ -342,6 +345,7 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
     companyRegistrationUrl: data.companyRegistrationUrl,
     lastKnownLatitude: data.lastKnownLatitude,
     lastKnownLongitude: data.lastKnownLongitude,
+    supplierPaymentMethod: data.supplierPaymentMethod,
     supplierBankName: data.supplierBankName,
     supplierBankAccountName: data.supplierBankAccountName,
     supplierBankAccountNumber: data.supplierBankAccountNumber,

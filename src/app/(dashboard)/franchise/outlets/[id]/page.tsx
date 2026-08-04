@@ -33,6 +33,8 @@ import {
   fetchCustomerNetworkHistory,
   fetchOutletStock,
   fetchOutletStockTakes,
+  adjustOutletStockApi,
+  deleteOutletStockApi,
   fetchOutletSummaryRange,
   fetchOutletInvoiceDetail,
   updateOutletGeoApi,
@@ -49,6 +51,7 @@ import { fetchInboundOrders, type InboundOrderRow } from "@/lib/api/cool-catch";
 import { OutletPricingTab } from "@/components/franchise/outlet-pricing-tab";
 import { OutletEquipmentTab } from "@/components/franchise/outlet-equipment-tab";
 import { OutletEconomicsVmiTab } from "@/components/franchise/outlet-economics-vmi-tab";
+import { OutletMpesaTab } from "@/components/franchise/outlet-mpesa-tab";
 import { fetchFranchiseNetworkOutletById } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -68,8 +71,12 @@ import {
   Cpu,
   MapPin,
   Settings2,
+  Smartphone,
 } from "lucide-react";
 import { useCanWriteFranchise } from "@/lib/rbac/use-write-guard";
+import { RowActions } from "@/components/ui/row-actions";
+import { Textarea } from "@/components/ui/textarea";
+import { SheetFooter } from "@/components/ui/sheet";
 
 // ─── KPI Cards ───────────────────────────────────────────────────────────────
 
@@ -209,24 +216,36 @@ function CustomerHistorySheet({
 
 // ─── Stock tab ────────────────────────────────────────────────────────────────
 
-function StockTab({ outletOrgId }: { outletOrgId: string }) {
+function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: boolean }) {
   const [rows, setRows] = React.useState<OutletStockRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [latestTake, setLatestTake] = React.useState<OutletStockTakeRow | null>(null);
+  const [adjusting, setAdjusting] = React.useState<OutletStockRow | null>(null);
+  const [adjustMode, setAdjustMode] = React.useState<"SET" | "INCREASE" | "DECREASE">("SET");
+  const [adjustQty, setAdjustQty] = React.useState("");
+  const [adjustReason, setAdjustReason] = React.useState("");
+  const [savingAdjust, setSavingAdjust] = React.useState(false);
+  const [deleting, setDeleting] = React.useState<OutletStockRow | null>(null);
+  const [deleteReason, setDeleteReason] = React.useState("");
+  const [savingDelete, setSavingDelete] = React.useState(false);
+
+  const loadStock = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const stockRes = await fetchOutletStock(outletOrgId);
+      setRows(stockRes.items ?? []);
+    } catch {
+      toast.error("Could not load outlet stock");
+    } finally {
+      setLoading(false);
+    }
+  }, [outletOrgId]);
 
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setRows([]);
-    fetchOutletStock(outletOrgId)
-      .then((stockRes) => {
-        if (!cancelled) setRows(stockRes.items ?? []);
-      })
-      .catch(() => toast.error("Could not load outlet stock"))
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    void loadStock();
 
     fetchOutletStockTakes(outletOrgId)
       .then((takes) => {
@@ -236,14 +255,86 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
         }
       })
       .catch(() => {
-        /* Last count column is optional; HQ stock table should still render. */
         if (!cancelled) setLatestTake(null);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [outletOrgId]);
+  }, [outletOrgId, loadStock]);
+
+  const openAdjust = (row: OutletStockRow) => {
+    setAdjusting(row);
+    setAdjustMode("SET");
+    setAdjustQty(String(row.quantity));
+    setAdjustReason("");
+  };
+
+  const handleApplyAdjustment = async () => {
+    if (!adjusting) return;
+    const numeric = parseFloat(adjustQty);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      toast.error("Enter a valid quantity.");
+      return;
+    }
+    if (!adjustReason.trim()) {
+      toast.error("A reason is required.");
+      return;
+    }
+
+    try {
+      setSavingAdjust(true);
+      if (adjustMode === "SET") {
+        await adjustOutletStockApi(outletOrgId, {
+          stockLevelId: adjusting.id,
+          targetQuantity: numeric,
+          reason: adjustReason.trim(),
+        });
+      } else {
+        const magnitude = Math.abs(numeric);
+        if (magnitude <= 0) {
+          toast.error("Enter a quantity greater than zero.");
+          return;
+        }
+        const signedDelta = adjustMode === "INCREASE" ? magnitude : -magnitude;
+        await adjustOutletStockApi(outletOrgId, {
+          stockLevelId: adjusting.id,
+          quantityDelta: signedDelta,
+          reason: adjustReason.trim(),
+        });
+      }
+      toast.success("Outlet stock updated.");
+      setAdjusting(null);
+      await loadStock();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSavingAdjust(false);
+    }
+  };
+
+  const handleDeleteStock = async () => {
+    if (!deleting) return;
+    if (!deleteReason.trim()) {
+      toast.error("A reason is required.");
+      return;
+    }
+    try {
+      setSavingDelete(true);
+      await deleteOutletStockApi(outletOrgId, deleting.id, {
+        reason: deleteReason.trim(),
+        zeroFirst: true,
+      });
+      toast.success("Stock record removed. Quantities were zeroed and VMI snapshot updated.");
+      setDeleting(null);
+      setDeleteReason("");
+      await loadStock();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSavingDelete(false);
+    }
+  };
 
   // Build map of productId → latest counted qty from the most recent submitted take.
   const lastCountByProduct = React.useMemo(() => {
@@ -254,6 +345,39 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
   const filtered = search.trim()
     ? rows.filter((r) => r.productName.toLowerCase().includes(search.toLowerCase()) || r.sku.toLowerCase().includes(search.toLowerCase()))
     : rows;
+
+  const adjustPreview = React.useMemo(() => {
+    if (!adjusting) return null;
+    const current = adjusting.quantity;
+    const parsed = parseFloat(adjustQty);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return { valid: false as const, current };
+    }
+
+    let projected = current;
+    let delta = 0;
+    if (adjustMode === "SET") {
+      projected = parsed;
+      delta = parsed - current;
+    } else if (adjustMode === "INCREASE") {
+      delta = parsed;
+      projected = current + parsed;
+    } else {
+      delta = -parsed;
+      projected = current - parsed;
+    }
+
+    const valid = projected >= 0 && projected >= adjusting.reservedQuantity;
+    return {
+      valid,
+      current,
+      projected,
+      delta,
+      reserved: adjusting.reservedQuantity,
+      negative: projected < 0,
+      belowReserved: projected >= 0 && projected < adjusting.reservedQuantity,
+    };
+  }, [adjusting, adjustMode, adjustQty]);
 
   const columns = [
     { id: "sku", header: "SKU", accessor: (r: OutletStockRow) => <span className="font-mono text-xs">{r.sku}</span> },
@@ -283,6 +407,35 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
         );
       },
     },
+    ...(canWrite
+      ? [
+          {
+            id: "actions",
+            header: "",
+            accessor: (r: OutletStockRow) => (
+              <RowActions
+                actions={[
+                  {
+                    label: "Adjust quantity",
+                    icon: "Pencil",
+                    onClick: () => openAdjust(r),
+                  },
+                  {
+                    label: "Remove stock record",
+                    icon: "Trash2",
+                    variant: "destructive" as const,
+                    onClick: () => {
+                      setDeleting(r);
+                      setDeleteReason("");
+                    },
+                  },
+                ]}
+              />
+            ),
+            className: "w-[50px]",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -305,6 +458,183 @@ function StockTab({ outletOrgId }: { outletOrgId: string }) {
         <span className="text-xs text-muted-foreground ml-auto">{rows.length} SKU{rows.length !== 1 ? "s" : ""}</span>
       </div>
       <DataTable data={filtered} columns={columns} emptyMessage={loading ? "Loading stock…" : "No stock records for this outlet."} />
+
+      {adjusting ? (
+        <Sheet open onOpenChange={(open) => !open && setAdjusting(null)}>
+          <SheetContent side="right" className="w-full sm:max-w-md">
+            <SheetHeader>
+              <SheetTitle>Adjust outlet stock</SheetTitle>
+              <SheetDescription>
+                {adjusting.productName} · {adjusting.warehouseName}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">On hand</div>
+                  <div className="text-lg font-semibold">{adjusting.quantity.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">Available</div>
+                  <div className="text-lg font-semibold">{adjusting.available.toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Adjustment mode</Label>
+                <div className="inline-flex rounded-md border bg-muted/40 p-0.5 text-xs">
+                  {(["SET", "INCREASE", "DECREASE"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`px-2 py-1 rounded-sm ${
+                        adjustMode === mode ? "bg-background shadow-sm" : "text-muted-foreground"
+                      }`}
+                      onClick={() => {
+                        setAdjustMode(mode);
+                        if (mode === "SET") setAdjustQty(String(adjusting.quantity));
+                        else setAdjustQty("");
+                      }}
+                    >
+                      {mode === "SET" ? "Set to" : mode === "INCREASE" ? "Increase" : "Decrease"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{adjustMode === "SET" ? "New on-hand quantity" : "Quantity change"}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={adjustQty}
+                  onChange={(e) => setAdjustQty(e.target.value)}
+                />
+              </div>
+              {adjustPreview && adjustQty.trim() !== "" ? (
+                <div
+                  className={`rounded-md border px-3 py-2.5 text-sm ${
+                    adjustPreview.valid
+                      ? "border-blue-300/70 bg-blue-50 text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50"
+                      : "border-destructive/40 bg-destructive/5 text-destructive"
+                  }`}
+                >
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                    Preview
+                  </div>
+                  {adjustPreview.valid || adjustPreview.negative || adjustPreview.belowReserved ? (
+                    <p className="font-medium tabular-nums">
+                      <span>{adjustPreview.current.toLocaleString()}</span>
+                      <span className="mx-1.5 text-muted-foreground">on hand</span>
+                      {adjustMode === "SET" ? (
+                        <>
+                          <span className="mx-1 text-muted-foreground">→</span>
+                          <span>set to {parseFloat(adjustQty).toLocaleString()}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="mx-1 text-muted-foreground">→</span>
+                          <span>
+                            {adjustMode === "INCREASE" ? "increase" : "decrease"} by{" "}
+                            {parseFloat(adjustQty).toLocaleString()}
+                          </span>
+                        </>
+                      )}
+                      <span className="mx-1 text-muted-foreground">→</span>
+                      <span className={adjustPreview.valid ? "text-emerald-700 dark:text-emerald-400" : ""}>
+                        will be {adjustPreview.projected.toLocaleString()}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">Enter a valid quantity to preview the new on-hand total.</p>
+                  )}
+                  {adjustPreview.negative ? (
+                    <p className="mt-1 text-xs">Cannot reduce below zero.</p>
+                  ) : adjustPreview.belowReserved ? (
+                    <p className="mt-1 text-xs">
+                      Cannot reduce below reserved quantity ({adjustPreview.reserved.toLocaleString()}).
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <Label>Reason (required)</Label>
+                <Textarea
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  placeholder="e.g. Correcting duplicate GRN posting at Ngong Rd"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <SheetFooter>
+              <Button variant="outline" onClick={() => setAdjusting(null)} disabled={savingAdjust}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void handleApplyAdjustment()}
+                disabled={
+                  savingAdjust ||
+                  !adjustReason.trim() ||
+                  !adjustPreview?.valid ||
+                  !adjustQty.trim()
+                }
+              >
+                {savingAdjust ? "Saving…" : "Apply adjustment"}
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      ) : null}
+
+      {deleting ? (
+        <Sheet
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeleting(null);
+              setDeleteReason("");
+            }
+          }}
+        >
+          <SheetContent side="right" className="w-full sm:max-w-md">
+            <SheetHeader>
+              <SheetTitle>Remove stock record</SheetTitle>
+              <SheetDescription>
+                This will zero out {deleting.quantity.toLocaleString()} on hand for {deleting.productName}, remove the
+                stock row, and refresh the VMI snapshot. Movement history is preserved.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-2 py-4">
+              <Label>Reason (required)</Label>
+              <Textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="e.g. Product was never stocked at this outlet"
+                rows={3}
+              />
+            </div>
+            <SheetFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeleting(null);
+                  setDeleteReason("");
+                }}
+                disabled={savingDelete}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => void handleDeleteStock()}
+                disabled={savingDelete || !deleteReason.trim()}
+              >
+                {savingDelete ? "Removing…" : "Remove record"}
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      ) : null}
     </div>
   );
 }
@@ -858,6 +1188,7 @@ export default function OutletDetailPage() {
   const searchParams = useSearchParams();
   const outletOrgId = params.id as string;
   const defaultTab = searchParams.get("tab") ?? "overview";
+  const canWrite = useCanWriteFranchise();
 
   const [summary, setSummary] = React.useState<OutletSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = React.useState(true);
@@ -944,6 +1275,10 @@ export default function OutletDetailPage() {
               Pricing
             </TabsTrigger>
             <TabsTrigger value="vmi">Economics & VMI</TabsTrigger>
+            <TabsTrigger value="mpesa" className="gap-1.5">
+              <Smartphone size={14} />
+              M-Pesa
+            </TabsTrigger>
             <TabsTrigger value="settings" className="gap-1.5">
               <Settings2 size={14} />
               Settings
@@ -959,7 +1294,7 @@ export default function OutletDetailPage() {
           </TabsContent>
 
           <TabsContent value="stock">
-            <StockTab outletOrgId={outletOrgId} />
+            <StockTab outletOrgId={outletOrgId} canWrite={canWrite} />
           </TabsContent>
 
           <TabsContent value="receipts">
@@ -988,6 +1323,10 @@ export default function OutletDetailPage() {
 
           <TabsContent value="vmi">
             <OutletEconomicsVmiTab outletOrgId={outletOrgId} />
+          </TabsContent>
+
+          <TabsContent value="mpesa">
+            <OutletMpesaTab outletOrgId={outletOrgId} outletName={outletName} />
           </TabsContent>
 
           <TabsContent value="settings">

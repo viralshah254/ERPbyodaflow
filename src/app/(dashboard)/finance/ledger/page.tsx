@@ -13,7 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
-import { fetchFinanceAccountsApi, fetchFinancePeriodsApi, fetchLedgerEntriesApi } from "@/lib/api/finance";
+import {
+  fetchFinanceAccountsApi,
+  fetchFinancePeriodsApi,
+  fetchLedgerEntriesPageApi,
+  type LedgerEntry,
+} from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
@@ -24,21 +29,30 @@ import { PageHeader } from "@/components/layout/page-header";
 
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-
-type LedgerEntry = Awaited<ReturnType<typeof fetchLedgerEntriesApi>>[number];
+const SEARCH_DEBOUNCE_MS = 400;
 
 export default function LedgerPage() {
   const baseCurrency = useBaseCurrency();
-  const [search, setSearch] = React.useState("");
+  const [searchInput, setSearchInput] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [accountId, setAccountId] = React.useState("");
   const [periodId, setPeriodId] = React.useState("");
   const [accounts, setAccounts] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
   const [entries, setEntries] = React.useState<LedgerEntry[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
   const [postingSource, setPostingSource] = React.useState<{ sourceType: string; sourceId: string } | null>(null);
   const [pageOffset, setPageOffset] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
 
   React.useEffect(() => {
     Promise.all([fetchFinanceAccountsApi(), fetchFinancePeriodsApi()])
@@ -50,37 +64,39 @@ export default function LedgerPage() {
       .catch((error) => toast.error((error as Error).message || "Failed to load ledger filters."));
   }, []);
 
-  React.useEffect(() => {
-    setLoading(true);
-    fetchLedgerEntriesApi(accountId || undefined, periodId || undefined)
-      .then((data) => {
-        setEntries(data);
-        setPageOffset(0);
-      })
-      .catch((error) => toast.error((error as Error).message || "Failed to load ledger entries."))
-      .finally(() => setLoading(false));
-  }, [accountId, periodId]);
-
-  const filtered = React.useMemo(() => {
-    if (!search.trim()) return entries;
-    const query = search.trim().toLowerCase();
-    return entries.filter(
-      (entry) =>
-        entry.accountCode.toLowerCase().includes(query) ||
-        entry.accountName.toLowerCase().includes(query) ||
-        entry.description.toLowerCase().includes(query) ||
-        entry.documentNumber.toLowerCase().includes(query)
-    );
-  }, [entries, search]);
-
-  React.useEffect(() => {
-    setPageOffset(0);
-  }, [search]);
-
-  const paginatedRows = React.useMemo(
-    () => filtered.slice(pageOffset, pageOffset + pageSize),
-    [filtered, pageOffset, pageSize]
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchLedgerEntriesPageApi({
+          accountId: accountId || undefined,
+          periodId: periodId || undefined,
+          search: debouncedSearch || undefined,
+          limit: pageSize,
+          cursor: String(offset),
+        });
+        setEntries(page.entries);
+        setPageOffset(page.offset);
+        setTotalCount(page.total);
+        setHasMore(page.hasMore);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error((error as Error).message || "Failed to load ledger entries.");
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [accountId, debouncedSearch, pageSize, periodId]
   );
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
+
+  const loading = initialLoading || fetching;
 
   const columns = React.useMemo(
     () => [
@@ -93,7 +109,7 @@ export default function LedgerPage() {
         id: "account",
         header: "Account",
         accessor: (row: LedgerEntry) => (
-          <span className="font-medium">{row.accountCode} \u00b7 {row.accountName}</span>
+          <span className="font-medium">{row.accountCode} · {row.accountName}</span>
         ),
       },
       {
@@ -121,7 +137,7 @@ export default function LedgerPage() {
         headerClassName: "text-right",
         className: "text-right",
         accessor: (row: LedgerEntry) =>
-          row.debit > 0 ? formatMoney(row.debit, baseCurrency) : "\u2013",
+          row.debit > 0 ? formatMoney(row.debit, baseCurrency) : "–",
       },
       {
         id: "credit",
@@ -129,7 +145,7 @@ export default function LedgerPage() {
         headerClassName: "text-right",
         className: "text-right",
         accessor: (row: LedgerEntry) =>
-          row.credit > 0 ? formatMoney(row.credit, baseCurrency) : "\u2013",
+          row.credit > 0 ? formatMoney(row.credit, baseCurrency) : "–",
       },
       {
         id: "balance",
@@ -155,7 +171,6 @@ export default function LedgerPage() {
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        {/* Filters */}
         <Card className="shrink-0">
           <CardHeader>
             <CardTitle>Filters</CardTitle>
@@ -167,10 +182,10 @@ export default function LedgerPage() {
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="search"
-                    placeholder="Search accounts or descriptions\u2026"
+                    placeholder="Search accounts or descriptions…"
                     className="pl-9"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                   />
                 </div>
               </div>
@@ -179,7 +194,7 @@ export default function LedgerPage() {
                 <SelectContent>
                   <SelectItem value="__all_accounts">All accounts</SelectItem>
                   {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>{account.code} \u00b7 {account.name}</SelectItem>
+                    <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -188,7 +203,7 @@ export default function LedgerPage() {
                 <SelectContent>
                   <SelectItem value="__all_periods">All periods</SelectItem>
                   {periods.map((period) => (
-                    <SelectItem key={period.id} value={period.id}>{period.fiscalYear} \u00b7 P{period.periodNumber}</SelectItem>
+                    <SelectItem key={period.id} value={period.id}>{period.fiscalYear} · P{period.periodNumber}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -196,16 +211,15 @@ export default function LedgerPage() {
           </CardContent>
         </Card>
 
-        {/* Ledger Table */}
         <Card className="shrink-0">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Journal Entries</CardTitle>
               {!loading && (
                 <p className="text-sm text-muted-foreground mt-1">
-                  {filtered.length === 0
+                  {totalCount === 0
                     ? "No entries match your filters."
-                    : `${filtered.length} ${filtered.length === 1 ? "entry" : "entries"} found`}
+                    : `${totalCount} ${totalCount === 1 ? "entry" : "entries"} found`}
                 </p>
               )}
             </div>
@@ -213,9 +227,9 @@ export default function LedgerPage() {
           </CardHeader>
           <CardContent className="p-0">
             <DataTable<LedgerEntry>
-              data={paginatedRows}
+              data={entries}
               columns={columns}
-              emptyMessage={loading ? "Loading entries\u2026" : "No ledger entries found."}
+              emptyMessage={loading ? "Loading entries…" : "No ledger entries found."}
               scrollMode="natural"
               size="comfortable"
             />
@@ -226,12 +240,18 @@ export default function LedgerPage() {
           className="shrink-0"
           pageOffset={pageOffset}
           pageSize={pageSize}
-          itemCount={paginatedRows.length}
-          totalCount={filtered.length || undefined}
-          hasMore={pageOffset + pageSize < filtered.length}
+          itemCount={entries.length}
+          totalCount={totalCount || undefined}
+          hasMore={hasMore}
           loading={loading}
-          onPrevious={() => setPageOffset(Math.max(0, pageOffset - pageSize))}
-          onNext={() => setPageOffset(pageOffset + pageSize)}
+          onPrevious={() => {
+            if (pageOffset <= 0 || loading) return;
+            void loadPage(Math.max(0, pageOffset - pageSize));
+          }}
+          onNext={() => {
+            if (!hasMore || loading) return;
+            void loadPage(pageOffset + pageSize);
+          }}
           entityLabel="entries"
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           onPageSizeChange={(size) => {

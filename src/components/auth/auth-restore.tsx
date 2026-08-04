@@ -87,6 +87,7 @@ export function AuthRestore() {
                 useOrgContextStore.getState().hydrateFromBackend({
                   orgType: session.org.orgType,
                   templateId: session.orgContext.templateId,
+                  industryCategory: session.orgContext.industryCategory,
                   enabledModules: session.orgContext.enabledModules,
                   featureFlags: session.orgContext.featureFlags,
                   terminology: session.orgContext.terminology,

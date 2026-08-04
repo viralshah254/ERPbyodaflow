@@ -1,0 +1,62 @@
+"use client";
+
+import { useEffect } from "react";
+import { toast } from "sonner";
+import { attachForegroundPushListener } from "@/lib/push-notifications";
+import { normalizeNotificationWebRoute } from "@/lib/drill-through";
+
+type PushDetail = { title?: string; body?: string; routeWeb?: string };
+
+function showPushToast(detail: PushDetail): void {
+  const title = detail.title?.trim() || "OdaFlow";
+  const body = detail.body?.trim() || "";
+  const routeWeb = normalizeNotificationWebRoute(detail.routeWeb);
+
+  toast(title, {
+    description: body || undefined,
+    action: routeWeb
+      ? {
+          label: "Open",
+          onClick: () => {
+            window.location.assign(routeWeb);
+          },
+        }
+      : undefined,
+  });
+}
+
+/** In-app toast when a push arrives while the ERP tab is open (foreground). */
+export function PushForegroundToast() {
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+
+    void attachForegroundPushListener().then((unsub) => {
+      unsubscribe = unsub;
+    });
+
+    const onCustomEvent = (event: Event) => {
+      showPushToast((event as CustomEvent<PushDetail>).detail ?? {});
+    };
+
+    const onServiceWorkerMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; title?: string; body?: string; routeWeb?: string };
+      if (data?.type !== "odaflow:push") return;
+      showPushToast(data);
+    };
+
+    window.addEventListener("odaflow:push-message", onCustomEvent);
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.onmessage = onServiceWorkerMessage;
+    }
+
+    return () => {
+      unsubscribe?.();
+      window.removeEventListener("odaflow:push-message", onCustomEvent);
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.onmessage = null;
+      }
+    };
+  }, []);
+
+  return null;
+}

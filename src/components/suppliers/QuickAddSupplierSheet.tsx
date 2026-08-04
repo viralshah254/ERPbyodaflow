@@ -16,7 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createPartyApi } from "@/lib/api/parties";
 import type { CoolcatchSupplierKind, PartyRow } from "@/lib/types/masters";
-import { supplierMasterFormToPayload } from "@/components/suppliers/SupplierMasterFormFields";
+import {
+  emptySupplierMasterForm,
+  supplierMasterFormToPayload,
+} from "@/components/suppliers/SupplierMasterFormFields";
 
 interface QuickAddSupplierSheetProps {
   open: boolean;
@@ -80,24 +83,14 @@ export function QuickAddSupplierSheet({
 
   const onSubmit = async (values: FormValues) => {
     const payload = supplierMasterFormToPayload({
+      ...emptySupplierMasterForm("KES"),
       coolcatchSupplierKind: values.coolcatchSupplierKind,
       name: values.name,
       contactPersonFirstName: values.contactPersonFirstName,
       contactPersonLastName: values.contactPersonLastName,
       email: values.email,
       phone: values.phone,
-      locationFormattedAddress: "",
-      addressLine1: "",
-      addressCity: "",
-      addressRegion: "",
-      addressCountry: "",
-      paymentTermsId: "",
-      defaultCurrency: "KES",
       taxId: values.taxId,
-      supplierBankName: "",
-      supplierBankAccountName: "",
-      supplierBankAccountNumber: "",
-      supplierBankBranchName: "",
     });
     const created = await createPartyApi(payload);
     const descParts = [created.code, values.phone.trim(), values.email.trim(), values.taxId.trim()].filter(Boolean);

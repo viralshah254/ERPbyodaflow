@@ -19,13 +19,19 @@ function IconByName({ name, className }: { name: string; className?: string }) {
 
 export default function SettingsHubPage() {
   const permissions = useAuthStore((s) => s.permissions);
+  const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
 
   const visibleGroups = React.useMemo(() => {
     return SETTINGS_HUB_GROUPS.map((g) => ({
       ...g,
-      links: g.links.filter((l) => canSeeHubItem(permissions, l.requiresPermissions)),
+      links: g.links.filter((l) =>
+        canSeeHubItem(permissions, l.requiresPermissions, {
+          isPlatformOperator,
+          requiresPlatformOperator: l.requiresPlatformOperator,
+        })
+      ),
     })).filter((g) => g.links.length > 0);
-  }, [permissions]);
+  }, [permissions, isPlatformOperator]);
 
   const hasAnySettingsLink = visibleGroups.length > 0;
 

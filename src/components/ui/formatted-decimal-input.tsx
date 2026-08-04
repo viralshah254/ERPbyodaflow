@@ -22,7 +22,14 @@ export function FormattedDecimalInput({
   ...props
 }: FormattedDecimalInputProps) {
   const [focused, setFocused] = React.useState(false);
-  const display = focused ? value : value ? formatDecimalDisplay(value) : "";
+  const [draft, setDraft] = React.useState(value);
+
+  // Sync from parent when blurred (programmatic updates, line switches, etc.)
+  React.useEffect(() => {
+    if (!focused) setDraft(value);
+  }, [value, focused]);
+
+  const display = focused ? draft : draft ? formatDecimalDisplay(draft) : "";
 
   return (
     <Input
@@ -33,15 +40,25 @@ export function FormattedDecimalInput({
       className={cn("tabular-nums", className)}
       value={display}
       onFocus={(e) => {
+        setDraft(value);
         setFocused(true);
         onFocus?.(e);
       }}
       onBlur={(e) => {
         setFocused(false);
+        const normalized = sanitizeDecimalInput(draft);
+        const final =
+          normalized.endsWith(".") && normalized.length > 1
+            ? normalized.slice(0, -1)
+            : normalized;
+        setDraft(final);
+        if (final !== value) onValueChange(final);
         onBlur?.(e);
       }}
       onChange={(e) => {
-        onValueChange(sanitizeDecimalInput(e.target.value));
+        const next = sanitizeDecimalInput(e.target.value);
+        setDraft(next);
+        onValueChange(next);
       }}
     />
   );

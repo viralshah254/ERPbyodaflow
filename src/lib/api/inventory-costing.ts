@@ -44,6 +44,56 @@ export async function fetchLatestInventoryCosting(): Promise<InventoryCostingSna
   return apiRequest<InventoryCostingSnapshot>("/api/inventory/costing/latest");
 }
 
+export type InventoryValuationPageResponse = InventoryValuationResponse & {
+  total?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+};
+
+export async function fetchInventoryValuationPage(params?: {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+}): Promise<{
+  ranAt: string | null;
+  method: string | null;
+  summary: InventoryValuationResponse["summary"];
+  rows: InventoryValuationResponse["rows"];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}> {
+  requireLiveApi("Inventory valuation");
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 25;
+  const qs = new URLSearchParams();
+  qs.set("limit", String(lim));
+  if (params?.cursor) qs.set("cursor", params.cursor);
+  if (params?.search?.trim()) qs.set("search", params.search.trim());
+  const payload = await apiRequest<InventoryValuationPageResponse>("/api/inventory/valuation", { params: qs });
+  const limit = typeof payload.limit === "number" ? payload.limit : lim;
+  const offset =
+    typeof payload.offset === "number" ? payload.offset : params?.cursor ? Number(params.cursor) || 0 : 0;
+  const rows = payload.rows ?? [];
+  const total = typeof payload.total === "number" ? payload.total : rows.length;
+  const hasMore =
+    typeof payload.hasMore === "boolean" ? payload.hasMore : offset + rows.length < total;
+  return {
+    ranAt: payload.ranAt,
+    method: payload.method,
+    summary: payload.summary ?? [],
+    rows,
+    total,
+    limit,
+    offset,
+    hasMore,
+    nextCursor: payload.nextCursor ?? (hasMore ? String(offset + rows.length) : null),
+  };
+}
+
 export async function fetchInventoryValuation(): Promise<InventoryValuationResponse> {
   requireLiveApi("Inventory valuation");
   return apiRequest<InventoryValuationResponse>("/api/inventory/valuation");

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useUIStore } from "@/stores/ui-store";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,6 @@ import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
 
 export function Header() {
-  const router = useRouter();
   const { user, currentBranch, permissions, logout } = useAuthStore();
   const copilotEnabled = useCopilotFeatureEnabled();
   const canSeeOrgProfile = permissions.includes("settings.org.read") || permissions.includes("*");
@@ -35,11 +34,20 @@ export function Header() {
   const userInitials = getUserInitials(user);
 
   const handleLogout = async () => {
-    await unregisterWebPushToken();
-    await firebaseSignOut();
+    try {
+      await unregisterWebPushToken();
+    } catch {
+      // best-effort before token is cleared
+    }
     setApiAuth({ bearerToken: undefined });
     logout();
-    router.push("/");
+    useOrgContextStore.getState().reset();
+    try {
+      await firebaseSignOut();
+    } catch {
+      // ignore if Firebase is unavailable or already signed out
+    }
+    window.location.assign("/login");
   };
 
   return (
@@ -133,7 +141,12 @@ export function Header() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleLogout} className="focus:bg-destructive/10 focus:text-destructive">
+          <DropdownMenuItem
+            onSelect={() => {
+              void handleLogout();
+            }}
+            className="focus:bg-destructive/10 focus:text-destructive"
+          >
             <LogOut className="mr-2 h-4 w-4" />
             <span>Log out</span>
           </DropdownMenuItem>

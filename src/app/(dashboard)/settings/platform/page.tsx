@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,7 @@ import {
   type PlatformTenantRow,
 } from "@/lib/api/platform";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
 
 type TenantFormState = {
   name: string;
@@ -178,6 +180,18 @@ function parseList(value: string): string[] {
 }
 
 export default function PlatformSettingsPage() {
+  const router = useRouter();
+  const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
+  const isLoading = useAuthStore((s) => s.isLoading);
+
+  React.useEffect(() => {
+    if (isLoading) return;
+    if (!isPlatformOperator) {
+      toast.error("Platform console requires the OdaFlow platform account. Sign in as your platform admin user.");
+      router.replace("/settings");
+    }
+  }, [isLoading, isPlatformOperator, router]);
+
   const [summary, setSummary] = React.useState<PlatformSummary | null>(null);
   const [auditRows, setAuditRows] = React.useState<PlatformAuditRow[]>([]);
   const [tenants, setTenants] = React.useState<PlatformTenantRow[]>([]);
@@ -224,11 +238,20 @@ export default function PlatformSettingsPage() {
   );
 
   React.useEffect(() => {
+    if (isLoading || !isPlatformOperator) return;
     setLoading(true);
     refresh()
       .catch((error) => toast.error((error as Error).message))
       .finally(() => setLoading(false));
-  }, [refresh]);
+  }, [refresh, isLoading, isPlatformOperator]);
+
+  if (isLoading || !isPlatformOperator) {
+    return (
+      <PageShell>
+        <PageHeader title="Platform control" description="Loading session…" breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Platform" }]} />
+      </PageShell>
+    );
+  }
 
   const openTenant = (tenant: PlatformTenantRow) => {
     setEditingTenant(tenant);

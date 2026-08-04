@@ -20,11 +20,13 @@ import {
 import {
   fetchFranchiseInboundOrderDetail,
   acceptInboundOrder,
+  rejectInboundOrder,
   type FranchiseInboundOrderDetail,
 } from "@/lib/api/cool-catch";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { FranchiseInboundRejectDialog } from "@/components/franchise/franchise-inbound-reject-dialog";
 
 function FranchiseInboundDetailSkeleton() {
   return (
@@ -65,6 +67,8 @@ export default function FranchiseInboundOrderDetailPage() {
   const [doc, setDoc] = React.useState<FranchiseInboundOrderDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [accepting, setAccepting] = React.useState(false);
+  const [rejecting, setRejecting] = React.useState(false);
+  const [rejectOpen, setRejectOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -97,6 +101,21 @@ export default function FranchiseInboundOrderDetailPage() {
     }
   };
 
+  const handleRejectConfirm = async (reason?: string) => {
+    if (!doc) return;
+    setRejecting(true);
+    try {
+      await rejectInboundOrder(outletOrgId, prId, reason);
+      toast.success(`Purchase request ${doc.number} rejected.`);
+      setRejectOpen(false);
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message ?? "Failed to reject order.");
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   if (loading) {
     return <FranchiseInboundDetailSkeleton />;
   }
@@ -114,7 +133,8 @@ export default function FranchiseInboundOrderDetailPage() {
     );
   }
 
-  const canAccept = doc.status !== "CONVERTED" && doc.status !== "CANCELLED";
+  const canAct =
+    doc.status !== "CONVERTED" && doc.status !== "CANCELLED" && doc.status !== "RECEIVED";
 
   return (
     <PageShell>
@@ -135,22 +155,35 @@ export default function FranchiseInboundOrderDetailPage() {
                 Back to list
               </Link>
             </Button>
-            {canAccept ? (
-              <Button onClick={() => void handleAccept()} disabled={accepting}>
-                {accepting ? (
-                  <>
-                    <Icons.Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Accepting…
-                  </>
-                ) : (
-                  <>
-                    <Icons.CheckCircle className="h-4 w-4 mr-2" />
-                    Accept → sales order
-                  </>
-                )}
-              </Button>
+            {canAct ? (
+              <>
+                <Button onClick={() => void handleAccept()} disabled={accepting || rejecting}>
+                  {accepting ? (
+                    <>
+                      <Icons.Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Accepting…
+                    </>
+                  ) : (
+                    <>
+                      <Icons.CheckCircle className="h-4 w-4 mr-2" />
+                      Accept → sales order
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => setRejectOpen(true)}
+                  disabled={accepting || rejecting}
+                >
+                  <Icons.XCircle className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+              </>
             ) : doc.status === "CONVERTED" ? (
               <span className="text-sm text-muted-foreground">Already converted at HQ.</span>
+            ) : doc.status === "CANCELLED" ? (
+              <span className="text-sm text-muted-foreground">Rejected at HQ.</span>
             ) : null}
           </div>
         }
@@ -183,6 +216,14 @@ export default function FranchiseInboundOrderDetailPage() {
               <div className="text-muted-foreground">Total</div>
               <div className="font-medium">{formatMoney(doc.total, doc.currency, { decimals: 0 })}</div>
             </div>
+            {doc.hqRejectionReason ? (
+              <div className="sm:col-span-2">
+                <div className="text-muted-foreground">Rejection reason</div>
+                <div className="font-medium mt-1 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-destructive">
+                  {doc.hqRejectionReason}
+                </div>
+              </div>
+            ) : null}
             {doc.linkedHqSalesOrder ? (
               <div className="sm:col-span-2">
                 <div className="text-muted-foreground">HQ sales order</div>
@@ -256,6 +297,14 @@ export default function FranchiseInboundOrderDetailPage() {
           </CardContent>
         </Card>
       </div>
+      <FranchiseInboundRejectDialog
+        target={doc && rejectOpen ? { prNumber: doc.number, outletName: doc.outletName } : null}
+        onOpenChange={(open) => {
+          if (!rejecting) setRejectOpen(open);
+        }}
+        rejecting={rejecting}
+        onConfirm={handleRejectConfirm}
+      />
     </PageShell>
   );
 }

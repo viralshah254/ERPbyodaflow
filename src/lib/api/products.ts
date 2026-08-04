@@ -17,6 +17,7 @@ type BackendProduct = {
   updatedAt?: string;
   description?: string;
   currentStock?: number;
+  availableQuantity?: number;
 };
 
 export type ProductPayload = {
@@ -50,6 +51,8 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
     status: item.status ?? "ACTIVE",
     description: item.description,
     currentStock: typeof item.currentStock === "number" ? item.currentStock : undefined,
+    availableQuantity:
+      typeof item.availableQuantity === "number" ? item.availableQuantity : undefined,
     updatedAt: item.updatedAt,
   };
 }
@@ -69,13 +72,10 @@ export type FetchProductsOptions = {
   cursor?: string;
   /** Restrict to these product ids (max 100 on the server). */
   ids?: string[];
-  /**
-   * Whether to include on-hand stock totals in each row.
-   * Pass false for document line pickers that don't display stock — this skips
-   * a StockLevel aggregate and cuts search latency significantly.
-   * Defaults to true when omitted (server decides based on whether search is present).
-   */
+  /** Whether to include on-hand stock totals in each row. */
   includeStock?: boolean;
+  /** Restrict stock aggregation to this fulfilment warehouse (with includeStock). */
+  warehouseId?: string;
 };
 
 export type FetchProductsPageResult = {
@@ -98,6 +98,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.productFamily?.trim()) params.set("productFamily", opts.productFamily.trim());
   if (opts.stockBand) params.set("stockBand", opts.stockBand);
   if (opts.includeStock !== undefined) params.set("includeStock", opts.includeStock ? "true" : "false");
+  if (opts.warehouseId?.trim()) params.set("warehouseId", opts.warehouseId.trim());
   const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 25;
   params.set("limit", String(lim));
   if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);

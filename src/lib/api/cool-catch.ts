@@ -690,6 +690,57 @@ export async function syncVmIFranchiseSnapshotsFromLedger(body?: {
   );
 }
 
+export async function fetchCashWeightAuditLinesPage(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+  status?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<{
+  items: CashWeightAuditLineRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  totals: { orderedQty: number; paidWeightKg: number; receivedWeightKg: number };
+}> {
+  requireLiveApi("Cash-weight audit lines");
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 25;
+  const query = listParams({
+    dateFrom: params?.dateFrom,
+    dateTo: params?.dateTo,
+    status: params?.status,
+  });
+  query.limit = String(lim);
+  if (params?.cursor) query.cursor = params.cursor;
+  const res = await apiRequest<{
+    items: CashWeightAuditLineRow[];
+    total?: number;
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+    totals?: { orderedQty: number; paidWeightKg: number; receivedWeightKg: number };
+  }>("/api/purchasing/cash-weight-audit", { params: query });
+  const limit = typeof res.limit === "number" ? res.limit : lim;
+  const offset =
+    typeof res.offset === "number" ? res.offset : params?.cursor ? Number(params.cursor) || 0 : 0;
+  const items = res.items ?? [];
+  const total = typeof res.total === "number" ? res.total : items.length;
+  const hasMore =
+    typeof res.hasMore === "boolean" ? res.hasMore : offset + items.length < total;
+  return {
+    items,
+    total,
+    limit,
+    offset,
+    hasMore,
+    nextCursor: res.nextCursor ?? (hasMore ? String(offset + items.length) : null),
+    totals: res.totals ?? { orderedQty: 0, paidWeightKg: 0, receivedWeightKg: 0 },
+  };
+}
+
 export async function fetchCashWeightAuditLines(params?: {
   dateFrom?: string;
   dateTo?: string;
@@ -1441,6 +1492,9 @@ export interface InboundOrderRow {
   lineCount?: number;
   /** Present when HQ spawned a sales order from this outlet PR. */
   linkedHqSalesOrder?: { id: string; number: string; status: string } | null;
+  orderChannel?: string | null;
+  /** True when HQ placed the order on behalf of the outlet (auto-accepted). */
+  hqCreated?: boolean;
   lines: InboundOrderLine[];
 }
 
@@ -1512,6 +1566,7 @@ export type FranchiseInboundOrderDetail = Omit<InboundOrderRow, "lines"> & {
   notes: string | null;
   partyId: string | null;
   supplierName: string | null;
+  hqRejectionReason?: string;
   lines: Array<InboundOrderLine & { unit?: string; description?: string }>;
 };
 
@@ -1534,6 +1589,77 @@ export async function acceptInboundOrder(
   });
 }
 
+export async function rejectInboundOrder(
+  childOrgId: string,
+  prId: string,
+  reason?: string
+): Promise<{ prId: string; prNumber: string; status: string }> {
+  return apiRequest(
+    `/api/franchise/network/inbound-orders/${encodeURIComponent(childOrgId)}/${encodeURIComponent(prId)}/reject`,
+    {
+      method: "POST",
+      body: reason?.trim() ? { reason: reason.trim() } : {},
+    }
+  );
+}
+
+export type StockRequestCatalogItem = {
+  id: string;
+  sku?: string;
+  name: string;
+  productFamily?: string;
+  unit?: string;
+  unitPrice: number;
+  transferReferencePrice?: number | null;
+  suggestedRetail?: number | null;
+  pricingCurrency?: string;
+};
+
+export async function fetchOutletStockRequestCatalogPage(
+  outletOrgId: string,
+  params?: { search?: string; limit?: number; cursor?: string }
+): Promise<{
+  items: StockRequestCatalogItem[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}> {
+  const p = new URLSearchParams();
+  const lim = params?.limit != null ? Math.min(Math.max(params.limit, 1), 100) : 50;
+  p.set("limit", String(lim));
+  if (params?.cursor != null && params.cursor !== "") p.set("cursor", params.cursor);
+  if (params?.search?.trim()) p.set("search", params.search.trim());
+  const qs = p.toString();
+  return apiRequest(
+    `/api/franchise/network/outlets/${encodeURIComponent(outletOrgId)}/stock-request-catalog${qs ? `?${qs}` : ""}`
+  );
+}
+
+export type CreateManualFranchiseOrderLine = {
+  productId: string;
+  quantity: number;
+  unitPrice?: number;
+};
+
+export async function createManualFranchiseOrder(
+  outletOrgId: string,
+  body: {
+    lines: CreateManualFranchiseOrderLine[];
+    currency?: string;
+    notes?: string;
+    date?: string;
+  }
+): Promise<{ prId: string; prNumber: string; soId: string; soNumber: string; outletName: string }> {
+  return apiRequest(
+    `/api/franchise/network/inbound-orders/${encodeURIComponent(outletOrgId)}/create-manual`,
+    {
+      method: "POST",
+      body,
+    }
+  );
+}
+
 // ─── Franchise Stock (HQ reads outlet stock) ──────────────────────────────────
 
 export interface OutletStockRow {
@@ -1550,6 +1676,38 @@ export interface OutletStockRow {
 
 export async function fetchOutletStock(outletOrgId: string): Promise<{ items: OutletStockRow[] }> {
   return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock`);
+}
+
+export async function adjustOutletStockApi(
+  outletOrgId: string,
+  payload: {
+    stockLevelId: string;
+    quantityDelta?: number;
+    targetQuantity?: number;
+    reason?: string;
+    comment?: string;
+  }
+): Promise<{ adjustmentId: string; number: string; stockLevelId: string; quantity: number; available: number }> {
+  requireLiveApi("Adjust outlet stock");
+  return apiRequest(`/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock-adjustments`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function deleteOutletStockApi(
+  outletOrgId: string,
+  stockLevelId: string,
+  payload?: { reason?: string; zeroFirst?: boolean }
+): Promise<{ deleted: boolean; stockLevelId: string }> {
+  requireLiveApi("Delete outlet stock");
+  return apiRequest(
+    `/api/franchise/outlets/${encodeURIComponent(outletOrgId)}/stock/${encodeURIComponent(stockLevelId)}`,
+    {
+      method: "DELETE",
+      body: payload ?? {},
+    }
+  );
 }
 
 // ─── Outlet targets ──────────────────────────────────────────────────────────

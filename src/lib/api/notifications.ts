@@ -21,6 +21,7 @@ export type InboxNotification = {
   permission?: string;
   entityType?: string;
   entityId?: string;
+  routeWeb?: string;
 };
 
 const DEFAULT_SETTINGS: NotificationSettings = {
@@ -71,7 +72,15 @@ export async function sendTestPushNotificationApi(input?: {
   entityType?: string;
   entityId?: string;
   alsoInbox?: boolean;
-}): Promise<{ sent: boolean; tokenCount?: number; reason?: string }> {
+}): Promise<{
+  sent: boolean;
+  tokenCount?: number;
+  successCount?: number;
+  failureCount?: number;
+  staleRemoved?: number;
+  reason?: string;
+  errors?: string[];
+}> {
   requireLiveApi("Test push notification");
   return apiRequest("/api/notifications/test-push", {
     method: "POST",
@@ -83,4 +92,32 @@ export async function sendTestPushNotificationApi(input?: {
       alsoInbox: input?.alsoInbox ?? true,
     },
   });
+}
+
+export async function sendOrgAdminTestPushApi(input?: {
+  title?: string;
+  message?: string;
+}): Promise<{ ok: boolean; orgIds: string[]; message: string }> {
+  requireLiveApi("Org admin test push");
+  return apiRequest("/api/notifications/test-push/org-admins", {
+    method: "POST",
+    body: {
+      title: input?.title,
+      message: input?.message,
+    },
+  });
+}
+
+export async function fetchPushTokenStatusApi(currentToken?: string): Promise<{
+  registered: boolean;
+  tokenCount: number;
+  platforms: string[];
+  currentTokenRegistered?: boolean;
+}> {
+  requireLiveApi("Push token status");
+  const params =
+    currentToken?.trim() != null && currentToken.trim() !== ""
+      ? { token: currentToken.trim() }
+      : undefined;
+  return apiRequest("/api/me/push-token/status", { params });
 }

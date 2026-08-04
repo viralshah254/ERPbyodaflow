@@ -12,6 +12,7 @@ export type PlatformTenantRow = {
   timeZone?: string;
   edition?: string;
   defaultTemplateId?: string;
+  industryCategory?: "FMCG" | "SEAFOOD" | "OTHER";
   enabledModules: string[];
   featureFlags: Record<string, boolean>;
   orgCount: number;
@@ -31,6 +32,7 @@ export type PlatformOrgRow = {
   isActive: boolean;
   edition?: string;
   templateId?: string;
+  industryCategory?: "FMCG" | "SEAFOOD" | "OTHER";
   enabledModules: string[];
   featureFlags: Record<string, boolean>;
   defaultNav: string[];
@@ -480,4 +482,65 @@ export type PlatformTemplate = {
 export async function fetchPlatformTemplatesApi(): Promise<PlatformTemplate[]> {
   const data = await apiRequest<{ templates: PlatformTemplate[] }>("/api/platform/templates");
   return data.templates;
+}
+
+export type OrgSignupApplicantRow = {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  industryCategory: "FMCG" | "SEAFOOD" | "OTHER";
+  orgType: string;
+  templateId: string;
+  templateName?: string;
+  orgName: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  country: string;
+  currency: string;
+  timeZone: string;
+  plan: string;
+  message?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+  provisionedTenantId?: string;
+  provisionedOrgId?: string;
+  provisionedUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function fetchOrgSignupApplicantsApi(
+  status?: string
+): Promise<OrgSignupApplicantRow[]> {
+  const params = status ? { status } : undefined;
+  const payload = await apiRequest<{ items: OrgSignupApplicantRow[] }>(
+    "/api/platform/org-signup-requests",
+    { params }
+  );
+  return payload.items ?? [];
+}
+
+export async function approveOrgSignupApplicantApi(
+  id: string,
+  payload?: { initialPassword?: string }
+): Promise<{
+  request: OrgSignupApplicantRow;
+  initialPassword: string;
+}> {
+  return apiRequest(`/api/platform/org-signup-requests/${id}/approve`, {
+    method: "POST",
+    body: payload ?? {},
+  });
+}
+
+export async function rejectOrgSignupApplicantApi(
+  id: string,
+  payload?: { reason?: string }
+): Promise<{ request: OrgSignupApplicantRow }> {
+  return apiRequest(`/api/platform/org-signup-requests/${id}/reject`, {
+    method: "POST",
+    body: payload ?? {},
+  });
 }

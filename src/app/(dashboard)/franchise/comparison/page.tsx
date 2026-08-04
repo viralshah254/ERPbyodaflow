@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -484,7 +484,7 @@ export default function FranchisePerformanceHubPage() {
               />
             </div>
 
-            <div className={LIST_TABLE_SURFACE_CLASS}>
+            <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Channel breakdown</h3>
             <p className="text-xs text-muted-foreground">Posted invoice revenue by order channel.</p>
@@ -558,7 +558,7 @@ export default function FranchisePerformanceHubPage() {
               </CardContent>
             </Card>
 
-            <div className={LIST_TABLE_SURFACE_CLASS}>
+            <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Outlets by channel performance</h3>
             <p className="text-xs text-muted-foreground">Sortable outlet view for the selected period.</p>
@@ -588,7 +588,7 @@ export default function FranchisePerformanceHubPage() {
               />
             </div>
 
-            <div className={LIST_TABLE_SURFACE_CLASS}>
+            <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Stock by outlet</h3>
             <p className="text-xs text-muted-foreground">Current network stock position.</p>
@@ -659,7 +659,7 @@ export default function FranchisePerformanceHubPage() {
                 ][index] ?? "bg-primary",
               }))}
             />
-            <div className={LIST_TABLE_SURFACE_CLASS}>
+            <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Outlet comparison</h3>
             <p className="text-xs text-muted-foreground">Sales, WhatsApp mix, stock, growth, and receivables for {dateRange.from} →{" "}

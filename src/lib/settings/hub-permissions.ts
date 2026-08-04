@@ -9,7 +9,12 @@ export function hasRuntimePermission(permissions: string[], required: string): b
 }
 
 /** User must have at least one listed permission. Empty / missing means always visible. */
-export function canSeeHubItem(permissions: string[], requiresPermissions: string[] | undefined): boolean {
+export function canSeeHubItem(
+  permissions: string[],
+  requiresPermissions: string[] | undefined,
+  options?: { isPlatformOperator?: boolean; requiresPlatformOperator?: boolean }
+): boolean {
+  if (options?.requiresPlatformOperator && !options.isPlatformOperator) return false;
   if (!requiresPermissions?.length) return true;
   return requiresPermissions.some((p) => hasRuntimePermission(permissions, p));
 }

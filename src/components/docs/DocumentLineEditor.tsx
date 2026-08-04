@@ -4,7 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
-import { formatDecimalDisplay, parseDecimalString } from "@/lib/decimal-input";
+import { sanitizeDecimalInput, parseDecimalString, parsePartialDecimalString, formatDecimalDisplay } from "@/lib/decimal-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -206,6 +206,57 @@ export function DocumentLineEditor({
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
 
+  /** In-progress qty/price text while typing (avoids coercing `3.` → 3 mid-entry). */
+  const [lineFieldDrafts, setLineFieldDrafts] = React.useState<
+    Record<string, { qty?: string; price?: string }>
+  >({});
+
+  const lineQtyValue = (line: DocumentLine) =>
+    lineFieldDrafts[line.id]?.qty ?? String(line.qty);
+
+  const linePriceValue = (line: DocumentLine) =>
+    lineFieldDrafts[line.id]?.price ?? String(line.price);
+
+  const handleLineQtyDraft = (lineId: string, raw: string) => {
+    setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], qty: raw } }));
+    const partial = parsePartialDecimalString(raw);
+    if (partial != null && partial >= 0) setQty(lineId, partial);
+  };
+
+  const finalizeLineQtyDraft = (lineId: string, raw: string) => {
+    const n = parseDecimalString(raw);
+    setQty(lineId, Number.isFinite(n) && n >= 0 ? n : 0);
+    setLineFieldDrafts((prev) => {
+      const next = { ...prev };
+      const row = next[lineId];
+      if (!row) return next;
+      const { qty: _qty, ...rest } = row;
+      if (Object.keys(rest).length === 0) delete next[lineId];
+      else next[lineId] = rest;
+      return next;
+    });
+  };
+
+  const handleLinePriceDraft = (lineId: string, raw: string) => {
+    setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], price: raw } }));
+    const partial = parsePartialDecimalString(raw);
+    if (partial != null && partial >= 0) setPrice(lineId, partial);
+  };
+
+  const finalizeLinePriceDraft = (lineId: string, raw: string) => {
+    const n = parseDecimalString(raw);
+    setPrice(lineId, Number.isFinite(n) && n >= 0 ? n : 0);
+    setLineFieldDrafts((prev) => {
+      const next = { ...prev };
+      const row = next[lineId];
+      if (!row) return next;
+      const { price: _price, ...rest } = row;
+      if (Object.keys(rest).length === 0) delete next[lineId];
+      else next[lineId] = rest;
+      return next;
+    });
+  };
+
   const [filteredProducts, setFilteredProducts] = React.useState<ProductRow[] | null>(null);
   /** Re-subscribe when global product cache updates (hydrate) so defaultTaxCodeId etc. are fresh. */
   const cachedProducts = React.useSyncExternalStore(
@@ -323,16 +374,24 @@ export function DocumentLineEditor({
     (productId: string, qty: number, uom: string): { price: number; reason: string } => {
       if (useCostPricing) return { price: 0, reason: "Manual" };
       const daily = dailyPricesByProductId?.[productId];
-      if (daily?.effectivePrice != null) {
+      if (daily?.effectivePrice != null && daily.effectivePrice > 0) {
         const label = daily.isStale
           ? `⚠ Stale${daily.fallbackDate ? ` (${daily.fallbackDate})` : ""}`
           : "Daily price";
         return { price: daily.effectivePrice, reason: label };
       }
-      return getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+      const tier = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
+      if (tier.price > 0) return tier;
+      if (daily && daily.effectivePrice == null) {
+        return { price: 0, reason: "Not priced on list" };
+      }
+      return tier;
     },
     [useCostPricing, dailyPricesByProductId, priceListIdResolved, pricingByProductId]
   );
+
+  const resolvePriceRef = React.useRef(resolvePrice);
+  resolvePriceRef.current = resolvePrice;
 
   // Variants per product — loaded lazily when a product with variants is selected
   const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
@@ -434,6 +493,27 @@ export function DocumentLineEditor({
       });
     });
   }, [taxCodesKey, linesAreTaxInclusive, taxCodes.length]);
+
+  /** Re-apply prices when daily prices or tier data finish loading (avoids stuck KES 0.00). */
+  React.useEffect(() => {
+    if (useCostPricing) return;
+    const dailyKeys = Object.keys(dailyPricesByProductId ?? {});
+    if (dailyKeys.length === 0 && Object.keys(pricingByProductId ?? {}).length === 0) return;
+    onLinesChangeRef.current((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map((l) => {
+        if (!l.productId) return l;
+        const { price, reason } = resolvePriceRef.current(l.productId, l.qty, l.uom);
+        if (price === l.price && reason === l.priceReason) return l;
+        changed = true;
+        const merged = { ...l, price, priceReason: reason, amount: l.qty * price };
+        const taxed = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
+        return { ...merged, tax: taxed.tax, amount: taxed.amount };
+      });
+      return changed ? next : prev;
+    });
+  }, [dailyPricesByProductId, priceListIdResolved, pricingByProductId, useCostPricing, taxCodes, linesAreTaxInclusive]);
 
   const setProduct = (lineId: string, productId: string) => {
     const applyRow = (row: ProductRow) => {
@@ -757,11 +837,9 @@ export function DocumentLineEditor({
                     <TableCell>
                       <FormattedDecimalInput
                         className="w-24"
-                        value={String(l.qty)}
-                        onValueChange={(raw) => {
-                          const n = parseDecimalString(raw);
-                          setQty(l.id, Number.isFinite(n) && n >= 0 ? n : 0);
-                        }}
+                        value={lineQtyValue(l)}
+                        onValueChange={(raw) => handleLineQtyDraft(l.id, raw)}
+                        onBlur={() => finalizeLineQtyDraft(l.id, lineQtyValue(l))}
                       />
                     </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
@@ -773,11 +851,9 @@ export function DocumentLineEditor({
                       {useCostPricing ? (
                         <FormattedDecimalInput
                           className="w-32 min-w-[7rem]"
-                          value={String(l.price)}
-                          onValueChange={(raw) => {
-                            const n = parseDecimalString(raw);
-                            setPrice(l.id, Number.isFinite(n) && n >= 0 ? n : 0);
-                          }}
+                          value={linePriceValue(l)}
+                          onValueChange={(raw) => handleLinePriceDraft(l.id, raw)}
+                          onBlur={() => finalizeLinePriceDraft(l.id, linePriceValue(l))}
                         />
                       ) : (
                         formatMoney(l.price, currency)
