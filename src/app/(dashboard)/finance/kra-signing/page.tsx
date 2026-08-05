@@ -20,6 +20,7 @@ import {
   retryIncotexDocumentApi,
   retryIncotexQueueApi,
   type IncotexMonitorRow,
+  type IncotexMonitorStatusFilter,
 } from "@/lib/api/incotex";
 import { formatMoney } from "@/lib/money";
 import { docTypeLabel, canRetryKraSigning, kraRetryButtonLabel, type IncotexSignableDocType } from "@/lib/kra/kra-signing";
