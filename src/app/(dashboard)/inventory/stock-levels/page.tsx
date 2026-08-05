@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   LIST_PAGE_BODY_CLASS,
   LIST_PAGE_SHELL_CLASS,
@@ -34,16 +34,58 @@ import {
   type FranchiseNetworkStockItem,
   type FranchiseOutletStockRow,
 } from "@/lib/api/inventory-stock";
+import {
+  fetchLatestInventoryCosting,
+  type InventoryCostingSnapshot,
+} from "@/lib/api/inventory-costing";
+import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
+import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { compareProductFamilyKeys, UNCATEGORIZED_FAMILY } from "@/lib/products/product-family";
+import {
+  downloadImportTemplateApi,
+  importOpeningStockApi,
+} from "@/lib/api/import-export";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+/** Weighted average book cost per product from latest inventory costing run. */
+function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null): Map<string, number> {
+  const result = new Map<string, number>();
+  if (!costing?.items?.length) return result;
+  const agg = new Map<string, { q: number; v: number }>();
+  for (const item of costing.items) {
+    const q = item.quantity ?? 0;
+    if (q <= 0) continue;
+    const cur = agg.get(item.productId) ?? { q: 0, v: 0 };
+    cur.q += q;
+    cur.v += item.inventoryValue ?? 0;
+    agg.set(item.productId, cur);
+  }
+  for (const [pid, { q, v }] of agg) {
+    if (q > 0) result.set(pid, v / q);
+  }
+  return result;
+}
+
 export default function StockLevelsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkHandledRef = React.useRef(false);
   const canWrite = useCanWriteInventory();
   const orgRole = useOrgContextStore((s) => s.orgRole);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const fmcg = isFmcgOrg(templateId);
   const isFranchisor = orgRole === "FRANCHISOR";
 
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -52,6 +94,8 @@ export default function StockLevelsPage() {
   const [stockItems, setStockItems] = React.useState<InventoryStockRow[]>([]);
   const [networkAgg, setNetworkAgg] = React.useState<FranchiseNetworkStockItem[]>([]);
   const [networkAggByProduct, setNetworkAggByProduct] = React.useState<Map<string, FranchiseNetworkStockItem>>(new Map());
+  const [avgCostByProduct, setAvgCostByProduct] = React.useState<Map<string, number>>(new Map());
+  const [costingRanAt, setCostingRanAt] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   // Stock adjustment state
@@ -61,13 +105,29 @@ export default function StockLevelsPage() {
   const [adjustReason, setAdjustReason] = React.useState("");
   const [adjustMode, setAdjustMode] = React.useState<"INCREASE" | "DECREASE">("DECREASE");
 
+  // Stock In (create level + qty) — Tally-style putaway / opening
+  const [stockInOpen, setStockInOpen] = React.useState(false);
+  const [stockInProductId, setStockInProductId] = React.useState("");
+  const [stockInWarehouseId, setStockInWarehouseId] = React.useState("");
+  const [stockInQty, setStockInQty] = React.useState("");
+  const [stockInReason, setStockInReason] = React.useState("Opening / production putaway");
+  const [stockInSaving, setStockInSaving] = React.useState(false);
+  const [productOptions, setProductOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+  const [warehouseLookup, setWarehouseLookup] = React.useState<LookupOption[]>([]);
+  const [importingOpening, setImportingOpening] = React.useState(false);
+  const openingStockInputRef = React.useRef<HTMLInputElement>(null);
+
   // Franchise drill-down sheet state
   const [franchiseDrillRow, setFranchiseDrillRow] = React.useState<FranchiseNetworkStockItem | null>(null);
 
   const refreshStock = React.useCallback(async () => {
     setLoading(true);
     try {
-      const requests: [Promise<InventoryStockRow[]>, Promise<{ items: FranchiseNetworkStockItem[] } | null>] = [
+      const requests: [
+        Promise<InventoryStockRow[]>,
+        Promise<{ items: FranchiseNetworkStockItem[] } | null>,
+        Promise<InventoryCostingSnapshot | null>,
+      ] = [
         fetchStockLevelsApi({
           warehouseId: warehouseFilter === "all" ? undefined : warehouseFilter,
           status: statusFilter as "In Stock" | "Low Stock" | "Out of Stock" | "all",
@@ -76,24 +136,144 @@ export default function StockLevelsPage() {
         isFranchisor
           ? fetchFranchiseNetworkStockAggregate({ search: searchQuery })
           : Promise.resolve(null),
+        fmcg ? fetchLatestInventoryCosting().catch(() => null) : Promise.resolve(null),
       ];
 
-      const [hqItems, aggResult] = await Promise.all(requests);
+      const [hqItems, aggResult, costing] = await Promise.all(requests);
       setStockItems(hqItems);
 
       const aggItems = aggResult?.items ?? [];
       setNetworkAgg(aggItems);
       setNetworkAggByProduct(new Map(aggItems.map((i) => [i.productId, i])));
+      if (fmcg) {
+        setAvgCostByProduct(weightedAvgBookCostByProduct(costing));
+        setCostingRanAt(costing?.ranAt ?? null);
+      }
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, statusFilter, warehouseFilter, isFranchisor]);
+  }, [searchQuery, statusFilter, warehouseFilter, isFranchisor, fmcg]);
+
+  const handleOpeningStockImport = async (file: File | undefined) => {
+    if (!file) return;
+    setImportingOpening(true);
+    try {
+      const result = await importOpeningStockApi(file);
+      const skipped = result.skipped?.length ?? 0;
+      toast.success(
+        `Opening stock imported: ${result.imported} line(s)` +
+          (result.adjustmentNumber ? ` (${result.adjustmentNumber})` : "") +
+          (skipped ? ` · ${skipped} skipped` : "")
+      );
+      await refreshStock();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Opening stock import failed");
+    } finally {
+      setImportingOpening(false);
+      if (openingStockInputRef.current) openingStockInputRef.current.value = "";
+    }
+  };
 
   React.useEffect(() => {
     void refreshStock();
   }, [refreshStock]);
+
+  React.useEffect(() => {
+    if (!canWrite) return;
+    void fetchWarehouseOptions()
+      .then((opts) => {
+        setWarehouseLookup(opts);
+        setStockInWarehouseId((prev) => prev || opts[0]?.id || "");
+      })
+      .catch(() => setWarehouseLookup([]));
+    void fetchProductsApi({ status: "ACTIVE", limit: 200 })
+      .then((items) =>
+        setProductOptions(
+          items.map((p) => ({
+            id: p.id,
+            label: `${p.sku ? `${p.sku} — ` : ""}${p.name}`,
+          }))
+        )
+      )
+      .catch(() => setProductOptions([]));
+  }, [canWrite]);
+
+  React.useEffect(() => {
+    if (deepLinkHandledRef.current) return;
+    const action = searchParams.get("action");
+    const productId = searchParams.get("productId");
+    const warehouseId = searchParams.get("warehouseId");
+    const search = searchParams.get("search");
+    if (!action && !productId && !warehouseId && !search) return;
+
+    deepLinkHandledRef.current = true;
+    if (search) setSearchQuery(search);
+    if (warehouseId) setStockInWarehouseId(warehouseId);
+    if (productId) {
+      setStockInProductId(productId);
+      void fetchProductApi(productId)
+        .then((product) => {
+          if (!product) return;
+          setProductOptions((prev) => {
+            if (prev.some((p) => p.id === product.id)) return prev;
+            return [
+              { id: product.id, label: `${product.sku ? `${product.sku} — ` : ""}${product.name}` },
+              ...prev,
+            ];
+          });
+        })
+        .catch(() => undefined);
+    }
+    if (action === "stockIn" && canWrite) {
+      setStockInOpen(true);
+      setStockInQty("");
+      setStockInReason(fmcg ? "Opening / production putaway" : "Opening stock");
+    }
+    router.replace("/inventory/stock-levels", { scroll: false });
+  }, [searchParams, canWrite, fmcg, router]);
+
+  const openStockIn = () => {
+    setStockInOpen(true);
+    setStockInQty("");
+    setStockInReason(fmcg ? "Opening / production putaway" : "Opening stock");
+    if (!stockInWarehouseId && warehouseLookup[0]?.id) {
+      setStockInWarehouseId(warehouseLookup[0].id);
+    }
+  };
+
+  const handleStockIn = async () => {
+    const qty = parseFloat(stockInQty);
+    if (!stockInProductId) {
+      toast.error("Select a product.");
+      return;
+    }
+    if (!stockInWarehouseId) {
+      toast.error("Select a warehouse.");
+      return;
+    }
+    if (!qty || Number.isNaN(qty) || qty <= 0) {
+      toast.error("Enter a positive quantity.");
+      return;
+    }
+    try {
+      setStockInSaving(true);
+      const res = await createStockAdjustmentApi({
+        productId: stockInProductId,
+        warehouseId: stockInWarehouseId,
+        quantityDelta: qty,
+        reason: stockInReason.trim() || "Stock In",
+      });
+      toast.success(`Stock In posted (${res.number}). Pick & pack can use this quantity.`);
+      setStockInOpen(false);
+      await refreshStock();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setStockInSaving(false);
+    }
+  };
 
   const filteredItems = React.useMemo(() => {
     const arr = [...stockItems];
@@ -111,11 +291,12 @@ export default function StockLevelsPage() {
 
   const warehouseOptions = React.useMemo(() => {
     const options = new Map<string, string>();
+    warehouseLookup.forEach((w) => options.set(w.id, w.label));
     stockItems.forEach((item) => {
       options.set(item.warehouseId ?? item.warehouse, item.warehouse);
     });
     return Array.from(options.entries()).map(([value, label]) => ({ value, label }));
-  }, [stockItems]);
+  }, [stockItems, warehouseLookup]);
 
   const openStockDetail = (row: InventoryStockRow) => {
     router.push(`/inventory/stock-levels/${row.id}`);
@@ -167,21 +348,26 @@ export default function StockLevelsPage() {
   );
 
   const columns = [
+    // Seafood: "Product" = product family (e.g. Tilapia). FMCG has no family — show product name.
     {
-      id: "productFamily",
+      id: fmcg ? "name" : "productFamily",
       header: "Product",
-      accessor: (row: InventoryStockRow) => row.productFamily?.trim() || "—",
+      accessor: (row: InventoryStockRow) =>
+        fmcg ? row.name?.trim() || "—" : row.productFamily?.trim() || "—",
       sticky: true,
     },
     {
       id: "sku",
       header: "SKU",
-      accessor: (row: InventoryStockRow) => (
-        <div>
+      accessor: (row: InventoryStockRow) =>
+        fmcg ? (
           <div className="font-medium font-mono">{row.sku}</div>
-          <div className="text-xs text-muted-foreground">{row.name}</div>
-        </div>
-      ),
+        ) : (
+          <div>
+            <div className="font-medium font-mono">{row.sku}</div>
+            <div className="text-xs text-muted-foreground">{row.name}</div>
+          </div>
+        ),
     },
     {
       id: "warehouse",
@@ -217,6 +403,40 @@ export default function StockLevelsPage() {
         <div className="text-right font-semibold">{row.available}</div>
       ),
     },
+    ...(fmcg
+      ? [
+          {
+            id: "avgCost",
+            header: "Avg inventory cost",
+            accessor: (row: InventoryStockRow) => {
+              const pid = row.productId;
+              const v = pid ? avgCostByProduct.get(pid) : undefined;
+              if (v == null) {
+                return <div className="text-right text-muted-foreground">—</div>;
+              }
+              return (
+                <div className="text-right tabular-nums text-sm">{formatMoney(v, "KES")}</div>
+              );
+            },
+          },
+          {
+            id: "inventoryValue",
+            header: "Inventory value",
+            accessor: (row: InventoryStockRow) => {
+              const pid = row.productId;
+              const unit = pid ? avgCostByProduct.get(pid) : undefined;
+              if (unit == null) {
+                return <div className="text-right text-muted-foreground">—</div>;
+              }
+              return (
+                <div className="text-right tabular-nums text-sm font-medium">
+                  {formatMoney(unit * (row.quantity ?? 0), "KES")}
+                </div>
+              );
+            },
+          },
+        ]
+      : []),
     ...(isFranchisor
       ? [
           {
@@ -304,7 +524,11 @@ export default function StockLevelsPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Stock Levels"
-        description="View current inventory levels across all warehouses"
+        description={
+          fmcg
+            ? "On-hand by warehouse, with avg inventory cost and value from the latest costing run. Stock In puts finished goods into MAIN for pick & pack."
+            : "View current inventory levels across all warehouses"
+        }
         sticky
         showCommandHint
         actions={
@@ -314,15 +538,67 @@ export default function StockLevelsPage() {
               Export
             </Button>
             {canWrite && (
-              <Button>
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                Stock Adjustment
-              </Button>
+              <>
+                <input
+                  ref={openingStockInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls,text/csv"
+                  className="hidden"
+                  onChange={(e) => void handleOpeningStockImport(e.target.files?.[0])}
+                />
+                <Button
+                  variant="outline"
+                  disabled={importingOpening}
+                  onClick={() => openingStockInputRef.current?.click()}
+                >
+                  <Icons.Upload className="mr-2 h-4 w-4" />
+                  {importingOpening ? "Importing…" : "Import opening stock"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    downloadImportTemplateApi("opening-stock", (msg) =>
+                      toast.info(msg || "Template unavailable.")
+                    )
+                  }
+                >
+                  CSV template
+                </Button>
+                <Button onClick={openStockIn}>
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  {fmcg ? "Stock In" : "Stock In / Opening"}
+                </Button>
+              </>
             )}
           </>
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+      {fmcg && !loading && stockItems.length === 0 && canWrite ? (
+        <div className="shrink-0 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+          <p className="font-medium flex items-start gap-2">
+            <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
+            No stock yet — Pick &amp; Pack cannot ship until goods are in a warehouse.
+          </p>
+          <p className="mt-1 text-xs opacity-90 pl-6">
+            Tally-style flow: <span className="font-medium">Stock In</span> (production / opening) → Sales order →
+            Delivery note → Pick &amp; pack → Dispatch. Purchased goods can also enter via GRN later.
+          </p>
+          <Button size="sm" className="mt-3 ml-6" onClick={openStockIn}>
+            Stock In to MAIN
+          </Button>
+        </div>
+      ) : null}
+      {fmcg && !loading && stockItems.length > 0 && !costingRanAt ? (
+        <p className="shrink-0 text-xs text-muted-foreground">
+          Run{" "}
+          <Link href="/inventory/costing" className="text-primary underline underline-offset-2">
+            inventory costing
+          </Link>{" "}
+          so avg inventory cost and value populate on this list.
+        </p>
+      ) : null}
       {isFranchisor && networkAgg.length > 0 && (
         <div className="shrink-0 flex flex-wrap gap-3">
           <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm">
@@ -550,7 +826,7 @@ export default function StockLevelsPage() {
                 <Input
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="Cycle count, damage, write-off (stub)"
+                  placeholder="Cycle count, damage, write-off"
                 />
               </div>
             </div>
@@ -568,6 +844,83 @@ export default function StockLevelsPage() {
           </SheetContent>
         </Sheet>
       )}
+
+      {/* Stock In — create warehouse quantity for a product (unblocks pick & pack) */}
+      <Sheet open={stockInOpen} onOpenChange={setStockInOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Stock In</SheetTitle>
+            <SheetDescription>
+              {fmcg
+                ? "Put finished goods into a warehouse (opening balance or production putaway). Same idea as Tally stock journal / godown receipt."
+                : "Create or increase on-hand quantity for a product in a warehouse."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Product</Label>
+              <Select value={stockInProductId || undefined} onValueChange={setStockInProductId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select product" />
+                </SelectTrigger>
+                <SelectContent>
+                  {productOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Warehouse</Label>
+              <Select value={stockInWarehouseId || undefined} onValueChange={setStockInWarehouseId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouseLookup.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Quantity</Label>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={stockInQty}
+                onChange={(e) => setStockInQty(e.target.value)}
+                placeholder="e.g. 100"
+              />
+              <p className="text-xs text-muted-foreground">
+                Always post in <span className="font-medium text-foreground">pieces (smallest / base UOM)</span> — the warehouse
+                ledger. Sales orders may use cartons; pick &amp; pack converts using product packaging (e.g. 1 carton = 24 pcs).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Input
+                value={stockInReason}
+                onChange={(e) => setStockInReason(e.target.value)}
+                placeholder="Opening / production putaway"
+              />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setStockInOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleStockIn()} disabled={stockInSaving}>
+              {stockInSaving ? "Posting…" : "Post Stock In"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

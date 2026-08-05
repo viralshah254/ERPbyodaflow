@@ -20,11 +20,15 @@ import {
   exportProductsCsvApi,
   exportProductVariantsCsvApi,
   exportSuppliersCsvApi,
+  importArOpeningBalancesApi,
+  importOpeningStockApi,
   importPartiesApi,
+  importPriceListsApi,
   importProductPackagingApi,
   importProductsApi,
   importProductVariantsApi,
   isImportExportAvailable,
+  type ImportTemplateEntity,
 } from "@/lib/api/import-export";
 import {
   approveImportStageRecordApi,
@@ -60,8 +64,14 @@ const SAMPLE_PAYLOADS: Record<ImportProvider, string> = {
           contact_name: "Acme Retail",
           contact_number: "C-001",
           email: "ops@acme.com",
-          phone: "+254700000000",
+          phone: "254700000000",
           contact_type: "customer",
+          billing_address: {
+            address: "Biashara Street",
+            city: "Nairobi",
+            state: "Nairobi",
+            country: "KE",
+          },
         },
       ],
       items: [
@@ -137,9 +147,7 @@ export default function MigrationConsolePage() {
   const [actioningRecordId, setActioningRecordId] = React.useState<string | null>(null);
   const [resolutionDrafts, setResolutionDrafts] = React.useState<Record<string, ImportConflictResolution>>({});
   const [matchedEntityDrafts, setMatchedEntityDrafts] = React.useState<Record<string, string>>({});
-  const [csvImportType, setCsvImportType] = React.useState<
-    "customers" | "suppliers" | "products" | "product-packaging" | "product-variants"
-  >("customers");
+  const [csvImportType, setCsvImportType] = React.useState<ImportTemplateEntity>("customers");
   const [csvImportFile, setCsvImportFile] = React.useState<File | null>(null);
   const [csvImporting, setCsvImporting] = React.useState(false);
   const csvImportInputRef = React.useRef<HTMLInputElement>(null);
@@ -902,7 +910,8 @@ export default function MigrationConsolePage() {
                 <CardHeader>
                   <CardTitle>Import from CSV</CardTitle>
                   <CardDescription>
-                    Add customers, suppliers, products, packaging, or variants via CSV. Download a template for required fields. Import products before packaging/variants.
+                    Add customers, suppliers, products, price tags, opening stock, AR balances,
+                    packaging, or variants via CSV. Download a template for required fields.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -920,6 +929,9 @@ export default function MigrationConsolePage() {
                             <SelectItem value="customers">Customers</SelectItem>
                             <SelectItem value="suppliers">Suppliers</SelectItem>
                             <SelectItem value="products">Products</SelectItem>
+                            <SelectItem value="price-lists">Price tags (prices)</SelectItem>
+                            <SelectItem value="opening-stock">Opening stock</SelectItem>
+                            <SelectItem value="ar-opening-balances">AR opening balances</SelectItem>
                             <SelectItem value="product-packaging">Product packaging</SelectItem>
                             <SelectItem value="product-variants">Product variants</SelectItem>
                           </SelectContent>
@@ -954,6 +966,19 @@ export default function MigrationConsolePage() {
                               if (csvImportType === "products") {
                                 const res = await importProductsApi(csvImportFile);
                                 toast.success(`Imported ${res.imported} product(s).`);
+                              } else if (csvImportType === "price-lists") {
+                                const res = await importPriceListsApi(csvImportFile);
+                                toast.success(
+                                  `Price tags: ${res.pricesUpserted} price(s), ${res.tagsCreated} created, ${res.tagsUpdated} updated.`
+                                );
+                              } else if (csvImportType === "opening-stock") {
+                                const res = await importOpeningStockApi(csvImportFile);
+                                toast.success(
+                                  `Opening stock: ${res.imported} line(s)${res.adjustmentNumber ? ` (${res.adjustmentNumber})` : ""}.`
+                                );
+                              } else if (csvImportType === "ar-opening-balances") {
+                                const res = await importArOpeningBalancesApi(csvImportFile);
+                                toast.success(`AR opening balances: ${res.imported} row(s).`);
                               } else if (csvImportType === "product-packaging") {
                                 const res = await importProductPackagingApi(csvImportFile);
                                 toast.success(`Imported ${res.imported} packaging row(s).`);
@@ -984,7 +1009,44 @@ export default function MigrationConsolePage() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Required: <strong>code</strong>, <strong>name</strong>. See docs/CSV_IMPORT_FORMAT_SPEC.md for full format. Migrating from Tally, Zoho, or QuickBooks? Use the provider JSON import above, or export from your ERP to CSV and map columns.
+                        {csvImportType === "customers" ? (
+                          <>
+                            First row is the column headers. Required: <strong>name</strong>,{" "}
+                            <strong>customerKind</strong> (<code>modern-trade</code>,{" "}
+                            <code>general-trade</code>, <code>distributor</code>,{" "}
+                            <code>van-sales</code>). Optional: code, tradingName, phone, email,
+                            address, route, taxId, creditLimitAmount.
+                          </>
+                        ) : csvImportType === "suppliers" ? (
+                          <>
+                            Required: <strong>code</strong>, <strong>name</strong>. Optional:
+                            phone, address, city, taxId, payment terms.
+                          </>
+                        ) : csvImportType === "price-lists" ? (
+                          <>
+                            Columns: <strong>priceTag</strong>, <strong>sku</strong> or{" "}
+                            <strong>barcode</strong>, <strong>price</strong>, optional discountPercent.
+                            Creates missing tags and merges prices (piece price for FMCG).
+                          </>
+                        ) : csvImportType === "opening-stock" ? (
+                          <>
+                            Columns: <strong>sku</strong> or <strong>barcode</strong>,{" "}
+                            <strong>quantity</strong>, optional warehouse. Posts a stock adjustment.
+                          </>
+                        ) : csvImportType === "ar-opening-balances" ? (
+                          <>
+                            Columns: <strong>customerCode</strong> (or name), <strong>amount</strong>,
+                            optional currency, reference, date. Creates AR open items for go-live.
+                          </>
+                        ) : (
+                          <>
+                            Download the template for the full column list. Products support
+                            vatCategory (standard/zero/exempt/export), grossWeightKg, grossVolumeM3.
+                            Import products before packaging/variants.
+                          </>
+                        )}{" "}
+                        Migrating from Tally, Zoho, or QuickBooks? Use the provider JSON import
+                        above, or export from your ERP to CSV and map columns.
                       </p>
                     </>
                   )}

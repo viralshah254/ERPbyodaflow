@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -20,14 +21,25 @@ import { fetchPriceListsApi } from "@/lib/api/pricing";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { isSeafoodOrg } from "@/config/industry";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 
 export default function DailyPricingReviewPage() {
+  const router = useRouter();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafood = isSeafoodOrg(templateId, industryCategory);
+
+  React.useEffect(() => {
+    if (!seafood) router.replace("/pricing/workspace/lists");
+  }, [seafood, router]);
+
   const [rows, setRows] = React.useState<ApprovalQueueRow[]>([]);
   const [listNames, setListNames] = React.useState<Record<string, string>>({});
   const [loading, setLoading] = React.useState(true);
 
   const load = React.useCallback(async () => {
-    if (!isApiConfigured()) {
+    if (!seafood || !isApiConfigured()) {
       setLoading(false);
       return;
     }
@@ -47,11 +59,13 @@ export default function DailyPricingReviewPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [seafood]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  if (!seafood) return null;
 
   return (
     <PageShell>

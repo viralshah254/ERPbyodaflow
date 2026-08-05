@@ -185,16 +185,26 @@ export async function fetchStockLevelApi(id: string): Promise<InventoryStockRow 
 }
 
 export async function createStockAdjustmentApi(payload: {
-  stockLevelId: string;
+  stockLevelId?: string;
+  /** Stock In when no stock level exists yet. */
+  productId?: string;
+  warehouseId?: string;
   quantityDelta: number;
   reason?: string;
-}): Promise<void> {
+}): Promise<{ id: string; number: string }> {
   requireLiveApi("Inventory stock adjustment");
-  await apiRequest("/api/inventory/stock-adjustments", {
+  const line = payload.stockLevelId
+    ? { stockLevelId: payload.stockLevelId, quantityDelta: payload.quantityDelta }
+    : {
+        productId: payload.productId,
+        warehouseId: payload.warehouseId,
+        quantityDelta: payload.quantityDelta,
+      };
+  return apiRequest<{ id: string; number: string }>("/api/inventory/stock-adjustments", {
     method: "POST",
     body: {
       reason: payload.reason,
-      lines: [{ stockLevelId: payload.stockLevelId, quantityDelta: payload.quantityDelta }],
+      lines: [line],
     },
   });
 }

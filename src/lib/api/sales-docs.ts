@@ -5,6 +5,7 @@ type BackendSalesDoc = {
   id: string;
   number: string;
   date: string;
+  createdAt?: string;
   party?: string;
   partyId?: string;
   total?: number;
@@ -13,6 +14,9 @@ type BackendSalesDoc = {
   status?: string;
   orderChannel?: string;
   reference?: string;
+  externalSource?: string;
+  odaflowChannel?: string;
+  odaflowSourcePdfUrl?: string;
 };
 
 type SalesDocType = "quote" | "sales-order" | "delivery-note" | "invoice";
@@ -22,6 +26,12 @@ function mapSalesDoc(item: BackendSalesDoc): SalesDocRow {
     id: item.id,
     number: item.number,
     date: item.date?.slice(0, 10) ?? "",
+    createdAt:
+      typeof item.createdAt === "string"
+        ? item.createdAt
+        : item.createdAt != null
+          ? String(item.createdAt)
+          : undefined,
     party: item.party ?? item.partyId,
     partyId: item.partyId,
     total: item.total ?? 0,
@@ -30,6 +40,9 @@ function mapSalesDoc(item: BackendSalesDoc): SalesDocRow {
     status: item.status ?? "DRAFT",
     orderChannel: item.orderChannel,
     reference: item.reference,
+    externalSource: item.externalSource,
+    odaflowChannel: item.odaflowChannel,
+    odaflowSourcePdfUrl: item.odaflowSourcePdfUrl,
   };
 }
 

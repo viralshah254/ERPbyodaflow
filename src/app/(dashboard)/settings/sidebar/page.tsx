@@ -172,6 +172,7 @@ export default function SidebarSettingsPage() {
     template,
     orgRole,
     franchisePersona,
+    templateId,
   } = useOrgContextStore();
 
   const navParams = React.useMemo(
@@ -185,8 +186,9 @@ export default function SidebarSettingsPage() {
       permissions,
       orgRole,
       franchisePersona,
+      templateId,
     }),
-    [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona]
+    [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona, templateId]
   );
 
   const baseSections = React.useMemo(() => computeDashboardSidebarSections(navParams), [navParams]);

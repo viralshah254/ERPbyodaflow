@@ -48,15 +48,36 @@ interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>,
     VariantProps<typeof sheetVariants> {}
 
+function isProtectedOutsideTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      "[data-location-suggestions], [data-radix-select-content], [data-radix-popper-content-wrapper]"
+    )
+  );
+}
+
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
+>(({ side = "right", className, children, onPointerDownOutside, onFocusOutside, onInteractOutside, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(sheetVariants({ side }), className)}
+      onPointerDownOutside={(e) => {
+        if (isProtectedOutsideTarget(e.target)) e.preventDefault();
+        onPointerDownOutside?.(e);
+      }}
+      onFocusOutside={(e) => {
+        if (isProtectedOutsideTarget(e.target)) e.preventDefault();
+        onFocusOutside?.(e);
+      }}
+      onInteractOutside={(e) => {
+        if (isProtectedOutsideTarget(e.target)) e.preventDefault();
+        onInteractOutside?.(e);
+      }}
       {...props}
     >
       {children}

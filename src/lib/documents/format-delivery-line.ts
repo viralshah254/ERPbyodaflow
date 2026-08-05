@@ -5,6 +5,10 @@
 export type DeliveryLineLabelInput = {
   productName?: string | null | undefined;
   productSku?: string | null | undefined;
+  productSize?: string | null | undefined;
+  productBarcode?: string | null | undefined;
+  odaflowPackSize?: string | null | undefined;
+  odaflowBarcode?: string | null | undefined;
   description?: string | null | undefined;
 };
 
@@ -32,5 +36,15 @@ export function deliveryLinePrimaryLabel(line: DeliveryLineLabelInput): string {
 
 export function deliveryLineSku(line: DeliveryLineLabelInput): string | undefined {
   const s = (line.productSku ?? "").trim();
+  return s.length > 0 ? s : undefined;
+}
+
+export function deliveryLineSize(line: DeliveryLineLabelInput): string | undefined {
+  const s = (line.productSize ?? line.odaflowPackSize ?? "").trim();
+  return s.length > 0 ? s : undefined;
+}
+
+export function deliveryLineBarcode(line: DeliveryLineLabelInput): string | undefined {
+  const s = (line.productBarcode ?? line.odaflowBarcode ?? "").trim();
   return s.length > 0 ? s : undefined;
 }

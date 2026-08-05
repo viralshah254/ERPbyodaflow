@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,8 +47,19 @@ import {
   isFranchiseList,
   pickCanonicalZoneMaster,
 } from "@/lib/pricing/franchise-zone-master";
+import { isSeafoodOrg } from "@/config/industry";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 
 export default function PricingZonesPage() {
+  const router = useRouter();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafood = isSeafoodOrg(templateId, industryCategory);
+
+  React.useEffect(() => {
+    if (!seafood) router.replace("/pricing/workspace/lists");
+  }, [seafood, router]);
+
   const [zones, setZones] = React.useState<Awaited<ReturnType<typeof fetchPricingZones>>>([]);
   const [profiles, setProfiles] = React.useState<FranchisePricingProfileRow[]>([]);
   const [outlets, setOutlets] = React.useState<Awaited<ReturnType<typeof fetchFranchiseNetworkOutlets>>>([]);
@@ -221,6 +233,8 @@ export default function PricingZonesPage() {
       href: "/pricing/workspace/lists",
     },
   ];
+
+  if (!seafood) return null;
 
   return (
     <PageShell>

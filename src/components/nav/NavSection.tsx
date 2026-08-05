@@ -8,6 +8,7 @@ import * as Icons from "lucide-react";
 interface NavSectionLike {
   id: string;
   label: string;
+  badgeCount?: number;
   items: Array<{
     id: string;
     label: string;
@@ -64,6 +65,11 @@ export function NavSection({ section, isCollapsed }: NavSectionProps) {
         <span className="min-w-0 flex-1 break-words text-sm font-semibold uppercase leading-snug tracking-[0.1em] text-foreground/90">
           {section.label}
         </span>
+        {section.badgeCount != null && section.badgeCount > 0 && (
+          <span className="shrink-0 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-semibold text-destructive-foreground">
+            {section.badgeCount}
+          </span>
+        )}
       </button>
       {isExpanded && (
         <div className="flex flex-col gap-0.5">

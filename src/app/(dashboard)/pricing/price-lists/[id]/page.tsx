@@ -49,6 +49,8 @@ import { cn } from "@/lib/utils";
 import { FranchiseOutletsPanel } from "@/components/pricing/franchise-outlets-panel";
 import { ZonePriceCascadeDialog } from "@/components/pricing/zone-price-cascade-dialog";
 import { isFranchiseList } from "@/lib/pricing/franchise-zone-master";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -272,9 +274,18 @@ export default function PriceListViewPage() {
   const router = useRouter();
   const priceListId = params.id;
   const today = todayIso();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const fmcgOrg = isFmcgOrg(templateId);
+
+  // FMCG uses piece prices on Pricing workspace → Price tags (not CoolCatch daily kg pricing).
+  React.useEffect(() => {
+    if (fmcgOrg && priceListId) {
+      router.replace(`/pricing/workspace/lists?list=${encodeURIComponent(priceListId)}`);
+    }
+  }, [fmcgOrg, priceListId, router]);
 
   const [data, setData] = React.useState<DailyPriceListResponse | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(!fmcgOrg);
   const [saving, setSaving] = React.useState(false);
   // Local edits: productId → price string
   const [edits, setEdits] = React.useState<Record<string, string>>({});
@@ -286,6 +297,7 @@ export default function PriceListViewPage() {
   const [cascadeApplying, setCascadeApplying] = React.useState(false);
 
   const load = React.useCallback(async () => {
+    if (fmcgOrg) return;
     setLoading(true);
     try {
       const res = await fetchDailyPricesApi(priceListId, selectedDate);
@@ -302,9 +314,17 @@ export default function PriceListViewPage() {
     } finally {
       setLoading(false);
     }
-  }, [priceListId, selectedDate]);
+  }, [priceListId, selectedDate, fmcgOrg]);
 
   React.useEffect(() => { void load(); }, [load]);
+
+  if (fmcgOrg) {
+    return (
+      <PageShell>
+        <p className="p-6 text-sm text-muted-foreground">Opening price tag editor…</p>
+      </PageShell>
+    );
+  }
 
   const handleChange = (productId: string, value: string) => {
     setEdits((prev) => ({ ...prev, [productId]: value }));

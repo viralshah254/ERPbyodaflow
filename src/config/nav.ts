@@ -55,6 +55,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Inventory",
     moduleId: "inventory",
     items: [
+      // Note: primary sidebar uses config/navigation/sections.ts (hides this for FMCG).
       {
         id: "inventory-products",
         label: "Products",

@@ -112,48 +112,105 @@ export async function fetchApiBinary(path: string): Promise<Blob | null> {
   return res.blob();
 }
 
+export type DownloadProgressUpdate = {
+  phase: "connecting" | "downloading" | "saving";
+  loadedBytes: number;
+  totalBytes: number | null;
+  percent: number | null;
+};
+
+export function downloadProgressLabel(update: DownloadProgressUpdate): string {
+  if (update.phase === "connecting") return "Preparing PDF…";
+  if (update.phase === "saving") return "Saving PDF…";
+  if (update.percent != null) return `Downloading PDF… ${update.percent}%`;
+  return "Downloading PDF…";
+}
+
 /**
  * GET and download as file (PDF, CSV, etc.). On 200, triggers browser download; on 501/404 shows toast.
+ * Optional onProgress reports byte counts when Content-Length is available.
  */
 export async function downloadFile(
   path: string,
   filename: string,
-  onNotAvailable: (message: string) => void
-): Promise<void> {
+  onNotAvailable: (message: string) => void,
+  onProgress?: (update: DownloadProgressUpdate) => void
+): Promise<boolean> {
   if (!getApiBase()) {
     onNotAvailable("API not configured.");
-    return;
+    return false;
   }
   const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
   try {
+    onProgress?.({ phase: "connecting", loadedBytes: 0, totalBytes: null, percent: null });
     await applyFreshFirebaseBearerIfAvailable();
     const res = await fetch(url, {
       method: "GET",
       headers: { ...getAuthHeaders(), Accept: "*/*" },
     });
-    if (res.status === 200) {
-      const blob = await res.blob();
-      const disposition = res.headers.get("Content-Disposition");
-      const name = disposition?.match(/filename="?([^";]+)"?/)?.[1] ?? filename;
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      return;
-    }
     if (res.status === 501) {
       onNotAvailable("Export not yet available.");
-      return;
+      return false;
     }
     if (res.status === 404) {
       onNotAvailable("Not found.");
-      return;
+      return false;
     }
-    const data = await res.json().catch(() => ({}));
-    onNotAvailable((data as { error?: string }).error ?? `Request failed (${res.status}).`);
+    if (res.status !== 200) {
+      const data = await res.json().catch(() => ({}));
+      onNotAvailable((data as { error?: string }).error ?? `Request failed (${res.status}).`);
+      return false;
+    }
+
+    const disposition = res.headers.get("Content-Disposition");
+    const name = disposition?.match(/filename="?([^";]+)"?/)?.[1] ?? filename;
+    const totalBytes = (() => {
+      const n = Number(res.headers.get("Content-Length") ?? 0);
+      return n > 0 ? n : null;
+    })();
+
+    let blob: Blob;
+    if (res.body) {
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let loadedBytes = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loadedBytes += value.byteLength;
+        onProgress?.({
+          phase: "downloading",
+          loadedBytes,
+          totalBytes,
+          percent:
+            totalBytes != null && totalBytes > 0
+              ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100))
+              : null,
+        });
+      }
+      const mime = res.headers.get("Content-Type") ?? "application/octet-stream";
+      blob = new Blob(chunks as BlobPart[], { type: mime });
+    } else {
+      blob = await res.blob();
+    }
+
+    onProgress?.({
+      phase: "saving",
+      loadedBytes: blob.size,
+      totalBytes: totalBytes ?? blob.size,
+      percent: 100,
+    });
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return true;
   } catch (e) {
     onNotAvailable(e instanceof Error ? e.message : "Network error.");
+    return false;
   }
 }
 

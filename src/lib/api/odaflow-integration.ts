@@ -52,6 +52,19 @@ export interface OdaflowSyncStatus {
   };
 }
 
+export interface OdaflowQueueOrderSummary {
+  customerName?: string;
+  odaflowCustomerId?: string;
+  salesRepName?: string;
+  salesRepPhone?: string;
+  orderTitle?: string;
+  channel?: string;
+  purchaseOrderNumber?: string;
+  totalAmount?: number;
+  currency?: string;
+  orderDate?: string;
+}
+
 export interface OdaflowQueueItem {
   _id: string;
   eventType: string;
@@ -63,11 +76,61 @@ export interface OdaflowQueueItem {
     type: string;
     odaflowId: string;
     displayName?: string;
+    reason?: string;
+    lineIndex?: number;
   }>;
   erpDocumentId?: string;
   attemptCount: number;
   lastAttemptAt?: string;
   createdAt: string;
+  rawPayload?: Record<string, unknown>;
+  orderSummary?: OdaflowQueueOrderSummary | null;
+}
+
+export interface OdaflowQueueOrderLinePreview {
+  index: number;
+  odaflowProductId?: string;
+  productName?: string;
+  barcode?: string;
+  packSize?: string;
+  qty: number;
+  unitPrice?: number;
+  subTotal?: number;
+  needsProductMatch: boolean;
+  needsPriceMatch: boolean;
+  hasIssue: boolean;
+  blockReason?: string;
+  isAutoMatched: boolean;
+  erpProductId?: string;
+  erpProductName?: string;
+}
+
+export interface OdaflowQueueOrderPreview {
+  odaflowOrderId: string;
+  purchaseOrderNumber?: string;
+  channel?: string;
+  orderTitle?: string;
+  customerName?: string;
+  odaflowCustomerId?: string;
+  orderDate?: string;
+  expectedDeliveryDate?: string;
+  currency?: string;
+  totalAmount?: number;
+  notes?: string;
+  documentUrl?: string;
+  salesRepName?: string;
+  salesRepPhone?: string;
+  customerNeedsMatch: boolean;
+  erpPartyId?: string;
+  erpPartyName?: string;
+  matchedLineCount: number;
+  totalLineCount: number;
+  lines: OdaflowQueueOrderLinePreview[];
+}
+
+export interface OdaflowQueueDetailResponse {
+  item: OdaflowQueueItem;
+  order: OdaflowQueueOrderPreview | null;
 }
 
 export interface OdaflowQueueResponse {
@@ -132,6 +195,9 @@ export async function fetchOdaflowQueue(params: {
   eventType?: string;
   page?: number;
   limit?: number;
+  q?: string;
+  customer?: string;
+  salesRep?: string;
 }): Promise<OdaflowQueueResponse> {
   requireLiveApi("Odaflow integration");
   const qs = new URLSearchParams();
@@ -139,7 +205,31 @@ export async function fetchOdaflowQueue(params: {
   if (params.eventType) qs.set("eventType", params.eventType);
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
+  if (params.q?.trim()) qs.set("q", params.q.trim());
+  if (params.customer?.trim()) qs.set("customer", params.customer.trim());
+  if (params.salesRep?.trim()) qs.set("salesRep", params.salesRep.trim());
   return apiRequest<OdaflowQueueResponse>(`/api/integrations/odaflow/sync/queue?${qs.toString()}`);
+}
+
+export async function fetchOdaflowQueueItem(id: string): Promise<OdaflowQueueDetailResponse> {
+  requireLiveApi("Odaflow integration");
+  return apiRequest<OdaflowQueueDetailResponse>(`/api/integrations/odaflow/sync/queue/${encodeURIComponent(id)}`);
+}
+
+export async function createSalesOrderFromQueueItem(
+  id: string,
+  body: {
+    erpPartyId?: string;
+    lineProducts?: Array<{ lineIndex: number; erpProductId: string }>;
+    lineQty?: Array<{ lineIndex: number; qty: number }>;
+    saveMappings?: boolean;
+  }
+): Promise<{ success: true; erpDocumentId: string; action: string }> {
+  requireLiveApi("Odaflow integration");
+  return apiRequest(`/api/integrations/odaflow/sync/queue/${encodeURIComponent(id)}/create-sales-order`, {
+    method: "POST",
+    body,
+  });
 }
 
 export async function retryQueueItem(id: string): Promise<void> {
@@ -150,6 +240,29 @@ export async function retryQueueItem(id: string): Promise<void> {
 export async function ignoreQueueItem(id: string): Promise<void> {
   requireLiveApi("Odaflow integration");
   await apiRequest(`/api/integrations/odaflow/sync/queue/${id}/ignore`, { method: "POST" });
+}
+
+export interface OdaflowErmLookupMapping {
+  externalId: string;
+  externalKey?: string;
+  lastSyncedAt?: string;
+  odaflowName?: string;
+  odaflowPackSize?: string;
+  odaflowBarcode?: string;
+  sfaProductKind?: "modern_trade" | "general_trade";
+  displayLabel?: string;
+}
+
+export async function lookupOdaflowErmByEntityId(params: {
+  entityType: "product" | "party";
+  entityId: string;
+}): Promise<{ mappings: OdaflowErmLookupMapping[] }> {
+  requireLiveApi("Odaflow integration");
+  const qs = new URLSearchParams({
+    entityType: params.entityType,
+    entityId: params.entityId,
+  });
+  return apiRequest(`/api/integrations/odaflow/mappings/lookup?${qs.toString()}`);
 }
 
 export async function fetchOdaflowProductMappings(): Promise<{ items: OdaflowMapping[] }> {

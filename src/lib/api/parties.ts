@@ -1,14 +1,25 @@
-import { type CustomerType, type CoolcatchSupplierKind, type PartyRole, type PartyRow, type SupplierType } from "@/lib/types/masters";
+import {
+  type CustomerType,
+  type CoolcatchSupplierKind,
+  type PartyChannel,
+  type PartyRole,
+  type PartyRow,
+  type SfaSegment,
+  type SupplierType,
+} from "@/lib/types/masters";
 import { apiRequest, requireLiveApi, uploadFormData } from "./client";
 
 type BackendParty = {
   id: string;
   name: string;
+  tradingName?: string;
   code?: string;
   roles?: PartyRole[];
   customerType?: CustomerType;
   supplierType?: SupplierType;
-  channel?: string;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
+  parentPartyId?: string;
   customerCategoryId?: string;
   email?: string;
   phone?: string;
@@ -20,6 +31,8 @@ type BackendParty = {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  defaultPriceListId?: string;
+  defaultTaxConfigId?: string;
   defaultCurrency?: string;
   status?: string;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
@@ -33,6 +46,10 @@ type BackendParty = {
     postalCode?: string;
     country?: string;
   };
+  route?: string;
+  latitude?: number;
+  longitude?: number;
+  googlePlaceId?: string;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   pinCertificateUrl?: string;
@@ -47,8 +64,12 @@ type BackendParty = {
 export type PartyPayload = {
   name: string;
   roles: PartyRole[];
+  tradingName?: string;
   code?: string;
   customerType?: CustomerType;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
+  parentPartyId?: string;
   supplierType?: SupplierType;
   customerCategoryId?: string;
   email?: string;
@@ -61,6 +82,8 @@ export type PartyPayload = {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  defaultPriceListId?: string;
+  defaultTaxConfigId?: string;
   defaultCurrency?: string;
   status?: "ACTIVE" | "INACTIVE";
   coolcatchSupplierKind?: CoolcatchSupplierKind;
@@ -74,6 +97,10 @@ export type PartyPayload = {
     postalCode?: string;
     country?: string;
   };
+  route?: string;
+  latitude?: number;
+  longitude?: number;
+  googlePlaceId?: string;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   supplierPaymentMethod?: "BANK" | "MPESA" | "PAYBILL" | "TILL";
@@ -93,6 +120,8 @@ export type PartyDetail = PartyRow & {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  defaultPriceListId?: string;
+  defaultTaxConfigId?: string;
   defaultCurrency?: string;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
   contactPersonFirstName?: string;
@@ -173,6 +202,9 @@ export function toPartyLookupOption(item: {
   creditLimit?: number;
   creditLimitAmount?: number;
   outstandingBalance?: number;
+  sfaSegment?: SfaSegment | string | null;
+  parentPartyId?: string | null;
+  parentPartyName?: string | null;
 }): PartyLookupOption {
   const effectiveCreditLimit = item.creditLimitAmount ?? item.creditLimit;
   const isOverCredit =
@@ -180,8 +212,16 @@ export function toPartyLookupOption(item: {
     effectiveCreditLimit > 0 &&
     (item.outstandingBalance ?? 0) > effectiveCreditLimit;
 
+  const segmentBadge =
+    item.sfaSegment === "MODERN_TRADE_HQ"
+      ? { label: "Supermarket", variant: "secondary" as const }
+      : item.sfaSegment === "MODERN_TRADE_BRANCH"
+        ? { label: "Branch", variant: "outline" as const }
+        : null;
+
   const badges: PartyLookupOption["badges"] = [
-    item.customerType
+    segmentBadge,
+    item.customerType && !segmentBadge
       ? {
           label: item.customerType.replace(/_/g, " ").toLowerCase().replace(/(^|\s)\w/g, (match) => match.toUpperCase()),
           variant: "secondary",
@@ -207,10 +247,19 @@ export function toPartyLookupOption(item: {
       : null,
   ].filter(Boolean) as NonNullable<PartyLookupOption["badges"]>;
 
+  const baseDescription = buildPartyLookupDescription(item);
+  const branchUnder =
+    item.sfaSegment === "MODERN_TRADE_BRANCH" && item.parentPartyName?.trim()
+      ? `Under ${item.parentPartyName.trim()}`
+      : item.sfaSegment === "MODERN_TRADE_BRANCH"
+        ? "Branch"
+        : null;
+  const description = [branchUnder, baseDescription].filter(Boolean).join(" · ") || undefined;
+
   return {
     id: item.id ?? item.partyId ?? "",
     label: item.name,
-    description: buildPartyLookupDescription(item),
+    description,
     code: item.code,
     email: item.email,
     phone: item.phone,
@@ -224,10 +273,14 @@ function mapParty(item: BackendParty): PartyRow {
   return {
     id: item.id,
     name: item.name,
+    tradingName: item.tradingName,
     code: item.code,
     type: roles.includes("supplier") ? "supplier" : "customer",
     roles,
     customerType: item.customerType,
+    channel: item.channel,
+    sfaSegment: item.sfaSegment,
+    parentPartyId: item.parentPartyId,
     supplierType: item.supplierType,
     coolcatchSupplierKind: item.coolcatchSupplierKind,
     contactPersonFirstName: item.contactPersonFirstName,
@@ -237,6 +290,10 @@ function mapParty(item: BackendParty): PartyRow {
     phone: item.phone,
     taxId: item.taxId,
     address: item.address,
+    route: item.route,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    googlePlaceId: item.googlePlaceId,
     pinCertificateUrl: item.pinCertificateUrl,
     companyRegistrationUrl: item.companyRegistrationUrl,
     supplierPaymentMethod: item.supplierPaymentMethod,
@@ -244,6 +301,10 @@ function mapParty(item: BackendParty): PartyRow {
     supplierBankAccountName: item.supplierBankAccountName,
     supplierBankAccountNumber: item.supplierBankAccountNumber,
     supplierBankBranchName: item.supplierBankBranchName,
+    lastKnownLatitude: item.lastKnownLatitude,
+    lastKnownLongitude: item.lastKnownLongitude,
+    defaultPriceListId: item.defaultPriceListId,
+    defaultTaxConfigId: item.defaultTaxConfigId,
     status: item.status ?? "ACTIVE",
   };
 }
@@ -257,7 +318,7 @@ export async function fetchNextSupplierCodeApi(): Promise<string> {
   return data.code;
 }
 
-/** Preview next customer code (0001, 0002, …). Server allocates the real code on create. */
+/** Preview next customer code (001, 002, …). Server allocates the real code on create when omitted. */
 export async function fetchNextCustomerCodeApi(): Promise<string> {
   requireLiveApi("Customer code preview");
   const data = await apiRequest<{ code: string }>("/api/parties/next-code", {
@@ -270,18 +331,27 @@ export async function fetchPartiesApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
+  /** Modern-trade branches under this supermarket HQ. */
+  parentPartyId?: string;
   supplierType?: SupplierType | "";
   status?: string;
   search?: string;
+  limit?: number;
 }): Promise<PartyRow[]> {
   requireLiveApi("Parties");
   const params = new URLSearchParams();
   if (filters?.role) params.set("role", filters.role);
   if (filters?.customerType) params.set("customerType", filters.customerType);
   if (filters?.customerCategoryId) params.set("customerCategoryId", filters.customerCategoryId);
+  if (filters?.channel) params.set("channel", filters.channel);
+  if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
+  if (filters?.parentPartyId) params.set("parentPartyId", filters.parentPartyId);
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.limit) params.set("limit", String(Math.min(Math.max(filters.limit, 1), 100)));
   const data = await apiRequest<{ items: BackendParty[] }>("/api/parties", {
     params,
   });
@@ -297,10 +367,14 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
   return {
     id: created.id,
     name: payload.name,
+    tradingName: payload.tradingName,
     code: created.code ?? payload.code,
     type: payload.roles.includes("supplier") ? "supplier" : "customer",
     roles: payload.roles,
     customerType: payload.customerType,
+    channel: payload.channel,
+    sfaSegment: payload.sfaSegment,
+    parentPartyId: payload.parentPartyId,
     supplierType: payload.supplierType,
     coolcatchSupplierKind: payload.coolcatchSupplierKind,
     contactPersonFirstName: payload.contactPersonFirstName,
@@ -308,6 +382,13 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     customerCategoryId: payload.customerCategoryId,
     email: payload.email,
     phone: payload.phone,
+    taxId: payload.taxId,
+    address: payload.address,
+    route: payload.route,
+    latitude: payload.latitude,
+    longitude: payload.longitude,
+    defaultPriceListId: payload.defaultPriceListId,
+    defaultTaxConfigId: payload.defaultTaxConfigId,
     status: payload.status ?? "ACTIVE",
   };
 }
@@ -336,6 +417,8 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
     creditWarningThresholdPct: data.creditWarningThresholdPct,
     customerCategoryId: data.customerCategoryId,
     paymentTermsId: data.paymentTermsId,
+    defaultPriceListId: data.defaultPriceListId,
+    defaultTaxConfigId: data.defaultTaxConfigId,
     defaultCurrency: data.defaultCurrency,
     coolcatchSupplierKind: data.coolcatchSupplierKind,
     contactPersonFirstName: data.contactPersonFirstName,
@@ -394,6 +477,9 @@ export async function searchPartyLookupOptionsApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
+  channel?: PartyChannel;
+  sfaSegment?: SfaSegment;
+  parentPartyId?: string;
   supplierType?: SupplierType | "";
   status?: string;
   search?: string;
@@ -404,6 +490,9 @@ export async function searchPartyLookupOptionsApi(filters?: {
   if (filters?.role) params.set("role", filters.role);
   if (filters?.customerType) params.set("customerType", filters.customerType);
   if (filters?.customerCategoryId) params.set("customerCategoryId", filters.customerCategoryId);
+  if (filters?.channel) params.set("channel", filters.channel);
+  if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
+  if (filters?.parentPartyId) params.set("parentPartyId", filters.parentPartyId);
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
@@ -411,7 +500,36 @@ export async function searchPartyLookupOptionsApi(filters?: {
   const data = await apiRequest<{ items: BackendParty[] }>("/api/parties", {
     params,
   });
-  return sortPartyLookupOptions(data.items.map((item) => toPartyLookupOption(item)), filters?.search ?? "");
+  // Resolve supermarket names for branch rows so pickers can show "Under Naivas".
+  const parentIds = [
+    ...new Set(
+      data.items
+        .map((p) => p.parentPartyId)
+        .filter((id): id is string => Boolean(id?.trim()))
+    ),
+  ];
+  const parentNameById = new Map<string, string>();
+  if (parentIds.length > 0) {
+    const parents = await Promise.all(
+      parentIds.map((id) =>
+        apiRequest<BackendParty>(`/api/parties/${encodeURIComponent(id)}`).catch(() => null)
+      )
+    );
+    for (const p of parents) {
+      if (p?.id) parentNameById.set(p.id, p.name);
+    }
+  }
+  return sortPartyLookupOptions(
+    data.items.map((item) =>
+      toPartyLookupOption({
+        ...item,
+        parentPartyName: item.parentPartyId
+          ? parentNameById.get(item.parentPartyId) ?? undefined
+          : undefined,
+      })
+    ),
+    filters?.search ?? ""
+  );
 }
 
 export async function uploadPartyPinCertificateApi(partyId: string, file: File): Promise<{ storageKey: string; fileName: string }> {

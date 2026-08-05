@@ -115,12 +115,12 @@ export function drillToCustomer(customerId?: string): DrillLink {
   if (customerId) {
     return {
       href: `/ar/customers?id=${customerId}`,
-      label: "View customer",
+      label: "View customer credit",
     };
   }
   return {
     href: "/ar/customers",
-    label: "View customers",
+    label: "Customer credit",
   };
 }
 

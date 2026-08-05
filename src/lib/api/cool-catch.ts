@@ -806,7 +806,7 @@ export async function fetchCashDisbursements(poId?: string): Promise<CashDisburs
 export function downloadCashDisbursementInvoice(
   disbursementId: string,
   onNotAvailable: (message: string) => void
-): Promise<void> {
+): Promise<boolean> {
   requireLiveApi("Disbursement invoice");
   return downloadFile(
     `/api/purchasing/cash-weight-audit/disbursements/${encodeURIComponent(disbursementId)}/invoice`,

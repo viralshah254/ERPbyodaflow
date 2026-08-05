@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -46,7 +46,8 @@ import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { t } from "@/lib/terminology";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -54,11 +55,19 @@ const DEFAULT_UOM_OPTIONS = ["EA", "KG", "L", "M", "PCS"];
 
 export default function ProductPackagingPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const canWrite = useCanWriteInventory();
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
+
+  React.useEffect(() => {
+    if (fmcgOrg) router.replace(`/master/products/${id}`);
+  }, [fmcgOrg, id, router]);
 
   const [product, setProduct] = React.useState<Awaited<ReturnType<typeof fetchProductApi>> | null | undefined>(undefined);
   const [packaging, setPackaging] = React.useState<ProductPackaging[]>([]);

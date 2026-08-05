@@ -15,13 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
@@ -29,9 +22,6 @@ import { hasRuntimePermission } from "@/lib/settings/hub-permissions";
 import {
   fetchOdaflowIntegrationApi,
   fetchOdaflowSyncStatus,
-  fetchOdaflowQueue,
-  retryQueueItem,
-  ignoreQueueItem,
   fetchOdaflowProductMappings,
   fetchOdaflowCustomerMappings,
   generateOdaflowCredentialsApi,
@@ -40,28 +30,12 @@ import {
   type OdaflowCredentialsApiResponse,
   type OdaflowIntegrationApiResponse,
   type OdaflowSyncStatus,
-  type OdaflowQueueItem,
   type OdaflowMapping,
 } from "@/lib/api/odaflow-integration";
+import { OdaflowSyncQueuePanel } from "@/components/integrations/OdaflowSyncQueuePanel";
+import { subscribeRealtimeInbox } from "@/lib/realtime-client";
 
 type Tab = "setup" | "overview" | "queue" | "products" | "customers";
-
-const QUEUE_STATUS_OPTIONS = [
-  { value: "pending", label: "Pending" },
-  { value: "failed", label: "Failed" },
-  { value: "resolved", label: "Resolved" },
-  { value: "ignored", label: "Ignored" },
-];
-
-const EVENT_TYPE_OPTIONS = [
-  { value: "", label: "All channels" },
-  { value: "order.modern_trade", label: "Modern Trade" },
-  { value: "order.distributor", label: "Distributor" },
-  { value: "order.direct", label: "Direct Customer" },
-  { value: "order.van_sales", label: "Van Sales" },
-  { value: "customer.upsert", label: "Customers" },
-  { value: "product.map", label: "Products" },
-];
 
 const TAB_LABELS: Record<Tab, string> = {
   setup: "Setup",
@@ -98,23 +72,6 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
-function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    processing: "bg-blue-100 text-blue-800",
-    resolved: "bg-green-100 text-green-800",
-    failed: "bg-red-100 text-red-800",
-    ignored: "bg-gray-100 text-gray-500",
-  };
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[status] ?? "bg-gray-100 text-gray-700"}`}
-    >
-      {status}
-    </span>
-  );
-}
-
 function channelLabel(eventType: string) {
   const map: Record<string, string> = {
     "order.modern_trade": "Modern Trade",
@@ -143,13 +100,7 @@ export default function OdaflowIntegrationPage() {
 
   const [status, setStatus] = React.useState<OdaflowSyncStatus | null>(null);
   const [statusLoading, setStatusLoading] = React.useState(true);
-
-  const [queueItems, setQueueItems] = React.useState<OdaflowQueueItem[]>([]);
-  const [queueTotal, setQueueTotal] = React.useState(0);
-  const [queueLoading, setQueueLoading] = React.useState(false);
-  const [queueStatus, setQueueStatus] = React.useState("pending");
-  const [queueEventType, setQueueEventType] = React.useState("");
-  const [queuePage, setQueuePage] = React.useState(1);
+  const [queueRefreshKey, setQueueRefreshKey] = React.useState(0);
 
   const [productMappings, setProductMappings] = React.useState<OdaflowMapping[]>([]);
   const [customerMappings, setCustomerMappings] = React.useState<OdaflowMapping[]>([]);
@@ -187,21 +138,13 @@ export default function OdaflowIntegrationPage() {
   }, [loadSettings, refreshStatus]);
 
   React.useEffect(() => {
-    if (tab !== "queue") return;
-    setQueueLoading(true);
-    fetchOdaflowQueue({
-      status: queueStatus,
-      eventType: queueEventType || undefined,
-      page: queuePage,
-      limit: 20,
-    })
-      .then((res) => {
-        setQueueItems(res.items);
-        setQueueTotal(res.total);
-      })
-      .catch(() => toast.error("Failed to load queue"))
-      .finally(() => setQueueLoading(false));
-  }, [tab, queueStatus, queueEventType, queuePage]);
+    return subscribeRealtimeInbox((event) => {
+      if (event === "odaflow.sync-queue.changed") {
+        void refreshStatus();
+        setQueueRefreshKey((k) => k + 1);
+      }
+    });
+  }, [refreshStatus]);
 
   React.useEffect(() => {
     if (tab !== "products" && tab !== "customers") return;
@@ -261,28 +204,6 @@ export default function OdaflowIntegrationPage() {
       setSaving(false);
     }
   };
-
-  async function handleRetry(id: string) {
-    try {
-      await retryQueueItem(id);
-      toast.success("Item requeued");
-      setQueueItems((prev) => prev.map((i) => (i._id === id ? { ...i, status: "pending" } : i)));
-      void refreshStatus();
-    } catch {
-      toast.error("Failed to retry");
-    }
-  }
-
-  async function handleIgnore(id: string) {
-    try {
-      await ignoreQueueItem(id);
-      toast.success("Item ignored");
-      setQueueItems((prev) => prev.filter((i) => i._id !== id));
-      void refreshStatus();
-    } catch {
-      toast.error("Failed to ignore");
-    }
-  }
 
   const fallbackBase = getErpApiBaseFromFrontend();
 
@@ -609,129 +530,13 @@ export default function OdaflowIntegrationPage() {
         )}
 
         {tab === "queue" && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Status</label>
-                <Select
-                  value={queueStatus}
-                  onValueChange={(v) => {
-                    setQueueStatus(v);
-                    setQueuePage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-36">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {QUEUE_STATUS_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-1">Channel</label>
-                <Select
-                  value={queueEventType}
-                  onValueChange={(v) => {
-                    setQueueEventType(v);
-                    setQueuePage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EVENT_TYPE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {queueLoading ? (
-              <div className="text-muted-foreground text-sm py-4">Loading queue…</div>
-            ) : queueItems.length === 0 ? (
-              <div className="text-muted-foreground text-sm py-6 text-center">No items in this view.</div>
-            ) : (
-              <div className="space-y-3">
-                {queueItems.map((item) => (
-                  <Card key={item._id}>
-                    <CardContent className="pt-4 pb-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            {statusBadge(item.status)}
-                            <span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-                              {channelLabel(item.eventType)}
-                            </span>
-                            <span className="text-sm font-medium truncate">
-                              {item.displayRef ?? item.odaflowId}
-                            </span>
-                          </div>
-                          {item.blockReason && <p className="text-xs text-red-600 mt-1">{item.blockReason}</p>}
-                          {item.unresolvedMappings && item.unresolvedMappings.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {item.unresolvedMappings.map((m, i) => (
-                                <span key={i} className="text-xs bg-red-50 text-red-700 rounded px-1.5 py-0.5">
-                                  {m.type}: {m.displayName ?? m.odaflowId}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {item.erpDocumentId && (
-                            <p className="text-xs text-green-600 mt-1">ERP Doc: {item.erpDocumentId}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {item.attemptCount} attempt{item.attemptCount !== 1 ? "s" : ""}
-                            {item.lastAttemptAt ? ` · last ${new Date(item.lastAttemptAt).toLocaleString()}` : ""}
-                          </p>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          {(item.status === "pending" || item.status === "failed") && (
-                            <Button size="sm" variant="outline" onClick={() => handleRetry(item._id)}>
-                              <Icons.RefreshCw className="h-3.5 w-3.5 mr-1" />
-                              Retry
-                            </Button>
-                          )}
-                          {item.status !== "resolved" && item.status !== "ignored" && (
-                            <Button size="sm" variant="ghost" onClick={() => handleIgnore(item._id)}>
-                              Ignore
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {queueTotal > 20 && (
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-sm text-muted-foreground">{queueTotal} total</span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" disabled={queuePage <= 1} onClick={() => setQueuePage((p) => p - 1)}>
-                    Previous
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={queuePage * 20 >= queueTotal}
-                    onClick={() => setQueuePage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+          <OdaflowSyncQueuePanel
+            refreshKey={queueRefreshKey}
+            onQueueChanged={() => {
+              void refreshStatus();
+              setQueueRefreshKey((k) => k + 1);
+            }}
+          />
         )}
 
         {tab === "products" && (

@@ -14,6 +14,7 @@ export type WarehousePickPackRow = {
   packingNote?: string;
   courier?: string;
   trackingRef?: string;
+  batchLabel?: string;
   vehicleId?: string;
   vehicleCode?: string;
   vehicleMode?: "LEASED" | "SPOT_HIRE";
@@ -33,8 +34,16 @@ export type WarehousePickPackRow = {
     variantId?: string;
     sku?: string;
     productName?: string;
+    /** Qty to pick/issue in warehouse base UOM (PCS for FMCG). */
     quantity: number;
     pickedQty?: number;
+    /** Sales/DN UOM (e.g. CARTON) — display; stock uses `quantity`. */
+    documentUnit?: string;
+    documentQuantity?: number;
+    unitsPer?: number;
+    baseUom?: string;
+    /** True when pack UOM has no unitsPer > 1 on packaging (FMCG). */
+    packagingConversionMissing?: boolean;
     suggestedBin?: string;
     locationId?: string;
     /** Available quantity at fulfilment warehouse (on-hand minus reserved). */
@@ -150,7 +159,7 @@ export async function runPickPackAction(
     courier?: string;
     trackingRef?: string;
     lines?: Array<{ lineId: string; pickedQty?: number; locationId?: string }>;
-    vehicleId?: string;
+    vehicleId?: string | null;
     vehicleMode?: "LEASED" | "SPOT_HIRE";
     carrier?: string;
     batchLabel?: string;
@@ -167,6 +176,24 @@ export async function patchPickPackWarehouse(id: string, warehouseId: string): P
   await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: { warehouseId },
+  });
+}
+
+/** Persist dispatch draft fields (waybill, batch, vehicle) before Mark dispatched. */
+export async function patchPickPackDispatchDraft(
+  id: string,
+  body: {
+    trackingRef?: string;
+    courier?: string;
+    batchLabel?: string;
+    vehicleId?: string | null;
+    vehicleMode?: "LEASED" | "SPOT_HIRE";
+  }
+): Promise<void> {
+  requireLiveApi("Pick-pack dispatch draft");
+  await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body,
   });
 }
 

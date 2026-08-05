@@ -249,7 +249,7 @@ export const ITEM_GUIDES: Partial<
     guideTips: [
       "Do not mix debit notes with informal “balance adjustments” in spreadsheets—keep everything in the ERP.",
     ],
-    recommendedNextStep: { label: "AR customers", href: "/ar/customers" },
+    recommendedNextStep: { label: "Customer credit", href: "/ar/customers" },
   },
   "docs-purchase-credit-note": {
     guideSummary:

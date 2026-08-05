@@ -11,7 +11,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchPickPackTask, patchPickPackLines, patchPickPackWarehouse, runPickPackAction, stagePickPackStock, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import {
+  fetchPickPackTask,
+  patchPickPackDispatchDraft,
+  patchPickPackLines,
+  patchPickPackWarehouse,
+  runPickPackAction,
+  stagePickPackStock,
+  type WarehousePickPackRow,
+} from "@/lib/api/warehouse-execution";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { patchDocumentApi } from "@/lib/api/documents";
 import { fetchProductsPageApi } from "@/lib/api/products";
@@ -34,7 +42,11 @@ import {
   isRoundFishMixLine,
   sizeProductsForBreakdown,
 } from "@/lib/warehouse/pick-pack-round-fish";
-import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
+import {
+  createDistributionVehicle,
+  fetchDistributionVehicles,
+  type DistributionVehicleRow,
+} from "@/lib/api/logistics";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import {
@@ -52,8 +64,63 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { isPieceUom } from "@/lib/fmcg/pricing";
+import { buildStockLevelsHref } from "@/lib/inventory/stock-levels-nav";
+
+function formatPickQty(n: number, fmcg: boolean, unit = "PCS"): string {
+  const v = formatKg(n);
+  if (!fmcg) return v;
+  return `${v} ${unit}`;
+}
+
+function formatPickQtyWithUnit(n: number, fmcg: boolean): string {
+  return fmcg ? formatPickQty(n, true, "PCS") : `${formatKg(n)} kg`;
+}
+
+/** Human label for pack UOM count field (Carton vs Bale vs …). */
+function packUomCountLabel(uom: string): { unit: string; countLabel: string; plural: string } {
+  const u = String(uom ?? "").trim().toUpperCase();
+  if (u === "BALE" || u === "BALES" || u === "BL") {
+    return { unit: "BALE", countLabel: "Bales count", plural: "bales" };
+  }
+  if (u === "OUTER" || u === "OUTERS" || u === "OTR") {
+    return { unit: "OUTER", countLabel: "Outers count", plural: "outers" };
+  }
+  if (u === "CTN" || u === "CARTON" || u === "CARTONS" || u === "CS") {
+    return { unit: "CARTON", countLabel: "Cartons count", plural: "cartons" };
+  }
+  if (u === "PK" || u === "PACK" || u === "PACKS") {
+    return { unit: "PACK", countLabel: "Packs count", plural: "packs" };
+  }
+  const nice = u ? u.charAt(0) + u.slice(1).toLowerCase() : "Carton";
+  return { unit: u || "CARTON", countLabel: `${nice}s count`, plural: `${nice.toLowerCase()}s` };
+}
+
+function resolveShipmentPackUom(
+  lines: Array<{ documentUnit?: string; unitsPer?: number; documentQuantity?: number }>
+): string {
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    const u = String(line.documentUnit ?? "").trim();
+    if (!u || isPieceUom(u)) continue;
+    if ((line.unitsPer ?? 0) <= 1 && (line.documentQuantity ?? 0) <= 0) continue;
+    const key = u.toUpperCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let best = "CARTON";
+  let bestN = 0;
+  for (const [u, n] of counts) {
+    if (n > bestN) {
+      best = u;
+      bestN = n;
+    }
+  }
+  return best;
+}
 
 /** 400 from pick-pack action may include shortLines (same shape as dispatch). */
 function toastPickPackInsufficientError(e: unknown) {
@@ -163,6 +230,10 @@ export default function PickPackDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const canWrite = useCanWriteInventory();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  // Prefer industryCategory so FMCG orgs never see seafood kg copy if templateId is stale.
+  const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
   const [task, setTask] = React.useState<WarehousePickPackRow | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [cartons, setCartons] = React.useState("0");
@@ -173,6 +244,18 @@ export default function PickPackDetailPage() {
   const [vehicleMode, setVehicleMode] = React.useState<"LEASED" | "SPOT_HIRE">("LEASED");
   const [selectedVehicleId, setSelectedVehicleId] = React.useState<string>("");
   const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
+  const [addVehicleOpen, setAddVehicleOpen] = React.useState(false);
+  const [addVehicleSaving, setAddVehicleSaving] = React.useState(false);
+  const [addVehicleForm, setAddVehicleForm] = React.useState({
+    code: "",
+    name: "",
+    registration: "",
+    monthlyCost: "",
+  });
+  const fleetVehicles = React.useMemo(
+    () => vehicles.filter((v) => !v.type || String(v.type).toUpperCase() === "LEASED"),
+    [vehicles]
+  );
 
   const [warehouseOptions, setWarehouseOptions] = React.useState<LookupOption[]>([]);
   const [warehouseSaving, setWarehouseSaving] = React.useState(false);
@@ -204,6 +287,13 @@ export default function PickPackDetailPage() {
       setPackingNote(payload?.packingNote ?? "");
       setCourier(payload?.courier ?? "");
       setTrackingRef(payload?.trackingRef ?? "");
+      setBatchLabel(payload?.batchLabel ?? "");
+      setVehicleMode(
+        payload?.vehicleMode === "SPOT_HIRE" || payload?.vehicleMode === "LEASED"
+          ? payload.vehicleMode
+          : "LEASED"
+      );
+      setSelectedVehicleId(payload?.vehicleId ?? "");
     } catch (error) {
       setTask(null);
       const err = error as Error & { status?: number };
@@ -281,13 +371,109 @@ export default function PickPackDetailPage() {
       });
   }, []);
 
-  React.useEffect(() => {
-    void fetchDistributionVehicles({ active: true })
-      .then(setVehicles)
-      .catch(() => {
-        /* Non-critical; fleet vehicles are optional */
-      });
+  const reloadVehicles = React.useCallback(async () => {
+    try {
+      const items = await fetchDistributionVehicles({ active: true });
+      setVehicles(items);
+      return items;
+    } catch {
+      /* Non-critical; fleet vehicles are optional */
+      return [] as DistributionVehicleRow[];
+    }
   }, []);
+
+  React.useEffect(() => {
+    void reloadVehicles();
+  }, [reloadVehicles]);
+
+  const suggestFleetVehicleCode = React.useCallback(() => {
+    const existing = vehicles
+      .map((v) => {
+        const m = v.code?.match(/^LSE-(\d+)$/i);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const next = existing.length ? Math.max(...existing) + 1 : 1;
+    return `LSE-${String(next).padStart(3, "0")}`;
+  }, [vehicles]);
+
+  const openAddVehicle = () => {
+    setAddVehicleForm({
+      code: suggestFleetVehicleCode(),
+      name: "",
+      registration: "",
+      monthlyCost: "",
+    });
+    setAddVehicleOpen(true);
+  };
+
+  const buildDispatchPayload = React.useCallback(
+    (overrides?: {
+      trackingRef?: string;
+      courier?: string;
+      batchLabel?: string;
+      vehicleMode?: "LEASED" | "SPOT_HIRE";
+      vehicleId?: string;
+    }) => {
+      const mode = overrides?.vehicleMode ?? vehicleMode;
+      const vehicleId = overrides?.vehicleId ?? selectedVehicleId;
+      return {
+        trackingRef: overrides?.trackingRef ?? trackingRef,
+        courier: overrides?.courier ?? courier,
+        batchLabel: (overrides?.batchLabel ?? batchLabel).trim(),
+        vehicleMode: mode,
+        vehicleId: mode === "LEASED" ? vehicleId || null : null,
+      };
+    },
+    [trackingRef, courier, batchLabel, vehicleMode, selectedVehicleId]
+  );
+
+  const saveDispatchDraft = React.useCallback(
+    async (overrides?: Parameters<typeof buildDispatchPayload>[0]) => {
+      if (!task?.id) return;
+      const st = (task.status ?? "").trim().toUpperCase();
+      if (st === "DISPATCHED" || st === "COMPLETED" || st === "CANCELLED") return;
+      try {
+        await patchPickPackDispatchDraft(task.id, buildDispatchPayload(overrides));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to save dispatch details.");
+      }
+    },
+    [task?.id, task?.status, buildDispatchPayload]
+  );
+
+  const handleCreateVehicle = async () => {
+    const code = addVehicleForm.code.trim().toUpperCase();
+    if (!code) {
+      toast.error("Vehicle code is required.");
+      return;
+    }
+    setAddVehicleSaving(true);
+    try {
+      const created = await createDistributionVehicle({
+        code,
+        name: addVehicleForm.name.trim() || undefined,
+        type: "LEASED",
+        registration: addVehicleForm.registration.trim() || undefined,
+        monthlyCost: addVehicleForm.monthlyCost.trim()
+          ? Number(addVehicleForm.monthlyCost)
+          : undefined,
+        assumedTripsPerMonth: 12,
+        currency: "KES",
+      });
+      const items = await reloadVehicles();
+      const id = created?.id || items.find((v) => v.code?.toUpperCase() === code)?.id;
+      if (id) setSelectedVehicleId(id);
+      setVehicleMode("LEASED");
+      setAddVehicleOpen(false);
+      if (id) void saveDispatchDraft({ vehicleMode: "LEASED", vehicleId: id });
+      toast.success("Vehicle added to fleet.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to add vehicle.");
+    } finally {
+      setAddVehicleSaving(false);
+    }
+  };
 
   const runWarehouseAction = React.useCallback(
     async (successMessage: string, fn: () => Promise<void>) => {
@@ -459,7 +645,9 @@ export default function PickPackDetailPage() {
       });
       if (line && stock.remaining + 1e-9 < line.quantity) {
         toast.warning(
-          `Only ${formatKg(stock.remaining)} kg left on this pick for that product (ordered ${formatKg(line.quantity)} kg).`,
+          fmcg
+            ? `Only ${formatPickQty(stock.remaining, true)} left on this pick for that product (need ${formatPickQty(line.quantity, true)}).`
+            : `Only ${formatKg(stock.remaining)} kg left on this pick for that product (ordered ${formatKg(line.quantity)} kg).`,
           { duration: 10000 }
         );
       }
@@ -474,7 +662,7 @@ export default function PickPackDetailPage() {
         setLineEditSaving(null);
       }
     },
-    [task, taskStockSnapshot, refresh]
+    [task, taskStockSnapshot, refresh, fmcg]
   );
 
   const removeAddedLine = React.useCallback(
@@ -583,6 +771,23 @@ export default function PickPackDetailPage() {
     return !hasAnyPick;
   }, [task, linePickedDraft]);
 
+  const shipmentPackUom = React.useMemo(
+    () => (fmcg && task ? resolveShipmentPackUom(task.lines) : "CARTON"),
+    [fmcg, task]
+  );
+  const packCountUi = packUomCountLabel(shipmentPackUom);
+  const orderedPackCount = React.useMemo(() => {
+    if (!fmcg || !task) return null;
+    let sum = 0;
+    for (const line of task.lines) {
+      const u = String(line.documentUnit ?? "").trim();
+      if (!u || isPieceUom(u)) continue;
+      if (packUomCountLabel(u).unit !== packCountUi.unit) continue;
+      sum += Number(line.documentQuantity ?? 0);
+    }
+    return sum > 0 ? sum : null;
+  }, [fmcg, task, packCountUi.unit]);
+
   if (!task && loading) {
     return <PageShell><PageHeader title="Loading task..." /></PageShell>;
   }
@@ -650,10 +855,13 @@ export default function PickPackDetailPage() {
   const qtyColumnLabel = packedOrLater ? "Packed" : "Picked";
   /** After dispatch, ledger avails already reflect issues — show delta only pre-dispatch. */
   const showAvailPickDelta = taskStatusUpper === "PICKED" || taskStatusUpper === "PACKED";
+  const packagingMissing = fmcg && task.lines.some((l) => l.packagingConversionMissing);
   const workflowHint = (() => {
     if (isCancelled) return "This task was cancelled.";
     if (taskStatusUpper === "PENDING")
-      return "Change the product on a line to substitute (dropdown), set picked qty, then confirm pick & pack. Set picked to 0 to skip.";
+      return fmcg
+        ? "Pick quantities are in pieces (base UOM). Set picked qty, then confirm pick & pack. Set picked to 0 to skip a line."
+        : "Change the product on a line to substitute (dropdown), set picked qty, then confirm pick & pack. Set picked to 0 to skip.";
     if (taskStatusUpper === "PICKED") return "Pick saved — adjust cartons if needed, then confirm pack.";
     if (taskStatusUpper === "PACKED") return "Packed — add courier/tracking and mark dispatched to issue stock from the fulfilment warehouse.";
     if (taskStatusUpper === "DISPATCHED")
@@ -720,20 +928,85 @@ export default function PickPackDetailPage() {
               </p>
             ) : null}
             {fulfilmentWarehouseUi.showPrimaryStockMismatch ? (
-              <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-100">
-                Available stock is showing in your <strong>MAIN</strong> (primary) warehouse — the fulfilment site above shows no
-                available quantity. Either switch the fulfilment warehouse to MAIN / primary stock location, or move stock
-                into the selected warehouse with a transfer.
-              </p>
+              <div className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-100 space-y-2">
+                <p>
+                  Available stock is showing in your <strong>MAIN</strong> (primary) warehouse — the fulfilment site above shows no
+                  available quantity. Either switch the fulfilment warehouse to MAIN / primary stock location, or move stock
+                  into the selected warehouse with a transfer.
+                </p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link
+                    href={buildStockLevelsHref({
+                      search: task.lines.find((l) => l.sku)?.sku,
+                      warehouseId: task.warehouseId,
+                    })}
+                  >
+                    View stock levels
+                  </Link>
+                </Button>
+              </div>
             ) : null}
             {pickPackStockHintMessage(task.stockLookupHint) ? (
-              <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-                {pickPackStockHintMessage(task.stockLookupHint)}
+              <div className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive space-y-2">
+                <p>{pickPackStockHintMessage(task.stockLookupHint)}</p>
                 {task.productIdsWithoutStockLevels?.length ? (
-                  <span className="mt-2 block font-mono text-xs opacity-90">
+                  <span className="block font-mono text-xs opacity-90">
                     IDs without stock records: {task.productIdsWithoutStockLevels.join(", ")}
                   </span>
                 ) : null}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {canWrite ? (
+                    <Button variant="secondary" size="sm" asChild>
+                      <Link
+                        href={buildStockLevelsHref({
+                          action: "stockIn",
+                          productId:
+                            task.productIdsWithoutStockLevels?.[0] ??
+                            task.lines.find((l) => l.productId)?.productId,
+                          warehouseId: task.warehouseId,
+                          search: task.lines.find((l) => l.sku)?.sku,
+                        })}
+                      >
+                        Stock In
+                      </Link>
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" size="sm" asChild>
+                    <Link
+                      href={buildStockLevelsHref({
+                        productId:
+                          task.productIdsWithoutStockLevels?.[0] ??
+                          task.lines.find((l) => l.productId)?.productId,
+                        warehouseId: task.warehouseId,
+                        search: task.lines.find((l) => l.sku)?.sku,
+                      })}
+                    >
+                      View stock levels
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {packagingMissing ? (
+              <p className="text-sm rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-950 dark:text-amber-100">
+                A line uses a pack UOM (e.g. carton) but packaging has no pieces-per-pack. Pick is treating it as 1 piece —{" "}
+                {task.lines
+                  .filter((l) => l.packagingConversionMissing && l.productId)
+                  .filter(
+                    (l, i, arr) => arr.findIndex((x) => x.productId === l.productId) === i
+                  )
+                  .map((l, i) => (
+                    <span key={l.productId}>
+                      {i > 0 ? ", " : null}
+                      <Link
+                        href={`/master/products/${l.productId}?tab=packaging`}
+                        className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-50"
+                      >
+                        {l.productName ?? l.sku ?? "open product"}
+                      </Link>
+                    </span>
+                  ))}
+                {" "}→ Packs, set e.g. 1 CARTON = 24 PCS, then reload this pick.
               </p>
             ) : null}
             {task.suggestedFulfilmentWarehouseId &&
@@ -806,12 +1079,24 @@ export default function PickPackDetailPage() {
               ) : null}
             </div>
             <CardDescription>
-              <strong>Most substitutions:</strong> use the product dropdown on the line (e.g. change Size 3 → Size 10 when Size 3
-              is out of stock), then enter picked qty. Set picked to 0 to skip a line entirely.{" "}
-              <strong>Can pick</strong> and <strong>Avail. (MAIN)</strong> show how much is left for that line after other rows on this order claim the same SKU.{" "}
-              <strong>Round fish mix:</strong> use &quot;Break down by size&quot; on that line.{" "}
-              Only use &quot;Add extra product line&quot; when you need a second product on the shipment while keeping the original
-              line at 0 for the record.
+              {fmcg ? (
+                <>
+                  Quantities to pick are in <strong>pieces (base UOM)</strong> — the same unit as Stock In. If the sales order was in
+                  cartons, packaging converts cartons → pieces here. Use the product dropdown to substitute when needed; set picked to
+                  0 to skip a line. <strong>Can pick</strong> and <strong>Avail. (MAIN)</strong> show remaining pieces after other lines
+                  on this order claim the same SKU. Only use &quot;Add extra product line&quot; when you need a second product while
+                  keeping the original line at 0.
+                </>
+              ) : (
+                <>
+                  <strong>Most substitutions:</strong> use the product dropdown on the line (e.g. change Size 3 → Size 10 when Size 3
+                  is out of stock), then enter picked qty. Set picked to 0 to skip a line entirely.{" "}
+                  <strong>Can pick</strong> and <strong>Avail. (MAIN)</strong> show how much is left for that line after other rows on
+                  this order claim the same SKU. <strong>Round fish mix:</strong> use &quot;Break down by size&quot; on that line. Only
+                  use &quot;Add extra product line&quot; when you need a second product on the shipment while keeping the original line
+                  at 0 for the record.
+                </>
+              )}
               {dispatchedOrComplete ? (
                 <span className="mt-2 block font-medium text-foreground">
                   This shipment has been dispatched from stock; remaining columns still show ledger availability before this task&apos;s
@@ -826,7 +1111,7 @@ export default function PickPackDetailPage() {
                 <TableRow>
                   <TableHead className="min-w-[12rem]">Product (substitute)</TableHead>
                   <TableHead>SKU</TableHead>
-                  <TableHead>Qty</TableHead>
+                  <TableHead>{fmcg ? "To pick" : "Qty"}</TableHead>
                   <TableHead className="text-right">Can pick</TableHead>
                   <TableHead className="text-right">Avail. (MAIN)</TableHead>
                   <TableHead className="text-right">Avail. (all sites)</TableHead>
@@ -879,7 +1164,7 @@ export default function PickPackDetailPage() {
                         ) : (
                           line.productName ?? line.productId
                         )}
-                        {canEditPicked && isRoundFishMixLine(line) ? (
+                        {!fmcg && canEditPicked && isRoundFishMixLine(line) ? (
                           <Button
                             type="button"
                             variant="link"
@@ -889,9 +1174,53 @@ export default function PickPackDetailPage() {
                             Break down by size
                           </Button>
                         ) : null}
+                        {fmcg && line.packagingConversionMissing ? (
+                          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                            Pack UOM {line.documentUnit} has no pieces-per-pack on packaging — treating as 1.{" "}
+                            {line.productId ? (
+                              <Link
+                                href={`/master/products/${line.productId}?tab=packaging`}
+                                className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200"
+                              >
+                                Set packaging on the product
+                              </Link>
+                            ) : (
+                              "Set packaging on the product"
+                            )}
+                            .
+                          </p>
+                        ) : null}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">{line.sku ?? "—"}</TableCell>
-                      <TableCell className="tabular-nums">{formatKg(line.quantity)}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {fmcg ? (
+                          <div className="space-y-0.5">
+                            {line.documentUnit &&
+                            line.documentQuantity != null &&
+                            !isPieceUom(line.documentUnit) ? (
+                              <>
+                                <div className="font-medium">
+                                  Ordered {formatKg(line.documentQuantity)} {line.documentUnit}
+                                </div>
+                                <div className="text-[11px] text-foreground">
+                                  → pick {formatPickQty(line.quantity, true, line.baseUom || "PCS")}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">
+                                  {formatKg(line.documentQuantity)} {line.documentUnit} ×{" "}
+                                  {line.unitsPer ?? "?"} {line.baseUom || "PCS"} ={" "}
+                                  {formatKg(line.quantity)} {line.baseUom || "PCS"} from stock
+                                </div>
+                              </>
+                            ) : (
+                              <div className="font-medium">
+                                {formatPickQty(line.quantity, true, line.baseUom || "PCS")}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          formatKg(line.quantity)
+                        )}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {lineStock ? (
                           <LineCanPickCell stock={lineStock} />
@@ -946,7 +1275,7 @@ export default function PickPackDetailPage() {
                             />
                             {lineStock?.overPickThisLine ? (
                               <p className="text-[10px] leading-tight text-amber-600">
-                                Only {formatKg(lineStock.remainingForLine)} kg left for this line
+                                Only {formatPickQtyWithUnit(lineStock.remainingForLine, fmcg)} left for this line
                               </p>
                             ) : null}
                           </div>
@@ -988,10 +1317,20 @@ export default function PickPackDetailPage() {
                   Add extra product line
                 </Button>
                 <p className="text-[11px] text-muted-foreground max-w-xl">
-                  Optional — only if you ship an additional product while leaving the original line at picked 0. For a simple swap
-                  (Size 9 → Size 10), use the product dropdown on that row instead. Lines from &quot;Break down by size&quot; stay
-                  on the pick list without a remove icon; manually added lines show{" "}
-                  <Trash2 className="inline h-3 w-3 align-text-bottom" aria-hidden /> on the right.
+                  {fmcg ? (
+                    <>
+                      Optional — only if you ship an additional product while leaving the original line at picked 0. For a simple
+                      SKU swap, use the product dropdown on that row instead. Manually added lines show{" "}
+                      <Trash2 className="inline h-3 w-3 align-text-bottom" aria-hidden /> on the right.
+                    </>
+                  ) : (
+                    <>
+                      Optional — only if you ship an additional product while leaving the original line at picked 0. For a simple
+                      swap (Size 9 → Size 10), use the product dropdown on that row instead. Lines from &quot;Break down by
+                      size&quot; stay on the pick list without a remove icon; manually added lines show{" "}
+                      <Trash2 className="inline h-3 w-3 align-text-bottom" aria-hidden /> on the right.
+                    </>
+                  )}
                 </p>
               </div>
             ) : null}
@@ -1044,10 +1383,25 @@ export default function PickPackDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Cartons count</Label>
+                <Label>{fmcg ? packCountUi.countLabel : "Cartons count"}</Label>
                 <Input value={cartons} onChange={(e) => setCartons(e.target.value)} />
                 <p className="text-[11px] text-muted-foreground">
-                  Leave as 0 or empty to default to 1 when you confirm pick &amp; pack.
+                  {fmcg ? (
+                    <>
+                      How many {packCountUi.plural} on this shipment (pack UOM from the order
+                      {orderedPackCount != null ? (
+                        <>
+                          ; ordered{" "}
+                          <span className="font-medium text-foreground">
+                            {formatKg(orderedPackCount)} {packCountUi.unit}
+                          </span>
+                        </>
+                      ) : null}
+                      ). Leave 0 or empty to default to 1 when you confirm pick &amp; pack.
+                    </>
+                  ) : (
+                    "Leave as 0 or empty to default to 1 when you confirm pick & pack."
+                  )}
                 </p>
               </div>
               <div className="space-y-2">
@@ -1068,7 +1422,10 @@ export default function PickPackDetailPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setVehicleMode("LEASED")}
+                  onClick={() => {
+                    setVehicleMode("LEASED");
+                    void saveDispatchDraft({ vehicleMode: "LEASED" });
+                  }}
                   className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                     vehicleMode === "LEASED"
                       ? "border-primary bg-primary text-primary-foreground"
@@ -1079,7 +1436,10 @@ export default function PickPackDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVehicleMode("SPOT_HIRE")}
+                  onClick={() => {
+                    setVehicleMode("SPOT_HIRE");
+                    void saveDispatchDraft({ vehicleMode: "SPOT_HIRE", vehicleId: "" });
+                  }}
                   className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                     vehicleMode === "SPOT_HIRE"
                       ? "border-primary bg-primary text-primary-foreground"
@@ -1092,26 +1452,64 @@ export default function PickPackDetailPage() {
 
               {vehicleMode === "LEASED" ? (
                 <div className="space-y-2">
-                  <Label>Vehicle</Label>
-                  <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Vehicle</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={openAddVehicle}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      Add vehicle
+                    </Button>
+                  </div>
+                  <Select
+                    value={selectedVehicleId}
+                    onValueChange={(v) => {
+                      setSelectedVehicleId(v);
+                      void saveDispatchDraft({ vehicleMode: "LEASED", vehicleId: v });
+                    }}
+                  >
                     <SelectTrigger className="w-full" aria-label="Fleet vehicle">
-                      <SelectValue placeholder={vehicles.length ? "Select vehicle…" : "No fleet vehicles found"} />
+                      <SelectValue
+                        placeholder={
+                          fleetVehicles.length ? "Select vehicle…" : "No fleet vehicles found"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicles.map((v) => (
+                      {fleetVehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id}>
                           {v.code}
                           {v.name ? ` — ${v.name}` : ""}
                           {v.registration ? ` (${v.registration})` : ""}
                         </SelectItem>
                       ))}
+                      <div className="border-t border-border mt-1 pt-1">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          onPointerDown={(e) => e.preventDefault()}
+                          onClick={openAddVehicle}
+                        >
+                          <Plus className="h-3.5 w-3.5 shrink-0" />
+                          Add vehicle…
+                        </button>
+                      </div>
                     </SelectContent>
                   </Select>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <Label>Carrier name</Label>
-                  <Input value={courier} onChange={(e) => setCourier(e.target.value)} placeholder="Carrier / driver name" />
+                  <Input
+                    value={courier}
+                    onChange={(e) => setCourier(e.target.value)}
+                    onBlur={() => void saveDispatchDraft()}
+                    placeholder="Carrier / driver name"
+                  />
                 </div>
               )}
 
@@ -1120,13 +1518,23 @@ export default function PickPackDetailPage() {
                 <Input
                   value={batchLabel}
                   onChange={(e) => setBatchLabel(e.target.value)}
+                  onBlur={() => void saveDispatchDraft()}
                   placeholder="e.g. Kitengela, Ruiru, Mathare"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Tracking reference</Label>
-                <Input value={trackingRef} onChange={(e) => setTrackingRef(e.target.value)} placeholder="Optional" />
+                <Label>Waybill / courier tracking</Label>
+                <Input
+                  value={trackingRef}
+                  onChange={(e) => setTrackingRef(e.target.value)}
+                  onBlur={() => void saveDispatchDraft()}
+                  placeholder="Optional — waybill, AWB, or your trip sheet ref"
+                />
+                <p className="text-xs text-muted-foreground">
+                  External reference from the carrier or your own books. Leave blank if none. All
+                  Dispatch fields save when you change them, confirm pack, or mark dispatched.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -1151,8 +1559,9 @@ export default function PickPackDetailPage() {
                 {partialPickSummary.sharedShortfall.map((s, idx) => (
                   <li key={`shared-${idx}`}>
                     {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} —{" "}
-                    {formatKg(s.totalPicked)} kg across {s.lineCount} line{s.lineCount === 1 ? "" : "s"},{" "}
-                    {formatKg(s.warehouse)} kg at warehouse ({formatKg(s.shortfall)} kg over)
+                    {formatPickQtyWithUnit(s.totalPicked, fmcg)} across {s.lineCount} line
+                    {s.lineCount === 1 ? "" : "s"}, {formatPickQtyWithUnit(s.warehouse, fmcg)} at warehouse (
+                    {formatPickQtyWithUnit(s.shortfall, fmcg)} over)
                   </li>
                 ))}
               </ul>
@@ -1178,8 +1587,8 @@ export default function PickPackDetailPage() {
                 <ul className="mt-2 list-disc pl-5 space-y-1">
                   {partialPickSummary.partial.map((s, idx) => (
                     <li key={`part-${idx}`}>
-                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · shipping {formatKg(s.picked)}{" "}
-                      of {formatKg(s.ordered)} kg
+                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · shipping{" "}
+                      {formatPickQtyWithUnit(s.picked, fmcg)} of {formatPickQtyWithUnit(s.ordered, fmcg)}
                     </li>
                   ))}
                 </ul>
@@ -1188,8 +1597,12 @@ export default function PickPackDetailPage() {
                 <ul className="mt-2 list-disc pl-5 space-y-1">
                   {partialPickSummary.overPick.map((s, idx) => (
                     <li key={`over-${idx}`}>
-                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · picked {formatKg(s.picked)}{" "}
-                      kg but only {formatKg(typeof s.remainingForLine === "number" ? s.remainingForLine : s.available)} kg
+                      {[s.productName, s.sku].filter(Boolean).join(" · ") || "Product"} · picked{" "}
+                      {formatPickQtyWithUnit(s.picked, fmcg)} but only{" "}
+                      {formatPickQtyWithUnit(
+                        typeof s.remainingForLine === "number" ? s.remainingForLine : s.available,
+                        fmcg
+                      )}{" "}
                       left on this line — will cap on confirm
                     </li>
                   ))}
@@ -1225,6 +1638,11 @@ export default function PickPackDetailPage() {
                       action: "pack",
                       cartonsCount: Math.max(1, Number(cartons) || 1),
                       packingNote,
+                      ...buildDispatchPayload(),
+                      vehicleId:
+                        vehicleMode === "LEASED" && selectedVehicleId
+                          ? selectedVehicleId
+                          : "",
                     });
                     toast.success("Pick and pack confirmed.");
                     await refresh();
@@ -1257,6 +1675,11 @@ export default function PickPackDetailPage() {
                       action: "pack",
                       cartonsCount: Math.max(1, Number(cartons) || 1),
                       packingNote,
+                      ...buildDispatchPayload(),
+                      vehicleId:
+                        vehicleMode === "LEASED" && selectedVehicleId
+                          ? selectedVehicleId
+                          : "",
                     });
                     toast.success("Pack confirmed.");
                     await refresh();
@@ -1278,14 +1701,18 @@ export default function PickPackDetailPage() {
             onClick={() => {
               void (async () => {
                 try {
+                  const draft = buildDispatchPayload();
                   await runPickPackAction(task.id, {
                     action: "dispatch",
-                    vehicleMode,
-                    vehicleId: vehicleMode === "LEASED" && selectedVehicleId ? selectedVehicleId : undefined,
-                    carrier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
-                    courier: vehicleMode === "SPOT_HIRE" ? courier : undefined,
-                    batchLabel: batchLabel.trim() || undefined,
-                    trackingRef,
+                    ...draft,
+                    vehicleId:
+                      draft.vehicleMode === "LEASED" && draft.vehicleId
+                        ? draft.vehicleId
+                        : undefined,
+                    carrier: draft.vehicleMode === "SPOT_HIRE" ? draft.courier : undefined,
+                    courier: draft.courier,
+                    batchLabel: draft.batchLabel,
+                    trackingRef: draft.trackingRef,
                   });
                   toast.success("Dispatch recorded.");
                   await refresh();
@@ -1449,7 +1876,7 @@ export default function PickPackDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Quantity (kg)</Label>
+                <Label>{fmcg ? "Quantity (PCS)" : "Quantity (kg)"}</Label>
                 <Input
                   type="number"
                   min={0}
@@ -1457,6 +1884,12 @@ export default function PickPackDetailPage() {
                   value={addLineQty}
                   onChange={(e) => setAddLineQty(e.target.value)}
                 />
+                {fmcg ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Enter pieces (base UOM) — same unit as Stock In and the pick list. Pack/carton conversion applies on sales
+                    order lines, not here.
+                  </p>
+                ) : null}
               </div>
             </div>
             <SheetFooter>
@@ -1492,6 +1925,91 @@ export default function PickPackDetailPage() {
               </Button>
             </SheetFooter>
             </div>
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
+          <SheetContent className="sm:max-w-md overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Add fleet vehicle</SheetTitle>
+              <SheetDescription>
+                Register a leased vehicle for dispatch. It will be selected on this pick automatically.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 py-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="pp-vehicle-code">Code *</Label>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    onClick={() =>
+                      setAddVehicleForm((f) => ({ ...f, code: suggestFleetVehicleCode() }))
+                    }
+                  >
+                    Use suggested
+                  </button>
+                </div>
+                <Input
+                  id="pp-vehicle-code"
+                  value={addVehicleForm.code}
+                  onChange={(e) =>
+                    setAddVehicleForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))
+                  }
+                  placeholder="Your fleet / tally code"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Prefilled with a suggested code (e.g. LSE-001). Replace it with your own code from
+                  tally or an existing vehicle register if you already have one.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pp-vehicle-name">Name / description</Label>
+                <Input
+                  id="pp-vehicle-name"
+                  value={addVehicleForm.name}
+                  onChange={(e) => setAddVehicleForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Isuzu NQR"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pp-vehicle-reg">Registration plate</Label>
+                <Input
+                  id="pp-vehicle-reg"
+                  value={addVehicleForm.registration}
+                  onChange={(e) =>
+                    setAddVehicleForm((f) => ({ ...f, registration: e.target.value }))
+                  }
+                  placeholder="e.g. KDA 123A"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pp-vehicle-cost">Monthly cost (optional)</Label>
+                <Input
+                  id="pp-vehicle-cost"
+                  type="number"
+                  min={0}
+                  value={addVehicleForm.monthlyCost}
+                  onChange={(e) =>
+                    setAddVehicleForm((f) => ({ ...f, monthlyCost: e.target.value }))
+                  }
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <SheetFooter>
+              <Button type="button" variant="outline" onClick={() => setAddVehicleOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={addVehicleSaving || !addVehicleForm.code.trim()}
+                onClick={() => void handleCreateVehicle()}
+              >
+                {addVehicleSaving ? "Saving…" : "Save vehicle"}
+              </Button>
+            </SheetFooter>
           </SheetContent>
         </Sheet>
 

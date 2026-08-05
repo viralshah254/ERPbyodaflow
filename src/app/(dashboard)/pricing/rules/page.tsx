@@ -48,8 +48,25 @@ import { searchPartyLookupOptionsApi, type PartyLookupOption } from "@/lib/api/p
 import type { DiscountPolicy } from "@/lib/products/pricing-types";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { isSeafoodOrg } from "@/config/industry";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { CustomerPriceTagsWorkspace } from "@/components/pricing/CustomerPriceTagsWorkspace";
 
 export default function PricingRulesPage() {
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
+  const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
+
+  if (!seafoodOrg) {
+    return <CustomerPriceTagsWorkspace fmcgOrg={fmcgOrg} />;
+  }
+
+  return <SeafoodPricingRulesPage />;
+}
+
+function SeafoodPricingRulesPage() {
   const [policies, setPolicies] = React.useState<DiscountPolicy[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [addPolicyOpen, setAddPolicyOpen] = React.useState(false);
@@ -70,6 +87,7 @@ export default function PricingRulesPage() {
   const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
   const [configPriceListId, setConfigPriceListId] = React.useState("");
   const [priceListOptions, setPriceListOptions] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [configureSheetPortalHost, setConfigureSheetPortalHost] = React.useState<HTMLElement | null>(null);
 
   // Configure supplier default cost list
   const [supplierCostDefaults, setSupplierCostDefaults] = React.useState<SupplierDefaultCostListRow[]>([]);
@@ -78,6 +96,7 @@ export default function PricingRulesPage() {
   const [selectedSupplierOption, setSelectedSupplierOption] = React.useState<PartyLookupOption | null>(null);
   const [configCostListId, setConfigCostListId] = React.useState("");
   const [savingSupplierDefault, setSavingSupplierDefault] = React.useState(false);
+  const [supplierSheetPortalHost, setSupplierSheetPortalHost] = React.useState<HTMLElement | null>(null);
 
   const loadPolicies = React.useCallback(() => {
     setLoading(true);
@@ -214,7 +233,7 @@ export default function PricingRulesPage() {
       <PageHeader
         title="Pricing rules"
         description="Discount policies, validity, approval linkage. Link to approvals below."
-        breadcrumbs={[{ label: "Pricing", href: "/pricing/overview" }, { label: "Rules" }]}
+        breadcrumbs={[{ label: "Pricing", href: "/pricing/workspace/overview" }, { label: "Rules" }]}
         sticky
         showCommandHint
         actions={
@@ -272,7 +291,7 @@ export default function PricingRulesPage() {
               </SheetContent>
             </Sheet>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/pricing/overview">Overview</Link>
+              <Link href="/pricing/workspace/overview">Overview</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/approvals/inbox">Approvals</Link>
@@ -329,11 +348,11 @@ export default function PricingRulesPage() {
                 <Button variant="outline" size="sm">Configure</Button>
               </SheetTrigger>
               <SheetContent className="overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>Customer default price list</SheetTitle>
-                  <SheetDescription>Set which price list is used by default per customer.</SheetDescription>
-                </SheetHeader>
-                <div className="space-y-6 py-6">
+                <div ref={setConfigureSheetPortalHost} className="space-y-6 py-6">
+                  <SheetHeader>
+                    <SheetTitle>Customer default price list</SheetTitle>
+                    <SheetDescription>Set which price list is used by default per customer.</SheetDescription>
+                  </SheetHeader>
                   <div className="grid gap-2">
                     <Label>Current assignments</Label>
                     {customerDefaults.length === 0 ? (
@@ -374,6 +393,7 @@ export default function PricingRulesPage() {
                         searchPlaceholder="Type name, code, phone, or email"
                         emptyMessage="No customers found."
                         recentStorageKey="lookup:recent-customers"
+                        portalContainer={configureSheetPortalHost}
                       />
                     </div>
                     <div className="grid gap-2">
@@ -408,11 +428,11 @@ export default function PricingRulesPage() {
                 <Button variant="outline" size="sm">Configure</Button>
               </SheetTrigger>
               <SheetContent className="overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>Supplier default cost list</SheetTitle>
-                  <SheetDescription>Set which cost list is used by default per supplier on purchase orders.</SheetDescription>
-                </SheetHeader>
-                <div className="space-y-6 py-6">
+                <div ref={setSupplierSheetPortalHost} className="space-y-6 py-6">
+                  <SheetHeader>
+                    <SheetTitle>Supplier default cost list</SheetTitle>
+                    <SheetDescription>Set which cost list is used by default per supplier on purchase orders.</SheetDescription>
+                  </SheetHeader>
                   <div className="grid gap-2">
                     <Label>Current assignments</Label>
                     {supplierCostDefaults.length === 0 ? (
@@ -453,6 +473,7 @@ export default function PricingRulesPage() {
                         searchPlaceholder="Type name, code, phone, or email"
                         emptyMessage="No suppliers found."
                         recentStorageKey="lookup:recent-suppliers"
+                        portalContainer={supplierSheetPortalHost}
                       />
                     </div>
                     <div className="grid gap-2">

@@ -5,6 +5,8 @@ type BackendProduct = {
   id: string;
   sku?: string;
   name: string;
+  barcode?: string | null;
+  size?: string | null;
   productFamily?: string | null;
   category?: string;
   categoryName?: string;
@@ -12,6 +14,8 @@ type BackendProduct = {
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
   defaultTaxCodeId?: string;
+  grossWeightKg?: number | null;
+  grossVolumeM3?: number | null;
   status?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -24,12 +28,16 @@ export type ProductPayload = {
   sku?: string;
   code?: string;
   name: string;
+  barcode?: string;
+  size?: string;
   productFamily?: string;
   category?: string;
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
   defaultTaxCodeId?: string;
+  grossWeightKg?: number | null;
+  grossVolumeM3?: number | null;
   status?: "ACTIVE" | "INACTIVE";
   description?: string;
 };
@@ -41,6 +49,8 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
     id: item.id,
     sku: item.sku ?? item.id,
     name: item.name,
+    barcode: item.barcode ?? undefined,
+    size: item.size ?? undefined,
     productFamily: item.productFamily ?? undefined,
     category,
     categoryName: item.categoryName ?? undefined,
@@ -48,6 +58,8 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
     baseUom: uom,
     productType: item.productType,
     defaultTaxCodeId: item.defaultTaxCodeId,
+    grossWeightKg: typeof item.grossWeightKg === "number" ? item.grossWeightKg : undefined,
+    grossVolumeM3: typeof item.grossVolumeM3 === "number" ? item.grossVolumeM3 : undefined,
     status: item.status ?? "ACTIVE",
     description: item.description,
     currentStock: typeof item.currentStock === "number" ? item.currentStock : undefined,
@@ -64,6 +76,7 @@ export type FetchProductsOptions = {
   sellable?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
   categoryId?: string;
+  departmentId?: string;
   productFamily?: string;
   stockBand?: "low" | "out" | "in_stock";
   /** Server caps at 100; use for document line pickers. */
@@ -95,6 +108,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.sellable) params.set("sellable", "true");
   if (opts.productType) params.set("productType", opts.productType);
   if (opts.categoryId?.trim()) params.set("categoryId", opts.categoryId.trim());
+  if (opts.departmentId?.trim()) params.set("departmentId", opts.departmentId.trim());
   if (opts.productFamily?.trim()) params.set("productFamily", opts.productFamily.trim());
   if (opts.stockBand) params.set("stockBand", opts.stockBand);
   if (opts.includeStock !== undefined) params.set("includeStock", opts.includeStock ? "true" : "false");
@@ -187,6 +201,8 @@ export async function createProductApi(payload: ProductPayload): Promise<{ id: s
       sku: payload.sku,
       code: payload.code,
       name: payload.name,
+      barcode: payload.barcode,
+      size: payload.size,
       productFamily: payload.productFamily,
       category: payload.category,
       unit: payload.unit,
@@ -199,7 +215,26 @@ export async function createProductApi(payload: ProductPayload): Promise<{ id: s
   });
 }
 
-export type ProductPatchPayload = Partial<Pick<ProductPayload, "sku" | "code" | "name" | "productFamily" | "category" | "unit" | "baseUom" | "productType" | "defaultTaxCodeId" | "status" | "description">>;
+export type ProductPatchPayload = Partial<
+  Pick<
+    ProductPayload,
+    | "sku"
+    | "code"
+    | "name"
+    | "barcode"
+    | "size"
+    | "productFamily"
+    | "category"
+    | "unit"
+    | "baseUom"
+    | "productType"
+    | "defaultTaxCodeId"
+    | "grossWeightKg"
+    | "grossVolumeM3"
+    | "status"
+    | "description"
+  >
+>;
 
 export async function patchProductApi(id: string, payload: ProductPatchPayload): Promise<void> {
   requireLiveApi("Product patch");
@@ -209,12 +244,16 @@ export async function patchProductApi(id: string, payload: ProductPatchPayload):
       sku: payload.sku,
       code: payload.code,
       name: payload.name,
+      barcode: payload.barcode,
+      size: payload.size,
       productFamily: payload.productFamily,
       category: payload.category,
       unit: payload.unit,
       baseUom: payload.baseUom,
       productType: payload.productType,
       defaultTaxCodeId: payload.defaultTaxCodeId,
+      ...(payload.grossWeightKg !== undefined ? { grossWeightKg: payload.grossWeightKg } : {}),
+      ...(payload.grossVolumeM3 !== undefined ? { grossVolumeM3: payload.grossVolumeM3 } : {}),
       status: payload.status,
       description: payload.description,
     },

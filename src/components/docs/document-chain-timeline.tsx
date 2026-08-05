@@ -101,9 +101,15 @@ export function DocumentChainTimeline({
   currency,
   exchangeRate,
 }: {
-  sourceDocument?: { id: string; typeKey: string; number: string; status: string } | null;
+  sourceDocument?: {
+    id: string;
+    typeKey: string;
+    number: string;
+    status: string;
+    total?: number;
+  } | null;
   documentChain: DocumentChainNode[];
-  currentDoc: { id: string; typeKey: string; number: string; status: string };
+  currentDoc: { id: string; typeKey: string; number: string; status: string; total?: number };
   currency: string;
   exchangeRate?: number;
 }) {
@@ -126,6 +132,7 @@ export function DocumentChainTimeline({
       number: sourceDocument.number,
       typeKey: sourceDocument.typeKey,
       status: sourceDocument.status,
+      total: sourceDocument.total,
     });
   }
 
@@ -134,6 +141,7 @@ export function DocumentChainTimeline({
     number: currentDoc.number,
     typeKey: currentDoc.typeKey,
     status: currentDoc.status,
+    total: currentDoc.total,
     highlight: true,
     label: "This document",
   });

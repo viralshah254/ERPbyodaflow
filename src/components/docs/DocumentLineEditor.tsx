@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
@@ -26,6 +27,7 @@ import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-type
 import {
   listProducts,
   fetchProductsForDocumentLines,
+  setProductsCache,
   subscribeProductsCache,
 } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
@@ -34,15 +36,28 @@ import { isApiConfigured } from "@/lib/api/client";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
 import {
-  UNCATEGORIZED_FAMILY,
+  isPieceUom,
+  resolveFmcgClientLinePrice,
+  resolveUnitsPerPiece,
+  type FmcgCatalogItem,
+} from "@/lib/fmcg/pricing";
+import { DocumentProductPickerSheet } from "@/components/docs/DocumentProductPickerSheet";
+import {
   productFamilyKey,
   productFamilyLabel,
   compareProductFamilyKeys,
   lineProductFamilyKey,
   productFamilySortRank,
 } from "@/lib/products/product-family";
+import {
+  productCategoryKey,
+  productCategoryLabelFromKey,
+  lineProductCategoryKey,
+  compareProductCategoryKeys,
+} from "@/lib/products/product-category-group";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
+import { resolveFmcgProductSizeLabel } from "@/lib/products/fmcg-size";
 import {
   Tooltip,
   TooltipContent,
@@ -63,6 +78,8 @@ export interface DocumentLine {
   baseQty: number;
   price: number;
   priceReason: string;
+  /** Price-tag / offered discount percent (0–100). */
+  discount?: number;
   amount: number;
   /** Computed tax amount for this line (0 when no tax code or rate is 0). */
   tax?: number;
@@ -125,9 +142,81 @@ interface DocumentLineEditorProps {
    * isStale=true means no price was set today — the effective price is from a prior day.
    */
   dailyPricesByProductId?: Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }>;
+  /**
+   * Flat catalog prices from PriceList.items (non-FMCG fallback).
+   * Used when daily prices are absent — after daily, before tiered product_pricing.
+   */
+  catalogPricesByProductId?: Record<string, number>;
+  /**
+   * FMCG only: piece price + discount on the customer's price tag.
+   * Pack unit price = pricePerPiece × packaging.unitsPer. Never use for CoolCatch.
+   */
+  fmcgCatalogByProductId?: Record<string, FmcgCatalogItem>;
+  /**
+   * FMCG orgs group lines by product category (not CoolCatch product family).
+   * Seafood / other templates must leave this false/undefined.
+   */
+  fmcgOrg?: boolean;
+  /** Load packaging / pricing for products just added from the picker. */
+  onProductsAdded?: (productIds: string[]) => void;
+  /** Fires when the sellable/purchasable product catalog finishes loading (or is not needed). */
+  onCatalogReadyChange?: (ready: boolean) => void;
 }
 
 const defaultPriceListId = "pl-retail";
+
+function fmcgSizeBadges(sizeLabel: string | undefined): AsyncSearchableSelectOption["badges"] {
+  return sizeLabel ? [{ label: sizeLabel, variant: "secondary" }] : undefined;
+}
+
+function productSkuSelectOption(
+  p: ProductRow,
+  fmcgOrg: boolean,
+  variantsByProductId?: Record<string, ProductVariant[]>
+): AsyncSearchableSelectOption {
+  if (fmcgOrg) {
+    const sizeLabel = resolveFmcgProductSizeLabel(p, variantsByProductId?.[p.id]);
+    return {
+      id: p.id,
+      label: p.name,
+      badges: fmcgSizeBadges(sizeLabel),
+    };
+  }
+  return {
+    id: p.id,
+    label: `${p.sku} — ${p.name}`,
+    description: (p.categoryName ?? p.category)?.trim() || undefined,
+  };
+}
+
+function lineSkuSelectedOption(
+  line: DocumentLine,
+  product: ProductRow | undefined,
+  fmcgOrg: boolean,
+  variantsByProductId?: Record<string, ProductVariant[]>
+): AsyncSearchableSelectOption {
+  if (fmcgOrg) {
+    const sizeLabel = resolveFmcgProductSizeLabel(product, variantsByProductId?.[line.productId]);
+    return {
+      id: line.productId,
+      label: line.name || product?.name || line.sku,
+      badges: fmcgSizeBadges(sizeLabel),
+    };
+  }
+  return {
+    id: line.productId,
+    label: `${line.sku} — ${line.name}`,
+  };
+}
+
+function mergeProductIntoCache(product: ProductRow): void {
+  const existing = listProducts();
+  if (existing.some((row) => row.id === product.id)) {
+    setProductsCache(existing.map((row) => (row.id === product.id ? { ...row, ...product } : row)));
+    return;
+  }
+  setProductsCache([...existing, product]);
+}
 
 /** Multi-word search: every token must appear somewhere in sku, name, category, description, or productFamily (case-insensitive). */
 function productMatchesLineSearch(p: ProductRow, query: string): boolean {
@@ -137,36 +226,107 @@ function productMatchesLineSearch(p: ProductRow, query: string): boolean {
     .split(/\s+/)
     .filter(Boolean);
   if (tokens.length === 0) return true;
-  const hay = [p.sku, p.name, p.category ?? "", p.description ?? "", p.productFamily ?? ""].join(" ").toLowerCase();
+  const hay = [p.sku, p.barcode ?? "", p.name, p.size ?? "", p.category ?? "", p.description ?? "", p.productFamily ?? ""]
+    .join(" ")
+    .toLowerCase();
   return tokens.every((t) => hay.includes(t));
+}
+
+/** Packs that are actually configured (pieces-per-pack > 1). */
+function configuredPackUoms(packaging: ProductPackaging[] | undefined): string[] {
+  return (packaging ?? [])
+    .filter((p) => Number.isFinite(p.unitsPer) && p.unitsPer > 1 && !isPieceUom(p.uom))
+    .map((p) => String(p.uom).trim().toUpperCase())
+    .filter(Boolean);
 }
 
 /** Default UOM from product packaging (purchase vs sales). */
 function pickDefaultUomFromPackaging(
   packaging: ProductPackaging[],
-  mode: "sales" | "purchasing"
+  mode: "sales" | "purchasing",
+  opts?: { fmcgOrg?: boolean }
 ): string | undefined {
-  if (!packaging.length) return undefined;
+  const usable = opts?.fmcgOrg
+    ? packaging.filter((p) => Number.isFinite(p.unitsPer) && p.unitsPer > 1)
+    : packaging;
+  if (!usable.length) return undefined;
   if (mode === "purchasing") {
-    const p = packaging.find((x) => x.isDefaultPurchaseUom);
+    const p = usable.find((x) => x.isDefaultPurchaseUom);
     if (p) return p.uom;
   }
-  const s = packaging.find((x) => x.isDefaultSalesUom);
+  const s = usable.find((x) => x.isDefaultSalesUom);
   if (s) return s.uom;
-  return packaging[0]?.uom;
+  return usable[0]?.uom;
 }
 
+/**
+ * Line UOM options.
+ * FMCG: base piece UOM (PCS) + only packs saved on that product (no org catalog / defaults).
+ * Seafood / other: packaging UOMs merged with org UOM catalog.
+ */
 function mergeLineUomOptions(
   packagingForProduct: ProductPackaging[] | undefined,
   catalogUomCodes: string[],
-  currentValue?: string
+  currentValue?: string,
+  opts?: { fmcgOrg?: boolean; baseUom?: string }
 ): string[] {
+  if (opts?.fmcgOrg) {
+    const base = String(opts.baseUom ?? "PCS").trim().toUpperCase() || "PCS";
+    const merged = new Set<string>([base, ...configuredPackUoms(packagingForProduct)]);
+    if (currentValue) merged.add(String(currentValue).trim().toUpperCase());
+    const arr = [...merged].filter(Boolean);
+    arr.sort((a, b) => {
+      if (isPieceUom(a) && !isPieceUom(b)) return -1;
+      if (!isPieceUom(a) && isPieceUom(b)) return 1;
+      return a.localeCompare(b);
+    });
+    return arr.length ? arr : ["PCS"];
+  }
   const fromPack = (packagingForProduct ?? []).map((p) => p.uom);
   const merged = new Set<string>([...fromPack, ...catalogUomCodes]);
   if (currentValue) merged.add(currentValue);
   const arr = [...merged].filter(Boolean);
   arr.sort((a, b) => a.localeCompare(b));
   return arr.length ? arr : ["EA"];
+}
+
+function defaultLineUom(
+  packaging: ProductPackaging[],
+  mode: "sales" | "purchasing",
+  product: Pick<ProductRow, "unit" | "baseUom">,
+  fmcgOrg: boolean
+): string {
+  const fromPack = pickDefaultUomFromPackaging(packaging, mode, { fmcgOrg });
+  if (fromPack) return fromPack;
+  if (fmcgOrg) return "PCS";
+  return product.unit ?? product.baseUom ?? "EA";
+}
+
+function isPreservedCommercialLine(line: Pick<DocumentLine, "priceReason">): boolean {
+  return (
+    line.priceReason === "Existing" ||
+    (typeof line.priceReason === "string" && line.priceReason.startsWith("Existing"))
+  );
+}
+
+/** Apply Disc% to a line loaded from an existing doc — uses stored unit price, not price tag. */
+function applyDiscountToPreservedLine(
+  line: Pick<DocumentLine, "price" | "discount" | "qty">,
+  discountPercent: number
+): { price: number; discount?: number; priceReason: string; amount: number } {
+  const disc = Math.min(100, Math.max(0, Number.isFinite(discountPercent) ? discountPercent : 0));
+  const oldDisc = line.discount ?? 0;
+  const gross =
+    oldDisc > 0 && oldDisc < 100
+      ? Math.round((line.price / (1 - oldDisc / 100)) * 100) / 100
+      : line.price;
+  const net = Math.round(gross * (1 - disc / 100) * 100) / 100;
+  return {
+    price: net,
+    discount: disc,
+    priceReason: disc > 0 ? `Existing (−${disc}%)` : "Existing (0% discount)",
+    amount: line.qty * net,
+  };
 }
 
 export function applyLineTax(
@@ -186,6 +346,13 @@ export function applyLineTax(
   return { tax, amount: Math.round((subtotal + tax) * 100) / 100 };
 }
 
+/** Net unit price in base UOM (e.g. per piece when line UOM is DOZEN). */
+function computeBaseUnitPrice(line: Pick<DocumentLine, "price" | "qty" | "baseQty">): number | null {
+  if (line.qty <= 0 || line.baseQty <= 0) return null;
+  if (Math.abs(line.baseQty - line.qty) < 0.0001) return null;
+  return Math.round(((line.price * line.qty) / line.baseQty) * 100) / 100;
+}
+
 export function DocumentLineEditor({
   priceListId = defaultPriceListId,
   useCostPricing = false,
@@ -202,13 +369,19 @@ export function DocumentLineEditor({
   catalogUomCodes = [],
   lineColumnLabels,
   dailyPricesByProductId,
+  catalogPricesByProductId,
+  fmcgCatalogByProductId,
+  fmcgOrg = false,
+  onProductsAdded,
+  onCatalogReadyChange,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
+  const [productPickerOpen, setProductPickerOpen] = React.useState(false);
 
-  /** In-progress qty/price text while typing (avoids coercing `3.` → 3 mid-entry). */
+  /** In-progress qty/price/discount text while typing (avoids coercing `3.` → 3 mid-entry). */
   const [lineFieldDrafts, setLineFieldDrafts] = React.useState<
-    Record<string, { qty?: string; price?: string }>
+    Record<string, { qty?: string; price?: string; discount?: string }>
   >({});
 
   const lineQtyValue = (line: DocumentLine) =>
@@ -216,6 +389,9 @@ export function DocumentLineEditor({
 
   const linePriceValue = (line: DocumentLine) =>
     lineFieldDrafts[line.id]?.price ?? String(line.price);
+
+  const lineDiscountValue = (line: DocumentLine) =>
+    lineFieldDrafts[line.id]?.discount ?? String(line.discount ?? 0);
 
   const handleLineQtyDraft = (lineId: string, raw: string) => {
     setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], qty: raw } }));
@@ -273,6 +449,29 @@ export function DocumentLineEditor({
     return cachedProducts;
   }, [productFilter, filteredProducts, cachedProducts]);
 
+  const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
+  const ensureVariantsLoaded = React.useCallback((productId: string) => {
+    if (variantsByProductId[productId] !== undefined) return;
+    fetchProductVariantsApi(productId)
+      .then((items) => setVariantsByProductId((prev) => ({ ...prev, [productId]: items })))
+      .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })));
+  }, [variantsByProductId]);
+
+  React.useEffect(() => {
+    if (!fmcgOrg || !isApiConfigured()) return;
+    const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))];
+    for (const productId of productIds) {
+      ensureVariantsLoaded(productId);
+      const cached = products.find((p) => p.id === productId);
+      if (resolveFmcgProductSizeLabel(cached, variantsByProductId[productId])) continue;
+      void fetchProductApi(productId)
+        .then((full) => {
+          if (full) mergeProductIntoCache(full);
+        })
+        .catch(() => {});
+    }
+  }, [ensureVariantsLoaded, fmcgOrg, lines, products, variantsByProductId]);
+
   React.useEffect(() => {
     if (!productFilter || productFilter === "all") {
       setFilteredProducts(null);
@@ -302,15 +501,26 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter]);
+  }, [productFilter, mode]);
+
+  React.useEffect(() => {
+    const catalogReady = !productFilter || productFilter === "all" || filteredProducts !== null;
+    onCatalogReadyChange?.(catalogReady);
+  }, [productFilter, filteredProducts, onCatalogReadyChange]);
+
   const loadSkuOptionsForLine = React.useCallback(
     async (line: DocumentLine, query: string): Promise<AsyncSearchableSelectOption[]> => {
-      const famKey = lineProductFamilyKey(products, line.productId);
+      const groupKey = fmcgOrg
+        ? lineProductCategoryKey(products, line.productId)
+        : lineProductFamilyKey(products, line.productId);
       const q = query.trim();
       const mapRows = (rows: ProductRow[]) => {
-        const filtered = rows.filter(
-          (p) => productFamilyKey(p) === famKey && productMatchesLineSearch(p, query)
-        );
+        const filtered = rows.filter((p) => {
+          const inGroup = fmcgOrg
+            ? productCategoryKey(p) === groupKey
+            : productFamilyKey(p) === groupKey;
+          return inGroup && productMatchesLineSearch(p, query);
+        });
         const sorted =
           q.length === 0
             ? [...filtered].sort((a, b) => {
@@ -322,16 +532,14 @@ export function DocumentLineEditor({
                   const rB = b.productType === "RAW" ? 0 : 1;
                   if (rA !== rB) return rA - rB;
                 }
-                const famCmp = productFamilySortRank(a.productFamily) - productFamilySortRank(b.productFamily);
-                if (famCmp !== 0) return famCmp;
+                if (!fmcgOrg) {
+                  const famCmp = productFamilySortRank(a.productFamily) - productFamilySortRank(b.productFamily);
+                  if (famCmp !== 0) return famCmp;
+                }
                 return a.sku.localeCompare(b.sku);
               }).slice(0, 100)
             : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
-        return sorted.map((p) => ({
-          id: p.id,
-          label: `${p.sku} — ${p.name}`,
-          description: p.category?.trim() || undefined,
-        }));
+        return sorted.map((p) => productSkuSelectOption(p, fmcgOrg, variantsByProductId));
       };
       if (isApiConfigured() && productFilter && productFilter !== "all") {
         try {
@@ -349,29 +557,52 @@ export function DocumentLineEditor({
       }
       return mapRows(products);
     },
-    [products, productFilter]
+    [products, productFilter, fmcgOrg, mode, variantsByProductId]
   );
-  const familyOptions = React.useMemo(() => {
+  /** CoolCatch: product family. FMCG: product category. */
+  const groupOptions = React.useMemo(() => {
     const keys = new Set<string>();
-    for (const p of products) keys.add(productFamilyKey(p));
+    for (const p of products) {
+      keys.add(fmcgOrg ? productCategoryKey(p) : productFamilyKey(p));
+    }
     return [...keys].sort((a, b) => {
-      if (mode === "purchasing") {
+      if (mode === "purchasing" && !fmcgOrg) {
         const hasRawA = products.some((p) => productFamilyKey(p) === a && p.productType === "RAW") ? 0 : 1;
         const hasRawB = products.some((p) => productFamilyKey(p) === b && p.productType === "RAW") ? 0 : 1;
         if (hasRawA !== hasRawB) return hasRawA - hasRawB;
       }
-      return compareProductFamilyKeys(a, b);
+      return fmcgOrg
+        ? compareProductCategoryKeys(a, b, products)
+        : compareProductFamilyKeys(a, b);
     });
-  }, [products, mode]);
+  }, [products, mode, fmcgOrg]);
   const [priceLists, setPriceLists] = React.useState<Awaited<ReturnType<typeof fetchPriceListsForUi>>>([]);
   React.useEffect(() => {
     fetchPriceListsForUi().then(setPriceLists).catch(() => {});
   }, []);
   const priceListIdResolved = useCostPricing ? "" : (priceListId || priceLists[0]?.id || "pl-retail");
 
-  // Resolve price: daily price takes priority over tier-based pricing.
+  const computeBaseQty = React.useCallback(
+    (productId: string, uom: string, qty: number): number => {
+      const packaging = packagingByProductId?.[productId];
+      if (fmcgOrg) {
+        const product = products.find((p) => p.id === productId);
+        const unitsPer = resolveUnitsPerPiece(uom, packaging, product?.baseUom ?? product?.unit);
+        return Math.round(qty * unitsPer * 1000) / 1000;
+      }
+      return getBaseQty(productId, uom, qty, packaging);
+    },
+    [fmcgOrg, packagingByProductId, products]
+  );
+
+  // Resolve price: daily (seafood) → FMCG piece×pack → flat catalog → tiered product_pricing.
   const resolvePrice = React.useCallback(
-    (productId: string, qty: number, uom: string): { price: number; reason: string } => {
+    (
+      productId: string,
+      qty: number,
+      uom: string,
+      discountOverride?: number
+    ): { price: number; reason: string; discount?: number } => {
       if (useCostPricing) return { price: 0, reason: "Manual" };
       const daily = dailyPricesByProductId?.[productId];
       if (daily?.effectivePrice != null && daily.effectivePrice > 0) {
@@ -380,74 +611,134 @@ export function DocumentLineEditor({
           : "Daily price";
         return { price: daily.effectivePrice, reason: label };
       }
+      const fmcgItem = fmcgCatalogByProductId?.[productId];
+      if (fmcgItem?.pricePerPiece != null && fmcgItem.pricePerPiece > 0) {
+        const product = products.find((p) => p.id === productId);
+        const resolved = resolveFmcgClientLinePrice({
+          pricePerPiece: fmcgItem.pricePerPiece,
+          uom,
+          quantity: qty,
+          discountPercent:
+            discountOverride != null && Number.isFinite(discountOverride)
+              ? discountOverride
+              : fmcgItem.discountPercent,
+          packaging: packagingByProductId?.[productId],
+          productBaseUom: product?.baseUom ?? product?.unit,
+        });
+        const effectiveDiscount =
+          discountOverride != null && Number.isFinite(discountOverride)
+            ? discountOverride
+            : (fmcgItem.discountPercent ?? 0);
+        // Net unit price after price-tag discount; percent kept for print / audit.
+        return {
+          price: resolved.unitPriceNet,
+          reason: resolved.reason,
+          ...(discountOverride != null
+            ? { discount: effectiveDiscount }
+            : effectiveDiscount > 0
+              ? { discount: effectiveDiscount }
+              : {}),
+        };
+      }
+      const catalog = catalogPricesByProductId?.[productId];
+      if (catalog != null && catalog > 0) {
+        return { price: catalog, reason: "Price list" };
+      }
       const tier = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
       if (tier.price > 0) return tier;
-      if (daily && daily.effectivePrice == null) {
+      if (daily && daily.effectivePrice == null && catalog == null && !fmcgItem) {
         return { price: 0, reason: "Not priced on list" };
       }
       return tier;
     },
-    [useCostPricing, dailyPricesByProductId, priceListIdResolved, pricingByProductId]
+    [
+      useCostPricing,
+      dailyPricesByProductId,
+      fmcgCatalogByProductId,
+      catalogPricesByProductId,
+      priceListIdResolved,
+      pricingByProductId,
+      packagingByProductId,
+      products,
+    ]
   );
 
   const resolvePriceRef = React.useRef(resolvePrice);
   resolvePriceRef.current = resolvePrice;
 
-  // Variants per product — loaded lazily when a product with variants is selected
-  const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
-  const ensureVariantsLoaded = React.useCallback((productId: string) => {
-    if (variantsByProductId[productId] !== undefined) return;
-    fetchProductVariantsApi(productId)
-      .then((items) => setVariantsByProductId((prev) => ({ ...prev, [productId]: items })))
-      .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })));
-  }, [variantsByProductId]);
+  const addProductsAsLines = React.useCallback(
+    (picked: ProductRow[]) => {
+      if (!picked.length) return;
+      // Keep category / SKU dropdowns aware of products loaded via search pagination.
+      const cached = listProducts();
+      const byId = new Map(cached.map((p) => [p.id, p]));
+      for (const p of picked) byId.set(p.id, p);
+      setProductsCache([...byId.values()]);
 
-  const addRow = () => {
-    const p = products[0];
-    if (!p) {
-      toast.error("No products found. Add products in Masters > Finished Good / SKU first.");
-      return;
-    }
-    // Prefetch variants so the Variant column is ready without an extra beat after paint.
-    ensureVariantsLoaded(p.id);
-    const packaging = packagingByProductId?.[p.id] ?? [];
-    const uom = pickDefaultUomFromPackaging(packaging, mode) ?? p.unit ?? p.baseUom ?? "EA";
-    const baseQty = getBaseQty(p.id, uom, 1, packagingByProductId?.[p.id]);
-    const { price, reason } = resolvePrice(p.id, 1, uom);
-    const newLine: DocumentLine = {
-      id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      productId: p.id,
-      sku: p.sku,
-      name: p.name,
-      uom,
-      qty: 1,
-      baseQty,
-      price,
-      priceReason: reason,
-      amount: price,
-      taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
-    };
-    const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
-    onLinesChange((prev) => [...prev, { ...newLine, tax: taxed.tax, amount: taxed.amount }]);
-    // Enrich from API in the background if default tax differs (no blocking the UI).
-    if (isApiConfigured()) {
-      void fetchProductApi(p.id).then((full) => {
-        if (!full?.id || (full.defaultTaxCodeId ?? defaultLineTaxCodeId) === (p.defaultTaxCodeId ?? defaultLineTaxCodeId)) return;
-        onLinesChange((prev) => {
-          const idx = prev.findIndex((l) => l.id === newLine.id);
-          if (idx < 0) return prev;
-          const line = prev[idx];
-          if (line.productId !== full.id) return prev;
-          const merged = { ...line, taxCodeId: full.defaultTaxCodeId ?? line.taxCodeId };
-          const t = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
-          const next = { ...merged, tax: t.tax, amount: t.amount };
-          const copy = [...prev];
-          copy[idx] = next;
-          return copy;
-        });
-      }).catch(() => {});
-    }
-  };
+      const stamp = Date.now();
+      const newLines: DocumentLine[] = picked.map((p, i) => {
+        ensureVariantsLoaded(p.id);
+        const packaging = packagingByProductId?.[p.id] ?? [];
+        const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
+        const baseQty = computeBaseQty(p.id, uom, 1);
+        const { price, reason, discount } = resolvePrice(p.id, 1, uom);
+        const newLine: DocumentLine = {
+          id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+          productId: p.id,
+          sku: p.sku,
+          name: p.name,
+          uom,
+          qty: 1,
+          baseQty,
+          price,
+          priceReason: reason,
+          ...(discount != null && discount > 0 ? { discount } : {}),
+          amount: price,
+          taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
+        };
+        const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
+        return { ...newLine, tax: taxed.tax, amount: taxed.amount };
+      });
+      onLinesChange((prev) => [...prev, ...newLines]);
+      onProductsAdded?.(picked.map((p) => p.id));
+
+      if (isApiConfigured()) {
+        for (const newLine of newLines) {
+          void fetchProductApi(newLine.productId)
+            .then((full) => {
+              if (!full?.id) return;
+              onLinesChange((prev) => {
+                const idx = prev.findIndex((l) => l.id === newLine.id);
+                if (idx < 0) return prev;
+                const line = prev[idx];
+                if (line.productId !== full.id) return prev;
+                const nextTax =
+                  full.defaultTaxCodeId ?? line.taxCodeId ?? defaultLineTaxCodeId ?? undefined;
+                if (nextTax === line.taxCodeId) return prev;
+                const merged = { ...line, taxCodeId: nextTax };
+                const t = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
+                const copy = [...prev];
+                copy[idx] = { ...merged, tax: t.tax, amount: t.amount };
+                return copy;
+              });
+            })
+            .catch(() => {});
+        }
+      }
+    },
+    [
+      defaultLineTaxCodeId,
+      ensureVariantsLoaded,
+      fmcgOrg,
+      linesAreTaxInclusive,
+      mode,
+      onLinesChange,
+      onProductsAdded,
+      packagingByProductId,
+      resolvePrice,
+      taxCodes,
+    ]
+  );
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -459,16 +750,24 @@ export function DocumentLineEditor({
         const productId = patch.productId ?? prev.productId;
         const uom = patch.uom ?? prev.uom;
         const qty = patch.qty ?? prev.qty;
-        next.baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
+        next.baseQty = patch.baseQty ?? computeBaseQty(productId, uom, qty);
         if (useCostPricing && patch.productId != null) {
           next.price = 0;
           next.priceReason = "Manual";
-        } else if (!useCostPricing) {
-          const { price, reason } = resolvePrice(productId, qty, uom);
+          next.discount = undefined;
+        } else if (!useCostPricing && patch.price == null) {
+          // Only auto-resolve when caller did not already set a pack-aware price.
+          const { price, reason, discount } = resolvePrice(
+            productId,
+            qty,
+            uom,
+            patch.discount ?? prev.discount
+          );
           next.price = price;
           next.priceReason = reason;
+          next.discount = discount != null && discount > 0 ? discount : undefined;
         }
-        next.amount = next.qty * next.price;
+        if (patch.amount == null) next.amount = next.qty * next.price;
       }
       const taxed = applyLineTax(next, taxCodes, linesAreTaxInclusive);
       next.tax = taxed.tax;
@@ -494,35 +793,114 @@ export function DocumentLineEditor({
     });
   }, [taxCodesKey, linesAreTaxInclusive, taxCodes.length]);
 
-  /** Re-apply prices when daily prices or tier data finish loading (avoids stuck KES 0.00). */
+  /** Ensure packaging is fetched for products already on the document (edit / convert prefills). */
+  const lineProductIdsKey = React.useMemo(
+    () =>
+      [...new Set(lines.map((l) => l.productId).filter(Boolean))]
+        .sort()
+        .join(","),
+    [lines]
+  );
+  React.useEffect(() => {
+    if (!lineProductIdsKey) return;
+    onProductsAdded?.(lineProductIdsKey.split(","));
+  }, [lineProductIdsKey, onProductsAdded]);
+
+  /** Re-apply prices when daily / catalog / tier / packaging finish loading (avoids stuck KES 0.00). */
   React.useEffect(() => {
     if (useCostPricing) return;
     const dailyKeys = Object.keys(dailyPricesByProductId ?? {});
-    if (dailyKeys.length === 0 && Object.keys(pricingByProductId ?? {}).length === 0) return;
+    const catalogKeys = Object.keys(catalogPricesByProductId ?? {});
+    const fmcgKeys = Object.keys(fmcgCatalogByProductId ?? {});
+    if (
+      dailyKeys.length === 0 &&
+      catalogKeys.length === 0 &&
+      fmcgKeys.length === 0 &&
+      Object.keys(pricingByProductId ?? {}).length === 0
+    ) {
+      return;
+    }
     onLinesChangeRef.current((prev) => {
       if (prev.length === 0) return prev;
       let changed = false;
       const next = prev.map((l) => {
         if (!l.productId) return l;
-        const { price, reason } = resolvePriceRef.current(l.productId, l.qty, l.uom);
-        if (price === l.price && reason === l.priceReason) return l;
+        // Wait for packaging before re-pricing pack UOMs (avoids 1×piece flash on edit).
+        if (fmcgOrg && !isPieceUom(l.uom)) {
+          const packs = packagingByProductId?.[l.productId];
+          if (!packs?.length) return l;
+        }
+        const nextBaseQty = computeBaseQty(l.productId, l.uom, l.qty);
+        if (isPreservedCommercialLine(l) && l.price > 0) {
+          if (l.discount != null) {
+            if (nextBaseQty === l.baseQty) return l;
+            changed = true;
+            return { ...l, baseQty: nextBaseQty };
+          }
+          const catalog = resolvePriceRef.current(l.productId, l.qty, l.uom, l.discount);
+          const looksUnderPriced =
+            fmcgOrg &&
+            !isPieceUom(l.uom) &&
+            catalog.price > 0 &&
+            l.price * 1.5 < catalog.price;
+          if (!looksUnderPriced) {
+            if (nextBaseQty === l.baseQty) return l;
+            changed = true;
+            return { ...l, baseQty: nextBaseQty };
+          }
+        }
+        // Keep line Disc% when set (edit / manual); otherwise use price-tag default.
+        const { price, reason, discount } = resolvePriceRef.current(
+          l.productId,
+          l.qty,
+          l.uom,
+          l.discount
+        );
+        const nextDiscount = discount;
+        if (
+          price === l.price &&
+          reason === l.priceReason &&
+          (nextDiscount ?? null) === (l.discount ?? null) &&
+          nextBaseQty === l.baseQty
+        ) {
+          return l;
+        }
         changed = true;
-        const merged = { ...l, price, priceReason: reason, amount: l.qty * price };
+        const merged = {
+          ...l,
+          price,
+          priceReason: reason,
+          discount: nextDiscount,
+          baseQty: nextBaseQty,
+          amount: l.qty * price,
+        };
         const taxed = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
         return { ...merged, tax: taxed.tax, amount: taxed.amount };
       });
       return changed ? next : prev;
     });
-  }, [dailyPricesByProductId, priceListIdResolved, pricingByProductId, useCostPricing, taxCodes, linesAreTaxInclusive]);
+  }, [
+    dailyPricesByProductId,
+    catalogPricesByProductId,
+    fmcgCatalogByProductId,
+    priceListIdResolved,
+    pricingByProductId,
+    packagingByProductId,
+    useCostPricing,
+    taxCodes,
+    linesAreTaxInclusive,
+    computeBaseQty,
+    fmcgOrg,
+  ]);
 
   const setProduct = (lineId: string, productId: string) => {
     const applyRow = (row: ProductRow) => {
       const packaging = packagingByProductId?.[productId] ?? [];
-      const uom = pickDefaultUomFromPackaging(packaging, mode) ?? row.unit ?? row.baseUom ?? "EA";
+      const uom = defaultLineUom(packaging, mode, row, fmcgOrg);
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
-      const baseQty = getBaseQty(productId, uom, qty, packagingByProductId?.[productId]);
-      const { price, reason } = resolvePrice(productId, qty, uom);
+      const baseQty = computeBaseQty(productId, uom, qty);
+      const { price, reason, discount } = resolvePrice(productId, qty, uom);
       updateLine(lineId, {
         productId: row.id,
         sku: row.sku,
@@ -531,6 +909,7 @@ export function DocumentLineEditor({
         baseQty,
         price,
         priceReason: reason,
+        discount: discount != null && discount > 0 ? discount : undefined,
         amount: qty * price,
         taxCodeId: row.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
         variantId: undefined,
@@ -541,7 +920,12 @@ export function DocumentLineEditor({
     const p = products.find((x) => x.id === productId);
     if (p) {
       if (isApiConfigured()) {
-        void fetchProductApi(productId).then((full) => applyRow(full ?? p)).catch(() => applyRow(p));
+        void fetchProductApi(productId)
+          .then((full) => {
+            if (full) mergeProductIntoCache(full);
+            applyRow(full ?? p);
+          })
+          .catch(() => applyRow(p));
       } else {
         applyRow(p);
       }
@@ -550,19 +934,22 @@ export function DocumentLineEditor({
     if (isApiConfigured()) {
       void fetchProductApi(productId)
         .then((full) => {
-          if (full) applyRow(full);
+          if (full) {
+            mergeProductIntoCache(full);
+            applyRow(full);
+          }
         })
         .catch(() => {});
     }
   };
 
-  const setLineFamily = (lineId: string, newKey: string) => {
+  const setLineGroup = (lineId: string, newKey: string) => {
     const line = linesRef.current.find((l) => l.id === lineId);
     if (!line) return;
     const candidates = products
-      .filter((p) => productFamilyKey(p) === newKey)
+      .filter((p) => (fmcgOrg ? productCategoryKey(p) === newKey : productFamilyKey(p) === newKey))
       .sort((a, b) => {
-        if (mode === "purchasing") {
+        if (mode === "purchasing" && !fmcgOrg) {
           const aS = a.name.toLowerCase().includes("sourcing") ? 0 : 1;
           const bS = b.name.toLowerCase().includes("sourcing") ? 0 : 1;
           if (aS !== bS) return aS - bS;
@@ -573,11 +960,14 @@ export function DocumentLineEditor({
         return a.sku.localeCompare(b.sku);
       });
     if (candidates.length === 0) {
-      toast.error("No SKUs in this product family.");
+      toast.error(fmcgOrg ? "No SKUs in this category." : "No SKUs in this product family.");
       return;
     }
     const cur = products.find((p) => p.id === line.productId);
-    if (cur && productFamilyKey(cur) === newKey) return;
+    if (cur) {
+      const curKey = fmcgOrg ? productCategoryKey(cur) : productFamilyKey(cur);
+      if (curKey === newKey) return;
+    }
     setProduct(lineId, candidates[0]!.id);
   };
 
@@ -596,11 +986,12 @@ export function DocumentLineEditor({
     if (variant.packagingUomCode) {
       const uom = variant.packagingUomCode;
       patch.uom = uom;
-      patch.baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
+      patch.baseQty = computeBaseQty(line.productId, uom, line.qty);
       if (!useCostPricing) {
-        const { price, reason } = resolvePrice(line.productId, line.qty, uom);
+        const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom, line.discount);
         patch.price = price;
         patch.priceReason = reason;
+        patch.discount = discount != null && discount > 0 ? discount : undefined;
         patch.amount = line.qty * price;
       }
     }
@@ -610,31 +1001,105 @@ export function DocumentLineEditor({
   const setUom = (lineId: string, uom: string) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const baseQty = getBaseQty(line.productId, uom, line.qty, packagingByProductId?.[line.productId]);
+    const baseQty = computeBaseQty(line.productId, uom, line.qty);
     if (useCostPricing) {
       updateLine(lineId, { uom, baseQty, amount: line.qty * line.price });
     } else {
-      const { price, reason } = resolvePrice(line.productId, line.qty, uom);
-      updateLine(lineId, { uom, baseQty, price, priceReason: reason, amount: line.qty * price });
+      const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom, line.discount);
+      updateLine(lineId, {
+        uom,
+        baseQty,
+        price,
+        priceReason: reason,
+        discount: discount != null && discount > 0 ? discount : undefined,
+        amount: line.qty * price,
+      });
     }
   };
 
   const setQty = (lineId: string, qty: number) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    const baseQty = getBaseQty(line.productId, line.uom, qty, packagingByProductId?.[line.productId]);
+    const baseQty = computeBaseQty(line.productId, line.uom, qty);
     if (useCostPricing) {
       updateLine(lineId, { qty, baseQty, amount: qty * line.price });
+    } else if (isPreservedCommercialLine(line)) {
+      updateLine(lineId, { qty, baseQty, amount: qty * line.price });
     } else {
-      const { price, reason } = resolvePrice(line.productId, qty, line.uom);
-      updateLine(lineId, { qty, baseQty, price, priceReason: reason, amount: qty * price });
+      const { price, reason, discount } = resolvePrice(line.productId, qty, line.uom, line.discount);
+      updateLine(lineId, {
+        qty,
+        baseQty,
+        price,
+        priceReason: reason,
+        discount: discount != null && discount > 0 ? discount : undefined,
+        amount: qty * price,
+      });
     }
   };
 
   const setPrice = (lineId: string, price: number) => {
     const line = lines.find((l) => l.id === lineId);
     if (!line) return;
-    updateLine(lineId, { price, amount: line.qty * price });
+    // Manual override clears price-tag discount.
+    updateLine(lineId, { price, discount: undefined, amount: line.qty * price });
+  };
+
+  /** Edit Disc% — on existing docs, discount off stored price; on new lines, use price tag. */
+  const setDiscount = (lineId: string, discountPercent: number) => {
+    const line = lines.find((l) => l.id === lineId);
+    if (!line || useCostPricing) return;
+    const disc = Math.min(100, Math.max(0, Number.isFinite(discountPercent) ? discountPercent : 0));
+
+    if (isPreservedCommercialLine(line) && line.price > 0) {
+      const next = applyDiscountToPreservedLine(line, disc);
+      updateLine(lineId, next);
+      return;
+    }
+
+    const { price, reason, discount } = resolvePrice(line.productId, line.qty, line.uom, disc);
+    if (price > 0) {
+      updateLine(lineId, {
+        price,
+        priceReason: reason,
+        ...(discount != null ? { discount } : {}),
+        amount: line.qty * price,
+      });
+      return;
+    }
+    // Fallback when catalog not loaded: reverse existing net → gross, then apply new %.
+    const oldDisc = line.discount ?? 0;
+    const gross =
+      oldDisc > 0 && oldDisc < 100
+        ? Math.round((line.price / (1 - oldDisc / 100)) * 100) / 100
+        : line.price;
+    const net = Math.round(gross * (1 - disc / 100) * 100) / 100;
+    updateLine(lineId, {
+      price: net,
+      discount: disc,
+      priceReason: disc > 0 ? `Manual (−${disc}%)` : "Existing (0% discount)",
+      amount: line.qty * net,
+    });
+  };
+
+  const handleLineDiscountDraft = (lineId: string, raw: string) => {
+    setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], discount: raw } }));
+    const partial = parsePartialDecimalString(raw);
+    if (partial != null && partial >= 0 && partial <= 100) setDiscount(lineId, partial);
+  };
+
+  const finalizeLineDiscountDraft = (lineId: string, raw: string) => {
+    const n = parseDecimalString(raw);
+    setDiscount(lineId, Number.isFinite(n) && n >= 0 ? Math.min(100, n) : 0);
+    setLineFieldDrafts((prev) => {
+      const next = { ...prev };
+      const row = next[lineId];
+      if (!row) return next;
+      const { discount: _discount, ...rest } = row;
+      if (Object.keys(rest).length === 0) delete next[lineId];
+      else next[lineId] = rest;
+      return next;
+    });
   };
 
   const removeLine = (id: string) => {
@@ -644,6 +1109,8 @@ export function DocumentLineEditor({
   const subtotalSum = lines.reduce((s, l) => s + l.qty * l.price, 0);
   const totalTax = lines.reduce((s, l) => s + (l.tax ?? 0), 0);
   const total = lines.reduce((s, l) => s + l.amount, 0);
+  // Sales docs: always show Disc% so draft invoices/SOs can edit offered discount.
+  const showDiscountCol = !useCostPricing;
 
   const showVariantColumn = React.useMemo(
     () =>
@@ -676,25 +1143,26 @@ export function DocumentLineEditor({
           type="button"
           variant="outline"
           size="sm"
-          onClick={addRow}
-          disabled={products.length === 0 || productListLoading}
-          title={
-            productListLoading
-              ? "Loading product list…"
-              : products.length === 0
-                ? "Add products in Masters first"
-                : undefined
-          }
+          onClick={() => setProductPickerOpen(true)}
+          disabled={productListLoading}
+          title={productListLoading ? "Loading product list…" : "Search and select products to add"}
         >
           <Icons.Plus className="mr-2 h-4 w-4" />
           Add line
         </Button>
       </div>
+      <DocumentProductPickerSheet
+        open={productPickerOpen}
+        onOpenChange={setProductPickerOpen}
+        productFilter={productFilter ?? (mode === "purchasing" ? "purchasable" : "sellable")}
+        fmcgOrg={fmcgOrg}
+        onConfirm={addProductsAsLines}
+      />
       {lines.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
           {useCostPricing
-            ? `No lines. Add a line above. Product family, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, cost per unit (enter manually).`
-            : `No lines. Add a line above. Product family, SKU, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, ${lineColumnLabels ? lineColumnLabels.baseQtyHeader.toLowerCase() : "base qty"}, price (from price list), price reason.`}
+            ? `No lines yet. Use Add line to search and select products. Then set ${fmcgOrg ? "category" : "product family"} / SKU if needed, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, and cost per unit.`
+            : `No lines yet. Use Add line to search and check products to add. Then set UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, and confirm price (${fmcgOrg ? "from price tag" : "from price list"}).`}
         </div>
       ) : (
         <>
@@ -702,8 +1170,8 @@ export function DocumentLineEditor({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[8rem] w-[12%]">Product</TableHead>
-                  <TableHead className="min-w-[8rem] sm:min-w-[11rem] w-[24%]">SKU</TableHead>
+                  <TableHead className="min-w-[8rem] w-[12%]">{fmcgOrg ? "Category" : "Product"}</TableHead>
+                  <TableHead className="min-w-[8rem] sm:min-w-[11rem] w-[24%]">{fmcgOrg ? "Product" : "SKU"}</TableHead>
                   {showVariantColumn && <TableHead className="min-w-[7rem]">Packaging variant</TableHead>}
                   <TableHead>UOM</TableHead>
                   <TableHead className="w-28">
@@ -744,7 +1212,31 @@ export function DocumentLineEditor({
                       "Base qty"
                     )}
                   </TableHead>
+                  {!lineColumnLabels ? (
+                    <TableHead className="w-28">
+                      {fmcgOrg ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 cursor-default">
+                                Base price
+                                <Icons.HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
+                              Net unit price per piece (base UOM) for the selected pack UOM and discount.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        "Base price"
+                      )}
+                    </TableHead>
+                  ) : null}
                   <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
+                  {showDiscountCol ? (
+                    <TableHead className="w-20 whitespace-nowrap">Disc %</TableHead>
+                  ) : null}
                   <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
                   {taxCodes.length > 0 && <TableHead className="w-36">Tax</TableHead>}
                   {taxCodes.length > 0 && <TableHead className="w-28">Tax amount</TableHead>}
@@ -759,16 +1251,22 @@ export function DocumentLineEditor({
                   <TableRow key={l.id}>
                     <TableCell>
                       <Select
-                        value={lineProductFamilyKey(products, l.productId)}
-                        onValueChange={(v) => setLineFamily(l.id, v)}
+                        value={
+                          fmcgOrg
+                            ? lineProductCategoryKey(products, l.productId)
+                            : lineProductFamilyKey(products, l.productId)
+                        }
+                        onValueChange={(v) => setLineGroup(l.id, v)}
                       >
                         <SelectTrigger className="w-[10rem] sm:w-[12rem]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {familyOptions.map((k) => (
+                          {groupOptions.map((k) => (
                             <SelectItem key={k} value={k}>
-                              {productFamilyLabel(k)}
+                              {fmcgOrg
+                                ? productCategoryLabelFromKey(k, products)
+                                : productFamilyLabel(k)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -780,22 +1278,34 @@ export function DocumentLineEditor({
                           value={l.productId}
                           onValueChange={(v) => setProduct(l.id, v)}
                           loadOptions={(q) => loadSkuOptionsForLine(l, q)}
-                          selectedOption={{
-                            id: l.productId,
-                            label: `${l.sku} — ${l.name}`,
-                          }}
+                          selectedOption={lineSkuSelectedOption(
+                            l,
+                            products.find((p) => p.id === l.productId),
+                            fmcgOrg,
+                            variantsByProductId
+                          )}
                           placeholder={
-                            productListLoading ? "Loading products…" : "Search SKU…"
+                            productListLoading ? "Loading products…" : fmcgOrg ? "Search product…" : "Search SKU…"
                           }
-                          searchPlaceholder="Type SKU, name, product family, or any words…"
+                          searchPlaceholder={
+                            fmcgOrg
+                              ? "Type SKU, barcode, name, category, or any words…"
+                              : "Type SKU, name, product family, or any words…"
+                          }
                           emptyMessage={
                             productListLoading
                               ? "Loading products…"
-                              : productFilter === "purchasable"
-                                ? "No purchasable SKUs match in this product family. Try another search."
-                                : productFilter === "sellable"
-                                  ? "No sellable SKUs match in this product family. Try another search."
-                                  : "No SKUs match in this product family. Try different words."
+                              : fmcgOrg
+                                ? productFilter === "purchasable"
+                                  ? "No purchasable SKUs match in this category. Try another search."
+                                  : productFilter === "sellable"
+                                    ? "No sellable SKUs match in this category. Try another search."
+                                    : "No SKUs match in this category. Try different words."
+                                : productFilter === "purchasable"
+                                  ? "No purchasable SKUs match in this product family. Try another search."
+                                  : productFilter === "sellable"
+                                    ? "No sellable SKUs match in this product family. Try another search."
+                                    : "No SKUs match in this product family. Try different words."
                           }
                           minSearchLength={0}
                           searchDebounceMs={150}
@@ -832,6 +1342,12 @@ export function DocumentLineEditor({
                         onChange={setUom}
                         packagingForProduct={packagingByProductId?.[l.productId]}
                         catalogUomCodes={catalogUomCodes}
+                        fmcgOrg={fmcgOrg}
+                        baseUom={
+                          products.find((p) => p.id === l.productId)?.baseUom ||
+                          products.find((p) => p.id === l.productId)?.unit ||
+                          "PCS"
+                        }
                       />
                     </TableCell>
                     <TableCell>
@@ -847,6 +1363,14 @@ export function DocumentLineEditor({
                         ? formatDecimalDisplay(String(l.poQty))
                         : formatDecimalDisplay(String(l.baseQty))}
                     </TableCell>
+                    {!lineColumnLabels ? (
+                      <TableCell className="text-muted-foreground tabular-nums">
+                        {(() => {
+                          const baseUnitPrice = computeBaseUnitPrice(l);
+                          return baseUnitPrice != null ? formatMoney(baseUnitPrice, currency) : "—";
+                        })()}
+                      </TableCell>
+                    ) : null}
                     <TableCell>
                       {useCostPricing ? (
                         <FormattedDecimalInput
@@ -859,6 +1383,16 @@ export function DocumentLineEditor({
                         formatMoney(l.price, currency)
                       )}
                     </TableCell>
+                    {showDiscountCol ? (
+                      <TableCell>
+                        <FormattedDecimalInput
+                          className="w-16"
+                          value={lineDiscountValue(l)}
+                          onValueChange={(raw) => handleLineDiscountDraft(l.id, raw)}
+                          onBlur={() => finalizeLineDiscountDraft(l.id, lineDiscountValue(l))}
+                        />
+                      </TableCell>
+                    ) : null}
                     <TableCell className="text-muted-foreground text-xs">{l.priceReason}</TableCell>
                     {taxCodes.length > 0 && (
                       <TableCell>
@@ -924,11 +1458,13 @@ export function DocumentLineEditor({
 
 function UomSelect({
   lineId,
-  productId: _productId,
+  productId,
   value,
   onChange,
   packagingForProduct = [],
   catalogUomCodes = [],
+  fmcgOrg = false,
+  baseUom = "PCS",
 }: {
   lineId: string;
   productId: string;
@@ -936,18 +1472,56 @@ function UomSelect({
   onChange: (lineId: string, uom: string) => void;
   packagingForProduct?: ProductPackaging[];
   catalogUomCodes?: string[];
+  fmcgOrg?: boolean;
+  baseUom?: string;
 }) {
-  const options = mergeLineUomOptions(packagingForProduct, catalogUomCodes, value);
+  // Always keep the line's current UOM in options (e.g. CARTON from SO/DN/invoice)
+  // so edit mode does not collapse to PCS before packaging finishes loading.
+  const options = mergeLineUomOptions(
+    packagingForProduct,
+    catalogUomCodes,
+    value,
+    { fmcgOrg, baseUom }
+  );
+  const normalizedValue = String(value ?? "").trim().toUpperCase();
+  const selectValue = options.includes(normalizedValue)
+    ? normalizedValue
+    : options.includes(value)
+      ? value
+      : options[0] ?? value;
+
+  React.useEffect(() => {
+    if (!fmcgOrg) return;
+    if (!selectValue || selectValue === normalizedValue || selectValue === value) return;
+    // Never strip a pack UOM before product packaging has loaded.
+    const packsLoaded = (packagingForProduct?.length ?? 0) > 0;
+    if (!packsLoaded && normalizedValue && !isPieceUom(normalizedValue)) return;
+    onChange(lineId, selectValue);
+  }, [fmcgOrg, lineId, onChange, packagingForProduct, selectValue, value, normalizedValue]);
 
   return (
-    <Select value={value} onValueChange={(v) => onChange(lineId, v)}>
-      <SelectTrigger className="w-24 min-w-[5.5rem]">
+    <Select value={selectValue} onValueChange={(v) => onChange(lineId, v)}>
+      <SelectTrigger className="w-28 min-w-[6rem]">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {options.map((u) => (
-          <SelectItem key={u} value={u}>{u}</SelectItem>
+          <SelectItem key={u} value={u}>
+            {u}
+          </SelectItem>
         ))}
+        {fmcgOrg && productId ? (
+          <div className="border-t border-border mt-1 pt-1">
+            <Link
+              href={`/master/products/${productId}?tab=packaging`}
+              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              onPointerDown={(e) => e.preventDefault()}
+            >
+              <Icons.Plus className="h-3.5 w-3.5 shrink-0" />
+              Add pack UOM…
+            </Link>
+          </div>
+        ) : null}
       </SelectContent>
     </Select>
   );

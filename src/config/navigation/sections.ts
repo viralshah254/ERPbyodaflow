@@ -109,6 +109,23 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     items: [
       { key: "masters-hub", label: "Masters", href: "/master", icon: "Database", moduleKey: "masters", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
       { key: "masters-products", label: "Products", href: "/master/products", icon: "Package", moduleKey: "masters", termKey: "product", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
+      {
+        key: "masters-categories",
+        label: "Categories",
+        href: "/master/categories",
+        icon: "Tags",
+        moduleKey: "masters",
+        requiresPermissions: ["inventory.read", "purchase.read", "sales.read"],
+      },
+      {
+        key: "masters-departments",
+        label: "Departments",
+        href: "/master/departments",
+        icon: "Layers",
+        moduleKey: "masters",
+        requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
+        requiresPermissions: ["inventory.read", "purchase.read", "sales.read"],
+      },
       { key: "masters-parties", label: "Parties", href: "/master/parties", icon: "Users", moduleKey: "masters", requiresPermissions: ["sales.read", "purchase.read", "finance.ar.read", "finance.ap.read"] },
       { key: "masters-warehouses", label: "Warehouses", href: "/master/warehouses", icon: "MapPin", moduleKey: "masters", termKey: "warehouse", requiresPermissions: ["inventory.read"] },
     ],
@@ -120,7 +137,17 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     tier: "primary",
     order: 3,
     items: [
-      { key: "inventory-products", label: "Products", href: "/inventory/products", icon: "Package", moduleKey: "inventory", termKey: "product", requiresPermissions: ["inventory.read"] },
+      {
+        key: "inventory-products",
+        label: "Products",
+        href: "/inventory/products",
+        icon: "Package",
+        moduleKey: "inventory",
+        termKey: "product",
+        requiresPermissions: ["inventory.read"],
+        // FMCG: catalogue lives under Masters → Finished SKU; stock+cost on Stock Levels.
+        excludesTemplates: ["fmcg-manufacturer", "fmcg-distributor"],
+      },
       { key: "inventory-stock-levels", label: "Stock Levels", href: "/inventory/stock-levels", icon: "Warehouse", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-movements", label: "Stock Movements", href: "/inventory/movements", icon: "ArrowLeftRight", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-receipts", label: "Receipts (GRN)", href: "/inventory/receipts", icon: "PackageCheck", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
@@ -233,6 +260,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "sales-overview", label: "Sales Overview", href: "/sales/overview", icon: "LayoutDashboard", moduleKey: "sales", requiresPermissions: ["sales.read"] },
       { key: "sales-quotes", label: "Quotes", href: "/sales/quotes", icon: "FileText", moduleKey: "sales", requiresPermissions: ["sales.orders.read"] },
       { key: "sales-orders", label: "Orders", href: "/sales/orders", icon: "ShoppingCart", moduleKey: "sales", termKey: "salesOrder", requiresPermissions: ["sales.orders.read"] },
+      { key: "odaflow-sync-queue", label: "Odaflow orders to review", href: "/sales/odaflow-sync-queue", icon: "AlertTriangle", moduleKey: "sales", requiresPermissions: ["automation.integrations.read"] },
       { key: "sales-deliveries", label: "Deliveries", href: "/sales/deliveries", icon: "Truck", moduleKey: "sales", requiresPermissions: ["sales.deliveries.read"] },
       { key: "sales-invoices", label: "Invoices", href: "/sales/invoices", icon: "Receipt", moduleKey: "sales", requiresPermissions: ["sales.invoices.read"] },
       { key: "sales-customers", label: "Customers", href: "/sales/customers", icon: "Users", moduleKey: "sales", termKey: "customer", requiresPermissions: ["sales.customers.read"] },
@@ -374,7 +402,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "finance-chart-of-accounts", label: "Chart of Accounts", href: "/finance/chart-of-accounts", icon: "ListTree", moduleKey: "finance", requiresPermissions: ["finance.accounts.read"] },
       { key: "finance-journals", label: "Journal Entries", href: "/finance/journals", icon: "FileEdit", moduleKey: "finance", requiresPermissions: ["finance.journals.read"] },
       { key: "finance-ar", label: "Accounts Receivable (AR)", href: "/finance/ar", icon: "ArrowDownCircle", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
-      { key: "ar-customers", label: "AR Customers", href: "/ar/customers", icon: "Users", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
+      { key: "ar-customers", label: "Customer credit", href: "/ar/customers", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
       { key: "ar-payments", label: "AR Payments", href: "/ar/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
       { key: "finance-ap", label: "Accounts Payable (AP)", href: "/finance/ap", icon: "ArrowUpCircle", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "ap-suppliers", label: "AP Suppliers", href: "/ap/suppliers", icon: "Building2", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
@@ -383,6 +411,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "ap-three-way-match", label: "3-way match", href: "/ap/three-way-match", icon: "GitCompare", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "finance-payments", label: "Payments & Receipts", href: "/finance/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.payments.read"] },
       { key: "finance-tax", label: "Tax / VAT", href: "/finance/tax", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.tax.read"] },
+      { key: "finance-kra-signing", label: "KRA signing monitor", href: "/finance/kra-signing", icon: "ShieldCheck", moduleKey: "finance", requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"], requiresPermissions: ["finance.read"] },
       { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
       { key: "finance-mpesa-recon", label: "M-Pesa Till Reconciliation", href: "/finance/mpesa-recon", icon: "Smartphone", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
@@ -449,6 +478,17 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             moduleKey: "pricing",
             requiresPermissions: ["sales.write", "admin.settings"],
           },
+          // Org-wide manufacturer packs removed — packing is set per product only.
+          {
+            key: "pricing-workspace-tax-tags",
+            label: "Tax tags",
+            href: "/pricing/workspace/tax-tags",
+            icon: "Receipt",
+            moduleKey: "pricing",
+            requiresPermissions: ["sales.write", "admin.settings"],
+            /** FMCG VAT configurations (exclusive / inclusive) for invoicing. */
+            requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
+          },
           {
             key: "pricing-workspace-zones",
             label: "Franchise zones",
@@ -456,6 +496,8 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             icon: "MapPin",
             moduleKey: "pricing",
             requiresPermissions: ["sales.write", "admin.settings"],
+            /** CoolCatch / seafood franchise pricing — hidden for FMCG. */
+            requiresTemplates: ["seafood-distributor", "cool-catch", "coolcatch"],
           },
           {
             key: "pricing-workspace-approvals",
@@ -464,6 +506,8 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             icon: "ClipboardCheck",
             moduleKey: "pricing",
             requiresPermissions: ["sales.write", "admin.settings"],
+            /** CoolCatch daily price review — seafood only. */
+            requiresTemplates: ["seafood-distributor", "cool-catch", "coolcatch"],
           },
         ],
       },

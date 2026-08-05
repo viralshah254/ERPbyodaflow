@@ -87,7 +87,8 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/ap/three-way-match", module: "finance", description: "3-way match", inNav: true },
 
   // AR
-  { path: "/ar/customers", module: "finance", description: "AR Customers", inNav: true },
+  { path: "/sales/customers", module: "sales", description: "Customers list + create", inNav: true },
+  { path: "/ar/customers", module: "finance", description: "Customer credit", inNav: true },
   { path: "/ar/payments", module: "finance", description: "AR Payments", inNav: true },
 
   // Finance

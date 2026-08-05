@@ -21,6 +21,7 @@ import {
   type ExistingLandedCostAllocation,
 } from "@/lib/api/landed-cost";
 import * as Icons from "lucide-react";
+import { DocumentTabLoading } from "@/components/docs/DocumentTabLoading";
 
 interface VatLine {
   code: string;
@@ -186,13 +187,21 @@ export function DocumentTaxesPanel({
     React.useState<ExistingLandedCostAllocation | null>(null);
   const [landedSourceId, setLandedSourceId] = React.useState<string | null>(null);
   const [loadingLanded, setLoadingLanded] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
 
   const isGrn = docType === "grn";
   const isBill = docType === "bill";
 
   React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setVat([]);
+    setWht([]);
+    setLineTaxRows([]);
+    setLandedSourceId(null);
     fetchDocumentDetailApi(docType as never, docId)
       .then((document) => {
+        if (cancelled) return;
         const lines = (document?.lines ?? []) as DocumentDetailRecord["lines"];
         const total = document?.total ?? lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
         const curr = document?.currency ?? currency;
@@ -217,11 +226,20 @@ export function DocumentTaxesPanel({
         );
 
         const totalTax = lines.reduce((sum, line) => sum + (line.tax ?? 0), 0);
-        const totalBase = lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
-        if (["invoice", "bill"].includes(docType) && totalTax > 0) {
+        // Exclusive VAT: amount already includes tax → base = amount − tax. Inclusive: amount is gross.
+        const totalGross = lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
+        const totalBase = Math.max(0, Math.round((totalGross - totalTax) * 100) / 100);
+        const showVatBreakdown = ["invoice", "bill", "sales-order", "delivery-note", "quote"].includes(
+          docType
+        );
+        if (showVatBreakdown && totalTax > 0) {
+          const primaryCode =
+            lines.find((l) => l.taxCodeCode)?.taxCodeCode ??
+            lines.find((l) => l.taxCodeId)?.taxCodeId ??
+            "VAT";
           setVat([
             {
-              code: "DOC-TAX",
+              code: primaryCode,
               base: totalBase,
               rate: totalBase > 0 ? Number(((totalTax / totalBase) * 100).toFixed(2)) : 0,
               amount: totalTax,
@@ -251,10 +269,17 @@ export function DocumentTaxesPanel({
         }
       })
       .catch(() => {
+        if (cancelled) return;
         setVat([]);
         setWht([]);
         setLineTaxRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [docId, docType, currency, isGrn, isBill]);
 
   React.useEffect(() => {
@@ -271,6 +296,10 @@ export function DocumentTaxesPanel({
   const editHref = landedSourceId
     ? `/inventory/costing?sourceId=${encodeURIComponent(landedSourceId)}`
     : "/inventory/costing";
+
+  if (loading) {
+    return <DocumentTabLoading label="Loading taxes & charges…" rows={4} />;
+  }
 
   return (
     <div className="space-y-4">
@@ -419,7 +448,8 @@ export function DocumentTaxesPanel({
       {!isGrn && !isBill && vat.length === 0 && wht.length === 0 && lineTaxRows.length === 0 && (
         <Card>
           <CardContent className="pt-6 pb-6 text-center text-sm text-muted-foreground">
-            No VAT or WHT lines for this document. Configure tax codes and mappings in Settings → Tax.
+            No VAT amounts on this document yet. Line tax codes appear above when set; VAT breakdown
+            shows once line tax is calculated. Configure rates under Settings → Taxes.
           </CardContent>
         </Card>
       )}

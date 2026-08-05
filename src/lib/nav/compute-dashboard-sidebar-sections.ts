@@ -58,6 +58,7 @@ export type ComputeDashboardSidebarSectionsParams = {
   permissions: string[];
   orgRole: string | undefined;
   franchisePersona: "STANDARD" | "LIGHT_ERP";
+  templateId?: string | null;
 };
 
 /** Resolved nav sections for the main ERP sidebar (before badges and sidebar layout prefs). */
@@ -72,6 +73,7 @@ export function computeDashboardSidebarSections(params: ComputeDashboardSidebarS
     permissions,
     orgRole,
     franchisePersona,
+    templateId,
   } = params;
 
   const orgType = toTemplateOrgType(ctxOrgType ?? orgOrgType ?? undefined);
@@ -95,6 +97,7 @@ export function computeDashboardSidebarSections(params: ComputeDashboardSidebarS
     permissions,
     orgRole: orgRole ?? undefined,
     strictSections: isFranchiseePersona || template?.strictNavSections === true,
+    templateId: templateId ?? template?.id ?? null,
   });
 
   if (!isFranchiseePersona) return sections;

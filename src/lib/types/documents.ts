@@ -1,4 +1,5 @@
 import type { DocTypeKey } from "@/config/documents/types";
+import type { KraSigningRecord } from "@/lib/kra/kra-signing";
 
 export type DocListRow = {
   id: string;
@@ -42,6 +43,7 @@ export type DocListRow = {
   warehouse?: string;
   reference?: string;
   pendingApprovalReason?: string;
+  kraSigning?: KraSigningRecord | null;
 };
 
 export type DocumentAttachmentRecord = {
@@ -111,6 +113,13 @@ export type FranchiseeWeightSplitReportRecord = {
   splitNote?: string;
 };
 
+export type PodEvidenceVerificationRecord = {
+  status: "pending" | "passed" | "failed" | "skipped";
+  reason?: string;
+  checkedAt?: string;
+  method?: "human" | "ai" | "none";
+};
+
 export type PodConfirmationRecord = {
   confirmedAt: string;
   confirmedByUserId?: string;
@@ -126,6 +135,12 @@ export type PodConfirmationRecord = {
   lines: PodConfirmationLineRecord[];
   extraReceiptLines?: FranchiseeExtraReceiptLineRecord[];
   franchiseeWeightSplit?: FranchiseeWeightSplitReportRecord;
+  /** mobile | signed_copy (desk scan) | desk */
+  source?: "mobile" | "signed_copy" | "desk";
+  /** Scanned / photographed customer-signed DN uploaded from ERP. */
+  signedCopyAttachmentId?: string;
+  /** Human today; AI verification stub for future invoice gate. */
+  evidenceVerification?: PodEvidenceVerificationRecord;
 };
 
 /** Driver pickup at collection / processing (before IN_TRANSIT). */
@@ -185,6 +200,11 @@ export type DocumentDetailRecord = {
   party?: string;
   branchId?: string;
   warehouseId?: string;
+  /** Customer price tag used for FMCG sales pricing (resolved from doc, chain, or party default). */
+  priceListId?: string;
+  priceListName?: string;
+  /** Tax tag applied to sales lines. */
+  taxConfigId?: string;
   total?: number;
   currency: string;
   exchangeRate?: number;
@@ -192,17 +212,36 @@ export type DocumentDetailRecord = {
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
+  /** FMCG: pack UOM lines missing pieces-per-pack — convert to DN blocked. */
+  packagingBlockingConversion?: boolean;
+  packagingMissingLines?: Array<{
+    productId: string;
+    unit: string;
+    description?: string;
+    productName?: string;
+    productSku?: string;
+  }>;
+  subtotal?: number;
+  /** Document-level discount amount when offered. */
+  discount?: number;
+  tax?: number;
   lines: Array<{
     id?: string;
     description: string;
     qty?: number;
     unit?: string;
     unitPrice?: number;
+    /** Line discount percent when offered. */
+    discount?: number;
     amount?: number;
     tax?: number;
     productId?: string;
     productName?: string;
     productSku?: string;
+    productSize?: string;
+    productBarcode?: string;
+    /** FMCG: this line's pack UOM has no pieces count on the product. */
+    packagingMissing?: boolean;
     accountId?: string;
     accountName?: string;
     accountCode?: string;
@@ -233,6 +272,9 @@ export type DocumentDetailRecord = {
     paidVarianceKg?: number;
     varianceReasonCode?: string;
     varianceReason?: string;
+    odaflowProductId?: string;
+    odaflowPackSize?: string;
+    odaflowBarcode?: string;
   }>;
   sourceDocument?: {
     id: string;
@@ -240,6 +282,7 @@ export type DocumentDetailRecord = {
     number: string;
     status: string;
     date: string;
+    total?: number;
   } | null;
   linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{
@@ -271,6 +314,21 @@ export type DocumentDetailRecord = {
   warehouseDrop?: WarehouseDropRecord;
   /** Admin can amend in-transit dispatch when allowed (delivery-note only). */
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
+  /** KRA / Incotex signing (invoice, credit note, debit note). */
+  kraSigning?: KraSigningRecord | null;
+  /** Odaflow SFA source metadata (sales orders synced from Odaflow). */
+  orderChannel?: string;
+  externalSource?: string;
+  externalOrderId?: string;
+  odaflowChannel?: string;
+  odaflowOrderTitle?: string;
+  odaflowSalesRepName?: string;
+  odaflowSalesRepPhone?: string;
+  odaflowSourcePdfUrl?: string;
+  odaflowCustomerId?: string;
+  /** Customer name as captured on the SFA order (may differ from mapped ERP party). */
+  odaflowCustomerName?: string;
+  createdAt?: string;
 };
 
 export type DocumentChainNode = {

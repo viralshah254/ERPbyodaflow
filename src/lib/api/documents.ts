@@ -6,7 +6,9 @@ import type {
   DocumentTimelineEntry,
 } from "@/lib/types/documents";
 import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
+import type { KraSigningRecord } from "@/lib/kra/kra-signing";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "./client";
+import type { DownloadProgressUpdate } from "./client";
 
 type BackendDocumentLine = {
   id?: string;
@@ -14,6 +16,11 @@ type BackendDocumentLine = {
   productId?: string;
   productName?: string;
   productSku?: string;
+  productSize?: string;
+  productBarcode?: string;
+  odaflowPackSize?: string;
+  odaflowBarcode?: string;
+  packagingMissing?: boolean;
   accountId?: string;
   accountName?: string;
   accountCode?: string;
@@ -21,6 +28,8 @@ type BackendDocumentLine = {
   quantity?: number;
   unit?: string;
   unitPrice?: number;
+  /** Line discount percent when offered on the price tag / order. */
+  discount?: number;
   tax?: number;
   amount?: number;
   sourceDocumentId?: string;
@@ -79,6 +88,14 @@ type BackendPodConfirmation = {
   dispatcherSignatureAttachmentId?: string;
   note?: string;
   lines: BackendPodConfirmationLine[];
+  source?: "mobile" | "signed_copy" | "desk";
+  signedCopyAttachmentId?: string;
+  evidenceVerification?: {
+    status: "pending" | "passed" | "failed" | "skipped";
+    reason?: string;
+    checkedAt?: string | Date;
+    method?: "human" | "ai" | "none";
+  };
 };
 
 type BackendDispatchPickupLine = {
@@ -126,6 +143,9 @@ type BackendDocumentDetail = {
   party?: string;
   branchId?: string;
   warehouseId?: string;
+  priceListId?: string;
+  priceListName?: string;
+  taxConfigId?: string;
   total?: number;
   currency?: string;
   exchangeRate?: number;
@@ -135,6 +155,17 @@ type BackendDocumentDetail = {
   availableActions?: Array<"submit" | "approve" | "post" | "cancel" | "reverse">;
   availableConversionTargets?: DocTypeKey[];
   outputTemplateId?: string;
+  packagingBlockingConversion?: boolean;
+  packagingMissingLines?: Array<{
+    productId: string;
+    unit: string;
+    description?: string;
+    productName?: string;
+    productSku?: string;
+  }>;
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
   lines?: BackendDocumentLine[];
   sourceDocument?: {
     id: string;
@@ -142,6 +173,7 @@ type BackendDocumentDetail = {
     number: string;
     status: string;
     date: string;
+    total?: number;
   } | null;
   linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{
@@ -170,6 +202,18 @@ type BackendDocumentDetail = {
   deliveryCheckIn?: BackendDeliveryCheckIn;
   warehouseDrop?: BackendWarehouseDrop;
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
+  kraSigning?: KraSigningRecord | null;
+  orderChannel?: string;
+  externalSource?: string;
+  externalOrderId?: string;
+  odaflowChannel?: string;
+  odaflowOrderTitle?: string;
+  odaflowSalesRepName?: string;
+  odaflowSalesRepPhone?: string;
+  odaflowSourcePdfUrl?: string;
+  odaflowCustomerId?: string;
+  odaflowCustomerName?: string;
+  createdAt?: string;
 };
 
 type ChainNode = {
@@ -225,6 +269,7 @@ type BackendDocumentListItem = {
   poRef?: string;
   reference?: string;
   pendingApprovalReason?: string;
+  kraSigning?: KraSigningRecord | null;
 };
 
 type BackendDocumentListResponse = {
@@ -240,6 +285,10 @@ export type DocumentDraftPayload = {
   branchId?: string;
   partyId?: string;
   warehouseId?: string;
+  /** Customer price tag / price list used for sales lines. */
+  priceListId?: string;
+  /** Tax tag (VAT configuration) applied to sales lines. */
+  taxConfigId?: string;
   poRef?: string;
   reference?: string;
   dueDate?: string;
@@ -252,12 +301,14 @@ export type DocumentDraftPayload = {
     quantity?: number;
     unit?: string;
     unitPrice?: number;
+    discount?: number;
     taxCodeId?: string;
     tax?: number;
     amount?: number;
     debit?: number;
     credit?: number;
     sourceLineId?: string;
+    lineId?: string;
   }>;
   subtotal?: number;
   discount?: number;
@@ -268,6 +319,7 @@ export type DocumentDraftPayload = {
   exchangeRate?: number;
   linesAreTaxInclusive?: boolean;
   outputTemplateId?: string;
+  odaflowMappingCorrections?: import("@/lib/odaflow-mapping-corrections").OdaflowMappingCorrectionsPayload;
 };
 
 export type PurchaseOrderLookupOption = {
@@ -370,6 +422,9 @@ function mapDocumentDetail(
     party: payload.party,
     branchId: payload.branchId,
     warehouseId: payload.warehouseId,
+    ...(payload.priceListId ? { priceListId: payload.priceListId } : {}),
+    ...(payload.priceListName ? { priceListName: payload.priceListName } : {}),
+    ...(payload.taxConfigId ? { taxConfigId: payload.taxConfigId } : {}),
     total: resolvedTotal,
     currency: payload.currency ?? "KES",
     exchangeRate: payload.exchangeRate,
@@ -382,19 +437,34 @@ function mapDocumentDetail(
     }),
     availableActions: payload.availableActions ?? [],
     availableConversionTargets: payload.availableConversionTargets ?? [],
+    packagingBlockingConversion: payload.packagingBlockingConversion,
+    packagingMissingLines: payload.packagingMissingLines,
     outputTemplateId: payload.outputTemplateId,
+    ...(typeof payload.subtotal === "number" ? { subtotal: payload.subtotal } : {}),
+    ...(typeof payload.discount === "number" && payload.discount > 0
+      ? { discount: payload.discount }
+      : {}),
+    ...(typeof payload.tax === "number" ? { tax: payload.tax } : {}),
     lines: (payload.lines ?? []).map((line) => ({
       id: line.id,
       description: line.description ?? "Line item",
       productId: line.productId,
       productName: line.productName,
       productSku: line.productSku,
+      ...(line.productSize ? { productSize: line.productSize } : {}),
+      ...(line.productBarcode ? { productBarcode: line.productBarcode } : {}),
+      ...(line.odaflowPackSize ? { odaflowPackSize: line.odaflowPackSize } : {}),
+      ...(line.odaflowBarcode ? { odaflowBarcode: line.odaflowBarcode } : {}),
+      packagingMissing: line.packagingMissing,
       accountId: line.accountId,
       accountName: line.accountName,
       accountCode: line.accountCode,
       qty: line.qty ?? line.quantity,
       unit: line.unit,
       unitPrice: line.unitPrice,
+      ...(typeof line.discount === "number" && Number.isFinite(line.discount) && line.discount >= 0
+        ? { discount: line.discount }
+        : {}),
       tax: line.tax,
       amount: line.amount,
       sourceDocumentId: line.sourceDocumentId,
@@ -458,6 +528,24 @@ function mapDocumentDetail(
               ? { varianceEvidenceAttachmentIds: ln.varianceEvidenceAttachmentIds }
               : {}),
           })),
+          ...(payload.podConfirmation.source ? { source: payload.podConfirmation.source } : {}),
+          ...(payload.podConfirmation.signedCopyAttachmentId
+            ? { signedCopyAttachmentId: payload.podConfirmation.signedCopyAttachmentId }
+            : {}),
+          ...(payload.podConfirmation.evidenceVerification
+            ? {
+                evidenceVerification: {
+                  status: payload.podConfirmation.evidenceVerification.status,
+                  reason: payload.podConfirmation.evidenceVerification.reason,
+                  checkedAt: payload.podConfirmation.evidenceVerification.checkedAt
+                    ? typeof payload.podConfirmation.evidenceVerification.checkedAt === "string"
+                      ? payload.podConfirmation.evidenceVerification.checkedAt
+                      : new Date(payload.podConfirmation.evidenceVerification.checkedAt).toISOString()
+                    : undefined,
+                  method: payload.podConfirmation.evidenceVerification.method,
+                },
+              }
+            : {}),
         }
       : undefined,
     dispatchPickup: payload.dispatchPickup
@@ -512,6 +600,18 @@ function mapDocumentDetail(
         }
       : undefined,
     dispatchAmendEligibility: payload.dispatchAmendEligibility,
+    kraSigning: payload.kraSigning ?? undefined,
+    ...(payload.orderChannel ? { orderChannel: payload.orderChannel } : {}),
+    ...(payload.externalSource ? { externalSource: payload.externalSource } : {}),
+    ...(payload.externalOrderId ? { externalOrderId: payload.externalOrderId } : {}),
+    ...(payload.odaflowChannel ? { odaflowChannel: payload.odaflowChannel } : {}),
+    ...(payload.odaflowOrderTitle ? { odaflowOrderTitle: payload.odaflowOrderTitle } : {}),
+    ...(payload.odaflowSalesRepName ? { odaflowSalesRepName: payload.odaflowSalesRepName } : {}),
+    ...(payload.odaflowSalesRepPhone ? { odaflowSalesRepPhone: payload.odaflowSalesRepPhone } : {}),
+    ...(payload.odaflowSourcePdfUrl ? { odaflowSourcePdfUrl: payload.odaflowSourcePdfUrl } : {}),
+    ...(payload.odaflowCustomerId ? { odaflowCustomerId: payload.odaflowCustomerId } : {}),
+    ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
+    ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };
 }
 
@@ -545,6 +645,7 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     poRef: item.poRef,
     reference: item.reference,
     pendingApprovalReason: item.pendingApprovalReason,
+    kraSigning: item.kraSigning ?? undefined,
   };
 }
 
@@ -784,6 +885,30 @@ export async function confirmDeliveryPodApi(
   });
 }
 
+/** Desk: confirm POD from an uploaded customer-signed / stamped delivery note scan. */
+export async function confirmDeliveryPodFromSignedCopyApi(
+  deliveryNoteId: string,
+  payload: {
+    signedCopyAttachmentId: string;
+    receiverName?: string;
+    note?: string;
+  }
+): Promise<void> {
+  requireLiveApi("Signed delivery note POD");
+  const signedCopyAttachmentId = payload.signedCopyAttachmentId.trim();
+  if (!signedCopyAttachmentId) {
+    throw new Error("signedCopyAttachmentId is required");
+  }
+  await apiRequest(`/api/documents/delivery-note/${deliveryNoteId}/pod-signed-copy`, {
+    method: "POST",
+    body: {
+      signedCopyAttachmentId,
+      ...(payload.receiverName?.trim() ? { receiverName: payload.receiverName.trim() } : {}),
+      ...(payload.note?.trim() ? { note: payload.note.trim() } : {}),
+    },
+  });
+}
+
 export async function requestDocumentApprovalApi(
   type: DocTypeKey,
   id: string,
@@ -809,14 +934,15 @@ export async function documentActionApi(
   });
 }
 
-export function downloadDocumentPdfApi(
+export async function downloadDocumentPdfApi(
   type: DocTypeKey,
   id: string,
   fileName: string,
-  onNotAvailable: (message: string) => void
-): void {
+  onNotAvailable: (message: string) => void,
+  onProgress?: (update: DownloadProgressUpdate) => void
+): Promise<boolean> {
   requireLiveApi("Document PDF export");
-  downloadFile(`/api/documents/${type}/${id}/pdf`, fileName, onNotAvailable);
+  return downloadFile(`/api/documents/${type}/${id}/pdf`, fileName, onNotAvailable, onProgress);
 }
 
 export function downloadDocumentExcelApi(
@@ -884,6 +1010,20 @@ export async function deleteDocumentCommentApi(
   await apiRequest(`/api/docs/${type}/${id}/comments/${encodeURIComponent(commentId)}`, {
     method: "DELETE",
   });
+}
+
+export async function sendInvoiceEmailApi(
+  invoiceId: string,
+  options?: { overrideTo?: string }
+): Promise<{ sent: boolean; to: string }> {
+  requireLiveApi("Send invoice email");
+  return apiRequest<{ sent: boolean; to: string }>(
+    `/api/documents/invoice/${encodeURIComponent(invoiceId)}/email`,
+    {
+      method: "POST",
+      body: options?.overrideTo?.trim() ? { overrideTo: options.overrideTo.trim() } : {},
+    }
+  );
 }
 
 export async function uploadDocumentAttachmentApi(

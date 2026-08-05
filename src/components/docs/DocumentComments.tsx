@@ -15,6 +15,8 @@ export interface DocumentComment {
 
 interface DocumentCommentsProps {
   comments?: DocumentComment[];
+  /** When true, show a loading state instead of “No comments yet”. */
+  loading?: boolean;
   onAddComment?: (body: string) => void;
   className?: string;
 }
@@ -22,6 +24,7 @@ interface DocumentCommentsProps {
 /** Comments panel for document detail: timeline of comments + add form. */
 export function DocumentComments({
   comments = [],
+  loading = false,
   onAddComment,
   className,
 }: DocumentCommentsProps) {
@@ -65,7 +68,12 @@ export function DocumentComments({
           {posting ? "Posting…" : "Post"}
         </Button>
       </div>
-      {comments.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground" role="status">
+          <Icons.Loader2 className="h-4 w-4 animate-spin" />
+          Loading comments…
+        </div>
+      ) : comments.length === 0 ? (
         <p className="text-sm text-muted-foreground">No comments yet.</p>
       ) : (
         <div className="space-y-4">
