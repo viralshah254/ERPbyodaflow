@@ -274,3 +274,161 @@ export async function fetchOdaflowCustomerMappings(): Promise<{ items: OdaflowMa
   requireLiveApi("Odaflow integration");
   return apiRequest<{ items: OdaflowMapping[] }>("/api/integrations/odaflow/mappings/customers");
 }
+
+export type ErpSfaEnrollmentStatus = {
+  enrolled: boolean;
+  fmcg: boolean;
+  integrationActive: boolean;
+  integrationConfigured: boolean;
+  manufacturerId: string | null;
+  sfaErpManaged: boolean | null;
+  reasons: string[];
+};
+
+export async function fetchErpSfaEnrollmentApi(): Promise<ErpSfaEnrollmentStatus> {
+  requireLiveApi("Odaflow enrollment");
+  return apiRequest<ErpSfaEnrollmentStatus>("/api/integrations/odaflow/enrollment");
+}
+
+export type ProductSfaSyncStatusRow = {
+  productId: string;
+  barcode?: string;
+  name?: string;
+  generalTrade: { linked: boolean; externalId?: string; lastSyncedAt?: string };
+  modernTrade: { linked: boolean; externalId?: string; lastSyncedAt?: string };
+};
+
+export async function fetchProductSfaSyncStatusApi(
+  productIds: string[]
+): Promise<{ items: ProductSfaSyncStatusRow[] }> {
+  requireLiveApi("Product SFA sync status");
+  const qs = new URLSearchParams({ productIds: productIds.join(",") });
+  return apiRequest(`/api/integrations/odaflow/products/sync-status?${qs.toString()}`);
+}
+
+export type ProductSfaSyncResult = {
+  created: { gt: number; mt: number };
+  updated: { gt: number; mt: number };
+  skipped: Array<{ productId: string; barcode?: string; reason: string }>;
+  warnings: Array<{ productId: string; barcode?: string; reason: string }>;
+};
+
+export async function syncProductsToSfaApi(body: {
+  productIds: string[];
+  catalogs: Array<"general_trade" | "modern_trade">;
+  priceListId: string;
+  dryRun?: boolean;
+}): Promise<ProductSfaSyncResult> {
+  requireLiveApi("Product SFA sync");
+  return apiRequest<ProductSfaSyncResult>("/api/integrations/odaflow/products/sync", {
+    method: "POST",
+    body,
+  });
+}
+
+export type SfaSyncSettings = {
+  defaultPriceListId: string | null;
+  defaultCatalogs: Array<"general_trade" | "modern_trade">;
+};
+
+export async function fetchSfaSyncSettingsApi(): Promise<SfaSyncSettings> {
+  requireLiveApi("SFA sync settings");
+  return apiRequest<SfaSyncSettings>("/api/integrations/odaflow/products/sync-settings");
+}
+
+export async function updateSfaSyncSettingsApi(
+  body: Partial<SfaSyncSettings>
+): Promise<SfaSyncSettings> {
+  requireLiveApi("SFA sync settings");
+  return apiRequest<SfaSyncSettings>("/api/integrations/odaflow/products/sync-settings", {
+    method: "PATCH",
+    body,
+  });
+}
+
+export type SfaProductSyncOverview = {
+  totalProducts: number;
+  activeProducts: number;
+  withBarcode: number;
+  missingBarcode: number;
+  gtLinked: number;
+  mtLinked: number;
+  unlinked: number;
+};
+
+export type SfaUnlinkedProduct = {
+  productId: string;
+  sku?: string;
+  name: string;
+  barcode?: string;
+  status: string;
+};
+
+export async function fetchSfaProductSyncOverviewApi(opts?: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{
+  overview: SfaProductSyncOverview;
+  unlinked: { items: SfaUnlinkedProduct[]; total: number };
+}> {
+  requireLiveApi("SFA product sync overview");
+  const qs = new URLSearchParams();
+  if (opts?.search) qs.set("search", opts.search);
+  if (opts?.limit != null) qs.set("limit", String(opts.limit));
+  if (opts?.offset != null) qs.set("offset", String(opts.offset));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiRequest(`/api/integrations/odaflow/products/sync-overview${suffix}`);
+}
+
+export type SfaBulkSyncProgress = {
+  done: number;
+  total: number;
+  phase: "syncing" | "done";
+};
+
+const SFA_SYNC_BATCH_SIZE = 20;
+
+export async function syncProductsToSfaBatchedApi(
+  body: {
+    productIds: string[];
+    catalogs: Array<"general_trade" | "modern_trade">;
+    priceListId: string;
+  },
+  onProgress?: (p: SfaBulkSyncProgress) => void
+): Promise<ProductSfaSyncResult> {
+  const ids = [...new Set(body.productIds.map((id) => id.trim()).filter(Boolean))];
+  const aggregate: ProductSfaSyncResult = {
+    created: { gt: 0, mt: 0 },
+    updated: { gt: 0, mt: 0 },
+    skipped: [],
+    warnings: [],
+  };
+
+  if (!ids.length) return aggregate;
+
+  onProgress?.({ done: 0, total: ids.length, phase: "syncing" });
+
+  for (let i = 0; i < ids.length; i += SFA_SYNC_BATCH_SIZE) {
+    const batch = ids.slice(i, i + SFA_SYNC_BATCH_SIZE);
+    const res = await syncProductsToSfaApi({
+      productIds: batch,
+      catalogs: body.catalogs,
+      priceListId: body.priceListId,
+    });
+    aggregate.created.gt += res.created.gt;
+    aggregate.created.mt += res.created.mt;
+    aggregate.updated.gt += res.updated.gt;
+    aggregate.updated.mt += res.updated.mt;
+    aggregate.skipped.push(...res.skipped);
+    aggregate.warnings.push(...res.warnings);
+    onProgress?.({
+      done: Math.min(i + batch.length, ids.length),
+      total: ids.length,
+      phase: "syncing",
+    });
+  }
+
+  onProgress?.({ done: ids.length, total: ids.length, phase: "done" });
+  return aggregate;
+}

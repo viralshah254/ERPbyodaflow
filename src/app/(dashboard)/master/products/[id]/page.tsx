@@ -95,6 +95,8 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
+import { SfaProductConnectionCard } from "@/components/integrations/SfaProductConnectSheet";
 import {
   composeFmcgSize,
   FMCG_SIZE_UOMS,
@@ -158,6 +160,7 @@ export default function ProductDetailPage() {
   const permissions = useAuthStore((s) => s.permissions);
   const canDelete = permissions.includes("admin.settings");
   const canWrite = useCanWriteInventory();
+  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
   const terminology = useTerminology();
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
@@ -1311,6 +1314,18 @@ export default function ProductDetailPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {fmcgOrg && sfaEnrolled && product ? (
+              <SfaProductConnectionCard
+                productId={product.id}
+                productName={product.name}
+                barcode={product.barcode ?? barcodeDraft}
+                size={product.size ?? composeFmcgSize(sizeValueDraft, sizeUomDraft)}
+                packaging={packaging.map((p) => ({ uom: p.uom, unitsPer: p.unitsPer }))}
+                fmcgTagPrices={fmcgTagPrices}
+                canWrite={canWrite}
+              />
+            ) : null}
           </TabsContent>
 
           {/* ── Pricing Tab ───────────────────────────────────────────────── */}

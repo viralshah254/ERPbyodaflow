@@ -33,7 +33,9 @@ import {
   type OdaflowMapping,
 } from "@/lib/api/odaflow-integration";
 import { OdaflowSyncQueuePanel } from "@/components/integrations/OdaflowSyncQueuePanel";
+import { OdaflowProductsSyncPanel } from "@/components/integrations/OdaflowProductsSyncPanel";
 import { subscribeRealtimeInbox } from "@/lib/realtime-client";
+import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 
 type Tab = "setup" | "overview" | "queue" | "products" | "customers";
 
@@ -41,7 +43,7 @@ const TAB_LABELS: Record<Tab, string> = {
   setup: "Setup",
   overview: "Overview",
   queue: "Sync Queue",
-  products: "Product Mappings",
+  products: "Products & sync",
   customers: "Customer Mappings",
 };
 
@@ -87,6 +89,7 @@ function channelLabel(eventType: string) {
 export default function OdaflowIntegrationPage() {
   const permissions = useAuthStore((s) => s.permissions ?? []);
   const canSave = hasRuntimePermission(permissions, "admin.settings");
+  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
 
   const [tab, setTab] = React.useState<Tab>("overview");
 
@@ -540,46 +543,52 @@ export default function OdaflowIntegrationPage() {
         )}
 
         {tab === "products" && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              These mappings link Odaflow product IDs to ERP SKUs. Missing mappings will cause orders to queue.
-              Add mappings via{" "}
-              <code className="text-xs bg-muted px-1 rounded">POST /api/integrations/odaflow/products/map</code>.
-            </p>
-            {mappingsLoading ? (
-              <div className="text-sm text-muted-foreground">Loading…</div>
-            ) : productMappings.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-4 text-center">No product mappings yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Odaflow ID</th>
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Pack Size</th>
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">ERP Product ID</th>
-                      <th className="text-left py-2 font-medium text-muted-foreground">Last Synced</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productMappings.map((m) => {
-                      const [, packSize] = (m.externalKey ?? "").split(":");
-                      return (
-                        <tr key={m._id} className="border-b hover:bg-muted/30">
-                          <td className="py-2 pr-4 font-mono text-xs">{m.externalId}</td>
-                          <td className="py-2 pr-4 text-muted-foreground">{packSize ?? "—"}</td>
-                          <td className="py-2 pr-4 font-mono text-xs">{m.entityId}</td>
-                          <td className="py-2 text-xs text-muted-foreground">
-                            {m.lastSyncedAt ? new Date(m.lastSyncedAt).toLocaleDateString() : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          sfaEnrolled ? (
+            <OdaflowProductsSyncPanel
+              canSave={canSave}
+              productMappingsCount={productMappings.length}
+            />
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Product sync to Odaflow SFA is available for enrolled FMCG organisations with an active ERP-managed connector.
+                Complete setup on the <strong>Setup</strong> tab and ensure SFA is in <code className="text-xs bg-muted px-1 rounded">erp_managed</code> mode.
+              </p>
+              {mappingsLoading ? (
+                <div className="text-sm text-muted-foreground">Loading…</div>
+              ) : productMappings.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center">No product mappings yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Odaflow ID</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Pack Size</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">ERP Product ID</th>
+                        <th className="text-left py-2 font-medium text-muted-foreground">Last Synced</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productMappings.map((m) => {
+                        const [, packSize] = (m.externalKey ?? "").split(":");
+                        return (
+                          <tr key={m._id} className="border-b hover:bg-muted/30">
+                            <td className="py-2 pr-4 font-mono text-xs">{m.externalId}</td>
+                            <td className="py-2 pr-4 text-muted-foreground">{packSize ?? "—"}</td>
+                            <td className="py-2 pr-4 font-mono text-xs">{m.entityId}</td>
+                            <td className="py-2 text-xs text-muted-foreground">
+                              {m.lastSyncedAt ? new Date(m.lastSyncedAt).toLocaleDateString() : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
         )}
 
         {tab === "customers" && (

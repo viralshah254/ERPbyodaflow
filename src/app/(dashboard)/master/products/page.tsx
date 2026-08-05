@@ -56,6 +56,8 @@ import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useAuthStore } from "@/stores/auth-store";
+import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
+import { SfaBulkSyncSheet, SfaBulkSyncLink } from "@/components/integrations/SfaBulkSyncSheet";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -96,6 +98,7 @@ export default function MasterProductsPage() {
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const permissions = useAuthStore((s) => s.permissions);
+  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
   const canDeleteProduct = permissions.includes("admin.settings");
   const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
   const productLabel = t("product", terminology);
@@ -162,6 +165,9 @@ export default function MasterProductsPage() {
   const [importResult, setImportResult] = React.useState<ImportProductsResult | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const [selectedProductIds, setSelectedProductIds] = React.useState<string[]>([]);
+  const [bulkSfaSyncOpen, setBulkSfaSyncOpen] = React.useState(false);
 
   // Deep-link from Pricing empty state: /master/products?import=1
   React.useEffect(() => {
@@ -655,6 +661,12 @@ export default function MasterProductsPage() {
         showCommandHint
         actions={canWriteProduct ? (
           <div className="flex items-center gap-2">
+            {fmcgOrg && sfaEnrolled ? (
+              <SfaBulkSyncLink
+                count={selectedProductIds.length}
+                onClick={() => setBulkSfaSyncOpen(true)}
+              />
+            ) : null}
             <Button
               variant="outline"
               onClick={() => exportProductsCsvApi((msg) => toast.error(msg))}
@@ -780,6 +792,9 @@ export default function MasterProductsPage() {
                 columns={columns}
                 onRowClick={(row) => router.push(`/master/products/${row.id}`)}
                 emptyMessage={loading ? "Searching…" : `No ${productLabel.toLowerCase()}s.`}
+                selectable={fmcgOrg && sfaEnrolled && canWriteProduct}
+                selectedIds={selectedProductIds}
+                onSelectionChange={setSelectedProductIds}
                 className={cn(
                   "transition-opacity duration-200",
                   loading && "opacity-60",
@@ -1638,6 +1653,15 @@ export default function MasterProductsPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {fmcgOrg && sfaEnrolled ? (
+        <SfaBulkSyncSheet
+          productIds={selectedProductIds}
+          open={bulkSfaSyncOpen}
+          onOpenChange={setBulkSfaSyncOpen}
+          onSynced={() => setSelectedProductIds([])}
+        />
+      ) : null}
     </PageShell>
   );
 }
