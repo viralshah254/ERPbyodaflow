@@ -43,7 +43,7 @@ function CatalogPresenceBadge({ onSfa, linked }: { onSfa: boolean; linked: boole
   if (onSfa) {
     return (
       <Badge variant="secondary" className="font-normal text-green-700 dark:text-green-400">
-        On SFA{linked ? "" : " · not mapped"}
+        {linked ? "On SFA" : "On SFA · barcode/link"}
       </Badge>
     );
   }
@@ -201,8 +201,8 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {overview.sfaLookupOk === false
-                  ? "SFA lookup offline — ERP mappings only"
-                  : "Live SFA check by barcode"}
+                  ? "SFA API lookup offline — ERP mappings only"
+                  : "Live SFA check via API (barcode + links)"}
               </p>
               {overview.missingBarcode > 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -267,8 +267,8 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
           <div>
             <CardTitle className="text-base">Products missing an SFA catalog</CardTitle>
             <CardDescription>
-              Active barcoded SKUs that are missing General Trade and/or Modern Trade in live SFA.
-              Products already on both catalogs are hidden even if ERP mappings are incomplete.
+              Active barcoded SKUs missing General Trade and/or Modern Trade. Presence is checked by
+              barcode, SFA entity links (including manual order matches), and ERP catalog mappings.
             </CardDescription>
           </div>
           {(debouncedSearch ? unlinkedTotal : overview?.unlinked ?? unlinkedTotal) > 0 ? (
@@ -291,8 +291,10 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
           />
           {overview?.sfaLookupOk === false ? (
             <p className="text-xs text-amber-600">
-              Could not reach SFA DocumentDB. Start the tunnel (`npm run documentdb:tunnel` in
-              odaflow-backend/api) so this list reflects live GT/MT presence.
+              Could not reach the SFA API for live catalog presence. Check{" "}
+              <code className="text-[11px] bg-muted px-1 rounded">ODAFLOW_SFA_API_URL</code> (e.g.
+              https://dev.odaflow.com) and{" "}
+              <code className="text-[11px] bg-muted px-1 rounded">ODAFLOW_SFA_API_KEY</code>.
             </p>
           ) : null}
           {unlinked.length === 0 ? (

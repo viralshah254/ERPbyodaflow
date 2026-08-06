@@ -89,7 +89,7 @@ function channelLabel(eventType: string) {
 export default function OdaflowIntegrationPage() {
   const permissions = useAuthStore((s) => s.permissions ?? []);
   const canSave = hasRuntimePermission(permissions, "admin.settings");
-  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
+  const { enrolled: sfaEnrolled, loading: sfaEnrollmentLoading } = useErpSfaEnrollment();
 
   const [tab, setTab] = React.useState<Tab>("overview");
 
@@ -551,7 +551,11 @@ export default function OdaflowIntegrationPage() {
         )}
 
         {tab === "products" && (
-          sfaEnrolled ? (
+          sfaEnrollmentLoading ? (
+            <div className="text-sm text-muted-foreground py-8 text-center">
+              Checking SFA enrollment…
+            </div>
+          ) : sfaEnrolled ? (
             <OdaflowProductsSyncPanel
               canSave={canSave}
               productMappingsCount={productMappings.length}
