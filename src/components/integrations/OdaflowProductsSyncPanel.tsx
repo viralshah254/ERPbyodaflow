@@ -39,6 +39,21 @@ type Props = {
   productMappingsCount: number;
 };
 
+function CatalogPresenceBadge({ onSfa, linked }: { onSfa: boolean; linked: boolean }) {
+  if (onSfa) {
+    return (
+      <Badge variant="secondary" className="font-normal text-green-700 dark:text-green-400">
+        On SFA{linked ? "" : " · not mapped"}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="font-normal text-amber-700 border-amber-500/50 dark:text-amber-400">
+      Missing
+    </Badge>
+  );
+}
+
 export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [overview, setOverview] = React.useState<SfaProductSyncOverview | null>(null);
@@ -178,12 +193,17 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Not on SFA yet</CardDescription>
+              <CardDescription>Missing GT or MT</CardDescription>
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${overview.unlinked > 0 ? "text-amber-600" : ""}`}>
                 {overview.unlinked}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {overview.sfaLookupOk === false
+                  ? "SFA lookup offline — ERP mappings only"
+                  : "Live SFA check by barcode"}
+              </p>
               {overview.missingBarcode > 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">
                   {overview.missingBarcode} active without barcode
@@ -245,19 +265,20 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle className="text-base">Products not on SFA</CardTitle>
+            <CardTitle className="text-base">Products missing an SFA catalog</CardTitle>
             <CardDescription>
-              Active products with a barcode that are not linked to any SFA catalog yet.
+              Active barcoded SKUs that are missing General Trade and/or Modern Trade in live SFA.
+              Products already on both catalogs are hidden even if ERP mappings are incomplete.
             </CardDescription>
           </div>
-          {unlinkedTotal > 0 ? (
+          {(debouncedSearch ? unlinkedTotal : overview?.unlinked ?? unlinkedTotal) > 0 ? (
             <Button
               type="button"
               size="sm"
               onClick={() => void openBulkSync()}
             >
               <Icons.Radio className="mr-2 h-4 w-4" />
-              Sync all {unlinkedTotal}
+              Sync all {debouncedSearch ? unlinkedTotal : overview?.unlinked ?? unlinkedTotal}
             </Button>
           ) : null}
         </CardHeader>
@@ -268,9 +289,17 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-md"
           />
+          {overview?.sfaLookupOk === false ? (
+            <p className="text-xs text-amber-600">
+              Could not reach SFA DocumentDB. Start the tunnel (`npm run documentdb:tunnel` in
+              odaflow-backend/api) so this list reflects live GT/MT presence.
+            </p>
+          ) : null}
           {unlinked.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              {overview?.unlinked ? "No matches for this search." : "All barcoded products are linked to SFA."}
+              {overview?.unlinked
+                ? "No matches for this search."
+                : "Every barcoded product is on both General Trade and Modern Trade in SFA."}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -280,6 +309,8 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Product</th>
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">SKU</th>
                     <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Barcode</th>
+                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">General trade</th>
+                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Modern trade</th>
                     <th className="text-left py-2 font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
@@ -293,6 +324,12 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
                       </td>
                       <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{p.sku ?? "—"}</td>
                       <td className="py-2 pr-4 font-mono text-xs">{p.barcode ?? "—"}</td>
+                      <td className="py-2 pr-4">
+                        <CatalogPresenceBadge onSfa={p.gtOnSfa} linked={p.gtLinked} />
+                      </td>
+                      <td className="py-2 pr-4">
+                        <CatalogPresenceBadge onSfa={p.mtOnSfa} linked={p.mtLinked} />
+                      </td>
                       <td className="py-2">
                         <Button
                           type="button"
