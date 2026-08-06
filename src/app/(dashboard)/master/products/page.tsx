@@ -34,7 +34,8 @@ import {
 import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, fetchProductFamiliesApi, deleteProductApi } from "@/lib/api/products";
 import { saveProductPackagingApi } from "@/lib/api/product-master";
 import { importProductsApi, exportProductsCsvApi, downloadProductsTemplateCsv } from "@/lib/api/import-export";
-import type { ImportProductsResult } from "@/lib/api/import-export";
+import type { ImportProductsProgress, ImportProductsResult } from "@/lib/api/import-export";
+import { Progress } from "@/components/ui/progress";
 import {
   fetchProductCategoriesApi,
   createProductCategoryApi,
@@ -55,6 +56,8 @@ import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useAuthStore } from "@/stores/auth-store";
+import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
+import { SfaBulkSyncSheet, SfaBulkSyncLink } from "@/components/integrations/SfaBulkSyncSheet";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -95,6 +98,7 @@ export default function MasterProductsPage() {
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const permissions = useAuthStore((s) => s.permissions);
+  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
   const canDeleteProduct = permissions.includes("admin.settings");
   const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
   const productLabel = t("product", terminology);
@@ -157,9 +161,13 @@ export default function MasterProductsPage() {
   const [importOpen, setImportOpen] = React.useState(false);
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [importing, setImporting] = React.useState(false);
+  const [importProgress, setImportProgress] = React.useState<ImportProductsProgress | null>(null);
   const [importResult, setImportResult] = React.useState<ImportProductsResult | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const [selectedProductIds, setSelectedProductIds] = React.useState<string[]>([]);
+  const [bulkSfaSyncOpen, setBulkSfaSyncOpen] = React.useState(false);
 
   // Deep-link from Pricing empty state: /master/products?import=1
   React.useEffect(() => {
@@ -560,8 +568,10 @@ export default function MasterProductsPage() {
       return;
     }
     setImporting(true);
+    setImportProgress({ phase: "preparing", done: 0, total: 0 });
+    setImportResult(null);
     try {
-      const result = await importProductsApi(importFile);
+      const result = await importProductsApi(importFile, setImportProgress);
       setImportResult(result);
       const skippedCount = result.skipped?.length ?? 0;
       const created = result.created ?? result.imported;
@@ -590,8 +600,24 @@ export default function MasterProductsPage() {
       toast.error(error instanceof Error ? error.message : "Import failed.");
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   };
+
+  const importProgressPercent =
+    importProgress && importProgress.total > 0
+      ? Math.round((importProgress.done / importProgress.total) * 100)
+      : importing
+        ? 5
+        : 0;
+  const importProgressLabel =
+    importProgress?.phase === "preparing"
+      ? "Preparing file…"
+      : importProgress && importProgress.total > 0
+        ? `Importing ${importProgress.done} of ${importProgress.total} products…`
+        : importing
+          ? "Importing…"
+          : null;
 
   // Product type option cards for the create drawer
   const typeOptions: Array<{ value: "RAW" | "FINISHED" | "BOTH"; label: string; description: string; color: string; icon: keyof typeof Icons }> = [
@@ -635,6 +661,12 @@ export default function MasterProductsPage() {
         showCommandHint
         actions={canWriteProduct ? (
           <div className="flex items-center gap-2">
+            {fmcgOrg && sfaEnrolled ? (
+              <SfaBulkSyncLink
+                count={selectedProductIds.length}
+                onClick={() => setBulkSfaSyncOpen(true)}
+              />
+            ) : null}
             <Button
               variant="outline"
               onClick={() => exportProductsCsvApi((msg) => toast.error(msg))}
@@ -760,6 +792,9 @@ export default function MasterProductsPage() {
                 columns={columns}
                 onRowClick={(row) => router.push(`/master/products/${row.id}`)}
                 emptyMessage={loading ? "Searching…" : `No ${productLabel.toLowerCase()}s.`}
+                selectable={fmcgOrg && sfaEnrolled && canWriteProduct}
+                selectedIds={selectedProductIds}
+                onSelectionChange={setSelectedProductIds}
                 className={cn(
                   "transition-opacity duration-200",
                   loading && "opacity-60",
@@ -1539,6 +1574,25 @@ export default function MasterProductsPage() {
               Excel files are converted automatically — no need to save as CSV first.
             </p>
 
+            {importing && (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <p className="font-medium text-foreground">
+                    {importProgressLabel ?? "Importing…"}
+                  </p>
+                  {importProgress && importProgress.total > 0 ? (
+                    <span className="tabular-nums text-xs text-muted-foreground">
+                      {importProgressPercent}%
+                    </span>
+                  ) : null}
+                </div>
+                <Progress value={importProgressPercent} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Keep this sheet open — large files import in batches.
+                </p>
+              </div>
+            )}
+
             {importResult && (
               <div className="space-y-2 rounded-lg border p-3 text-sm">
                 <p className="font-medium text-foreground">
@@ -1575,15 +1629,39 @@ export default function MasterProductsPage() {
             )}
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={() => { setImportFile(null); setImportResult(null); setImportOpen(false); }}>
+            <Button
+              variant="outline"
+              disabled={importing}
+              onClick={() => {
+                setImportFile(null);
+                setImportResult(null);
+                setImportProgress(null);
+                setImportOpen(false);
+              }}
+            >
               {importResult ? "Close" : "Cancel"}
             </Button>
             <Button disabled={!importFile || importing} onClick={() => void handleImport()}>
-              {importing ? "Importing..." : importResult ? "Import again" : "Import"}
+              {importing
+                ? importProgress && importProgress.total > 0
+                  ? `${importProgress.done}/${importProgress.total}`
+                  : "Importing..."
+                : importResult
+                  ? "Import again"
+                  : "Import"}
             </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {fmcgOrg && sfaEnrolled ? (
+        <SfaBulkSyncSheet
+          productIds={selectedProductIds}
+          open={bulkSfaSyncOpen}
+          onOpenChange={setBulkSfaSyncOpen}
+          onSynced={() => setSelectedProductIds([])}
+        />
+      ) : null}
     </PageShell>
   );
 }

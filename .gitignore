@@ -14,7 +14,8 @@
 /build
 
 # misc
-docs/
+# Only ignore root markdown/docs folder — not src/components/docs (UI components).
+/docs/
 .DS_Store
 *.pem
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { downloadFile, isApiConfigured, requireLiveApi, uploadFormData } from "./client";
+import { apiRequest, downloadFile, isApiConfigured, requireLiveApi, uploadFormData } from "./client";
 
 /** Export products as CSV. */
 export function exportProductsCsvApi(onError: (msg: string) => void): void {
@@ -114,6 +114,16 @@ export interface ImportProductsResult {
   categoriesCreated?: string[];
 }
 
+export type ImportProductsProgress = {
+  phase: "preparing" | "importing" | "done";
+  /** Rows processed so far (0…total). */
+  done: number;
+  /** Total data rows in the file. */
+  total: number;
+};
+
+const PRODUCT_IMPORT_BATCH_SIZE = 25;
+
 export interface ImportProductPackagingResult {
   imported: number;
 }
@@ -137,16 +147,158 @@ function isExcelFile(file: File): boolean {
 }
 
 /**
+ * Parse a products CSV into row objects the import API accepts as `body.rows`.
+ * Mirrors server header mapping so batched JSON imports behave like a full-file upload.
+ */
+function parseProductsCsvToRows(csv: string): Array<Record<string, string | number | undefined>> {
+  const lines = csv
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .split(/\r?\n/)
+    .filter((line) => {
+      const t = line.trim();
+      return t.length > 0 && !t.startsWith("#");
+    });
+  if (lines.length < 2) return [];
+
+  const parseLine = (line: string): string[] => {
+    const parts: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        inQuotes = !inQuotes;
+      } else if ((c === "," && !inQuotes) || (c === "\t" && !inQuotes)) {
+        parts.push(current.trim());
+        current = "";
+      } else {
+        current += c;
+      }
+    }
+    parts.push(current.trim());
+    return parts;
+  };
+
+  const header = parseLine(lines[0]).map((h) =>
+    h.replace(/\s*\((required|optional)\)\s*$/i, "").trim()
+  );
+  const idx = (re: RegExp) => header.findIndex((h) => re.test(h));
+  const nameIdx = idx(/name/i);
+  const barcodeIdx = idx(/^\s*(bar[\s_]?code|barcode|ean|upc)\s*$/i);
+  const skuIdx = idx(/^sku$/i);
+  const sizeIdx = idx(/^\s*(size|pack[\s_]?size)\s*$/i);
+  const catIdx = idx(/category|cat/i);
+  const vatIdx = idx(/vat/i);
+  const codeIdx = (() => {
+    const exact = header.findIndex((h) =>
+      /^\s*(product[\s_]?code|code|item[\s_]?code)\s*$/i.test(h)
+    );
+    if (exact >= 0) return exact;
+    return header.findIndex((h) => /code/i.test(h) && !/category|brand|bar/i.test(h));
+  })();
+  const typeIdx = idx(/^(producttype|product type|type|kind)$/i);
+  const familyIdx = idx(/^\s*(product[\s_]?family|family|product[\s_]?line)\s*$/i);
+  const uomIdx = idx(/uom|unit|baseuom/i);
+  const brandIdx = idx(/brand/i);
+  const statusIdx = idx(/status/i);
+  const grossWIdx = idx(/gross[\s_]?weight/i);
+  const grossVIdx = idx(/gross[\s_]?volume/i);
+  const cartonIdx = idx(/^\s*cartons?\s*$/i);
+  const baleIdx = idx(/^\s*bales?\s*$/i);
+  const outerIdx = idx(/^\s*outers?\s*$/i);
+
+  const rows: Array<Record<string, string | number | undefined>> = [];
+  for (let i = 1; i < lines.length; i++) {
+    const r = parseLine(lines[i]);
+    const get = (col: number) => (col >= 0 ? (r[col] ?? "").toString().trim() : "");
+    const name = get(nameIdx >= 0 ? nameIdx : 0);
+    const barcode = get(barcodeIdx);
+    const code = get(codeIdx);
+    if (!name && !barcode && !code) continue;
+    const gwRaw = get(grossWIdx);
+    const gvRaw = get(grossVIdx);
+    rows.push({
+      __row: i + 1,
+      code,
+      name: name || get(0),
+      sku: get(skuIdx),
+      barcode,
+      size: get(sizeIdx),
+      category: get(catIdx),
+      vatCategory: get(vatIdx),
+      brandCode: get(brandIdx),
+      status: get(statusIdx) || "ACTIVE",
+      productType: get(typeIdx),
+      productFamily: get(familyIdx),
+      uom: get(uomIdx),
+      grossWeightKg: gwRaw !== "" ? Number(gwRaw) : undefined,
+      grossVolumeM3: gvRaw !== "" ? Number(gvRaw) : undefined,
+      carton: get(cartonIdx),
+      bale: get(baleIdx),
+      outer: get(outerIdx),
+    });
+  }
+  return rows;
+}
+
+function mergeImportProductsResults(into: ImportProductsResult, part: ImportProductsResult): void {
+  into.imported = (into.imported ?? 0) + (part.imported ?? 0);
+  into.created = (into.created ?? 0) + (part.created ?? 0);
+  into.updated = (into.updated ?? 0) + (part.updated ?? 0);
+  into.skipped = [...(into.skipped ?? []), ...(part.skipped ?? [])];
+  into.warnings = [...(into.warnings ?? []), ...(part.warnings ?? [])];
+  const cats = new Set([...(into.categoriesCreated ?? []), ...(part.categoriesCreated ?? [])]);
+  into.categoriesCreated = [...cats];
+}
+
+/**
  * Import products from a CSV or Excel (.xlsx/.xls) file.
  * Excel is parsed in the browser (first sheet) and converted to CSV, so the backend
  * keeps a single CSV code path and no server-side Excel dependency is needed.
+ * Large files are sent in batches so the UI can show real progress.
  */
-export async function importProductsApi(file: File): Promise<ImportProductsResult> {
+export async function importProductsApi(
+  file: File,
+  onProgress?: (progress: ImportProductsProgress) => void
+): Promise<ImportProductsResult> {
   requireLiveApi("Products import");
+  onProgress?.({ phase: "preparing", done: 0, total: 0 });
   const uploadFile = await toCsvUploadFile(file);
-  const formData = new FormData();
-  formData.append("file", uploadFile);
-  return uploadFormData<ImportProductsResult>("/api/import/products", formData);
+  const csv = await uploadFile.text();
+  const rows = parseProductsCsvToRows(csv);
+  if (!rows.length) {
+    throw new Error("No product rows found in the file.");
+  }
+
+  const total = rows.length;
+  onProgress?.({ phase: "importing", done: 0, total });
+
+  const merged: ImportProductsResult = {
+    imported: 0,
+    created: 0,
+    updated: 0,
+    skipped: [],
+    warnings: [],
+    categoriesCreated: [],
+  };
+
+  for (let i = 0; i < rows.length; i += PRODUCT_IMPORT_BATCH_SIZE) {
+    const batch = rows.slice(i, i + PRODUCT_IMPORT_BATCH_SIZE);
+    const part = await apiRequest<ImportProductsResult>("/api/import/products", {
+      method: "POST",
+      body: { rows: batch },
+    });
+    mergeImportProductsResults(merged, part);
+    onProgress?.({
+      phase: "importing",
+      done: Math.min(i + batch.length, total),
+      total,
+    });
+  }
+
+  onProgress?.({ phase: "done", done: total, total });
+  return merged;
 }
 
 export interface ImportPriceListsResult {
