@@ -391,11 +391,6 @@ export default function OdaflowIntegrationPage() {
                 )}
               </CardContent>
             </Card>
-
-            <p className="text-sm text-muted-foreground">
-              After saving credentials in Odaflow, devs can run product sync scripts. See{" "}
-              <code className="rounded bg-muted px-1">erp-intergration.md</code> in the backend repo.
-            </p>
           </div>
         )}
 
