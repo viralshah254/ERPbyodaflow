@@ -439,25 +439,38 @@ export default function OdaflowIntegrationPage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card
+                    className={status.queueSummary.pending > 0 ? "cursor-pointer hover:border-primary/50 transition-colors" : undefined}
+                    onClick={
+                      status.queueSummary.pending > 0
+                        ? () => setTab("queue")
+                        : undefined
+                    }
+                  >
                     <CardHeader className="pb-2">
-                      <CardDescription>Pending in Queue</CardDescription>
+                      <CardDescription>Orders to review</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className={`text-2xl font-bold ${status.queueSummary.pending > 0 ? "text-yellow-600" : ""}`}>
                         {status.queueSummary.pending}
                       </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Unmatched customers or products
+                      </p>
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardDescription>Recent Failures</CardDescription>
+                      <CardDescription>Resolved</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className={`text-2xl font-bold ${status.recentFailureCount > 0 ? "text-red-500" : ""}`}>
-                        {status.recentFailureCount}
+                      <div className="text-2xl font-bold">
+                        {status.queueSummary.resolved}
                       </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cleared from the sync queue
+                      </p>
                     </CardContent>
                   </Card>
                 </div>
