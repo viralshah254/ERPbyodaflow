@@ -1833,7 +1833,10 @@ export default function MasterProductsPage() {
           productIds={selectedProductIds}
           open={bulkSfaSyncOpen}
           onOpenChange={setBulkSfaSyncOpen}
-          onSynced={() => setSelectedProductIds([])}
+          onSynced={async () => {
+            setSelectedProductIds([]);
+            await refreshProducts();
+          }}
         />
       ) : null}
     </PageShell>
