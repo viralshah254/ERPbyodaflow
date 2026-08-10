@@ -147,7 +147,7 @@ export function PartyImportSheet({
   const dropZone = (
     file: File | null,
     onPick: (f: File | null) => void,
-    inputRef: React.RefObject<HTMLInputElement | null>
+    inputRef: React.RefObject<HTMLInputElement>
   ) => (
     <>
       <input
