@@ -33,9 +33,19 @@ import {
 } from "@/components/ui/sheet";
 import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, fetchProductFamiliesApi, deleteProductApi } from "@/lib/api/products";
 import { saveProductPackagingApi } from "@/lib/api/product-master";
-import { importProductsApi, exportProductsCsvApi, downloadProductsTemplateCsv } from "@/lib/api/import-export";
+import {
+  importProductsApi,
+  exportProductsCsvApi,
+  downloadProductsTemplateAsFormatApi,
+} from "@/lib/api/import-export";
 import type { ImportProductsProgress, ImportProductsResult } from "@/lib/api/import-export";
 import { Progress } from "@/components/ui/progress";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   fetchProductCategoriesApi,
   createProductCategoryApi,
@@ -1696,15 +1706,51 @@ export default function MasterProductsPage() {
                 <Icons.FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Need the format?</span>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => downloadProductsTemplateCsv({ fmcg: fmcgOrg })}
-              >
-                <Icons.Download className="mr-2 h-3.5 w-3.5" />
-                Template
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm">
+                    <Icons.Download className="mr-2 h-3.5 w-3.5" />
+                    Template
+                    <Icons.ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void (async () => {
+                        const ok = await downloadProductsTemplateAsFormatApi("xlsx", {
+                          fmcg: fmcgOrg,
+                        });
+                        if (ok) {
+                          toast.success("Excel template downloaded — open it in Microsoft Excel.");
+                        } else {
+                          toast.error("Excel download failed.");
+                        }
+                      })();
+                    }}
+                  >
+                    <Icons.FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Microsoft Excel (.xlsx)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void (async () => {
+                        const ok = await downloadProductsTemplateAsFormatApi("csv", {
+                          fmcg: fmcgOrg,
+                        });
+                        if (ok) {
+                          toast.success("CSV template downloaded — open it in Excel or Google Sheets.");
+                        } else {
+                          toast.error("CSV download failed.");
+                        }
+                      })();
+                    }}
+                  >
+                    <Icons.FileText className="mr-2 h-4 w-4" />
+                    CSV (Google Sheets)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <input
