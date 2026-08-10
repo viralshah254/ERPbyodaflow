@@ -33,9 +33,19 @@ import {
 } from "@/components/ui/sheet";
 import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProductsPageApi, fetchProductFamiliesApi, deleteProductApi } from "@/lib/api/products";
 import { saveProductPackagingApi } from "@/lib/api/product-master";
-import { importProductsApi, exportProductsCsvApi, downloadProductsTemplateCsv } from "@/lib/api/import-export";
+import {
+  importProductsApi,
+  exportProductsCsvApi,
+  downloadProductsTemplateAsFormatApi,
+} from "@/lib/api/import-export";
 import type { ImportProductsProgress, ImportProductsResult } from "@/lib/api/import-export";
 import { Progress } from "@/components/ui/progress";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   fetchProductCategoriesApi,
   createProductCategoryApi,
@@ -50,6 +60,13 @@ import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
 import { productTypeLabel } from "@/lib/products/product-type";
 import { composeFmcgSize, FMCG_SIZE_UOMS } from "@/lib/products/fmcg-size";
+import {
+  clearProductCreateDraft,
+  loadProductCreateDraft,
+  productCreateDraftHasContent,
+  saveProductCreateDraft,
+  type ProductCreateDraft,
+} from "@/lib/products/product-create-draft";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
@@ -64,6 +81,7 @@ import * as Icons from "lucide-react";
 const productIcon = "Package" as const;
 const PRODUCTS_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
+const PRODUCT_CREATE_DRAFT_DEBOUNCE_MS = 500;
 
 /** Next sequential SKU (SKU-001, SKU-002…). Ignores barcode-style SKUs. */
 function suggestNextSku(existing: string[]): string {
@@ -98,10 +116,12 @@ export default function MasterProductsPage() {
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const permissions = useAuthStore((s) => s.permissions);
+  const orgId = useAuthStore((s) => s.org?.orgId ?? "");
   const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
   const canDeleteProduct = permissions.includes("admin.settings");
   const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
   const productLabel = t("product", terminology);
+  const [hasCreateDraft, setHasCreateDraft] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -141,12 +161,10 @@ export default function MasterProductsPage() {
 
   const [taxCodes, setTaxCodes] = React.useState<TaxRow[]>([]);
   const [defaultTaxCodeId, setDefaultTaxCodeId] = React.useState("");
-  /** FMCG: optional packing rows on create (pack name + pieces per pack). */
-  const [createPackRows, setCreatePackRows] = React.useState<Array<{ uom: string; unitsPer: string }>>([
-    { uom: "CARTON", unitsPer: "" },
-    { uom: "BALE", unitsPer: "" },
-    { uom: "OUTER", unitsPer: "" },
-  ]);
+  /** FMCG: optional packing rows on create — start empty; user adds packs as needed. */
+  const [createPackRows, setCreatePackRows] = React.useState<Array<{ uom: string; unitsPer: string }>>(
+    []
+  );
   const [categories, setCategories] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [addCategoryOpen, setAddCategoryOpen] = React.useState(false);
   const [deleteConfirmProductId, setDeleteConfirmProductId] = React.useState<string | null>(null);
@@ -455,12 +473,133 @@ export default function MasterProductsPage() {
     setProductType(fmcgOrg ? "FINISHED" : "");
     setUnit(fmcgOrg ? "PCS" : "");
     setDefaultTaxCodeId("");
-    setCreatePackRows([
-      { uom: "CARTON", unitsPer: "" },
-      { uom: "BALE", unitsPer: "" },
-      { uom: "OUTER", unitsPer: "" },
-    ]);
+    setCreatePackRows([]);
   };
+
+  const applyCreateDraft = React.useCallback((draft: ProductCreateDraft) => {
+    setStep(draft.step);
+    setSku(draft.sku);
+    setCode(draft.code);
+    setBarcode(draft.barcode);
+    setSize(draft.size);
+    setSizeValue(draft.sizeValue);
+    setSizeUom(draft.sizeUom || "g");
+    setName(draft.name);
+    setCategoryId(draft.categoryId);
+    setProductFamily(draft.productFamily);
+    setProductType(draft.productType || (fmcgOrg ? "FINISHED" : ""));
+    setUnit(draft.unit || (fmcgOrg ? "PCS" : ""));
+    setDefaultTaxCodeId(draft.defaultTaxCodeId);
+    setCreatePackRows(Array.isArray(draft.createPackRows) ? draft.createPackRows : []);
+  }, [fmcgOrg]);
+
+  const buildCreateDraftPayload = React.useCallback(
+    (): Omit<ProductCreateDraft, "savedAt"> => ({
+      step,
+      sku,
+      code,
+      barcode,
+      size,
+      sizeValue,
+      sizeUom,
+      name,
+      productType,
+      categoryId,
+      productFamily,
+      unit,
+      defaultTaxCodeId,
+      createPackRows,
+    }),
+    [
+      step,
+      sku,
+      code,
+      barcode,
+      size,
+      sizeValue,
+      sizeUom,
+      name,
+      productType,
+      categoryId,
+      productFamily,
+      unit,
+      defaultTaxCodeId,
+      createPackRows,
+    ]
+  );
+
+  const persistCreateDraft = React.useCallback(() => {
+    if (!orgId || !canWriteProduct) return;
+    const payload = buildCreateDraftPayload();
+    const asDraft = { ...payload, savedAt: new Date().toISOString() };
+    if (!productCreateDraftHasContent(asDraft)) {
+      clearProductCreateDraft(orgId);
+      setHasCreateDraft(false);
+      return;
+    }
+    saveProductCreateDraft(orgId, payload);
+    setHasCreateDraft(true);
+  }, [orgId, canWriteProduct, buildCreateDraftPayload]);
+
+  const discardCreateDraft = React.useCallback(() => {
+    if (orgId) clearProductCreateDraft(orgId);
+    setHasCreateDraft(false);
+    resetForm();
+  }, [orgId, fmcgOrg]);
+
+  // Restore draft presence on mount / org change.
+  React.useEffect(() => {
+    if (!orgId) {
+      setHasCreateDraft(false);
+      return;
+    }
+    const draft = loadProductCreateDraft(orgId);
+    setHasCreateDraft(productCreateDraftHasContent(draft));
+  }, [orgId]);
+
+  // Autosave create form while editing (and when drawer closes mid-entry).
+  React.useEffect(() => {
+    if (!orgId || !canWriteProduct || !drawerOpen) return;
+    const timer = window.setTimeout(() => {
+      persistCreateDraft();
+    }, PRODUCT_CREATE_DRAFT_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    orgId,
+    canWriteProduct,
+    drawerOpen,
+    persistCreateDraft,
+    step,
+    sku,
+    code,
+    barcode,
+    size,
+    sizeValue,
+    sizeUom,
+    name,
+    productType,
+    categoryId,
+    productFamily,
+    unit,
+    defaultTaxCodeId,
+    createPackRows,
+  ]);
+
+  const openCreateDrawer = React.useCallback(
+    (opts?: { preferDraft?: boolean }) => {
+      if (opts?.preferDraft !== false && orgId) {
+        const draft = loadProductCreateDraft(orgId);
+        if (productCreateDraftHasContent(draft) && draft) {
+          applyCreateDraft(draft);
+          setDrawerOpen(true);
+          return;
+        }
+      }
+      resetForm();
+      setDrawerOpen(true);
+    },
+    [orgId, applyCreateDraft, fmcgOrg]
+  );
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -547,6 +686,8 @@ export default function MasterProductsPage() {
         }
       }
       toast.success(`${productTypeLabel(productType || undefined)} created.`);
+      if (orgId) clearProductCreateDraft(orgId);
+      setHasCreateDraft(false);
       resetForm();
       setDrawerOpen(false);
       await refreshProducts();
@@ -682,10 +823,7 @@ export default function MasterProductsPage() {
               Import
             </Button>
             <Button
-              onClick={() => {
-                resetForm();
-                setDrawerOpen(true);
-              }}
+              onClick={() => openCreateDrawer({ preferDraft: true })}
               data-tour-step="create-button"
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
@@ -696,6 +834,24 @@ export default function MasterProductsPage() {
         }
       />
       <div className="p-6 space-y-4">
+        {canWriteProduct && hasCreateDraft && !drawerOpen ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+            <div className="text-sm">
+              <p className="font-medium text-foreground">Unfinished product draft</p>
+              <p className="text-xs text-muted-foreground">
+                Your last Add {productLabel.toLowerCase()} form was saved locally. Continue where you left off after refresh or leaving the page.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => discardCreateDraft()}>
+                Discard
+              </Button>
+              <Button type="button" size="sm" onClick={() => openCreateDrawer({ preferDraft: true })}>
+                Continue draft
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <DataTableToolbar
           searchPlaceholder="Search by SKU, name, category..."
           searchValue={search}
@@ -869,7 +1025,12 @@ export default function MasterProductsPage() {
       {/* ── Create drawer ────────────────────────────────────────────────── */}
       <EntityDrawer
         open={drawerOpen}
-        onOpenChange={(o) => { if (!o) resetForm(); setDrawerOpen(o); }}
+        onOpenChange={(o) => {
+          if (!o) {
+            persistCreateDraft();
+          }
+          setDrawerOpen(o);
+        }}
         title={`New ${productLabel}`}
         description={
           fmcgOrg
@@ -882,8 +1043,16 @@ export default function MasterProductsPage() {
         footer={
           fmcgOrg ? (
             <>
-              <Button variant="outline" onClick={() => { resetForm(); setDrawerOpen(false); }}>
-                Cancel
+              <Button
+                variant="outline"
+                onClick={() => {
+                  persistCreateDraft();
+                  setDrawerOpen(false);
+                }}
+              >
+                {hasCreateDraft || productCreateDraftHasContent({ ...buildCreateDraftPayload(), savedAt: "" })
+                  ? "Save draft & close"
+                  : "Cancel"}
               </Button>
               <Button
                 onClick={() => void handleCreate()}
@@ -894,8 +1063,16 @@ export default function MasterProductsPage() {
             </>
           ) : step === 1 ? (
             <>
-              <Button variant="outline" onClick={() => { resetForm(); setDrawerOpen(false); }}>
-                Cancel
+              <Button
+                variant="outline"
+                onClick={() => {
+                  persistCreateDraft();
+                  setDrawerOpen(false);
+                }}
+              >
+                {hasCreateDraft || productCreateDraftHasContent({ ...buildCreateDraftPayload(), savedAt: "" })
+                  ? "Save draft & close"
+                  : "Cancel"}
               </Button>
               <Button
                 onClick={() => setStep(2)}
@@ -1061,51 +1238,58 @@ export default function MasterProductsPage() {
                   <div>
                     <Label>Packing (optional)</Label>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Pieces per pack for this product only (e.g. 1 CARTON = 24 PCS). No company-wide default — each SKU can differ. Required before converting sales orders that sell in that pack.
+                      Pieces per pack for this product only (e.g. 1 CARTON = 24 PCS). Leave empty if you only sell by piece. Required later before converting sales orders that sell in that pack.
                     </p>
                   </div>
                   <div className="space-y-2">
-                    {createPackRows.map((row, idx) => (
-                      <div key={idx} className="grid grid-cols-[1fr_100px_auto] gap-2 items-end">
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Pack name</Label>
-                          <Input
-                            value={row.uom}
-                            onChange={(e) => {
-                              const next = [...createPackRows];
-                              next[idx] = { ...next[idx], uom: e.target.value };
-                              setCreatePackRows(next);
-                            }}
-                            placeholder="CARTON / BALE / OUTER…"
-                          />
+                    {createPackRows.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No packs added. Use Add pack only if this SKU also sells as carton, bale, outer, etc.
+                      </p>
+                    ) : (
+                      createPackRows.map((row, idx) => (
+                        <div key={idx} className="grid grid-cols-[1fr_100px_auto] gap-2 items-end">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Pack name</Label>
+                            <Input
+                              value={row.uom}
+                              onChange={(e) => {
+                                const next = [...createPackRows];
+                                next[idx] = { ...next[idx], uom: e.target.value };
+                                setCreatePackRows(next);
+                              }}
+                              placeholder="CARTON / BALE / OUTER…"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Pieces</Label>
+                            <Input
+                              type="number"
+                              min={2}
+                              step={1}
+                              value={row.unitsPer}
+                              onChange={(e) => {
+                                const next = [...createPackRows];
+                                next[idx] = { ...next[idx], unitsPer: e.target.value };
+                                setCreatePackRows(next);
+                              }}
+                              placeholder="24"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="mb-0.5"
+                            onClick={() =>
+                              setCreatePackRows((rows) => rows.filter((_, i) => i !== idx))
+                            }
+                          >
+                            Remove
+                          </Button>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Pieces</Label>
-                          <Input
-                            type="number"
-                            min={2}
-                            step={1}
-                            value={row.unitsPer}
-                            onChange={(e) => {
-                              const next = [...createPackRows];
-                              next[idx] = { ...next[idx], unitsPer: e.target.value };
-                              setCreatePackRows(next);
-                            }}
-                            placeholder="24"
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="mb-0.5"
-                          disabled={createPackRows.length <= 1}
-                          onClick={() => setCreatePackRows((rows) => rows.filter((_, i) => i !== idx))}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                   <Button
                     type="button"
@@ -1522,15 +1706,51 @@ export default function MasterProductsPage() {
                 <Icons.FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Need the format?</span>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => downloadProductsTemplateCsv({ fmcg: fmcgOrg })}
-              >
-                <Icons.Download className="mr-2 h-3.5 w-3.5" />
-                Template
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm">
+                    <Icons.Download className="mr-2 h-3.5 w-3.5" />
+                    Template
+                    <Icons.ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void (async () => {
+                        const ok = await downloadProductsTemplateAsFormatApi("xlsx", {
+                          fmcg: fmcgOrg,
+                        });
+                        if (ok) {
+                          toast.success("Excel template downloaded — open it in Microsoft Excel.");
+                        } else {
+                          toast.error("Excel download failed.");
+                        }
+                      })();
+                    }}
+                  >
+                    <Icons.FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Microsoft Excel (.xlsx)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void (async () => {
+                        const ok = await downloadProductsTemplateAsFormatApi("csv", {
+                          fmcg: fmcgOrg,
+                        });
+                        if (ok) {
+                          toast.success("CSV template downloaded — open it in Excel or Google Sheets.");
+                        } else {
+                          toast.error("CSV download failed.");
+                        }
+                      })();
+                    }}
+                  >
+                    <Icons.FileText className="mr-2 h-4 w-4" />
+                    CSV (Google Sheets)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <input
@@ -1659,7 +1879,10 @@ export default function MasterProductsPage() {
           productIds={selectedProductIds}
           open={bulkSfaSyncOpen}
           onOpenChange={setBulkSfaSyncOpen}
-          onSynced={() => setSelectedProductIds([])}
+          onSynced={async () => {
+            setSelectedProductIds([]);
+            await refreshProducts();
+          }}
         />
       ) : null}
     </PageShell>

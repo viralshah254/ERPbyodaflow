@@ -24,6 +24,7 @@ import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { CustomerDirectoryPanel } from "@/components/customers/CustomerDirectoryPanel";
 import { CustomerFormSheet } from "@/components/customers/CustomerFormSheet";
+import { PartyImportSheet } from "@/components/masters/PartyImportSheet";
 import { fetchPartyByIdApi } from "@/lib/api/parties";
 
 export type CustomersHubProps = {
@@ -42,6 +43,12 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   const returnTo = searchParams.get("returnTo");
   const odaflowQueue = searchParams.get("odaflowQueue");
   const prefillName = searchParams.get("name");
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importTab, setImportTab] = React.useState<"create" | "sheet">("create");
+  const openImport = (tab: "create" | "sheet" = "create") => {
+    setImportTab(tab);
+    setImportOpen(true);
+  };
 
   // Finance users land on the dedicated credit page — send them there.
   React.useEffect(() => {
@@ -192,6 +199,14 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
                   Credit (Finance)
                 </Link>
               </Button>
+              <Button variant="outline" onClick={() => openImport("sheet")}>
+                <Icons.Sheet className="mr-2 h-4 w-4" />
+                Credit & tax sheet
+              </Button>
+              <Button variant="outline" onClick={() => openImport("create")}>
+                <Icons.Upload className="mr-2 h-4 w-4" />
+                Import
+              </Button>
               <Button onClick={() => openNewCustomer()}>
                 <Icons.Plus className="mr-2 h-4 w-4" />
                 Add customer
@@ -271,6 +286,17 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
           }
         }}
       />
+
+      {canWrite ? (
+        <PartyImportSheet
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          type="customer"
+          entityLabel="Customer"
+          initialTab={importTab}
+          onImported={() => setRefreshKey((k) => k + 1)}
+        />
+      ) : null}
     </PageShell>
   );
 }

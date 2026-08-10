@@ -53,6 +53,7 @@ import { t } from "@/lib/terminology";
 import { useOrgContext, useTerminology } from "@/stores/orgContextStore";
 import { useAuthStore } from "@/stores/auth-store";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { PartyImportSheet } from "@/components/masters/PartyImportSheet";
 import { toast } from "sonner";
 
 
@@ -69,6 +70,12 @@ export default function MasterPartiesPage() {
   const franchiseeLabel = t("franchisee", terminology);
 
   const [tab, setTab] = React.useState<"customers" | "franchisees" | "suppliers">("customers");
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importTab, setImportTab] = React.useState<"create" | "sheet">("create");
+  const openImport = (tab: "create" | "sheet" = "create") => {
+    setImportTab(tab);
+    setImportOpen(true);
+  };
 
   // FMCG has no franchise network — never stay on the franchisees tab.
   React.useEffect(() => {
@@ -574,7 +581,32 @@ export default function MasterPartiesPage() {
                     Sales customers
                   </Link>
                 </Button>
+                <Button variant="outline" onClick={() => openImport("sheet")}>
+                  <Icons.Sheet className="mr-2 h-4 w-4" />
+                  Credit & tax sheet
+                </Button>
+                <Button variant="outline" onClick={() => openImport("create")}>
+                  <Icons.Upload className="mr-2 h-4 w-4" />
+                  Import
+                </Button>
                 <Button onClick={goToSalesNewCustomer}>
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Add {label}
+                </Button>
+              </div>
+            ) : tab === "customers" || tab === "suppliers" ? (
+              <div className="flex flex-wrap gap-2">
+                {tab === "customers" ? (
+                  <Button variant="outline" onClick={() => openImport("sheet")}>
+                    <Icons.Sheet className="mr-2 h-4 w-4" />
+                    Credit & tax sheet
+                  </Button>
+                ) : null}
+                <Button variant="outline" onClick={() => openImport("create")}>
+                  <Icons.Upload className="mr-2 h-4 w-4" />
+                  Import
+                </Button>
+                <Button onClick={openCreateDrawer}>
                   <Icons.Plus className="mr-2 h-4 w-4" />
                   Add {label}
                 </Button>
@@ -764,6 +796,17 @@ export default function MasterPartiesPage() {
           ) : null}
         </Tabs>
       </div>
+
+      {(tab === "customers" || tab === "suppliers") && canWriteParty ? (
+        <PartyImportSheet
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          type={tab === "suppliers" ? "supplier" : "customer"}
+          entityLabel={tab === "suppliers" ? supplierLabel : customerOnlyLabel}
+          initialTab={importTab}
+          onImported={() => void refreshParties()}
+        />
+      ) : null}
 
       <EntityDrawer
         open={drawerOpen}

@@ -1,6 +1,13 @@
 "use client";
 
-import { apiRequest, downloadFile, isApiConfigured, requireLiveApi, uploadFormData } from "./client";
+import {
+  apiRequest,
+  downloadFile,
+  fetchApiBinary,
+  isApiConfigured,
+  requireLiveApi,
+  uploadFormData,
+} from "./client";
 
 /** Export products as CSV. */
 export function exportProductsCsvApi(onError: (msg: string) => void): void {
@@ -8,16 +15,73 @@ export function exportProductsCsvApi(onError: (msg: string) => void): void {
   downloadFile("/api/import/products/export", `products-export-${new Date().toISOString().slice(0, 10)}.csv`, onError);
 }
 
-/** Export customers as CSV. */
+export type PartySheetExportFormat = "xlsx" | "csv";
+
+/** Fetch a CSV API path and save as Excel or CSV. */
+async function downloadCsvPathAsFormat(
+  path: string,
+  stem: string,
+  format: PartySheetExportFormat,
+  onError: (msg: string) => void
+): Promise<boolean> {
+  if (format === "csv") {
+    return downloadFile(path, `${stem}.csv`, onError);
+  }
+
+  try {
+    const blob = await fetchApiBinary(path);
+    if (!blob) {
+      onError("Could not download the file. Try again or use CSV.");
+      return false;
+    }
+    const csvText = await blob.text();
+    const XLSX = await import("xlsx");
+    const workbook = XLSX.read(csvText, { type: "string" });
+    const out = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const xlsxBlob = new Blob([out], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(xlsxBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${stem}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (e) {
+    onError(e instanceof Error ? e.message : "Excel download failed.");
+    return false;
+  }
+}
+
+/**
+ * Download all customers/suppliers for Credit & tax editing.
+ * Excel (xlsx) is the default-friendly option for Windows/Mac; CSV suits Google Sheets.
+ */
+export async function exportPartiesSheetApi(
+  type: "customer" | "supplier",
+  format: PartySheetExportFormat,
+  onError: (msg: string) => void
+): Promise<boolean> {
+  requireLiveApi("Parties export");
+  const date = new Date().toISOString().slice(0, 10);
+  const stem = type === "customer" ? `customers-sheet-${date}` : `suppliers-sheet-${date}`;
+  return downloadCsvPathAsFormat(
+    `/api/import/parties/export?type=${type}`,
+    stem,
+    format,
+    onError
+  );
+}
+
+/** Export all customers as CSV (open in Google Sheets to edit taxId / credit). */
 export function exportCustomersCsvApi(onError: (msg: string) => void): void {
-  requireLiveApi("Customers export");
-  downloadFile("/api/import/parties/export?type=customer", `customers-export-${new Date().toISOString().slice(0, 10)}.csv`, onError);
+  void exportPartiesSheetApi("customer", "csv", onError);
 }
 
 /** Export suppliers as CSV. */
 export function exportSuppliersCsvApi(onError: (msg: string) => void): void {
-  requireLiveApi("Suppliers export");
-  downloadFile("/api/import/parties/export?type=supplier", `suppliers-export-${new Date().toISOString().slice(0, 10)}.csv`, onError);
+  void exportPartiesSheetApi("supplier", "csv", onError);
 }
 
 /** Export product packaging as CSV. */
@@ -47,18 +111,26 @@ export function downloadImportTemplateApi(
   entityType: ImportTemplateEntity,
   onError: (msg: string) => void
 ): void {
-  requireLiveApi("Import template");
-  downloadFile(`/api/import/templates/${entityType}`, `${entityType}-import-template.csv`, onError);
+  void downloadImportTemplateAsFormatApi(entityType, "csv", onError);
 }
 
-/**
- * Generate and download a products import template client-side.
- * FMCG matches the New Finished SKU form (name, barcode, sku, size, category).
- * Type/base UOM are implied (FINISHED + PCS) and not collected in the file.
- * Seafood keeps CoolCatch samples with explicit type/UOM.
- */
-export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
-  const csv = opts?.fmcg
+/** Download import template as Excel or CSV. */
+export async function downloadImportTemplateAsFormatApi(
+  entityType: ImportTemplateEntity,
+  format: PartySheetExportFormat,
+  onError: (msg: string) => void
+): Promise<boolean> {
+  requireLiveApi("Import template");
+  return downloadCsvPathAsFormat(
+    `/api/import/templates/${entityType}`,
+    `${entityType}-import-template`,
+    format,
+    onError
+  );
+}
+
+function buildProductsTemplateCsv(opts?: { fmcg?: boolean }): string {
+  return opts?.fmcg
     ? [
         "name,barcode,sku,size,category,vatCategory,grossWeightKg,grossVolumeM3,carton (optional),bale (optional),outer (optional)",
         "Classic Cola 500ml,6001234567890,COLA-500,500ml,Beverages,standard,0.55,0.0012,24,,",
@@ -71,15 +143,58 @@ export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
         "00002,Ice 5kg Bag,EA,Purchased product,Packaging,,zero,,",
         "00003,Nile Perch Fillet,KG,Stock product,Fish,Nile Perch,export,,",
       ].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "products-import-template.csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+}
+
+/**
+ * Generate and download a products import template client-side.
+ * FMCG matches the New Finished SKU form (name, barcode, sku, size, category).
+ * Type/base UOM are implied (FINISHED + PCS) and not collected in the file.
+ * Seafood keeps CoolCatch samples with explicit type/UOM.
+ */
+export function downloadProductsTemplateCsv(opts?: { fmcg?: boolean }): void {
+  void downloadProductsTemplateAsFormatApi("csv", opts);
+}
+
+/** Download products import template as Excel or CSV. */
+export async function downloadProductsTemplateAsFormatApi(
+  format: PartySheetExportFormat,
+  opts?: { fmcg?: boolean }
+): Promise<boolean> {
+  const csv = buildProductsTemplateCsv(opts);
+  const stem = "products-import-template";
+
+  if (format === "csv") {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${stem}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  }
+
+  try {
+    const XLSX = await import("xlsx");
+    const workbook = XLSX.read(csv, { type: "string" });
+    const out = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const xlsxBlob = new Blob([out], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(xlsxBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${stem}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function toCsvUploadFile(file: File): Promise<File> {
@@ -96,6 +211,31 @@ async function toCsvUploadFile(file: File): Promise<File> {
 export interface ImportPartiesResult {
   imported: number;
   type: string;
+  skipped?: Array<{ row: number; code?: string; reason: string }>;
+  warnings?: Array<{ row: number; code?: string; reason: string }>;
+}
+
+export interface PatchPartiesResult {
+  updated: number;
+  unchanged: number;
+  type: string;
+  skipped?: Array<{ row: number; code?: string; reason: string }>;
+}
+
+/**
+ * Apply Google Sheets / Excel edits to existing customers (by code).
+ * Updates taxId, creditLimitAmount, and other present columns — never creates rows.
+ */
+export async function patchPartiesFromSheetApi(
+  file: File,
+  type: "customer" | "supplier"
+): Promise<PatchPartiesResult> {
+  requireLiveApi("Parties sheet update");
+  const uploadFile = await toCsvUploadFile(file);
+  const formData = new FormData();
+  formData.append("file", uploadFile);
+  formData.append("type", type);
+  return uploadFormData<PatchPartiesResult>("/api/import/parties/patch", formData);
 }
 
 export interface ImportRowIssue {
@@ -132,11 +272,12 @@ export interface ImportProductVariantsResult {
   imported: number;
 }
 
-/** Import parties (customers or suppliers) from CSV file. */
+/** Import parties (customers or suppliers) from CSV / Excel file. */
 export async function importPartiesApi(file: File, type: "customer" | "supplier"): Promise<ImportPartiesResult> {
   requireLiveApi("Parties import");
+  const uploadFile = await toCsvUploadFile(file);
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", uploadFile);
   formData.append("type", type);
   return uploadFormData<ImportPartiesResult>("/api/import/parties", formData);
 }

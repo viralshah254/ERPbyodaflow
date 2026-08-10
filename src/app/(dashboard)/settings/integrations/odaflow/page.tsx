@@ -25,7 +25,6 @@ import {
   fetchOdaflowProductMappings,
   fetchOdaflowCustomerMappings,
   generateOdaflowCredentialsApi,
-  getErpApiBaseFromFrontend,
   updateOdaflowIntegrationApi,
   type OdaflowCredentialsApiResponse,
   type OdaflowIntegrationApiResponse,
@@ -46,16 +45,6 @@ const TAB_LABELS: Record<Tab, string> = {
   products: "Products & sync",
   customers: "Customer Mappings",
 };
-
-function UrlRow({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <code className="block text-xs break-all rounded bg-muted px-2 py-1">{value}</code>
-    </div>
-  );
-}
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   return (
@@ -89,7 +78,7 @@ function channelLabel(eventType: string) {
 export default function OdaflowIntegrationPage() {
   const permissions = useAuthStore((s) => s.permissions ?? []);
   const canSave = hasRuntimePermission(permissions, "admin.settings");
-  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
+  const { enrolled: sfaEnrolled, loading: sfaEnrollmentLoading } = useErpSfaEnrollment();
 
   const [tab, setTab] = React.useState<Tab>("overview");
 
@@ -208,13 +197,11 @@ export default function OdaflowIntegrationPage() {
     }
   };
 
-  const fallbackBase = getErpApiBaseFromFrontend();
-
   return (
     <PageShell>
       <PageHeader
         title="Odaflow SFA connector"
-        description="Generate credentials, monitor sync health, and resolve unmatched orders between Odaflow and the ERP."
+        description="Connect Odaflow to this ERP account, sync products for your sales teams, and resolve unmatched orders."
         breadcrumbs={[
           { label: "Settings", href: "/settings" },
           { label: "Odaflow connector" },
@@ -257,19 +244,27 @@ export default function OdaflowIntegrationPage() {
           <div className="space-y-6 max-w-3xl">
             {!canSave && (
               <p className="text-sm text-muted-foreground">
-                View-only. Saving requires <code className="rounded bg-muted px-1">admin.settings</code>.
+                You can view this page, but only an organisation admin can generate or change connection settings.
               </p>
             )}
 
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-50">
-              <strong className="font-medium">Two-step setup:</strong> (1) Generate credentials here on ERP.
-              (2) In Odaflow, open <strong>Workspace → ERP connection</strong> and paste the API key, HMAC secret, and org ID below.
+              <p className="font-medium">Connect ERP to Odaflow in two steps</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-4 text-sm">
+                <li>Generate your connection credentials on this page.</li>
+                <li>
+                  In Odaflow, open <strong>Workspace → ERP connection</strong> and paste the organisation ID, API key,
+                  and secret.
+                </li>
+              </ol>
             </div>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Your ERP org</CardTitle>
-                <CardDescription>Give this org ID to the Odaflow admin when they connect.</CardDescription>
+                <CardTitle className="text-base">Your organisation ID</CardTitle>
+                <CardDescription>
+                  Share this ID when linking Odaflow to this ERP account.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {loading ? (
@@ -278,14 +273,14 @@ export default function OdaflowIntegrationPage() {
                   <>
                     <div className="flex items-center gap-2">
                       <code className="flex-1 rounded bg-muted px-2 py-1 text-sm break-all">{settings?.orgId}</code>
-                      {settings?.orgId && <CopyButton value={settings.orgId} label="Org ID" />}
+                      {settings?.orgId && <CopyButton value={settings.orgId} label="Organisation ID" />}
                     </div>
                     <div className="flex flex-wrap gap-2 text-sm">
                       <Badge variant={settings?.apiKeyConfigured ? "default" : "secondary"}>
-                        API key {settings?.apiKeyConfigured ? "configured" : "not set"}
+                        {settings?.apiKeyConfigured ? "Credentials ready" : "Credentials not created yet"}
                       </Badge>
                       <Badge variant={settings?.isActive ? "default" : "secondary"}>
-                        {settings?.isActive ? "Active" : "Inactive"}
+                        {settings?.isActive ? "Connection on" : "Connection off"}
                       </Badge>
                       {settings?.lastSyncAt && (
                         <span className="text-muted-foreground">
@@ -300,29 +295,10 @@ export default function OdaflowIntegrationPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Inbound API URLs</CardTitle>
+                <CardTitle className="text-base">Connection credentials</CardTitle>
                 <CardDescription>
-                  Odaflow calls these with header <code className="text-xs">X-Odaflow-API-Key</code>. Set{" "}
-                  <code className="text-xs">PUBLIC_API_BASE_URL</code> on the API host for production URLs.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!settings?.ordersUrl && (
-                  <p className="text-sm text-muted-foreground">
-                    Browser API origin: <code className="text-xs break-all">{fallbackBase || "(not configured)"}</code>
-                  </p>
-                )}
-                <UrlRow label="POST orders" value={settings?.ordersUrl ?? null} />
-                <UrlRow label="POST customers" value={settings?.customersUrl ?? null} />
-                <UrlRow label="POST product map" value={settings?.productsUrl ?? null} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Credentials</CardTitle>
-                <CardDescription>
-                  Link this ERP org to one Odaflow manufacturer ID. The API key is shown once after generate/rotate.
+                  Link this ERP account to your Odaflow manufacturer. The API key is shown only once when you
+                  generate or rotate it — copy it somewhere safe.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -332,11 +308,11 @@ export default function OdaflowIntegrationPage() {
                     id="mfg-id"
                     value={allowedManufacturerId}
                     onChange={(e) => setAllowedManufacturerId(e.target.value)}
-                    placeholder="69720d9400e503bbe94442c8"
+                    placeholder="Paste the manufacturer ID from Odaflow"
                     disabled={!canSave}
                   />
                   <p className="text-xs text-muted-foreground">
-                    From Odaflow admin or MongoDB <code>manufacturers._id</code> for this tenant.
+                    Ask your Odaflow admin for this ID, or find it under your manufacturer workspace settings.
                   </p>
                 </div>
 
@@ -348,7 +324,7 @@ export default function OdaflowIntegrationPage() {
                     disabled={!canSave}
                   />
                   <Label htmlFor="odaflow-active" className="font-normal cursor-pointer">
-                    Integration active (accept inbound Odaflow events)
+                    Keep connection active (receive orders and updates from Odaflow)
                   </Label>
                 </div>
 
@@ -400,12 +376,18 @@ export default function OdaflowIntegrationPage() {
               <div className="text-muted-foreground text-sm">Loading status…</div>
             ) : !status ? (
               <Card>
-                <CardContent className="pt-6">
-                  <p className="text-muted-foreground text-sm">
-                    Odaflow connector not configured. Open the <strong>Setup</strong> tab to generate credentials, or run{" "}
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded">npm run bootstrap:topfood-odaflow-connector</code>{" "}
-                    from the backend repo.
-                  </p>
+                <CardContent className="flex flex-col items-start gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-base font-medium">Finish connecting Odaflow</p>
+                    <p className="text-sm text-muted-foreground max-w-xl">
+                      Your organisation is not linked to Odaflow yet. Generate credentials on Setup, then paste them
+                      into Odaflow under Workspace → ERP connection.
+                    </p>
+                  </div>
+                  <Button type="button" onClick={() => setTab("setup")}>
+                    Go to Setup
+                    <Icons.ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
                 </CardContent>
               </Card>
             ) : (
@@ -439,25 +421,38 @@ export default function OdaflowIntegrationPage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card
+                    className={status.queueSummary.pending > 0 ? "cursor-pointer hover:border-primary/50 transition-colors" : undefined}
+                    onClick={
+                      status.queueSummary.pending > 0
+                        ? () => setTab("queue")
+                        : undefined
+                    }
+                  >
                     <CardHeader className="pb-2">
-                      <CardDescription>Pending in Queue</CardDescription>
+                      <CardDescription>Orders to review</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className={`text-2xl font-bold ${status.queueSummary.pending > 0 ? "text-yellow-600" : ""}`}>
                         {status.queueSummary.pending}
                       </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Unmatched customers or products
+                      </p>
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardDescription>Recent Failures</CardDescription>
+                      <CardDescription>Resolved</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className={`text-2xl font-bold ${status.recentFailureCount > 0 ? "text-red-500" : ""}`}>
-                        {status.recentFailureCount}
+                      <div className="text-2xl font-bold">
+                        {status.queueSummary.resolved}
                       </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cleared from the sync queue
+                      </p>
                     </CardContent>
                   </Card>
                 </div>
@@ -538,59 +533,39 @@ export default function OdaflowIntegrationPage() {
         )}
 
         {tab === "products" && (
-          sfaEnrolled ? (
+          sfaEnrollmentLoading ? (
+            <div className="text-sm text-muted-foreground py-8 text-center">
+              Checking your Odaflow connection…
+            </div>
+          ) : sfaEnrolled ? (
             <OdaflowProductsSyncPanel
               canSave={canSave}
               productMappingsCount={productMappings.length}
             />
           ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Product sync to Odaflow SFA is available for enrolled FMCG organisations with an active ERP-managed connector.
-                Complete setup on the <strong>Setup</strong> tab and ensure SFA is in <code className="text-xs bg-muted px-1 rounded">erp_managed</code> mode.
-              </p>
-              {mappingsLoading ? (
-                <div className="text-sm text-muted-foreground">Loading…</div>
-              ) : productMappings.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4 text-center">No product mappings yet.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Odaflow ID</th>
-                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Pack Size</th>
-                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">ERP Product ID</th>
-                        <th className="text-left py-2 font-medium text-muted-foreground">Last Synced</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {productMappings.map((m) => {
-                        const [, packSize] = (m.externalKey ?? "").split(":");
-                        return (
-                          <tr key={m._id} className="border-b hover:bg-muted/30">
-                            <td className="py-2 pr-4 font-mono text-xs">{m.externalId}</td>
-                            <td className="py-2 pr-4 text-muted-foreground">{packSize ?? "—"}</td>
-                            <td className="py-2 pr-4 font-mono text-xs">{m.entityId}</td>
-                            <td className="py-2 text-xs text-muted-foreground">
-                              {m.lastSyncedAt ? new Date(m.lastSyncedAt).toLocaleDateString() : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+            <Card>
+              <CardContent className="flex flex-col items-start gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-base font-medium">Product sync is not ready yet</p>
+                  <p className="text-sm text-muted-foreground max-w-xl">
+                    Finish connecting this ERP account to Odaflow first. Once Setup is complete, you can sync
+                    products into your sales reps&apos; catalogs from here.
+                  </p>
                 </div>
-              )}
-            </div>
+                <Button type="button" onClick={() => setTab("setup")}>
+                  Go to Setup
+                  <Icons.ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
           )
         )}
 
         {tab === "customers" && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              These mappings link Odaflow customer IDs to ERP Party records. Push customers via{" "}
-              <code className="text-xs bg-muted px-1 rounded">POST /api/integrations/odaflow/customers/upsert</code>.
+              Customers matched between Odaflow and this ERP account appear here. New matches are created when
+              orders sync or when you resolve them in the Sync Queue.
             </p>
             {mappingsLoading ? (
               <div className="text-sm text-muted-foreground">Loading…</div>

@@ -33,14 +33,32 @@ import {
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { SfaBulkSyncSheet } from "@/components/integrations/SfaBulkSyncSheet";
+import { TopProgressBar } from "@/components/ui/top-progress-bar";
+import { cn } from "@/lib/utils";
 
 type Props = {
   canSave: boolean;
   productMappingsCount: number;
 };
 
+function CatalogPresenceBadge({ onSfa, linked }: { onSfa: boolean; linked: boolean }) {
+  if (onSfa) {
+    return (
+      <Badge variant="secondary" className="font-normal text-green-700 dark:text-green-400">
+        {linked ? "On SFA" : "On SFA · barcode/link"}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="font-normal text-amber-700 border-amber-500/50 dark:text-amber-400">
+      Missing
+    </Badge>
+  );
+}
+
 export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Props) {
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [overview, setOverview] = React.useState<SfaProductSyncOverview | null>(null);
   const [unlinked, setUnlinked] = React.useState<SfaUnlinkedProduct[]>([]);
   const [unlinkedTotal, setUnlinkedTotal] = React.useState(0);
@@ -55,9 +73,12 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
 
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [bulkProductIds, setBulkProductIds] = React.useState<string[]>([]);
+  const hasDataRef = React.useRef(false);
 
-  const refresh = React.useCallback(async () => {
-    setLoading(true);
+  const refresh = React.useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = Boolean(opts?.soft && hasDataRef.current);
+    if (soft) setRefreshing(true);
+    else setLoading(true);
     try {
       const [data, settings, lists] = await Promise.all([
         fetchSfaProductSyncOverviewApi({ search: debouncedSearch || undefined, limit: 50 }),
@@ -71,12 +92,16 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
       setDefaultPriceListId(settings.defaultPriceListId || lists.find((p) => p.isDefault)?.id || lists[0]?.id || "");
       setDefaultGt(settings.defaultCatalogs.includes("general_trade"));
       setDefaultMt(settings.defaultCatalogs.includes("modern_trade"));
+      hasDataRef.current = true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load SFA product sync data.");
-      setOverview(null);
-      setUnlinked([]);
+      if (!hasDataRef.current) {
+        setOverview(null);
+        setUnlinked([]);
+      }
     } finally {
-      setLoading(false);
+      if (soft) setRefreshing(false);
+      else setLoading(false);
     }
   }, [debouncedSearch]);
 
@@ -86,7 +111,7 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
   }, [search]);
 
   React.useEffect(() => {
-    void refresh();
+    void refresh({ soft: hasDataRef.current });
   }, [refresh]);
 
   const handleSaveDefaults = async () => {
@@ -178,12 +203,17 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Not on SFA yet</CardDescription>
+              <CardDescription>Missing GT or MT</CardDescription>
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${overview.unlinked > 0 ? "text-amber-600" : ""}`}>
                 {overview.unlinked}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {overview.sfaLookupOk === false
+                  ? "SFA API lookup offline — ERP mappings only"
+                  : "Live SFA check via API (barcode + links)"}
+              </p>
               {overview.missingBarcode > 0 ? (
                 <p className="text-xs text-muted-foreground mt-1">
                   {overview.missingBarcode} active without barcode
@@ -245,19 +275,20 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle className="text-base">Products not on SFA</CardTitle>
+            <CardTitle className="text-base">Products missing an SFA catalog</CardTitle>
             <CardDescription>
-              Active products with a barcode that are not linked to any SFA catalog yet.
+              Active barcoded SKUs missing General Trade and/or Modern Trade. Presence is checked by
+              barcode, SFA entity links (including manual order matches), and ERP catalog mappings.
             </CardDescription>
           </div>
-          {unlinkedTotal > 0 ? (
+          {(debouncedSearch ? unlinkedTotal : overview?.unlinked ?? unlinkedTotal) > 0 ? (
             <Button
               type="button"
               size="sm"
               onClick={() => void openBulkSync()}
             >
               <Icons.Radio className="mr-2 h-4 w-4" />
-              Sync all {unlinkedTotal}
+              Sync all {debouncedSearch ? unlinkedTotal : overview?.unlinked ?? unlinkedTotal}
             </Button>
           ) : null}
         </CardHeader>
@@ -268,48 +299,79 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-md"
           />
-          {unlinked.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              {overview?.unlinked ? "No matches for this search." : "All barcoded products are linked to SFA."}
+          {overview?.sfaLookupOk === false ? (
+            <p className="text-xs text-amber-600">
+              Could not reach the SFA API for live catalog presence. Check{" "}
+              <code className="text-[11px] bg-muted px-1 rounded">ODAFLOW_SFA_API_URL</code> (e.g.
+              https://dev.odaflow.com) and{" "}
+              <code className="text-[11px] bg-muted px-1 rounded">ODAFLOW_SFA_API_KEY</code>.
             </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Product</th>
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">SKU</th>
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Barcode</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {unlinked.map((p) => (
-                    <tr key={p.productId} className="border-b hover:bg-muted/30">
-                      <td className="py-2 pr-4">
-                        <Link href={`/master/products/${p.productId}`} className="text-primary hover:underline">
-                          {p.name}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{p.sku ?? "—"}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">{p.barcode ?? "—"}</td>
-                      <td className="py-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => void openBulkSync([p.productId])}
-                        >
-                          Sync
-                        </Button>
-                      </td>
+          ) : null}
+          <div className="relative">
+            <TopProgressBar active={refreshing} />
+            {refreshing ? (
+              <p className="absolute right-0 -top-6 text-[11px] text-muted-foreground">
+                Updating…
+              </p>
+            ) : null}
+            {unlinked.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                {overview?.unlinked
+                  ? "No matches for this search."
+                  : "Every barcoded product is on both General Trade and Modern Trade in SFA."}
+              </p>
+            ) : (
+              <div
+                className={cn(
+                  "overflow-x-auto transition-opacity duration-200",
+                  refreshing && "opacity-70"
+                )}
+              >
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Product</th>
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">SKU</th>
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Barcode</th>
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">General trade</th>
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Modern trade</th>
+                      <th className="text-left py-2 font-medium text-muted-foreground">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {unlinked.map((p) => (
+                      <tr key={p.productId} className="border-b hover:bg-muted/30">
+                        <td className="py-2 pr-4">
+                          <Link href={`/master/products/${p.productId}`} className="text-primary hover:underline">
+                            {p.name}
+                          </Link>
+                        </td>
+                        <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{p.sku ?? "—"}</td>
+                        <td className="py-2 pr-4 font-mono text-xs">{p.barcode ?? "—"}</td>
+                        <td className="py-2 pr-4">
+                          <CatalogPresenceBadge onSfa={p.gtOnSfa} linked={p.gtLinked} />
+                        </td>
+                        <td className="py-2 pr-4">
+                          <CatalogPresenceBadge onSfa={p.mtOnSfa} linked={p.mtLinked} />
+                        </td>
+                        <td className="py-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => void openBulkSync([p.productId])}
+                          >
+                            Sync
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
           {unlinkedTotal > unlinked.length ? (
             <p className="text-xs text-muted-foreground">
               Showing {unlinked.length} of {unlinkedTotal}. Use{" "}
@@ -341,7 +403,7 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
         productIds={bulkProductIds}
         open={bulkOpen}
         onOpenChange={setBulkOpen}
-        onSynced={() => void refresh()}
+        onSynced={() => refresh({ soft: true })}
       />
     </div>
   );

@@ -39,8 +39,11 @@ type Props = {
   productIds: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSynced?: () => void;
+  /** Called after a successful sync; sheet closes when this settles. */
+  onSynced?: () => void | Promise<void>;
   title?: string;
+  /** Close the sheet automatically after a successful sync (default true). */
+  closeOnSuccess?: boolean;
 };
 
 export function SfaBulkSyncSheet({
@@ -49,6 +52,7 @@ export function SfaBulkSyncSheet({
   onOpenChange,
   onSynced,
   title = "Sync products to Odaflow SFA",
+  closeOnSuccess = true,
 }: Props) {
   const [gt, setGt] = React.useState(true);
   const [mt, setMt] = React.useState(false);
@@ -119,7 +123,10 @@ export function SfaBulkSyncSheet({
       } else {
         toast.error(res.skipped[0]?.reason ?? "No products were synced.");
       }
-      if (synced > 0) onSynced?.();
+      if (synced > 0) {
+        if (closeOnSuccess) onOpenChange(false);
+        await onSynced?.();
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Bulk sync failed.");
     } finally {

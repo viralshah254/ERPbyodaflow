@@ -354,6 +354,8 @@ export type SfaProductSyncOverview = {
   gtLinked: number;
   mtLinked: number;
   unlinked: number;
+  /** False when live SFA barcode lookup failed (tunnel / ODAFLOW_MONGO_URI). */
+  sfaLookupOk?: boolean;
 };
 
 export type SfaUnlinkedProduct = {
@@ -362,6 +364,10 @@ export type SfaUnlinkedProduct = {
   name: string;
   barcode?: string;
   status: string;
+  gtOnSfa: boolean;
+  mtOnSfa: boolean;
+  gtLinked: boolean;
+  mtLinked: boolean;
 };
 
 export async function fetchSfaProductSyncOverviewApi(opts?: {
@@ -370,7 +376,7 @@ export async function fetchSfaProductSyncOverviewApi(opts?: {
   offset?: number;
 }): Promise<{
   overview: SfaProductSyncOverview;
-  unlinked: { items: SfaUnlinkedProduct[]; total: number };
+  unlinked: { items: SfaUnlinkedProduct[]; total: number; sfaLookupOk?: boolean };
 }> {
   requireLiveApi("SFA product sync overview");
   const qs = new URLSearchParams();
