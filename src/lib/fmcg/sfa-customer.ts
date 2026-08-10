@@ -45,7 +45,8 @@ export const CUSTOMER_KIND_OPTIONS = [
   {
     id: "modern-trade",
     label: "Modern trade",
-    description: "Supermarket or chain HQ — branches are separate customers that can order too",
+    description:
+      "Supermarket HQ or branch — syncs to the shared SFA catalog; tax ID and credit stay on this ERP org",
     sfaSegment: "MODERN_TRADE_HQ" as SfaSegment,
     channel: "MODERN_TRADE" as PartyChannel,
     customerType: "RETAILER" as const,

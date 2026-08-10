@@ -17,6 +17,7 @@ import {
   importPartiesApi,
   patchPartiesFromSheetApi,
   type ImportPartiesResult,
+  type PartySheetExportKind,
   type PatchPartiesResult,
 } from "@/lib/api/import-export";
 import {
@@ -25,7 +26,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+
+const CUSTOMER_SHEET_KINDS: { value: PartySheetExportKind; label: string }[] = [
+  { value: "all", label: "All customers" },
+  { value: "modern-trade", label: "Modern trade only" },
+  { value: "modern-trade-hq", label: "Modern trade HQ only" },
+  { value: "gt-all", label: "General trade + distributor + van" },
+  { value: "general-trade", label: "General trade only" },
+  { value: "distributor", label: "Distributors only" },
+  { value: "van-sales", label: "Van sales only" },
+];
 
 const ACCEPTED_IMPORT =
   ".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -62,6 +81,7 @@ export function PartyImportSheet({
   const [importResult, setImportResult] = React.useState<ImportPartiesResult | null>(null);
   const [patchResult, setPatchResult] = React.useState<PatchPartiesResult | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
+  const [sheetKind, setSheetKind] = React.useState<PartySheetExportKind>("all");
 
   const labelLower = entityLabel.toLowerCase();
   const templateEntity = type === "customer" ? "customers" : "suppliers";
@@ -76,6 +96,7 @@ export function PartyImportSheet({
     setImportResult(null);
     setPatchResult(null);
     setDragOver(false);
+    setSheetKind("all");
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -220,6 +241,15 @@ export function PartyImportSheet({
 
           <TabsContent value="create" className="space-y-5 py-4">
             <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground space-y-2">
+              {type === "customer" ? (
+                <p>
+                  Prefer importing <span className="font-medium text-foreground">general trade /
+                  distributor / van</span> outlets in <span className="font-medium text-foreground">SFA</span>{" "}
+                  first (with GPS), then sync here. Use this create import mainly for ERP-only
+                  greenfield or quick Party setup. Modern trade stores stay in the shared SFA catalog —
+                  link them from SFA, then set tax/credit under Credit &amp; tax ID.
+                </p>
+              ) : null}
               <p className="font-medium text-foreground">Columns</p>
               {type === "customer" ? (
                 <ul className="list-disc pl-4 space-y-1">
@@ -230,8 +260,9 @@ export function PartyImportSheet({
                   <li>
                     <span className="font-medium text-foreground">customerKind</span>{" "}
                     <span className="text-muted-foreground">(optional)</span> — type of customer:{" "}
-                    <code>modern-trade</code> (supermarket HQ), <code>modern-trade-branch</code>,{" "}
-                    <code>general-trade</code>, <code>distributor</code>, or <code>van-sales</code>.
+                    <code>general-trade</code>, <code>distributor</code>, <code>van-sales</code>, or{" "}
+                    <code>modern-trade</code> / <code>modern-trade-branch</code> if you must create
+                    Parties here.
                   </li>
                   <li>
                     <span className="font-medium text-foreground">customerCode</span>{" "}
@@ -363,33 +394,75 @@ export function PartyImportSheet({
           <TabsContent value="sheet" className="space-y-5 py-4">
             <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground space-y-2">
               <p className="font-medium text-foreground">How to update credit &amp; tax ID</p>
-              <ol className="list-decimal pl-4 space-y-1">
-                <li>
-                  <span className="font-medium text-foreground">Download all {labelLower}s</span> —
-                  choose Excel (recommended) or CSV.
-                </li>
-                <li>
-                  Open in <span className="font-medium text-foreground">Microsoft Excel</span>, Numbers,
-                  or Google Sheets and edit{" "}
-                  <span className="font-medium text-foreground">taxId</span> and{" "}
-                  <span className="font-medium text-foreground">creditLimitAmount</span>.
-                </li>
-                <li>
-                  Do not change <span className="font-medium text-foreground">customerCode</span> — we
-                  use it to find each customer.
-                </li>
-                <li>
-                  Save the file, then upload it below. We only update existing customers — nothing new
-                  is created.
-                </li>
-              </ol>
+              {type === "customer" ? (
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>
+                    Sync customers from SFA first (so ERP already has the outlets linked). Do{" "}
+                    <span className="font-medium text-foreground">not</span> re-import a full customer
+                    master here just to set tax or credit.
+                  </li>
+                  <li>
+                    Choose who to download (all, modern trade only, GT/van, etc.), then download Excel
+                    or CSV.
+                  </li>
+                  <li>
+                    Edit{" "}
+                    <span className="font-medium text-foreground">taxId</span> and{" "}
+                    <span className="font-medium text-foreground">creditLimitAmount</span> from your
+                    finance data. Leave{" "}
+                    <span className="font-medium text-foreground">customerCode</span> unchanged.
+                  </li>
+                  <li>
+                    Upload below. We only update existing customers — nothing new is created. Orders
+                    already match via the SFA link; tax/credit apply on the next credit check.
+                  </li>
+                </ol>
+              ) : (
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>
+                    <span className="font-medium text-foreground">Download all {labelLower}s</span> —
+                    choose Excel (recommended) or CSV.
+                  </li>
+                  <li>
+                    Edit{" "}
+                    <span className="font-medium text-foreground">taxId</span> and{" "}
+                    <span className="font-medium text-foreground">creditLimitAmount</span>.
+                  </li>
+                  <li>Upload below — existing rows only; nothing new is created.</li>
+                </ol>
+              )}
             </div>
+
+            {type === "customer" ? (
+              <div className="space-y-2">
+                <Label htmlFor="sheet-kind">Download</Label>
+                <Select
+                  value={sheetKind}
+                  onValueChange={(v) => setSheetKind(v as PartySheetExportKind)}
+                >
+                  <SelectTrigger id="sheet-kind" className="w-full">
+                    <SelectValue placeholder="Who to download" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CUSTOMER_SHEET_KINDS.map((k) => (
+                      <SelectItem key={k.value} value={k.value}>
+                        {k.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="outline" className="w-full" disabled={patching}>
                   <Icons.Download className="mr-2 h-4 w-4" />
-                  Download all {labelLower}s
+                  Download{" "}
+                  {type === "customer" && sheetKind !== "all"
+                    ? CUSTOMER_SHEET_KINDS.find((k) => k.value === sheetKind)?.label.toLowerCase() ??
+                      labelLower + "s"
+                    : `all ${labelLower}s`}
                   <Icons.ChevronDown className="ml-auto h-4 w-4 opacity-70" />
                 </Button>
               </DropdownMenuTrigger>
@@ -397,7 +470,12 @@ export function PartyImportSheet({
                 <DropdownMenuItem
                   onSelect={() => {
                     void (async () => {
-                      const ok = await exportPartiesSheetApi(type, "xlsx", (msg) => toast.error(msg));
+                      const ok = await exportPartiesSheetApi(
+                        type,
+                        "xlsx",
+                        (msg) => toast.error(msg),
+                        type === "customer" ? { kind: sheetKind } : undefined
+                      );
                       if (ok) {
                         toast.success("Excel file downloaded — open it in Microsoft Excel to edit.");
                       }
@@ -410,7 +488,12 @@ export function PartyImportSheet({
                 <DropdownMenuItem
                   onSelect={() => {
                     void (async () => {
-                      const ok = await exportPartiesSheetApi(type, "csv", (msg) => toast.error(msg));
+                      const ok = await exportPartiesSheetApi(
+                        type,
+                        "csv",
+                        (msg) => toast.error(msg),
+                        type === "customer" ? { kind: sheetKind } : undefined
+                      );
                       if (ok) {
                         toast.success("CSV downloaded — open it in Excel or Google Sheets.");
                       }

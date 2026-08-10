@@ -184,8 +184,8 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         title="Customers"
         description={
           fmcg
-            ? "Add and manage who you sell to — including supermarket branches as full customers. Credit limits for existing customers are managed under Finance."
-            : "Add and manage who you sell to. Finance can update credit on existing customers."
+            ? "SFA holds field outlets (including shared modern trade). Sync from SFA, then use Credit & tax sheet for taxId and credit limits — single edit or bulk download/upload."
+            : "Add and manage who you sell to. After SFA sync, update tax ID and credit with Credit & tax sheet or Finance."
         }
         breadcrumbs={breadcrumbs}
         sticky

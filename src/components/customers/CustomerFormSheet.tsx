@@ -30,6 +30,7 @@ import {
 import {
   createPartyApi,
   fetchNextCustomerCodeApi,
+  fetchPartiesApi,
   fetchPartyByIdApi,
   updatePartyApi,
   type PartyPayload,
@@ -320,16 +321,32 @@ export function CustomerFormSheet({
   const [draftRestored, setDraftRestored] = React.useState(false);
   const [loadedParentPartyId, setLoadedParentPartyId] = React.useState<string | null>(null);
   const [loadedParentPartyName, setLoadedParentPartyName] = React.useState<string | null>(null);
+  /** When creating from Type step: new supermarket HQ vs branch under an existing HQ. */
+  const [mtCreateMode, setMtCreateMode] = React.useState<"hq" | "branch">("hq");
+  const [selectedHqId, setSelectedHqId] = React.useState("");
+  const [selectedHqName, setSelectedHqName] = React.useState("");
+  const [hqOptions, setHqOptions] = React.useState<Array<{ id: string; name: string; code?: string }>>(
+    []
+  );
   const hydratedRef = React.useRef(false);
 
   const kind = CUSTOMER_KIND_OPTIONS.find((k) => k.id === form.kindId) ?? CUSTOMER_KIND_OPTIONS[1];
-  // HQ hides route/geo; branches need outlet address/location like any customer.
-  const showRouteAndGeo = !fmcg || form.kindId !== "modern-trade";
-  const stepId = createSteps[step]?.id ?? "identity";
-  const lockedParentPartyId = parentPartyId?.trim() || loadedParentPartyId;
-  const displayParentName = parentPartyName?.trim() || loadedParentPartyName;
   const isBranchCustomer =
-    branchMode || form.kindId === "modern-trade-branch" || Boolean(lockedParentPartyId);
+    branchMode ||
+    form.kindId === "modern-trade-branch" ||
+    (form.kindId === "modern-trade" && mtCreateMode === "branch") ||
+    Boolean(parentPartyId?.trim() || loadedParentPartyId);
+  // HQ hides route/geo; branches need outlet address/location like any customer.
+  const showRouteAndGeo = !fmcg || isBranchCustomer || form.kindId !== "modern-trade";
+  const stepId = createSteps[step]?.id ?? "identity";
+  const lockedParentPartyId =
+    parentPartyId?.trim() ||
+    loadedParentPartyId ||
+    (mtCreateMode === "branch" && selectedHqId ? selectedHqId : null);
+  const displayParentName =
+    parentPartyName?.trim() ||
+    loadedParentPartyName ||
+    (mtCreateMode === "branch" ? selectedHqName : null);
 
   React.useEffect(() => {
     if (!open) {
@@ -456,6 +473,9 @@ export function CustomerFormSheet({
     }
     setStepErrors({});
     setNextCodePreview("");
+    setMtCreateMode(branchMode ? "branch" : "hq");
+    setSelectedHqId("");
+    setSelectedHqName("");
     void fetchNextCustomerCodeApi()
       .then((code) => setNextCodePreview(code))
       .catch(() => setNextCodePreview(""));
@@ -482,12 +502,38 @@ export function CustomerFormSheet({
     if (stepErrors.kindId) setStepErrors((prev) => ({ ...prev, kindId: "" }));
   };
 
+  React.useEffect(() => {
+    if (!open || !fmcg || form.kindId !== "modern-trade" || mtCreateMode !== "branch") return;
+    if (parentPartyId?.trim()) return;
+    void fetchPartiesApi({
+      role: "customer",
+      sfaSegment: "MODERN_TRADE_HQ",
+      status: "ACTIVE",
+      limit: 100,
+    })
+      .then((items) =>
+        setHqOptions(
+          items.map((p) => ({ id: p.id, name: p.name, code: p.code }))
+        )
+      )
+      .catch(() => setHqOptions([]));
+  }, [open, fmcg, form.kindId, mtCreateMode, parentPartyId]);
+
   const validateStep = (index: number): boolean => {
     const id = createSteps[index]?.id;
     const next: Record<string, string> = {};
     if (id === "type") {
       if (fmcg && !form.kindId) next.kindId = "Select a customer type to continue.";
       if (!fmcg && !form.customerType) next.customerType = "Select a customer type to continue.";
+      if (
+        fmcg &&
+        form.kindId === "modern-trade" &&
+        mtCreateMode === "branch" &&
+        !parentPartyId?.trim() &&
+        !selectedHqId
+      ) {
+        next.kindId = "Select the supermarket this branch belongs to.";
+      }
     }
     if (id === "identity") {
       if (!form.name.trim()) next.name = "Name is required.";
@@ -553,7 +599,7 @@ export function CustomerFormSheet({
       customerType: fmcg ? kind.customerType : form.customerType,
     };
     if (fmcg) {
-      const effectiveKind = branchMode
+      const effectiveKind = isBranchCustomer
         ? CUSTOMER_KIND_OPTIONS.find((k) => k.id === "modern-trade-branch")!
         : kind;
       payload.sfaSegment = effectiveKind.sfaSegment;
@@ -561,7 +607,7 @@ export function CustomerFormSheet({
       payload.customerType = effectiveKind.customerType;
       payload.defaultPriceListId = form.defaultPriceListId || undefined;
       payload.defaultTaxConfigId = form.defaultTaxConfigId || undefined;
-      if ((branchMode || form.kindId === "modern-trade-branch") && lockedParentPartyId) {
+      if (isBranchCustomer && lockedParentPartyId) {
         payload.parentPartyId = lockedParentPartyId;
       }
     }
@@ -604,19 +650,17 @@ export function CustomerFormSheet({
         const created = await createPartyApi(payload);
         clearDraft();
         toast.success(
-          supermarketOnly
-            ? "Supermarket created. Continue adding its branch."
-            : branchMode
-              ? "Branch created — it can be selected on sales orders and invoices."
-              : fmcg && form.kindId === "modern-trade"
-                ? "Supermarket created. You can add branches next."
-                : "Customer created"
+          supermarketOnly || (!isBranchCustomer && form.kindId === "modern-trade")
+            ? "Supermarket created in ERP — syncing to the shared SFA catalog. You can add branches next."
+            : isBranchCustomer
+              ? "Branch created in ERP — syncing to the shared SFA catalog for orders."
+              : "Customer created in ERP — syncing to SFA when the connector is active."
         );
         onOpenChange(false);
         onSuccess?.({
           id: created.id,
           name: created.name,
-          kindId: branchMode ? "modern-trade-branch" : form.kindId,
+          kindId: isBranchCustomer ? "modern-trade-branch" : form.kindId,
           created: true,
         });
       }
@@ -735,7 +779,14 @@ export function CustomerFormSheet({
                           <button
                             key={option.id}
                             type="button"
-                            onClick={() => handleKindChange(option.id)}
+                            onClick={() => {
+                              handleKindChange(option.id);
+                              if (option.id !== "modern-trade") {
+                                setMtCreateMode("hq");
+                                setSelectedHqId("");
+                                setSelectedHqName("");
+                              }
+                            }}
                             className={cn(
                               "rounded-lg border px-3 py-2.5 text-left transition-colors",
                               selected
@@ -766,6 +817,81 @@ export function CustomerFormSheet({
                       </SelectContent>
                     </Select>
                   )}
+
+                  {fmcg && form.kindId === "modern-trade" && !parentPartyId?.trim() ? (
+                    <div className="space-y-3 rounded-lg border p-3">
+                      <p className="text-sm font-medium text-foreground">Modern trade</p>
+                      <p className="text-xs text-muted-foreground">
+                        New supermarket HQs and branches sync to the shared SFA catalog. Tax ID and
+                        credit stay on this ERP organisation only.
+                      </p>
+                      <div className="grid gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMtCreateMode("hq");
+                            setSelectedHqId("");
+                            setSelectedHqName("");
+                          }}
+                          className={cn(
+                            "rounded-lg border px-3 py-2 text-left text-sm",
+                            mtCreateMode === "hq"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:bg-muted/50"
+                          )}
+                        >
+                          New supermarket (HQ)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMtCreateMode("branch")}
+                          className={cn(
+                            "rounded-lg border px-3 py-2 text-left text-sm",
+                            mtCreateMode === "branch"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:bg-muted/50"
+                          )}
+                        >
+                          Branch under existing supermarket
+                        </button>
+                      </div>
+                      {mtCreateMode === "branch" ? (
+                        <div className="space-y-2">
+                          <FieldLabel required>Supermarket</FieldLabel>
+                          <Select
+                            value={selectedHqId}
+                            onValueChange={(id) => {
+                              setSelectedHqId(id);
+                              const hq = hqOptions.find((h) => h.id === id);
+                              setSelectedHqName(hq?.name ?? "");
+                              if (stepErrors.kindId) {
+                                setStepErrors((prev) => ({ ...prev, kindId: "" }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select supermarket HQ" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {hqOptions.length === 0 ? (
+                                <SelectItem value="__none" disabled>
+                                  No modern-trade HQs yet — create one first
+                                </SelectItem>
+                              ) : (
+                                hqOptions.map((hq) => (
+                                  <SelectItem key={hq.id} value={hq.id}>
+                                    {hq.name}
+                                    {hq.code ? ` (${hq.code})` : ""}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   {stepErrors.kindId || stepErrors.customerType ? (
                     <p className="text-xs text-destructive">
                       {stepErrors.kindId || stepErrors.customerType}

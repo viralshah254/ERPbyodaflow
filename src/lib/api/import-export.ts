@@ -54,24 +54,36 @@ async function downloadCsvPathAsFormat(
   }
 }
 
+/** Optional customerKind filter for Credit & tax sheet download. */
+export type PartySheetExportKind =
+  | "all"
+  | "modern-trade"
+  | "modern-trade-hq"
+  | "general-trade"
+  | "distributor"
+  | "van-sales"
+  | "gt-all";
+
 /**
- * Download all customers/suppliers for Credit & tax editing.
+ * Download customers/suppliers for Credit & tax editing.
  * Excel (xlsx) is the default-friendly option for Windows/Mac; CSV suits Google Sheets.
+ * For customers, pass `kind` to download modern-trade only, GT-only, etc.
  */
 export async function exportPartiesSheetApi(
   type: "customer" | "supplier",
   format: PartySheetExportFormat,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  options?: { kind?: PartySheetExportKind }
 ): Promise<boolean> {
   requireLiveApi("Parties export");
   const date = new Date().toISOString().slice(0, 10);
-  const stem = type === "customer" ? `customers-sheet-${date}` : `suppliers-sheet-${date}`;
-  return downloadCsvPathAsFormat(
-    `/api/import/parties/export?type=${type}`,
-    stem,
-    format,
-    onError
-  );
+  const kind = type === "customer" ? options?.kind ?? "all" : "all";
+  const kindSlug = kind !== "all" ? `-${kind}` : "";
+  const stem =
+    type === "customer" ? `customers-sheet${kindSlug}-${date}` : `suppliers-sheet-${date}`;
+  const qs = new URLSearchParams({ type });
+  if (type === "customer" && kind !== "all") qs.set("kind", kind);
+  return downloadCsvPathAsFormat(`/api/import/parties/export?${qs.toString()}`, stem, format, onError);
 }
 
 /** Export all customers as CSV (open in Google Sheets to edit taxId / credit). */
