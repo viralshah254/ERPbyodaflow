@@ -6,7 +6,10 @@
 import { getCurrentFirebaseIdTokenForApi } from "@/lib/firebase";
 import { canUseDevHeaders } from "@/lib/runtime-flags";
 
-const GAIA_BASE = (process.env.NEXT_PUBLIC_GAIA_API_BASE_URL ?? "").replace(/\/$/, "");
+const DEFAULT_GAIA_API_BASE_URL = "https://gaia.odaflow.com";
+const GAIA_BASE = (
+  process.env.NEXT_PUBLIC_GAIA_API_BASE_URL?.trim() || DEFAULT_GAIA_API_BASE_URL
+).replace(/\/$/, "");
 const ENV_DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
 const ENV_BRANCH_ID = process.env.NEXT_PUBLIC_CURRENT_BRANCH_ID ?? "";
 
