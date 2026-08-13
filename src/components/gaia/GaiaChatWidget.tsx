@@ -105,17 +105,16 @@ export function GaiaChatWidget() {
   if (!enabled) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-24 right-5 z-[10040] flex flex-col items-end gap-3">
-      <div
-        className={`pointer-events-auto flex h-[min(72vh,640px)] w-[min(100vw-1.5rem,400px)] origin-bottom-right flex-col overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-2xl transition-all duration-300 dark:border-slate-700 dark:bg-slate-900 ${
-          open
-            ? "translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none h-0 translate-y-3 scale-95 border-0 opacity-0 shadow-none"
-        }`}
-        role="dialog"
-        aria-label="Gaia assistant"
-        aria-hidden={!open}
-      >
+    <div
+      data-gaia-widget=""
+      className="pointer-events-none fixed bottom-24 right-5 z-40 flex flex-col items-end gap-3"
+    >
+      {open ? (
+        <div
+          className="pointer-events-auto flex h-[min(72vh,640px)] w-[min(100vw-1.5rem,400px)] origin-bottom-right flex-col overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          role="dialog"
+          aria-label="Gaia assistant"
+        >
         <header className="flex items-center gap-3 bg-gradient-to-r from-[#012A4A] to-[#0A73B7] px-4 py-3 text-white">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-lg font-semibold tracking-tight ring-1 ring-white/20">
             G
@@ -248,7 +247,8 @@ export function GaiaChatWidget() {
             Gaia is an AI assistant for OdaFlow. Double-check important numbers before acting.
           </p>
         </form>
-      </div>
+        </div>
+      ) : null}
 
       <button
         type="button"

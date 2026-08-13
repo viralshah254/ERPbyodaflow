@@ -184,6 +184,7 @@ export function AccessibilityWidget() {
         {tools.dictionary ? <DictionaryPopover /> : null}
         <button
           type="button"
+          data-a11y-widget=""
           onClick={() => setWidgetHidden(false)}
           className="fixed bottom-4 right-0 z-[10045] rounded-l-md border border-r-0 bg-background px-2 py-3 text-xs font-medium shadow-md hover:bg-muted"
           aria-label="Show accessibility widget"
@@ -200,6 +201,7 @@ export function AccessibilityWidget() {
       {tools.dictionary ? <DictionaryPopover /> : null}
 
       <div
+        data-a11y-widget=""
         className="fixed z-[10045] flex touch-none flex-col"
         style={{
           left: pos.x,
