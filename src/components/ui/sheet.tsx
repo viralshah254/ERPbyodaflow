@@ -52,7 +52,7 @@ function isProtectedOutsideTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   return Boolean(
     target.closest(
-      "[data-location-suggestions], [data-radix-select-content], [data-radix-popper-content-wrapper], [data-gaia-widget], [data-a11y-widget]"
+      "[data-location-suggestions], [data-radix-select-content], [data-radix-popper-content-wrapper], [data-async-searchable-panel], [data-gaia-widget], [data-a11y-widget], [data-customer-hide-dialog]"
     )
   );
 }

@@ -20,6 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KraTaxPinField } from "@/components/parties/KraTaxPinField";
+import {
+  AsyncSearchableSelect,
+  type AsyncSearchableSelectOption,
+} from "@/components/ui/async-searchable-select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -325,9 +329,10 @@ export function CustomerFormSheet({
   const [mtCreateMode, setMtCreateMode] = React.useState<"hq" | "branch">("hq");
   const [selectedHqId, setSelectedHqId] = React.useState("");
   const [selectedHqName, setSelectedHqName] = React.useState("");
-  const [hqOptions, setHqOptions] = React.useState<Array<{ id: string; name: string; code?: string }>>(
-    []
+  const [selectedHqOption, setSelectedHqOption] = React.useState<AsyncSearchableSelectOption | null>(
+    null
   );
+  const [sheetPortalHost, setSheetPortalHost] = React.useState<HTMLElement | null>(null);
   const hydratedRef = React.useRef(false);
 
   const kind = CUSTOMER_KIND_OPTIONS.find((k) => k.id === form.kindId) ?? CUSTOMER_KIND_OPTIONS[1];
@@ -476,6 +481,7 @@ export function CustomerFormSheet({
     setMtCreateMode(branchMode ? "branch" : "hq");
     setSelectedHqId("");
     setSelectedHqName("");
+    setSelectedHqOption(null);
     void fetchNextCustomerCodeApi()
       .then((code) => setNextCodePreview(code))
       .catch(() => setNextCodePreview(""));
@@ -502,22 +508,20 @@ export function CustomerFormSheet({
     if (stepErrors.kindId) setStepErrors((prev) => ({ ...prev, kindId: "" }));
   };
 
-  React.useEffect(() => {
-    if (!open || !fmcg || form.kindId !== "modern-trade" || mtCreateMode !== "branch") return;
-    if (parentPartyId?.trim()) return;
-    void fetchPartiesApi({
+  const loadHqOptions = React.useCallback(async (query: string) => {
+    const rows = await fetchPartiesApi({
       role: "customer",
       sfaSegment: "MODERN_TRADE_HQ",
       status: "ACTIVE",
-      limit: 100,
-    })
-      .then((items) =>
-        setHqOptions(
-          items.map((p) => ({ id: p.id, name: p.name, code: p.code }))
-        )
-      )
-      .catch(() => setHqOptions([]));
-  }, [open, fmcg, form.kindId, mtCreateMode, parentPartyId]);
+      search: query,
+      limit: 5,
+    });
+    return rows.map((p) => ({
+      id: p.id,
+      label: p.name,
+      description: p.code ? `Code ${p.code}` : undefined,
+    }));
+  }, []);
 
   const validateStep = (index: number): boolean => {
     const id = createSteps[index]?.id;
@@ -682,6 +686,9 @@ export function CustomerFormSheet({
     setStep(0);
     setStepErrors({});
     setDraftRestored(false);
+    setSelectedHqId("");
+    setSelectedHqName("");
+    setSelectedHqOption(null);
     toast.message("Draft discarded");
   };
 
@@ -697,7 +704,10 @@ export function CustomerFormSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col gap-0 p-0">
+      <SheetContent
+        ref={setSheetPortalHost}
+        className="w-full sm:max-w-lg flex flex-col gap-0 p-0"
+      >
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0 space-y-3">
           <div>
             <SheetTitle>
@@ -785,6 +795,7 @@ export function CustomerFormSheet({
                                 setMtCreateMode("hq");
                                 setSelectedHqId("");
                                 setSelectedHqName("");
+                                setSelectedHqOption(null);
                               }
                             }}
                             className={cn(
@@ -822,8 +833,8 @@ export function CustomerFormSheet({
                     <div className="space-y-3 rounded-lg border p-3">
                       <p className="text-sm font-medium text-foreground">Modern trade</p>
                       <p className="text-xs text-muted-foreground">
-                        New supermarket HQs and branches sync to the shared SFA catalog. Tax ID and
-                        credit stay on this ERP organisation only.
+                        New supermarket HQs and branches from SFA appear here automatically.
+                        Tax ID and credit stay on this ERP organisation only.
                       </p>
                       <div className="grid gap-2">
                         <button
@@ -832,6 +843,7 @@ export function CustomerFormSheet({
                             setMtCreateMode("hq");
                             setSelectedHqId("");
                             setSelectedHqName("");
+                            setSelectedHqOption(null);
                           }}
                           className={cn(
                             "rounded-lg border px-3 py-2 text-left text-sm",
@@ -858,35 +870,27 @@ export function CustomerFormSheet({
                       {mtCreateMode === "branch" ? (
                         <div className="space-y-2">
                           <FieldLabel required>Supermarket</FieldLabel>
-                          <Select
+                          <AsyncSearchableSelect
                             value={selectedHqId}
+                            selectedOption={selectedHqOption}
                             onValueChange={(id) => {
                               setSelectedHqId(id);
-                              const hq = hqOptions.find((h) => h.id === id);
-                              setSelectedHqName(hq?.name ?? "");
                               if (stepErrors.kindId) {
                                 setStepErrors((prev) => ({ ...prev, kindId: "" }));
                               }
                             }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select supermarket HQ" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {hqOptions.length === 0 ? (
-                                <SelectItem value="__none" disabled>
-                                  No modern-trade HQs yet — create one first
-                                </SelectItem>
-                              ) : (
-                                hqOptions.map((hq) => (
-                                  <SelectItem key={hq.id} value={hq.id}>
-                                    {hq.name}
-                                    {hq.code ? ` (${hq.code})` : ""}
-                                  </SelectItem>
-                                ))
-                              )}
-                            </SelectContent>
-                          </Select>
+                            onOptionSelect={(option) => {
+                              setSelectedHqOption(option);
+                              setSelectedHqName(option?.label ?? "");
+                            }}
+                            loadOptions={loadHqOptions}
+                            placeholder="Select supermarket HQ"
+                            searchPlaceholder="Search supermarket name or code"
+                            emptyMessage="No supermarkets match. Try another name or code."
+                            recentStorageKey="lookup:recent-supermarket-hqs"
+                            listMaxHeightClassName="max-h-56"
+                            portalContainer={sheetPortalHost}
+                          />
                         </div>
                       ) : null}
                     </div>

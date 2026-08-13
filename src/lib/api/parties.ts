@@ -402,6 +402,19 @@ export async function updatePartyApi(id: string, payload: Partial<PartyPayload>)
   return mapParty(updated);
 }
 
+export async function hidePartyInOrgApi(id: string): Promise<{
+  id: string;
+  alreadyHidden: boolean;
+  hiddenCount: number;
+  branchCount: number;
+  cascadedHq: boolean;
+}> {
+  requireLiveApi("Hide party in organisation");
+  return apiRequest(`/api/parties/${encodeURIComponent(id)}/hide-in-org`, {
+    method: "POST",
+  });
+}
+
 export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null> {
   requireLiveApi("Party detail");
   const data = await apiRequest<BackendParty>(`/api/parties/${id}`);

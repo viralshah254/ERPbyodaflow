@@ -245,9 +245,10 @@ export function PartyImportSheet({
                 <p>
                   Prefer importing <span className="font-medium text-foreground">general trade /
                   distributor / van</span> outlets in <span className="font-medium text-foreground">SFA</span>{" "}
-                  first (with GPS), then sync here. Use this create import mainly for ERP-only
-                  greenfield or quick Party setup. Modern trade stores stay in the shared SFA catalog —
-                  link them from SFA, then set tax/credit under Credit &amp; tax ID.
+                  first, then sync here. Use this create import mainly for ERP-only
+                  greenfield or quick Party setup. Shared supermarket HQs and branches
+                  appear in this organisation from SFA automatically — set tax ID and
+                  credit under Credit &amp; tax ID.
                 </p>
               ) : null}
               <p className="font-medium text-foreground">Columns</p>

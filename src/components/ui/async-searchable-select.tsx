@@ -474,6 +474,8 @@ export function AsyncSearchableSelect({
       style={opts.style}
       role="listbox"
       aria-label={searchPlaceholder}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
     >
       {panelInner}
     </div>
@@ -538,19 +540,19 @@ export function AsyncSearchableSelect({
         <Icons.ChevronsUpDown className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
       </Button>
       {open && !floating
-        ? panelShell({
-            className: cn(
-              "absolute z-50 mt-2 left-0 rounded-lg border bg-popover p-2 text-popover-foreground shadow-xl",
-              "min-w-full w-max max-w-[min(100vw-1.5rem,48rem)]",
-              dropdownClassName
-            ),
-          })
+        ?             panelShell({
+              className: cn(
+                "absolute z-50 mt-2 left-0 rounded-lg border bg-popover p-2 text-popover-foreground shadow-xl pointer-events-auto",
+                "min-w-full w-max max-w-[min(100vw-1.5rem,48rem)]",
+                dropdownClassName
+              ),
+            })
         : null}
       {floatingReady && portalTarget
         ? createPortal(
             panelShell({
               className: cn(
-                "fixed z-[400] rounded-lg border bg-popover p-2 text-popover-foreground shadow-2xl outline-none",
+                "fixed z-[400] rounded-lg border bg-popover p-2 text-popover-foreground shadow-2xl outline-none pointer-events-auto",
                 "ring-1 ring-border/60 animate-in fade-in-0 zoom-in-95 duration-100",
                 dropdownClassName
               ),
