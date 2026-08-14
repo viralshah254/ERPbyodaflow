@@ -26,6 +26,9 @@ import { CustomerDirectoryPanel } from "@/components/customers/CustomerDirectory
 import { CustomerFormSheet } from "@/components/customers/CustomerFormSheet";
 import { PartyImportSheet } from "@/components/masters/PartyImportSheet";
 import { fetchPartyByIdApi } from "@/lib/api/parties";
+import { pullSharedCatalogFromSfaApi } from "@/lib/api/odaflow-integration";
+import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
+import { toast } from "sonner";
 
 export type CustomersHubProps = {
   fromFinance?: boolean;
@@ -37,6 +40,8 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   const canWrite = useCanWriteSales();
   const { templateId } = useOrgContext();
   const fmcg = isFmcgOrg(templateId);
+  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
+  const [pullingCatalog, setPullingCatalog] = React.useState(false);
 
   const editCustomerId = searchParams.get("id");
   const openCreate = searchParams.get("new") === "1";
@@ -145,6 +150,26 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
     setFormOpen(true);
   }, [editCustomerId, fromFinance]);
 
+  const pullSharedCatalog = React.useCallback(async () => {
+    if (pullingCatalog) return;
+    setPullingCatalog(true);
+    try {
+      const result = await pullSharedCatalogFromSfaApi();
+      setRefreshKey((k) => k + 1);
+      const hqLabel = result.hqs === 1 ? "1 supermarket HQ" : `${result.hqs} supermarket HQs`;
+      const branchLabel = result.branches === 1 ? "1 branch" : `${result.branches} branches`;
+      if (result.failed > 0) {
+        toast.warning(`Updated ${hqLabel} and ${branchLabel}. ${result.failed} could not sync.`);
+      } else {
+        toast.success(`Updated ${hqLabel} and ${branchLabel} from SFA.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not refresh from SFA");
+    } finally {
+      setPullingCatalog(false);
+    }
+  }, [pullingCatalog]);
+
   const breadcrumbs = [
     { label: "Sales", href: "/sales/overview" },
     { label: "Customers" },
@@ -184,8 +209,8 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         title="Customers"
         description={
           fmcg
-            ? "Add and manage who you sell to — including supermarket branches as full customers. Credit limits for existing customers are managed under Finance."
-            : "Add and manage who you sell to. Finance can update credit on existing customers."
+            ? "SFA holds field outlets (including shared modern trade). Sync from SFA, then use Credit & tax sheet for taxId and credit limits — single edit or bulk download/upload."
+            : "Add and manage who you sell to. After SFA sync, update tax ID and credit with Credit & tax sheet or Finance."
         }
         breadcrumbs={breadcrumbs}
         sticky
@@ -193,6 +218,21 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         actions={
           canWrite ? (
             <div className="flex flex-wrap gap-2">
+              {fmcg && sfaEnrolled ? (
+                <Button
+                  variant="outline"
+                  onClick={() => void pullSharedCatalog()}
+                  disabled={pullingCatalog}
+                  title="Pull shared supermarket HQs and branches from SFA. Works even if automatic customer sync is off."
+                >
+                  {pullingCatalog ? (
+                    <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Icons.RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  {pullingCatalog ? "Refreshing…" : "Refresh from SFA"}
+                </Button>
+              ) : null}
               <Button variant="outline" asChild>
                 <Link href="/ar/customers">
                   <Icons.Wallet className="mr-2 h-4 w-4" />

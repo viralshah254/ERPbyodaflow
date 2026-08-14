@@ -9,6 +9,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { CopilotDrawer } from "@/components/copilot/CopilotDrawer";
+import { GaiaChatWidget } from "@/components/gaia/GaiaChatWidget";
 import { automationInsightApply } from "@/lib/api/stub-endpoints";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
@@ -101,6 +102,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           onConsumePrefill={() => setPrefillPrompt(null)}
         />
       ) : null}
+      {/* Gaia — ERP dashboard chat (uses logged-in ERP session) */}
+      <GaiaChatWidget />
     </div>
   );
 }

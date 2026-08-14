@@ -25,10 +25,14 @@ import {
   sfaSegmentLabel,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
-import { fetchPartiesApi } from "@/lib/api/parties";
+import { fetchPartiesApi, hidePartyInOrgApi } from "@/lib/api/parties";
 import type { PartyRow } from "@/lib/types/masters";
 import { isApiConfigured } from "@/lib/api/client";
 import { SupermarketBranchesSheet } from "@/components/customers/SupermarketBranchesSheet";
+import {
+  CustomerHideConfirmDialog,
+  type CustomerHideKind,
+} from "@/components/customers/CustomerHideConfirmDialog";
 
 type TabId = (typeof CUSTOMER_DIRECTORY_TABS)[number]["id"];
 
@@ -74,6 +78,11 @@ export function CustomerDirectoryPanel({
   const [loading, setLoading] = React.useState(true);
   const [branchesSupermarket, setBranchesSupermarket] = React.useState<PartyRow | null>(null);
   const [branchesOpen, setBranchesOpen] = React.useState(false);
+  const [hideTarget, setHideTarget] = React.useState<{
+    id: string;
+    name: string;
+    kind: CustomerHideKind;
+  } | null>(null);
 
   const tabConfig = segmentTabs ? CUSTOMER_DIRECTORY_TABS.find((t) => t.id === activeTab)! : null;
 
@@ -123,6 +132,37 @@ export function CustomerDirectoryPanel({
     setBranchesOpen(true);
   };
 
+  const requestHide = (party: PartyRow, kind: CustomerHideKind) => {
+    setHideTarget({ id: party.id, name: party.name, kind });
+  };
+
+  const confirmHide = async () => {
+    if (!hideTarget) return;
+    try {
+      const result = await hidePartyInOrgApi(hideTarget.id);
+      if (hideTarget.kind === "hq") {
+        toast.success(
+          result.branchCount > 0
+            ? `Removed from your organisation, including ${result.branchCount} branch${result.branchCount === 1 ? "" : "es"}.`
+            : "Supermarket removed from your organisation."
+        );
+        if (branchesSupermarket?.id === hideTarget.id) {
+          setBranchesOpen(false);
+          setBranchesSupermarket(null);
+        }
+      } else if (hideTarget.kind === "branch") {
+        toast.success("Branch removed from your organisation.");
+      } else {
+        toast.success("Customer removed from your organisation.");
+      }
+      setHideTarget(null);
+      await loadParties();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove this customer.");
+      throw err;
+    }
+  };
+
   const renderModernTradeTable = () => (
     <div className={LIST_TABLE_SURFACE_CLASS}>
       {loading ? (
@@ -145,7 +185,7 @@ export function CustomerDirectoryPanel({
               <TableHead>Code</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>City</TableHead>
-              <TableHead className="text-right w-[200px]">Actions</TableHead>
+              <TableHead className="text-right w-[248px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -187,6 +227,17 @@ export function CustomerDirectoryPanel({
                       }
                     >
                       Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      title="Remove from your organisation"
+                      aria-label={`Remove ${party.name} from your organisation`}
+                      onClick={() => requestHide(party, "hq")}
+                    >
+                      <Icons.Trash2 className="h-4 w-4" />
                     </Button>
                     <Button
                       type="button"
@@ -272,6 +323,14 @@ export function CustomerDirectoryPanel({
                     >
                       Edit
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => requestHide(party, "customer")}
+                    >
+                      Delete
+                    </Button>
                     <Button size="sm" onClick={() => router.push(`/docs/sales-order/new?party=${party.id}`)}>
                       New order
                     </Button>
@@ -351,8 +410,26 @@ export function CustomerDirectoryPanel({
             onEditBranch?.(branchId, supermarket);
             setBranchesOpen(false);
           }}
+          onHidden={() => {
+            void loadParties();
+          }}
+          onHqHidden={() => {
+            setBranchesOpen(false);
+            setBranchesSupermarket(null);
+            void loadParties();
+          }}
         />
       ) : null}
+
+      <CustomerHideConfirmDialog
+        open={!!hideTarget}
+        onOpenChange={(open) => {
+          if (!open) setHideTarget(null);
+        }}
+        name={hideTarget?.name ?? ""}
+        kind={hideTarget?.kind ?? "customer"}
+        onConfirm={confirmHide}
+      />
     </>
   );
 }

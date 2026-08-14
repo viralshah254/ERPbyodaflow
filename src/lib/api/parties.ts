@@ -35,6 +35,7 @@ type BackendParty = {
   defaultTaxConfigId?: string;
   defaultCurrency?: string;
   status?: string;
+  hiddenInOrgAt?: string | Date | null;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
   contactPersonFirstName?: string;
   contactPersonLastName?: string;
@@ -306,7 +307,19 @@ function mapParty(item: BackendParty): PartyRow {
     defaultPriceListId: item.defaultPriceListId,
     defaultTaxConfigId: item.defaultTaxConfigId,
     status: item.status ?? "ACTIVE",
+    hiddenInOrgAt: item.hiddenInOrgAt ? String(item.hiddenInOrgAt) : null,
   };
+}
+
+export function formatPartyDisplayName(party: {
+  name?: string | null;
+  code?: string | null;
+  hiddenInOrgAt?: string | Date | null;
+}): string {
+  const name = String(party.name ?? "").trim() || String(party.code ?? "").trim();
+  if (!name) return "";
+  if (party.hiddenInOrgAt) return `${name} (deleted customer)`;
+  return name;
 }
 
 /** Preview next supplier code (su0001, …). Server allocates the real code on create. */
@@ -400,6 +413,19 @@ export async function updatePartyApi(id: string, payload: Partial<PartyPayload>)
     body: payload,
   });
   return mapParty(updated);
+}
+
+export async function hidePartyInOrgApi(id: string): Promise<{
+  id: string;
+  alreadyHidden: boolean;
+  hiddenCount: number;
+  branchCount: number;
+  cascadedHq: boolean;
+}> {
+  requireLiveApi("Hide party in organisation");
+  return apiRequest(`/api/parties/${encodeURIComponent(id)}/hide-in-org`, {
+    method: "POST",
+  });
 }
 
 export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null> {

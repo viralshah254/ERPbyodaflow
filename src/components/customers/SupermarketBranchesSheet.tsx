@@ -22,8 +22,9 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
-import { fetchPartiesApi } from "@/lib/api/parties";
+import { fetchPartiesApi, hidePartyInOrgApi } from "@/lib/api/parties";
 import type { PartyRow } from "@/lib/types/masters";
+import { CustomerHideConfirmDialog, type CustomerHideKind } from "@/components/customers/CustomerHideConfirmDialog";
 
 type SupermarketBranchesSheetProps = {
   open: boolean;
@@ -33,6 +34,10 @@ type SupermarketBranchesSheetProps = {
   onEditBranch: (branchId: string, supermarket: PartyRow) => void;
   /** Bump when a branch was created outside this sheet so the list reloads. */
   refreshKey?: number;
+  /** After a branch is hidden in this organisation. */
+  onHidden?: () => void;
+  /** After the supermarket HQ (and its branches) are hidden. */
+  onHqHidden?: () => void;
 };
 
 /**
@@ -46,10 +51,17 @@ export function SupermarketBranchesSheet({
   onAddBranch,
   onEditBranch,
   refreshKey = 0,
+  onHidden,
+  onHqHidden,
 }: SupermarketBranchesSheetProps) {
   const [branches, setBranches] = React.useState<PartyRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const [hideTarget, setHideTarget] = React.useState<{
+    id: string;
+    name: string;
+    kind: CustomerHideKind;
+  } | null>(null);
 
   const loadBranches = React.useCallback(async () => {
     if (!supermarket?.id) {
@@ -103,9 +115,35 @@ export function SupermarketBranchesSheet({
     });
   }, [branches, search]);
 
+  const confirmHide = async () => {
+    if (!hideTarget) return;
+    try {
+      const result = await hidePartyInOrgApi(hideTarget.id);
+      if (hideTarget.kind === "hq") {
+        toast.success(
+          result.branchCount > 0
+            ? `Removed from your organisation, including ${result.branchCount} branch${result.branchCount === 1 ? "" : "es"}.`
+            : "Supermarket removed from your organisation."
+        );
+        setHideTarget(null);
+        onHqHidden?.();
+        onOpenChange(false);
+        return;
+      }
+      toast.success("Branch removed from your organisation.");
+      setHideTarget(null);
+      await loadBranches();
+      onHidden?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove this customer.");
+      throw err;
+    }
+  };
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl flex flex-col gap-0 p-0">
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full sm:max-w-xl flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0 space-y-3">
           <div className="flex items-start justify-between gap-3 pr-6">
             <div className="min-w-0 space-y-1">
@@ -119,14 +157,27 @@ export function SupermarketBranchesSheet({
               </SheetDescription>
             </div>
             {supermarket ? (
-              <Button
-                size="sm"
-                className="shrink-0"
-                onClick={() => onAddBranch(supermarket.id)}
-              >
-                <Icons.Plus className="mr-1.5 h-4 w-4" />
-                Add branch
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() =>
+                    setHideTarget({ id: supermarket.id, name: supermarket.name, kind: "hq" })
+                  }
+                >
+                  <Icons.Trash2 className="mr-1.5 h-4 w-4" />
+                  Remove
+                </Button>
+                <Button
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => onAddBranch(supermarket.id)}
+                >
+                  <Icons.Plus className="mr-1.5 h-4 w-4" />
+                  Add branch
+                </Button>
+              </div>
             ) : null}
           </div>
           <div className="space-y-1.5">
@@ -170,7 +221,7 @@ export function SupermarketBranchesSheet({
                   <TableHead>Branch</TableHead>
                   <TableHead>Code</TableHead>
                   <TableHead>Address</TableHead>
-                  <TableHead className="w-[72px] text-right">Edit</TableHead>
+                  <TableHead className="w-[96px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -193,17 +244,31 @@ export function SupermarketBranchesSheet({
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Update ${branch.name}`}
-                        onClick={() => {
-                          if (supermarket) onEditBranch(branch.id, supermarket);
-                        }}
-                      >
-                        <Icons.Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end items-center">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Update ${branch.name}`}
+                          onClick={() => {
+                            if (supermarket) onEditBranch(branch.id, supermarket);
+                          }}
+                        >
+                          <Icons.Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          aria-label={`Remove ${branch.name} from your organisation`}
+                          onClick={() =>
+                            setHideTarget({ id: branch.id, name: branch.name, kind: "branch" })
+                          }
+                        >
+                          <Icons.Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -213,5 +278,15 @@ export function SupermarketBranchesSheet({
         </div>
       </SheetContent>
     </Sheet>
+      <CustomerHideConfirmDialog
+        open={!!hideTarget}
+        onOpenChange={(next) => {
+          if (!next) setHideTarget(null);
+        }}
+        name={hideTarget?.name ?? ""}
+        kind={hideTarget?.kind ?? "branch"}
+        onConfirm={confirmHide}
+      />
+    </>
   );
 }

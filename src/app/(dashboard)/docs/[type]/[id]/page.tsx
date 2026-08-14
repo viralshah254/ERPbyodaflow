@@ -65,7 +65,7 @@ import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
-import { fetchPartyByIdApi, type PartyLookupOption } from "@/lib/api/parties";
+import { fetchPartyByIdApi, formatPartyDisplayName, type PartyLookupOption } from "@/lib/api/parties";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
   DocumentDetailHeader,
@@ -527,7 +527,9 @@ export default function DocViewPage() {
     let cancelled = false;
     void fetchPartyByIdApi(document.partyId)
       .then((row) => {
-        if (!cancelled && row?.name?.trim()) setResolvedPartyName(row.name.trim());
+        if (!cancelled && row?.name?.trim()) {
+          setResolvedPartyName(formatPartyDisplayName(row) || row.name.trim());
+        }
       })
       .catch(() => {});
     return () => {
@@ -820,7 +822,7 @@ export default function DocViewPage() {
             let label = raw && !isUuidLike(raw) ? raw : null;
             if (!label) {
               const row = await fetchPartyByIdApi(po.partyId).catch(() => null);
-              if (row?.name?.trim()) label = row.name.trim();
+              if (row?.name?.trim()) label = formatPartyDisplayName(row) || row.name.trim();
             }
             setSelectedConvertPartyOption(label ? { id: po.partyId, label } : null);
           } else {

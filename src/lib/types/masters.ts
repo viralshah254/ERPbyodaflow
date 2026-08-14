@@ -102,6 +102,7 @@ export type PartyRow = {
   /** FMCG tax tag (TaxConfig id). */
   defaultTaxConfigId?: string;
   status: string;
+  hiddenInOrgAt?: string | null;
 };
 
 export type WarehouseRow = {

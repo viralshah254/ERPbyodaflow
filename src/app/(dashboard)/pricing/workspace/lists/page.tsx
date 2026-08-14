@@ -61,6 +61,8 @@ import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { FmcgPriceTagsWorkspace } from "@/components/pricing/FmcgPriceTagsWorkspace";
+import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
+import { SfaCatalogSyncAlertBanner } from "@/components/integrations/SfaCatalogSyncAlertBanner";
 
 const CHANNELS = ["Retail", "Wholesale", "Distributor", "ModernTrade", "Export"];
 
@@ -77,6 +79,7 @@ function PriceListsContent() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg = isFmcgOrg(templateId);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
+  const { enrolled: sfaEnrolled, status: sfaEnrollment } = useErpSfaEnrollment();
 
   const selectList = React.useCallback(
     (id: string) => {
@@ -252,6 +255,9 @@ function PriceListsContent() {
         }
       />
       <div className="p-6 space-y-6">
+        {fmcgOrg && sfaEnrolled ? (
+          <SfaCatalogSyncAlertBanner pending={sfaEnrollment?.catalogSyncPending} />
+        ) : null}
         {!seafoodOrg ? (
           <FmcgPriceTagsWorkspace
             lists={lists}
