@@ -20,13 +20,17 @@ type ChatMessage = {
 };
 
 const WELCOME =
-  "Hey — I'm Gaia, your OdaFlow ERP assistant. Ask about sales orders, stock, invoices, customers, or anything in this workspace.";
+  "Hey — I'm Gaia, your OdaFlow ERP assistant. Ask about sales orders, stock, invoices and customers, or ask me how a flow works — order to cash, goods receipt to supplier bill, setting up a new company, or connecting this ERP to OdaFlow.";
 
+// Two live-data asks and two how-does-this-work asks. The second pair is
+// where Gaia is strongest on ERP: it reads the routers and nav configs,
+// so it answers with the real menu path and the step you are missing
+// rather than a plausible-sounding guess.
 const QUICK_PROMPTS = [
   "What should I check first today?",
-  "Any stuck sales orders?",
-  "How is stock looking?",
-  "Show me recent invoices",
+  "How do I connect this ERP to OdaFlow?",
+  "Where do I record a goods receipt?",
+  "Why would a supplier bill be blocked?",
 ];
 
 function uid() {
