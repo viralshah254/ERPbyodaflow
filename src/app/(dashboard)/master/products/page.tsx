@@ -75,6 +75,7 @@ import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useAuthStore } from "@/stores/auth-store";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { SfaBulkSyncSheet, SfaBulkSyncLink } from "@/components/integrations/SfaBulkSyncSheet";
+import { SfaCatalogSyncAlertBanner } from "@/components/integrations/SfaCatalogSyncAlertBanner";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -117,7 +118,7 @@ export default function MasterProductsPage() {
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const permissions = useAuthStore((s) => s.permissions);
   const orgId = useAuthStore((s) => s.org?.orgId ?? "");
-  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
+  const { enrolled: sfaEnrolled, status: sfaEnrollment } = useErpSfaEnrollment();
   const canDeleteProduct = permissions.includes("admin.settings");
   const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
   const productLabel = t("product", terminology);
@@ -851,6 +852,9 @@ export default function MasterProductsPage() {
               </Button>
             </div>
           </div>
+        ) : null}
+        {fmcgOrg && sfaEnrolled ? (
+          <SfaCatalogSyncAlertBanner pending={sfaEnrollment?.catalogSyncPending} />
         ) : null}
         <DataTableToolbar
           searchPlaceholder="Search by SKU, name, category..."

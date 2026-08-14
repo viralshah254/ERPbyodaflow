@@ -20,10 +20,9 @@ function copyFor(kind: CustomerHideKind, name: string) {
   if (kind === "hq") {
     return {
       title: "Remove this supermarket?",
-      lead: `${name} and every branch under it will leave this organisation’s customer list.`,
+      lead: `${name} and every branch under it will leave your organisation’s customer list.`,
       points: [
         "You will not see the HQ or its branches when creating orders or invoices here.",
-        "The shared SFA catalog is unchanged — other organisations still see this chain.",
       ],
       confirmLabel: "Remove supermarket",
     };
@@ -31,20 +30,18 @@ function copyFor(kind: CustomerHideKind, name: string) {
   if (kind === "branch") {
     return {
       title: "Remove this branch?",
-      lead: `${name} will leave this organisation’s customer list.`,
+      lead: `${name} will leave your organisation’s customer list.`,
       points: [
         "The supermarket HQ and other branches stay visible here.",
-        "The shared SFA catalog is unchanged — other organisations still see this branch.",
       ],
       confirmLabel: "Remove branch",
     };
   }
   return {
     title: "Remove this customer?",
-    lead: `${name} will leave this organisation’s customer list.`,
+    lead: `${name} will leave your organisation’s customer list.`,
     points: [
       "They will not appear in your parties or when creating new orders here.",
-      "This does not delete them from SFA or from any other organisation.",
     ],
     confirmLabel: "Remove customer",
   };

@@ -275,6 +275,13 @@ export async function fetchOdaflowCustomerMappings(): Promise<{ items: OdaflowMa
   return apiRequest<{ items: OdaflowMapping[] }>("/api/integrations/odaflow/mappings/customers");
 }
 
+export type CatalogSyncPending = {
+  at: string;
+  count: number;
+  kind: string;
+  label: string;
+};
+
 export type ErpSfaEnrollmentStatus = {
   enrolled: boolean;
   fmcg: boolean;
@@ -283,11 +290,27 @@ export type ErpSfaEnrollmentStatus = {
   manufacturerId: string | null;
   sfaErpManaged: boolean | null;
   reasons: string[];
+  catalogSyncPending: CatalogSyncPending | null;
 };
 
 export async function fetchErpSfaEnrollmentApi(): Promise<ErpSfaEnrollmentStatus> {
   requireLiveApi("Odaflow enrollment");
   return apiRequest<ErpSfaEnrollmentStatus>("/api/integrations/odaflow/enrollment");
+}
+
+export type SharedCatalogPullResult = {
+  success: boolean;
+  hqs: number;
+  branches: number;
+  failed: number;
+};
+
+export async function pullSharedCatalogFromSfaApi(): Promise<SharedCatalogPullResult> {
+  requireLiveApi("Shared catalog pull");
+  return apiRequest<SharedCatalogPullResult>("/api/integrations/odaflow/shared-catalog/pull", {
+    method: "POST",
+    body: {},
+  });
 }
 
 export type ProductSfaSyncStatusRow = {

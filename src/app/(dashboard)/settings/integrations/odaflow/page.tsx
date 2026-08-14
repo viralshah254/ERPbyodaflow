@@ -26,6 +26,7 @@ import {
   fetchOdaflowCustomerMappings,
   generateOdaflowCredentialsApi,
   updateOdaflowIntegrationApi,
+  pullSharedCatalogFromSfaApi,
   type OdaflowCredentialsApiResponse,
   type OdaflowIntegrationApiResponse,
   type OdaflowSyncStatus,
@@ -35,6 +36,7 @@ import { OdaflowSyncQueuePanel } from "@/components/integrations/OdaflowSyncQueu
 import { OdaflowProductsSyncPanel } from "@/components/integrations/OdaflowProductsSyncPanel";
 import { subscribeRealtimeInbox } from "@/lib/realtime-client";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
+import { useSearchParams } from "next/navigation";
 
 type Tab = "setup" | "overview" | "queue" | "products" | "customers";
 
@@ -79,8 +81,18 @@ export default function OdaflowIntegrationPage() {
   const permissions = useAuthStore((s) => s.permissions ?? []);
   const canSave = hasRuntimePermission(permissions, "admin.settings");
   const { enrolled: sfaEnrolled, loading: sfaEnrollmentLoading } = useErpSfaEnrollment();
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const initialTab: Tab =
+    tabFromUrl === "setup" ||
+    tabFromUrl === "overview" ||
+    tabFromUrl === "queue" ||
+    tabFromUrl === "products" ||
+    tabFromUrl === "customers"
+      ? tabFromUrl
+      : "overview";
 
-  const [tab, setTab] = React.useState<Tab>("overview");
+  const [tab, setTab] = React.useState<Tab>(initialTab);
 
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -97,6 +109,7 @@ export default function OdaflowIntegrationPage() {
   const [productMappings, setProductMappings] = React.useState<OdaflowMapping[]>([]);
   const [customerMappings, setCustomerMappings] = React.useState<OdaflowMapping[]>([]);
   const [mappingsLoading, setMappingsLoading] = React.useState(false);
+  const [pullingCatalog, setPullingCatalog] = React.useState(false);
 
   const refreshStatus = React.useCallback(async () => {
     setStatusLoading(true);
@@ -173,6 +186,27 @@ export default function OdaflowIntegrationPage() {
       toast.error(e instanceof Error ? e.message : "Failed to generate credentials.");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handlePullSharedCatalog = async () => {
+    if (pullingCatalog) return;
+    setPullingCatalog(true);
+    try {
+      const result = await pullSharedCatalogFromSfaApi();
+      const hqLabel = result.hqs === 1 ? "1 supermarket HQ" : `${result.hqs} supermarket HQs`;
+      const branchLabel = result.branches === 1 ? "1 branch" : `${result.branches} branches`;
+      if (result.failed > 0) {
+        toast.warning(`Updated ${hqLabel} and ${branchLabel}. ${result.failed} could not sync.`);
+      } else {
+        toast.success(`Updated ${hqLabel} and ${branchLabel} from SFA.`);
+      }
+      const custs = await fetchOdaflowCustomerMappings();
+      setCustomerMappings(custs.items);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not refresh from SFA");
+    } finally {
+      setPullingCatalog(false);
     }
   };
 
@@ -563,10 +597,29 @@ export default function OdaflowIntegrationPage() {
 
         {tab === "customers" && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Customers matched between Odaflow and this ERP account appear here. New matches are created when
-              orders sync or when you resolve them in the Sync Queue.
-            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Customers matched between Odaflow and this ERP account appear here. New matches are created when
+                orders sync or when you resolve them in the Sync Queue.
+              </p>
+              {sfaEnrolled ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => void handlePullSharedCatalog()}
+                  disabled={pullingCatalog}
+                  title="Pull shared supermarket HQs and branches from SFA. Works even if automatic customer sync is off."
+                >
+                  {pullingCatalog ? (
+                    <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Icons.RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  {pullingCatalog ? "Refreshing…" : "Refresh from SFA"}
+                </Button>
+              ) : null}
+            </div>
             {mappingsLoading ? (
               <div className="text-sm text-muted-foreground">Loading…</div>
             ) : customerMappings.length === 0 ? (

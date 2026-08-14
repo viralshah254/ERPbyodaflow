@@ -143,17 +143,17 @@ export function CustomerDirectoryPanel({
       if (hideTarget.kind === "hq") {
         toast.success(
           result.branchCount > 0
-            ? `Removed from this organisation, including ${result.branchCount} branch${result.branchCount === 1 ? "" : "es"}.`
-            : "Supermarket removed from this organisation."
+            ? `Removed from your organisation, including ${result.branchCount} branch${result.branchCount === 1 ? "" : "es"}.`
+            : "Supermarket removed from your organisation."
         );
         if (branchesSupermarket?.id === hideTarget.id) {
           setBranchesOpen(false);
           setBranchesSupermarket(null);
         }
       } else if (hideTarget.kind === "branch") {
-        toast.success("Branch removed from this organisation.");
+        toast.success("Branch removed from your organisation.");
       } else {
-        toast.success("Customer removed from this organisation.");
+        toast.success("Customer removed from your organisation.");
       }
       setHideTarget(null);
       await loadParties();
@@ -233,8 +233,8 @@ export function CustomerDirectoryPanel({
                       size="icon"
                       variant="ghost"
                       className="text-destructive hover:text-destructive"
-                      title="Remove from this organisation"
-                      aria-label={`Remove ${party.name} from this organisation`}
+                      title="Remove from your organisation"
+                      aria-label={`Remove ${party.name} from your organisation`}
                       onClick={() => requestHide(party, "hq")}
                     >
                       <Icons.Trash2 className="h-4 w-4" />

@@ -33,6 +33,8 @@ import {
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { SfaBulkSyncSheet } from "@/components/integrations/SfaBulkSyncSheet";
+import { SfaCatalogSyncAlertBanner } from "@/components/integrations/SfaCatalogSyncAlertBanner";
+import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +59,7 @@ function CatalogPresenceBadge({ onSfa, linked }: { onSfa: boolean; linked: boole
 }
 
 export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Props) {
+  const { status: sfaEnrollment, refresh: refreshEnrollment } = useErpSfaEnrollment();
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [overview, setOverview] = React.useState<SfaProductSyncOverview | null>(null);
@@ -174,6 +177,10 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
 
   return (
     <div className="space-y-6">
+      <SfaCatalogSyncAlertBanner
+        pending={sfaEnrollment?.catalogSyncPending}
+        onSyncHere={() => void openBulkSync()}
+      />
       {overview ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
@@ -403,7 +410,10 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
         productIds={bulkProductIds}
         open={bulkOpen}
         onOpenChange={setBulkOpen}
-        onSynced={() => refresh({ soft: true })}
+        onSynced={() => {
+          void refreshEnrollment();
+          return refresh({ soft: true });
+        }}
       />
     </div>
   );

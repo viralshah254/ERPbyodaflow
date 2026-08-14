@@ -122,15 +122,15 @@ export function SupermarketBranchesSheet({
       if (hideTarget.kind === "hq") {
         toast.success(
           result.branchCount > 0
-            ? `Removed from this organisation, including ${result.branchCount} branch${result.branchCount === 1 ? "" : "es"}.`
-            : "Supermarket removed from this organisation."
+            ? `Removed from your organisation, including ${result.branchCount} branch${result.branchCount === 1 ? "" : "es"}.`
+            : "Supermarket removed from your organisation."
         );
         setHideTarget(null);
         onHqHidden?.();
         onOpenChange(false);
         return;
       }
-      toast.success("Branch removed from this organisation.");
+      toast.success("Branch removed from your organisation.");
       setHideTarget(null);
       await loadBranches();
       onHidden?.();
@@ -261,7 +261,7 @@ export function SupermarketBranchesSheet({
                           size="icon"
                           variant="ghost"
                           className="text-destructive hover:text-destructive"
-                          aria-label={`Remove ${branch.name} from this organisation`}
+                          aria-label={`Remove ${branch.name} from your organisation`}
                           onClick={() =>
                             setHideTarget({ id: branch.id, name: branch.name, kind: "branch" })
                           }
