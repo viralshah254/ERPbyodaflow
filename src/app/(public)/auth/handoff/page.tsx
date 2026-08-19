@@ -1,0 +1,64 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { completeOdaflowHandoff } from "@/lib/auth/complete-odaflow-handoff";
+
+function HandoffContent() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const code = params.get("code")?.trim();
+    const next = params.get("next") || "";
+    if (!code) {
+      setError("Missing handoff code.");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const fallback = await completeOdaflowHandoff(code);
+        if (cancelled) return;
+        const dest = next.startsWith("/") ? next : fallback;
+        router.replace(dest);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not continue into ERP.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [params, router]);
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md text-center space-y-4">
+          <p>{error}</p>
+          <Link href="/login?local=1" className="underline">
+            Sign in with email
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p>Opening Odaflow ERP…</p>
+    </div>
+  );
+}
+
+export default function ErpHandoffPage() {
+  return (
+    <React.Suspense fallback={<p className="p-8">Opening Odaflow ERP…</p>}>
+      <HandoffContent />
+    </React.Suspense>
+  );
+}

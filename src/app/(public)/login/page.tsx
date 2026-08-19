@@ -21,6 +21,8 @@ import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isDevAuthEnabled } from "@/lib/runtime-flags";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
+import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -53,6 +55,39 @@ function LoginContent() {
   });
 
   const rememberMe = watch("rememberMe");
+
+  const existingUser = useAuthStore((s) => s.user);
+  const [handoffBusy, setHandoffBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (existingUser) return;
+    const code = searchParams.get("code")?.trim();
+    if (code) {
+      let cancelled = false;
+      setHandoffBusy(true);
+      (async () => {
+        try {
+          const { completeOdaflowHandoff } = await import("@/lib/auth/complete-odaflow-handoff");
+          const fallback = await completeOdaflowHandoff(code);
+          if (cancelled) return;
+          const next = searchParams.get("next") || searchParams.get("redirect") || fallback;
+          router.replace(next.startsWith("/") ? next : fallback);
+        } catch {
+          if (!cancelled) setHandoffBusy(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (searchParams.get("local") === "1") return;
+    const hub = odaflowHubWebUrl();
+    const next = searchParams.get("redirect") || "/dashboard";
+    const returnTo = `${window.location.origin}/login?local=1`;
+    window.location.replace(
+      `${hub}/auth/sso?client=erp&next=${encodeURIComponent(next)}&return=${encodeURIComponent(returnTo)}`
+    );
+  }, [existingUser, searchParams, router]);
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
@@ -141,6 +176,14 @@ function LoginContent() {
       }
     }
   };
+
+  const stayLocal = searchParams.get("local") === "1" || Boolean(searchParams.get("code"));
+  if (handoffBusy) {
+    return <SsoContinuityScreen title="Opening ERP" message="Continuing your session" />;
+  }
+  if (!existingUser && !stayLocal) {
+    return <SsoContinuityScreen title="Opening ERP" message="Taking you to sign in" />;
+  }
 
   return (
     <div className="flex w-full flex-1 items-center py-10 lg:py-14">
