@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { completeOdaflowHandoff } from "@/lib/auth/complete-odaflow-handoff";
+import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
+import { odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
 
 function HandoffContent() {
   const router = useRouter();
@@ -35,29 +36,20 @@ function HandoffContent() {
     };
   }, [params, router]);
 
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="max-w-md text-center space-y-4">
-          <p>{error}</p>
-          <Link href="/login?local=1" className="underline">
-            Sign in with email
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p>Opening Odaflow ERP…</p>
-    </div>
+    <SsoContinuityScreen
+      title="Opening ERP"
+      message="Continuing your session"
+      error={error}
+      actionHref={`${odaflowHubWebUrl()}/auth/sso?client=erp`}
+      actionLabel="Back to Odaflow"
+    />
   );
 }
 
 export default function ErpHandoffPage() {
   return (
-    <React.Suspense fallback={<p className="p-8">Opening Odaflow ERP…</p>}>
+    <React.Suspense fallback={<SsoContinuityScreen title="Opening ERP" message="Continuing your session" />}>
       <HandoffContent />
     </React.Suspense>
   );

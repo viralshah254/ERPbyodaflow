@@ -13,8 +13,23 @@ import { getCurrentFirebaseIdTokenForApi, isFirebaseConfigured } from "@/lib/fir
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const ENV_DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
 const ENV_BRANCH_ID = process.env.NEXT_PUBLIC_CURRENT_BRANCH_ID ?? "";
+const API_BASE_OVERRIDE_KEY = "odaflow_erp_api_base";
+
+export function setApiBaseOverride(base: string): void {
+  if (typeof window === "undefined") return;
+  const trimmed = base.replace(/\/$/, "");
+  if (!trimmed) {
+    sessionStorage.removeItem(API_BASE_OVERRIDE_KEY);
+    return;
+  }
+  sessionStorage.setItem(API_BASE_OVERRIDE_KEY, trimmed);
+}
 
 export function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    const override = sessionStorage.getItem(API_BASE_OVERRIDE_KEY)?.replace(/\/$/, "");
+    if (override) return override;
+  }
   return API_BASE.replace(/\/$/, "");
 }
 
