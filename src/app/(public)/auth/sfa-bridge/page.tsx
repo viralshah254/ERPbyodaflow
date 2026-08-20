@@ -17,7 +17,7 @@ function SfaBridgeContent() {
     if (hydrating) return;
     const next = params.get("next") || "/";
     const returnTo = params.get("return") || "";
-    const hub = `${odaflowHubWebUrl()}/auth/sso?client=sfa&next=${encodeURIComponent(next)}`;
+    const hub = `${odaflowHubWebUrl()}/auth/sso?client=sfa&erpTried=1&next=${encodeURIComponent(next)}`;
 
     let cancelled = false;
     (async () => {
@@ -47,7 +47,7 @@ function SfaBridgeContent() {
       title="Opening SFA"
       message="Continuing from your ERP session"
       error={error}
-      actionHref={`${odaflowHubWebUrl()}/auth/sso?client=sfa`}
+      actionHref={`${odaflowHubWebUrl()}/login?sso=1&client=sfa&erpTried=1`}
       actionLabel="Sign in on Odaflow"
     />
   );
