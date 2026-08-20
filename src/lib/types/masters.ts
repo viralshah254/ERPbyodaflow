@@ -92,6 +92,7 @@ export type PartyRow = {
   supplierBankBranchName?: string;
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
+  paymentTermsId?: string;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
   creditLimitAmount?: number;
   maxOutstandingInvoiceAgeDays?: number;

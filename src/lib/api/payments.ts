@@ -291,10 +291,14 @@ export async function searchArCustomerOptionsApi(search?: string): Promise<Party
   );
 }
 
-export async function fetchArCustomerSummariesApi(search?: string): Promise<ArCustomerSummary[]> {
+export async function fetchArCustomerSummariesApi(
+  search?: string,
+  paymentClass?: "CASH" | "CREDIT"
+): Promise<ArCustomerSummary[]> {
   requireLiveApi("AR customer summaries");
   const params = new URLSearchParams();
   if (search?.trim()) params.set("search", search.trim());
+  if (paymentClass) params.set("paymentClass", paymentClass);
   const payload = await apiRequest<{ items: ArCustomerSummary[] }>("/api/ar/customers", { params });
   return payload.items ?? [];
 }

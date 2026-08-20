@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { LIST_TABLE_SURFACE_CLASS } from "@/components/layout/page-shell";
+import {
+  LIST_TABLE_PAGINATION_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+} from "@/components/layout/page-shell";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,9 +29,12 @@ import {
   sfaSegmentLabel,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
-import { fetchPartiesApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { fetchPartiesPageApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { paymentTermDisplayName } from "@/lib/fmcg/payment-class";
 import type { PartyRow } from "@/lib/types/masters";
 import { isApiConfigured } from "@/lib/api/client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SupermarketBranchesSheet } from "@/components/customers/SupermarketBranchesSheet";
 import {
   CustomerHideConfirmDialog,
@@ -35,6 +42,8 @@ import {
 } from "@/components/customers/CustomerHideConfirmDialog";
 
 type TabId = (typeof CUSTOMER_DIRECTORY_TABS)[number]["id"];
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 export type CustomerDirectoryPanelProps = {
   fmcg: boolean;
@@ -83,6 +92,22 @@ export function CustomerDirectoryPanel({
     name: string;
     kind: CustomerHideKind;
   } | null>(null);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(25);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState<number | undefined>(undefined);
+  const [paymentClass, setPaymentClass] = React.useState<"all" | "CASH" | "CREDIT">("all");
+  const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
+
+  React.useEffect(() => {
+    void fetchPaymentTermsApi()
+      .then((items) => setTerms(items.map((term) => ({ id: term.id, name: term.name, code: term.code }))))
+      .catch(() => setTerms([]));
+  }, []);
+
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [activeTab, search, paymentClass]);
 
   const tabConfig = segmentTabs ? CUSTOMER_DIRECTORY_TABS.find((t) => t.id === activeTab)! : null;
 
@@ -94,20 +119,25 @@ export function CustomerDirectoryPanel({
     }
     setLoading(true);
     try {
-      const items = await fetchPartiesApi({
+      const page = await fetchPartiesPageApi({
         role: "customer",
         sfaSegment: segmentTabs && tabConfig ? tabConfig.sfaSegment : undefined,
         channel: segmentTabs && tabConfig && "channel" in tabConfig ? tabConfig.channel : undefined,
         search: search.trim() || undefined,
+        paymentClass: paymentClass === "all" ? undefined : paymentClass,
         status: "ACTIVE",
+        limit: pageSize,
+        cursor: pageOffset > 0 ? String(pageOffset) : undefined,
       });
-      setParties(items);
+      setParties(page.items);
+      setHasMore(Boolean(page.nextCursor));
+      setTotalCount(page.totalCount);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load customers");
     } finally {
       setLoading(false);
     }
-  }, [activeTab, search, segmentTabs, tabConfig]);
+  }, [activeTab, pageOffset, pageSize, paymentClass, search, segmentTabs, tabConfig]);
 
   React.useEffect(() => {
     void loadParties();
@@ -163,8 +193,29 @@ export function CustomerDirectoryPanel({
     }
   };
 
+  const pagination =
+    !loading && parties.length > 0 ? (
+      <TablePagination
+        className={LIST_TABLE_PAGINATION_CLASS}
+        pageOffset={pageOffset}
+        pageSize={pageSize}
+        itemCount={parties.length}
+        hasMore={hasMore}
+        loading={loading}
+        totalCount={totalCount}
+        onPrevious={() => setPageOffset((offset) => Math.max(0, offset - pageSize))}
+        onNext={() => setPageOffset((offset) => offset + pageSize)}
+        entityLabel="customers"
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPageOffset(0);
+        }}
+      />
+    ) : null;
+
   const renderModernTradeTable = () => (
-    <div className={LIST_TABLE_SURFACE_CLASS}>
+    <div className={LIST_TABLE_STATIC_CLASS}>
       {loading ? (
         <p className="p-6 text-sm text-muted-foreground">Loading…</p>
       ) : parties.length === 0 ? (
@@ -178,6 +229,7 @@ export function CustomerDirectoryPanel({
           }}
         />
       ) : (
+        <>
         <Table>
           <TableHeader>
             <TableRow>
@@ -252,6 +304,8 @@ export function CustomerDirectoryPanel({
             ))}
           </TableBody>
         </Table>
+        {pagination}
+        </>
       )}
     </div>
   );
@@ -261,8 +315,12 @@ export function CustomerDirectoryPanel({
       return renderModernTradeTable();
     }
 
+    const thisTab = tabId
+      ? CUSTOMER_DIRECTORY_TABS.find((tab) => tab.id === tabId)
+      : tabConfig;
+
     return (
-      <div className={LIST_TABLE_SURFACE_CLASS}>
+      <div className={LIST_TABLE_STATIC_CLASS}>
         {loading ? (
           <p className="p-6 text-sm text-muted-foreground">Loading…</p>
         ) : parties.length === 0 ? (
@@ -276,6 +334,7 @@ export function CustomerDirectoryPanel({
             }}
           />
         ) : (
+          <>
           <ul className="divide-y">
             {parties.map((party) => (
               <li key={party.id} className="p-4 sm:p-5">
@@ -293,11 +352,23 @@ export function CustomerDirectoryPanel({
                           {party.code}
                         </Badge>
                       ) : null}
-                      {party.sfaSegment ? (
+                      {party.taxId && party.taxId !== party.code ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          PIN {party.taxId}
+                        </Badge>
+                      ) : null}
+                      {party.sfaSegment && party.sfaSegment !== thisTab?.sfaSegment ? (
                         <Badge variant="secondary">{sfaSegmentLabel(party.sfaSegment)}</Badge>
                       ) : null}
-                      {party.channel ? (
+                      {party.channel &&
+                      party.channel !== thisTab?.channel &&
+                      channelLabel(party.channel) !== sfaSegmentLabel(party.sfaSegment) ? (
                         <Badge variant="outline">{channelLabel(party.channel)}</Badge>
+                      ) : null}
+                      {party.paymentTermsId ? (
+                        <Badge variant="secondary">
+                          {paymentTermDisplayName(terms.find((term) => term.id === party.paymentTermsId))}
+                        </Badge>
                       ) : null}
                       {party.route ? (
                         <Badge variant="outline" className="font-normal">
@@ -339,6 +410,8 @@ export function CustomerDirectoryPanel({
               </li>
             ))}
           </ul>
+          {pagination}
+          </>
         )}
       </div>
     );
@@ -357,6 +430,24 @@ export function CustomerDirectoryPanel({
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
+      {!(segmentTabs && activeTab === "modern-trade") ? (
+        <div className="space-y-1">
+          <Label htmlFor="customer-payment-class">Cash or credit</Label>
+          <Select
+            value={paymentClass}
+            onValueChange={(value) => setPaymentClass(value as "all" | "CASH" | "CREDIT")}
+          >
+            <SelectTrigger id="customer-payment-class" className="w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All (Cash + Debtors)</SelectItem>
+              <SelectItem value="CASH">Cash</SelectItem>
+              <SelectItem value="CREDIT">Credit (Debtors)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={() => void loadParties()} disabled={loading}>
           Refresh
@@ -372,10 +463,10 @@ export function CustomerDirectoryPanel({
   );
 
   return (
-    <>
+    <div className="space-y-4 pb-16">
       {segmentTabs ? (
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
-          <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsList className="flex h-auto flex-wrap gap-1">
             {CUSTOMER_DIRECTORY_TABS.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id}>
                 {tab.label}
@@ -430,6 +521,6 @@ export function CustomerDirectoryPanel({
         kind={hideTarget?.kind ?? "customer"}
         onConfirm={confirmHide}
       />
-    </>
+    </div>
   );
 }

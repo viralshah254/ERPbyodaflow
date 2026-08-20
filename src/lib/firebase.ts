@@ -136,9 +136,33 @@ export async function sendPasswordReset(email: string): Promise<void> {
 /**
  * Sign out the current user. Call this on logout so the next visit does not restore session.
  */
+export async function signInWithCustomTokenAndGetIdToken(
+  customToken: string,
+  rememberMe = true
+): Promise<string> {
+  const auth = await getClientAuth();
+  const { signInWithCustomToken, setPersistence, browserLocalPersistence, browserSessionPersistence } =
+    await import("firebase/auth");
+  await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+  const credential = await signInWithCustomToken(auth, customToken);
+  return credential.user.getIdToken();
+}
+
 export async function signOut(): Promise<void> {
   if (typeof window === "undefined") return;
   clearRememberMeUntil();
+  const { odaflowApiUrl } = await import("@/lib/auth/odaflow-hub");
+  const sfaApi = odaflowApiUrl();
+  if (sfaApi) {
+    try {
+      await fetch(`${sfaApi}/api/auth/sso/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // SSO logout is best-effort
+    }
+  }
   try {
     const auth = await getClientAuth();
     const { signOut: firebaseSignOut } = await import("firebase/auth");

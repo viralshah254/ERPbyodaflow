@@ -13,7 +13,6 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppFrame } from "@/components/marketing/app-frame";
 import { LoginHeroPreview } from "@/components/marketing/login-hero-preview";
-import { AppSplashScreen } from "@/components/brand/AppSplashScreen";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 import { isFirebaseConfigured, signInAndGetIdToken, setRememberMeUntil, clearRememberMeUntil } from "@/lib/firebase";
@@ -21,6 +20,8 @@ import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isDevAuthEnabled } from "@/lib/runtime-flags";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
+import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -53,6 +54,48 @@ function LoginContent() {
   });
 
   const rememberMe = watch("rememberMe");
+
+  const existingUser = useAuthStore((s) => s.user);
+  const handoffCode = searchParams.get("code")?.trim() || "";
+  const [handoffBusy, setHandoffBusy] = React.useState(() => Boolean(handoffCode));
+  const [handoffError, setHandoffError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const nextPath = searchParams.get("next") || searchParams.get("redirect") || "/dashboard";
+    const dest = nextPath.startsWith("/") ? nextPath : "/dashboard";
+    if (existingUser) {
+      router.replace(dest);
+      return;
+    }
+    const code = searchParams.get("code")?.trim();
+    if (code) {
+      setHandoffBusy(true);
+      setHandoffError(null);
+      let cancelled = false;
+      (async () => {
+        try {
+          const { completeOdaflowHandoff } = await import("@/lib/auth/complete-odaflow-handoff");
+          const fallback = await completeOdaflowHandoff(code);
+          router.replace(dest.startsWith("/") ? dest : fallback);
+        } catch (err) {
+          if (cancelled) return;
+          setHandoffError(
+            err instanceof Error ? err.message : "Could not continue from Odaflow."
+          );
+          setHandoffBusy(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (searchParams.get("local") === "1") return;
+    const hub = odaflowHubWebUrl();
+    const returnTo = `${window.location.origin}/login?local=1`;
+    window.location.replace(
+      `${hub}/auth/sso?client=erp&next=${encodeURIComponent(dest)}&return=${encodeURIComponent(returnTo)}`
+    );
+  }, [existingUser, searchParams, router]);
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
@@ -141,6 +184,30 @@ function LoginContent() {
       }
     }
   };
+
+  const localFormOnly = searchParams.get("local") === "1" && !handoffCode;
+  const hubRetry = `${odaflowHubWebUrl()}/auth/sso?client=erp&next=${encodeURIComponent(
+    searchParams.get("next") || searchParams.get("redirect") || "/dashboard"
+  )}`;
+  const showEmailForm = localFormOnly && !handoffBusy && !existingUser;
+
+  if (!showEmailForm) {
+    return (
+      <SsoContinuityScreen
+        title="Opening ERP"
+        message={
+          existingUser
+            ? "Opening your workspace"
+            : handoffCode
+              ? "Continuing your session"
+              : "Taking you to sign in"
+        }
+        error={handoffError}
+        actionHref={hubRetry}
+        actionLabel="Back to Odaflow"
+      />
+    );
+  }
 
   return (
     <div className="flex w-full flex-1 items-center py-10 lg:py-14">
@@ -270,7 +337,7 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <React.Suspense
-      fallback={<AppSplashScreen message="Loading…" variant="fullscreen" />}
+      fallback={<SsoContinuityScreen title="Opening ERP" message="Continuing your session" />}
     >
       <LoginContent />
     </React.Suspense>

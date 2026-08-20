@@ -31,6 +31,7 @@ import {
   CUSTOMER_KIND_OPTIONS_FOR_CREATE,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
+import { paymentTermDisplayName, sortPaymentTerms } from "@/lib/fmcg/payment-class";
 import {
   createPartyApi,
   fetchNextCustomerCodeApi,
@@ -318,7 +319,7 @@ export function CustomerFormSheet({
   const [stepErrors, setStepErrors] = React.useState<Record<string, string>>({});
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [terms, setTerms] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [priceLists, setPriceLists] = React.useState<Array<{ id: string; name: string }>>([]);
   const [taxConfigs, setTaxConfigs] = React.useState<TaxConfigRow[]>([]);
   const [nextCodePreview, setNextCodePreview] = React.useState("");
@@ -360,7 +361,7 @@ export function CustomerFormSheet({
     }
 
     void fetchPaymentTermsApi()
-      .then((items) => setTerms(items.map((t) => ({ id: t.id, name: t.name }))))
+      .then((items) => setTerms(items.map((t) => ({ id: t.id, name: t.name, code: t.code }))))
       .catch(() => setTerms([]));
     void fetchPriceListOptions()
       .then(setPriceLists)
@@ -699,7 +700,7 @@ export function CustomerFormSheet({
     ? taxConfigs.find((t) => t.id === form.defaultTaxConfigId)?.name ?? form.defaultTaxConfigId
     : "Org default";
   const termName = form.paymentTermsId
-    ? terms.find((t) => t.id === form.paymentTermsId)?.name ?? "Selected"
+    ? paymentTermDisplayName(terms.find((t) => t.id === form.paymentTermsId))
     : "None";
 
   return (
@@ -1082,6 +1083,31 @@ export function CustomerFormSheet({
                     {stepErrors.creditLimit ? (
                       <p className="text-xs text-destructive">{stepErrors.creditLimit}</p>
                     ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Optional. Finance can also raise limits later under Customer credit.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <FieldLabel>Cash or credit</FieldLabel>
+                    <Select
+                      value={form.paymentTermsId || "__none__"}
+                      onValueChange={(v) => setField("paymentTermsId", v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Cash or Credit (Debtors)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {sortPaymentTerms(terms).map((term) => (
+                          <SelectItem key={term.id} value={term.id}>
+                            {paymentTermDisplayName(term)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Cash = pay on invoice. Credit (Debtors) = sundry debtors / account.
+                    </p>
                   </div>
                   {fmcg ? (
                     <div className="space-y-2">
@@ -1131,25 +1157,6 @@ export function CustomerFormSheet({
                       </p>
                     </div>
                   ) : null}
-                  <div className="space-y-2">
-                    <FieldLabel optional>Payment terms</FieldLabel>
-                    <Select
-                      value={form.paymentTermsId || "__none__"}
-                      onValueChange={(v) => setField("paymentTermsId", v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="None" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {terms.map((term) => (
-                          <SelectItem key={term.id} value={term.id}>
-                            {term.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="space-y-2">
                     <FieldLabel optional>Credit control</FieldLabel>
                     <Select
@@ -1210,7 +1217,7 @@ export function CustomerFormSheet({
                       </div>
                     ) : null}
                     <div className="flex justify-between gap-3">
-                      <dt>Payment terms</dt>
+                      <dt>Cash or credit</dt>
                       <dd className="text-foreground text-right">{termName}</dd>
                     </div>
                   </dl>
@@ -1450,6 +1457,28 @@ function EditAllFields({
             <p className="text-xs text-destructive">{stepErrors.creditLimit}</p>
           ) : null}
         </div>
+        <div className="space-y-2">
+          <FieldLabel>Cash or credit</FieldLabel>
+          <Select
+            value={form.paymentTermsId || "__none__"}
+            onValueChange={(v) => setField("paymentTermsId", v === "__none__" ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select Cash or Credit (Debtors)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None</SelectItem>
+              {sortPaymentTerms(terms).map((term) => (
+                <SelectItem key={term.id} value={term.id}>
+                  {paymentTermDisplayName(term)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Cash = pay on invoice. Credit (Debtors) = sundry debtors / account.
+          </p>
+        </div>
         {fmcg ? (
           <div className="space-y-2">
             <FieldLabel optional>Price tag</FieldLabel>
@@ -1499,25 +1528,6 @@ function EditAllFields({
             </p>
           </div>
         ) : null}
-        <div className="space-y-2">
-          <FieldLabel optional>Payment terms</FieldLabel>
-          <Select
-            value={form.paymentTermsId || "__none__"}
-            onValueChange={(v) => setField("paymentTermsId", v === "__none__" ? "" : v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="None" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">None</SelectItem>
-              {terms.map((term) => (
-                <SelectItem key={term.id} value={term.id}>
-                  {term.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         <div className="space-y-2">
           <FieldLabel optional>Credit control</FieldLabel>
           <Select

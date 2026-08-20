@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_BODY_PAGINATED_CLASS,
   LIST_PAGE_SHELL_CLASS,
   PageShell,
 } from "@/components/layout/page-shell";
@@ -64,7 +64,7 @@ function CustomerCreditContent() {
           </div>
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         {!canWriteFinance ? (
           <p className="mb-3 text-sm text-muted-foreground">
             You can view credit details. Raising limits requires finance write access.
