@@ -290,6 +290,7 @@ function mapParty(item: BackendParty): PartyRow {
     email: item.email,
     phone: item.phone,
     taxId: item.taxId,
+    paymentTermsId: item.paymentTermsId,
     address: item.address,
     route: item.route,
     latitude: item.latitude,
@@ -340,7 +341,7 @@ export async function fetchNextCustomerCodeApi(): Promise<string> {
   return data.code;
 }
 
-export async function fetchPartiesApi(filters?: {
+type PartyListFilters = {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
@@ -351,8 +352,16 @@ export async function fetchPartiesApi(filters?: {
   supplierType?: SupplierType | "";
   status?: string;
   search?: string;
+  paymentClass?: "CASH" | "CREDIT";
   limit?: number;
-}): Promise<PartyRow[]> {
+  cursor?: string;
+};
+
+export async function fetchPartiesPageApi(filters?: PartyListFilters): Promise<{
+  items: PartyRow[];
+  nextCursor: string | null;
+  totalCount?: number;
+}> {
   requireLiveApi("Parties");
   const params = new URLSearchParams();
   if (filters?.role) params.set("role", filters.role);
@@ -364,11 +373,26 @@ export async function fetchPartiesApi(filters?: {
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.paymentClass) params.set("paymentClass", filters.paymentClass);
   if (filters?.limit) params.set("limit", String(Math.min(Math.max(filters.limit, 1), 100)));
-  const data = await apiRequest<{ items: BackendParty[] }>("/api/parties", {
+  if (filters?.cursor) params.set("cursor", filters.cursor);
+  const data = await apiRequest<{
+    items: BackendParty[];
+    nextCursor?: string | null;
+    totalCount?: number;
+  }>("/api/parties", {
     params,
   });
-  return data.items.map(mapParty);
+  return {
+    items: data.items.map(mapParty),
+    nextCursor: data.nextCursor ?? null,
+    totalCount: typeof data.totalCount === "number" ? data.totalCount : undefined,
+  };
+}
+
+export async function fetchPartiesApi(filters?: PartyListFilters): Promise<PartyRow[]> {
+  const page = await fetchPartiesPageApi(filters);
+  return page.items;
 }
 
 export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {

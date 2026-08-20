@@ -4,10 +4,16 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as Icons from "lucide-react";
-import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_PAGINATION_CLASS,
+  LIST_TABLE_STATIC_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,7 +33,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import type { PartyRow, CustomerType, SupplierType } from "@/lib/types/masters";
 import {
   createPartyApi,
-  fetchPartiesApi,
+  fetchPartiesPageApi,
   updatePartyApi,
   fetchPartyByIdApi,
   fetchNextSupplierCodeApi,
@@ -56,6 +62,7 @@ import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { PartyImportSheet } from "@/components/masters/PartyImportSheet";
 import { toast } from "sonner";
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 export default function MasterPartiesPage() {
   const router = useRouter();
@@ -88,6 +95,10 @@ export default function MasterPartiesPage() {
   const [customerType, setCustomerType] = React.useState<CustomerType | "">("");
   const [supplierType, setSupplierType] = React.useState<SupplierType | "">("");
   const [parties, setParties] = React.useState<PartyRow[]>([]);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(25);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState<number | undefined>(undefined);
   const [customerCategories, setCustomerCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermRow[]>([]);
   const [currencies, setCurrencies] = React.useState<
@@ -173,19 +184,26 @@ export default function MasterPartiesPage() {
     return () => window.clearTimeout(timeoutId);
   }, [search]);
 
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [tab, debouncedSearch, customerType, supplierType]);
+
   const refreshParties = React.useCallback(async () => {
     setLoading(true);
     try {
       const role = tab === "customers" ? "customer" : tab === "franchisees" ? "franchisee" : "supplier";
-      setParties(
-        await fetchPartiesApi({
-          role,
-          customerType: tab === "customers" ? customerType : "",
-          supplierType: tab === "suppliers" ? supplierType : "",
-          search: debouncedSearch,
-          status: "ACTIVE",
-        })
-      );
+      const page = await fetchPartiesPageApi({
+        role,
+        customerType: tab === "customers" ? customerType : "",
+        supplierType: tab === "suppliers" ? supplierType : "",
+        search: debouncedSearch,
+        status: "ACTIVE",
+        limit: pageSize,
+        cursor: pageOffset > 0 ? String(pageOffset) : undefined,
+      });
+      setParties(page.items);
+      setHasMore(Boolean(page.nextCursor));
+      setTotalCount(page.totalCount);
       const [categories, terms] = await Promise.all([
         fetchCustomerCategoriesApi(),
         fetchPaymentTermsApi(),
@@ -197,7 +215,7 @@ export default function MasterPartiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [customerType, debouncedSearch, supplierType, tab]);
+  }, [customerType, debouncedSearch, pageOffset, pageSize, supplierType, tab]);
 
   React.useEffect(() => {
     void refreshParties();
@@ -214,6 +232,34 @@ export default function MasterPartiesPage() {
   const filteredSuppliers = React.useMemo(() => {
     return parties;
   }, [parties]);
+
+  const entityLabel =
+    tab === "customers"
+      ? "customers"
+      : tab === "franchisees"
+        ? `${franchiseeLabel.toLowerCase()}s`
+        : `${supplierLabel.toLowerCase()}s`;
+
+  const pagination =
+    !loading && parties.length > 0 ? (
+      <TablePagination
+        className={LIST_TABLE_PAGINATION_CLASS}
+        pageOffset={pageOffset}
+        pageSize={pageSize}
+        itemCount={parties.length}
+        hasMore={hasMore}
+        loading={loading}
+        totalCount={totalCount}
+        onPrevious={() => setPageOffset((offset) => Math.max(0, offset - pageSize))}
+        onNext={() => setPageOffset((offset) => offset + pageSize)}
+        entityLabel={entityLabel}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPageOffset(0);
+        }}
+      />
+    ) : null;
 
   const columns = React.useMemo(
     () => [
@@ -687,14 +733,17 @@ export default function MasterPartiesPage() {
                 }}
               />
             ) : (
-              <DataTable<PartyRow>
-                data={filteredCustomers}
-                columns={columns}
-                onRowClick={openEditDrawer}
-                emptyMessage={`No ${customerOnlyLabel.toLowerCase()}s.`}
-                scrollMode="natural"
-                size="comfortable"
+              <div className={LIST_TABLE_STATIC_CLASS}>
+                <DataTable<PartyRow>
+                  data={filteredCustomers}
+                  columns={columns}
+                  onRowClick={openEditDrawer}
+                  emptyMessage={`No ${customerOnlyLabel.toLowerCase()}s.`}
+                  scrollMode="natural"
+                  size="comfortable"
                 />
+                {pagination}
+              </div>
             )}
           </TabsContent>
           <TabsContent value="suppliers" className="mt-4 space-y-4">
@@ -741,14 +790,17 @@ export default function MasterPartiesPage() {
                 }}
               />
             ) : (
-              <DataTable<PartyRow>
-                data={filteredSuppliers}
-                columns={columns}
-                onRowClick={openEditDrawer}
-                emptyMessage={`No ${supplierLabel.toLowerCase()}s.`}
-                scrollMode="natural"
-                size="comfortable"
+              <div className={LIST_TABLE_STATIC_CLASS}>
+                <DataTable<PartyRow>
+                  data={filteredSuppliers}
+                  columns={columns}
+                  onRowClick={openEditDrawer}
+                  emptyMessage={`No ${supplierLabel.toLowerCase()}s.`}
+                  scrollMode="natural"
+                  size="comfortable"
                 />
+                {pagination}
+              </div>
             )}
           </TabsContent>
           {!fmcgOrg ? (
@@ -783,14 +835,17 @@ export default function MasterPartiesPage() {
                   }}
                 />
               ) : (
-                <DataTable<PartyRow>
-                  data={filteredFranchisees}
-                  columns={columns}
-                  onRowClick={openEditDrawer}
-                  emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
-                  scrollMode="natural"
-                  size="comfortable"
-                />
+                <div className={LIST_TABLE_STATIC_CLASS}>
+                  <DataTable<PartyRow>
+                    data={filteredFranchisees}
+                    columns={columns}
+                    onRowClick={openEditDrawer}
+                    emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
+                    scrollMode="natural"
+                    size="comfortable"
+                  />
+                  {pagination}
+                </div>
               )}
             </TabsContent>
           ) : null}

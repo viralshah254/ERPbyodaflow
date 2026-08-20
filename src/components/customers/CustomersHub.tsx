@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_BODY_PAGINATED_CLASS,
   LIST_PAGE_SHELL_CLASS,
   PageShell,
 } from "@/components/layout/page-shell";
@@ -256,7 +257,7 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         }
       />
 
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         <CustomerDirectoryPanel
           fmcg={fmcg}
           segmentTabs={fmcg}

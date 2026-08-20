@@ -3,9 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LIST_TABLE_SURFACE_CLASS } from "@/components/layout/page-shell";
+import { LIST_TABLE_PAGINATION_CLASS, LIST_TABLE_STATIC_CLASS } from "@/components/layout/page-shell";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ import * as Icons from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { KraTaxPinField } from "@/components/parties/KraTaxPinField";
 import { useCanWriteFinance, useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { paymentTermDisplayName } from "@/lib/fmcg/payment-class";
 
 export type CustomerAccountsPanelProps = {
   editCustomerId?: string | null;
@@ -65,12 +67,15 @@ export function CustomerAccountsPanel({
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [paymentClass, setPaymentClass] = React.useState<"all" | "CASH" | "CREDIT">("all");
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [summaries, setSummaries] = React.useState<ArCustomerSummary[]>([]);
-  const [terms, setTerms] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(25);
+  const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [categories, setCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [currencies, setCurrencies] = React.useState<
     Array<{ id: string; code: string; name: string; isBaseCurrency?: boolean }>
@@ -113,12 +118,12 @@ export function CustomerAccountsPanel({
     setLoading(true);
     try {
       const [customers, termsData, categoriesData, currenciesData] = await Promise.all([
-        fetchArCustomerSummariesApi(debouncedSearch),
+        fetchArCustomerSummariesApi(debouncedSearch, paymentClass === "all" ? undefined : paymentClass),
         fetchPaymentTermsApi(),
         fetchCustomerCategoriesApi(),
         fetchFinancialCurrenciesApi().catch(() => [] as Awaited<ReturnType<typeof fetchFinancialCurrenciesApi>>),
       ]);
-      setTerms(termsData.map((term) => ({ id: term.id, name: term.name })));
+      setTerms(termsData.map((term) => ({ id: term.id, name: term.name, code: term.code })));
       setCategories(categoriesData.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
       setCurrencies(
         currenciesData
@@ -131,11 +136,23 @@ export function CustomerAccountsPanel({
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, paymentClass]);
 
   React.useEffect(() => {
     void reload();
   }, [reload]);
+
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [debouncedSearch, paymentClass]);
+
+  React.useEffect(() => {
+    if (pageOffset > 0 && pageOffset >= summaries.length) {
+      setPageOffset(Math.max(0, Math.floor((Math.max(summaries.length, 1) - 1) / pageSize) * pageSize));
+    }
+  }, [summaries.length, pageOffset, pageSize]);
+
+  const pagedSummaries = summaries.slice(pageOffset, pageOffset + pageSize);
 
   React.useEffect(() => {
     if (!drawerOpen) return;
@@ -351,8 +368,10 @@ export function CustomerAccountsPanel({
       {
         id: "paymentTerms",
         header: "Terms",
-        accessor: (row: ArCustomerSummary) =>
-          row.paymentTermsId ? termById.get(row.paymentTermsId) ?? "—" : "—",
+        accessor: (row: ArCustomerSummary) => {
+          const term = terms.find((item) => item.id === row.paymentTermsId);
+          return term ? paymentTermDisplayName(term) : "—";
+        },
       },
       {
         id: "status",
@@ -390,7 +409,7 @@ export function CustomerAccountsPanel({
         className: "w-[50px]",
       },
     ],
-    [currency, onEditCustomerIdChange, router, termById]
+    [currency, onEditCustomerIdChange, router, termById, terms]
   );
 
   const openCreate = () => {
@@ -413,6 +432,19 @@ export function CustomerAccountsPanel({
         searchPlaceholder="Search by name or email…"
         searchValue={search}
         onSearchChange={setSearch}
+        filters={[
+          {
+            id: "paymentClass",
+            label: "Cash or credit",
+            options: [
+              { label: "All (Cash + Debtors)", value: "all" },
+              { label: "Cash", value: "CASH" },
+              { label: "Credit (Debtors)", value: "CREDIT" },
+            ],
+            value: paymentClass,
+            onChange: (value) => setPaymentClass(value as "all" | "CASH" | "CREDIT"),
+          },
+        ]}
         onExport={() =>
           downloadCsv(
             `customers-accounts-${new Date().toISOString().slice(0, 10)}.csv`,
@@ -443,7 +475,7 @@ export function CustomerAccountsPanel({
         }
       />
 
-      <div className={LIST_TABLE_SURFACE_CLASS}>
+      <div className={`${LIST_TABLE_STATIC_CLASS} pb-16`}>
         {loading ? (
           <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
             <Icons.Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -467,18 +499,37 @@ export function CustomerAccountsPanel({
             />
           </div>
         ) : (
-          <DataTable
-            data={summaries}
-            columns={columns}
-            onRowClick={(row) => {
-              setEditingId(row.id);
-              setDrawerOpen(true);
-              onEditCustomerIdChange?.(row.id);
-            }}
-            emptyMessage="No customers found."
-            scrollMode="natural"
-            size="comfortable"
-          />
+          <>
+            <DataTable
+              data={pagedSummaries}
+              columns={columns}
+              onRowClick={(row) => {
+                setEditingId(row.id);
+                setDrawerOpen(true);
+                onEditCustomerIdChange?.(row.id);
+              }}
+              emptyMessage="No customers found."
+              scrollMode="natural"
+              size="comfortable"
+            />
+            <TablePagination
+              className={LIST_TABLE_PAGINATION_CLASS}
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={pagedSummaries.length}
+              hasMore={pageOffset + pageSize < summaries.length}
+              loading={loading}
+              totalCount={summaries.length}
+              onPrevious={() => setPageOffset((offset) => Math.max(0, offset - pageSize))}
+              onNext={() => setPageOffset((offset) => offset + pageSize)}
+              entityLabel="customers"
+              pageSizeOptions={[25, 50, 100]}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPageOffset(0);
+              }}
+            />
+          </>
         )}
       </div>
 
@@ -549,7 +600,7 @@ export function CustomerAccountsPanel({
               {errors.creditLimit ? <p className="text-xs text-destructive">{errors.creditLimit}</p> : null}
             </div>
             <div className="space-y-2">
-              <Label>Payment terms</Label>
+              <Label>Cash or credit</Label>
               <Select
                 value={form.paymentTermsId || "__none__"}
                 onValueChange={(value) =>
@@ -557,17 +608,20 @@ export function CustomerAccountsPanel({
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select payment term" />
+                  <SelectValue placeholder="Select Cash or Credit (Debtors)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
                   {terms.map((term) => (
                     <SelectItem key={term.id} value={term.id}>
-                      {term.name}
+                      {paymentTermDisplayName(term)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Cash = pay on invoice. Credit (Debtors) = sundry debtors / account.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Credit control mode</Label>
