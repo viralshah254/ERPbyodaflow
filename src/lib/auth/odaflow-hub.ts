@@ -47,6 +47,16 @@ export function odaflowApiUrl(): string {
   return odaflowApiCandidates()[0] || "https://dev.odaflow.com";
 }
 
+/** SFA web app. A local ERP page must stay on local OdaWeb. */
+export function odaflowSfaWebUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_ODAFLOW_WEB_URL?.trim();
+  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
+    if (fromEnv && /localhost|127\.0\.0\.1/.test(fromEnv)) return trimSlash(fromEnv);
+    return "http://localhost:5173";
+  }
+  return trimSlash(fromEnv || "https://www.odaflow.com");
+}
+
 /** ERP APIs that can accept the Firebase session from hub login. */
 export function erpApiCandidates(): string[] {
   const fromEnv = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");

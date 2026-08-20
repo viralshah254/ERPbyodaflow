@@ -56,6 +56,10 @@ export type ApiAuthOptions = {
 
 let authOptions: ApiAuthOptions = {};
 
+export function getApiBearerToken(): string | undefined {
+  return authOptions.bearerToken;
+}
+
 /** Set auth options (e.g. from auth store after login). Pass `bearerToken: undefined` to clear the token on logout. */
 export function setApiAuth(options: ApiAuthOptions): void {
   if ("bearerToken" in options && options.bearerToken === undefined) {

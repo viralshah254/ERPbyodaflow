@@ -111,6 +111,9 @@ export function AuthRestore() {
                   const tid = DEFAULT_TEMPLATE_BY_ORG_TYPE[session.org.orgType];
                   if (tid) applyTemplate(tid);
                 }
+                void import("@/lib/auth/attach-sfa-from-erp").then(({ attachSfaFromErp }) =>
+                  attachSfaFromErp().catch(() => undefined)
+                );
               } catch {
                 if (!cancelled) logout();
               }

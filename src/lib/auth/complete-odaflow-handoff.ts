@@ -127,7 +127,11 @@ async function completeOnce(code: string): Promise<string> {
   if (!token) {
     throw new Error("Could not open an ERP session from Odaflow.");
   }
-  return applyErpSession(token);
+  const dest = await applyErpSession(token);
+  void import("@/lib/auth/attach-sfa-from-erp").then(({ attachSfaFromErp }) =>
+    attachSfaFromErp().catch(() => undefined)
+  );
+  return dest;
 }
 
 export async function completeOdaflowHandoff(code: string): Promise<string> {
