@@ -45,6 +45,7 @@ async function exchangeCode(code: string): Promise<ExchangePayload> {
 }
 
 async function consumeAssertion(assertion: string): Promise<string> {
+  let lastError = "";
   for (const base of erpApiCandidates()) {
     try {
       const consumeRes = await fetch(`${base}/api/auth/odaflow-sso/consume`, {
@@ -53,15 +54,21 @@ async function consumeAssertion(assertion: string): Promise<string> {
         body: JSON.stringify({ assertion }),
         signal: AbortSignal.timeout(2500),
       });
-      const consumeJson = (await consumeRes.json()) as { customToken?: string };
+      const consumeJson = (await consumeRes.json()) as {
+        customToken?: string;
+        error?: string;
+        code?: string;
+      };
       if (consumeRes.ok && consumeJson.customToken) {
         setApiBaseOverride(base);
         return signInWithCustomTokenAndGetIdToken(consumeJson.customToken, true);
       }
+      if (consumeJson.error) lastError = consumeJson.error;
     } catch {
       // Local ERP API is often down; try the next host.
     }
   }
+  if (lastError) throw new Error(lastError);
   return "";
 }
 
@@ -140,7 +147,7 @@ async function completeOnce(code: string): Promise<string> {
   }
   if (!token) {
     throw new Error(
-      "Could not open an ERP session from Odaflow. Set SSO_ASSERTION_SECRET on erp-api.odaflow.com to the same value odaflow-backend uses to sign assertions."
+      "Could not open an ERP session from Odaflow. This account has no linked ERP user yet."
     );
   }
   const dest = await applyErpSession(token);

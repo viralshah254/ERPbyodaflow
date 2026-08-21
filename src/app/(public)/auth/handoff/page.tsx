@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { completeOdaflowHandoff } from "@/lib/auth/complete-odaflow-handoff";
 import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
-import { odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubLoggedOutUrl } from "@/lib/auth/odaflow-hub";
 
 function HandoffContent() {
   const router = useRouter();
@@ -41,7 +41,7 @@ function HandoffContent() {
       title="Opening ERP"
       message="Continuing your session"
       error={error}
-      actionHref={`${odaflowHubWebUrl()}/auth/sso?client=erp`}
+      actionHref={odaflowHubLoggedOutUrl("erp")}
       actionLabel="Back to Odaflow"
     />
   );
