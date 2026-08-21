@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import DOMPurify from "isomorphic-dompurify";
+import DOMPurify from "dompurify";
 import { marked } from "marked";
 
 /**
@@ -61,6 +61,7 @@ function toSafeHtml(text: string): string {
   const md = normalizeMarkdown(text);
   if (!md) return "";
   const raw = marked.parse(md, { async: false }) as string;
+  if (typeof window === "undefined" || !DOMPurify.isSupported) return "";
   return DOMPurify.sanitize(raw, PURIFY).replace(
     /<a /g,
     '<a target="_blank" rel="noopener noreferrer" '
