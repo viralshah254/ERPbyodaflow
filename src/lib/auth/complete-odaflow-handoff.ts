@@ -117,6 +117,15 @@ async function applyErpSession(token: string): Promise<string> {
   );
 }
 
+async function existingErpIdToken(): Promise<string> {
+  try {
+    const { getIdToken } = await import("@/lib/firebase");
+    return (await getIdToken()) || "";
+  } catch {
+    return "";
+  }
+}
+
 async function completeOnce(code: string): Promise<string> {
   const exchanged = await exchangeCode(code);
   let token = exchanged.firebaseIdToken || "";
@@ -125,7 +134,12 @@ async function completeOnce(code: string): Promise<string> {
     if (consumed) token = consumed;
   }
   if (!token) {
-    throw new Error("Could not open an ERP session from Odaflow.");
+    token = await existingErpIdToken();
+  }
+  if (!token) {
+    throw new Error(
+      "Could not open an ERP session from Odaflow. Set SSO_ASSERTION_SECRET on erp-api.odaflow.com to the same value odaflow-backend uses to sign assertions."
+    );
   }
   const dest = await applyErpSession(token);
   void import("@/lib/auth/attach-sfa-from-erp").then(({ attachSfaFromErp }) =>
