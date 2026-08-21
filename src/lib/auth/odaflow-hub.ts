@@ -24,27 +24,30 @@ function envApiUrl(): string {
   ).trim();
 }
 
+const PROD_WEB_HOSTS = new Set([
+  "www.odaflow.com",
+  "odaflow.com",
+  "people.odaflow.com",
+  "crm.odaflow.com",
+  "erp.odaflow.com",
+]);
+
 /**
- * SFA APIs that may have minted the handoff code.
- * Local ERP often talks to a local hub while the code was issued on dev.odaflow.com.
+ * Production ERP/SFA webs talk to api.odaflow.com.
+ * Local npm run dev tries localhost, then dev.odaflow.com.
  */
 export function odaflowApiCandidates(): string[] {
+  const host = typeof window === "undefined" ? "" : window.location.hostname;
+  if (PROD_WEB_HOSTS.has(host)) return ["https://api.odaflow.com"];
+  if (isLocalHost(host)) return ["http://localhost:8080", "https://dev.odaflow.com"];
   const fromEnv = envApiUrl();
-  const local = "http://localhost:8080";
-  const remote = "https://dev.odaflow.com";
-  const urls: string[] = [];
-  if (fromEnv) urls.push(trimSlash(fromEnv));
-  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
-    urls.push(local, remote);
-  } else if (!fromEnv) {
-    urls.push(remote);
-  }
-  return [...new Set(urls.filter(Boolean))];
+  if (fromEnv && !/localhost|127\.0\.0\.1/.test(fromEnv)) return [trimSlash(fromEnv)];
+  return ["https://api.odaflow.com"];
 }
 
 /** SFA / odaflow-backend API used for SSO exchange. */
 export function odaflowApiUrl(): string {
-  return odaflowApiCandidates()[0] || "https://dev.odaflow.com";
+  return odaflowApiCandidates()[0] || "https://api.odaflow.com";
 }
 
 /** SFA web app. A local ERP page must stay on local OdaWeb. */
