@@ -318,6 +318,7 @@ export function CustomerDirectoryPanel({
     const thisTab = tabId
       ? CUSTOMER_DIRECTORY_TABS.find((tab) => tab.id === tabId)
       : tabConfig;
+    const tabChannel = thisTab && "channel" in thisTab ? thisTab.channel : undefined;
 
     return (
       <div className={LIST_TABLE_STATIC_CLASS}>
@@ -361,7 +362,7 @@ export function CustomerDirectoryPanel({
                         <Badge variant="secondary">{sfaSegmentLabel(party.sfaSegment)}</Badge>
                       ) : null}
                       {party.channel &&
-                      party.channel !== thisTab?.channel &&
+                      party.channel !== tabChannel &&
                       channelLabel(party.channel) !== sfaSegmentLabel(party.sfaSegment) ? (
                         <Badge variant="outline">{channelLabel(party.channel)}</Badge>
                       ) : null}
