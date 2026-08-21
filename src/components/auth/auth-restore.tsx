@@ -11,12 +11,21 @@ import {
 } from "@/lib/firebase";
 import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
+import { odaflowHubLoggedOutUrl } from "@/lib/auth/odaflow-hub";
+import { onOdaflowLogout, shouldDropLocalSession } from "@/lib/auth/sso-logout-sync";
 
 const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   MANUFACTURER: "fmcg-manufacturer",
   DISTRIBUTOR: "fmcg-distributor",
   SHOP: "retail-multi-store",
 };
+
+function leaveErpTabIfSignedOut() {
+  if (typeof window === "undefined") return;
+  const path = window.location.pathname;
+  if (path.startsWith("/auth/") || path.startsWith("/login")) return;
+  window.location.replace(odaflowHubLoggedOutUrl("erp"));
+}
 
 /**
  * Restores session from Firebase when the app loads (e.g. user reopens the browser).
@@ -44,6 +53,8 @@ export function AuthRestore() {
         const config = getFirebaseConfig();
         const app = getApps().length === 0 ? initializeApp(config) : getApp();
         const auth = getAuth(app);
+        await auth.authStateReady();
+        if (cancelled) return;
 
         let resolved = false;
         let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -64,6 +75,16 @@ export function AuthRestore() {
               pendingTimeout = null;
             }
             if (firebaseUser) {
+              if (shouldDropLocalSession()) {
+                await signOut();
+                if (!cancelled) {
+                  setApiAuth({ bearerToken: undefined });
+                  logout();
+                  leaveErpTabIfSignedOut();
+                }
+                done();
+                return;
+              }
               if (isRememberMeExpired()) {
                 await signOut();
                 if (!cancelled) logout();
@@ -120,11 +141,18 @@ export function AuthRestore() {
               done();
               return;
             }
-            // No user: give Firebase time to restore from persistence, then mark logged out
+            const hadSession = Boolean(useAuthStore.getState().user);
+            if (hadSession) {
+              setApiAuth({ bearerToken: undefined });
+              logout();
+              done();
+              leaveErpTabIfSignedOut();
+              return;
+            }
             pendingTimeout = setTimeout(() => {
               pendingTimeout = null;
               if (!cancelled && !resolved) done();
-            }, 700);
+            }, 50);
           })().catch((err) => {
             console.warn("[AuthRestore] session restore failed:", err);
             if (!cancelled) logout();
@@ -132,8 +160,17 @@ export function AuthRestore() {
           });
         });
 
+        const stopLogoutSync = onOdaflowLogout(() => {
+          if (cancelled) return;
+          if (!useAuthStore.getState().user) return;
+          setApiAuth({ bearerToken: undefined });
+          logout();
+          leaveErpTabIfSignedOut();
+        });
+
         teardown = () => {
           unsubscribe();
+          stopLogoutSync();
           if (pendingTimeout) clearTimeout(pendingTimeout);
         };
         if (cancelled) teardown();

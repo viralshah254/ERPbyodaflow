@@ -119,6 +119,8 @@ function LoginContent() {
       const session = await fetchRuntimeSession();
       const { setSession } = useAuthStore.getState();
       const { hydrateFromBackend } = useOrgContextStore.getState();
+      const { markOdaflowLogin } = await import("@/lib/auth/sso-logout-sync");
+      markOdaflowLogin();
       setSession({
         user: session.user,
         org: session.org,

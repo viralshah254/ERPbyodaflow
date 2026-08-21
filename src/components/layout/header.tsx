@@ -22,6 +22,8 @@ import { unregisterWebPushToken } from "@/lib/push-notifications";
 import { setApiAuth } from "@/lib/api/client";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
+import { odaflowHubLoggedOutUrl } from "@/lib/auth/odaflow-hub";
+import { pingSiblingSignOut } from "@/lib/auth/sso-logout-sync";
 
 export function Header() {
   const { user, currentBranch, permissions, logout } = useAuthStore();
@@ -39,6 +41,7 @@ export function Header() {
     } catch {
       // best-effort before token is cleared
     }
+    pingSiblingSignOut();
     setApiAuth({ bearerToken: undefined });
     logout();
     useOrgContextStore.getState().reset();
@@ -47,7 +50,7 @@ export function Header() {
     } catch {
       // ignore if Firebase is unavailable or already signed out
     }
-    window.location.assign("/login");
+    window.location.assign(odaflowHubLoggedOutUrl("erp"));
   };
 
   return (

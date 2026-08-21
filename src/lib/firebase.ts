@@ -102,10 +102,12 @@ export async function signInAndGetIdToken(
 
 /**
  * Get current ID token (e.g. after page reload). Returns null if not signed in.
+ * Waits for Firebase persistence so a just-opened tab is not treated as logged out.
  */
 export async function getIdToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   const auth = await getClientAuth();
+  await auth.authStateReady();
   const user = auth.currentUser;
   if (!user) return null;
   return user.getIdToken();
@@ -151,18 +153,15 @@ export async function signInWithCustomTokenAndGetIdToken(
 export async function signOut(): Promise<void> {
   if (typeof window === "undefined") return;
   clearRememberMeUntil();
-  const { odaflowApiUrl } = await import("@/lib/auth/odaflow-hub");
-  const sfaApi = odaflowApiUrl();
-  if (sfaApi) {
-    try {
-      await fetch(`${sfaApi}/api/auth/sso/logout`, {
+  const { odaflowApiCandidates } = await import("@/lib/auth/odaflow-hub");
+  await Promise.all(
+    odaflowApiCandidates().map((sfaApi) =>
+      fetch(`${sfaApi}/api/auth/sso/logout`, {
         method: "POST",
         credentials: "include",
-      });
-    } catch {
-      // SSO logout is best-effort
-    }
-  }
+      }).catch(() => undefined)
+    )
+  );
   try {
     const auth = await getClientAuth();
     const { signOut: firebaseSignOut } = await import("firebase/auth");
