@@ -45,24 +45,35 @@ async function exchangeCode(code: string): Promise<ExchangePayload> {
 }
 
 async function consumeAssertion(assertion: string): Promise<string> {
+  let lastError: Error | null = null;
   for (const base of erpApiCandidates()) {
     try {
       const consumeRes = await fetch(`${base}/api/auth/odaflow-sso/consume`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assertion }),
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(8000),
       });
-      const consumeJson = (await consumeRes.json()) as { customToken?: string };
+      const consumeJson = (await consumeRes.json()) as {
+        customToken?: string;
+        error?: string;
+        message?: string;
+        code?: string;
+      };
       if (consumeRes.ok && consumeJson.customToken) {
         setApiBaseOverride(base);
         return signInWithCustomTokenAndGetIdToken(consumeJson.customToken, true);
       }
-    } catch {
-      // Local ERP API is often down; try the next host.
+      lastError = new Error(
+        consumeJson.error ||
+          consumeJson.message ||
+          (consumeJson.code ? `SSO consume failed (${consumeJson.code})` : "SSO consume failed")
+      );
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error("SSO consume failed");
     }
   }
-  return "";
+  throw lastError || new Error("Could not open an ERP session from Odaflow.");
 }
 
 async function sessionOn(base: string, token: string): Promise<string> {

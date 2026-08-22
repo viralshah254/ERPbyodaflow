@@ -26,25 +26,32 @@ function envApiUrl(): string {
 
 /**
  * SFA APIs that may have minted the handoff code.
- * Local ERP often talks to a local hub while the code was issued on dev.odaflow.com.
+ * Production ERP must exchange against api.odaflow.com (odaflow.com mints there).
+ * Local ERP can also try the local hub and dev.
  */
-export function odaflowApiCandidates(): string[] {
+export function odaflowApiCandidates(
+  hostname = typeof window !== "undefined" ? window.location.hostname : ""
+): string[] {
   const fromEnv = envApiUrl();
   const local = "http://localhost:8080";
+  const prod = "https://api.odaflow.com";
   const remote = "https://dev.odaflow.com";
   const urls: string[] = [];
   if (fromEnv) urls.push(trimSlash(fromEnv));
-  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
+  if (isLocalHost(hostname)) {
     urls.push(local, remote);
-  } else if (!fromEnv) {
-    urls.push(remote);
+  } else {
+    urls.push(prod);
+    if (!fromEnv) urls.push(remote);
   }
   return [...new Set(urls.filter(Boolean))];
 }
 
 /** SFA / odaflow-backend API used for SSO exchange. */
-export function odaflowApiUrl(): string {
-  return odaflowApiCandidates()[0] || "https://dev.odaflow.com";
+export function odaflowApiUrl(
+  hostname = typeof window !== "undefined" ? window.location.hostname : ""
+): string {
+  return odaflowApiCandidates(hostname)[0] || "https://api.odaflow.com";
 }
 
 /** SFA web app. A local ERP page must stay on local OdaWeb. */
