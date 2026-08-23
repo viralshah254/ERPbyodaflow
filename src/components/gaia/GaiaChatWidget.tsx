@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { MessageCircle, Send, Sparkles, Trash2, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { Send, Trash2, X } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   clearGaiaSessionCache,
@@ -10,6 +12,9 @@ import {
   sendGaiaMessage,
 } from "@/lib/gaia/gaia-service";
 import { GaiaMessageBody } from "@/lib/gaia/render-message";
+import { useDraggableFloater } from "@/hooks/useDraggableFloater";
+import { FloaterTooltip } from "./FloaterTooltip";
+import { GaiaOrb } from "./GaiaOrb";
 
 type Role = "user" | "assistant";
 
@@ -22,10 +27,6 @@ type ChatMessage = {
 const WELCOME =
   "Hey — I'm Gaia, your OdaFlow ERP assistant. Ask about sales orders, stock, invoices and customers, or ask me how a flow works — order to cash, goods receipt to supplier bill, setting up a new company, or connecting this ERP to OdaFlow.";
 
-// Two live-data asks and two how-does-this-work asks. The second pair is
-// where Gaia is strongest on ERP: it reads the routers and nav configs,
-// so it answers with the real menu path and the step you are missing
-// rather than a plausible-sounding guess.
 const QUICK_PROMPTS = [
   "What should I check first today?",
   "How do I connect this ERP to OdaFlow?",
@@ -37,26 +38,81 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setReduced(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return reduced;
+}
+
 /** Floating Gaia chat for ERP dashboard users — uses their ERP session. */
 export function GaiaChatWidget() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const enabled = isGaiaConfigured() && isAuthenticated;
+  const configured = isGaiaConfigured();
+  const enabled = configured && isAuthenticated;
 
   const [open, setOpen] = React.useState(false);
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
   const [messages, setMessages] = React.useState<ChatMessage[]>([
     { id: "welcome", role: "assistant", content: WELCOME },
   ]);
-  const bottomRef = React.useRef<HTMLDivElement>(null);
+  const messagesRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const [isDark, setIsDark] = React.useState(false);
+  const reducedMotion = usePrefersReducedMotion();
+  const {
+    rootRef: floaterRootRef,
+    rootStyle,
+    isDragging,
+    hasCustomPosition,
+    getOrbProps,
+  } = useDraggableFloater("gaia");
 
   React.useEffect(() => {
-    if (open) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-      setTimeout(() => inputRef.current?.focus(), 120);
+    setMounted(true);
+  }, []);
+
+  React.useEffect(() => {
+    const sync = () =>
+      setIsDark(document.documentElement.classList.contains("dark"));
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => obs.disconnect();
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const scroller = messagesRef.current;
+    if (scroller) {
+      scroller.scrollTo({
+        top: scroller.scrollHeight,
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
     }
-  }, [open, messages, loading]);
+    setTimeout(() => inputRef.current?.focus(), 160);
+  }, [open, messages, loading, reducedMotion]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const sendRef = React.useRef<(text: string) => Promise<void>>(async () => undefined);
 
   const send = React.useCallback(
     async (text: string) => {
@@ -76,14 +132,17 @@ export function GaiaChatWidget() {
           },
         ]);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Something went wrong talking to Gaia.";
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Something went wrong talking to Gaia. Try again in a moment.";
         setMessages((prev) => [
           ...prev,
           {
             id: uid(),
             role: "assistant",
             content:
-              msg.toLowerCase().includes("sign in") || msg.includes("401")
+              msg.includes("401") || msg.toLowerCase().includes("sign in")
                 ? "Your session expired. Refresh the page and sign in again."
                 : `I hit a snag: ${msg}`,
           },
@@ -94,6 +153,19 @@ export function GaiaChatWidget() {
     },
     [loading]
   );
+
+  sendRef.current = send;
+
+  React.useEffect(() => {
+    const onAsk = (e: Event) => {
+      const message = (e as CustomEvent<{ message?: string }>).detail?.message;
+      if (!message) return;
+      setOpen(true);
+      void sendRef.current(message);
+    };
+    window.addEventListener("gaia:ask", onAsk);
+    return () => window.removeEventListener("gaia:ask", onAsk);
+  }, []);
 
   const clearChat = async () => {
     if (!confirm("Clear this Gaia conversation?")) return;
@@ -106,184 +178,217 @@ export function GaiaChatWidget() {
     setMessages([{ id: "welcome", role: "assistant", content: WELCOME }]);
   };
 
-  if (!enabled) return null;
+  if (!enabled || !mounted) return null;
 
-  return (
-    <div
-      data-gaia-widget=""
-      className="pointer-events-none fixed bottom-24 right-5 z-40 flex flex-col items-end gap-3"
-    >
-      {open ? (
-        <div
-          className="pointer-events-auto flex h-[min(72vh,640px)] w-[min(100vw-1.5rem,400px)] origin-bottom-right flex-col overflow-hidden rounded-2xl border border-sky-100 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-          role="dialog"
-          aria-label="Gaia assistant"
-        >
-        <header className="flex items-center gap-3 bg-gradient-to-r from-[#012A4A] to-[#0A73B7] px-4 py-3 text-white">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-lg font-semibold tracking-tight ring-1 ring-white/20">
-            G
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-semibold leading-tight tracking-tight">Gaia</div>
-            <div className="flex items-center gap-1.5 text-[11px] text-sky-100/90">
-              <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${
-                  loading ? "animate-pulse bg-amber-300" : "bg-emerald-300"
-                }`}
-              />
-              {loading ? "Typing…" : "OdaFlow · ERP"}
-            </div>
-          </div>
-          <button
+  const statusLabel = loading ? "Thinking…" : "Ready";
+  const orbState = loading ? "thinking" : open ? "open" : "idle";
+
+  const panelTransition = reducedMotion
+    ? { duration: 0.12 }
+    : { type: "spring" as const, stiffness: 220, damping: 22, mass: 0.7 };
+
+  const onPanelPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--gaia-mx", `${((e.clientX - r.left) / r.width) * 100}%`);
+    el.style.setProperty("--gaia-my", `${((e.clientY - r.top) / r.height) * 100}%`);
+  };
+
+  const ui = (
+    <>
+      <AnimatePresence>
+        {open && (
+          <motion.button
             type="button"
-            onClick={clearChat}
-            className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white"
-            title="Clear conversation"
-            aria-label="Clear conversation"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white"
-            title="Close"
+            key="gaia-backdrop"
+            className="gaia-backdrop"
             aria-label="Close Gaia"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </header>
+            initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reducedMotion ? 0.12 : 0.4 }}
+            onClick={() => setOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
-        <div className="flex-1 space-y-3.5 overflow-y-auto px-3.5 py-4">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+      <div
+        ref={floaterRootRef}
+        className={`gaia-widget-root${hasCustomPosition ? " is-custom" : ""}${isDragging ? " is-dragging" : ""}`}
+        data-gaia-widget=""
+        style={rootStyle}
+      >
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              key="gaia-panel"
+              layoutId={reducedMotion ? undefined : "gaia-stage"}
+              className={`gaia-panel ${isDark ? "gaia-panel--dark" : "gaia-panel--light"}`}
+              role="dialog"
+              aria-label="Gaia assistant"
+              initial={
+                reducedMotion
+                  ? { opacity: 1 }
+                  : { opacity: 0, scale: 0.58, y: 48, transformOrigin: "bottom right" }
+              }
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={
+                reducedMotion
+                  ? { opacity: 0 }
+                  : { opacity: 0, scale: 0.82, y: 24 }
+              }
+              transition={panelTransition}
+              onPointerMove={reducedMotion ? undefined : onPanelPointer}
             >
-              {m.role === "assistant" && (
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#075985] to-[#0A73B7] text-[11px] font-semibold text-white shadow-sm">
-                  G
+              <div className="gaia-panel__aurora" aria-hidden />
+              <div className="gaia-panel__caustic" aria-hidden />
+              <div className="gaia-panel__sheen" aria-hidden />
+              <div className="gaia-panel__rim" aria-hidden />
+
+              <header className="gaia-header">
+                <div className="gaia-header__mark" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <h2 className="gaia-brand">Gaia</h2>
+                  <p className="gaia-status">
+                    <span
+                      className={`gaia-status-dot ${
+                        loading ? "gaia-status-dot--busy" : "gaia-status-dot--ok"
+                      }`}
+                    />
+                    {statusLabel}
+                  </p>
                 </div>
-              )}
-              <div
-                className={`min-w-0 max-w-[82%] overflow-hidden rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed shadow-sm ${
-                  m.role === "user"
-                    ? "rounded-br-md bg-[#075985] text-white"
-                    : "rounded-bl-md border border-sky-100 bg-sky-50 text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                }`}
-              >
-                <GaiaMessageBody text={m.content} tone={m.role} />
-              </div>
-            </div>
-          ))}
-
-          {loading && (
-            <div className="flex items-end gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#075985] to-[#0A73B7] text-[11px] font-semibold text-white">
-                G
-              </div>
-              <div
-                className="inline-flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-sky-100 bg-sky-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-800"
-                aria-label="Gaia is typing"
-              >
-                <span className="gaia-dot" />
-                <span className="gaia-dot" style={{ animationDelay: "0.15s" }} />
-                <span className="gaia-dot" style={{ animationDelay: "0.3s" }} />
-              </div>
-            </div>
-          )}
-
-          {!loading && messages.length <= 1 && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {QUICK_PROMPTS.map((q) => (
                 <button
-                  key={q}
                   type="button"
-                  onClick={() => void send(q)}
-                  className="rounded-xl border border-sky-200 px-3 py-2 text-left text-[12px] text-[#075985] transition hover:bg-sky-50 dark:border-slate-600 dark:text-sky-300 dark:hover:bg-slate-800"
+                  onClick={clearChat}
+                  className="gaia-icon-btn"
+                  title="Clear conversation"
+                  aria-label="Clear conversation"
                 >
-                  <Sparkles className="mr-1 inline h-3 w-3 opacity-70" />
-                  {q}
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2.4} />
+                  Clear
                 </button>
-              ))}
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="gaia-icon-btn"
+                  title="Close"
+                  aria-label="Close Gaia"
+                >
+                  <X className="h-4 w-4" strokeWidth={2.4} />
+                  Close
+                </button>
+              </header>
 
-        <form
-          className="border-t border-sky-100 px-3 py-3 dark:border-slate-700"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send(input);
-          }}
-        >
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = `${Math.min(120, e.target.scrollHeight)}px`;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              <div ref={messagesRef} className="gaia-messages space-y-3">
+                {messages.map((m) => (
+                  <motion.div
+                    key={m.id}
+                    className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                    initial={reducedMotion ? false : { opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <div
+                      className={`gaia-bubble min-w-0 max-w-[88%] overflow-hidden text-[13.5px] leading-[1.55] ${
+                        m.role === "user" ? "gaia-bubble--user" : "gaia-bubble--ai"
+                      }`}
+                    >
+                      <GaiaMessageBody text={m.content} tone={m.role} />
+                    </div>
+                  </motion.div>
+                ))}
+
+                {loading && (
+                  <div className="flex justify-start" aria-label="Gaia is typing">
+                    <div className="gaia-bubble gaia-bubble--ai gaia-wave">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                )}
+
+                {configured && !loading && messages.length <= 1 && (
+                  <div className="gaia-prompts pt-1">
+                    <p className="gaia-prompts__label">Try asking</p>
+                    <div className="flex flex-col gap-2">
+                      {QUICK_PROMPTS.map((q, i) => (
+                        <motion.button
+                          key={q}
+                          type="button"
+                          onClick={() => void send(q)}
+                          className="gaia-prompt"
+                          initial={reducedMotion ? false : { opacity: 0, x: 12 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.08 + i * 0.06, duration: 0.35, ease: "easeOut" }}
+                        >
+                          {q}
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <form
+                className="gaia-composer"
+                onSubmit={(e) => {
                   e.preventDefault();
                   void send(input);
-                }
-              }}
-              placeholder="Message Gaia…"
-              disabled={loading}
-              className="flex-1 resize-none rounded-xl border border-sky-200 bg-white px-3.5 py-2.5 text-[13.5px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#0A73B7] focus:ring-2 focus:ring-[#0A73B7]/35 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#0A73B7] text-white shadow-md transition hover:bg-[#075985] disabled:cursor-not-allowed disabled:bg-slate-300"
-              aria-label="Send"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="mt-2 text-center text-[10.5px] text-slate-500 dark:text-slate-400">
-            Gaia is an AI assistant for OdaFlow. Double-check important numbers before acting.
-          </p>
-        </form>
-        </div>
-      ) : null}
+                }}
+              >
+                <div className="gaia-composer__dock">
+                  <textarea
+                    ref={inputRef}
+                    rows={1}
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      e.target.style.height = "auto";
+                      e.target.style.height = `${Math.min(120, e.target.scrollHeight)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        void send(input);
+                      }
+                    }}
+                    placeholder="Ask Gaia anything…"
+                    disabled={loading}
+                    className="gaia-composer__input"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading || !input.trim()}
+                    className="gaia-composer__send"
+                    aria-label="Send"
+                  >
+                    <Send className="h-4 w-4" strokeWidth={2.25} />
+                  </button>
+                </div>
+                <p className="gaia-disclaimer">
+                  AI assistant for OdaFlow — verify critical numbers before acting.
+                </p>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="pointer-events-auto relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#075985] to-[#0A73B7] text-white shadow-lg ring-2 ring-white/30 transition hover:scale-105 active:scale-95"
-        aria-label={open ? "Close Gaia" : "Open Gaia"}
-        title="Ask Gaia"
-      >
-        {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
-        {!open && (
-          <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-300 opacity-60" />
-            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-white" />
-          </span>
-        )}
-      </button>
-
-      <style>{`
-        .gaia-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 9999px;
-          background: #0a73b7;
-          display: inline-block;
-          animation: gaia-bounce 1.1s ease-in-out infinite;
-        }
-        @keyframes gaia-bounce {
-          0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
-          40% { transform: translateY(-4px); opacity: 1; }
-        }
-      `}</style>
-    </div>
+        <FloaterTooltip label="Ask Gaia" hidden={isDragging}>
+          <GaiaOrb
+            state={orbState}
+            reducedMotion={reducedMotion}
+            open={open}
+            isDragging={isDragging}
+            {...getOrbProps(() => setOpen((v) => !v))}
+          />
+        </FloaterTooltip>
+      </div>
+    </>
   );
+
+  return createPortal(ui, document.body);
 }

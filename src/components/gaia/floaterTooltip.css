@@ -1,0 +1,53 @@
+.floater-tip {
+  position: relative;
+  display: inline-flex;
+  pointer-events: auto;
+}
+
+.floater-tip__bubble {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #f8fafc;
+  box-shadow: 0 10px 24px rgba(2, 8, 23, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition-delay: 0s;
+}
+
+.floater-tip__label {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.floater-tip__hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: #cbd5e1;
+  line-height: 1.3;
+}
+
+.floater-tip:hover .floater-tip__bubble {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.4s;
+}
+
+.floater-tip.is-hidden .floater-tip__bubble {
+  opacity: 0 !important;
+  transform: translateY(4px);
+  transition-delay: 0s !important;
+}
