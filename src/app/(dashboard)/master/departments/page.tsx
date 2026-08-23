@@ -214,6 +214,8 @@ export default function MasterDepartmentsPage() {
       {
         id: "name",
         header: "Department",
+        sortable: true,
+        sortValue: (r: ProductDepartmentRow) => r.name?.toLowerCase() ?? "",
         accessor: (r: ProductDepartmentRow) => (
           <span className="font-medium">{r.name}</span>
         ),
@@ -222,6 +224,8 @@ export default function MasterDepartmentsPage() {
       {
         id: "code",
         header: "Code",
+        sortable: true,
+        sortValue: (r: ProductDepartmentRow) => r.code ?? "",
         accessor: (r: ProductDepartmentRow) => (
           <span className="text-muted-foreground">{r.code}</span>
         ),
@@ -229,6 +233,9 @@ export default function MasterDepartmentsPage() {
       {
         id: "categories",
         header: "Categories",
+        sortable: true,
+        sortValue: (r: ProductDepartmentRow) =>
+          r.categories.map((c) => c.name).join(", ").toLowerCase(),
         accessor: (r: ProductDepartmentRow) => {
           if (r.categories.length === 0) {
             return <span className="text-muted-foreground">None</span>;
@@ -247,6 +254,8 @@ export default function MasterDepartmentsPage() {
       {
         id: "status",
         header: "Status",
+        sortable: true,
+        sortValue: (r: ProductDepartmentRow) => (r.isActive ? "active" : "inactive"),
         accessor: (r: ProductDepartmentRow) => (
           <StatusBadge status={r.isActive ? "ACTIVE" : "INACTIVE"} />
         ),

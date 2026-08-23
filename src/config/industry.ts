@@ -4,6 +4,7 @@ const FMCG_TEMPLATE_IDS = new Set([
   "fmcg-manufacturer",
   "fmcg-distributor",
   "retail-multi-store",
+  "bakex",
 ]);
 
 const SEAFOOD_TEMPLATE_IDS = new Set([

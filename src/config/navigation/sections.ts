@@ -63,6 +63,15 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresPermissions: ["manufacturing.workorders.read"],
       },
       {
+        key: "manufacturing-production-plan",
+        label: "Production Plan",
+        href: "/manufacturing/production-plan",
+        icon: "Calculator",
+        moduleKey: "manufacturing",
+        requiresFlags: ["bomMrpWorkOrders"],
+        requiresPermissions: ["manufacturing.production.read"],
+      },
+      {
         key: "manufacturing-mrp",
         label: "MRP",
         href: "/manufacturing/mrp",

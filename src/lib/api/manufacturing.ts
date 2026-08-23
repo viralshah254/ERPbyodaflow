@@ -468,6 +468,65 @@ export async function applyManufacturingMrp(suggestionIds?: string[]): Promise<{
   });
 }
 
+export type ProductionPlanRow = {
+  productId: string;
+  productName: string;
+  productSku?: string;
+  uom: string;
+  bomId?: string;
+  requiredQty: number;
+  onHandQty: number;
+  incomingQty: number;
+  shortageQty: number;
+  suggestedQty?: number;
+};
+
+export type ProductionPlanTreeNode = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  uom: string;
+  kind: "pack" | "make" | "buy";
+  children: ProductionPlanTreeNode[];
+};
+
+export type ExplodedProductionPlan = {
+  packLines: ProductionPlanRow[];
+  make: ProductionPlanRow[];
+  buy: ProductionPlanRow[];
+  tree: ProductionPlanTreeNode[];
+};
+
+export type ProductionPlanLineInput = {
+  productId: string;
+  quantity: number;
+};
+
+export async function fetchProductionPlanDefaults(): Promise<{ items: ProductionPlanRow[] }> {
+  requireLiveApi("Production plan");
+  return apiRequest("/api/manufacturing/production-plan/defaults");
+}
+
+export async function explodeProductionPlan(lines: ProductionPlanLineInput[]): Promise<ExplodedProductionPlan> {
+  requireLiveApi("Production plan");
+  return apiRequest("/api/manufacturing/production-plan/explode", {
+    method: "POST",
+    body: { lines },
+  });
+}
+
+export async function applyProductionPlan(lines: ProductionPlanLineInput[]): Promise<{
+  applied: boolean;
+  created: Array<{ id: string; number: string; productId: string; quantity: number }>;
+  explode: ExplodedProductionPlan;
+}> {
+  requireLiveApi("Production plan");
+  return apiRequest("/api/manufacturing/production-plan/apply", {
+    method: "POST",
+    body: { lines },
+  });
+}
+
 export type MaterialAvailabilityLine = {
   productId: string;
   productName: string;
