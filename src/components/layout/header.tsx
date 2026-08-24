@@ -16,13 +16,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound } from "lucide-react";
+import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound, LayoutGrid } from "lucide-react";
 import { signOut as firebaseSignOut } from "@/lib/firebase";
 import { unregisterWebPushToken } from "@/lib/push-notifications";
 import { setApiAuth } from "@/lib/api/client";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
-import { odaflowHubLoggedOutUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubLoggedOutUrl, odaflowLaunchpadUrl } from "@/lib/auth/odaflow-hub";
 import { pingSiblingSignOut } from "@/lib/auth/sso-logout-sync";
 
 export function Header() {
@@ -144,6 +144,12 @@ export function Header() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <a href={odaflowLaunchpadUrl()} className="flex cursor-pointer items-center">
+              <LayoutGrid className="mr-2 h-4 w-4" />
+              <span>Open Launchpad</span>
+            </a>
+          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
               void handleLogout();
