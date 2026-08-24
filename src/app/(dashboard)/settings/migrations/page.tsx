@@ -1025,7 +1025,8 @@ export default function MigrationConsolePage() {
                         ) : csvImportType === "price-lists" ? (
                           <>
                             Columns: <strong>priceTag</strong>, <strong>sku</strong> or{" "}
-                            <strong>barcode</strong>, <strong>price</strong>, optional discountPercent.
+                            <strong>barcode</strong>, <strong>price</strong>, optional
+                            discountPercent or finalPrice (the other is calculated).
                             Creates missing tags and merges prices (piece price for FMCG).
                           </>
                         ) : csvImportType === "opening-stock" ? (

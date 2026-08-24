@@ -473,13 +473,43 @@ export interface ImportArOpeningBalancesResult {
   skipped?: Array<{ row: number; reason: string }>;
 }
 
+async function priceTagSheetToCsvFile(file: File): Promise<File> {
+  if (!isExcelFile(file)) return file;
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const firstSheetName = wb.SheetNames.find((name) => !/^how to edit$/i.test(name)) ?? wb.SheetNames[0];
+  if (!firstSheetName) throw new Error("The Excel file has no sheets.");
+  const sheet = wb.Sheets[firstSheetName];
+  const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, {
+    header: 1,
+    raw: true,
+    defval: "",
+  });
+  if (aoa.length < 2) throw new Error("The Excel file needs a header row and at least one data row.");
+  const header = (aoa[0] ?? []).map((h) => String(h ?? "").trim());
+  const finalIdx = header.findIndex((h) => /final/i.test(h) && /price/i.test(h));
+  if (finalIdx >= 0) {
+    for (let r = 1; r < aoa.length; r++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r, c: finalIdx })] as { f?: string } | undefined;
+      if (cell?.f?.trim()) {
+        const row = aoa[r] ?? [];
+        row[finalIdx] = "";
+        aoa[r] = row;
+      }
+    }
+  }
+  const csv = aoa.map((row) => (row ?? []).map((cell) => csvCell(cell)).join(",")).join("\n");
+  return new File([csv], file.name.replace(/\.(xlsx|xls)$/i, ".csv"), { type: "text/csv" });
+}
+
 /** Bulk create/fill price tags from CSV (priceTag, sku/barcode, price). */
 export async function importPriceListsApi(
   file: File,
   opts?: { priceListId?: string }
 ): Promise<ImportPriceListsResult> {
   requireLiveApi("Price tags import");
-  const uploadFile = await toCsvUploadFile(file);
+  const uploadFile = await priceTagSheetToCsvFile(file);
   const formData = new FormData();
   formData.append("file", uploadFile);
   if (opts?.priceListId) formData.append("priceListId", opts.priceListId);
@@ -522,31 +552,56 @@ export async function exportPriceTagPricesAsFormatApi(
   requireLiveApi("Price tag export");
   try {
     const { fetchCatalogPricesApi } = await import("./pricing");
+    const { finalFromPriceAndDiscount } = await import("../pricing/price-tag-math");
     const catalog = await fetchCatalogPricesApi(priceListId);
-    const header = ["product", "sku", "barcode", "price", "discountPercent"];
-    const rows: Array<Array<string | number>> = [
-      header,
-      ...catalog.items.map((item) => [
-        item.name ?? "",
-        item.sku ?? "",
-        item.barcode ?? "",
-        item.source === "price_list" && item.price != null ? item.price : "",
-        item.discountPercent != null && item.discountPercent > 0 ? item.discountPercent : "",
-      ]),
-    ];
+    const header = ["product", "sku", "barcode", "price", "discountPercent", "finalPrice"];
+    const dataRows = catalog.items.map((item) => {
+      const price = item.source === "price_list" && item.price != null ? item.price : "";
+      const discount =
+        item.discountPercent != null && item.discountPercent > 0 ? item.discountPercent : "";
+      const final =
+        typeof price === "number"
+          ? finalFromPriceAndDiscount(price, typeof discount === "number" ? discount : 0)
+          : "";
+      return [item.name ?? "", item.sku ?? "", item.barcode ?? "", price, discount, final];
+    });
+    const rows: Array<Array<string | number>> = [header, ...dataRows];
     const stem = priceTagFileStem(tagName || catalog.priceListName);
+    const note =
+      "# Discount %: type 20 for 20% off (or 0.5 for 50%). Final price is price after discount — type a final price to set the discount.";
 
     if (format === "csv") {
-      const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+      const csv = [note, ...rows.map((r) => r.map(csvCell).join(","))].join("\n");
       triggerBlobDownload(new Blob([csv], { type: "text/csv;charset=utf-8;" }), `${stem}.csv`);
       return true;
     }
 
     const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet(rows);
+    const lastRow = rows.length;
+    for (let r = 2; r <= lastRow; r++) {
+      ws[XLSX.utils.encode_cell({ r: r - 1, c: 5 })] = {
+        t: "n",
+        f: `IF(D${r}="","",ROUND(D${r}*(1-IF(AND(E${r}<>"",E${r}<=1),E${r},N(E${r})/100)),2))`,
+      };
+    }
+    const help = XLSX.utils.aoa_to_sheet([
+      ["How to edit this sheet"],
+      [],
+      ["Price", "List price per piece."],
+      [
+        "Discount %",
+        "Type 20 for 20% off. You can also type 0.5 for 50% off. Final price updates by formula.",
+      ],
+      [
+        "Final price",
+        "Selling price after discount. Type a number here to set the discount on import (example: price 100 and final 50 → 50% discount).",
+      ],
+    ]);
     const wb = XLSX.utils.book_new();
     const sheetName = stem.slice(0, 31);
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.utils.book_append_sheet(wb, help, "How to edit");
     const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     triggerBlobDownload(
       new Blob([out], {

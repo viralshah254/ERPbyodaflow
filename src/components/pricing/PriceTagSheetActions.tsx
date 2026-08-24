@@ -160,7 +160,7 @@ export function PriceTagSheetActions({
         title={
           mode === "single"
             ? `Import prices into “${tagName ?? "this tag"}”. priceTag column is optional.`
-            : "Import several tags at once. Columns: priceTag, sku or barcode, price, discountPercent (optional)."
+            : "Import several tags at once. Columns: priceTag, sku or barcode, price, discountPercent or finalPrice."
         }
         disabled={importing || (mode === "single" && !priceListId)}
         onClick={() => fileRef.current?.click()}
