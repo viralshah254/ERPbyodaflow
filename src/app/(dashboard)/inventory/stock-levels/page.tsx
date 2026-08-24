@@ -526,7 +526,7 @@ export default function StockLevelsPage() {
         title="Stock Levels"
         description={
           fmcg
-            ? "On-hand by warehouse, with avg inventory cost and value from the latest costing run. Stock In puts finished goods into MAIN for pick & pack."
+            ? "On-hand by warehouse, with avg inventory cost from the latest costing run. Completing a work order issues components and receives finished goods. Stock In is for opening or purchased stock."
             : "View current inventory levels across all warehouses"
         }
         sticky
