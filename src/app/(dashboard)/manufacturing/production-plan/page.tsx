@@ -243,7 +243,7 @@ export default function ProductionPlanPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Production Plan"
-        description="Enter today’s pack quantities, then work backwards to System Cake, margarine, and raw materials."
+        description="Enter today’s pack quantities, then work backwards through semi-finished batches to raw materials."
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Production Plan" },
@@ -297,7 +297,7 @@ export default function ProductionPlanPage() {
                 <Badge variant="default">{plan.make.length + plan.packLines.length}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                Batches first (margarine, then cake), then packing. Shortage is what still needs a work order.
+                Components first (items with their own BOM), then packing. Shortage is what still needs a work order.
               </p>
               <div className="rounded-xl border bg-card shadow-sm">
                 <DataTable
@@ -340,7 +340,7 @@ export default function ProductionPlanPage() {
 
         <p className="flex items-start gap-2 text-sm text-muted-foreground">
           <Icons.Info className="mt-0.5 h-4 w-4 shrink-0" />
-          Recipe weights are still the seeded estimates. After the first bake, tighten BOM quantities and this planner will follow.
+          Tighten BOM quantities after the first production run and this planner will follow. Create work orders in Make order (components, then packs). Complete each order to consume inputs and receive the output.
         </p>
       </div>
     </PageShell>

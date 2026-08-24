@@ -474,6 +474,7 @@ export type ProductionPlanRow = {
   productSku?: string;
   uom: string;
   bomId?: string;
+  routingId?: string;
   requiredQty: number;
   onHandQty: number;
   incomingQty: number;

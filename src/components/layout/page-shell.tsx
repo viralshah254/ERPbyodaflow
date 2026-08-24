@@ -15,6 +15,14 @@ export const LIST_PAGE_BODY_CLASS =
 export const LIST_TABLE_SURFACE_CLASS =
   "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
 
+/** Inventory-style lists: tall table body from the viewport, pager stays in the card footer. */
+export const LIST_TABLE_VIEWPORT_CLASS =
+  "relative flex h-[calc(100dvh-14.5rem)] min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
+
+/** Compact body under PageHeader when the table uses LIST_TABLE_VIEWPORT_CLASS. */
+export const LIST_PAGE_BODY_VIEWPORT_CLASS =
+  "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-0 py-3";
+
 /** Flex child between LIST_TABLE_SURFACE and DataTable scrollMode="fill". */
 export const LIST_TABLE_SCROLL_BODY_CLASS =
   "flex min-h-0 flex-1 flex-col overflow-hidden transition-opacity duration-200";

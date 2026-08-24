@@ -1,15 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_VIEWPORT_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_PAGINATION_CLASS,
+  LIST_TABLE_SCROLL_BODY_CLASS,
+  LIST_TABLE_VIEWPORT_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Badge } from "@/components/ui/badge";
 import { downloadCsv } from "@/lib/export/csv";
 import type { MovementRow } from "@/lib/types/inventory";
 import { fetchInventoryMovementsApi } from "@/lib/api/inventory-stock";
 import { toast } from "sonner";
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export default function StockMovementsPage() {
   const [search, setSearch] = React.useState("");
@@ -17,29 +27,44 @@ export default function StockMovementsPage() {
   const [typeFilter, setTypeFilter] = React.useState("");
   const [allRows, setAllRows] = React.useState<MovementRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(25);
 
   const refreshRows = React.useCallback(async () => {
     setLoading(true);
     try {
-      setAllRows(
-        await fetchInventoryMovementsApi({
-          warehouseId: warehouseFilter || undefined,
-          search,
-          type: typeFilter || undefined,
-        })
-      );
+      setAllRows(await fetchInventoryMovementsApi());
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [warehouseFilter, search, typeFilter]);
+  }, []);
 
   React.useEffect(() => {
     void refreshRows();
   }, [refreshRows]);
 
-  const filtered = allRows;
+  const filtered = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allRows.filter((row) => {
+      if (warehouseFilter && row.warehouse !== warehouseFilter) return false;
+      if (typeFilter && row.type !== typeFilter) return false;
+      if (!q) return true;
+      return [row.sku, row.productName, row.reference, row.warehouse]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
+  }, [allRows, search, warehouseFilter, typeFilter]);
+
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [search, warehouseFilter, typeFilter, pageSize]);
+
+  const pagedRows = React.useMemo(
+    () => filtered.slice(pageOffset, pageOffset + pageSize),
+    [filtered, pageOffset, pageSize]
+  );
 
   const warehouses = React.useMemo(
     () => Array.from(new Set(allRows.map((r) => r.warehouse))),
@@ -96,10 +121,11 @@ export default function StockMovementsPage() {
           { label: "Movements" },
         ]}
         sticky
+        dense
         showCommandHint
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
-        <DataTableToolbar className="shrink-0"
+      <div className={LIST_PAGE_BODY_VIEWPORT_CLASS}>
+        <DataTableToolbar className="shrink-0 p-2"
           searchPlaceholder="Search by SKU, product, reference..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -146,20 +172,42 @@ export default function StockMovementsPage() {
           }
         />
 
-        {loading ? (
-          <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
-            Loading movements...
-          </div>
-        ) : (
-          <DataTable<MovementRow>
-            data={filtered}
-            columns={columns}
-            emptyMessage="No movements found."
-            scrollMode="fill"
-            size="comfortable"
-            className="min-h-0 flex-1 border-0"
+        <div className={LIST_TABLE_VIEWPORT_CLASS}>
+          {loading ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+              Loading movements...
+            </div>
+          ) : (
+            <div className={LIST_TABLE_SCROLL_BODY_CLASS}>
+              <DataTable<MovementRow>
+                data={pagedRows}
+                columns={columns}
+                emptyMessage="No movements found."
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+              />
+            </div>
+          )}
+          {!loading && filtered.length > 0 ? (
+            <TablePagination
+              className={`${LIST_TABLE_PAGINATION_CLASS} rounded-none border-0 border-t shadow-none bg-card`}
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={pagedRows.length}
+              totalCount={filtered.length}
+              hasMore={pageOffset + pageSize < filtered.length}
+              onPrevious={() => setPageOffset((offset) => Math.max(0, offset - pageSize))}
+              onNext={() => setPageOffset((offset) => offset + pageSize)}
+              entityLabel="movements"
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPageOffset(0);
+              }}
             />
-        )}
+          ) : null}
+        </div>
       </div>
     </PageShell>
   );

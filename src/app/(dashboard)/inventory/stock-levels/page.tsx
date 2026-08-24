@@ -4,18 +4,20 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_BODY_VIEWPORT_CLASS,
   LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_SURFACE_CLASS,
+  LIST_TABLE_PAGINATION_CLASS,
+  LIST_TABLE_SCROLL_BODY_CLASS,
+  LIST_TABLE_VIEWPORT_CLASS,
   PageShell,
 } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { FiltersBar } from "@/components/ui/filters-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
-import { CardDescription } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -59,6 +61,8 @@ import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
 /** Weighted average book cost per product from latest inventory costing run. */
 function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null): Map<string, number> {
   const result = new Map<string, number>();
@@ -91,6 +95,8 @@ export default function StockLevelsPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState<string>("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(25);
   const [stockItems, setStockItems] = React.useState<InventoryStockRow[]>([]);
   const [networkAgg, setNetworkAgg] = React.useState<FranchiseNetworkStockItem[]>([]);
   const [networkAggByProduct, setNetworkAggByProduct] = React.useState<Map<string, FranchiseNetworkStockItem>>(new Map());
@@ -288,6 +294,15 @@ export default function StockLevelsPage() {
     });
     return arr;
   }, [stockItems]);
+
+  React.useEffect(() => {
+    setPageOffset(0);
+  }, [searchQuery, warehouseFilter, statusFilter, pageSize]);
+
+  const pagedItems = React.useMemo(
+    () => filteredItems.slice(pageOffset, pageOffset + pageSize),
+    [filteredItems, pageOffset, pageSize]
+  );
 
   const warehouseOptions = React.useMemo(() => {
     const options = new Map<string, string>();
@@ -526,10 +541,11 @@ export default function StockLevelsPage() {
         title="Stock Levels"
         description={
           fmcg
-            ? "On-hand by warehouse, with avg inventory cost and value from the latest costing run. Stock In puts finished goods into MAIN for pick & pack."
-            : "View current inventory levels across all warehouses"
+            ? "On-hand by warehouse. Work orders issue components and receive finished goods."
+            : "On-hand inventory by warehouse"
         }
         sticky
+        dense
         showCommandHint
         actions={
           <>
@@ -574,7 +590,7 @@ export default function StockLevelsPage() {
           </>
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className={LIST_PAGE_BODY_VIEWPORT_CLASS}>
       {fmcg && !loading && stockItems.length === 0 && canWrite ? (
         <div className="shrink-0 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
           <p className="font-medium flex items-start gap-2">
@@ -618,7 +634,7 @@ export default function StockLevelsPage() {
       )}
 
         <FiltersBar
-          className="shrink-0"
+          className="shrink-0 rounded-xl p-2"
           searchPlaceholder="Search by SKU or product name..."
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
@@ -650,28 +666,42 @@ export default function StockLevelsPage() {
           activeFiltersCount={[warehouseFilter, statusFilter].filter((v) => v !== "all").length}
           onClearFilters={() => { setWarehouseFilter("all"); setStatusFilter("all"); }}
         />
-        <div className={LIST_TABLE_SURFACE_CLASS}>
-          <div className="shrink-0 border-b px-4 py-3">
-            <h3 className="text-sm font-semibold">Stock Levels</h3>
-            <CardDescription className="mt-1">
-              {loading
-                ? "Loading stock..."
-                : `${filteredItems.length} items across all locations${isFranchisor && networkAgg.length > 0 ? " · Franchise network column shows totals across all outlets" : ""}`}
-            </CardDescription>
-          </div>
+        <div className={LIST_TABLE_VIEWPORT_CLASS}>
           {loading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">Loading stock levels...</div>
+            <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+              Loading stock levels...
+            </div>
           ) : (
-            <DataTable
-              data={filteredItems}
-              columns={columns}
-              onRowClick={(row) => openStockDetail(row)}
-              emptyMessage="No stock items found."
-              scrollMode="fill"
-              size="comfortable"
-              className="min-h-0 flex-1 border-0"
-            />
+            <div className={LIST_TABLE_SCROLL_BODY_CLASS}>
+              <DataTable
+                data={pagedItems}
+                columns={columns}
+                onRowClick={(row) => openStockDetail(row)}
+                emptyMessage="No stock items found."
+                scrollMode="fill"
+                size="comfortable"
+                className="min-h-0 flex-1 border-0"
+              />
+            </div>
           )}
+          {!loading && filteredItems.length > 0 ? (
+            <TablePagination
+              className={`${LIST_TABLE_PAGINATION_CLASS} rounded-none border-0 border-t shadow-none bg-card`}
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={pagedItems.length}
+              totalCount={filteredItems.length}
+              hasMore={pageOffset + pageSize < filteredItems.length}
+              onPrevious={() => setPageOffset((offset) => Math.max(0, offset - pageSize))}
+              onNext={() => setPageOffset((offset) => offset + pageSize)}
+              entityLabel="stock lines"
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPageOffset(0);
+              }}
+            />
+          ) : null}
         </div>
       </div>
 

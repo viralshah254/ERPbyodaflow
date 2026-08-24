@@ -296,9 +296,23 @@ export default function WorkOrdersPage() {
               </Button>
             )}
             {canWrite && r.status === "RELEASED" && (
-              <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "start" })}>
-                Start
-              </Button>
+              <>
+                <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "start" })}>
+                  Start
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void runAction(r.id, {
+                      action: "complete",
+                      producedQuantity: r.openQuantity > 0 ? r.quantity : r.producedQuantity,
+                    })
+                  }
+                >
+                  Complete
+                </Button>
+              </>
             )}
             {canWrite && r.status === "IN_PROGRESS" && (
               <Button
@@ -455,7 +469,7 @@ export default function WorkOrdersPage() {
             <SheetDescription>
               {grnId
                 ? "Link a GRN batch to track input weight and production outputs."
-                : "Create a production order from a BOM or for a specific product."}
+                : "Pick the finished or semi-finished SKU. The matching formula is attached so complete can issue raw materials and receive finished goods."}
             </SheetDescription>
           </SheetHeader>
 
@@ -542,7 +556,37 @@ export default function WorkOrdersPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>BOM</Label>
+              <Label>
+                Product
+                <span className="ml-1 text-xs text-destructive">*</span>
+              </Label>
+              <Select
+                value={productId}
+                disabled={sheetMetaLoading}
+                onValueChange={(nextProductId) => {
+                  setProductId(nextProductId);
+                  const match = boms.find((bom) => bom.finishedProductId === nextProductId);
+                  if (match) {
+                    setBomId(match.id);
+                    if (match.routeId) setRoutingId(match.routeId);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select product to make" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.sku} - {product.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Formula / BOM</Label>
               <Select
                 value={bomId || "__none__"}
                 disabled={sheetMetaLoading}
@@ -558,13 +602,13 @@ export default function WorkOrdersPage() {
               >
                 <SelectTrigger>
                   {sheetMetaLoading ? (
-                    <span className="text-muted-foreground text-sm">Loading BOMs…</span>
+                    <span className="text-muted-foreground text-sm">Loading formulas…</span>
                   ) : (
-                    <SelectValue placeholder="Optional BOM" />
+                    <SelectValue placeholder="Select formula" />
                   )}
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">No BOM</SelectItem>
+                  <SelectItem value="__none__">No formula (receive only)</SelectItem>
                   {boms.map((bom) => (
                     <SelectItem key={bom.id} value={bom.id}>
                       {bom.code} - {bom.name}
@@ -572,28 +616,12 @@ export default function WorkOrdersPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {productId && !bomId && boms.some((bom) => bom.finishedProductId === productId) && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  This SKU has a formula. Leave it selected so complete can consume raw materials.
+                </p>
+              )}
             </div>
-
-            {!grnId && !bomId && (
-              <div className="space-y-2">
-                <Label>
-                  Finished product
-                  <span className="ml-1 text-xs text-destructive">*</span>
-                </Label>
-                <Select value={productId} onValueChange={setProductId} disabled={sheetMetaLoading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select product" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.sku} - {product.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             <div className="space-y-2">
               <Label>Routing</Label>
