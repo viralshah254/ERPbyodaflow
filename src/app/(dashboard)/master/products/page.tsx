@@ -58,7 +58,7 @@ import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
 import type { TaxRow } from "@/lib/types/taxes";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
-import { productTypeLabel } from "@/lib/products/product-type";
+import { productTypeLabel, productTypeSortKey } from "@/lib/products/product-type";
 import { composeFmcgSize, FMCG_SIZE_UOMS } from "@/lib/products/fmcg-size";
 import {
   clearProductCreateDraft,
@@ -323,11 +323,15 @@ export default function MasterProductsPage() {
               id: "name",
               header: "Product name",
               accessor: "name" as keyof ProductRow,
+              sortable: true,
+              sortValue: (r: ProductRow) => r.name?.toLowerCase() ?? "",
               sticky: true,
             },
             {
               id: "barcode",
               header: "Barcode",
+              sortable: true,
+              sortValue: (r: ProductRow) => r.barcode ?? "",
               accessor: (r: ProductRow) =>
                 r.barcode ? (
                   <span className="font-mono text-xs font-medium">{r.barcode}</span>
@@ -338,6 +342,13 @@ export default function MasterProductsPage() {
             {
               id: "category",
               header: "Category",
+              sortable: true,
+              sortValue: (r: ProductRow) =>
+                (
+                  r.categoryName ??
+                  (r.category ? categoryNameById.get(r.category) : undefined) ??
+                  ""
+                ).toLowerCase(),
               accessor: (r: ProductRow) =>
                 r.categoryName ??
                 (r.category ? categoryNameById.get(r.category) : undefined) ??
@@ -346,11 +357,15 @@ export default function MasterProductsPage() {
             {
               id: "size",
               header: "Size",
+              sortable: true,
+              sortValue: (r: ProductRow) => r.size?.trim() || "",
               accessor: (r: ProductRow) => r.size?.trim() || "—",
             },
             {
               id: "sku",
               header: "SKU",
+              sortable: true,
+              sortValue: (r: ProductRow) => r.sku ?? "",
               accessor: (r: ProductRow) => (
                 <span className="font-mono text-muted-foreground">{r.sku}</span>
               ),
@@ -360,6 +375,8 @@ export default function MasterProductsPage() {
             {
               id: "sku",
               header: "SKU",
+              sortable: true,
+              sortValue: (r: ProductRow) => r.sku ?? "",
               accessor: (r: ProductRow) => (
                 <div>
                   <span className="font-mono font-medium">{r.sku}</span>
@@ -367,10 +384,18 @@ export default function MasterProductsPage() {
               ),
               sticky: true,
             },
-            { id: "name", header: "Name", accessor: "name" as keyof ProductRow },
+            {
+              id: "name",
+              header: "Name",
+              accessor: "name" as keyof ProductRow,
+              sortable: true,
+              sortValue: (r: ProductRow) => r.name?.toLowerCase() ?? "",
+            },
             {
               id: "barcode",
               header: "Barcode",
+              sortable: true,
+              sortValue: (r: ProductRow) => r.barcode ?? "",
               accessor: (r: ProductRow) =>
                 r.barcode ? <span className="font-mono text-xs">{r.barcode}</span> : "—",
             },
@@ -379,6 +404,8 @@ export default function MasterProductsPage() {
                   {
                     id: "productFamily",
                     header: "Product family",
+                    sortable: true,
+                    sortValue: (r: ProductRow) => r.productFamily?.trim().toLowerCase() || "",
                     accessor: (r: ProductRow) => r.productFamily?.trim() || "—",
                   },
                 ]
@@ -386,12 +413,21 @@ export default function MasterProductsPage() {
                   {
                     id: "size",
                     header: "Size",
+                    sortable: true,
+                    sortValue: (r: ProductRow) => r.size?.trim() || "",
                     accessor: (r: ProductRow) => r.size?.trim() || "—",
                   },
                 ]),
             {
               id: "category",
               header: "Category",
+              sortable: true,
+              sortValue: (r: ProductRow) =>
+                (
+                  r.categoryName ??
+                  (r.category ? categoryNameById.get(r.category) : undefined) ??
+                  ""
+                ).toLowerCase(),
               accessor: (r: ProductRow) =>
                 r.categoryName ??
                 (r.category ? categoryNameById.get(r.category) : undefined) ??
@@ -401,6 +437,8 @@ export default function MasterProductsPage() {
       {
         id: "productType",
         header: "Type",
+        sortable: true,
+        sortValue: (r: ProductRow) => productTypeSortKey(r.productType),
         accessor: (r: ProductRow) => <ProductTypeBadge type={r.productType} />,
       },
       // FMCG sells finished packs by barcode — packing UOM is not a list concern.
@@ -410,22 +448,29 @@ export default function MasterProductsPage() {
               id: "unit",
               header: !seafoodOrg ? "Packing" : "Unit",
               accessor: "unit" as keyof ProductRow,
+              sortable: true,
+              sortValue: (r: ProductRow) => r.unit?.toLowerCase() ?? "",
             },
           ]
         : []),
       {
         id: "currentStock",
         header: "Stock",
+        sortable: true,
+        sortValue: (r: ProductRow) => r.currentStock ?? -1,
         accessor: (r: ProductRow) => r.currentStock ?? "—",
       },
       {
         id: "status",
         header: "Status",
+        sortable: true,
+        sortValue: (r: ProductRow) => r.status?.toLowerCase() ?? "",
         accessor: (r: ProductRow) => <StatusBadge status={r.status} />,
       },
       {
         id: "actions",
         header: "",
+        sortable: false,
         accessor: (r: ProductRow) => (
           <div onClick={(e) => e.stopPropagation()}>
             <RowActions

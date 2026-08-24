@@ -113,7 +113,7 @@ export function CommandPalette() {
   const setContext = useCopilotStore((s) => s.setContext);
 
   // Auth + org context (mirrors AppSidebar)
-  const { user, org, permissions } = useAuthStore();
+  const { user, org, permissions, isAuthenticated, isLoading } = useAuthStore();
   const {
     orgType: ctxOrgType,
     enabledModules,
@@ -135,13 +135,16 @@ export function CommandPalette() {
   // Load sidebar layout prefs (same logic as AppSidebar)
   const sidebarPreferencesRevision = useUIStore((s) => s.sidebarPreferencesRevision);
   React.useEffect(() => {
-    if (!isApiConfigured()) { setSidebarLayout(null); return; }
+    if (!isApiConfigured() || isLoading || !isAuthenticated) {
+      if (!isLoading && !isAuthenticated) setSidebarLayout(null);
+      return;
+    }
     let cancelled = false;
     fetchPreferencesApi()
       .then((p) => { if (!cancelled) setSidebarLayout(p.sidebarLayout ?? null); })
       .catch(() => { if (!cancelled) setSidebarLayout(null); });
     return () => { cancelled = true; };
-  }, [sidebarPreferencesRevision]);
+  }, [sidebarPreferencesRevision, isAuthenticated, isLoading]);
 
   // Build resolved nav sections (same as AppSidebar)
   const navParams = React.useMemo(() => ({

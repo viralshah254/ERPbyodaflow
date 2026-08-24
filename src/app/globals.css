@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 @import "./accessibility.css";
+@import "../components/gaia/gaiaImmersive.css";
+@import "../components/gaia/floaterTooltip.css";
 
 @layer base {
   :root {

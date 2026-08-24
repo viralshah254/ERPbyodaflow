@@ -1,6 +1,7 @@
 import type { SidebarLayout } from "@/config/navigation/sidebar-layout";
+import { getCurrentFirebaseIdTokenForApi } from "@/lib/firebase";
 import { useUIStore } from "@/stores/ui-store";
-import { apiRequest, requireLiveApi } from "./client";
+import { apiRequest, getApiBearerToken, requireLiveApi } from "./client";
 
 export type { SidebarLayout };
 
@@ -23,6 +24,8 @@ const DEFAULT_PREFERENCES: Preferences = {
 
 export async function fetchPreferencesApi(): Promise<Preferences> {
   requireLiveApi("Preferences");
+  const token = getApiBearerToken() || (await getCurrentFirebaseIdTokenForApi());
+  if (!token) return { ...DEFAULT_PREFERENCES };
   const data = await apiRequest<Partial<Preferences>>("/api/settings/preferences");
   return { ...DEFAULT_PREFERENCES, ...data };
 }

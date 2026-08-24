@@ -174,7 +174,7 @@ export default function BomsPage() {
         header: "Code",
         accessor: (r: BomRow) => (
           <Link
-            href={`/manufacturing/boms/${r.id}`}
+            href={`/manufacturing/boms/${encodeURIComponent(r.id)}`}
             className="font-mono text-sm font-semibold text-primary hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
@@ -317,7 +317,7 @@ export default function BomsPage() {
                 data={rows}
                 columns={columns}
                 emptyMessage="No BOMs match your filters. Create one to get started."
-                onRowClick={(r) => router.push(`/manufacturing/boms/${r.id}`)}
+                onRowClick={(r) => router.push(`/manufacturing/boms/${encodeURIComponent(r.id)}`)}
                 scrollMode="fill"
                 size="comfortable"
                 className="min-h-0 flex-1 border-0"

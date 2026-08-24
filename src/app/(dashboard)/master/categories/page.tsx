@@ -168,12 +168,16 @@ export default function MasterCategoriesPage() {
       {
         id: "name",
         header: "Category",
+        sortable: true,
+        sortValue: (r: ItemCategoryRow) => r.name?.toLowerCase() ?? "",
         accessor: (r: ItemCategoryRow) => <span className="font-medium">{r.name}</span>,
         sticky: true,
       },
       {
         id: "code",
         header: "Code",
+        sortable: true,
+        sortValue: (r: ItemCategoryRow) => r.code ?? "",
         accessor: (r: ItemCategoryRow) => (
           <span className="font-mono text-muted-foreground">{r.code}</span>
         ),
@@ -181,6 +185,8 @@ export default function MasterCategoriesPage() {
       {
         id: "status",
         header: "Status",
+        sortable: true,
+        sortValue: (r: ItemCategoryRow) => (r.isActive ? "active" : "inactive"),
         accessor: (r: ItemCategoryRow) => (
           <StatusBadge status={r.isActive ? "ACTIVE" : "INACTIVE"} />
         ),

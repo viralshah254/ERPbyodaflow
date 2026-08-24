@@ -17,9 +17,19 @@ interface Column<T> {
   accessor: keyof T | ((row: T) => React.ReactNode);
   className?: string;
   sticky?: boolean;
-  /** Click header to sort; provide sortValue or use accessor when it is a keyof T. */
+  /**
+   * Click header to sort. Defaults to on when `accessor` is a field key or
+   * `sortValue` is set. Set false for actions / non-data columns.
+   */
   sortable?: boolean;
   sortValue?: (row: T) => string | number | null | undefined;
+}
+
+function columnCanSort<T>(col: Column<T>): boolean {
+  if (col.sortable === false) return false;
+  if (col.sortValue) return true;
+  if (typeof col.accessor === "string") return true;
+  return col.sortable === true;
 }
 
 function compareSortValues(
@@ -94,7 +104,7 @@ export function DataTable<T extends object>({
   const displayData = React.useMemo(() => {
     if (!sort) return data;
     const col = columns.find((c) => c.id === sort.columnId);
-    if (!col?.sortable) return data;
+    if (!col || !columnCanSort(col)) return data;
     const getter: ((row: T) => unknown) | null =
       col.sortValue ??
       (typeof col.accessor === "string"
@@ -108,7 +118,7 @@ export function DataTable<T extends object>({
 
   const toggleSort = (columnId: string) => {
     const col = columns.find((c) => c.id === columnId);
-    if (!col?.sortable) return;
+    if (!col || !columnCanSort(col)) return;
     const getter =
       col.sortValue ??
       (typeof col.accessor === "string"
@@ -241,7 +251,7 @@ export function DataTable<T extends object>({
                     column.className?.includes("text-right") && "text-right",
                   )}
                   aria-sort={
-                    column.sortable
+                    columnCanSort(column)
                       ? sort?.columnId === column.id
                         ? sort.dir === "asc"
                           ? "ascending"
@@ -250,7 +260,7 @@ export function DataTable<T extends object>({
                       : undefined
                   }
                 >
-                  {column.sortable ? (
+                  {columnCanSort(column) ? (
                     <button
                       type="button"
                       className={cn(

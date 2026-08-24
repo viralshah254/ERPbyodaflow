@@ -33,7 +33,14 @@ import * as Icons from "lucide-react";
 
 export default function BomDetailPage() {
   const params = useParams();
-  const id = params.id as string;
+  const rawId = params.id as string;
+  const id = (() => {
+    try {
+      return decodeURIComponent(rawId);
+    } catch {
+      return rawId;
+    }
+  })();
   const router = useRouter();
   const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();

@@ -112,7 +112,7 @@ export default function NewBomPage() {
         type,
       });
       toast.success(`BOM ${bom.code ?? bom.id} created.`);
-      router.push(`/manufacturing/boms/${bom.id}`);
+      router.push(`/manufacturing/boms/${encodeURIComponent(bom.id)}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create BOM.");
     }

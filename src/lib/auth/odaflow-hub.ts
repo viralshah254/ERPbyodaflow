@@ -29,30 +29,34 @@ function envApiUrl(): string {
   ).trim();
 }
 
-const PROD_WEB_HOSTS = new Set([
-  "www.odaflow.com",
-  "odaflow.com",
-  "people.odaflow.com",
-  "crm.odaflow.com",
-  "erp.odaflow.com",
-]);
-
 /**
- * Production ERP/SFA webs talk to api.odaflow.com.
- * Local npm run dev tries localhost, then dev.odaflow.com.
+ * SFA APIs that may have minted the handoff code.
+ * Production ERP must exchange against api.odaflow.com (odaflow.com mints there).
+ * Local ERP can also try the local hub and dev.
  */
-export function odaflowApiCandidates(): string[] {
-  const host = typeof window === "undefined" ? "" : window.location.hostname;
-  if (PROD_WEB_HOSTS.has(host)) return ["https://api.odaflow.com"];
-  if (isLocalHost(host)) return ["http://localhost:8080", "https://dev.odaflow.com"];
+export function odaflowApiCandidates(
+  hostname = typeof window !== "undefined" ? window.location.hostname : ""
+): string[] {
   const fromEnv = envApiUrl();
-  if (fromEnv && !/localhost|127\.0\.0\.1/.test(fromEnv)) return [trimSlash(fromEnv)];
-  return ["https://api.odaflow.com"];
+  const local = "http://localhost:8080";
+  const prod = "https://api.odaflow.com";
+  const remote = "https://dev.odaflow.com";
+  const urls: string[] = [];
+  if (fromEnv) urls.push(trimSlash(fromEnv));
+  if (isLocalHost(hostname)) {
+    urls.push(local, remote);
+  } else {
+    urls.push(prod);
+    if (!fromEnv) urls.push(remote);
+  }
+  return [...new Set(urls.filter(Boolean))];
 }
 
 /** SFA / odaflow-backend API used for SSO exchange. */
-export function odaflowApiUrl(): string {
-  return odaflowApiCandidates()[0] || "https://api.odaflow.com";
+export function odaflowApiUrl(
+  hostname = typeof window !== "undefined" ? window.location.hostname : ""
+): string {
+  return odaflowApiCandidates(hostname)[0] || "https://api.odaflow.com";
 }
 
 /** SFA web app. A local ERP page must stay on local OdaWeb. */

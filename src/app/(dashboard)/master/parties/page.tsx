@@ -267,6 +267,8 @@ export default function MasterPartiesPage() {
       {
         id: "name",
         header: "Name",
+        sortable: true,
+        sortValue: (r: PartyRow) => r.name?.toLowerCase() ?? "",
         accessor: (r: PartyRow) => {
           const chips: string[] = [];
           if (r.roles?.includes("franchisee") || r.customerType === "FRANCHISEE") {
@@ -359,6 +361,8 @@ export default function MasterPartiesPage() {
       {
         id: "status",
         header: "Status",
+        sortable: true,
+        sortValue: (r: PartyRow) => r.status?.toLowerCase() ?? "",
         accessor: (r: PartyRow) => <StatusBadge status={r.status} />,
       },
     ],
