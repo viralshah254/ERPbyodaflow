@@ -6,6 +6,15 @@ function trimSlash(url: string): string {
   return url.replace(/\/$/, "");
 }
 
+export function odaflowLaunchpadUrl(): string {
+  return `${odaflowHubWebUrl()}/apps`;
+}
+
+/** Unified hub sign-in after logout. Do not send people to the old ERP login form. */
+export function odaflowHubLoggedOutUrl(client: "sfa" | "crm" | "hr" | "erp" = "erp"): string {
+  return `${odaflowHubWebUrl()}/login?sso=1&client=${client}&erpTried=1&loggedOut=1`;
+}
+
 /** OdaWeb hub. A local ERP page must stay on local OdaWeb. */
 export function odaflowHubWebUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_ODAFLOW_WEB_URL?.trim();

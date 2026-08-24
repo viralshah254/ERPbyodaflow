@@ -83,6 +83,8 @@ async function sessionOn(base: string, token: string): Promise<string> {
   const session = await fetchRuntimeSession();
   const { setSession } = useAuthStore.getState();
   const { hydrateFromBackend } = useOrgContextStore.getState();
+  const { markOdaflowLogin } = await import("@/lib/auth/sso-logout-sync");
+  markOdaflowLogin();
   setSession({
     user: session.user,
     org: session.org,
@@ -128,6 +130,15 @@ async function applyErpSession(token: string): Promise<string> {
   );
 }
 
+async function existingErpIdToken(): Promise<string> {
+  try {
+    const { getIdToken } = await import("@/lib/firebase");
+    return (await getIdToken()) || "";
+  } catch {
+    return "";
+  }
+}
+
 async function completeOnce(code: string): Promise<string> {
   const exchanged = await exchangeCode(code);
   let token = exchanged.firebaseIdToken || "";
@@ -136,7 +147,12 @@ async function completeOnce(code: string): Promise<string> {
     if (consumed) token = consumed;
   }
   if (!token) {
-    throw new Error("Could not open an ERP session from Odaflow.");
+    token = await existingErpIdToken();
+  }
+  if (!token) {
+    throw new Error(
+      "Could not open an ERP session from Odaflow. This account has no linked ERP user yet."
+    );
   }
   const dest = await applyErpSession(token);
   void import("@/lib/auth/attach-sfa-from-erp").then(({ attachSfaFromErp }) =>

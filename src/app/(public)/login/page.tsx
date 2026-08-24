@@ -20,7 +20,7 @@ import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isDevAuthEnabled } from "@/lib/runtime-flags";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubLoggedOutUrl, odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
 import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
 
 const loginSchema = z.object({
@@ -119,6 +119,8 @@ function LoginContent() {
       const session = await fetchRuntimeSession();
       const { setSession } = useAuthStore.getState();
       const { hydrateFromBackend } = useOrgContextStore.getState();
+      const { markOdaflowLogin } = await import("@/lib/auth/sso-logout-sync");
+      markOdaflowLogin();
       setSession({
         user: session.user,
         org: session.org,
@@ -186,9 +188,7 @@ function LoginContent() {
   };
 
   const localFormOnly = searchParams.get("local") === "1" && !handoffCode;
-  const hubRetry = `${odaflowHubWebUrl()}/auth/sso?client=erp&next=${encodeURIComponent(
-    searchParams.get("next") || searchParams.get("redirect") || "/dashboard"
-  )}`;
+  const hubRetry = odaflowHubLoggedOutUrl("erp");
   const showEmailForm = localFormOnly && !handoffBusy && !existingUser;
 
   if (!showEmailForm) {

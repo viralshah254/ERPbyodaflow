@@ -1,3 +1,17 @@
+function SsoTopProgressBar({ accent = "#7dd3fc" }: { accent?: string }) {
+  return (
+    <div
+      className="sso-top-progress"
+      role="progressbar"
+      aria-hidden="true"
+      style={{ ["--sso-bar" as string]: accent }}
+    >
+      <span className="sso-top-progress__bar sso-top-progress__bar--primary" />
+      <span className="sso-top-progress__bar sso-top-progress__bar--trail" />
+    </div>
+  );
+}
+
 export function SsoContinuityScreen({
   title = "Opening ERP",
   message = "Taking you to sign in",
@@ -13,6 +27,7 @@ export function SsoContinuityScreen({
 }) {
   return (
     <div className="fixed inset-0 z-[80] overflow-hidden bg-[#07131f] text-[#e8e2d6]">
+      {!error && <SsoTopProgressBar />}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -46,12 +61,6 @@ export function SsoContinuityScreen({
             {error || message}
           </p>
 
-          {!error && (
-            <div className="mt-9 h-[3px] overflow-hidden rounded-full bg-white/10">
-              <div className="sso-continuity-bar h-full w-1/3 rounded-full bg-sky-300" />
-            </div>
-          )}
-
           {error && actionHref && (
             <a
               href={actionHref}
@@ -63,15 +72,49 @@ export function SsoContinuityScreen({
         </div>
       </div>
 
-      <style>{`
-        @keyframes sso-continuity-slide {
-          0% { transform: translateX(-120%); }
-          100% { transform: translateX(320%); }
-        }
-        .sso-continuity-bar {
-          animation: sso-continuity-slide 1.6s ease-in-out infinite;
-        }
-      `}</style>
+      <style>{SSO_TOP_PROGRESS_CSS}</style>
     </div>
   );
 }
+
+const SSO_TOP_PROGRESS_CSS = `
+  .sso-top-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 90;
+    height: 3px;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .sso-top-progress__bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: auto;
+    background: var(--sso-bar, #7dd3fc);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--sso-bar, #7dd3fc) 70%, transparent);
+  }
+  .sso-top-progress__bar--primary {
+    animation: sso-top-primary 2.1s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+  }
+  .sso-top-progress__bar--trail {
+    animation: sso-top-trail 2.1s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
+    animation-delay: 1.15s;
+  }
+  @keyframes sso-top-primary {
+    0% { left: -35%; right: 100%; }
+    60% { left: 100%; right: -90%; }
+    100% { left: 100%; right: -90%; }
+  }
+  @keyframes sso-top-trail {
+    0% { left: -200%; right: 100%; }
+    60% { left: 107%; right: -8%; }
+    100% { left: 107%; right: -8%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sso-top-progress__bar { animation: none; left: 0; right: 35%; }
+  }
+`;

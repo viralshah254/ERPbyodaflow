@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FmcgPriceTagItemsEditor } from "@/components/pricing/FmcgPriceTagItemsEditor";
+import { PriceTagSheetActions } from "@/components/pricing/PriceTagSheetActions";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,7 @@ export function FmcgPriceTagsWorkspace({
   onSaved: () => void;
 }) {
   const [query, setQuery] = React.useState("");
+  const [editorEpoch, setEditorEpoch] = React.useState(0);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -216,7 +218,7 @@ export function FmcgPriceTagsWorkspace({
                   {selected.currency} · price per piece · packs calculate from packaging
                 </p>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => onEdit(selected)}>
                   <Icons.Pencil className="mr-1.5 h-3.5 w-3.5" />
                   Edit tag
@@ -224,10 +226,24 @@ export function FmcgPriceTagsWorkspace({
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/master/products">Products</Link>
                 </Button>
+                <PriceTagSheetActions
+                  mode="single"
+                  priceListId={selected.id}
+                  tagName={selected.name}
+                  onImported={() => {
+                    setEditorEpoch((n) => n + 1);
+                    onSaved();
+                  }}
+                />
               </div>
             </header>
             <div className="flex-1 overflow-auto p-4 sm:p-5">
-              <FmcgPriceTagItemsEditor priceListId={selected.id} onSaved={onSaved} />
+              <FmcgPriceTagItemsEditor
+                key={`${selected.id}-${editorEpoch}`}
+                priceListId={selected.id}
+                tagName={selected.name}
+                onSaved={onSaved}
+              />
             </div>
           </>
         ) : (

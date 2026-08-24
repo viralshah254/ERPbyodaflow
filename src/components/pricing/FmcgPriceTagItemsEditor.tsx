@@ -28,9 +28,13 @@ import {
 } from "@/lib/api/pricing";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import {
-  downloadImportTemplateApi,
-  importPriceListsApi,
-} from "@/lib/api/import-export";
+  discountFromPriceAndFinal,
+  finalFromPriceAndDiscount,
+  formatPriceAmount,
+  normalizeDiscountInput,
+  parseDiscountPercent,
+  parseNumber,
+} from "@/lib/pricing/price-tag-math";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -44,28 +48,42 @@ type RowDraft = {
   size: string;
   pricePerPiece: string;
   discountPercent: string;
+  finalPrice: string;
 };
 
 type EditDraft = {
   pricePerPiece: string;
   discountPercent: string;
+  finalPrice: string;
 };
 
+function finalFromDraft(priceStr: string, discountStr: string): string {
+  const price = parseNumber(priceStr);
+  if (price == null || priceStr.trim() === "") return "";
+  const discount = parseDiscountPercent(discountStr) ?? 0;
+  return formatPriceAmount(finalFromPriceAndDiscount(price, discount));
+}
+
 function itemToEdit(item?: { price?: number; discountPercent?: number }): EditDraft {
+  const pricePerPiece = item?.price != null ? String(item.price) : "";
+  const discountPercent =
+    item?.discountPercent != null && item.discountPercent > 0
+      ? String(item.discountPercent)
+      : "";
   return {
-    pricePerPiece: item?.price != null ? String(item.price) : "",
-    discountPercent:
-      item?.discountPercent != null && item.discountPercent > 0
-        ? String(item.discountPercent)
-        : "",
+    pricePerPiece,
+    discountPercent,
+    finalPrice: finalFromDraft(pricePerPiece, discountPercent),
   };
 }
 
 export function FmcgPriceTagItemsEditor({
   priceListId,
+  tagName,
   onSaved,
 }: {
   priceListId: string;
+  tagName?: string;
   onSaved?: () => void;
 }) {
   const [list, setList] = React.useState<PriceListDetail | null>(null);
@@ -82,8 +100,6 @@ export function FmcgPriceTagItemsEditor({
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [softLoading, setSoftLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [importing, setImporting] = React.useState(false);
-  const csvInputRef = React.useRef<HTMLInputElement>(null);
   const hasLoadedOnce = React.useRef(false);
   const editsRef = React.useRef(edits);
   editsRef.current = edits;
@@ -156,6 +172,7 @@ export function FmcgPriceTagItemsEditor({
             size: p.size?.trim() || "—",
             pricePerPiece: edit.pricePerPiece,
             discountPercent: edit.discountPercent,
+            finalPrice: edit.finalPrice || finalFromDraft(edit.pricePerPiece, edit.discountPercent),
           };
         });
         setRows(drafts);
@@ -233,6 +250,57 @@ export function FmcgPriceTagItemsEditor({
     );
   };
 
+  const editPrice = (productId: string, pricePerPiece: string) => {
+    const current =
+      edits[productId] ??
+      itemToEdit(list?.items.find((i) => i.productId === productId));
+    setRowEdit(productId, {
+      pricePerPiece,
+      finalPrice: finalFromDraft(pricePerPiece, current.discountPercent),
+    });
+  };
+
+  const editDiscount = (productId: string, discountPercent: string) => {
+    const current =
+      edits[productId] ??
+      itemToEdit(list?.items.find((i) => i.productId === productId));
+    setRowEdit(productId, {
+      discountPercent,
+      finalPrice: finalFromDraft(current.pricePerPiece, discountPercent),
+    });
+  };
+
+  const commitDiscount = (productId: string, discountPercent: string) => {
+    const normalized = normalizeDiscountInput(discountPercent);
+    if (normalized === discountPercent) return;
+    editDiscount(productId, normalized);
+  };
+
+  const editFinal = (productId: string, finalPrice: string) => {
+    const current =
+      edits[productId] ??
+      itemToEdit(list?.items.find((i) => i.productId === productId));
+    const price = parseNumber(current.pricePerPiece);
+    if (finalPrice.trim() === "") {
+      setRowEdit(productId, { discountPercent: "", finalPrice: "" });
+      return;
+    }
+    if (price == null || price <= 0) {
+      setRowEdit(productId, { finalPrice });
+      return;
+    }
+    const final = parseNumber(finalPrice);
+    if (final == null) {
+      setRowEdit(productId, { finalPrice });
+      return;
+    }
+    const discount = discountFromPriceAndFinal(price, final);
+    setRowEdit(productId, {
+      finalPrice,
+      discountPercent: discount != null && discount > 0 ? formatPriceAmount(discount) : "",
+    });
+  };
+
   const save = async () => {
     if (!list) return;
     setSaving(true);
@@ -244,13 +312,11 @@ export function FmcgPriceTagItemsEditor({
           byId.delete(productId);
           continue;
         }
-        const discountPercent = Number(edit.discountPercent);
+        const discountPercent = parseDiscountPercent(edit.discountPercent);
         byId.set(productId, {
           productId,
           price,
-          ...(Number.isFinite(discountPercent) && discountPercent > 0
-            ? { discountPercent }
-            : {}),
+          ...(discountPercent != null && discountPercent > 0 ? { discountPercent } : {}),
         });
       }
 
@@ -262,13 +328,11 @@ export function FmcgPriceTagItemsEditor({
           // leave existing list item as-is if user didn't touch
           continue;
         }
-        const discountPercent = Number(r.discountPercent);
+        const discountPercent = parseDiscountPercent(r.discountPercent);
         byId.set(r.productId, {
           productId: r.productId,
           price,
-          ...(Number.isFinite(discountPercent) && discountPercent > 0
-            ? { discountPercent }
-            : {}),
+          ...(discountPercent != null && discountPercent > 0 ? { discountPercent } : {}),
         });
       }
 
@@ -315,70 +379,17 @@ export function FmcgPriceTagItemsEditor({
     rows.length === 0 && !debouncedSearch.trim() && !softLoading;
   const showEmptySearch =
     rows.length === 0 && Boolean(debouncedSearch.trim()) && !softLoading;
-  const tagLabel = list?.name ?? "this tag";
-
-  const handleCsvImport = async (file: File | undefined) => {
-    if (!file) return;
-    setImporting(true);
-    try {
-      const result = await importPriceListsApi(file);
-      const skipped = result.skipped?.length ?? 0;
-      toast.success(
-        `Imported prices: ${result.pricesUpserted} row(s), ${result.tagsCreated} tag(s) created, ${result.tagsUpdated} updated` +
-          (skipped ? ` · ${skipped} skipped` : "")
-      );
-      onSaved?.();
-      await loadPriceList();
-      await loadProductsPage();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Price CSV import failed");
-    } finally {
-      setImporting(false);
-      if (csvInputRef.current) csvInputRef.current.value = "";
-    }
-  };
+  const tagLabel = list?.name ?? tagName ?? "this tag";
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Enter <span className="font-medium text-foreground">price per piece</span> for{" "}
-        <span className="font-medium text-foreground">{tagLabel}</span> in the grid
-        below. Optional discount % can show on the customer invoice.
+        <span className="font-medium text-foreground">{tagLabel}</span>. Discount % and
+        final price stay in sync — change either one and the other updates. To
+        bulk-edit, download this tag’s prices above (Excel has the same formulas),
+        then import. The open tag is used automatically.
       </p>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={csvInputRef}
-          type="file"
-          accept=".csv,.xlsx,.xls,text/csv"
-          className="hidden"
-          onChange={(e) => void handleCsvImport(e.target.files?.[0])}
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={importing}
-          onClick={() => csvInputRef.current?.click()}
-        >
-          <Icons.Upload className="mr-1.5 h-3.5 w-3.5" />
-          {importing ? "Importing…" : "Import CSV"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() =>
-            downloadImportTemplateApi("price-lists", (msg) => toast.info(msg || "Template unavailable."))
-          }
-        >
-          <Icons.Download className="mr-1.5 h-3.5 w-3.5" />
-          CSV template
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          Columns: priceTag, sku or barcode, price, discountPercent (optional)
-        </span>
-      </div>
 
       <div className="relative">
         <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -427,12 +438,13 @@ export function FmcgPriceTagItemsEditor({
                     <TableHead>SKU</TableHead>
                     <TableHead className="w-[140px]">Price / pc</TableHead>
                     <TableHead className="w-[120px]">Discount %</TableHead>
+                    <TableHead className="w-[140px]">Final price</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {showEmptySearch ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                         No products match “{debouncedSearch.trim()}”.
                       </TableCell>
                     </TableRow>
@@ -450,9 +462,7 @@ export function FmcgPriceTagItemsEditor({
                             step="0.01"
                             className="h-8"
                             value={r.pricePerPiece}
-                            onChange={(e) =>
-                              setRowEdit(r.productId, { pricePerPiece: e.target.value })
-                            }
+                            onChange={(e) => editPrice(r.productId, e.target.value)}
                             placeholder="0"
                           />
                         </TableCell>
@@ -464,9 +474,19 @@ export function FmcgPriceTagItemsEditor({
                             step="0.1"
                             className="h-8"
                             value={r.discountPercent}
-                            onChange={(e) =>
-                              setRowEdit(r.productId, { discountPercent: e.target.value })
-                            }
+                            onChange={(e) => editDiscount(r.productId, e.target.value)}
+                            onBlur={(e) => commitDiscount(r.productId, e.target.value)}
+                            placeholder="0"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="h-8"
+                            value={r.finalPrice}
+                            onChange={(e) => editFinal(r.productId, e.target.value)}
                             placeholder="0"
                           />
                         </TableCell>

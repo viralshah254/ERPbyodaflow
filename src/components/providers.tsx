@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { useState } from "react";
 import { AuthRestore } from "@/components/auth/auth-restore";
+import { SessionLogoutWatcher } from "@/components/auth/session-logout-watcher";
 import { FirebaseClientInit } from "@/components/firebase-client-init";
 import { AccessibilityProvider } from "@/components/accessibility/AccessibilityProvider";
 import { AccessibilityWidget } from "@/components/accessibility/AccessibilityWidget";
@@ -33,6 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AccessibilityProvider>
           <div className="app-providers-root">
             <AuthRestore />
+            <SessionLogoutWatcher />
             <FirebaseClientInit />
             {children}
             <Toaster position="bottom-right" richColors />

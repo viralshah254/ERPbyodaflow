@@ -9,6 +9,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { odaflowHubLoggedOutUrl } from "@/lib/auth/odaflow-hub";
 
 const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   MANUFACTURER: "fmcg-manufacturer",
@@ -41,7 +42,7 @@ export default function DashboardLayout({
       return;
     }
     if (!user) {
-      router.replace("/login");
+      window.location.replace(odaflowHubLoggedOutUrl("erp"));
     }
   }, [isLoading, user, router]);
 

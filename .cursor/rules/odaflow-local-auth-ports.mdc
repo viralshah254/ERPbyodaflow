@@ -1,0 +1,25 @@
+---
+description: Local Odaflow SSO — run OdaWeb as the login hub; keep fixed ports
+alwaysApply: true
+---
+
+# Local Odaflow auth (fixed ports)
+
+OdaWeb is the **unified login hub**. When building or testing CRM, People, ERP, or any SSO/handoff flow locally, also run OdaWeb with `npm run dev`. You can start apps in any order.
+
+## Ports (do not change, do not hop)
+
+| App | Command | URL |
+|---|---|---|
+| OdaWeb (hub) | `npm run dev` in `OdaWeb` | http://localhost:5173 |
+| CRM | `npm run dev` in `odacrm` | http://localhost:5174 |
+| People | `npm run dev` in `oda_hr` | http://localhost:5175 |
+| ERP | `npm run dev` in `ERPbyodaflow` | http://localhost:3000 |
+
+Vite/Next must **fail** if that port is taken (`strictPort` / `--port 3000`). Never let the app move to 5176 or 3001 — handoff and cookies break.
+
+## What to run
+
+- Sign-in, logout, launchpad, or switching apps → OdaWeb on **5173** must be up.
+- Launchpad: http://localhost:5173/apps
+- Only the one product under test can stay down. Do not invent new local ports or point local SSO at production webs.
