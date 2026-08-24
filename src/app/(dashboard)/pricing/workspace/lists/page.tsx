@@ -61,6 +61,7 @@ import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { FmcgPriceTagsWorkspace } from "@/components/pricing/FmcgPriceTagsWorkspace";
+import { PriceTagSheetActions } from "@/components/pricing/PriceTagSheetActions";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { SfaCatalogSyncAlertBanner } from "@/components/integrations/SfaCatalogSyncAlertBanner";
 
@@ -238,11 +239,17 @@ function PriceListsContent() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button size="sm" onClick={openAdd}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               {fmcgOrg ? "Add price tag" : "Add price list"}
             </Button>
+            {fmcgOrg ? (
+              <PriceTagSheetActions
+                mode="multi"
+                onImported={() => void refresh({ soft: true })}
+              />
+            ) : null}
             {seafoodOrg ? (
               <Button variant="outline" size="sm" asChild>
                 <Link href="/pricing/workspace/approvals">Daily review</Link>

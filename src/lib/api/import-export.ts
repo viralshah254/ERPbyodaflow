@@ -474,12 +474,91 @@ export interface ImportArOpeningBalancesResult {
 }
 
 /** Bulk create/fill price tags from CSV (priceTag, sku/barcode, price). */
-export async function importPriceListsApi(file: File): Promise<ImportPriceListsResult> {
+export async function importPriceListsApi(
+  file: File,
+  opts?: { priceListId?: string }
+): Promise<ImportPriceListsResult> {
   requireLiveApi("Price tags import");
   const uploadFile = await toCsvUploadFile(file);
   const formData = new FormData();
   formData.append("file", uploadFile);
+  if (opts?.priceListId) formData.append("priceListId", opts.priceListId);
   return uploadFormData<ImportPriceListsResult>("/api/import/price-lists", formData);
+}
+
+function csvCell(value: string | number | null | undefined): string {
+  const s = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/** Safe download stem from a price-tag name (e.g. "10%" → "10%"). */
+export function priceTagFileStem(tagName: string): string {
+  const cleaned = tagName.replace(/[/\\?*:|"<>]/g, "-").replace(/\s+/g, " ").trim();
+  return cleaned || "price-tag";
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Download every product on a price tag as CSV or Excel so manufacturers can
+ * bulk-edit piece prices and re-import. The file is named after the tag.
+ */
+export async function exportPriceTagPricesAsFormatApi(
+  priceListId: string,
+  tagName: string,
+  format: PartySheetExportFormat,
+  onError: (msg: string) => void
+): Promise<boolean> {
+  requireLiveApi("Price tag export");
+  try {
+    const { fetchCatalogPricesApi } = await import("./pricing");
+    const catalog = await fetchCatalogPricesApi(priceListId);
+    const header = ["product", "sku", "barcode", "price", "discountPercent"];
+    const rows: Array<Array<string | number>> = [
+      header,
+      ...catalog.items.map((item) => [
+        item.name ?? "",
+        item.sku ?? "",
+        item.barcode ?? "",
+        item.source === "price_list" && item.price != null ? item.price : "",
+        item.discountPercent != null && item.discountPercent > 0 ? item.discountPercent : "",
+      ]),
+    ];
+    const stem = priceTagFileStem(tagName || catalog.priceListName);
+
+    if (format === "csv") {
+      const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+      triggerBlobDownload(new Blob([csv], { type: "text/csv;charset=utf-8;" }), `${stem}.csv`);
+      return true;
+    }
+
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    const sheetName = stem.slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    triggerBlobDownload(
+      new Blob([out], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      `${stem}.xlsx`
+    );
+    return true;
+  } catch (e) {
+    onError(e instanceof Error ? e.message : "Could not download prices.");
+    return false;
+  }
 }
 
 /** Opening stock quantities (sku/barcode, warehouse, quantity). */
