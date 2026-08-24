@@ -328,29 +328,41 @@ export async function fetchInventoryMovementsApi(filters?: {
   warehouseId?: string;
   search?: string;
   type?: string;
+  limit?: number;
 }): Promise<MovementRow[]> {
   requireLiveApi("Inventory movements");
-  const params = new URLSearchParams();
-  if (filters?.warehouseId) params.set("warehouseId", filters.warehouseId);
-  if (filters?.search?.trim()) params.set("search", filters.search.trim());
-  const data = await apiRequest<{ items: BackendInventoryMovement[] }>("/api/inventory/movements", {
-    params,
-  });
-  let rows = data.items.map((item) => ({
-    id: item.id,
-    date: item.date,
-    type:
-      item.sourceType === "TRANSFER"
-        ? "TRANSFER"
-        : item.sourceType === "ADJUSTMENT"
-          ? "ADJUST"
-          : item.direction,
-    sku: item.sku ?? "—",
-    productName: item.name ?? "Unknown product",
-    warehouse: item.warehouse,
-    quantity: item.signedQuantity ?? 0,
-    reference: item.reference,
-  })) as MovementRow[];
-  if (filters?.type) rows = rows.filter((row) => row.type === filters.type);
+  const pageLimit = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 100;
+  const rows: MovementRow[] = [];
+  let cursor: string | undefined;
+  while (rows.length < 500) {
+    const params = new URLSearchParams();
+    params.set("limit", String(pageLimit));
+    if (cursor) params.set("cursor", cursor);
+    if (filters?.warehouseId) params.set("warehouseId", filters.warehouseId);
+    if (filters?.search?.trim()) params.set("search", filters.search.trim());
+    const data = await apiRequest<{
+      items: BackendInventoryMovement[];
+      nextCursor?: string | null;
+    }>("/api/inventory/movements", { params });
+    const page = (data.items ?? []).map((item) => ({
+      id: item.id,
+      date: item.date,
+      type:
+        item.sourceType === "TRANSFER"
+          ? "TRANSFER"
+          : item.sourceType === "ADJUSTMENT"
+            ? "ADJUST"
+            : item.direction,
+      sku: item.sku ?? "—",
+      productName: item.name ?? "Unknown product",
+      warehouse: item.warehouse,
+      quantity: item.signedQuantity ?? 0,
+      reference: item.reference,
+    })) as MovementRow[];
+    rows.push(...page);
+    if (!data.nextCursor || page.length < pageLimit) break;
+    cursor = data.nextCursor;
+  }
+  if (filters?.type) return rows.filter((row) => row.type === filters.type);
   return rows;
 }
