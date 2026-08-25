@@ -23,6 +23,7 @@ import {
   type ProductionPlanTreeNode,
 } from "@/lib/api/manufacturing";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
