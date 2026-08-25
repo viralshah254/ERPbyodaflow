@@ -25,6 +25,9 @@ const statusVariants: Record<string, "default" | "success" | "warning" | "danger
   PARTIALLY_APPLIED: "warning",
   PAID: "success",
   OPEN: "warning",
+  RELEASED: "info",
+  IN_PROGRESS: "info",
+  COMPLETED: "success",
   
   // Stock statuses
   "In Stock": "success",

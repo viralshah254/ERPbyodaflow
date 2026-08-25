@@ -31,6 +31,14 @@ function qtyLabel(value: number, uom?: string) {
   return uom ? `${n} ${uom}` : String(n);
 }
 
+/** Same check as Complete: on-hand only. Incoming WOs do not fill the warehouse. */
+function warehouseShortfall(row: ProductionPlanRow): number {
+  if (typeof row.warehouseShortfallQty === "number") {
+    return row.warehouseShortfallQty;
+  }
+  return Math.round(Math.max(0, row.requiredQty - row.onHandQty) * 1000) / 1000;
+}
+
 function TreeBlock({ nodes }: { nodes: ProductionPlanTreeNode[] }) {
   if (!nodes.length) return null;
   return (
@@ -38,7 +46,12 @@ function TreeBlock({ nodes }: { nodes: ProductionPlanTreeNode[] }) {
       {nodes.map((node) => (
         <li key={`${node.kind}-${node.productId}-${node.quantity}`}>
           <span className="text-muted-foreground">{node.kind}</span>{" "}
-          <span className="font-medium">{node.productName}</span>{" "}
+          <Link
+            href={`/inventory/stock-levels?search=${encodeURIComponent(node.productName)}`}
+            className="font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {node.productName}
+          </Link>{" "}
           <span className="tabular-nums">{qtyLabel(node.quantity, node.uom)}</span>
           {node.children.length > 0 && (
             <div className="ml-4 mt-1 border-l pl-3">
@@ -49,6 +62,53 @@ function TreeBlock({ nodes }: { nodes: ProductionPlanTreeNode[] }) {
       ))}
     </ul>
   );
+}
+
+function stockLevelsHref(row: { productSku?: string; productName: string }): string {
+  return `/inventory/stock-levels?search=${encodeURIComponent(row.productSku || row.productName)}`;
+}
+
+function ProductStockLink({ row }: { row: ProductionPlanRow }) {
+  const label = row.productSku ? `${row.productSku} — ${row.productName}` : row.productName;
+  return (
+    <Link
+      href={stockLevelsHref(row)}
+      className="text-sm font-medium text-primary underline-offset-2 hover:underline"
+    >
+      {label}
+    </Link>
+  );
+}
+
+function makeAction(row: ProductionPlanRow): string {
+  if (row.shortageQty > 0) {
+    return `Make in production — raise a work order for ${row.shortageQty} ${row.uom}. Not a supplier purchase.`;
+  }
+  if (warehouseShortfall(row) > 0 && row.incomingQty > 0) {
+    return `Still 0 on the shelf. Finish incoming work orders (${row.incomingQty} ${row.uom}), then pack.`;
+  }
+  if (warehouseShortfall(row) > 0) {
+    return `Not on the shelf. Make ${warehouseShortfall(row)} ${row.uom} before packing.`;
+  }
+  return "Already on the shelf.";
+}
+
+function packAction(row: ProductionPlanRow): string {
+  if (row.incomingQty > 0 && row.shortageQty <= 0) {
+    return `This is the finished pack, not something to buy. Complete existing work orders (${row.incomingQty} ${row.uom}).`;
+  }
+  if (row.shortageQty > 0) {
+    return `Create a pack work order for ${row.shortageQty} ${row.uom}.`;
+  }
+  return "Pack qty is covered.";
+}
+
+function buyAction(row: ProductionPlanRow): string {
+  const short = warehouseShortfall(row);
+  if (short > 0) {
+    return `Buy ${short} ${row.uom} from a supplier — not enough on the shelf.`;
+  }
+  return "Already on the shelf — do not raise a purchase.";
 }
 
 function plannedNameList(rows: ProductionPlanRow[], qtyById: Record<string, string>): string {
@@ -75,6 +135,9 @@ export default function ProductionPlanPage() {
   const [calculating, setCalculating] = React.useState(false);
   const [applying, setApplying] = React.useState(false);
   const [plan, setPlan] = React.useState<ExplodedProductionPlan | null>(null);
+  const [createdOrders, setCreatedOrders] = React.useState<
+    Array<{ id: string; number: string; productId: string; quantity: number; reused?: boolean }> | null
+  >(null);
   const [pageOffset, setPageOffset] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(25);
 
@@ -136,6 +199,7 @@ export default function ProductionPlanPage() {
     }
     setQtyById(next);
     setPlan(null);
+    setCreatedOrders(null);
     setShowAllSkus(true);
   };
 
@@ -149,12 +213,12 @@ export default function ProductionPlanPage() {
       const exploded = await explodeProductionPlan(packLines);
       setPlan(exploded);
       setShowAllSkus(false);
-      const makeNeed = exploded.make.filter((row) => row.shortageQty > 0).length;
-      const packNeed = exploded.packLines.length;
-      const buyNeed = exploded.buy.filter((row) => row.shortageQty > 0).length;
+      const buyNeed = exploded.buy.filter((row) => warehouseShortfall(row) > 0).length;
+      const makeNeed = exploded.make.filter((row) => row.shortageQty > 0 || warehouseShortfall(row) > 0).length;
       toast.success(
-        `Worked backwards for ${packLines.length} SKU${packLines.length === 1 ? "" : "s"}. ` +
-          `Make ${packNeed + makeNeed} · Buy ${buyNeed}. Other products with empty pack qty were ignored.`
+        buyNeed > 0
+          ? `Worked backwards. Make ${makeNeed} in production. Buy ${buyNeed} from suppliers.`
+          : `Worked backwards. Make ${makeNeed} in production. Nothing to buy — purchased ingredients are on the shelf.`
       );
       requestAnimationFrame(() => {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -177,11 +241,36 @@ export default function ProductionPlanPage() {
       const result = await applyProductionPlan(packLines);
       setPlan(result.explode);
       setShowAllSkus(false);
-      toast.success(
-        result.created.length
-          ? `Created ${result.created.length} draft work order${result.created.length === 1 ? "" : "s"}.`
-          : "No work orders needed — stock already covers this plan."
+      setCreatedOrders(result.created);
+      const componentShort = result.explode.make.filter(
+        (row) => warehouseShortfall(row) > 0 || row.shortageQty > 0
       );
+      const buyNeed = result.explode.buy.filter((row) => warehouseShortfall(row) > 0);
+      const fresh = result.created.filter((row) => !row.reused).length;
+      const reused = result.created.filter((row) => row.reused).length;
+      if (buyNeed.length) {
+        toast.warning(
+          `Also buy: ${buyNeed.map((row) => row.productSku ?? row.productName).join(", ")}.`
+        );
+      } else if (componentShort.length) {
+        toast.warning(
+          `Drafts created. Make these first (not purchases): ${componentShort.map((row) => row.productSku ?? row.productName).join(", ")}.`
+        );
+      } else if (!result.created.length) {
+        toast.success("No work orders needed — stock already covers this plan.");
+      } else if (fresh === 0) {
+        toast.info(
+          `Work orders already exist for this plan (${result.created.map((row) => row.number).join(", ")}).`
+        );
+      } else if (reused) {
+        toast.success(
+          `Created ${fresh} draft work order${fresh === 1 ? "" : "s"}. ${reused} already existed.`
+        );
+      } else {
+        toast.success(
+          `Created ${fresh} draft work order${fresh === 1 ? "" : "s"}: ${result.created.map((row) => row.number).join(", ")}.`
+        );
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create work orders.");
     } finally {
@@ -233,6 +322,7 @@ export default function ProductionPlanPage() {
               const value = event.target.value;
               setQtyById((prev) => ({ ...prev, [r.productId]: value }));
               setPlan(null);
+              setCreatedOrders(null);
             }}
             aria-label={`Pack quantity for ${r.productName}`}
           />
@@ -242,54 +332,145 @@ export default function ProductionPlanPage() {
     [qtyById]
   );
 
-  const resultColumns = React.useMemo(
+  const makeColumns = React.useMemo(
     () => [
       {
         id: "item",
         header: "Item",
+        accessor: (r: ProductionPlanRow) => <ProductStockLink row={r} />,
+      },
+      {
+        id: "need",
+        header: "Need",
         accessor: (r: ProductionPlanRow) => (
-          <span className="text-sm font-medium">
-            {r.productSku ? `${r.productSku} — ${r.productName}` : r.productName}
+          <span className="tabular-nums text-sm">
+            {r.requiredQty} {r.uom}
           </span>
         ),
       },
       {
-        id: "uom",
-        header: "UOM",
-        accessor: (r: ProductionPlanRow) => <span className="text-sm">{r.uom}</span>,
-      },
-      {
-        id: "required",
-        header: "Required",
-        accessor: (r: ProductionPlanRow) => <span className="tabular-nums text-sm">{r.requiredQty}</span>,
-      },
-      {
         id: "onHand",
-        header: "On hand",
+        header: "On the shelf",
         accessor: (r: ProductionPlanRow) => <span className="tabular-nums text-sm">{r.onHandQty}</span>,
       },
       {
-        id: "incoming",
-        header: "Incoming",
-        accessor: (r: ProductionPlanRow) => <span className="tabular-nums text-sm">{r.incomingQty}</span>,
-      },
-      {
-        id: "shortage",
-        header: "To make / buy",
-        accessor: (r: ProductionPlanRow) =>
-          r.shortageQty > 0 ? (
-            <span className="tabular-nums text-sm font-semibold">{r.shortageQty}</span>
-          ) : (
-            <span className="text-xs text-muted-foreground">Covered</span>
-          ),
+        id: "do",
+        header: "What to do",
+        accessor: (r: ProductionPlanRow) => (
+          <div className="max-w-[28rem] space-y-1">
+            <p className="text-sm">{makeAction(r)}</p>
+            <Link href="/manufacturing/work-orders" className="text-xs text-primary underline-offset-2 hover:underline">
+              Open work orders
+            </Link>
+          </div>
+        ),
       },
     ],
     []
   );
 
-  const makeRows = plan ? [...plan.make, ...plan.packLines] : [];
-  const makeShort = makeRows.filter((row) => row.shortageQty > 0).length;
-  const buyShort = plan?.buy.filter((row) => row.shortageQty > 0).length ?? 0;
+  const packResultColumns = React.useMemo(
+    () => [
+      {
+        id: "item",
+        header: "Finished pack",
+        accessor: (r: ProductionPlanRow) => <ProductStockLink row={r} />,
+      },
+      {
+        id: "need",
+        header: "Pack qty",
+        accessor: (r: ProductionPlanRow) => (
+          <span className="tabular-nums text-sm">
+            {r.requiredQty} {r.uom}
+          </span>
+        ),
+      },
+      {
+        id: "onHand",
+        header: "On the shelf",
+        accessor: (r: ProductionPlanRow) => <span className="tabular-nums text-sm">{r.onHandQty}</span>,
+      },
+      {
+        id: "incoming",
+        header: "Open WOs",
+        accessor: (r: ProductionPlanRow) => <span className="tabular-nums text-sm">{r.incomingQty}</span>,
+      },
+      {
+        id: "do",
+        header: "What to do",
+        accessor: (r: ProductionPlanRow) => (
+          <div className="max-w-[28rem] space-y-1">
+            <p className="text-sm">{packAction(r)}</p>
+            <Link href="/manufacturing/work-orders" className="text-xs text-primary underline-offset-2 hover:underline">
+              Open work orders
+            </Link>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
+
+  const buyColumns = React.useMemo(
+    () => [
+      {
+        id: "item",
+        header: "Item",
+        accessor: (r: ProductionPlanRow) => <ProductStockLink row={r} />,
+      },
+      {
+        id: "need",
+        header: "Need",
+        accessor: (r: ProductionPlanRow) => (
+          <span className="tabular-nums text-sm">
+            {r.requiredQty} {r.uom}
+          </span>
+        ),
+      },
+      {
+        id: "onHand",
+        header: "On the shelf",
+        accessor: (r: ProductionPlanRow) => <span className="tabular-nums text-sm">{r.onHandQty}</span>,
+      },
+      {
+        id: "buy",
+        header: "Buy",
+        accessor: (r: ProductionPlanRow) => {
+          const short = warehouseShortfall(r);
+          return short > 0 ? (
+            <span className="tabular-nums text-sm font-semibold">{short} {r.uom}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          );
+        },
+      },
+      {
+        id: "do",
+        header: "What to do",
+        accessor: (r: ProductionPlanRow) => (
+          <div className="max-w-[28rem] space-y-1">
+            <p className="text-sm">{buyAction(r)}</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              <Link href={stockLevelsHref(r)} className="text-xs text-primary underline-offset-2 hover:underline">
+                Stock levels
+              </Link>
+              {warehouseShortfall(r) > 0 ? (
+                <Link href="/docs/purchase-order/new" className="text-xs text-primary underline-offset-2 hover:underline">
+                  New purchase order
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
+
+  const componentRows = plan?.make ?? [];
+  const packResultRows = plan?.packLines ?? [];
+  const buyShortRows = plan?.buy.filter((row) => warehouseShortfall(row) > 0) ?? [];
+  const makeWork = componentRows.filter((row) => row.shortageQty > 0 || warehouseShortfall(row) > 0);
 
   return (
     <PageShell>
@@ -321,8 +502,17 @@ export default function ProductionPlanPage() {
             {calculating ? "Working backwards…" : plan ? "Recalculate" : "Work backwards"}
           </Button>
           {canWrite && (
-            <Button size="sm" variant="secondary" onClick={() => void handleApply()} disabled={applying || loading}>
-              {applying ? "Creating…" : "Create work orders"}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleApply()}
+              disabled={applying || loading || createdOrders != null}
+            >
+              {applying
+                ? "Creating…"
+                : createdOrders != null
+                  ? "Work orders created"
+                  : "Create work orders"}
             </Button>
           )}
         </div>
@@ -370,28 +560,77 @@ export default function ProductionPlanPage() {
                 Worked backwards from {plannedNameList(defaults, qtyById)}.
               </p>
               <p className="mt-1 text-muted-foreground">
-                Finished products with no pack qty were skipped. Make {makeRows.length}
-                {makeShort < makeRows.length ? ` (${makeRows.length - makeShort} already covered by stock)` : ""}.
-                Buy {plan.buy.length}
-                {buyShort === 0 && plan.buy.length > 0 ? " (all covered)" : buyShort ? ` (${buyShort} short)` : ""}.
-                Scroll down for the explosion tree, then create work orders.
+                {makeWork.length
+                  ? `Make in the bakery first: ${makeWork.map((row) => row.productName).join(", ")}.`
+                  : "No extra batches to raise for components."}{" "}
+                {buyShortRows.length
+                  ? `Then buy from suppliers: ${buyShortRows.map((row) => row.productName).join(", ")}.`
+                  : "Buy is empty because purchased ingredients and packaging are already on the shelf — margarine and cake are made here, so they never appear on Buy."}
               </p>
+              {(buyShortRows.length > 0 || makeWork.length > 0 || packResultRows.length > 0) ? (
+                <ol className="mt-3 list-decimal space-y-2 pl-5 text-foreground">
+                  {buyShortRows.map((row) => (
+                    <li key={`buy-${row.productId}`}>
+                      <ProductStockLink row={row} />
+                      <span className="text-muted-foreground"> — {buyAction(row)}</span>
+                    </li>
+                  ))}
+                  {makeWork.map((row) => (
+                    <li key={row.productId}>
+                      <ProductStockLink row={row} />
+                      <span className="text-muted-foreground"> — {makeAction(row)}</span>
+                    </li>
+                  ))}
+                  {packResultRows.map((row) => (
+                    <li key={`pack-${row.productId}`}>
+                      <ProductStockLink row={row} />
+                      <span className="text-muted-foreground"> — {packAction(row)}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+              {createdOrders != null ? (
+                <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {createdOrders.length ? (
+                    <>
+                      <span className="font-medium text-foreground">
+                        Draft work orders (Release → Complete next):
+                      </span>
+                      {createdOrders.map((wo) => (
+                        <Link
+                          key={wo.id}
+                          href={`/manufacturing/work-orders/${encodeURIComponent(wo.id)}`}
+                          className="font-mono text-primary underline underline-offset-2"
+                        >
+                          {wo.number}
+                          {wo.reused ? " (existing)" : ""}
+                        </Link>
+                      ))}
+                    </>
+                  ) : (
+                    <span className="font-medium text-foreground">
+                      No new drafts — this plan is already covered.
+                    </span>
+                  )}
+                </p>
+              ) : null}
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold">Make</h2>
-                  <Badge variant="default">{makeRows.length}</Badge>
+                  <h2 className="text-base font-semibold">Make in production</h2>
+                  <Badge variant="default">{componentRows.length}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Components first, then packing. Covered means on-hand plus open WOs already meet the requirement.
+                  These have a recipe. Get more by completing work orders, not by buying the SKU. Click a name for
+                  stock levels.
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                   <DataTable
-                    data={makeRows}
-                    columns={resultColumns}
-                    emptyMessage="Nothing to make."
+                    data={componentRows}
+                    columns={makeColumns}
+                    emptyMessage="Nothing to make for this pack qty."
                     scrollMode="natural"
                     size="comfortable"
                   />
@@ -399,24 +638,49 @@ export default function ProductionPlanPage() {
               </div>
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold">Buy</h2>
-                  <Badge variant="secondary">{plan.buy.length}</Badge>
+                  <h2 className="text-base font-semibold">Buy from suppliers</h2>
+                  <Badge variant="secondary">{buyShortRows.length}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Raw materials and packaging. Covered means you do not need a purchase for this plan.
+                  Only purchased items that are short on the shelf (flour, sugar, boxes, labels). Made items such as
+                  margarine and cake never belong here.
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                   <DataTable
-                    data={plan.buy}
-                    columns={resultColumns}
-                    emptyMessage="No purchases required."
+                    data={buyShortRows}
+                    columns={buyColumns}
+                    emptyMessage="Nothing to buy. Purchased ingredients and packaging for this plan are already on the shelf. Short margarine or cake means make them — see Make in production."
                     scrollMode="natural"
                     size="comfortable"
                   />
                 </div>
               </div>
               <div className="space-y-3 lg:col-span-2">
-                <h2 className="text-base font-semibold">Explosion tree</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold">Pack today</h2>
+                  <Badge variant="outline">{packResultRows.length}</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Finished product you typed a pack qty for. Zero on the shelf is expected until you complete the pack
+                  work orders. Click a name for stock.
+                </p>
+                <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                  <DataTable
+                    data={packResultRows}
+                    columns={packResultColumns}
+                    emptyMessage="No pack lines."
+                    scrollMode="natural"
+                    size="comfortable"
+                  />
+                </div>
+              </div>
+              <div className="space-y-3 lg:col-span-2">
+                <h2 className="text-base font-semibold">Recipe tree</h2>
+                <p className="text-sm text-muted-foreground">
+                  Full formula. <span className="font-medium text-foreground">make</span> is produced here.{" "}
+                  <span className="font-medium text-foreground">buy</span> is a purchased ingredient in the recipe —
+                  it only shows on Buy from suppliers if the shelf is short. Names open stock levels.
+                </p>
                 <div className="rounded-xl border bg-card p-4 shadow-sm">
                   {plan.tree.length ? (
                     <TreeBlock nodes={plan.tree} />
@@ -430,15 +694,15 @@ export default function ProductionPlanPage() {
         ) : (
           <p className="flex items-start gap-2 text-sm text-muted-foreground">
             <Icons.Info className="mt-0.5 h-4 w-4 shrink-0" />
-            Type pack qty only on the SKUs you want to make. Work backwards then shows Make, Buy, and the recipe tree
-            below this list — empty pack qty is ignored.
+            Type pack qty only on the SKUs you want to make. Work backwards then lists what to make, what to buy, and
+            how to pack — empty pack qty is ignored.
           </p>
         )}
 
         <p className="flex items-start gap-2 text-sm text-muted-foreground">
           <Icons.Info className="mt-0.5 h-4 w-4 shrink-0" />
-          Create work orders in Make order (components, then packs). Complete each order to consume inputs and receive
-          the output.
+          Create work orders for Make items first (margarine, then cake), complete them so they hit the shelf, then
+          complete the pack. Buy from suppliers only when Buy from suppliers has rows.
         </p>
       </div>
     </PageShell>

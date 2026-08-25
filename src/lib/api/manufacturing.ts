@@ -377,6 +377,11 @@ export async function fetchManufacturingWorkOrders(
   return rows;
 }
 
+export async function fetchManufacturingWorkOrder(id: string): Promise<ManufacturingWorkOrder> {
+  requireLiveApi("Manufacturing work order");
+  return apiRequest(`/api/manufacturing/work-orders/${encodeURIComponent(id)}`);
+}
+
 export async function createManufacturingWorkOrder(payload: {
   productId?: string;
   bomId?: string;
@@ -479,6 +484,7 @@ export type ProductionPlanRow = {
   onHandQty: number;
   incomingQty: number;
   shortageQty: number;
+  warehouseShortfallQty?: number;
   suggestedQty?: number;
 };
 
@@ -518,7 +524,7 @@ export async function explodeProductionPlan(lines: ProductionPlanLineInput[]): P
 
 export async function applyProductionPlan(lines: ProductionPlanLineInput[]): Promise<{
   applied: boolean;
-  created: Array<{ id: string; number: string; productId: string; quantity: number }>;
+  created: Array<{ id: string; number: string; productId: string; quantity: number; reused?: boolean }>;
   explode: ExplodedProductionPlan;
 }> {
   requireLiveApi("Production plan");

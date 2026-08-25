@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,7 +27,6 @@ import {
   fetchManufacturingBoms,
   fetchManufacturingRoutes,
   fetchManufacturingWorkOrdersPage,
-  runManufacturingWorkOrderAction,
   type ManufacturingBom,
   type ManufacturingRoute,
   type ManufacturingWorkOrder,
@@ -52,6 +53,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function WorkOrdersPage() {
+  const router = useRouter();
   const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
@@ -161,18 +163,6 @@ export default function WorkOrdersPage() {
     if (id === "q") setSearch("");
   };
 
-  const runAction = React.useCallback(
-    async (id: string, action: Parameters<typeof runManufacturingWorkOrderAction>[1]) => {
-      try {
-        await runManufacturingWorkOrderAction(id, action);
-        await loadPage(pageOffset);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Action failed.");
-      }
-    },
-    [loadPage, pageOffset]
-  );
-
   React.useEffect(() => {
     if (!sheetOpen) return;
     setSheetMetaLoading(true);
@@ -244,7 +234,15 @@ export default function WorkOrdersPage() {
       {
         id: "number",
         header: "Number",
-        accessor: (r: ManufacturingWorkOrder) => <span className="font-mono text-sm font-semibold">{r.number}</span>,
+        accessor: (r: ManufacturingWorkOrder) => (
+          <Link
+            href={`/manufacturing/work-orders/${encodeURIComponent(r.id)}`}
+            className="font-mono text-sm font-semibold text-primary underline-offset-2 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {r.number}
+          </Link>
+        ),
         sticky: true,
       },
       {
@@ -285,54 +283,8 @@ export default function WorkOrdersPage() {
       },
       { id: "dueDate", header: "Due date", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" },
       { id: "status", header: "Status", accessor: (r: ManufacturingWorkOrder) => <StatusBadge status={r.status} /> },
-      {
-        id: "actions",
-        header: "",
-        accessor: (r: ManufacturingWorkOrder) => (
-          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-            {canWrite && r.status === "DRAFT" && (
-              <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "release" })}>
-                Release
-              </Button>
-            )}
-            {canWrite && r.status === "RELEASED" && (
-              <>
-                <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "start" })}>
-                  Start
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    void runAction(r.id, {
-                      action: "complete",
-                      producedQuantity: r.openQuantity > 0 ? r.quantity : r.producedQuantity,
-                    })
-                  }
-                >
-                  Complete
-                </Button>
-              </>
-            )}
-            {canWrite && r.status === "IN_PROGRESS" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  void runAction(r.id, {
-                    action: "complete",
-                    producedQuantity: r.openQuantity > 0 ? r.quantity : r.producedQuantity,
-                  })
-                }
-              >
-                Complete
-              </Button>
-            )}
-          </div>
-        ),
-      },
     ],
-    [runAction]
+    []
   );
 
   const loadAvailableGrns = React.useCallback(async () => {
@@ -362,7 +314,7 @@ export default function WorkOrdersPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={woLabel}
-        description="Create, issue, and receive work orders"
+        description="Open a work order to release, start, and complete it. Actions are not on the list so similar products are harder to mix up."
         breadcrumbs={[{ label: areaLabel, href: "/manufacturing/work-orders" }, { label: woLabel }]}
         sticky
         actions={
@@ -415,7 +367,7 @@ export default function WorkOrdersPage() {
         {initialLoading ? (
           <SkeletonDataTable
             rows={PAGE_SIZE}
-            columnWidths={["w-24", "w-44", "w-32", "w-28", "w-20", "w-20", "w-20", "w-16", "w-24", "w-24", "w-28"]}
+            columnWidths={["w-24", "w-44", "w-32", "w-28", "w-20", "w-20", "w-20", "w-16", "w-24", "w-24"]}
           />
         ) : (
           <div className={LIST_TABLE_SURFACE_CLASS}>
@@ -433,7 +385,8 @@ export default function WorkOrdersPage() {
                 scrollMode="fill"
                 size="comfortable"
                 className="min-h-0 flex-1 border-0"
-                />
+                onRowClick={(r) => router.push(`/manufacturing/work-orders/${encodeURIComponent(r.id)}`)}
+              />
             </div>
           </div>
         )}
