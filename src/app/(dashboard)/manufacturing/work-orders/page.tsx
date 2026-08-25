@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -12,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -25,15 +29,15 @@ import {
   fetchManufacturingBoms,
   fetchManufacturingRoutes,
   fetchManufacturingWorkOrdersPage,
-  runManufacturingWorkOrderAction,
+  fetchProductionPlanDefaults,
   type ManufacturingBom,
   type ManufacturingRoute,
   type ManufacturingWorkOrder,
+  type ProductionPlanRow,
   type MaterialAvailabilityLine,
 } from "@/lib/api/manufacturing";
 import { fetchGRNs } from "@/lib/api/grn";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
-import { hydrateProductsFromApi, listProducts, subscribeProductsCache } from "@/lib/data/products.repo";
 import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
@@ -52,13 +56,11 @@ const STATUS_OPTIONS = [
 ];
 
 export default function WorkOrdersPage() {
+  const router = useRouter();
   const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
-
-  const [products, setProducts] = React.useState(() => listProducts());
-  React.useEffect(() => subscribeProductsCache(() => setProducts(listProducts())), []);
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -77,6 +79,7 @@ export default function WorkOrdersPage() {
   const [saving, setSaving] = React.useState(false);
   const [bomId, setBomId] = React.useState("");
   const [productId, setProductId] = React.useState("");
+  const [selectedProductOption, setSelectedProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [routingId, setRoutingId] = React.useState("");
   const [quantity, setQuantity] = React.useState("1");
   const [dueDate, setDueDate] = React.useState("");
@@ -161,25 +164,12 @@ export default function WorkOrdersPage() {
     if (id === "q") setSearch("");
   };
 
-  const runAction = React.useCallback(
-    async (id: string, action: Parameters<typeof runManufacturingWorkOrderAction>[1]) => {
-      try {
-        await runManufacturingWorkOrderAction(id, action);
-        await loadPage(pageOffset);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Action failed.");
-      }
-    },
-    [loadPage, pageOffset]
-  );
-
   React.useEffect(() => {
     if (!sheetOpen) return;
     setSheetMetaLoading(true);
     void Promise.all([
       fetchManufacturingBoms({ includeItems: true }),
       fetchManufacturingRoutes({ includeOperations: true }),
-      hydrateProductsFromApi(),
     ])
       .then(([nextBoms, nextRoutes]) => {
         setBoms(nextBoms);
@@ -244,7 +234,15 @@ export default function WorkOrdersPage() {
       {
         id: "number",
         header: "Number",
-        accessor: (r: ManufacturingWorkOrder) => <span className="font-mono text-sm font-semibold">{r.number}</span>,
+        accessor: (r: ManufacturingWorkOrder) => (
+          <Link
+            href={`/manufacturing/work-orders/${encodeURIComponent(r.id)}`}
+            className="font-mono text-sm font-semibold text-primary underline-offset-2 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {r.number}
+          </Link>
+        ),
         sticky: true,
       },
       {
@@ -285,54 +283,8 @@ export default function WorkOrdersPage() {
       },
       { id: "dueDate", header: "Due date", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" },
       { id: "status", header: "Status", accessor: (r: ManufacturingWorkOrder) => <StatusBadge status={r.status} /> },
-      {
-        id: "actions",
-        header: "",
-        accessor: (r: ManufacturingWorkOrder) => (
-          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-            {canWrite && r.status === "DRAFT" && (
-              <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "release" })}>
-                Release
-              </Button>
-            )}
-            {canWrite && r.status === "RELEASED" && (
-              <>
-                <Button size="sm" variant="ghost" onClick={() => void runAction(r.id, { action: "start" })}>
-                  Start
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    void runAction(r.id, {
-                      action: "complete",
-                      producedQuantity: r.openQuantity > 0 ? r.quantity : r.producedQuantity,
-                    })
-                  }
-                >
-                  Complete
-                </Button>
-              </>
-            )}
-            {canWrite && r.status === "IN_PROGRESS" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  void runAction(r.id, {
-                    action: "complete",
-                    producedQuantity: r.openQuantity > 0 ? r.quantity : r.producedQuantity,
-                  })
-                }
-              >
-                Complete
-              </Button>
-            )}
-          </div>
-        ),
-      },
     ],
-    [runAction]
+    []
   );
 
   const loadAvailableGrns = React.useCallback(async () => {
@@ -348,6 +300,21 @@ export default function WorkOrdersPage() {
     }
   }, []);
 
+  const makeableById = React.useRef<Map<string, ProductionPlanRow>>(new Map());
+  const loadMakeableProducts = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+    const page = await fetchProductionPlanDefaults({
+      search: query || undefined,
+      limit: 10,
+      scope: "makeable",
+    });
+    const items = page.items ?? [];
+    for (const row of items) makeableById.current.set(row.productId, row);
+    return items.map((row) => ({
+      id: row.productId,
+      label: row.productSku ? `${row.productSku} — ${row.productName}` : row.productName,
+    }));
+  }, []);
+
   function resetForm() {
     setBomId("");
     setProductId("");
@@ -356,13 +323,14 @@ export default function WorkOrdersPage() {
     setQuantity("1");
     setDueDate("");
     setAvailLines([]);
+    setSelectedProductOption(null);
   }
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={woLabel}
-        description="Create, issue, and receive work orders"
+        description="Open a work order to release, start, and complete it. Actions are not on the list so similar products are harder to mix up."
         breadcrumbs={[{ label: areaLabel, href: "/manufacturing/work-orders" }, { label: woLabel }]}
         sticky
         actions={
@@ -415,7 +383,7 @@ export default function WorkOrdersPage() {
         {initialLoading ? (
           <SkeletonDataTable
             rows={PAGE_SIZE}
-            columnWidths={["w-24", "w-44", "w-32", "w-28", "w-20", "w-20", "w-20", "w-16", "w-24", "w-24", "w-28"]}
+            columnWidths={["w-24", "w-44", "w-32", "w-28", "w-20", "w-20", "w-20", "w-16", "w-24", "w-24"]}
           />
         ) : (
           <div className={LIST_TABLE_SURFACE_CLASS}>
@@ -433,7 +401,8 @@ export default function WorkOrdersPage() {
                 scrollMode="fill"
                 size="comfortable"
                 className="min-h-0 flex-1 border-0"
-                />
+                onRowClick={(r) => router.push(`/manufacturing/work-orders/${encodeURIComponent(r.id)}`)}
+              />
             </div>
           </div>
         )}
@@ -463,7 +432,7 @@ export default function WorkOrdersPage() {
           }
         }}
       >
-        <SheetContent className="overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle>New work order</SheetTitle>
             <SheetDescription>
@@ -560,29 +529,33 @@ export default function WorkOrdersPage() {
                 Product
                 <span className="ml-1 text-xs text-destructive">*</span>
               </Label>
-              <Select
+              <AsyncSearchableSelect
                 value={productId}
-                disabled={sheetMetaLoading}
+                selectedOption={selectedProductOption}
                 onValueChange={(nextProductId) => {
                   setProductId(nextProductId);
-                  const match = boms.find((bom) => bom.finishedProductId === nextProductId);
-                  if (match) {
-                    setBomId(match.id);
-                    if (match.routeId) setRoutingId(match.routeId);
-                  }
+                  const cached = makeableById.current.get(nextProductId);
+                  const match = boms.find((bom) => bom.finishedProductId === nextProductId)
+                    ?? (cached?.bomId ? boms.find((bom) => bom.id === cached.bomId) : undefined);
+                  if (cached?.bomId) setBomId(cached.bomId);
+                  else if (match) setBomId(match.id);
+                  if (cached?.routingId) setRoutingId(cached.routingId);
+                  else if (match?.routeId) setRoutingId(match.routeId);
                 }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select product to make" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.sku} - {product.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onOptionSelect={setSelectedProductOption}
+                loadOptions={loadMakeableProducts}
+                placeholder="Search SKU to make…"
+                searchPlaceholder="Type SKU or name — searches the server"
+                emptyMessage="No matching formula SKU. Raw materials are bought, not made here."
+                disabled={sheetMetaLoading}
+                searchDebounceMs={400}
+                floating={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Pick a SKU that has a formula (System Margarine, System Cake, packed cakes). Completing the work order
+                issues raw materials and receives this SKU onto stock levels. Do not Stock In those unless you are
+                posting an opening balance.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -596,6 +569,12 @@ export default function WorkOrdersPage() {
                   const bom = boms.find((item) => item.id === nextBomId);
                   if (bom) {
                     setProductId(bom.finishedProductId);
+                    setSelectedProductOption({
+                      id: bom.finishedProductId,
+                      label: bom.finishedProductSku
+                        ? `${bom.finishedProductSku} — ${bom.finishedProductName ?? bom.name}`
+                        : (bom.finishedProductName ?? bom.name),
+                    });
                     if (bom.routeId) setRoutingId(bom.routeId);
                   }
                 }}
@@ -679,38 +658,45 @@ export default function WorkOrdersPage() {
                   )}
                 </div>
                 {availLines.length > 0 && (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-muted-foreground border-b">
-                        <th className="text-left py-1 font-medium">Component</th>
-                        <th className="text-right py-1 font-medium">Required</th>
-                        <th className="text-right py-1 font-medium">On hand</th>
-                        <th className="text-right py-1 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {availLines.map((line) => (
-                        <tr key={line.productId} className="border-b border-border/40 last:border-0">
-                          <td className="py-1 pr-2">
-                            {line.productSku ? `${line.productSku}` : line.productName}
-                          </td>
-                          <td className="py-1 text-right tabular-nums">
-                            {line.requiredQty} {line.uom}
-                          </td>
-                          <td className="py-1 text-right tabular-nums">
-                            {line.onHandQty} {line.uom}
-                          </td>
-                          <td className="py-1 text-right">
-                            {line.shortfall > 0 ? (
-                              <span className="text-destructive font-medium">−{line.shortfall}</span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400">OK</span>
-                            )}
-                          </td>
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      Click a component for stock. RAW and packaging also have Purchase.
+                    </p>
+                    <table className="w-full min-w-[28rem] text-xs">
+                      <thead>
+                        <tr className="text-muted-foreground border-b">
+                          <th className="text-left py-1 font-medium">Component</th>
+                          <th className="text-right py-1 font-medium">Required</th>
+                          <th className="text-right py-1 font-medium">On hand</th>
+                          <th className="text-right py-1 font-medium">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {availLines.map((line) => (
+                          <tr key={line.productId} className="border-b border-border/40 last:border-0">
+                            <td className="py-1 pr-2 align-top whitespace-nowrap">
+                              <MaterialComponentLinks line={line} compact />
+                            </td>
+                            <td className="py-1 text-right tabular-nums whitespace-nowrap">
+                              {Math.round(line.requiredQty * 1000) / 1000} {line.uom}
+                            </td>
+                            <td className="py-1 text-right tabular-nums whitespace-nowrap">
+                              {Math.round(line.onHandQty * 1000) / 1000} {line.uom}
+                            </td>
+                            <td className="py-1 text-right whitespace-nowrap">
+                              {line.shortfall > 0 ? (
+                                <span className="text-destructive font-medium">
+                                  −{Math.round(line.shortfall * 1000) / 1000}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400">OK</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
                 )}
                 {availLines.length === 0 && !availLoading && (
                   <p className="text-xs text-muted-foreground">No component lines on this BOM.</p>

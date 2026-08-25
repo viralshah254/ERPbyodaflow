@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 
 export interface ComboboxOption {
   value: string;
@@ -29,6 +30,8 @@ interface ComboboxProps {
   onDelete?: (value: string) => void | Promise<void>;
   /** Extra explanatory line shown in the inline delete confirm. */
   deleteHint?: (option: ComboboxOption) => string | undefined;
+  loading?: boolean;
+  debounceMs?: number;
 }
 
 export function Combobox({
@@ -44,9 +47,12 @@ export function Combobox({
   onRename,
   onDelete,
   deleteHint,
+  loading = false,
+  debounceMs = 300,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [editingValue, setEditingValue] = React.useState<string | null>(null);
   const [editLabel, setEditLabel] = React.useState("");
   const [confirmDeleteValue, setConfirmDeleteValue] = React.useState<string | null>(null);
@@ -54,11 +60,18 @@ export function Combobox({
 
   const selected = React.useMemo(() => options.find((o) => o.value === value), [options, value]);
 
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedQuery(query), debounceMs);
+    return () => window.clearTimeout(id);
+  }, [query, debounceMs]);
+
+  const searchPending = query.trim() !== debouncedQuery.trim();
+
   const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     if (!q) return options;
     return options.filter((o) => o.label.toLowerCase().includes(q));
-  }, [options, query]);
+  }, [options, debouncedQuery]);
 
   const exactMatch = React.useMemo(
     () => options.some((o) => o.label.trim().toLowerCase() === query.trim().toLowerCase()),
@@ -69,6 +82,7 @@ export function Combobox({
   React.useEffect(() => {
     if (!open) {
       setQuery("");
+      setDebouncedQuery("");
       setEditingValue(null);
       setConfirmDeleteValue(null);
     }
@@ -135,7 +149,8 @@ export function Combobox({
           e.preventDefault();
         }}
       >
-        <div className="flex items-center gap-2 border-b px-3 py-2">
+        <div className="relative flex items-center gap-2 border-b px-3 py-2">
+          <TableLinearProgress active={loading || searchPending} className="rounded-none" />
           <Icons.Search className="h-4 w-4 shrink-0 opacity-50" />
           <input
             autoFocus

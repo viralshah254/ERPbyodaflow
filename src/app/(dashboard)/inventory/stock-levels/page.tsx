@@ -18,6 +18,8 @@ import { FiltersBar } from "@/components/ui/filters-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { Button } from "@/components/ui/button";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import {
   Sheet,
   SheetContent,
@@ -40,7 +42,7 @@ import {
   fetchLatestInventoryCosting,
   type InventoryCostingSnapshot,
 } from "@/lib/api/inventory-costing";
-import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
+import { fetchProductApi, fetchProductsPageApi } from "@/lib/api/products";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import {
   Select,
@@ -62,6 +64,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const SEARCH_DEBOUNCE_MS = 400;
 
 /** Weighted average book cost per product from latest inventory costing run. */
 function weightedAvgBookCostByProduct(costing: InventoryCostingSnapshot | null): Map<string, number> {
@@ -92,6 +95,7 @@ export default function StockLevelsPage() {
   const fmcg = isFmcgOrg(templateId);
   const isFranchisor = orgRole === "FRANCHISOR";
 
+  const [searchInput, setSearchInput] = React.useState("");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [warehouseFilter, setWarehouseFilter] = React.useState<string>("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
@@ -102,7 +106,9 @@ export default function StockLevelsPage() {
   const [networkAggByProduct, setNetworkAggByProduct] = React.useState<Map<string, FranchiseNetworkStockItem>>(new Map());
   const [avgCostByProduct, setAvgCostByProduct] = React.useState<Map<string, number>>(new Map());
   const [costingRanAt, setCostingRanAt] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
 
   // Stock adjustment state
   const [savingAdjustment, setSavingAdjustment] = React.useState(false);
@@ -118,7 +124,7 @@ export default function StockLevelsPage() {
   const [stockInQty, setStockInQty] = React.useState("");
   const [stockInReason, setStockInReason] = React.useState("Opening / production putaway");
   const [stockInSaving, setStockInSaving] = React.useState(false);
-  const [productOptions, setProductOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+  const [stockInProductOption, setStockInProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [warehouseLookup, setWarehouseLookup] = React.useState<LookupOption[]>([]);
   const [importingOpening, setImportingOpening] = React.useState(false);
   const openingStockInputRef = React.useRef<HTMLInputElement>(null);
@@ -127,7 +133,9 @@ export default function StockLevelsPage() {
   const [franchiseDrillRow, setFranchiseDrillRow] = React.useState<FranchiseNetworkStockItem | null>(null);
 
   const refreshStock = React.useCallback(async () => {
-    setLoading(true);
+    const first = !hasLoadedOnce.current;
+    if (first) setInitialLoading(true);
+    else setFetching(true);
     try {
       const requests: [
         Promise<InventoryStockRow[]>,
@@ -155,12 +163,19 @@ export default function StockLevelsPage() {
         setAvgCostByProduct(weightedAvgBookCostByProduct(costing));
         setCostingRanAt(costing?.ranAt ?? null);
       }
+      hasLoadedOnce.current = true;
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setFetching(false);
     }
   }, [searchQuery, statusFilter, warehouseFilter, isFranchisor, fmcg]);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
 
   const handleOpeningStockImport = async (file: File | undefined) => {
     if (!file) return;
@@ -194,17 +209,15 @@ export default function StockLevelsPage() {
         setStockInWarehouseId((prev) => prev || opts[0]?.id || "");
       })
       .catch(() => setWarehouseLookup([]));
-    void fetchProductsApi({ status: "ACTIVE", limit: 200 })
-      .then((items) =>
-        setProductOptions(
-          items.map((p) => ({
-            id: p.id,
-            label: `${p.sku ? `${p.sku} — ` : ""}${p.name}`,
-          }))
-        )
-      )
-      .catch(() => setProductOptions([]));
   }, [canWrite]);
+
+  const loadStockInProducts = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+    const page = await fetchProductsPageApi({ search: query || undefined, status: "ACTIVE", limit: 10 });
+    return page.items.map((p) => ({
+      id: p.id,
+      label: `${p.sku ? `${p.sku} — ` : ""}${p.name}`,
+    }));
+  }, []);
 
   React.useEffect(() => {
     if (deepLinkHandledRef.current) return;
@@ -215,19 +228,19 @@ export default function StockLevelsPage() {
     if (!action && !productId && !warehouseId && !search) return;
 
     deepLinkHandledRef.current = true;
-    if (search) setSearchQuery(search);
+    if (search) {
+      setSearchInput(search);
+      setSearchQuery(search);
+    }
     if (warehouseId) setStockInWarehouseId(warehouseId);
     if (productId) {
       setStockInProductId(productId);
       void fetchProductApi(productId)
         .then((product) => {
           if (!product) return;
-          setProductOptions((prev) => {
-            if (prev.some((p) => p.id === product.id)) return prev;
-            return [
-              { id: product.id, label: `${product.sku ? `${product.sku} — ` : ""}${product.name}` },
-              ...prev,
-            ];
+          setStockInProductOption({
+            id: product.id,
+            label: `${product.sku ? `${product.sku} — ` : ""}${product.name}`,
           });
         })
         .catch(() => undefined);
@@ -243,6 +256,8 @@ export default function StockLevelsPage() {
   const openStockIn = () => {
     setStockInOpen(true);
     setStockInQty("");
+    setStockInProductId("");
+    setStockInProductOption(null);
     setStockInReason(fmcg ? "Opening / production putaway" : "Opening stock");
     if (!stockInWarehouseId && warehouseLookup[0]?.id) {
       setStockInWarehouseId(warehouseLookup[0].id);
@@ -591,7 +606,7 @@ export default function StockLevelsPage() {
         }
       />
       <div className={LIST_PAGE_BODY_VIEWPORT_CLASS}>
-      {fmcg && !loading && stockItems.length === 0 && canWrite ? (
+      {fmcg && !initialLoading && stockItems.length === 0 && canWrite ? (
         <div className="shrink-0 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
           <p className="font-medium flex items-start gap-2">
             <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
@@ -606,7 +621,7 @@ export default function StockLevelsPage() {
           </Button>
         </div>
       ) : null}
-      {fmcg && !loading && stockItems.length > 0 && !costingRanAt ? (
+      {fmcg && !initialLoading && stockItems.length > 0 && !costingRanAt ? (
         <p className="shrink-0 text-xs text-muted-foreground">
           Run{" "}
           <Link href="/inventory/costing" className="text-primary underline underline-offset-2">
@@ -636,8 +651,8 @@ export default function StockLevelsPage() {
         <FiltersBar
           className="shrink-0 rounded-xl p-2"
           searchPlaceholder="Search by SKU or product name..."
-          searchValue={searchQuery}
-          onSearchChange={setSearchQuery}
+          searchValue={searchInput}
+          onSearchChange={setSearchInput}
           searchInputDataHint="search"
           filters={[
             {
@@ -664,27 +679,37 @@ export default function StockLevelsPage() {
             },
           ]}
           activeFiltersCount={[warehouseFilter, statusFilter].filter((v) => v !== "all").length}
-          onClearFilters={() => { setWarehouseFilter("all"); setStatusFilter("all"); }}
+          onClearFilters={() => {
+            setWarehouseFilter("all");
+            setStatusFilter("all");
+            setSearchInput("");
+            setSearchQuery("");
+          }}
         />
         <div className={LIST_TABLE_VIEWPORT_CLASS}>
-          {loading ? (
+          <TableLinearProgress active={fetching || searchInput.trim() !== searchQuery} />
+          {initialLoading ? (
             <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
               Loading stock levels...
             </div>
           ) : (
-            <div className={LIST_TABLE_SCROLL_BODY_CLASS}>
+            <div
+              className={`${LIST_TABLE_SCROLL_BODY_CLASS} ${
+                (fetching || searchInput.trim() !== searchQuery) ? "pointer-events-none opacity-60" : ""
+              }`}
+            >
               <DataTable
                 data={pagedItems}
                 columns={columns}
                 onRowClick={(row) => openStockDetail(row)}
-                emptyMessage="No stock items found."
+                emptyMessage="No stock items found. Made SKUs like System Margarine only appear after a work order is completed (or Stock In for opening)."
                 scrollMode="fill"
                 size="comfortable"
                 className="min-h-0 flex-1 border-0"
               />
             </div>
           )}
-          {!loading && filteredItems.length > 0 ? (
+          {!initialLoading && filteredItems.length > 0 ? (
             <TablePagination
               className={`${LIST_TABLE_PAGINATION_CLASS} rounded-none border-0 border-t shadow-none bg-card`}
               pageOffset={pageOffset}
@@ -889,18 +914,22 @@ export default function StockLevelsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Product</Label>
-              <Select value={stockInProductId || undefined} onValueChange={setStockInProductId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {productOptions.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AsyncSearchableSelect
+                value={stockInProductId}
+                selectedOption={stockInProductOption}
+                onValueChange={setStockInProductId}
+                onOptionSelect={setStockInProductOption}
+                loadOptions={loadStockInProducts}
+                placeholder="Search SKU or name…"
+                searchPlaceholder="Type to search — fetches 10 matches from the server"
+                emptyMessage="No matching product."
+                searchDebounceMs={SEARCH_DEBOUNCE_MS}
+                floating={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Stock In adds quantity without consuming a recipe. To make System Margarine or System Cake, create a
+                work order from Production Plan and complete it.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Warehouse</Label>

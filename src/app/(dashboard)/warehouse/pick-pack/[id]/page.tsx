@@ -1696,10 +1696,12 @@ export default function PickPackDetailPage() {
           ) : null}
           {canWrite && <Button
             variant="secondary"
-            disabled={!canDispatch}
+            disabled={!canDispatch || pickPackLoading}
             title={!canDispatch ? "Confirm pack first." : undefined}
             onClick={() => {
               void (async () => {
+                if (pickPackLoading) return;
+                setPickPackLoading(true);
                 try {
                   const draft = buildDispatchPayload();
                   await runPickPackAction(task.id, {
@@ -1718,11 +1720,13 @@ export default function PickPackDetailPage() {
                   await refresh();
                 } catch (e) {
                   toastPickPackInsufficientError(e);
+                } finally {
+                  setPickPackLoading(false);
                 }
               })();
             }}
           >
-            Mark dispatched
+            {pickPackLoading ? "Saving…" : "Mark dispatched"}
           </Button>}
           {canWrite && <Button
             variant="outline"

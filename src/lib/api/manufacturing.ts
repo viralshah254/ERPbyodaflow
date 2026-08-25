@@ -377,6 +377,11 @@ export async function fetchManufacturingWorkOrders(
   return rows;
 }
 
+export async function fetchManufacturingWorkOrder(id: string): Promise<ManufacturingWorkOrder> {
+  requireLiveApi("Manufacturing work order");
+  return apiRequest(`/api/manufacturing/work-orders/${encodeURIComponent(id)}`);
+}
+
 export async function createManufacturingWorkOrder(payload: {
   productId?: string;
   bomId?: string;
@@ -479,6 +484,7 @@ export type ProductionPlanRow = {
   onHandQty: number;
   incomingQty: number;
   shortageQty: number;
+  warehouseShortfallQty?: number;
   suggestedQty?: number;
 };
 
@@ -503,9 +509,27 @@ export type ProductionPlanLineInput = {
   quantity: number;
 };
 
-export async function fetchProductionPlanDefaults(): Promise<{ items: ProductionPlanRow[] }> {
+export async function fetchProductionPlanDefaults(opts?: {
+  search?: string;
+  limit?: number;
+  cursor?: string;
+  suggestedOnly?: boolean;
+  scope?: "pack" | "makeable";
+}): Promise<{
+  items: ProductionPlanRow[];
+  totalCount?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+}> {
   requireLiveApi("Production plan");
-  return apiRequest("/api/manufacturing/production-plan/defaults");
+  const params: Record<string, string> = {};
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+  if (opts?.limit != null) params.limit = String(opts.limit);
+  if (opts?.cursor != null && opts.cursor !== "") params.cursor = opts.cursor;
+  if (opts?.suggestedOnly) params.suggestedOnly = "true";
+  if (opts?.scope) params.scope = opts.scope;
+  return apiRequest("/api/manufacturing/production-plan/defaults", { params });
 }
 
 export async function explodeProductionPlan(lines: ProductionPlanLineInput[]): Promise<ExplodedProductionPlan> {
@@ -518,7 +542,7 @@ export async function explodeProductionPlan(lines: ProductionPlanLineInput[]): P
 
 export async function applyProductionPlan(lines: ProductionPlanLineInput[]): Promise<{
   applied: boolean;
-  created: Array<{ id: string; number: string; productId: string; quantity: number }>;
+  created: Array<{ id: string; number: string; productId: string; quantity: number; reused?: boolean }>;
   explode: ExplodedProductionPlan;
 }> {
   requireLiveApi("Production plan");

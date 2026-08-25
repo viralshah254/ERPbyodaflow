@@ -153,6 +153,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/manufacturing/boms/bom1", module: "manufacturing", description: "BOM detail", inNav: false, dynamic: true },
   { path: "/manufacturing/routing", module: "manufacturing", description: "Routing (work centers, routes, ops)", inNav: true },
   { path: "/manufacturing/work-orders", module: "manufacturing", description: "Work orders", inNav: true },
+  { path: "/manufacturing/work-orders/[id]", module: "manufacturing", description: "Work order production steps", inNav: false },
   { path: "/manufacturing/mrp", module: "manufacturing", description: "MRP planning", inNav: true },
 
   // Distribution
