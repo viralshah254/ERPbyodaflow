@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 
 export type AsyncSearchableSelectOption = {
   id: string;
@@ -350,7 +351,9 @@ export function AsyncSearchableSelect({
 
   const panelInner = (
     <>
-      <Input
+      <div className="relative">
+        <TableLinearProgress active={loading} className="rounded-none" />
+        <Input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={handleKeyDown}
@@ -358,6 +361,7 @@ export function AsyncSearchableSelect({
         autoFocus
         className="bg-background"
       />
+      </div>
       {listHeader ? <div className="mt-2">{listHeader}</div> : null}
       <div
         className={cn(
@@ -382,10 +386,10 @@ export function AsyncSearchableSelect({
         ) : null}
         {hint ? (
           <div className="p-3 text-sm text-muted-foreground">{hint}</div>
-        ) : loading ? (
+        ) : visibleOptions.length === 0 && loading ? (
           <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
             <Icons.Loader2 className="h-4 w-4 animate-spin" />
-            Searching...
+            Searching…
           </div>
         ) : visibleOptions.length === 0 ? (
           <div className="p-3 text-sm text-muted-foreground">{emptyMessage}</div>

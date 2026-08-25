@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -27,14 +28,15 @@ import {
   fetchManufacturingBoms,
   fetchManufacturingRoutes,
   fetchManufacturingWorkOrdersPage,
+  fetchProductionPlanDefaults,
   type ManufacturingBom,
   type ManufacturingRoute,
   type ManufacturingWorkOrder,
+  type ProductionPlanRow,
   type MaterialAvailabilityLine,
 } from "@/lib/api/manufacturing";
 import { fetchGRNs } from "@/lib/api/grn";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
-import { hydrateProductsFromApi, listProducts, subscribeProductsCache } from "@/lib/data/products.repo";
 import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
@@ -59,9 +61,6 @@ export default function WorkOrdersPage() {
   const woLabel = t("workOrder", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
 
-  const [products, setProducts] = React.useState(() => listProducts());
-  React.useEffect(() => subscribeProductsCache(() => setProducts(listProducts())), []);
-
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -79,6 +78,7 @@ export default function WorkOrdersPage() {
   const [saving, setSaving] = React.useState(false);
   const [bomId, setBomId] = React.useState("");
   const [productId, setProductId] = React.useState("");
+  const [selectedProductOption, setSelectedProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [routingId, setRoutingId] = React.useState("");
   const [quantity, setQuantity] = React.useState("1");
   const [dueDate, setDueDate] = React.useState("");
@@ -169,7 +169,6 @@ export default function WorkOrdersPage() {
     void Promise.all([
       fetchManufacturingBoms({ includeItems: true }),
       fetchManufacturingRoutes({ includeOperations: true }),
-      hydrateProductsFromApi(),
     ])
       .then(([nextBoms, nextRoutes]) => {
         setBoms(nextBoms);
@@ -300,6 +299,21 @@ export default function WorkOrdersPage() {
     }
   }, []);
 
+  const makeableById = React.useRef<Map<string, ProductionPlanRow>>(new Map());
+  const loadMakeableProducts = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+    const page = await fetchProductionPlanDefaults({
+      search: query || undefined,
+      limit: 10,
+      scope: "makeable",
+    });
+    const items = page.items ?? [];
+    for (const row of items) makeableById.current.set(row.productId, row);
+    return items.map((row) => ({
+      id: row.productId,
+      label: row.productSku ? `${row.productSku} — ${row.productName}` : row.productName,
+    }));
+  }, []);
+
   function resetForm() {
     setBomId("");
     setProductId("");
@@ -308,6 +322,7 @@ export default function WorkOrdersPage() {
     setQuantity("1");
     setDueDate("");
     setAvailLines([]);
+    setSelectedProductOption(null);
   }
 
   return (
@@ -513,29 +528,33 @@ export default function WorkOrdersPage() {
                 Product
                 <span className="ml-1 text-xs text-destructive">*</span>
               </Label>
-              <Select
+              <AsyncSearchableSelect
                 value={productId}
-                disabled={sheetMetaLoading}
+                selectedOption={selectedProductOption}
                 onValueChange={(nextProductId) => {
                   setProductId(nextProductId);
-                  const match = boms.find((bom) => bom.finishedProductId === nextProductId);
-                  if (match) {
-                    setBomId(match.id);
-                    if (match.routeId) setRoutingId(match.routeId);
-                  }
+                  const cached = makeableById.current.get(nextProductId);
+                  const match = boms.find((bom) => bom.finishedProductId === nextProductId)
+                    ?? (cached?.bomId ? boms.find((bom) => bom.id === cached.bomId) : undefined);
+                  if (cached?.bomId) setBomId(cached.bomId);
+                  else if (match) setBomId(match.id);
+                  if (cached?.routingId) setRoutingId(cached.routingId);
+                  else if (match?.routeId) setRoutingId(match.routeId);
                 }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select product to make" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.sku} - {product.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onOptionSelect={setSelectedProductOption}
+                loadOptions={loadMakeableProducts}
+                placeholder="Search SKU to make…"
+                searchPlaceholder="Type SKU or name — searches the server"
+                emptyMessage="No matching formula SKU. Raw materials are bought, not made here."
+                disabled={sheetMetaLoading}
+                searchDebounceMs={400}
+                floating={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Pick a SKU that has a formula (System Margarine, System Cake, packed cakes). Completing the work order
+                issues raw materials and receives this SKU onto stock levels. Do not Stock In those unless you are
+                posting an opening balance.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -549,6 +568,12 @@ export default function WorkOrdersPage() {
                   const bom = boms.find((item) => item.id === nextBomId);
                   if (bom) {
                     setProductId(bom.finishedProductId);
+                    setSelectedProductOption({
+                      id: bom.finishedProductId,
+                      label: bom.finishedProductSku
+                        ? `${bom.finishedProductSku} — ${bom.finishedProductName ?? bom.name}`
+                        : (bom.finishedProductName ?? bom.name),
+                    });
                     if (bom.routeId) setRoutingId(bom.routeId);
                   }
                 }}

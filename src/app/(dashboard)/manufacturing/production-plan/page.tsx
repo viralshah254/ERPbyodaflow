@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -21,10 +22,11 @@ import {
   type ProductionPlanRow,
   type ProductionPlanTreeNode,
 } from "@/lib/api/manufacturing";
-import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
+const SEARCH_DEBOUNCE_MS = 400;
 
 function qtyLabel(value: number, uom?: string) {
   const n = Number.isFinite(value) ? value : 0;
@@ -111,12 +113,15 @@ function buyAction(row: ProductionPlanRow): string {
   return "Already on the shelf — do not raise a purchase.";
 }
 
-function plannedNameList(rows: ProductionPlanRow[], qtyById: Record<string, string>): string {
-  const names = rows
-    .filter((row) => Number(qtyById[row.productId] ?? "") > 0)
-    .map((row) => {
-      const qty = Number(qtyById[row.productId] ?? "") || 0;
-      return `${row.productName} (${qty} ${row.uom})`;
+function plannedNameList(rowsById: Record<string, ProductionPlanRow>, qtyById: Record<string, string>): string {
+  const names = Object.entries(qtyById)
+    .filter(([, raw]) => Number(raw) > 0)
+    .map(([productId, raw]) => {
+      const row = rowsById[productId];
+      const qty = Number(raw) || 0;
+      const name = row?.productName ?? productId;
+      const uom = row?.uom ?? "";
+      return `${name} (${qty}${uom ? ` ${uom}` : ""})`;
     });
   if (names.length <= 3) return names.join(", ");
   return `${names.slice(0, 3).join(", ")} + ${names.length - 3} more`;
@@ -129,9 +134,16 @@ export default function ProductionPlanPage() {
   const resultsRef = React.useRef<HTMLDivElement>(null);
 
   const [defaults, setDefaults] = React.useState<ProductionPlanRow[]>([]);
+  const [rowsById, setRowsById] = React.useState<Record<string, ProductionPlanRow>>({});
   const [qtyById, setQtyById] = React.useState<Record<string, string>>({});
   const [showAllSkus, setShowAllSkus] = React.useState(true);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [loading, setLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
   const [calculating, setCalculating] = React.useState(false);
   const [applying, setApplying] = React.useState(false);
   const [plan, setPlan] = React.useState<ExplodedProductionPlan | null>(null);
@@ -139,68 +151,117 @@ export default function ProductionPlanPage() {
     Array<{ id: string; number: string; productId: string; quantity: number; reused?: boolean }> | null
   >(null);
   const [pageOffset, setPageOffset] = React.useState(0);
-  const [pageSize, setPageSize] = React.useState(25);
+  const [pageSize, setPageSize] = React.useState(10);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  const mergeRows = React.useCallback((items: ProductionPlanRow[]) => {
+    setRowsById((current) => {
+      const next = { ...current };
+      for (const item of items) next[item.productId] = item;
+      return next;
+    });
+    setQtyById((current) => {
+      const next = { ...current };
+      for (const item of items) {
+        if (next[item.productId] == null) next[item.productId] = "";
+      }
+      return next;
+    });
+  }, []);
 
   const loadDefaults = React.useCallback(async () => {
-    setLoading(true);
+    const first = !hasLoadedOnce.current;
+    if (first) setLoading(true);
+    else setFetching(true);
     try {
-      const result = await fetchProductionPlanDefaults();
-      setDefaults(result.items ?? []);
-      setQtyById((current) => {
-        const next = { ...current };
-        for (const item of result.items ?? []) {
-          if (next[item.productId] == null) next[item.productId] = "";
-        }
-        return next;
+      const result = await fetchProductionPlanDefaults({
+        search: searchQuery || undefined,
+        limit: pageSize,
+        cursor: String(pageOffset),
       });
+      const items = result.items ?? [];
+      setDefaults(items);
+      mergeRows(items);
+      setTotalCount(result.totalCount ?? items.length);
+      setHasMore(Boolean(result.hasMore));
+      hasLoadedOnce.current = true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load pack list.");
     } finally {
       setLoading(false);
+      setFetching(false);
     }
-  }, []);
+  }, [mergeRows, pageOffset, pageSize, searchQuery]);
 
   React.useEffect(() => {
+    if (!showAllSkus) {
+      setLoading(false);
+      return;
+    }
     void loadDefaults();
-  }, [loadDefaults]);
-
-  const packLines = React.useMemo(
-    () =>
-      defaults
-        .map((item) => ({
-          productId: item.productId,
-          quantity: Number(qtyById[item.productId] ?? "") || 0,
-        }))
-        .filter((line) => line.quantity > 0),
-    [defaults, qtyById]
-  );
-
-  const visibleDefaults = React.useMemo(
-    () =>
-      showAllSkus
-        ? defaults
-        : defaults.filter((item) => Number(qtyById[item.productId] ?? "") > 0),
-    [defaults, qtyById, showAllSkus]
-  );
+  }, [loadDefaults, showAllSkus]);
 
   React.useEffect(() => {
     setPageOffset(0);
-  }, [showAllSkus, pageSize, defaults.length]);
+  }, [searchQuery, pageSize]);
 
-  const pagedDefaults = React.useMemo(
-    () => visibleDefaults.slice(pageOffset, pageOffset + pageSize),
-    [visibleDefaults, pageOffset, pageSize]
+  const packLines = React.useMemo(
+    () =>
+      Object.entries(qtyById)
+        .map(([productId, raw]) => ({
+          productId,
+          quantity: Number(raw) || 0,
+        }))
+        .filter((line) => line.quantity > 0),
+    [qtyById]
   );
 
-  const prefillFromSales = () => {
-    const next: Record<string, string> = {};
-    for (const item of defaults) {
-      next[item.productId] = item.suggestedQty && item.suggestedQty > 0 ? String(item.suggestedQty) : "";
+  const plannedRows = React.useMemo(
+    () =>
+      packLines
+        .map((line) => rowsById[line.productId])
+        .filter((row): row is ProductionPlanRow => Boolean(row)),
+    [packLines, rowsById]
+  );
+
+  const visibleDefaults = showAllSkus ? defaults : plannedRows;
+
+  const pagedDefaults = React.useMemo(() => {
+    if (showAllSkus) return visibleDefaults;
+    return visibleDefaults.slice(pageOffset, pageOffset + pageSize);
+  }, [pageOffset, pageSize, showAllSkus, visibleDefaults]);
+
+  const tableTotal = showAllSkus ? totalCount : plannedRows.length;
+  const tableHasMore = showAllSkus ? hasMore : pageOffset + pageSize < plannedRows.length;
+  const searchPending = searchInput.trim() !== searchQuery;
+  const tableBusy = fetching || searchPending;
+
+  const prefillFromSales = async () => {
+    setFetching(true);
+    try {
+      const result = await fetchProductionPlanDefaults({ suggestedOnly: true, limit: 100 });
+      const items = result.items ?? [];
+      mergeRows(items);
+      const next: Record<string, string> = { ...qtyById };
+      for (const item of items) {
+        next[item.productId] = item.suggestedQty && item.suggestedQty > 0 ? String(item.suggestedQty) : "";
+      }
+      setQtyById(next);
+      setPlan(null);
+      setCreatedOrders(null);
+      setShowAllSkus(false);
+      setSearchInput("");
+      setSearchQuery("");
+      if (!items.length) toast.info("No open sales shortages to prefill.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to prefill from sales.");
+    } finally {
+      setFetching(false);
     }
-    setQtyById(next);
-    setPlan(null);
-    setCreatedOrders(null);
-    setShowAllSkus(true);
   };
 
   const handleCalculate = async () => {
@@ -492,10 +553,24 @@ export default function ProductionPlanPage() {
 
       <div className="flex flex-col gap-4 px-4 py-4 pb-12 sm:px-6 sm:py-6">
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={prefillFromSales} disabled={loading || !defaults.length}>
+          <div className="relative min-w-[16rem] flex-1">
+            <Icons.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              value={searchInput}
+              onChange={(event) => {
+                setSearchInput(event.target.value);
+                setShowAllSkus(true);
+              }}
+              placeholder="Search finished SKU or name…"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void prefillFromSales()} disabled={loading}>
             Prefill from sales
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowAllSkus((v) => !v)}>
+          <Button variant="outline" size="sm" onClick={() => { setShowAllSkus((v) => !v); setPageOffset(0); }}>
             {showAllSkus ? "Show planned SKUs only" : "Show all SKUs"}
           </Button>
           <Button size="sm" onClick={() => void handleCalculate()} disabled={calculating || loading}>
@@ -520,26 +595,31 @@ export default function ProductionPlanPage() {
         {loading ? (
           <SkeletonDataTable rows={8} columnWidths={["w-20", "w-48", "w-16", "w-16", "w-16", "w-24"]} />
         ) : (
-          <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+            <TableLinearProgress active={tableBusy} />
+            <div className={cn(tableBusy && "pointer-events-none opacity-60")}>
             <DataTable
               data={pagedDefaults}
               columns={packColumns}
               emptyMessage={
                 showAllSkus
-                  ? "No finished products with a recipe were found."
-                  : "No pack quantities yet. Show all SKUs, type a quantity, then work backwards."
+                  ? searchQuery
+                    ? "No pack SKUs match that search."
+                    : "No finished products with a recipe were found."
+                  : "No pack quantities yet. Search a SKU, type a quantity, then work backwards."
               }
               scrollMode="natural"
               size="comfortable"
             />
-            {visibleDefaults.length > 0 ? (
+            </div>
+            {tableTotal > 0 ? (
               <TablePagination
                 className="rounded-none border-0 border-t shadow-none bg-card"
                 pageOffset={pageOffset}
                 pageSize={pageSize}
                 itemCount={pagedDefaults.length}
-                totalCount={visibleDefaults.length}
-                hasMore={pageOffset + pageSize < visibleDefaults.length}
+                totalCount={tableTotal}
+                hasMore={tableHasMore}
                 onPrevious={() => setPageOffset((offset) => Math.max(0, offset - pageSize))}
                 onNext={() => setPageOffset((offset) => offset + pageSize)}
                 entityLabel="finished products"
@@ -557,7 +637,7 @@ export default function ProductionPlanPage() {
           <div ref={resultsRef} className="space-y-6">
             <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
               <p className="font-medium">
-                Worked backwards from {plannedNameList(defaults, qtyById)}.
+                Worked backwards from {plannedNameList(rowsById, qtyById)}.
               </p>
               <p className="mt-1 text-muted-foreground">
                 {makeWork.length

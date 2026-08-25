@@ -509,9 +509,27 @@ export type ProductionPlanLineInput = {
   quantity: number;
 };
 
-export async function fetchProductionPlanDefaults(): Promise<{ items: ProductionPlanRow[] }> {
+export async function fetchProductionPlanDefaults(opts?: {
+  search?: string;
+  limit?: number;
+  cursor?: string;
+  suggestedOnly?: boolean;
+  scope?: "pack" | "makeable";
+}): Promise<{
+  items: ProductionPlanRow[];
+  totalCount?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+}> {
   requireLiveApi("Production plan");
-  return apiRequest("/api/manufacturing/production-plan/defaults");
+  const params: Record<string, string> = {};
+  if (opts?.search?.trim()) params.search = opts.search.trim();
+  if (opts?.limit != null) params.limit = String(opts.limit);
+  if (opts?.cursor != null && opts.cursor !== "") params.cursor = opts.cursor;
+  if (opts?.suggestedOnly) params.suggestedOnly = "true";
+  if (opts?.scope) params.scope = opts.scope;
+  return apiRequest("/api/manufacturing/production-plan/defaults", { params });
 }
 
 export async function explodeProductionPlan(lines: ProductionPlanLineInput[]): Promise<ExplodedProductionPlan> {
