@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -431,7 +432,7 @@ export default function WorkOrdersPage() {
           }
         }}
       >
-        <SheetContent className="overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle>New work order</SheetTitle>
             <SheetDescription>
@@ -657,38 +658,45 @@ export default function WorkOrdersPage() {
                   )}
                 </div>
                 {availLines.length > 0 && (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-muted-foreground border-b">
-                        <th className="text-left py-1 font-medium">Component</th>
-                        <th className="text-right py-1 font-medium">Required</th>
-                        <th className="text-right py-1 font-medium">On hand</th>
-                        <th className="text-right py-1 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {availLines.map((line) => (
-                        <tr key={line.productId} className="border-b border-border/40 last:border-0">
-                          <td className="py-1 pr-2">
-                            {line.productSku ? `${line.productSku}` : line.productName}
-                          </td>
-                          <td className="py-1 text-right tabular-nums">
-                            {line.requiredQty} {line.uom}
-                          </td>
-                          <td className="py-1 text-right tabular-nums">
-                            {line.onHandQty} {line.uom}
-                          </td>
-                          <td className="py-1 text-right">
-                            {line.shortfall > 0 ? (
-                              <span className="text-destructive font-medium">−{line.shortfall}</span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400">OK</span>
-                            )}
-                          </td>
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      Click a component for stock. RAW and packaging also have Purchase.
+                    </p>
+                    <table className="w-full min-w-[28rem] text-xs">
+                      <thead>
+                        <tr className="text-muted-foreground border-b">
+                          <th className="text-left py-1 font-medium">Component</th>
+                          <th className="text-right py-1 font-medium">Required</th>
+                          <th className="text-right py-1 font-medium">On hand</th>
+                          <th className="text-right py-1 font-medium">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {availLines.map((line) => (
+                          <tr key={line.productId} className="border-b border-border/40 last:border-0">
+                            <td className="py-1 pr-2 align-top whitespace-nowrap">
+                              <MaterialComponentLinks line={line} compact />
+                            </td>
+                            <td className="py-1 text-right tabular-nums whitespace-nowrap">
+                              {Math.round(line.requiredQty * 1000) / 1000} {line.uom}
+                            </td>
+                            <td className="py-1 text-right tabular-nums whitespace-nowrap">
+                              {Math.round(line.onHandQty * 1000) / 1000} {line.uom}
+                            </td>
+                            <td className="py-1 text-right whitespace-nowrap">
+                              {line.shortfall > 0 ? (
+                                <span className="text-destructive font-medium">
+                                  −{Math.round(line.shortfall * 1000) / 1000}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400">OK</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
                 )}
                 {availLines.length === 0 && !availLoading && (
                   <p className="text-xs text-muted-foreground">No component lines on this BOM.</p>

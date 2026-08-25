@@ -16,6 +16,7 @@ import {
   type ManufacturingWorkOrder,
   type MaterialAvailabilityLine,
 } from "@/lib/api/manufacturing";
+import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -280,7 +281,7 @@ export default function WorkOrderDetailPage() {
                           {availLines.map((line) => (
                             <TableRow key={line.productId} className={line.shortfall > 0 ? "bg-destructive/10" : undefined}>
                               <TableCell>
-                                {line.productSku ? `${line.productSku} — ${line.productName}` : line.productName}
+                                <MaterialComponentLinks line={line} />
                               </TableCell>
                               <TableCell className="text-right tabular-nums">
                                 {line.requiredQty} {line.uom}
