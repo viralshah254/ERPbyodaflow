@@ -99,6 +99,13 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     title: "Integrations",
     links: [
       {
+        href: "/settings/integrations/kra",
+        label: "KRA eTIMS",
+        description: "Connect this organisation to KRA for signed tax invoices",
+        icon: "ShieldCheck",
+        requiresPermissions: ["settings.org.read"],
+      },
+      {
         href: "/settings/integrations/whatsapp",
         label: "WhatsApp orders",
         description: "WhatsApp Business routing and sales order defaults",

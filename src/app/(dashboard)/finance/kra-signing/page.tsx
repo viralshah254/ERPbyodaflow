@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   LIST_PAGE_BODY_CLASS,
@@ -17,15 +16,18 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { KraSigningBadge } from "@/components/kra/KraSigningBadge";
 import {
   fetchIncotexMonitorApi,
-  retryIncotexDocumentApi,
   retryIncotexQueueApi,
   type IncotexMonitorRow,
   type IncotexMonitorStatusFilter,
 } from "@/lib/api/incotex";
+import { retryEtimsQueueApi, retryKraDocumentApi, retryKraQueueApi } from "@/lib/api/kra-integration";
 import { formatMoney } from "@/lib/money";
-import { docTypeLabel, canRetryKraSigning, kraRetryButtonLabel, type IncotexSignableDocType } from "@/lib/kra/kra-signing";
-import { useOrgContextStore } from "@/stores/orgContextStore";
-import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import {
+  docTypeLabel,
+  canRetryKraSigning,
+  kraRetryButtonLabel,
+  type IncotexSignableDocType,
+} from "@/lib/kra/kra-signing";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -48,13 +50,18 @@ const TYPE_OPTIONS = [
   { label: "Debit notes", value: "debit-note" },
 ];
 
+const PROVIDER_OPTIONS = [
+  { label: "All providers", value: "all" },
+  { label: "Incotex", value: "incotex" },
+  { label: "eTIMS OSCU", value: "etims_oscu" },
+];
+
 export default function KraSigningMonitorPage() {
   const router = useRouter();
-  const templateId = useOrgContextStore((s) => s.templateId);
-  const fmcg = isFmcgOrg(templateId);
 
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [typeFilter, setTypeFilter] = React.useState("all");
+  const [providerFilter, setProviderFilter] = React.useState("all");
   const [rows, setRows] = React.useState<IncotexMonitorRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [pageOffset, setPageOffset] = React.useState(0);
@@ -68,6 +75,7 @@ export default function KraSigningMonitorPage() {
       const result = await fetchIncotexMonitorApi({
         status: statusFilter as IncotexMonitorStatusFilter,
         typeKey: typeFilter as IncotexSignableDocType | "all",
+        provider: providerFilter as "all" | "incotex" | "etims_oscu",
         limit: PAGE_SIZE,
         offset,
       });
@@ -79,17 +87,16 @@ export default function KraSigningMonitorPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, typeFilter]);
+  }, [statusFilter, typeFilter, providerFilter]);
 
   React.useEffect(() => {
-    if (!fmcg) return;
     void loadPage(0);
-  }, [fmcg, loadPage]);
+  }, [loadPage]);
 
   const handleRetryRow = async (row: IncotexMonitorRow) => {
     setRetryingId(row.id);
     try {
-      const { kraSigning } = await retryIncotexDocumentApi(row.typeKey, row.id);
+      const { kraSigning } = await retryKraDocumentApi(row.typeKey, row.id);
       await loadPage(pageOffset);
       if (kraSigning.status === "signed") {
         toast.success(`${row.number} signed with KRA.`);
@@ -108,7 +115,12 @@ export default function KraSigningMonitorPage() {
   const handleRetryQueue = async () => {
     setRetryingQueue(true);
     try {
-      const { retried } = await retryIncotexQueueApi();
+      const { retried } =
+        providerFilter === "etims_oscu"
+          ? await retryEtimsQueueApi()
+          : providerFilter === "incotex"
+            ? await retryIncotexQueueApi()
+            : await retryKraQueueApi();
       await loadPage(pageOffset);
       toast.success(`Retried ${retried} declined document(s).`);
     } catch (e) {
@@ -176,27 +188,13 @@ export default function KraSigningMonitorPage() {
     [retryingId]
   );
 
-  if (!fmcg) {
-    return (
-      <PageShell>
-        <PageHeader
-          title="KRA signing monitor"
-          breadcrumbs={[{ label: "Finance", href: "/finance" }, { label: "KRA signing" }]}
-        />
-        <div className="p-6 text-muted-foreground">
-          KRA / Incotex signing monitor is available for FMCG organisations only.
-        </div>
-      </PageShell>
-    );
-  }
-
   const hasMore = pageOffset + rows.length < total;
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="KRA signing monitor"
-        description="Track invoices, credit notes, and debit notes sent to KRA via Incotex — queued, signed, and declined with error reasons."
+        description="Track invoices, credit notes, and debit notes sent to KRA — Incotex for existing clients, eTIMS OSCU for tenants who connected directly."
         breadcrumbs={[{ label: "Finance", href: "/finance" }, { label: "KRA signing" }]}
         sticky
         actions={
@@ -223,6 +221,13 @@ export default function KraSigningMonitorPage() {
               options: TYPE_OPTIONS,
               value: typeFilter,
               onChange: setTypeFilter,
+            },
+            {
+              id: "provider",
+              label: "Provider",
+              options: PROVIDER_OPTIONS,
+              value: providerFilter,
+              onChange: setProviderFilter,
             },
           ]}
           actions={

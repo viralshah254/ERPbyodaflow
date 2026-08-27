@@ -1,15 +1,24 @@
 export type KraSigningStatus = "pending" | "signed" | "failed" | "skipped";
 
+export type KraSigningProvider = "incotex" | "etims_oscu";
+
 export type KraSigningRecord = {
   status: KraSigningStatus;
+  provider?: KraSigningProvider;
   cuInvoiceNumber?: string;
   verifyUrl?: string;
   cuSerialNumber?: string;
+  receiptNumber?: string;
+  qrPayload?: string;
   signedAt?: string;
   errorMessage?: string;
   retryCount?: number;
   incotexEndpoint?: string;
 };
+
+export function isEtimsOscuSigning(kraSigning?: KraSigningRecord | null): boolean {
+  return kraSigning?.provider === "etims_oscu";
+}
 
 export const INCOTEX_SIGNABLE_DOC_TYPES = ["invoice", "credit-note", "debit-note"] as const;
 

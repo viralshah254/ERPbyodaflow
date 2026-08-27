@@ -125,13 +125,19 @@ export default function CompliancePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">E-invoicing</CardTitle>
-            <CardDescription>Enable or disable e-invoice controls in the document flow.</CardDescription>
+            <CardDescription>
+              KRA tax invoice signing is configured per organisation. Incotex clients stay on their existing
+              connection; other tenants connect to eTIMS from the KRA page.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <div className="flex items-center gap-2">
               <Checkbox id="e-inv" checked={eInvoice} onCheckedChange={(c) => setEInvoice(c === true)} />
-              <Label htmlFor="e-inv">Enable e-invoicing</Label>
+              <Label htmlFor="e-inv">Enable e-invoicing reminder</Label>
             </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/settings/integrations/kra">Open KRA eTIMS connection</Link>
+            </Button>
           </CardContent>
         </Card>
         <Card>

@@ -5,12 +5,13 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { KraSigningBadge } from "@/components/kra/KraSigningBadge";
-import { retryIncotexDocumentApi } from "@/lib/api/incotex";
+import { retryKraDocumentApi } from "@/lib/api/kra-integration";
 import {
   docTypeLabel,
   isIncotexSignableDocType,
   canRetryKraSigning,
   kraRetryButtonLabel,
+  isEtimsOscuSigning,
   type IncotexSignableDocType,
   type KraSigningRecord,
 } from "@/lib/kra/kra-signing";
@@ -42,7 +43,7 @@ export function KraSigningPanel({
   const handleRetry = async () => {
     setRetrying(true);
     try {
-      const { kraSigning: next } = await retryIncotexDocumentApi(
+      const { kraSigning: next } = await retryKraDocumentApi(
         typeKey as IncotexSignableDocType,
         documentId
       );
@@ -71,10 +72,11 @@ export function KraSigningPanel({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Icons.ShieldCheck className="h-4 w-4" />
-          KRA / Incotex
+          {isEtimsOscuSigning(kraSigning) ? "KRA / eTIMS" : "KRA / Incotex"}
         </CardTitle>
         <CardDescription>
-          {docTypeLabel(typeKey)} transmission status to KRA via Incotex.
+          {docTypeLabel(typeKey)} transmission status to KRA
+          {isEtimsOscuSigning(kraSigning) ? " via eTIMS OSCU." : " via Incotex."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
@@ -92,6 +94,12 @@ export function KraSigningPanel({
 
         {kraSigning?.status === "signed" ? (
           <dl className="grid gap-2 border-t pt-3">
+            {kraSigning.receiptNumber ? (
+              <div>
+                <dt className="text-muted-foreground">eTIMS receipt number</dt>
+                <dd className="font-mono">{kraSigning.receiptNumber}</dd>
+              </div>
+            ) : null}
             {kraSigning.cuInvoiceNumber ? (
               <div>
                 <dt className="text-muted-foreground">CU invoice number</dt>

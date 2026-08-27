@@ -41,9 +41,11 @@ export function KraSigningBadge({
           {kraSigning.errorMessage}
         </span>
       ) : null}
-      {!compact && status === "signed" && kraSigning?.cuInvoiceNumber ? (
-        <span className="text-xs text-muted-foreground font-mono" title="CU invoice number">
-          CU {kraSigning.cuInvoiceNumber}
+      {!compact && status === "signed" && (kraSigning?.receiptNumber || kraSigning?.cuInvoiceNumber) ? (
+        <span className="text-xs text-muted-foreground font-mono" title="KRA receipt">
+          {kraSigning?.receiptNumber
+            ? `eTIMS ${kraSigning.receiptNumber}`
+            : `CU ${kraSigning?.cuInvoiceNumber}`}
         </span>
       ) : null}
     </div>

@@ -214,6 +214,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/settings/sidebar", module: "settings", description: "Sidebar navigation", inNav: true },
   { path: "/settings/sequences", module: "settings", description: "Numbering sequences", inNav: true },
   { path: "/settings/compliance", module: "settings", description: "Compliance", inNav: true },
+  { path: "/settings/integrations/kra", module: "settings", description: "KRA eTIMS", inNav: true },
   { path: "/settings/notifications", module: "settings", description: "Notifications", inNav: true },
   { path: "/settings/migrations", module: "settings", description: "Migration console", inNav: true },
   { path: "/settings/payroll", module: "settings", description: "Payroll settings", inNav: true },

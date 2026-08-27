@@ -18,12 +18,14 @@ export type IncotexMonitorStatusFilter = "all" | "not_sent" | KraSigningRecord["
 export async function fetchIncotexMonitorApi(opts?: {
   status?: IncotexMonitorStatusFilter;
   typeKey?: IncotexSignableDocType | "all";
+  provider?: "all" | "incotex" | "etims_oscu";
   limit?: number;
   offset?: number;
 }): Promise<{ items: IncotexMonitorRow[]; total: number }> {
   const params = new URLSearchParams();
   if (opts?.status && opts.status !== "all") params.set("status", opts.status);
   if (opts?.typeKey && opts.typeKey !== "all") params.set("typeKey", opts.typeKey);
+  if (opts?.provider && opts.provider !== "all") params.set("provider", opts.provider);
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   if (opts?.offset != null) params.set("offset", String(opts.offset));
   return apiRequest<{ items: IncotexMonitorRow[]; total: number }>("/api/kra/incotex/monitor", {
