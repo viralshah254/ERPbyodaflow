@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import { LIST_TABLE_WORKLIST_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,8 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { manufacturingAreaLabel } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { isSeafoodOrg } from "@/config/industry";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import {
   applyProductionPlan,
@@ -132,6 +133,9 @@ export default function ProductionPlanPage() {
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const canWrite = useCanWriteManufacturing();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const resultsRef = React.useRef<HTMLDivElement>(null);
 
   const [defaults, setDefaults] = React.useState<ProductionPlanRow[]>([]);
@@ -538,7 +542,11 @@ export default function ProductionPlanPage() {
     <PageShell>
       <PageHeader
         title="Production Plan"
-        description="Enter pack quantities on the SKUs you will make today. Work backwards ignores empty pack qty."
+        description={
+          seafoodOrg
+            ? "Enter pack quantities on the fish SKUs you will process today. Work backwards ignores empty pack qty."
+            : "Enter pack quantities on the SKUs you will make today. Work backwards ignores empty pack qty."
+        }
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Production Plan" },
@@ -596,9 +604,9 @@ export default function ProductionPlanPage() {
         {loading ? (
           <SkeletonDataTable rows={8} columnWidths={["w-20", "w-48", "w-16", "w-16", "w-16", "w-24"]} />
         ) : (
-          <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className={LIST_TABLE_WORKLIST_CLASS}>
             <TableLinearProgress active={tableBusy} />
-            <div className={cn(tableBusy && "pointer-events-none opacity-60")}>
+            <div className={cn("flex min-h-0 flex-1 flex-col", tableBusy && "pointer-events-none opacity-60")}>
             <DataTable
               data={pagedDefaults}
               columns={packColumns}
@@ -606,10 +614,13 @@ export default function ProductionPlanPage() {
                 showAllSkus
                   ? searchQuery
                     ? "No pack SKUs match that search."
-                    : "No finished products with a recipe were found."
+                    : seafoodOrg
+                      ? "No packed fish SKUs with a processing recipe were found."
+                      : "No finished products with a recipe were found."
                   : "No pack quantities yet. Search a SKU, type a quantity, then work backwards."
               }
-              scrollMode="natural"
+              scrollMode="fill"
+              className="min-h-0 flex-1 border-0 shadow-none"
               size="comfortable"
             />
             </div>
@@ -642,11 +653,13 @@ export default function ProductionPlanPage() {
               </p>
               <p className="mt-1 text-muted-foreground">
                 {makeWork.length
-                  ? `Make in the bakery first: ${makeWork.map((row) => row.productName).join(", ")}.`
+                  ? `Make in production first: ${makeWork.map((row) => row.productName).join(", ")}.`
                   : "No extra batches to raise for components."}{" "}
                 {buyShortRows.length
                   ? `Then buy from suppliers: ${buyShortRows.map((row) => row.productName).join(", ")}.`
-                  : "Buy is empty because purchased ingredients and packaging are already on the shelf — margarine and cake are made here, so they never appear on Buy."}
+                  : seafoodOrg
+                    ? "Buy is empty because purchased fish and packing are already in the cold store — processed items (fillets, steaks) are made here, so they never appear on Buy."
+                    : "Buy is empty because purchased inputs and packaging are already on the shelf — made items are produced here, so they never appear on Buy."}
               </p>
               {(buyShortRows.length > 0 || makeWork.length > 0 || packResultRows.length > 0) ? (
                 <ol className="mt-3 list-decimal space-y-2 pl-5 text-foreground">
@@ -723,14 +736,19 @@ export default function ProductionPlanPage() {
                   <Badge variant="secondary">{buyShortRows.length}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Only purchased items that are short on the shelf (flour, sugar, boxes, labels). Made items such as
-                  margarine and cake never belong here.
+                  {seafoodOrg
+                    ? "Only purchased items that are short in the cold store (whole fish from farms or brokers, ice, crates). Processed SKUs never belong here."
+                    : "Only purchased items that are short on the shelf (inputs, packaging). Made items never belong here."}
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                   <DataTable
                     data={buyShortRows}
                     columns={buyColumns}
-                    emptyMessage="Nothing to buy. Purchased ingredients and packaging for this plan are already on the shelf. Short margarine or cake means make them — see Make in production."
+                    emptyMessage={
+                      seafoodOrg
+                        ? "Nothing to buy. Whole fish and packing for this plan are already in the cold store. If fillets or other processed SKUs are short, raise them under Make in production."
+                        : "Nothing to buy. Purchased inputs and packaging for this plan are already on the shelf. If a made item is short, raise it under Make in production."
+                    }
                     scrollMode="natural"
                     size="comfortable"
                   />
@@ -782,8 +800,9 @@ export default function ProductionPlanPage() {
 
         <p className="flex items-start gap-2 text-sm text-muted-foreground">
           <Icons.Info className="mt-0.5 h-4 w-4 shrink-0" />
-          Create work orders for Make items first (margarine, then cake), complete them so they hit the shelf, then
-          complete the pack. Buy from suppliers only when Buy from suppliers has rows.
+          {seafoodOrg
+            ? "Create work orders for processing first (whole fish, then fillets or steaks), complete them so they hit the cold store, then complete the pack. Buy from suppliers only when Buy from suppliers has rows."
+            : "Create work orders for Make items first (components, then finished packs), complete them so they hit the shelf, then complete the pack. Buy from suppliers only when Buy from suppliers has rows."}
         </p>
       </div>
     </PageShell>

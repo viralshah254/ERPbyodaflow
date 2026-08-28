@@ -3,7 +3,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_PAGINATION_CLASS,
+  LIST_TABLE_SCROLL_BODY_CLASS,
+  LIST_TABLE_WORKLIST_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -215,6 +222,7 @@ export default function PurchaseRequestsPage() {
       <PageHeader
         title="Purchase Requests"
         description="Requisitions and approval flow"
+        dense
         breadcrumbs={[
           { label: "Purchasing", href: "/purchasing/orders" },
           { label: "Purchase Requests" },
@@ -229,7 +237,7 @@ export default function PurchaseRequestsPage() {
           </Button>
         ) : undefined}
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className={cn(LIST_PAGE_BODY_CLASS, "gap-3 p-3 sm:p-4")}>
         <DataTableToolbar
           className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search by number, requester..."
@@ -289,12 +297,16 @@ export default function PurchaseRequestsPage() {
           }
         />
         {initialLoading ? (
-          <SkeletonDataTable
-            rows={pageSize}
-            columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
-          />
+          <div className={LIST_TABLE_WORKLIST_CLASS}>
+            <div className="min-h-0 flex-1 overflow-hidden p-3">
+              <SkeletonDataTable
+                rows={12}
+                columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
+              />
+            </div>
+          </div>
         ) : (
-          <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className={LIST_TABLE_WORKLIST_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
@@ -306,7 +318,7 @@ export default function PurchaseRequestsPage() {
                 data={rows}
                 columns={columns}
                 scrollMode="fill"
-                className="border-0 shadow-none"
+                className="min-h-0 flex-1 border-0 shadow-none"
                 onRowClick={(row) => router.push(`/docs/purchase-request/${row.id}`)}
                 emptyMessage="No purchase requests match your filters."
                 selectable
@@ -314,22 +326,22 @@ export default function PurchaseRequestsPage() {
                 onSelectionChange={setSelectedIds}
               />
             </div>
+            <TablePagination
+              className={`${LIST_TABLE_PAGINATION_CLASS} rounded-none border-0 border-t shadow-none bg-card`}
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={rows.length}
+              hasMore={hasMore}
+              loading={initialLoading}
+              busy={tableBusy}
+              onPrevious={goToPreviousPage}
+              onNext={goToNextPage}
+              entityLabel="purchase requests"
+              pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </div>
         )}
-        <TablePagination
-          className="shrink-0"
-          pageOffset={pageOffset}
-          pageSize={pageSize}
-          itemCount={initialLoading ? 0 : rows.length}
-          hasMore={hasMore}
-          loading={initialLoading}
-          busy={tableBusy}
-          onPrevious={goToPreviousPage}
-          onNext={goToNextPage}
-          entityLabel="purchase requests"
-          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
-          onPageSizeChange={handlePageSizeChange}
-        />
       </div>
     </PageShell>
   );

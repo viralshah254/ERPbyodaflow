@@ -18,7 +18,8 @@ import {
 } from "@/lib/api/manufacturing";
 import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { isSeafoodOrg } from "@/config/industry";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -52,6 +53,9 @@ export default function WorkOrderDetailPage() {
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
 
   const [order, setOrder] = React.useState<ManufacturingWorkOrder | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -248,7 +252,9 @@ export default function WorkOrderDetailPage() {
                   <CardDescription>
                     Completing issues real on-hand stock. Production Plan “Covered” can include other work orders
                     that are not finished yet — those are not in the warehouse until you complete them first
-                    (for example System Cake before packing Family Cake).
+                    {seafoodOrg
+                      ? " (for example process whole fish before packing fillets)."
+                      : " (process components before packing the finished SKU)."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
