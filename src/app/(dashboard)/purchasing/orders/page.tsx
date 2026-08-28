@@ -3,14 +3,20 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_PAGINATION_CLASS,
+  LIST_TABLE_SCROLL_BODY_CLASS,
+  LIST_TABLE_WORKLIST_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
-import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -247,7 +253,8 @@ export default function PurchaseOrdersPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Purchase Orders"
-        description="Manage supplier orders"
+        description="Landing, processing, and shop replenishment orders"
+        dense
         breadcrumbs={[
           { label: "Purchasing", href: "/purchasing/orders" },
           { label: "Purchase Orders" },
@@ -262,30 +269,29 @@ export default function PurchaseOrdersPage() {
           </Button>
         ) : undefined}
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        <ExceptionBanner
-          type="info"
-          title="Procurement workspace"
-          description="Use this worklist to control approvals, cash-heavy sourcing, and drill into PO-level audit and landed-cost context."
-        />
-        <div className="grid shrink-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={cn(LIST_PAGE_BODY_CLASS, "gap-3 p-3 sm:p-4")}>
+        <div className="grid shrink-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <OperationalKpiCard
+            compact
             title="Total POs"
             value={initialLoading ? "—" : kpiTotal}
             subtitle="All purchase orders"
           />
           <OperationalKpiCard
+            compact
             title="Pending Approval"
             value={initialLoading ? "—" : kpiPending}
             subtitle="Needs action now"
             severity="warning"
           />
           <OperationalKpiCard
+            compact
             title="Approved"
             value={initialLoading ? "—" : kpiApproved}
             subtitle="Ready for receiving"
           />
           <OperationalKpiCard
+            compact
             title="Received"
             value={initialLoading ? "—" : kpiReceived}
             subtitle="Already fulfilled"
@@ -370,24 +376,28 @@ export default function PurchaseOrdersPage() {
           }
         />
         {initialLoading ? (
-          <SkeletonDataTable
-            rows={pageSize}
-            columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
-          />
+          <div className={LIST_TABLE_WORKLIST_CLASS}>
+            <div className="min-h-0 flex-1 overflow-hidden p-3">
+              <SkeletonDataTable
+                rows={12}
+                columnWidths={["w-20", "w-24", "w-32", "w-24", "w-20", "w-24"]}
+              />
+            </div>
+          </div>
         ) : (
-          <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
+          <div className={LIST_TABLE_WORKLIST_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
-                "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+                LIST_TABLE_SCROLL_BODY_CLASS,
                 tableBusy && "pointer-events-none opacity-60",
               )}
             >
               <DataTable<PurchasingDocRow>
                 data={rows}
                 columns={columns}
-                scrollMode="natural"
-                className="border-0 shadow-none"
+                scrollMode="fill"
+                className="min-h-0 flex-1 border-0 shadow-none"
                 onRowClick={(row) => router.push(`/purchasing/orders/${row.id}`)}
                 emptyMessage="No purchase orders match your filters."
                 selectable
@@ -395,22 +405,22 @@ export default function PurchaseOrdersPage() {
                 onSelectionChange={setSelectedIds}
               />
             </div>
+            <TablePagination
+              className={`${LIST_TABLE_PAGINATION_CLASS} rounded-none border-0 border-t shadow-none bg-card`}
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={rows.length}
+              hasMore={hasMore}
+              loading={initialLoading}
+              busy={tableBusy}
+              onPrevious={goToPreviousPage}
+              onNext={goToNextPage}
+              entityLabel="purchase orders"
+              pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+              onPageSizeChange={handlePageSizeChange}
+            />
           </div>
         )}
-        <TablePagination
-          className="shrink-0"
-          pageOffset={pageOffset}
-          pageSize={pageSize}
-          itemCount={initialLoading ? 0 : rows.length}
-          hasMore={hasMore}
-          loading={initialLoading}
-          busy={tableBusy}
-          onPrevious={goToPreviousPage}
-          onNext={goToNextPage}
-          entityLabel="purchase orders"
-          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
-          onPageSizeChange={handlePageSizeChange}
-        />
       </div>
     </PageShell>
   );

@@ -552,7 +552,7 @@ export default function WorkOrdersPage() {
                 floating={false}
               />
               <p className="text-xs text-muted-foreground">
-                Pick a SKU that has a formula (System Margarine, System Cake, packed cakes). Completing the work order
+                Pick a SKU that has a formula. Completing the work order
                 issues raw materials and receives this SKU onto stock levels. Do not Stock In those unless you are
                 posting an opening balance.
               </p>
