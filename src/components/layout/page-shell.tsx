@@ -30,9 +30,9 @@ export const LIST_TABLE_WORKLIST_CLASS =
 export const LIST_PAGE_BODY_VIEWPORT_CLASS =
   "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-0 py-3";
 
-/** Flex child between LIST_TABLE_SURFACE and DataTable scrollMode="fill". */
+/** Flex child between LIST_TABLE_SURFACE and DataTable — scrolls when rows overflow. */
 export const LIST_TABLE_SCROLL_BODY_CLASS =
-  "flex min-h-0 flex-1 flex-col overflow-hidden transition-opacity duration-200";
+  "flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto transition-opacity duration-200";
 
 /** Pagination footer pinned below a fill-mode table card. */
 export const LIST_TABLE_PAGINATION_CLASS = "shrink-0 border-t px-4";
