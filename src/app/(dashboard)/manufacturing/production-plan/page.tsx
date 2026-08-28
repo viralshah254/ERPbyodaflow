@@ -803,6 +803,7 @@ export default function ProductionPlanPage() {
           {seafoodOrg
             ? "Create work orders for processing first (whole fish, then fillets or steaks), complete them so they hit the cold store, then complete the pack. Buy from suppliers only when Buy from suppliers has rows."
             : "Create work orders for Make items first (components, then finished packs), complete them so they hit the shelf, then complete the pack. Buy from suppliers only when Buy from suppliers has rows."}
+        </p>
       </div>
     </PageShell>
   );
