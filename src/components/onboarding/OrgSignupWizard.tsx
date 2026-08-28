@@ -11,7 +11,12 @@ import { OrgSignupApplicantPanel } from "@/components/onboarding/OrgSignupApplic
 import { useOnboardingStore } from "@/stores/onboarding-store";
 import { getTemplateById } from "@/config/industryTemplates/index";
 import { industryCategoryLabel } from "@/config/industry";
-import { submitOrgSignupApi } from "@/lib/api/org-signup";
+import {
+  resolveOdaflowHandoffApi,
+  submitOdaflowHandoffSignupApi,
+  submitOrgSignupApi,
+  type OdaflowHandoff,
+} from "@/lib/api/org-signup";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
@@ -63,7 +68,43 @@ export function OrgSignupWizard() {
   const [step, setStep] = React.useState(0);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitted, setSubmitted] = React.useState(false);
-  const { data, reset } = useOnboardingStore();
+  const { data, reset, updateData } = useOnboardingStore();
+
+  // A signup arriving from OdaFlow SFA carries a signed token. We resolve it
+  // server-side and prefill from the answer, so the customer does not re-key
+  // details OdaFlow already holds.
+  const [handoffToken, setHandoffToken] = React.useState<string | null>(null);
+  const [handoff, setHandoff] = React.useState<OdaflowHandoff | null>(null);
+  const [handoffError, setHandoffError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("handoff");
+    if (!token) return;
+    setHandoffToken(token);
+    let cancelled = false;
+    void resolveOdaflowHandoffApi(token)
+      .then((resolved) => {
+        if (cancelled) return;
+        setHandoff(resolved);
+        updateData({
+          orgName: resolved.orgName,
+          ...(resolved.contactEmail ? { email: resolved.contactEmail } : {}),
+          ...(resolved.contactPhone ? { phone: resolved.contactPhone } : {}),
+          ...(resolved.contactName
+            ? {
+                firstName: resolved.contactName.split(/\s+/)[0],
+                lastName: resolved.contactName.split(/\s+/).slice(1).join(" "),
+              }
+            : {}),
+        });
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setHandoffError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [updateData]);
 
   const template = data.templateId ? getTemplateById(data.templateId) : null;
 
@@ -74,6 +115,33 @@ export function OrgSignupWizard() {
     }
     setSubmitting(true);
     try {
+      if (handoffToken && handoff) {
+        const result = await submitOdaflowHandoffSignupApi({
+          token: handoffToken,
+          industryCategory: data.industryCategory,
+          orgType: data.orgType,
+          templateId: data.templateId,
+          templateName: template?.name,
+          firstName: data.firstName ?? "",
+          lastName: data.lastName ?? "",
+          email: data.email,
+          phone: data.phone,
+          country: data.country ?? "Kenya",
+          currency: data.currency ?? "KES",
+          timeZone: data.timezone ?? "Africa/Nairobi",
+          message: data.businessType,
+        });
+        if (!result.linked) {
+          // The tenant is live either way; only the connector needs attention.
+          toast.warning(
+            "Your ERP is ready, but we could not connect it to OdaFlow automatically. You can finish that from Settings → Integrations.",
+          );
+        }
+        setSubmitted(true);
+        reset();
+        return;
+      }
+
       await submitOrgSignupApi({
         industryCategory: data.industryCategory,
         orgType: data.orgType,
@@ -100,6 +168,33 @@ export function OrgSignupWizard() {
   };
 
   if (submitted) {
+    // An OdaFlow customer is provisioned on the spot, so there is nothing to
+    // wait for — telling them to expect a review would be wrong.
+    if (handoff) {
+      return (
+        <Card className="p-8 max-w-lg mx-auto text-center border-primary/20">
+          <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <Icons.Check className="h-7 w-7 text-primary" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Your ERP is ready</h2>
+          <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+            We have set up <span className="font-medium">{handoff.orgName}</span> and emailed your
+            sign-in details. Your 30-day trial starts now.
+          </p>
+          <div className="rounded-lg border bg-muted/30 p-4 text-left text-sm space-y-2 mb-6">
+            <p className="font-medium">Connected to your OdaFlow account</p>
+            <p className="text-muted-foreground">
+              Products, customers and staff stay in step with SFA and People automatically — no API
+              keys to copy.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/login">Sign in to your ERP</Link>
+          </Button>
+        </Card>
+      );
+    }
+
     return (
       <Card className="p-8 max-w-lg mx-auto text-center border-primary/20">
         <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
@@ -125,6 +220,32 @@ export function OrgSignupWizard() {
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] gap-8 lg:gap-10 items-start">
       <div className="space-y-6 min-w-0">
+        {handoff && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
+            <Icons.Link2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium">Connecting to your OdaFlow account</p>
+              <p className="text-muted-foreground">
+                Setting up <span className="font-medium">{handoff.orgName}</span>. It will share
+                products, customers and staff with your SFA account. Free for 30 days.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {handoffError && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
+            <Icons.AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium">This OdaFlow link is not valid</p>
+              <p className="text-muted-foreground">
+                {handoffError} You can still apply below, but your ERP will not be connected to
+                OdaFlow automatically.
+              </p>
+            </div>
+          </div>
+        )}
+
         <SignupStepper step={step} />
 
         <div className="lg:hidden">
