@@ -53,3 +53,56 @@ export async function submitOrgSignupApi(payload: OrgSignupPayload): Promise<Org
   }
   return (data as { request: OrgSignupRequestRow }).request;
 }
+
+export type OdaflowHandoff = {
+  orgName: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  trialActive: boolean;
+  linkedToOdaflow: true;
+};
+
+/**
+ * Resolves a signup link that came from OdaFlow SFA. The token is opaque here —
+ * the API verifies it server-side and returns the company it belongs to.
+ */
+export async function resolveOdaflowHandoffApi(token: string): Promise<OdaflowHandoff> {
+  const base = getApiBase();
+  if (!base) throw new Error("API is not configured. Set NEXT_PUBLIC_API_URL.");
+  const res = await fetch(
+    `${base}/api/public/org-signup/handoff?token=${encodeURIComponent(token)}`,
+    { headers: { Accept: "application/json" } },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error ?? `Could not verify this link (${res.status})`);
+  }
+  return data as OdaflowHandoff;
+}
+
+export type HandoffSignupResult = {
+  orgId: string;
+  tenantId: string;
+  manufacturerId: string;
+  linked: boolean;
+  linkError?: string;
+};
+
+/** Provisions immediately for an existing OdaFlow customer. */
+export async function submitOdaflowHandoffSignupApi(
+  payload: Omit<OrgSignupPayload, "orgName" | "plan"> & { token: string },
+): Promise<HandoffSignupResult> {
+  const base = getApiBase();
+  if (!base) throw new Error("API is not configured. Set NEXT_PUBLIC_API_URL.");
+  const res = await fetch(`${base}/api/public/org-signup/handoff`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+  }
+  return data as HandoffSignupResult;
+}

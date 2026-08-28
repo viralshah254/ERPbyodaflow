@@ -48,7 +48,8 @@ export function odaflowApiCandidates(
   const urls: string[] = [];
   if (fromEnv) urls.push(trimSlash(fromEnv));
   if (isLocalHost(hostname)) {
-    urls.push(local, remote);
+    if (!fromEnv || /localhost|127\.0\.0\.1/.test(fromEnv)) urls.push(local);
+    urls.push(remote);
   } else {
     urls.push(prod);
     if (!fromEnv) urls.push(remote);
