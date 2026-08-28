@@ -316,6 +316,36 @@
   overflow-wrap: anywhere;
 }
 
+.gaia-md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 6px 0 10px;
+}
+
+.gaia-md table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.gaia-md th,
+.gaia-md td {
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gaia-panel--light .gaia-md th,
+.gaia-panel--light .gaia-md td {
+  border-bottom-color: rgba(15, 40, 55, 0.1);
+}
+
+.gaia-md th {
+  font-weight: 600;
+}
+
 .gaia-wave {
   display: flex;
   align-items: center;

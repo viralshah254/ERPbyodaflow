@@ -34,6 +34,14 @@ const PURIFY = {
     "pre",
     "hr",
     "span",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "th",
+    "td",
+    "div",
   ],
   ALLOWED_ATTR: ["href", "target", "rel", "class"],
   ALLOW_DATA_ATTR: false,
@@ -62,10 +70,10 @@ function toSafeHtml(text: string): string {
   if (!md) return "";
   const raw = marked.parse(md, { async: false }) as string;
   if (typeof window === "undefined" || !DOMPurify.isSupported) return "";
-  return DOMPurify.sanitize(raw, PURIFY).replace(
-    /<a /g,
-    '<a target="_blank" rel="noopener noreferrer" '
-  );
+  return DOMPurify.sanitize(raw, PURIFY)
+    .replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ')
+    .replace(/<table([\s>])/g, '<div class="gaia-md-table-wrap"><table$1')
+    .replace(/<\/table>/g, "</table></div>");
 }
 
 function scrubUnsafeHrefs(html: string): string {
