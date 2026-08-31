@@ -79,7 +79,7 @@ function KenyaRates({ data }: { data: StatRef }) {
       {/* AHL */}
       <Section title="AHL — Affordable Housing Levy">
         {ahl && <Band label={(ahl.label as string) ?? "1.5% of gross"} rate={ahl.rate as number | undefined} />}
-        <p className="text-xs mt-1">No tax relief since December 2024 — deducted from net.</p>
+        <p className="text-xs mt-1">From December 2024, SHIF and Housing Levy reduce taxable pay before PAYE. Employer remits a matching 1.5%.</p>
       </Section>
 
       {/* WHT Consultants */}
