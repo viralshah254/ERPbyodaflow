@@ -19,13 +19,20 @@ export const LIST_TABLE_SURFACE_CLASS =
 export const LIST_TABLE_VIEWPORT_CLASS =
   "relative flex h-[calc(100dvh-14.5rem)] min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
 
+/**
+ * Purchasing worklists (optional KPI strip above): table is the primary pane —
+ * taller than chrome above it, scrolls inside the card.
+ */
+export const LIST_TABLE_WORKLIST_CLASS =
+  "relative flex h-[calc(100dvh-20.5rem)] min-h-[18rem] flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
+
 /** Compact body under PageHeader when the table uses LIST_TABLE_VIEWPORT_CLASS. */
 export const LIST_PAGE_BODY_VIEWPORT_CLASS =
   "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-0 py-3";
 
-/** Flex child between LIST_TABLE_SURFACE and DataTable scrollMode="fill". */
+/** Flex child between LIST_TABLE_SURFACE and DataTable — scrolls when rows overflow. */
 export const LIST_TABLE_SCROLL_BODY_CLASS =
-  "flex min-h-0 flex-1 flex-col overflow-hidden transition-opacity duration-200";
+  "flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto transition-opacity duration-200";
 
 /** Pagination footer pinned below a fill-mode table card. */
 export const LIST_TABLE_PAGINATION_CLASS = "shrink-0 border-t px-4";

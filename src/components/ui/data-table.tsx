@@ -191,7 +191,7 @@ export function DataTable<T extends object>({
       (scrollMode === "auto" && needsAutoScroll)) &&
       "overflow-auto",
     scrollMode === "fixed" && "max-h-[min(28rem,70dvh)] min-h-0",
-    scrollMode === "fill" && "min-h-0 h-full flex-1",
+    scrollMode === "fill" && "min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto",
     scrollMode === "auto" && needsAutoScroll && "min-h-0",
   );
 

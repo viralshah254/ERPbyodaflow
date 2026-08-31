@@ -702,7 +702,7 @@ export default function StockLevelsPage() {
                 data={pagedItems}
                 columns={columns}
                 onRowClick={(row) => openStockDetail(row)}
-                emptyMessage="No stock items found. Made SKUs like System Margarine only appear after a work order is completed (or Stock In for opening)."
+                emptyMessage="No stock items found. Made SKUs only appear after a work order is completed (or Stock In for opening)."
                 scrollMode="fill"
                 size="comfortable"
                 className="min-h-0 flex-1 border-0"
@@ -927,8 +927,8 @@ export default function StockLevelsPage() {
                 floating={false}
               />
               <p className="text-xs text-muted-foreground">
-                Stock In adds quantity without consuming a recipe. To make System Margarine or System Cake, create a
-                work order from Production Plan and complete it.
+                Stock In adds quantity without consuming a recipe. To make a formula SKU, create a work order from
+                Production Plan and complete it.
               </p>
             </div>
             <div className="space-y-2">

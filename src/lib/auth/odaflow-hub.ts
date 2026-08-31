@@ -12,7 +12,16 @@ export function odaflowLaunchpadUrl(): string {
 
 /** Unified hub sign-in after logout. Do not send people to the old ERP login form. */
 export function odaflowHubLoggedOutUrl(client: "sfa" | "crm" | "hr" | "erp" = "erp"): string {
-  return `${odaflowHubWebUrl()}/login?sso=1&client=${client}&erpTried=1&loggedOut=1`;
+  const qs = new URLSearchParams({
+    sso: "1",
+    client,
+    erpTried: "1",
+    loggedOut: "1",
+  });
+  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
+    qs.set("return", `${window.location.origin}/login?local=1`);
+  }
+  return `${odaflowHubWebUrl()}/login?${qs.toString()}`;
 }
 
 /** OdaWeb hub. A local ERP page must stay on local OdaWeb. */
