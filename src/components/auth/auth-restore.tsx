@@ -160,6 +160,29 @@ export function AuthRestore() {
           });
         });
 
+        // Keep in-memory Bearer aligned when Firebase rotates the ~1h ID token.
+        const unsubIdToken = auth.onIdTokenChanged((firebaseUser) => {
+          void (async () => {
+            if (cancelled || !firebaseUser) return;
+            try {
+              const token = await firebaseUser.getIdToken();
+              if (!cancelled) setApiAuth({ bearerToken: token });
+            } catch {
+              /* ignore — next API call will force-refresh or send to launchpad */
+            }
+          })();
+        });
+
+        const onVisible = () => {
+          if (document.visibilityState !== "visible") return;
+          const user = auth.currentUser;
+          if (!user) return;
+          void user.getIdToken(true).then((token) => {
+            if (!cancelled) setApiAuth({ bearerToken: token });
+          }).catch(() => undefined);
+        };
+        document.addEventListener("visibilitychange", onVisible);
+
         const stopLogoutSync = onOdaflowLogout(() => {
           if (cancelled) return;
           if (!useAuthStore.getState().user) return;
@@ -170,6 +193,8 @@ export function AuthRestore() {
 
         teardown = () => {
           unsubscribe();
+          unsubIdToken();
+          document.removeEventListener("visibilitychange", onVisible);
           stopLogoutSync();
           if (pendingTimeout) clearTimeout(pendingTimeout);
         };

@@ -9,6 +9,7 @@
  */
 import { canUseDevHeaders } from "@/lib/runtime-flags";
 import { getCurrentFirebaseIdTokenForApi, isFirebaseConfigured } from "@/lib/firebase";
+import { odaflowLaunchpadUrl } from "@/lib/auth/odaflow-hub";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const ENV_DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
@@ -103,15 +104,67 @@ function getAuthHeaders(includeJsonContentType = false): HeadersInit {
 }
 
 /** Keeps Bearer in sync with Firebase — ID tokens expire ~hourly otherwise API returns 401. */
-async function applyFreshFirebaseBearerIfAvailable(): Promise<void> {
-  if (typeof window === "undefined") return;
+async function applyFreshFirebaseBearerIfAvailable(forceRefresh = false): Promise<boolean> {
+  if (typeof window === "undefined") return false;
   try {
-    if (!isFirebaseConfigured()) return;
-    const tok = await getCurrentFirebaseIdTokenForApi();
-    if (tok) setApiAuth({ bearerToken: tok });
+    if (!isFirebaseConfigured()) return false;
+    const tok = await getCurrentFirebaseIdTokenForApi(forceRefresh);
+    if (tok) {
+      setApiAuth({ bearerToken: tok });
+      return true;
+    }
   } catch {
     /* Firebase not ready */
   }
+  return false;
+}
+
+let redirectingForExpiredSession = false;
+
+function redirectToLaunchpadForExpiredSession(): void {
+  if (typeof window === "undefined" || redirectingForExpiredSession) return;
+  const path = window.location.pathname;
+  if (path.startsWith("/auth/") || path.startsWith("/login")) return;
+  redirectingForExpiredSession = true;
+  setApiAuth({ bearerToken: undefined });
+  window.location.replace(odaflowLaunchpadUrl());
+}
+
+function isUnauthorizedPayload(status: number, data: unknown): boolean {
+  if (status !== 401) return false;
+  const payload = data as { code?: string; error?: string } | null;
+  return (
+    payload?.code === "UNAUTHORIZED" ||
+    String(payload?.error || "").toLowerCase() === "unauthorized"
+  );
+}
+
+/**
+ * Run an authenticated fetch; on UNAUTHORIZED force-refresh the Firebase ID token and retry once.
+ * Callers must build headers inside `doFetch` so the retry picks up the new Bearer.
+ */
+async function withFirebaseAuthRetry(doFetch: () => Promise<Response>): Promise<Response> {
+  await applyFreshFirebaseBearerIfAvailable(false);
+  let res = await doFetch();
+  if (res.status !== 401) return res;
+
+  const firstBody = await res.clone().json().catch(() => ({}));
+  if (!isUnauthorizedPayload(401, firstBody)) return res;
+
+  const refreshed = await applyFreshFirebaseBearerIfAvailable(true);
+  if (!refreshed) {
+    redirectToLaunchpadForExpiredSession();
+    return res;
+  }
+
+  res = await doFetch();
+  if (res.status === 401) {
+    const again = await res.clone().json().catch(() => ({}));
+    if (isUnauthorizedPayload(401, again)) {
+      redirectToLaunchpadForExpiredSession();
+    }
+  }
+  return res;
 }
 
 function apiUrl(path: string): string {
@@ -122,11 +175,12 @@ function apiUrl(path: string): string {
 /** Authenticated binary GET (e.g. org logo preview). Returns null if not ok or API disabled. */
 export async function fetchApiBinary(path: string): Promise<Blob | null> {
   if (!getApiBase()) return null;
-  await applyFreshFirebaseBearerIfAvailable();
-  const res = await fetch(apiUrl(path), {
-    method: "GET",
-    headers: { ...getAuthHeaders(), Accept: "*/*" },
-  });
+  const res = await withFirebaseAuthRetry(() =>
+    fetch(apiUrl(path), {
+      method: "GET",
+      headers: { ...getAuthHeaders(), Accept: "*/*" },
+    })
+  );
   if (!res.ok) return null;
   return res.blob();
 }
@@ -162,11 +216,12 @@ export async function downloadFile(
   const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
   try {
     onProgress?.({ phase: "connecting", loadedBytes: 0, totalBytes: null, percent: null });
-    await applyFreshFirebaseBearerIfAvailable();
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { ...getAuthHeaders(), Accept: "*/*" },
-    });
+    const res = await withFirebaseAuthRetry(() =>
+      fetch(url, {
+        method: "GET",
+        headers: { ...getAuthHeaders(), Accept: "*/*" },
+      })
+    );
     if (res.status === 501) {
       onNotAvailable("Export not yet available.");
       return false;
@@ -255,12 +310,13 @@ export async function uploadFormData<T = unknown>(path: string, formData: FormDa
     throw new Error("API not configured.");
   }
   const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
-  await applyFreshFirebaseBearerIfAvailable();
-  const res = await fetch(url, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: formData,
-  });
+  const res = await withFirebaseAuthRetry(() =>
+    fetch(url, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: formData,
+    })
+  );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error((data as { error?: string }).error ?? `Upload failed (${res.status})`) as Error & { status?: number };
@@ -291,12 +347,13 @@ export async function uploadFile(
     form.append(key, value);
   });
   try {
-    await applyFreshFirebaseBearerIfAvailable();
-    const res = await fetch(url, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: form,
-    });
+    const res = await withFirebaseAuthRetry(() =>
+      fetch(url, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: form,
+      })
+    );
     const data = await res.json().catch(() => ({}));
     if (res.ok || res.status === 202) {
       onSuccess(data as { jobId?: string; imported?: number; message?: string });
@@ -324,8 +381,6 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  await applyFreshFirebaseBearerIfAvailable();
-
   const { method = "GET", body, params } = options;
   let url = apiUrl(path);
   if (params) {
@@ -333,12 +388,13 @@ export async function apiRequest<T = unknown>(
     const qs = search.toString();
     if (qs) url += (url.includes("?") ? "&" : "?") + qs;
   }
-  const headers = getAuthHeaders(body != null && method !== "GET");
-  const res = await fetch(url, {
-    method,
-    headers,
-    ...(body != null && method !== "GET" ? { body: JSON.stringify(body) } : {}),
-  });
+  const res = await withFirebaseAuthRetry(() =>
+    fetch(url, {
+      method,
+      headers: getAuthHeaders(body != null && method !== "GET"),
+      ...(body != null && method !== "GET" ? { body: JSON.stringify(body) } : {}),
+    })
+  );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const payload = data as { error?: string; message?: string; reason?: string };
