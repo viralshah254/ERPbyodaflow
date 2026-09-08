@@ -139,6 +139,10 @@ async function existingErpIdToken(): Promise<string> {
   }
 }
 
+/**
+ * mint (hub) → exchange (SFA API, erpAssertion) → consume (ERP API, customToken).
+ * A missing assertion or consume failure must not send the user to loggedOut login.
+ */
 async function completeOnce(code: string): Promise<string> {
   const exchanged = await exchangeCode(code);
   let token = exchanged.firebaseIdToken || "";

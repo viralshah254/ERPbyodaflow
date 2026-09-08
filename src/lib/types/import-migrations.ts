@@ -1,4 +1,4 @@
-export type ImportProvider = "ZOHO_BOOKS" | "QUICKBOOKS" | "SAP_B1";
+export type ImportProvider = "ZOHO_BOOKS" | "QUICKBOOKS" | "SAP_B1" | "SAGE_EVOLUTION";
 export type ImportRunStatus =
   | "PENDING"
   | "RUNNING"

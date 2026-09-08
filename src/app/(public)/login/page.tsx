@@ -20,7 +20,7 @@ import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isDevAuthEnabled } from "@/lib/runtime-flags";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { odaflowHubLoggedOutUrl, odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubResumeUrl, odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
 import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
 
 const loginSchema = z.object({
@@ -188,7 +188,7 @@ function LoginContent() {
   };
 
   const localFormOnly = searchParams.get("local") === "1" && !handoffCode;
-  const hubRetry = odaflowHubLoggedOutUrl("erp");
+  const hubRetry = odaflowHubResumeUrl("erp");
   const showEmailForm = localFormOnly && !handoffBusy && !existingUser;
 
   if (!showEmailForm) {

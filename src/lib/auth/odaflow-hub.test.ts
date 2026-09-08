@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { odaflowApiCandidates, odaflowApiUrl } from "./odaflow-hub";
+import {
+  odaflowApiCandidates,
+  odaflowApiUrl,
+  odaflowHubLoggedOutUrl,
+  odaflowHubResumeUrl,
+} from "./odaflow-hub";
 
 describe("odaflowApiCandidates", () => {
   const prevApi = process.env.NEXT_PUBLIC_ODAFLOW_API_URL;
@@ -32,5 +37,22 @@ describe("odaflowApiCandidates", () => {
     expect(urls[0]).toBe("http://localhost:8080");
     expect(urls).toContain("https://dev.odaflow.com");
     expect(urls).not.toContain("https://api.odaflow.com");
+  });
+});
+
+describe("odaflow hub resume vs logout URLs", () => {
+  it("resumes SSO without loggedOut", () => {
+    const url = odaflowHubResumeUrl("erp");
+    expect(url).toContain("/auth/sso?");
+    expect(url).toContain("client=erp");
+    expect(url).toContain("resume=1");
+    expect(url).not.toContain("loggedOut=1");
+  });
+
+  it("keeps loggedOut only on the real sign-out URL", () => {
+    const url = odaflowHubLoggedOutUrl("erp");
+    expect(url).toContain("/login?");
+    expect(url).toContain("loggedOut=1");
+    expect(url).toContain("erpTried=1");
   });
 });

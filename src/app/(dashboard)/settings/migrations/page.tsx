@@ -20,6 +20,7 @@ import {
   exportProductsCsvApi,
   exportProductVariantsCsvApi,
   exportSuppliersCsvApi,
+  importApOpeningBalancesApi,
   importArOpeningBalancesApi,
   importOpeningStockApi,
   importPartiesApi,
@@ -102,6 +103,38 @@ const SAMPLE_PAYLOADS: Record<ImportProvider, string> = {
     {
       businessPartners: [{ CardCode: "C2000", CardName: "Acme Retail", CardType: "C", Valid: "tYES" }],
       items: [{ ItemCode: "FLOUR-2KG", ItemName: "Premium Flour 2kg", InventoryUOM: "EA", Valid: "tYES" }],
+    },
+    null,
+    2
+  ),
+  SAGE_EVOLUTION: JSON.stringify(
+    {
+      currencies: [{ code: "KES", name: "Kenyan Shilling", symbol: "KSh" }],
+      taxRates: [{ Code: "VAT16", Description: "VAT 16%", TaxRate: 16 }],
+      units: [{ Code: "EA", name: "Each" }],
+      clients: [
+        {
+          DCLink: 101,
+          Account: "C-001",
+          Name: "Westlands Kiosk",
+          Telephone: "0711000000",
+          Tax_Number: "P051111111A",
+          Physical1: "Waiyaki Way",
+        },
+      ],
+      vendors: [{ DCLink: 201, Account: "S-010", Name: "Unga Millers" }],
+      stkItems: [
+        {
+          StockLink: 9,
+          Code: "JOY-MANDAZI",
+          Description_1: "JOY SUPER BITES MANDAZI",
+          ItemGroup: "Finished Goods",
+          Bar_Code: "6164000350139",
+          DefaultSellingPrice1: 50,
+        },
+      ],
+      priceLists: [{ priceTag: "RETAIL", sku: "JOY-MANDAZI", barcode: "6164000350139", price: 50 }],
+      arOpenItems: [{ partyCode: "C-001", amount: 12500, currency: "KES", reference: "OB-C-001", date: "2026-09-01" }],
     },
     null,
     2
@@ -375,6 +408,7 @@ export default function MigrationConsolePage() {
                       <SelectItem value="ZOHO_BOOKS">Zoho Books</SelectItem>
                       <SelectItem value="QUICKBOOKS">QuickBooks</SelectItem>
                       <SelectItem value="SAP_B1">SAP Business One</SelectItem>
+                      <SelectItem value="SAGE_EVOLUTION">Sage Evolution</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -910,7 +944,7 @@ export default function MigrationConsolePage() {
                 <CardHeader>
                   <CardTitle>Import from CSV</CardTitle>
                   <CardDescription>
-                    Add customers, suppliers, products, price tags, opening stock, AR balances,
+                    Add customers, suppliers, products, price tags, opening stock, AR/AP balances,
                     packaging, or variants via CSV. Download a template for required fields.
                   </CardDescription>
                 </CardHeader>
@@ -932,6 +966,7 @@ export default function MigrationConsolePage() {
                             <SelectItem value="price-lists">Price tags (prices)</SelectItem>
                             <SelectItem value="opening-stock">Opening stock</SelectItem>
                             <SelectItem value="ar-opening-balances">AR opening balances</SelectItem>
+                            <SelectItem value="ap-opening-balances">AP opening balances</SelectItem>
                             <SelectItem value="product-packaging">Product packaging</SelectItem>
                             <SelectItem value="product-variants">Product variants</SelectItem>
                           </SelectContent>
@@ -979,6 +1014,9 @@ export default function MigrationConsolePage() {
                               } else if (csvImportType === "ar-opening-balances") {
                                 const res = await importArOpeningBalancesApi(csvImportFile);
                                 toast.success(`AR opening balances: ${res.imported} row(s).`);
+                              } else if (csvImportType === "ap-opening-balances") {
+                                const res = await importApOpeningBalancesApi(csvImportFile);
+                                toast.success(`AP opening balances: ${res.imported} row(s).`);
                               } else if (csvImportType === "product-packaging") {
                                 const res = await importProductPackagingApi(csvImportFile);
                                 toast.success(`Imported ${res.imported} packaging row(s).`);
@@ -1039,6 +1077,11 @@ export default function MigrationConsolePage() {
                             Columns: <strong>customerCode</strong> (or name), <strong>amount</strong>,
                             optional currency, reference, date. Creates AR open items for go-live.
                           </>
+                        ) : csvImportType === "ap-opening-balances" ? (
+                          <>
+                            Columns: <strong>supplierCode</strong> (or name), <strong>amount</strong>,
+                            optional currency, reference, date. Creates AP open items for go-live.
+                          </>
                         ) : (
                           <>
                             Download the template for the full column list. Products support
@@ -1046,8 +1089,8 @@ export default function MigrationConsolePage() {
                             Import products before packaging/variants.
                           </>
                         )}{" "}
-                        Migrating from Tally, Zoho, or QuickBooks? Use the provider JSON import
-                        above, or export from your ERP to CSV and map columns.
+                        Migrating from Sage Evolution, Tally, Zoho, or QuickBooks? Use the provider
+                        JSON import above, or export from your ERP to CSV and map columns.
                       </p>
                     </>
                   )}

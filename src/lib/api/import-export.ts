@@ -116,7 +116,8 @@ export type ImportTemplateEntity =
   | "product-variants"
   | "price-lists"
   | "opening-stock"
-  | "ar-opening-balances";
+  | "ar-opening-balances"
+  | "ap-opening-balances";
 
 /** Download CSV template for import. */
 export function downloadImportTemplateApi(
@@ -473,6 +474,8 @@ export interface ImportArOpeningBalancesResult {
   skipped?: Array<{ row: number; reason: string }>;
 }
 
+export type ImportApOpeningBalancesResult = ImportArOpeningBalancesResult;
+
 async function priceTagSheetToCsvFile(file: File): Promise<File> {
   if (!isExcelFile(file)) return file;
   const XLSX = await import("xlsx");
@@ -632,6 +635,15 @@ export async function importArOpeningBalancesApi(file: File): Promise<ImportArOp
   const formData = new FormData();
   formData.append("file", uploadFile);
   return uploadFormData<ImportArOpeningBalancesResult>("/api/import/ar-opening-balances", formData);
+}
+
+/** Supplier AP opening balances (cutover). */
+export async function importApOpeningBalancesApi(file: File): Promise<ImportApOpeningBalancesResult> {
+  requireLiveApi("AP opening balances import");
+  const uploadFile = await toCsvUploadFile(file);
+  const formData = new FormData();
+  formData.append("file", uploadFile);
+  return uploadFormData<ImportApOpeningBalancesResult>("/api/import/ap-opening-balances", formData);
 }
 
 /** Import product packaging from CSV file. */

@@ -11,7 +11,7 @@ import {
 } from "@/lib/firebase";
 import { isApiConfigured, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
-import { odaflowHubLoggedOutUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubLoggedOutUrl, odaflowHubResumeUrl } from "@/lib/auth/odaflow-hub";
 import { onOdaflowLogout, shouldDropLocalSession } from "@/lib/auth/sso-logout-sync";
 
 const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
@@ -20,11 +20,13 @@ const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   SHOP: "retail-multi-store",
 };
 
-function leaveErpTabIfSignedOut() {
+function leaveErpTab(realLogout: boolean) {
   if (typeof window === "undefined") return;
   const path = window.location.pathname;
   if (path.startsWith("/auth/") || path.startsWith("/login")) return;
-  window.location.replace(odaflowHubLoggedOutUrl("erp"));
+  window.location.replace(
+    realLogout ? odaflowHubLoggedOutUrl("erp") : odaflowHubResumeUrl("erp")
+  );
 }
 
 /**
@@ -80,7 +82,7 @@ export function AuthRestore() {
                 if (!cancelled) {
                   setApiAuth({ bearerToken: undefined });
                   logout();
-                  leaveErpTabIfSignedOut();
+                  leaveErpTab(true);
                 }
                 done();
                 return;
@@ -146,7 +148,7 @@ export function AuthRestore() {
               setApiAuth({ bearerToken: undefined });
               logout();
               done();
-              leaveErpTabIfSignedOut();
+              leaveErpTab(shouldDropLocalSession());
               return;
             }
             pendingTimeout = setTimeout(() => {
@@ -165,7 +167,7 @@ export function AuthRestore() {
           if (!useAuthStore.getState().user) return;
           setApiAuth({ bearerToken: undefined });
           logout();
-          leaveErpTabIfSignedOut();
+          leaveErpTab(true);
         });
 
         teardown = () => {

@@ -10,7 +10,25 @@ export function odaflowLaunchpadUrl(): string {
   return `${odaflowHubWebUrl()}/apps`;
 }
 
-/** Unified hub sign-in after logout. Do not send people to the old ERP login form. */
+function localHubReturn(): string | undefined {
+  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
+    return `${window.location.origin}/login?local=1`;
+  }
+  return undefined;
+}
+
+/** Resume SSO with the existing hub session. Never mark the user logged out. */
+export function odaflowHubResumeUrl(client: "sfa" | "crm" | "hr" | "erp" = "erp"): string {
+  const qs = new URLSearchParams({
+    client,
+    resume: "1",
+  });
+  const ret = localHubReturn();
+  if (ret) qs.set("return", ret);
+  return `${odaflowHubWebUrl()}/auth/sso?${qs.toString()}`;
+}
+
+/** Unified hub sign-in after a real logout. Do not use this for handoff errors. */
 export function odaflowHubLoggedOutUrl(client: "sfa" | "crm" | "hr" | "erp" = "erp"): string {
   const qs = new URLSearchParams({
     sso: "1",
@@ -18,9 +36,8 @@ export function odaflowHubLoggedOutUrl(client: "sfa" | "crm" | "hr" | "erp" = "e
     erpTried: "1",
     loggedOut: "1",
   });
-  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
-    qs.set("return", `${window.location.origin}/login?local=1`);
-  }
+  const ret = localHubReturn();
+  if (ret) qs.set("return", ret);
   return `${odaflowHubWebUrl()}/login?${qs.toString()}`;
 }
 
