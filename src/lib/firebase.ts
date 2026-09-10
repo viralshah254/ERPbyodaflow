@@ -116,14 +116,18 @@ export async function getIdToken(): Promise<string | null> {
 /**
  * Refreshes the Firebase JWT if needed (`getIdToken` renews expired tokens transparently).
  * Call before API requests so Bearer matches a valid token (~1h lifetime).
+ * Pass `forceRefresh` after a 401 so Firebase mints a new ID token instead of reusing a stale one.
  */
-export async function getCurrentFirebaseIdTokenForApi(): Promise<string | null> {
+export async function getCurrentFirebaseIdTokenForApi(
+  forceRefresh = false
+): Promise<string | null> {
   if (typeof window === "undefined" || !isFirebaseConfigured()) return null;
   try {
     const auth = await getClientAuth();
+    await auth.authStateReady();
     const user = auth.currentUser;
     if (!user) return null;
-    return user.getIdToken();
+    return user.getIdToken(forceRefresh);
   } catch {
     return null;
   }
