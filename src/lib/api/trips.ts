@@ -20,10 +20,10 @@ function listParams(p?: Record<string, string | undefined>): Record<string, stri
   return out;
 }
 
-export async function fetchTrips(params?: { type?: TripType; status?: TripStatus }): Promise<TripRow[]> {
+export async function fetchTrips(params?: { type?: TripType; status?: TripStatus; routeId?: string }): Promise<TripRow[]> {
   requireLiveApi("Distribution trips");
   const q = listParams(
-    params ? { type: params.type, status: params.status } : undefined
+    params ? { type: params.type, status: params.status, routeId: params.routeId } : undefined
   );
   const res = await apiRequest<{ items: TripRow[] }>("/api/distribution/trips", {
     params: Object.keys(q).length ? q : undefined,

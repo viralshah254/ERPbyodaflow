@@ -60,6 +60,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
 import type { TaxRow } from "@/lib/types/taxes";
 import { FmcgProductPacksEditor } from "@/components/products/FmcgProductPacksEditor";
+import { ProductHistoryTab } from "@/components/products/ProductHistoryTab";
 import {
   fetchProductPackagingDetailApi,
   saveProductPackagingApi,
@@ -152,7 +153,9 @@ export default function ProductDetailPage() {
         ? "pricing"
         : tabParam === "variants"
           ? "variants"
-          : "overview";
+          : tabParam === "history"
+            ? "history"
+            : "overview";
   const [activeTab, setActiveTab] = React.useState(initialTab);
   React.useEffect(() => {
     setActiveTab(initialTab);
@@ -894,6 +897,10 @@ export default function ProductDetailPage() {
                 )}
               </TabsTrigger>
             ) : null}
+            <TabsTrigger value="history">
+              <Icons.History className="mr-2 h-4 w-4" />
+              History
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Overview Tab ──────────────────────────────────────────────── */}
@@ -1904,6 +1911,10 @@ export default function ProductDetailPage() {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="history">
+            <ProductHistoryTab productId={id} />
           </TabsContent>
         </Tabs>
       </div>

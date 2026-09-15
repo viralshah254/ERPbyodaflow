@@ -299,6 +299,24 @@ export default function MasterPartiesPage() {
           return (
             <div className="space-y-1">
               <div className="font-medium">{r.name}</div>
+              <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
+                {r.roles?.includes("customer") || r.type === "customer" ? (
+                  <Link
+                    href={`/sales/customers/${encodeURIComponent(r.id)}?tab=ledger`}
+                    className="text-[11px] text-primary hover:underline"
+                  >
+                    Customer ledger
+                  </Link>
+                ) : null}
+                {r.roles?.includes("supplier") || r.type === "supplier" ? (
+                  <Link
+                    href={`/ap/suppliers/${encodeURIComponent(r.id)}?tab=ledger`}
+                    className="text-[11px] text-primary hover:underline"
+                  >
+                    Supplier ledger
+                  </Link>
+                ) : null}
+              </div>
               {chips.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {chips.map((chip) => (
@@ -454,6 +472,9 @@ export default function MasterPartiesPage() {
       ...emptySupplierMasterForm(supplierBaseCurrency),
       coolcatchSupplierKind: row.coolcatchSupplierKind ?? "BROKER",
       name: row.name,
+      code: row.code ?? "",
+      onHold: Boolean(row.onHold),
+      notes: row.notes ?? "",
       contactPersonFirstName: row.contactPersonFirstName ?? "",
       contactPersonLastName: row.contactPersonLastName ?? "",
       email: row.email ?? "",

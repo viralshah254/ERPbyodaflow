@@ -28,4 +28,6 @@ export interface MovementRow {
   warehouse: string;
   quantity: number;
   reference?: string;
+  sourceType?: string;
+  sourceId?: string;
 }

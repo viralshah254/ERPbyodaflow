@@ -90,6 +90,7 @@ export default function BinLocationsPage() {
       { id: "code", header: "Code", accessor: (r: BinLocationTableRow) => <span className="font-medium">{r.code ?? "—"}</span>, sticky: true },
       { id: "name", header: "Name", accessor: "name" as keyof BinLocationTableRow },
       { id: "type", header: "Type", accessor: "type" as keyof BinLocationTableRow },
+      { id: "default", header: "Default", accessor: (r: BinLocationTableRow) => (r.isDefault ? "Yes" : "—") },
       { id: "status", header: "Status", accessor: (r: BinLocationTableRow) => r.status ?? "ACTIVE" },
       { id: "onHand", header: "On hand", accessor: "onHand" as keyof BinLocationTableRow },
     ],

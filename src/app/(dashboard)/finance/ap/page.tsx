@@ -70,6 +70,7 @@ export default function AccountsPayablePage() {
             { label: "3-way Match", description: "Reconcile PO, GRN, and Bill", href: "/ap/three-way-match", icon: Icons.GitCompare },
             { label: "AP Payments", description: "Record and track payments", href: "/ap/payments", icon: Icons.CreditCard },
             { label: "Suppliers", description: "Manage supplier master data", href: "/ap/suppliers", icon: Icons.Users },
+            { label: "Supplier statements", description: "Period statements with opening balance", href: "/ap/statements", icon: Icons.FileText },
           ].map((item) => (
             <Link key={item.href} href={item.href} className="group">
               <Card className="h-full transition-colors hover:border-primary/50 hover:bg-muted/40">

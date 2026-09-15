@@ -1,4 +1,5 @@
 import {
+  type ArApGroup,
   type CustomerType,
   type CoolcatchSupplierKind,
   type PartyChannel,
@@ -24,6 +25,10 @@ type BackendParty = {
   email?: string;
   phone?: string;
   taxId?: string;
+  sageDcLink?: number;
+  arApGroup?: ArApGroup;
+  onHold?: boolean;
+  notes?: string;
   creditLimit?: number;
   creditLimitAmount?: number;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
@@ -76,6 +81,10 @@ export type PartyPayload = {
   email?: string;
   phone?: string;
   taxId?: string;
+  sageDcLink?: number;
+  arApGroup?: ArApGroup;
+  onHold?: boolean;
+  notes?: string;
   creditLimit?: number;
   creditLimitAmount?: number;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
@@ -290,6 +299,10 @@ function mapParty(item: BackendParty): PartyRow {
     email: item.email,
     phone: item.phone,
     taxId: item.taxId,
+    sageDcLink: item.sageDcLink,
+    arApGroup: item.arApGroup,
+    onHold: item.onHold,
+    notes: item.notes,
     paymentTermsId: item.paymentTermsId,
     address: item.address,
     route: item.route,

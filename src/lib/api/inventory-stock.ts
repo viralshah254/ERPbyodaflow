@@ -321,11 +321,13 @@ type BackendInventoryMovement = {
   name?: string;
   warehouse: string;
   sourceType?: string;
+  sourceId?: string;
   reference?: string;
 };
 
 export async function fetchInventoryMovementsApi(filters?: {
   warehouseId?: string;
+  productId?: string;
   search?: string;
   type?: string;
   limit?: number;
@@ -339,6 +341,7 @@ export async function fetchInventoryMovementsApi(filters?: {
     params.set("limit", String(pageLimit));
     if (cursor) params.set("cursor", cursor);
     if (filters?.warehouseId) params.set("warehouseId", filters.warehouseId);
+    if (filters?.productId) params.set("productId", filters.productId);
     if (filters?.search?.trim()) params.set("search", filters.search.trim());
     const data = await apiRequest<{
       items: BackendInventoryMovement[];
@@ -358,6 +361,8 @@ export async function fetchInventoryMovementsApi(filters?: {
       warehouse: item.warehouse,
       quantity: item.signedQuantity ?? 0,
       reference: item.reference,
+      sourceType: item.sourceType,
+      sourceId: item.sourceId,
     })) as MovementRow[];
     rows.push(...page);
     if (!data.nextCursor || page.length < pageLimit) break;

@@ -132,6 +132,10 @@ export type ArCustomerSummary = {
   phone?: string;
   code?: string;
   taxId?: string;
+  sageDcLink?: number;
+  arApGroup?: import("@/lib/types/masters").ArApGroup;
+  onHold?: boolean;
+  notes?: string;
   creditLimit?: number;
   creditLimitAmount?: number;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
@@ -157,6 +161,8 @@ export type ApSupplierSummary = {
   phone?: string;
   code?: string;
   taxId?: string;
+  onHold?: boolean;
+  notes?: string;
   address?: {
     line1?: string;
     line2?: string;

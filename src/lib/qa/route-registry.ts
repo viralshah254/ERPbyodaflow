@@ -70,6 +70,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/sales/deliveries", module: "sales", description: "Deliveries", inNav: true },
   { path: "/sales/invoices", module: "sales", description: "Invoices", inNav: true },
   { path: "/sales/customers", module: "sales", description: "Customers", inNav: true },
+  { path: "/sales/customers/1", module: "sales", description: "Customer 360 / ledger", inNav: false, dynamic: true },
   { path: "/sales/returns", module: "sales", description: "Returns / Credit notes", inNav: true },
 
   // Purchasing
@@ -82,6 +83,8 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
 
   // AP
   { path: "/ap/suppliers", module: "finance", description: "AP Suppliers", inNav: true },
+  { path: "/ap/suppliers/1", module: "finance", description: "Supplier 360 / ledger", inNav: false, dynamic: true },
+  { path: "/ap/statements", module: "finance", description: "Supplier statements", inNav: true },
   { path: "/ap/bills", module: "finance", description: "AP Bills", inNav: true },
   { path: "/ap/payments", module: "finance", description: "AP Payments", inNav: true },
   { path: "/ap/three-way-match", module: "finance", description: "3-way match", inNav: true },
@@ -89,6 +92,8 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   // AR
   { path: "/sales/customers", module: "sales", description: "Customers list + create", inNav: true },
   { path: "/ar/customers", module: "finance", description: "Customer credit", inNav: true },
+  { path: "/ar/statements", module: "finance", description: "Customer statements", inNav: true },
+  { path: "/ar/aging", module: "finance", description: "AR aging", inNav: true },
   { path: "/ar/payments", module: "finance", description: "AR Payments", inNav: true },
 
   // Finance

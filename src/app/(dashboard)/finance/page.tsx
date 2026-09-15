@@ -82,6 +82,8 @@ export default function FinanceDashboardPage() {
             { label: "Cash Flow", href: "/finance/statements/cash-flow" },
             { label: "Trial Balance", href: "/finance/trial-balance" },
             { label: "General Ledger", href: "/finance/gl" },
+            { label: "Customer statements", href: "/ar/statements" },
+            { label: "Supplier statements", href: "/ap/statements" },
           ].map((link) => (
             <Button key={link.href} variant="outline" size="sm" asChild>
               <Link href={link.href}>{link.label}</Link>

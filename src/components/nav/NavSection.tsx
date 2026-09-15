@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NavItem } from "./NavItem";
 import { getSectionExpanded, setSectionExpanded } from "@/lib/sidebar-state";
+import { navTreeContainsPath } from "@/lib/nav/nav-active-path";
 import * as Icons from "lucide-react";
 interface NavSectionLike {
   id: string;
@@ -26,14 +28,21 @@ interface NavSectionProps {
 }
 
 export function NavSection({ section, isCollapsed }: NavSectionProps) {
+  const pathname = usePathname();
+  const containsCurrent = navTreeContainsPath(section.items, pathname);
   const [isExpanded, setIsExpanded] = React.useState(true);
 
   React.useEffect(() => {
+    if (containsCurrent) {
+      setIsExpanded(true);
+      return;
+    }
     const stored = getSectionExpanded(section.id);
     if (stored !== undefined) setIsExpanded(stored);
-  }, [section.id]);
+  }, [section.id, containsCurrent]);
 
   const toggle = () => {
+    if (containsCurrent) return;
     const next = !isExpanded;
     setIsExpanded(next);
     setSectionExpanded(section.id, next);
@@ -52,6 +61,7 @@ export function NavSection({ section, isCollapsed }: NavSectionProps) {
         className={cn(
           "group sticky top-0 z-10 mb-3 flex min-h-[2.25rem] w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors sm:items-center sm:gap-2.5",
           "border border-transparent bg-muted/35 shadow-sm backdrop-blur-sm hover:border-border/40 hover:bg-muted/55",
+          containsCurrent && "border-border/50 bg-muted/60",
           isExpanded ? "text-foreground/80" : "text-muted-foreground"
         )}
         aria-expanded={isExpanded}

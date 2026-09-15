@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { getItemExpanded, setItemExpanded } from "@/lib/sidebar-state";
+import { navHrefMatchesPath, navTreeContainsPath } from "@/lib/nav/nav-active-path";
 import * as Icons from "lucide-react";
 interface NavItemLike {
   id: string;
@@ -25,42 +26,42 @@ interface NavItemProps {
 export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
   const pathname = usePathname();
   const IconComponent = (Icons[item.icon as keyof typeof Icons] || Icons.Circle) as React.ComponentType<{ className?: string }>;
-  const isActive = item.href ? pathname === item.href || pathname?.startsWith(item.href + "/") : false;
-  const isChildActive = item.children?.some(
-    (c) => c.href && (pathname === c.href || pathname?.startsWith(c.href + "/"))
-  );
+  const isActive = navHrefMatchesPath(item.href, pathname);
+  const isChildActive = navTreeContainsPath(item.children, pathname);
   const hasChildren = item.children && item.children.length > 0;
-  const [isExpanded, setIsExpanded] = React.useState(isActive || !!isChildActive);
+  const [isExpanded, setIsExpanded] = React.useState(isActive || isChildActive);
   const itemRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     if (!hasChildren) return;
+    if (isActive || isChildActive) {
+      setIsExpanded(true);
+      return;
+    }
     const stored = getItemExpanded(item.id);
     if (stored !== undefined) setIsExpanded(stored);
-    else if (isActive || isChildActive) setIsExpanded(true);
   }, [item.id, hasChildren, isActive, isChildActive]);
 
   React.useEffect(() => {
-    const el = itemRef.current;
-    if (!isActive || !el) return;
-    const scrollParent = el.closest("[data-sidebar-scroll]") as HTMLElement | null;
-    if (!scrollParent) return;
-    try {
-      // Keep scroll inside the sidebar rail only — block:"center" on scrollIntoView
-      // also scrolls the document and clips the global header on deep nav items.
+    if (!isActive) return;
+    const frame = window.requestAnimationFrame(() => {
+      const el = itemRef.current;
+      if (!el) return;
+      const scrollParent = el.closest("[data-sidebar-scroll]") as HTMLElement | null;
+      if (!scrollParent) return;
       const elRect = el.getBoundingClientRect();
       const parentRect = scrollParent.getBoundingClientRect();
-      if (elRect.top < parentRect.top) {
-        scrollParent.scrollTop -= parentRect.top - elRect.top;
-      } else if (elRect.bottom > parentRect.bottom) {
-        scrollParent.scrollTop += elRect.bottom - parentRect.bottom;
+      if (elRect.top < parentRect.top + 8) {
+        scrollParent.scrollTop -= parentRect.top + 8 - elRect.top;
+      } else if (elRect.bottom > parentRect.bottom - 8) {
+        scrollParent.scrollTop += elRect.bottom - (parentRect.bottom - 8);
       }
-    } catch {
-      // ignore scroll errors
-    }
-  }, [isActive]);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActive, isExpanded]);
 
   const toggle = () => {
+    if (isActive || isChildActive) return;
     const next = !isExpanded;
     setIsExpanded(next);
     setItemExpanded(item.id, next);
@@ -163,7 +164,7 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
   }
 
   return (
-    <Link href={item.href}>
+    <Link href={item.href} aria-current={isActive ? "page" : undefined}>
       {isCollapsed ? (
         <div className="relative group">
           {content}

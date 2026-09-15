@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   LIST_TABLE_PAGINATION_CLASS,
@@ -29,11 +30,15 @@ import {
   sfaSegmentLabel,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
-import { fetchPartiesPageApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { fetchPartiesPageApi, fetchPartyCreditSummaryApi, hidePartyInOrgApi } from "@/lib/api/parties";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { paymentTermDisplayName } from "@/lib/fmcg/payment-class";
 import type { PartyRow } from "@/lib/types/masters";
 import { isApiConfigured } from "@/lib/api/client";
+import { formatMoney } from "@/lib/money";
+import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
+import { can } from "@/lib/rbac/can";
+import { useAuthStore } from "@/stores/auth-store";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SupermarketBranchesSheet } from "@/components/customers/SupermarketBranchesSheet";
 import {
@@ -73,6 +78,10 @@ export function CustomerDirectoryPanel({
   onActiveTabChange,
 }: CustomerDirectoryPanelProps) {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const canReadAr = can(user, "finance.ar.read");
+  const { settings } = useFinancialSettings();
+  const currency = settings.baseCurrency?.trim()?.toUpperCase() || "KES";
   const [internalTab, setInternalTab] = React.useState<TabId>("modern-trade");
   const activeTab = activeTabProp ?? internalTab;
   const setActiveTab = React.useCallback(
@@ -98,6 +107,7 @@ export function CustomerDirectoryPanel({
   const [totalCount, setTotalCount] = React.useState<number | undefined>(undefined);
   const [paymentClass, setPaymentClass] = React.useState<"all" | "CASH" | "CREDIT">("all");
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
+  const [outstandingById, setOutstandingById] = React.useState<Record<string, number>>({});
 
   React.useEffect(() => {
     void fetchPaymentTermsApi()
@@ -132,12 +142,23 @@ export function CustomerDirectoryPanel({
       setParties(page.items);
       setHasMore(Boolean(page.nextCursor));
       setTotalCount(page.totalCount);
+      if (canReadAr && page.items.length) {
+        const summaries = await Promise.all(
+          page.items.map(async (party) => {
+            const summary = await fetchPartyCreditSummaryApi(party.id);
+            return [party.id, summary?.outstandingBalance ?? 0] as const;
+          })
+        );
+        setOutstandingById(Object.fromEntries(summaries));
+      } else {
+        setOutstandingById({});
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load customers");
     } finally {
       setLoading(false);
     }
-  }, [activeTab, pageOffset, pageSize, paymentClass, search, segmentTabs, tabConfig]);
+  }, [activeTab, canReadAr, pageOffset, pageSize, paymentClass, search, segmentTabs, tabConfig]);
 
   React.useEffect(() => {
     void loadParties();
@@ -353,6 +374,17 @@ export function CustomerDirectoryPanel({
                           {party.code}
                         </Badge>
                       ) : null}
+                      {party.sageDcLink != null ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          Sage {party.sageDcLink}
+                        </Badge>
+                      ) : null}
+                      {party.arApGroup ? (
+                        <Badge variant={party.arApGroup === "BAD_DEBT" ? "destructive" : "secondary"}>
+                          {party.arApGroup.replace("_", " ")}
+                        </Badge>
+                      ) : null}
+                      {party.onHold ? <Badge variant="destructive">On hold</Badge> : null}
                       {party.taxId && party.taxId !== party.code ? (
                         <Badge variant="outline" className="font-mono text-xs">
                           PIN {party.taxId}
@@ -383,7 +415,23 @@ export function CustomerDirectoryPanel({
                         .join(" · ") || "No contact on file"}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2 shrink-0">
+                  <div className="flex flex-wrap gap-2 shrink-0 items-center">
+                    {canReadAr ? (
+                      <span className="text-sm font-medium tabular-nums mr-1">
+                        {formatMoney(outstandingById[party.id] ?? 0, currency)}
+                      </span>
+                    ) : null}
+                    <Button size="sm" variant="secondary" asChild>
+                      <Link
+                        href={
+                          canReadAr
+                            ? `/sales/customers/${encodeURIComponent(party.id)}?tab=ledger`
+                            : `/sales/customers/${encodeURIComponent(party.id)}`
+                        }
+                      >
+                        {canReadAr ? "Ledger" : "View"}
+                      </Link>
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"

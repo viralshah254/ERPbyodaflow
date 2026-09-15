@@ -47,12 +47,14 @@ type RowDraft = {
   barcode: string;
   size: string;
   pricePerPiece: string;
+  rrp: string;
   discountPercent: string;
   finalPrice: string;
 };
 
 type EditDraft = {
   pricePerPiece: string;
+  rrp: string;
   discountPercent: string;
   finalPrice: string;
 };
@@ -64,14 +66,16 @@ function finalFromDraft(priceStr: string, discountStr: string): string {
   return formatPriceAmount(finalFromPriceAndDiscount(price, discount));
 }
 
-function itemToEdit(item?: { price?: number; discountPercent?: number }): EditDraft {
+function itemToEdit(item?: { price?: number; rrp?: number; discountPercent?: number }): EditDraft {
   const pricePerPiece = item?.price != null ? String(item.price) : "";
+  const rrp = item?.rrp != null ? String(item.rrp) : "";
   const discountPercent =
     item?.discountPercent != null && item.discountPercent > 0
       ? String(item.discountPercent)
       : "";
   return {
     pricePerPiece,
+    rrp,
     discountPercent,
     finalPrice: finalFromDraft(pricePerPiece, discountPercent),
   };
@@ -171,6 +175,7 @@ export function FmcgPriceTagItemsEditor({
             barcode: p.barcode?.trim() || "—",
             size: p.size?.trim() || "—",
             pricePerPiece: edit.pricePerPiece,
+            rrp: edit.rrp,
             discountPercent: edit.discountPercent,
             finalPrice: edit.finalPrice || finalFromDraft(edit.pricePerPiece, edit.discountPercent),
           };
@@ -313,9 +318,11 @@ export function FmcgPriceTagItemsEditor({
           continue;
         }
         const discountPercent = parseDiscountPercent(edit.discountPercent);
+        const rrp = Number(edit.rrp);
         byId.set(productId, {
           productId,
           price,
+          ...(Number.isFinite(rrp) && rrp > 0 && edit.rrp.trim() !== "" ? { rrp } : {}),
           ...(discountPercent != null && discountPercent > 0 ? { discountPercent } : {}),
         });
       }
@@ -329,9 +336,11 @@ export function FmcgPriceTagItemsEditor({
           continue;
         }
         const discountPercent = parseDiscountPercent(r.discountPercent);
+        const rrp = Number(r.rrp);
         byId.set(r.productId, {
           productId: r.productId,
           price,
+          ...(Number.isFinite(rrp) && rrp > 0 && r.rrp.trim() !== "" ? { rrp } : {}),
           ...(discountPercent != null && discountPercent > 0 ? { discountPercent } : {}),
         });
       }
@@ -339,6 +348,7 @@ export function FmcgPriceTagItemsEditor({
       const items = [...byId.values()].map((i) => ({
         productId: i.productId,
         price: i.price,
+        ...(i.rrp != null && i.rrp > 0 ? { rrp: i.rrp } : {}),
         ...(i.discountPercent != null && i.discountPercent > 0
           ? { discountPercent: i.discountPercent }
           : {}),
@@ -384,11 +394,11 @@ export function FmcgPriceTagItemsEditor({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Enter <span className="font-medium text-foreground">price per piece</span> for{" "}
-        <span className="font-medium text-foreground">{tagLabel}</span>. Discount % and
-        final price stay in sync — change either one and the other updates. To
-        bulk-edit, download this tag’s prices above (Excel has the same formulas),
-        then import. The open tag is used automatically.
+        Enter <span className="font-medium text-foreground">sell price per piece</span> and
+        optional <span className="font-medium text-foreground">RRP</span> for{" "}
+        <span className="font-medium text-foreground">{tagLabel}</span>. Sell is what you
+        charge; RRP is the recommended reseller price. Discount % and final price stay
+        in sync. To bulk-edit, download this tag’s prices above, then import.
       </p>
 
       <div className="relative">
@@ -436,7 +446,8 @@ export function FmcgPriceTagItemsEditor({
                     <TableHead>Barcode</TableHead>
                     <TableHead className="w-[88px]">Size</TableHead>
                     <TableHead>SKU</TableHead>
-                    <TableHead className="w-[140px]">Price / pc</TableHead>
+                    <TableHead className="w-[140px]">Sell / pc</TableHead>
+                    <TableHead className="w-[140px]">RRP / pc</TableHead>
                     <TableHead className="w-[120px]">Discount %</TableHead>
                     <TableHead className="w-[140px]">Final price</TableHead>
                   </TableRow>
@@ -444,7 +455,7 @@ export function FmcgPriceTagItemsEditor({
                 <TableBody>
                   {showEmptySearch ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                         No products match “{debouncedSearch.trim()}”.
                       </TableCell>
                     </TableRow>
@@ -463,6 +474,17 @@ export function FmcgPriceTagItemsEditor({
                             className="h-8"
                             value={r.pricePerPiece}
                             onChange={(e) => editPrice(r.productId, e.target.value)}
+                            placeholder="0"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="h-8"
+                            value={r.rrp}
+                            onChange={(e) => setRowEdit(r.productId, { rrp: e.target.value })}
                             placeholder="0"
                           />
                         </TableCell>

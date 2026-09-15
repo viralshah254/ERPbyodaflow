@@ -52,6 +52,8 @@ export interface PriceListDetail {
     productId: string;
     price: number;
     currency?: string;
+    /** FMCG: recommended reseller RRP per piece. `price` is the selling price. */
+    rrp?: number;
     /** FMCG: discount % on this tag for the SKU. */
     discountPercent?: number;
   }>;
@@ -355,7 +357,7 @@ export async function createPriceListApi(body: {
   name: string;
   code?: string;
   currency?: string;
-  items?: Array<{ productId: string; price: number; currency?: string; discountPercent?: number }>;
+  items?: Array<{ productId: string; price: number; currency?: string; rrp?: number; discountPercent?: number }>;
   parentPriceListId?: string;
   markupType?: "PERCENT" | "FLAT";
   markupValue?: number;
@@ -376,7 +378,7 @@ export async function updatePriceListApi(
     name: string;
     code?: string;
     currency: string;
-    items: Array<{ productId: string; price: number; currency?: string; discountPercent?: number }>;
+    items: Array<{ productId: string; price: number; currency?: string; rrp?: number; discountPercent?: number }>;
     parentPriceListId: string | null;
     markupType: "PERCENT" | "FLAT" | null;
     markupValue: number | null;

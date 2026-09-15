@@ -105,7 +105,7 @@ export function drillToPasswordResetRequest(userId?: string): DrillLink {
 /** Get drill link for a product/SKU */
 export function drillToProduct(productId: string): DrillLink {
   return {
-    href: `/master/products/${productId}`,
+    href: `/master/products/${encodeURIComponent(productId)}?tab=history`,
     label: "View product",
   };
 }
@@ -114,8 +114,8 @@ export function drillToProduct(productId: string): DrillLink {
 export function drillToCustomer(customerId?: string): DrillLink {
   if (customerId) {
     return {
-      href: `/ar/customers?id=${customerId}`,
-      label: "View customer credit",
+      href: `/sales/customers/${encodeURIComponent(customerId)}?tab=ledger`,
+      label: "View customer ledger",
     };
   }
   return {
@@ -128,8 +128,8 @@ export function drillToCustomer(customerId?: string): DrillLink {
 export function drillToSupplier(supplierId?: string): DrillLink {
   if (supplierId) {
     return {
-      href: `/ap/suppliers?id=${supplierId}`,
-      label: "View supplier",
+      href: `/ap/suppliers/${encodeURIComponent(supplierId)}?tab=ledger`,
+      label: "View supplier ledger",
     };
   }
   return {

@@ -2,9 +2,7 @@
 
 import * as React from "react";
 import {
-  LIST_PAGE_BODY_CLASS,
   LIST_PAGE_SHELL_CLASS,
-  LIST_TABLE_SURFACE_CLASS,
   PageShell,
 } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -24,7 +22,7 @@ export default function DistributionRoutesPage() {
   const terminology = useTerminology();
   const canWrite = useCanWriteDistribution();
   const routeLabel = t("route", terminology);
-  const [rows, setRows] = React.useState<Array<DistributionRouteRow & { schedule: string; outlets: number; status: string }>>([]);
+  const [rows, setRows] = React.useState<DistributionRouteRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [name, setName] = React.useState("");
@@ -35,12 +33,7 @@ export default function DistributionRoutesPage() {
     setLoading(true);
     try {
       const items = await fetchDistributionRoutes();
-      setRows(items.map((item) => ({
-        ...item,
-        schedule: item.description ?? "Operational",
-        outlets: item.stops?.length ?? 0,
-        status: "Active",
-      })));
+      setRows(items);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load routes.");
     } finally {
@@ -52,11 +45,27 @@ export default function DistributionRoutesPage() {
     void refresh();
   }, [refresh]);
 
+  const weekdayLabel = (weekday?: number) =>
+    weekday == null ? "Any day" : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekday] ?? "Any day";
+
+  const grouped = React.useMemo(() => {
+    const map = new Map<string, DistributionRouteRow[]>();
+    for (const row of rows) {
+      const key = row.corridor?.trim() || "Other";
+      const list = map.get(key) ?? [];
+      list.push(row);
+      map.set(key, list);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [rows]);
+
   const columns = [
-    { id: "name", header: "Name", accessor: (r: (typeof rows)[number]) => <span className="font-medium">{r.name}</span>, sticky: true },
-    { id: "schedule", header: "Description", accessor: "schedule" as keyof (typeof rows)[number] },
-    { id: "outlets", header: "Stops", accessor: "outlets" as keyof (typeof rows)[number] },
-    { id: "status", header: "Status", accessor: "status" as keyof (typeof rows)[number] },
+    { id: "name", header: "Name", accessor: (r: DistributionRouteRow) => <span className="font-medium">{r.name}</span>, sticky: true },
+    { id: "kind", header: "Kind", accessor: (r: DistributionRouteRow) => r.kind ?? "SALES" },
+    { id: "weekday", header: "Day", accessor: (r: DistributionRouteRow) => weekdayLabel(r.weekday) },
+    { id: "schedule", header: "Description", accessor: (r: DistributionRouteRow) => r.description || "—" },
+    { id: "fulfilment", header: "Fulfilment", accessor: (r: DistributionRouteRow) => r.fulfilmentWarehouseName ?? "—" },
+    { id: "outlets", header: "Stops", accessor: (r: DistributionRouteRow) => r.stops?.length ?? 0 },
   ];
 
   return (
@@ -73,20 +82,29 @@ export default function DistributionRoutesPage() {
           </Button>
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
-        <div className={LIST_TABLE_SURFACE_CLASS}>
-          <div className="shrink-0 border-b px-4 py-3">
-            <h3 className="text-sm font-semibold">Routes</h3>
-          </div>
-          <DataTable
-            data={rows}
-            columns={columns}
-            emptyMessage={loading ? "Loading routes..." : "No routes."}
-            scrollMode="fill"
-            size="comfortable"
-            className="min-h-0 flex-1 border-0"
-          />
-        </div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4 sm:p-6">
+        {loading && !rows.length ? (
+          <p className="text-sm text-muted-foreground">Loading routes...</p>
+        ) : !rows.length ? (
+          <p className="text-sm text-muted-foreground">No routes.</p>
+        ) : (
+          grouped.map(([corridor, items]) => (
+            <div key={corridor} className="rounded-xl border bg-card shadow-sm">
+              <div className="shrink-0 border-b px-4 py-3">
+                <h3 className="text-sm font-semibold">{corridor}</h3>
+                <p className="text-xs text-muted-foreground">{items.length} route{items.length === 1 ? "" : "s"}</p>
+              </div>
+              <DataTable
+                data={items}
+                columns={columns}
+                emptyMessage="No routes."
+                scrollMode="natural"
+                size="comfortable"
+                className="border-0"
+              />
+            </div>
+          ))
+        )}
       </div>
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent>

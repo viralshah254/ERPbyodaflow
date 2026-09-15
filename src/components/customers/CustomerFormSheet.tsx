@@ -46,7 +46,8 @@ import {
   fetchTaxConfigsApi,
   type TaxConfigRow,
 } from "@/lib/api/pricing";
-import type { CustomerType } from "@/lib/types/masters";
+import type { ArApGroup, CustomerType } from "@/lib/types/masters";
+import { Textarea } from "@/components/ui/textarea";
 import {
   LocationPickerField,
   type ResolvedLocation,
@@ -62,6 +63,13 @@ const GENERIC_CUSTOMER_TYPES: { value: CustomerType; label: string }[] = [
   { value: "END_CUSTOMER", label: "End customer" },
 ];
 
+const AR_AP_GROUPS: { value: ArApGroup; label: string }[] = [
+  { value: "CASH", label: "Cash" },
+  { value: "CREDIT", label: "Credit" },
+  { value: "SALES", label: "Sales" },
+  { value: "BAD_DEBT", label: "Bad debt" },
+];
+
 type FormState = {
   kindId: CustomerKindId;
   customerType: CustomerType;
@@ -73,6 +81,10 @@ type FormState = {
   contactPersonFirstName: string;
   contactPersonLastName: string;
   taxId: string;
+  sageDcLink: string;
+  arApGroup: "" | ArApGroup;
+  onHold: boolean;
+  notes: string;
   addressLine1: string;
   city: string;
   region: string;
@@ -98,6 +110,10 @@ const emptyForm = (kindId: CustomerKindId = "general-trade"): FormState => ({
   contactPersonFirstName: "",
   contactPersonLastName: "",
   taxId: "",
+  sageDcLink: "",
+  arApGroup: "",
+  onHold: false,
+  notes: "",
   addressLine1: "",
   city: "",
   region: "",
@@ -411,6 +427,10 @@ export function CustomerFormSheet({
             contactPersonFirstName: party.contactPersonFirstName ?? "",
             contactPersonLastName: party.contactPersonLastName ?? "",
             taxId: party.taxId ?? "",
+            sageDcLink: party.sageDcLink != null ? String(party.sageDcLink) : "",
+            arApGroup: party.arApGroup ?? "",
+            onHold: Boolean(party.onHold),
+            notes: party.notes ?? "",
             addressLine1: party.address?.line1 ?? "",
             city: party.address?.city ?? "",
             region: party.address?.region ?? "",
@@ -587,6 +607,10 @@ export function CustomerFormSheet({
       contactPersonFirstName: form.contactPersonFirstName.trim() || undefined,
       contactPersonLastName: form.contactPersonLastName.trim() || undefined,
       taxId: form.taxId.trim() || undefined,
+      sageDcLink: form.sageDcLink.trim() ? Number(form.sageDcLink) : undefined,
+      arApGroup: form.arApGroup || undefined,
+      onHold: form.onHold,
+      notes: form.notes.trim() || undefined,
       address: {
         line1: form.addressLine1.trim() || undefined,
         city: form.city.trim() || undefined,
@@ -1015,6 +1039,7 @@ export function CustomerFormSheet({
                     <FieldLabel optional>KRA PIN</FieldLabel>
                     <KraTaxPinField value={form.taxId} onChange={(taxId) => setField("taxId", taxId)} />
                   </div>
+                  <SageAccountFields form={form} setField={setField} />
                 </div>
               ) : null}
 
@@ -1264,6 +1289,78 @@ export function CustomerFormSheet({
   );
 }
 
+function SageAccountFields({
+  form,
+  setField,
+}: {
+  form: FormState;
+  setField: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <FieldLabel htmlFor="sage-dclink" optional>
+            Sage customer ID
+          </FieldLabel>
+          <Input
+            id="sage-dclink"
+            value={form.sageDcLink}
+            onChange={(e) => setField("sageDcLink", e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="From Sage"
+            inputMode="numeric"
+          />
+        </div>
+        <div className="space-y-2">
+          <FieldLabel>Account group</FieldLabel>
+          <Select
+            value={form.arApGroup || "__none__"}
+            onValueChange={(v) => setField("arApGroup", v === "__none__" ? "" : (v as ArApGroup))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None</SelectItem>
+              {AR_AP_GROUPS.map((g) => (
+                <SelectItem key={g.value} value={g.value}>
+                  {g.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <FieldLabel>On hold</FieldLabel>
+        <Select
+          value={form.onHold ? "yes" : "no"}
+          onValueChange={(v) => setField("onHold", v === "yes")}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no">No — can invoice</SelectItem>
+            <SelectItem value="yes">Yes — block new invoices</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <FieldLabel htmlFor="sage-notes" optional>
+          Notes
+        </FieldLabel>
+        <Textarea
+          id="sage-notes"
+          value={form.notes}
+          onChange={(e) => setField("notes", e.target.value)}
+          rows={2}
+        />
+      </div>
+    </>
+  );
+}
+
 /** Compact edit mode — identity, Google address, and credit / price tag (same as create). */
 function EditAllFields({
   fmcg,
@@ -1394,6 +1491,7 @@ function EditAllFields({
         <FieldLabel optional>KRA PIN</FieldLabel>
         <KraTaxPinField value={form.taxId} onChange={(taxId) => setField("taxId", taxId)} />
       </div>
+      <SageAccountFields form={form} setField={setField} />
 
       <div className="space-y-1.5">
         <LocationPickerField

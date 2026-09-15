@@ -8,6 +8,7 @@ export type WarehouseLocationRow = {
   code?: string;
   parentId?: string;
   status?: "ACTIVE" | "INACTIVE";
+  isDefault?: boolean;
 };
 
 export async function fetchWarehouseLocations(warehouseId: string): Promise<WarehouseLocationRow[]> {

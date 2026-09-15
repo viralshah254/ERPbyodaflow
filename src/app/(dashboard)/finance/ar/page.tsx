@@ -32,12 +32,20 @@ export default function AccountsReceivablePage() {
       title="Accounts Receivable"
       description="Manage customer invoices and payments"
       actions={
-        <Button variant="outline" asChild>
-          <Link href="/treasury/collections">
-          <Icons.Download className="mr-2 h-4 w-4" />
-          Aging Report
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/ar/statements">
+              <Icons.FileText className="mr-2 h-4 w-4" />
+              Customer statements
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/ar/aging">
+              <Icons.Download className="mr-2 h-4 w-4" />
+              Aging Report
+            </Link>
+          </Button>
+        </div>
       }
     >
       <div className="space-y-6">

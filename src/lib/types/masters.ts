@@ -52,6 +52,8 @@ export type SupplierType = "RAW_MATERIAL" | "SERVICE" | "LOGISTICS" | "OTHER";
 /** CoolCatch: direct farm gate vs broker/aggregator supplier. */
 export type CoolcatchSupplierKind = "FARM" | "BROKER";
 
+export type ArApGroup = "CASH" | "CREDIT" | "SALES" | "BAD_DEBT";
+
 export type PartyRow = {
   id: string;
   name: string;
@@ -71,6 +73,10 @@ export type PartyRow = {
   email?: string;
   phone?: string;
   taxId?: string;
+  sageDcLink?: number;
+  arApGroup?: ArApGroup;
+  onHold?: boolean;
+  notes?: string;
   address?: {
     line1?: string;
     line2?: string;

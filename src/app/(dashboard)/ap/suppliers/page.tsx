@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -40,6 +41,7 @@ import {
 } from "@/components/suppliers/SupplierMasterFormFields";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -54,6 +56,7 @@ type APSupplierRow = ApSupplierSummary & {
 };
 
 export default function APSuppliersPage() {
+  const router = useRouter();
   const [searchInput, setSearchInput] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | "ACTIVE" | "INACTIVE">("all");
@@ -170,6 +173,9 @@ export default function APSuppliersPage() {
           ...emptySupplierMasterForm(party.defaultCurrency ?? "KES"),
           coolcatchSupplierKind: party.coolcatchSupplierKind ?? "BROKER",
           name: party.name ?? "",
+          code: party.code ?? "",
+          onHold: Boolean(party.onHold),
+          notes: party.notes ?? "",
           contactPersonFirstName: party.contactPersonFirstName ?? "",
           contactPersonLastName: party.contactPersonLastName ?? "",
           email: party.email ?? "",
@@ -308,8 +314,32 @@ export default function APSuppliersPage() {
         header: "Name",
         accessor: (r: APSupplierRow) => (
           <div className="min-w-[8rem]">
-            <p className="font-medium leading-snug">{r.name}</p>
+            <p className="font-medium leading-snug">
+              <Link
+                href={`/ap/suppliers/${encodeURIComponent(r.id)}?tab=ledger`}
+                className="hover:underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {r.name}
+              </Link>
+            </p>
             {r.code && <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{r.code}</p>}
+            <button
+              type="button"
+              className="mt-1 text-[11px] text-muted-foreground hover:underline"
+              onClick={(event) => {
+                event.stopPropagation();
+                setEditingId(r.id);
+                setDrawerOpen(true);
+              }}
+            >
+              Edit master
+            </button>
+            {r.onHold ? (
+              <Badge variant="destructive" className="mt-1 text-[10px]">
+                On hold
+              </Badge>
+            ) : null}
           </div>
         ),
         sticky: true,
@@ -440,15 +470,23 @@ export default function APSuppliersPage() {
         ]}
         showCommandHint
         actions={
-          <Button
-            onClick={() => {
-              setEditingId(null);
-              setDrawerOpen(true);
-            }}
-          >
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Add supplier
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/ap/statements">
+                <Icons.FileText className="mr-2 h-4 w-4" />
+                Statements
+              </Link>
+            </Button>
+            <Button
+              onClick={() => {
+                setEditingId(null);
+                setDrawerOpen(true);
+              }}
+            >
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Add supplier
+            </Button>
+          </div>
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
@@ -517,8 +555,7 @@ export default function APSuppliersPage() {
                   scrollMode="fill"
                   className="border-0 shadow-none"
                   onRowClick={(row) => {
-                    setEditingId(row.id);
-                    setDrawerOpen(true);
+                    router.push(`/ap/suppliers/${encodeURIComponent(row.id)}`);
                   }}
                   emptyMessage="No suppliers match your filters."
                 />

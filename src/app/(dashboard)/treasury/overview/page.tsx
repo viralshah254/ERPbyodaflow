@@ -22,6 +22,8 @@ const LINKS = [
   { href: "/treasury/bank-accounts", label: "Bank accounts", desc: "Manage bank accounts", icon: "Landmark" as const },
   { href: "/treasury/cashflow", label: "Cashflow", desc: "Forecast and drilldowns", icon: "TrendingUp" as const },
   { href: "/finance/bank-recon", label: "Bank reconciliation", desc: "Match statements", icon: "Wallet" as const },
+  { href: "/ar/statements", label: "Customer statements", desc: "AR period statements", icon: "FileText" as const },
+  { href: "/ap/statements", label: "Supplier statements", desc: "AP period statements", icon: "FileText" as const },
 ];
 
 export default function TreasuryOverviewPage() {

@@ -92,6 +92,10 @@ export function CustomerAccountsPanel({
     creditWarningThresholdPct: "",
     defaultCurrency: "KES",
     taxId: "",
+    sageDcLink: "",
+    arApGroup: "" as "" | "CASH" | "CREDIT" | "SALES" | "BAD_DEBT",
+    onHold: false,
+    notes: "",
   });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [duplicateWarning, setDuplicateWarning] = React.useState<string | undefined>(undefined);
@@ -174,6 +178,10 @@ export function CustomerAccountsPanel({
         creditWarningThresholdPct: "",
         defaultCurrency: baseCode,
         taxId: "",
+        sageDcLink: "",
+        arApGroup: "",
+        onHold: false,
+        notes: "",
       });
       setErrors({});
       setDuplicateWarning(undefined);
@@ -198,6 +206,10 @@ export function CustomerAccountsPanel({
             party.creditWarningThresholdPct != null ? String(party.creditWarningThresholdPct) : "",
           defaultCurrency: party.defaultCurrency ?? currency,
           taxId: party.taxId ?? "",
+          sageDcLink: party.sageDcLink != null ? String(party.sageDcLink) : "",
+          arApGroup: party.arApGroup ?? "",
+          onHold: Boolean(party.onHold),
+          notes: party.notes ?? "",
         });
         setErrors({});
         setDuplicateWarning(undefined);
@@ -263,6 +275,10 @@ export function CustomerAccountsPanel({
       paymentTermsId: form.paymentTermsId || undefined,
       defaultCurrency: form.defaultCurrency.trim().toUpperCase() || undefined,
       taxId: form.taxId.trim() || undefined,
+      sageDcLink: form.sageDcLink.trim() ? Number(form.sageDcLink) : undefined,
+      arApGroup: form.arApGroup || undefined,
+      onHold: form.onHold,
+      notes: form.notes.trim() || undefined,
       status: "ACTIVE",
     };
     setSaving(true);
@@ -346,6 +362,34 @@ export function CustomerAccountsPanel({
           ),
       },
       {
+        id: "sageId",
+        header: "Sage ID",
+        accessor: (row: ArCustomerSummary) =>
+          row.sageDcLink != null ? (
+            <span className="font-mono text-xs">{row.sageDcLink}</span>
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          ),
+      },
+      {
+        id: "group",
+        header: "Group",
+        accessor: (row: ArCustomerSummary) =>
+          row.arApGroup ? (
+            <Badge variant={row.arApGroup === "BAD_DEBT" ? "destructive" : "secondary"}>
+              {row.arApGroup.replace("_", " ")}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          ),
+      },
+      {
+        id: "onHold",
+        header: "Hold",
+        accessor: (row: ArCustomerSummary) =>
+          row.onHold ? <Badge variant="destructive">On hold</Badge> : <span className="text-muted-foreground">—</span>,
+      },
+      {
         id: "creditLimit",
         header: "Credit limit",
         accessor: (row: ArCustomerSummary) => {
@@ -399,8 +443,18 @@ export function CustomerAccountsPanel({
                 onClick: () => router.push(`/docs/sales-order/new?party=${row.id}`),
               },
               {
-                label: "AR aging",
+                label: "Ledger",
                 icon: "FileText",
+                onClick: () => router.push(`/sales/customers/${encodeURIComponent(row.id)}?tab=ledger`),
+              },
+              {
+                label: "Statement (print)",
+                icon: "Printer",
+                onClick: () => router.push(`/ar/statements?partyId=${encodeURIComponent(row.id)}`),
+              },
+              {
+                label: "AR aging",
+                icon: "BarChart2",
                 onClick: () => router.push("/ar/aging"),
               },
             ]}
@@ -563,6 +617,63 @@ export function CustomerAccountsPanel({
       >
         <div className="space-y-4 pr-4">
           <KraTaxPinField value={form.taxId} onChange={(taxId) => setForm((prev) => ({ ...prev, taxId }))} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Sage customer ID</Label>
+              <Input
+                value={form.sageDcLink}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, sageDcLink: e.target.value.replace(/[^\d]/g, "") }))
+                }
+                inputMode="numeric"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Account group</Label>
+              <Select
+                value={form.arApGroup || "__none__"}
+                onValueChange={(value) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    arApGroup: value === "__none__" ? "" : (value as typeof form.arApGroup),
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="CASH">Cash</SelectItem>
+                  <SelectItem value="CREDIT">Credit</SelectItem>
+                  <SelectItem value="SALES">Sales</SelectItem>
+                  <SelectItem value="BAD_DEBT">Bad debt</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>On hold</Label>
+            <Select
+              value={form.onHold ? "yes" : "no"}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, onHold: value === "yes" }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no">No — can invoice</SelectItem>
+                <SelectItem value="yes">Yes — block new invoices</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Input
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+            />
+          </div>
           <div className="space-y-2">
             <Label>Name</Label>
             <Input

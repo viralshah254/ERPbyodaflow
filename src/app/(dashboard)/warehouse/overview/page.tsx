@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { fetchTransfers } from "@/lib/api/warehouse-transfers";
 import { fetchCycleCountTasks, fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
+import { fetchDistributionRoutes, type DistributionRouteRow } from "@/lib/api/distribution";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
@@ -45,21 +46,24 @@ export default function WarehouseOverviewPage() {
   const [pendingPick, setPendingPick] = React.useState(0);
   const [awaitingPutaway, setAwaitingPutaway] = React.useState(0);
   const [openCounts, setOpenCounts] = React.useState(0);
+  const [todayRoutes, setTodayRoutes] = React.useState<DistributionRouteRow[]>([]);
 
   React.useEffect(() => {
     let active = true;
     async function load() {
-      const [transfers, pickPack, putaway, cycleCounts] = await Promise.all([
+      const [transfers, pickPack, putaway, cycleCounts, routes] = await Promise.all([
         fetchTransfers(),
         fetchPickPackTasks(),
         fetchPutawayTasks(),
         fetchCycleCountTasks(),
+        fetchDistributionRoutes({ today: true, includeActivity: true }).catch(() => [] as DistributionRouteRow[]),
       ]);
       if (!active) return;
       setInTransit(transfers.filter((t) => t.status === "IN_TRANSIT").length);
       setPendingPick(pickPack.filter((p) => p.status !== "COMPLETED").length);
       setAwaitingPutaway(putaway.filter((p) => p.status !== "CONFIRMED").length);
       setOpenCounts(cycleCounts.filter((c) => c.status === "OPEN" || c.status === "IN_PROGRESS").length);
+      setTodayRoutes(routes);
     }
     void load().catch((error) => {
       if (!active) return;
@@ -68,6 +72,7 @@ export default function WarehouseOverviewPage() {
       setPendingPick(0);
       setAwaitingPutaway(0);
       setOpenCounts(0);
+      setTodayRoutes([]);
     });
     return () => {
       active = false;
@@ -138,6 +143,7 @@ export default function WarehouseOverviewPage() {
             </CardContent>
           </Card>
         </div>
+        <TodayRoutesBoard routes={todayRoutes} />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {LINKS.map(({ href, label, desc, icon }) => {
             const Icon = (LINK_ICONS[icon] ?? Box) as React.ComponentType<{ className?: string }>;
@@ -160,5 +166,89 @@ export default function WarehouseOverviewPage() {
         </div>
       </div>
     </PageShell>
+  );
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function TodayRoutesBoard({ routes }: { routes: DistributionRouteRow[] }) {
+  const scheduled = routes.filter((row) => row.weekday != null);
+  const anytime = routes.filter((row) => row.weekday == null);
+  if (!routes.length) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Today’s routes</h2>
+          <p className="text-xs text-muted-foreground">
+            Day lanes plus always-on destinations. Stock still leaves MAIN / FG.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/distribution/routes">All routes</Link>
+        </Button>
+      </div>
+      <RouteActivityList routes={scheduled} empty="No day-specific routes for today." />
+      {anytime.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground">Anytime / geo routes</h3>
+          <RouteActivityList routes={anytime} empty="" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RouteActivityList({ routes, empty }: { routes: DistributionRouteRow[]; empty: string }) {
+  if (!routes.length) {
+    return empty ? <p className="text-sm text-muted-foreground">{empty}</p> : null;
+  }
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 font-medium">Route</th>
+            <th className="px-3 py-2 font-medium">Corridor</th>
+            <th className="px-3 py-2 font-medium">Fulfilment</th>
+            <th className="px-3 py-2 font-medium">Pick</th>
+            <th className="px-3 py-2 font-medium">Trips</th>
+            <th className="px-3 py-2 font-medium" />
+          </tr>
+        </thead>
+        <tbody>
+          {routes.map((row) => {
+            const pickHref = `/warehouse/pick-pack?batchLabel=${encodeURIComponent(row.name)}`;
+            const tripHref = `/distribution/trips?routeId=${encodeURIComponent(row.id)}`;
+            return (
+              <tr key={row.id} className="border-t">
+                <td className="px-3 py-2 font-medium">
+                  {row.name}
+                  {row.weekday != null && (
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      {WEEKDAYS[row.weekday]}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground">{row.corridor ?? "—"}</td>
+                <td className="px-3 py-2 text-muted-foreground">{row.fulfilmentWarehouseName ?? "FG / MAIN"}</td>
+                <td className="px-3 py-2">{row.openPickPackCount ?? 0}</td>
+                <td className="px-3 py-2">
+                  {(row.tripsPlannedCount ?? 0) + (row.tripsInTransitCount ?? 0)}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <Link className="mr-3 text-xs underline underline-offset-2" href={pickHref}>
+                    Pick
+                  </Link>
+                  <Link className="text-xs underline underline-offset-2" href={tripHref}>
+                    Trips
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }

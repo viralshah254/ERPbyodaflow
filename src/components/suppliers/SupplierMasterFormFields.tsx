@@ -19,6 +19,9 @@ export type SupplierPaymentMethod = "BANK" | "MPESA" | "PAYBILL" | "TILL";
 
 export type SupplierMasterFormValues = {
   coolcatchSupplierKind: CoolcatchSupplierKind;
+  code: string;
+  onHold: boolean;
+  notes: string;
   name: string;
   contactPersonFirstName: string;
   contactPersonLastName: string;
@@ -43,6 +46,9 @@ export type SupplierMasterFormValues = {
 
 export const emptySupplierMasterForm = (defaultCurrency = "KES"): SupplierMasterFormValues => ({
   coolcatchSupplierKind: "FARM",
+  code: "",
+  onHold: false,
+  notes: "",
   name: "",
   contactPersonFirstName: "",
   contactPersonLastName: "",
@@ -197,6 +203,35 @@ export function SupplierMasterFormFields({
           placeholder={isFarm ? "e.g. Lakeview Tilapia Farm" : "e.g. Coastline Traders Ltd"}
         />
         {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Supplier code</Label>
+        <Input
+          value={form.code}
+          onChange={(e) => patch({ code: e.target.value })}
+          placeholder="e.g. JSBS001"
+          className="font-mono"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>On hold</Label>
+        <Select
+          value={form.onHold ? "yes" : "no"}
+          onValueChange={(value) => patch({ onHold: value === "yes" })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no">No</SelectItem>
+            <SelectItem value="yes">Yes — block new purchases</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Notes</Label>
+        <Input value={form.notes} onChange={(e) => patch({ notes: e.target.value })} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -698,6 +733,9 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
 
   return {
     name: form.name.trim(),
+    code: form.code.trim() || undefined,
+    onHold: form.onHold,
+    notes: form.notes.trim() || undefined,
     roles: ["supplier"] as PartyRole[],
     coolcatchSupplierKind: form.coolcatchSupplierKind,
     contactPersonFirstName: form.contactPersonFirstName.trim(),

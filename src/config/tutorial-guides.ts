@@ -687,7 +687,7 @@ export const ITEM_GUIDES: Partial<
       "Create from order/delivery to inherit lines; manual invoices need extra scrutiny.",
       "Verify tax, withholding, and payment terms before post.",
       "Post when accounting recognises revenue; some orgs batch nightly.",
-      "After post, AR aging and customer statements should update.",
+      "After post, AR aging and customer statements (Finance → Customer statements) should update.",
       "Use Copilot to clarify “what still blocks posting” on a complex invoice.",
     ],
     guideTips: [
