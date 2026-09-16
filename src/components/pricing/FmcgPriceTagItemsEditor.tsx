@@ -354,8 +354,21 @@ export function FmcgPriceTagItemsEditor({
           : {}),
       }));
 
-      await updatePriceListApi(list.id, { items });
-      toast.success("Price tag saved (prices are per piece)");
+      const saved = await updatePriceListApi(list.id, { items });
+      const sfa = saved?.sfaSync;
+      if (sfa?.attempted && sfa.pushed > 0) {
+        toast.success(
+          `Price tag saved. Pushed ${sfa.pushed} price${sfa.pushed === 1 ? "" : "s"} to SFA`
+        );
+      } else if (sfa?.attempted && sfa.reason) {
+        toast.error(`Price tag saved, but SFA push failed: ${sfa.reason}`);
+      } else if (sfa && !sfa.attempted) {
+        toast.success(
+          `Price tag saved. ${sfa.reason ?? "SFA was not updated."}`
+        );
+      } else {
+        toast.success("Price tag saved (prices are per piece)");
+      }
       setEdits({});
       onSaved?.();
       await loadPriceList();

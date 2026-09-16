@@ -80,7 +80,8 @@ function PriceListsContent() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg = isFmcgOrg(templateId);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
-  const { enrolled: sfaEnrolled, status: sfaEnrollment } = useErpSfaEnrollment();
+  const { enrolled: sfaEnrolled, status: sfaEnrollment, refresh: refreshSfaEnrollment } =
+    useErpSfaEnrollment();
 
   const selectList = React.useCallback(
     (id: string) => {
@@ -276,7 +277,10 @@ function PriceListsContent() {
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={setDeleteTarget}
-            onSaved={() => void refresh({ soft: true })}
+            onSaved={() => {
+              void refresh({ soft: true });
+              void refreshSfaEnrollment();
+            }}
           />
         ) : null}
 

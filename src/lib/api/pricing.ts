@@ -372,6 +372,13 @@ export async function createPriceListApi(body: {
   return apiRequest<{ id: string }>("/api/pricing/price-lists", { method: "POST", body });
 }
 
+export type SfaPricePushResult = {
+  attempted: boolean;
+  pushed: number;
+  skipped: number;
+  reason?: string;
+};
+
 export async function updatePriceListApi(
   id: string,
   body: Partial<{
@@ -389,9 +396,12 @@ export async function updatePriceListApi(
     franchiseId: string | null;
     isActive: boolean;
   }>
-): Promise<void> {
+): Promise<{ sfaSync?: SfaPricePushResult }> {
   requireLiveApi("Update price list");
-  await apiRequest(`/api/pricing/price-lists/${encodeURIComponent(id)}`, { method: "PATCH", body });
+  return apiRequest<{ sfaSync?: SfaPricePushResult }>(
+    `/api/pricing/price-lists/${encodeURIComponent(id)}`,
+    { method: "PATCH", body }
+  );
 }
 
 export async function deletePriceListApi(id: string): Promise<void> {
