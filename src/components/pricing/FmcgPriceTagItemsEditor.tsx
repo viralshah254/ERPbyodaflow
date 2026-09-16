@@ -356,9 +356,12 @@ export function FmcgPriceTagItemsEditor({
 
       const saved = await updatePriceListApi(list.id, { items });
       const sfa = saved?.sfaSync;
+      const target = sfa?.target ? ` ${sfa.target}` : " SFA";
+      const skippedNote =
+        sfa && sfa.skipped > 0 ? ` (${sfa.skipped} skipped)` : "";
       if (sfa?.attempted && sfa.pushed > 0) {
         toast.success(
-          `Price tag saved. Pushed ${sfa.pushed} price${sfa.pushed === 1 ? "" : "s"} to SFA`
+          `Price tag saved. Pushed ${sfa.pushed} price${sfa.pushed === 1 ? "" : "s"} to${target}${skippedNote}`
         );
       } else if (sfa?.attempted && sfa.reason) {
         toast.error(`Price tag saved, but SFA push failed: ${sfa.reason}`);

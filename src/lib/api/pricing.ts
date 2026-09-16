@@ -377,6 +377,7 @@ export type SfaPricePushResult = {
   pushed: number;
   skipped: number;
   reason?: string;
+  target?: string;
 };
 
 export async function updatePriceListApi(
