@@ -62,7 +62,7 @@ function LoginContent() {
 
   React.useEffect(() => {
     const nextPath = searchParams.get("next") || searchParams.get("redirect") || "/dashboard";
-    const dest = nextPath.startsWith("/") ? nextPath : "/dashboard";
+    const dest = nextPath.startsWith("/") && nextPath !== "/" ? nextPath : "/dashboard";
     if (existingUser) {
       router.replace(dest);
       return;
@@ -129,6 +129,7 @@ function LoginContent() {
         branches: session.branches,
         permissions: session.permissions,
         isPlatformOperator: session.isPlatformOperator,
+        collectionsHold: session.collectionsHold,
       });
       hydrateFromBackend({
         orgType: session.org.orgType,
@@ -154,6 +155,10 @@ function LoginContent() {
       setIsLoading(false);
       if (session.user.mustChangePassword) {
         router.push("/change-password");
+        return;
+      }
+      if (session.collectionsHold?.enabled) {
+        router.push("/collections-hold");
         return;
       }
       const defaultRedirect = session.isPlatformOperator ? "/platform" : "/dashboard";

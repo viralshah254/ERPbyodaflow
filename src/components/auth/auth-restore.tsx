@@ -106,7 +106,14 @@ export function AuthRestore() {
                   branches: session.branches,
                   permissions: session.permissions,
                   isPlatformOperator: session.isPlatformOperator,
+                  collectionsHold: session.collectionsHold,
                 });
+                if (session.collectionsHold?.enabled && typeof window !== "undefined") {
+                  const path = window.location.pathname;
+                  if (!path.startsWith("/collections-hold") && !path.startsWith("/login") && !path.startsWith("/auth/")) {
+                    window.location.replace("/collections-hold");
+                  }
+                }
                 useOrgContextStore.getState().hydrateFromBackend({
                   orgType: session.org.orgType,
                   templateId: session.orgContext.templateId,

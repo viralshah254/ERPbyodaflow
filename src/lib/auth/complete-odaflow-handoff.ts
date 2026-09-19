@@ -93,6 +93,7 @@ async function sessionOn(base: string, token: string): Promise<string> {
     branches: session.branches,
     permissions: session.permissions,
     isPlatformOperator: session.isPlatformOperator,
+    collectionsHold: session.collectionsHold,
   });
   hydrateFromBackend({
     orgType: session.org.orgType,
@@ -111,6 +112,7 @@ async function sessionOn(base: string, token: string): Promise<string> {
     franchiseManagerName: session.orgContext.franchiseManagerName,
     franchisePersona: session.orgContext.franchisePersona,
   });
+  if (session.collectionsHold?.enabled) return "/collections-hold";
   return session.isPlatformOperator ? "/platform" : "/dashboard";
 }
 

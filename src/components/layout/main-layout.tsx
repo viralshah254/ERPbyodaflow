@@ -2,6 +2,7 @@
 
 import { AppSidebar } from "@/components/nav/AppSidebar";
 import { Header } from "./header";
+import { SandboxEnvironmentBanner } from "@/components/environment/sandbox-environment-banner";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import { FirstVisitBanner } from "@/components/tutorial/FirstVisitBanner";
 import { TutorialProgressTracker } from "@/components/tutorial/TutorialProgressTracker";
@@ -79,6 +80,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       {sidebarOpen && <AppSidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Header />
+        <SandboxEnvironmentBanner />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="shrink-0">
             <TutorialProgressTracker />

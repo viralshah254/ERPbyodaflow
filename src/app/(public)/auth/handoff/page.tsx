@@ -23,7 +23,7 @@ function HandoffContent() {
       try {
         const fallback = await completeOdaflowHandoff(code);
         if (cancelled) return;
-        const dest = next.startsWith("/") ? next : fallback;
+        const dest = next.startsWith("/") && next !== "/" ? next : fallback;
         router.replace(dest);
       } catch (err) {
         if (!cancelled) {

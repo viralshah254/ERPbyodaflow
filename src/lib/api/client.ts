@@ -397,7 +397,14 @@ export async function apiRequest<T = unknown>(
   );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const payload = data as { error?: string; message?: string; reason?: string };
+    const payload = data as { error?: string; message?: string; reason?: string; code?: string };
+    if (
+      typeof window !== "undefined" &&
+      payload.code === "COLLECTIONS_HOLD" &&
+      !window.location.pathname.startsWith("/collections-hold")
+    ) {
+      window.location.replace("/collections-hold");
+    }
     const err = new Error(
       payload.error ?? payload.message ?? payload.reason ?? `Request failed (${res.status})`
     ) as Error & { status?: number; body?: unknown };

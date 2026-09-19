@@ -558,6 +558,14 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: "settings.org.read",
       },
       {
+        id: "settings-environment",
+        label: "Environment",
+        href: "/settings/environment",
+        icon: "FlaskConical",
+        moduleId: "settings",
+        permission: "settings.org.read",
+      },
+      {
         id: "settings-branches",
         label: "Branches",
         href: "/settings/branches",

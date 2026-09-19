@@ -22,7 +22,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isLoading, isPlatformOperator, user } = useAuthStore();
+  const { isLoading, isPlatformOperator, user, collectionsHold } = useAuthStore();
   const router = useRouter();
 
   const org = useAuthStore((s) => s.org);
@@ -33,6 +33,12 @@ export default function DashboardLayout({
       router.replace("/platform");
     }
   }, [isLoading, isPlatformOperator, router]);
+
+  useEffect(() => {
+    if (!isLoading && collectionsHold?.enabled && !isPlatformOperator) {
+      router.replace("/collections-hold");
+    }
+  }, [isLoading, collectionsHold, isPlatformOperator, router]);
 
   // Redirect to login only after AuthRestore has finished and we're still not authenticated
   useEffect(() => {

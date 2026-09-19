@@ -19,6 +19,10 @@ export interface Tenant {
   name: string;
   plan: "STARTER" | "PROFESSIONAL" | "ENTERPRISE";
   status?: "ACTIVE" | "TRIAL" | "SUSPENDED";
+  environmentMode?: "SANDBOX" | "LIVE";
+  sandboxSeededAt?: Date;
+  wentLiveAt?: Date;
+  wentLiveByUserId?: string;
   region: string;
   currency: string;
   timeZone: string;

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { User, Org, Branch, Tenant } from "@/types/erp";
+import type { CollectionsHold } from "@/lib/api/collections-hold";
 
 interface AuthState {
   user: User | null;
@@ -11,6 +12,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   isPlatformOperator: boolean;
+  collectionsHold: CollectionsHold | null;
 
   setUser: (user: User | null) => void;
   setOrg: (org: Org | null) => void;
@@ -26,6 +28,7 @@ interface AuthState {
     branches: Branch[];
     permissions: string[];
     isPlatformOperator?: boolean;
+    collectionsHold?: CollectionsHold | null;
   }) => void;
   finishHydration: () => void;
   logout: () => void;
@@ -41,6 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
   isPlatformOperator: false,
+  collectionsHold: null,
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   setOrg: (org) => set({ org }),
@@ -48,8 +52,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   setCurrentBranch: (branch) => set({ currentBranch: branch }),
   setBranches: (branches) => set({ branches }),
   setPermissions: (permissions) => set({ permissions }),
-  setSession: ({ user, org, tenant, currentBranch, branches, permissions, isPlatformOperator }) =>
-    set({
+  setSession: ({ user, org, tenant, currentBranch, branches, permissions, isPlatformOperator, collectionsHold }) =>
+    set((state) => ({
       user,
       org,
       tenant,
@@ -59,7 +63,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: !!user,
       isLoading: false,
       isPlatformOperator: isPlatformOperator === true,
-    }),
+      collectionsHold: collectionsHold !== undefined ? collectionsHold : state.collectionsHold,
+    })),
   finishHydration: () => set({ isLoading: false }),
   logout: () => set({
     user: null,
@@ -71,6 +76,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     isAuthenticated: false,
     isLoading: false,
     isPlatformOperator: false,
+    collectionsHold: null,
   }),
 }));
 

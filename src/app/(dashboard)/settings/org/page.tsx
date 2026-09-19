@@ -25,6 +25,7 @@ import { fetchApiBinary } from "@/lib/api/client";
 import type { OrgComplianceAttachmentSummary } from "@/lib/types/org";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import Link from "next/link";
 
 const ALL_TEMPLATES = getAllTemplates();
 
@@ -183,6 +184,19 @@ export default function OrganizationPage() {
   return (
     <PageLayout title="Organization Profile" description="Manage your organization details">
       <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Environment</CardTitle>
+            <CardDescription>
+              Sandbox for dummy data and practice. Go Live starts empty real books.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/settings/environment">Open environment settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Organization Information</CardTitle>

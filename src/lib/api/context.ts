@@ -1,5 +1,6 @@
 import { apiRequest, requireLiveApi } from "./client";
 import type { Branch, Org, Tenant, User } from "@/types/erp";
+import { parseCollectionsHold, type CollectionsHold } from "./collections-hold";
 
 export type RuntimeOrgContext = {
   templateId: string;
@@ -63,6 +64,10 @@ type BackendTenant = {
   slug?: string;
   plan?: "STARTER" | "PROFESSIONAL" | "ENTERPRISE";
   status?: "ACTIVE" | "TRIAL" | "SUSPENDED";
+  environmentMode?: "SANDBOX" | "LIVE";
+  sandboxSeededAt?: string;
+  wentLiveAt?: string;
+  wentLiveByUserId?: string;
   region?: string;
   currency?: string;
   timeZone?: string;
@@ -90,6 +95,7 @@ type BackendSession = {
   orgContext: RuntimeOrgContext;
   isPlatformOperator?: boolean;
   hasPlatformOwnerManage?: boolean;
+  collectionsHold?: unknown;
 };
 
 function mapDate(value?: string): Date {
@@ -146,6 +152,10 @@ function mapTenant(tenant: BackendTenant): Tenant {
     name: tenant.name,
     plan: tenant.plan ?? "ENTERPRISE",
     status: tenant.status ?? "ACTIVE",
+    environmentMode: tenant.environmentMode === "SANDBOX" ? "SANDBOX" : "LIVE",
+    sandboxSeededAt: tenant.sandboxSeededAt ? mapDate(tenant.sandboxSeededAt) : undefined,
+    wentLiveAt: tenant.wentLiveAt ? mapDate(tenant.wentLiveAt) : undefined,
+    wentLiveByUserId: tenant.wentLiveByUserId,
     region: tenant.region ?? "KE",
     currency: tenant.currency ?? "KES",
     timeZone: tenant.timeZone ?? "Africa/Nairobi",
@@ -180,6 +190,7 @@ export async function fetchRuntimeSession(): Promise<{
   orgContext: RuntimeOrgContext;
   isPlatformOperator: boolean;
   hasPlatformOwnerManage: boolean;
+  collectionsHold: CollectionsHold | null;
 }> {
   requireLiveApi("Runtime session");
   const payload = await apiRequest<BackendSession>("/api/me");
@@ -194,6 +205,7 @@ export async function fetchRuntimeSession(): Promise<{
     orgContext: payload.orgContext,
     isPlatformOperator: payload.isPlatformOperator === true,
     hasPlatformOwnerManage: payload.hasPlatformOwnerManage === true,
+    collectionsHold: parseCollectionsHold(payload.collectionsHold),
   };
 }
 
