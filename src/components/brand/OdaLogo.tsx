@@ -18,8 +18,8 @@ export function OdaLogo({ height = 40, className, href }: OdaLogoProps) {
     <img
       src={ODA_BRAND.logoSrc}
       alt="Oda ERP"
-      width={280}
-      height={80}
+      width={1024}
+      height={1024}
       className={cn("h-auto w-auto max-w-full object-contain object-left")}
       style={{ height, width: "auto" }}
       decoding="async"

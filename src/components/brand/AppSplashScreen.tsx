@@ -23,11 +23,11 @@ export function AppSplashScreen({
         "flex w-full flex-col items-center justify-center gap-6 px-6",
         isFull ? "flex h-full min-h-0 w-full flex-1 flex-col" : "min-h-[220px] py-16"
       )}
-      style={{ backgroundColor: ODA_BRAND.navy }}
+      style={{ backgroundColor: "#ffffff" }}
     >
-      <OdaLogo height={isFull ? 52 : 44} className="max-w-[min(90vw,340px)] drop-shadow-sm" />
+      <OdaLogo height={isFull ? 72 : 56} className="max-w-[min(90vw,340px)]" />
       {message ? (
-        <p className="max-w-sm text-center text-sm text-white/85">{message}</p>
+        <p className="max-w-sm text-center text-sm text-slate-600">{message}</p>
       ) : null}
     </div>
   );

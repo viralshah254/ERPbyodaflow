@@ -25,7 +25,7 @@ interface PageHeaderProps {
   showCommandHint?: boolean;
   /** Show RightPanel toggle when page has a right slot */
   showRightPanelToggle?: boolean;
-  /** Tighter typography and padding for data-heavy pages */
+  /** Extra-tight padding; default chrome is already compact. */
   dense?: boolean;
   className?: string;
 }
@@ -42,26 +42,25 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   const { rightPanelOpen, toggleRightPanel } = useUIStore();
+  const visibleCrumbs = (breadcrumbs ?? []).filter((crumb, i, all) => {
+    const isLast = i === all.length - 1;
+    return !(isLast && crumb.label === title);
+  });
 
   return (
     <div
       className={cn(
-        "shrink-0 border-b bg-card",
-        dense ? "px-4 py-2.5" : "px-6 py-4",
+        "shrink-0 border-b bg-card px-4",
+        dense ? "py-2" : "py-2.5",
         sticky && "sticky top-0 z-30 bg-card shadow-sm",
         className
       )}
     >
-      {breadcrumbs && breadcrumbs.length > 0 && (
-        <nav
-          className={cn(
-            "flex items-center gap-2 text-muted-foreground",
-            dense ? "mb-1 text-xs" : "mb-2 text-sm",
-          )}
-        >
-          {breadcrumbs.map((crumb, i) => (
-            <React.Fragment key={i}>
-              {i > 0 && <ChevronRight className="h-4 w-4 shrink-0" />}
+      {visibleCrumbs.length > 0 && (
+        <nav className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+          {visibleCrumbs.map((crumb, i) => (
+            <React.Fragment key={`${crumb.label}-${i}`}>
+              {i > 0 && <ChevronRight className="h-3 w-3 shrink-0" />}
               {crumb.href ? (
                 <Link href={crumb.href} className="hover:text-foreground transition-colors">
                   {crumb.label}
@@ -73,38 +72,25 @@ export function PageHeader({
           ))}
         </nav>
       )}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
-          <h1
-            className={cn(
-              "font-bold text-foreground tracking-tight",
-              dense ? "text-xl" : "text-2xl",
-            )}
-          >
+          <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
             {title}
           </h1>
-          {description && (
-            <p
-              className={cn(
-                "text-muted-foreground",
-                dense ? "text-xs mt-0.5" : "text-sm mt-1",
-              )}
-            >
+          {description ? (
+            <p className="mt-0.5 hidden text-xs text-muted-foreground sm:line-clamp-1 sm:block">
               {description}
             </p>
-          )}
-          <div className={cn("flex items-center gap-3 flex-wrap", dense ? "mt-1" : "mt-2")}>
-            <PageHelp />
-            {showCommandHint && (
-              <CommandPaletteHint />
-            )}
-          </div>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:shrink-0">
+          <PageHelp compact />
+          {showCommandHint ? <CommandPaletteHint /> : null}
           {showRightPanelToggle && (
             <Button
               variant="ghost"
               size="icon"
+              className="h-8 w-8"
               onClick={toggleRightPanel}
               title={rightPanelOpen ? "Hide right panel" : "Show right panel"}
             >

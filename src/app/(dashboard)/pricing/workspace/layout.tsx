@@ -18,7 +18,7 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
       <Link
         href={href}
         className={cn(
-          "inline-flex items-center border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+          "inline-flex items-center border-b-2 px-2.5 py-1.5 text-xs font-medium transition-colors sm:text-sm",
           active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
         )}
       >
@@ -29,8 +29,8 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="sticky top-0 z-10 border-b bg-background px-6 pt-2">
-        <nav className="flex flex-wrap gap-1" aria-label="Pricing workspace">
+      <div className="sticky top-0 z-10 border-b bg-background px-4 pt-1">
+        <nav className="flex flex-wrap gap-0.5" aria-label="Pricing workspace">
           {tab("/pricing/workspace/overview", "Overview", "/workspace/overview")}
           {tab(
             "/pricing/workspace/lists",
@@ -48,7 +48,7 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
           <Link
             href="/pricing/rules"
             className={cn(
-              "ml-auto inline-flex items-center border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground",
+              "ml-auto inline-flex items-center border-b-2 border-transparent px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground sm:text-sm",
               path.startsWith("/pricing/rules") && "text-foreground"
             )}
           >

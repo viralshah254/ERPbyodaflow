@@ -11,10 +11,11 @@ import { useSpotlightTour } from "@/components/tutorial/SpotlightTour";
 import { Button } from "@/components/ui/button";
 import { PageGuideSheet } from "@/components/tutorial/PageGuideSheet";
 import { BookOpen, Sparkles, Play, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const DEFAULT_PROMPT = "Explain this page and suggest next steps.";
 
-export function PageHelp() {
+export function PageHelp({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname();
   const info = pathname ? getTutorialForRoute(pathname) : null;
   const tour = pathname ? getTourForRoute(pathname) : null;
@@ -39,17 +40,18 @@ export function PageHelp() {
 
   return (
     <>
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-1 flex-wrap">
         {showTour && (
           <div className="flex items-center gap-0.5">
             <Button
               variant="ghost"
-              size="sm"
-              className="h-7 text-xs"
+              size={compact ? "icon" : "sm"}
+              className={compact ? "h-8 w-8" : "h-7 text-xs"}
               onClick={startTour}
+              title="Start tour"
             >
-              <Play className="h-3.5 w-3.5 mr-1" />
-              Start tour
+              <Play className={cn("h-3.5 w-3.5", !compact && "mr-1")} />
+              {!compact ? "Start tour" : <span className="sr-only">Start tour</span>}
             </Button>
             <Button
               variant="ghost"
@@ -65,22 +67,26 @@ export function PageHelp() {
         )}
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
+          size={compact ? "icon" : "sm"}
+          className={compact ? "h-8 w-8" : "h-7 text-xs"}
           onClick={() => setGuideSheetOpen(true)}
+          title="Tutorial"
         >
-          <BookOpen className="h-3.5 w-3.5" />
-          Tutorial
+          <BookOpen className={cn("h-3.5 w-3.5", !compact && "mr-1")} />
+          {!compact ? "Tutorial" : <span className="sr-only">Tutorial</span>}
         </Button>
         {copilotEnabled ? (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
+            size={compact ? "icon" : "sm"}
+            className={compact ? "h-8 w-8" : "h-7 text-xs"}
             onClick={handleAskCopilot}
+            title={info ? "Ask Copilot about this page" : "Ask Copilot"}
           >
-            <Sparkles className="h-3.5 w-3.5 mr-1" />
-            {info ? "Ask Copilot about this page" : "Ask Copilot"}
+            <Sparkles className={cn("h-3.5 w-3.5", !compact && "mr-1")} />
+            {!compact ? (info ? "Ask Copilot about this page" : "Ask Copilot") : (
+              <span className="sr-only">Ask Copilot</span>
+            )}
           </Button>
         ) : null}
       </div>

@@ -233,8 +233,8 @@ function PriceListsContent() {
         title={fmcgOrg ? "Price tags" : "Price lists"}
         description={
           fmcgOrg
-            ? "Named tags (e.g. Naivas, Premium). Set price per piece; pack prices calculate from packaging."
-            : "Wholesale, Retail, Distributor, Export. Currency per list, UOM-aware tiers."
+            ? "Piece prices by named tag. Pack prices come from packaging."
+            : "Wholesale, Retail, Distributor, Export. Currency per list."
         }
         breadcrumbs={[{ label: "Pricing", href: "/pricing/workspace/overview" }, { label: fmcgOrg ? "Price tags" : "Price lists" }]}
         sticky
@@ -242,8 +242,9 @@ function PriceListsContent() {
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button size="sm" onClick={openAdd}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              {fmcgOrg ? "Add price tag" : "Add price list"}
+              <Icons.Plus className="mr-1.5 h-4 w-4" />
+              <span className="sm:hidden">Add</span>
+              <span className="hidden sm:inline">{fmcgOrg ? "Add price tag" : "Add price list"}</span>
             </Button>
             {fmcgOrg ? (
               <PriceTagSheetActions
@@ -262,7 +263,7 @@ function PriceListsContent() {
           </div>
         }
       />
-      <div className="p-6 space-y-6">
+      <div className="space-y-3 p-3 sm:space-y-4 sm:p-4">
         {fmcgOrg && sfaEnrolled ? (
           <SfaCatalogSyncAlertBanner pending={sfaEnrollment?.catalogSyncPending} />
         ) : null}

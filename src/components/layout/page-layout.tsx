@@ -25,12 +25,12 @@ export function PageLayout({
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       {/* Header */}
-      <div className="shrink-0 border-b bg-card px-6 py-4">
+      <div className="shrink-0 border-b bg-card px-4 py-2.5">
         {breadcrumbs && breadcrumbs.length > 0 && (
-          <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+          <nav className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
             {breadcrumbs.map((crumb, i) => (
               <React.Fragment key={i}>
-                {i > 0 && <Icons.ChevronRight className="h-4 w-4" />}
+                {i > 0 && <Icons.ChevronRight className="h-3 w-3" />}
                 {crumb.href ? (
                   <a
                     href={crumb.href}
@@ -45,18 +45,20 @@ export function PageLayout({
             ))}
           </nav>
         )}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
-            {description && (
-              <p className="text-sm text-muted-foreground mt-1">{description}</p>
-            )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{title}</h1>
+            {description ? (
+              <p className="mt-0.5 hidden text-xs text-muted-foreground sm:line-clamp-1 sm:block">
+                {description}
+              </p>
+            ) : null}
           </div>
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+          {actions ? <div className="flex flex-wrap items-center justify-end gap-1.5">{actions}</div> : null}
         </div>
       </div>
       {/* Content — scroll inside page card/sections, not the app chrome */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
           {children}
         </div>
