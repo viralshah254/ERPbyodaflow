@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import {
-  LIST_PAGE_BODY_CLASS,
-  LIST_PAGE_SHELL_CLASS,
+  LIST_PAGE_BODY_PAGINATED_CLASS,
   PageShell,
 } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -12,6 +11,13 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { RowActions } from "@/components/ui/row-actions";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
@@ -26,14 +32,20 @@ import {
   normalizeCategoryCode,
   suggestCategoryCodeFromName,
   updateProductCategoryApi,
+  sortCategoriesForTree,
   type ItemCategoryRow,
 } from "@/lib/api/product-categories";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function MasterCategoriesPage() {
   const canWrite = useCanWriteInventory();
+  const templateId = useOrgContextStore((s) => s.template?.id);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -46,7 +58,7 @@ export default function MasterCategoriesPage() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [codeManual, setCodeManual] = React.useState(false);
   const [deleteId, setDeleteId] = React.useState<string | null>(null);
-  const [form, setForm] = React.useState({ name: "", code: "" });
+  const [form, setForm] = React.useState({ name: "", code: "", parentId: "" });
   const hasLoadedOnceRef = React.useRef(false);
 
   const reload = React.useCallback(async () => {
@@ -85,28 +97,37 @@ export default function MasterCategoriesPage() {
   );
 
   const filtered = React.useMemo(() => {
-    if (!debouncedSearch.trim()) return rows;
+    const source = sortCategoriesForTree(rows);
+    if (!debouncedSearch.trim()) return source;
     const q = debouncedSearch.trim().toLowerCase();
-    return rows.filter(
-      (r) => r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
+    return source.filter(
+      (r) =>
+        r.code.toLowerCase().includes(q) ||
+        r.name.toLowerCase().includes(q) ||
+        (r.parentName ?? "").toLowerCase().includes(q)
     );
   }, [rows, debouncedSearch]);
+
+  const parentOptions = React.useMemo(
+    () => rows.filter((r) => !r.parentId && r.id !== editingId),
+    [rows, editingId]
+  );
 
   const showSoftProgress = softLoading || softFiltering;
 
   const deleteTarget = deleteId ? rows.find((r) => r.id === deleteId) : undefined;
 
-  const openCreate = () => {
+  const openCreate = (parentId = "") => {
     setEditingId(null);
     setCodeManual(false);
-    setForm({ name: "", code: "" });
+    setForm({ name: "", code: "", parentId });
     setDrawerOpen(true);
   };
 
   const openEdit = (row: ItemCategoryRow) => {
     setEditingId(row.id);
     setCodeManual(true);
-    setForm({ name: row.name, code: row.code });
+    setForm({ name: row.name, code: row.code, parentId: row.parentId ?? "" });
     setDrawerOpen(true);
   };
 
@@ -124,14 +145,16 @@ export default function MasterCategoriesPage() {
         await updateProductCategoryApi(editingId, {
           name: form.name.trim(),
           code,
+          parentId: fmcgOrg ? form.parentId || null : undefined,
         });
         toast.success("Category updated. Product lists show the new name automatically.");
       } else {
         await createProductCategoryApi({
           name: form.name.trim(),
           code,
+          parentId: fmcgOrg && form.parentId ? form.parentId : undefined,
         });
-        toast.success("Category created.");
+        toast.success(form.parentId ? "Subcategory created." : "Category created.");
       }
       setDrawerOpen(false);
       await reload();
@@ -170,7 +193,11 @@ export default function MasterCategoriesPage() {
         header: "Category",
         sortable: true,
         sortValue: (r: ItemCategoryRow) => r.name?.toLowerCase() ?? "",
-        accessor: (r: ItemCategoryRow) => <span className="font-medium">{r.name}</span>,
+        accessor: (r: ItemCategoryRow) => (
+          <span className={cn("font-medium", r.parentId && "pl-5 text-sm")}>
+            {r.parentId ? `↳ ${r.name}` : r.name}
+          </span>
+        ),
         sticky: true,
       },
       {
@@ -182,6 +209,22 @@ export default function MasterCategoriesPage() {
           <span className="font-mono text-muted-foreground">{r.code}</span>
         ),
       },
+      ...(fmcgOrg
+        ? [
+            {
+              id: "parent",
+              header: "Parent",
+              sortable: true,
+              sortValue: (r: ItemCategoryRow) => r.parentName ?? "",
+              accessor: (r: ItemCategoryRow) =>
+                r.parentName ? (
+                  <span className="text-muted-foreground">{r.parentName}</span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                ),
+            },
+          ]
+        : []),
       {
         id: "status",
         header: "Status",
@@ -205,6 +248,15 @@ export default function MasterCategoriesPage() {
                         icon: "Pencil" as const,
                         onClick: () => openEdit(r),
                       },
+                      ...(fmcgOrg && !r.parentId
+                        ? [
+                            {
+                              label: "Add subcategory",
+                              icon: "Plus" as const,
+                              onClick: () => openCreate(r.id),
+                            },
+                          ]
+                        : []),
                       {
                         label: "Delete",
                         icon: "Trash2" as const,
@@ -220,14 +272,18 @@ export default function MasterCategoriesPage() {
           ]
         : []),
     ],
-    [canWrite]
+    [canWrite, fmcgOrg]
   );
 
   return (
-    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+    <PageShell>
       <PageHeader
         title="Categories"
-        description="Group products. Renaming updates every product that uses the category."
+        description={
+          fmcgOrg
+            ? "Group products into categories and optional subcategories. Renaming updates every product that uses the category."
+            : "Group products. Renaming updates every product that uses the category."
+        }
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: "Categories" },
@@ -236,21 +292,21 @@ export default function MasterCategoriesPage() {
         showCommandHint
         actions={
           canWrite ? (
-            <Button onClick={openCreate}>
+            <Button onClick={() => openCreate()}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add category
             </Button>
           ) : undefined
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         <DataTableToolbar
           searchPlaceholder="Search by name or code…"
           searchValue={search}
           onSearchChange={setSearch}
         />
         {!hasLoadedOnce ? (
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border">
+          <div className="relative overflow-hidden rounded-lg border">
             <TopProgressBar active />
             <div className="space-y-2 p-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -273,7 +329,7 @@ export default function MasterCategoriesPage() {
             }
           />
         ) : (
-          <div className="relative min-h-0 flex-1">
+          <div className="relative">
             <TopProgressBar active={showSoftProgress} />
             <DataTable<ItemCategoryRow>
               data={filtered}
@@ -284,10 +340,10 @@ export default function MasterCategoriesPage() {
                   ? `No categories match “${debouncedSearch.trim()}”.`
                   : "No categories."
               }
-              scrollMode="fill"
+              scrollMode="natural"
               size="comfortable"
               className={cn(
-                "min-h-0 flex-1 border-0 transition-opacity duration-200",
+                "transition-opacity duration-200",
                 showSoftProgress && "opacity-60",
               )}
             />
@@ -298,11 +354,19 @@ export default function MasterCategoriesPage() {
       <EntityDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        title={editingId ? "Edit category" : "New category"}
+        title={
+          editingId
+            ? "Edit category"
+            : form.parentId
+              ? "New subcategory"
+              : "New category"
+        }
         description={
           editingId
             ? "Rename updates the label on all products that use this category."
-            : "Add a category you can assign when creating or editing products."
+            : form.parentId
+              ? "This subcategory sits under a parent category. Products can use either the parent or this child."
+              : "Add a category you can assign when creating or editing products."
         }
         mode={editingId ? "edit" : "create"}
         footer={
@@ -388,6 +452,33 @@ export default function MasterCategoriesPage() {
                 : "Filled from the name. Edit anytime to type your own (e.g. 0008)."}
             </p>
           </div>
+          {fmcgOrg ? (
+            <div className="space-y-2">
+              <Label>Parent category</Label>
+              <Select
+                value={form.parentId || "__none__"}
+                onValueChange={(v) =>
+                  setForm((current) => ({ ...current, parentId: v === "__none__" ? "" : v }))
+                }
+                disabled={Boolean(editingId && rows.some((r) => r.parentId === editingId))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None — top-level category" />
+                </SelectTrigger>
+                <SelectContent className="max-h-64 overflow-y-auto">
+                  <SelectItem value="__none__">None — top-level category</SelectItem>
+                  {parentOptions.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Optional. One level only — a subcategory cannot have its own children.
+              </p>
+            </div>
+          ) : null}
         </div>
       </EntityDrawer>
 

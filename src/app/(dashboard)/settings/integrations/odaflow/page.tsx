@@ -23,10 +23,8 @@ import {
   fetchOdaflowIntegrationApi,
   fetchOdaflowSyncStatus,
   fetchOdaflowProductMappings,
-  fetchOdaflowCustomerMappings,
   generateOdaflowCredentialsApi,
   updateOdaflowIntegrationApi,
-  pullSharedCatalogFromSfaApi,
   type OdaflowCredentialsApiResponse,
   type OdaflowIntegrationApiResponse,
   type OdaflowSyncStatus,
@@ -34,6 +32,7 @@ import {
 } from "@/lib/api/odaflow-integration";
 import { OdaflowSyncQueuePanel } from "@/components/integrations/OdaflowSyncQueuePanel";
 import { OdaflowProductsSyncPanel } from "@/components/integrations/OdaflowProductsSyncPanel";
+import { OdaflowMultichainMappingBoard } from "@/components/integrations/OdaflowMultichainMappingBoard";
 import { subscribeRealtimeInbox } from "@/lib/realtime-client";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { useSearchParams } from "next/navigation";
@@ -45,7 +44,7 @@ const TAB_LABELS: Record<Tab, string> = {
   overview: "Overview",
   queue: "Sync Queue",
   products: "Products & sync",
-  customers: "Customer Mappings",
+  customers: "Multichain mapping",
 };
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -107,9 +106,6 @@ export default function OdaflowIntegrationPage() {
   const [queueRefreshKey, setQueueRefreshKey] = React.useState(0);
 
   const [productMappings, setProductMappings] = React.useState<OdaflowMapping[]>([]);
-  const [customerMappings, setCustomerMappings] = React.useState<OdaflowMapping[]>([]);
-  const [mappingsLoading, setMappingsLoading] = React.useState(false);
-  const [pullingCatalog, setPullingCatalog] = React.useState(false);
 
   const refreshStatus = React.useCallback(async () => {
     setStatusLoading(true);
@@ -152,15 +148,12 @@ export default function OdaflowIntegrationPage() {
   }, [refreshStatus]);
 
   React.useEffect(() => {
-    if (tab !== "products" && tab !== "customers") return;
-    setMappingsLoading(true);
-    Promise.all([fetchOdaflowProductMappings(), fetchOdaflowCustomerMappings()])
-      .then(([prods, custs]) => {
+    if (tab !== "products") return;
+    fetchOdaflowProductMappings()
+      .then((prods) => {
         setProductMappings(prods.items);
-        setCustomerMappings(custs.items);
       })
-      .catch(() => toast.error("Failed to load mappings"))
-      .finally(() => setMappingsLoading(false));
+      .catch(() => toast.error("Failed to load mappings"));
   }, [tab]);
 
   const handleGenerate = async (rotate: boolean) => {
@@ -186,27 +179,6 @@ export default function OdaflowIntegrationPage() {
       toast.error(e instanceof Error ? e.message : "Failed to generate credentials.");
     } finally {
       setGenerating(false);
-    }
-  };
-
-  const handlePullSharedCatalog = async () => {
-    if (pullingCatalog) return;
-    setPullingCatalog(true);
-    try {
-      const result = await pullSharedCatalogFromSfaApi();
-      const hqLabel = result.hqs === 1 ? "1 supermarket HQ" : `${result.hqs} supermarket HQs`;
-      const branchLabel = result.branches === 1 ? "1 branch" : `${result.branches} branches`;
-      if (result.failed > 0) {
-        toast.warning(`Updated ${hqLabel} and ${branchLabel}. ${result.failed} could not sync.`);
-      } else {
-        toast.success(`Updated ${hqLabel} and ${branchLabel} from SFA.`);
-      }
-      const custs = await fetchOdaflowCustomerMappings();
-      setCustomerMappings(custs.items);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not refresh from SFA");
-    } finally {
-      setPullingCatalog(false);
     }
   };
 
@@ -596,61 +568,29 @@ export default function OdaflowIntegrationPage() {
         )}
 
         {tab === "customers" && (
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Customers matched between Odaflow and this ERP account appear here. New matches are created when
-                orders sync or when you resolve them in the Sync Queue.
-              </p>
-              {sfaEnrolled ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => void handlePullSharedCatalog()}
-                  disabled={pullingCatalog}
-                  title="Pull shared supermarket HQs and branches from SFA. Works even if automatic customer sync is off."
-                >
-                  {pullingCatalog ? (
-                    <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Icons.RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  {pullingCatalog ? "Refreshing…" : "Refresh from SFA"}
-                </Button>
-              ) : null}
+          sfaEnrollmentLoading ? (
+            <div className="text-sm text-muted-foreground py-8 text-center">
+              Checking your Odaflow connection…
             </div>
-            {mappingsLoading ? (
-              <div className="text-sm text-muted-foreground">Loading…</div>
-            ) : customerMappings.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-4 text-center">No customer mappings yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Odaflow Customer ID</th>
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Customer Code</th>
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">ERP Party ID</th>
-                      <th className="text-left py-2 font-medium text-muted-foreground">Last Synced</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customerMappings.map((m) => (
-                      <tr key={m._id} className="border-b hover:bg-muted/30">
-                        <td className="py-2 pr-4 font-mono text-xs">{m.externalId}</td>
-                        <td className="py-2 pr-4 text-muted-foreground">{m.externalKey ?? "—"}</td>
-                        <td className="py-2 pr-4 font-mono text-xs">{m.entityId}</td>
-                        <td className="py-2 text-xs text-muted-foreground">
-                          {m.lastSyncedAt ? new Date(m.lastSyncedAt).toLocaleDateString() : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          ) : sfaEnrolled ? (
+            <OdaflowMultichainMappingBoard canSave={canSave} />
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-start gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-base font-medium">Multichain mapping is not ready yet</p>
+                  <p className="text-sm text-muted-foreground max-w-xl">
+                    Finish connecting this ERP account to Odaflow first. Once Setup is complete, you can
+                    review SFA supermarket HQs against Multichain parties here.
+                  </p>
+                </div>
+                <Button type="button" onClick={() => setTab("setup")}>
+                  Go to Setup
+                  <Icons.ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+          )
         )}
       </div>
     </PageShell>

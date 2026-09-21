@@ -14,9 +14,26 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { ProductRow } from "@/lib/types/masters";
+import { productTypeLabel, type ProductKind } from "@/lib/products/product-type";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+
+type ProductTypeFilter = "" | ProductKind;
+
+const TYPE_FILTER_OPTIONS: Array<{ value: ProductTypeFilter; label: string }> = [
+  { value: "", label: "All types" },
+  { value: "FINISHED", label: "Finished goods" },
+  { value: "RAW", label: "Purchased / raw" },
+  { value: "BOTH", label: "Stock (buy & sell)" },
+];
+
+function defaultTypeFilter(productFilter: "purchasable" | "sellable" | "all"): ProductTypeFilter {
+  if (productFilter === "sellable") return "FINISHED";
+  if (productFilter === "purchasable") return "RAW";
+  return "";
+}
 
 type DocumentProductPickerSheetProps = {
   open: boolean;
@@ -40,6 +57,9 @@ export function DocumentProductPickerSheet({
 }: DocumentProductPickerSheetProps) {
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState<ProductTypeFilter>(() =>
+    defaultTypeFilter(productFilter)
+  );
   const [items, setItems] = React.useState<ProductRow[]>([]);
   const [cursor, setCursor] = React.useState<string | null>("0");
   const [hasMore, setHasMore] = React.useState(false);
@@ -58,11 +78,12 @@ export function DocumentProductPickerSheet({
     if (!open) return;
     setSearch("");
     setDebouncedSearch("");
+    setTypeFilter(defaultTypeFilter(productFilter));
     setSelected(new Map());
     setItems([]);
     setCursor("0");
     setHasMore(false);
-  }, [open]);
+  }, [open, productFilter]);
 
   const loadPage = React.useCallback(
     async (opts: { reset: boolean; cursor: string | null; search: string }) => {
@@ -75,6 +96,7 @@ export function DocumentProductPickerSheet({
           status: "ACTIVE",
           purchasable: productFilter === "purchasable" ? true : undefined,
           sellable: productFilter === "sellable" ? true : undefined,
+          productType: typeFilter || undefined,
           limit: PAGE_SIZE,
           cursor: opts.cursor ?? "0",
           includeStock: false,
@@ -98,13 +120,13 @@ export function DocumentProductPickerSheet({
         }
       }
     },
-    [productFilter]
+    [productFilter, typeFilter]
   );
 
   React.useEffect(() => {
     if (!open) return;
     void loadPage({ reset: true, cursor: "0", search: debouncedSearch });
-  }, [open, debouncedSearch, loadPage]);
+  }, [open, debouncedSearch, typeFilter, loadPage]);
 
   const toggle = (product: ProductRow) => {
     setSelected((prev) => {
@@ -146,15 +168,34 @@ export function DocumentProductPickerSheet({
         </SheetHeader>
 
         <div className="mt-4 space-y-3 flex-1 min-h-0 flex flex-col">
-          <div className="relative">
-            <Icons.Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, SKU, barcode…"
-              className="pl-9"
-              autoFocus
-            />
+          <div className="grid gap-2 sm:grid-cols-[1fr_11rem]">
+            <div className="relative">
+              <Icons.Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, SKU, barcode…"
+                className="pl-9"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="doc-product-type-filter" className="sr-only">
+                Product type
+              </Label>
+              <select
+                id="doc-product-type-filter"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as ProductTypeFilter)}
+              >
+                {TYPE_FILTER_OPTIONS.map((opt) => (
+                  <option key={opt.value || "all"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -183,7 +224,12 @@ export function DocumentProductPickerSheet({
               <p className="p-4 text-sm text-muted-foreground">Loading products…</p>
             ) : items.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">
-                No products match{debouncedSearch ? ` “${debouncedSearch}”` : ""}.
+                No products match
+                {debouncedSearch ? ` “${debouncedSearch}”` : ""}
+                {typeFilter
+                  ? ` in ${TYPE_FILTER_OPTIONS.find((o) => o.value === typeFilter)?.label ?? "this type"}`
+                  : ""}
+                .
               </p>
             ) : (
               <ul className="divide-y">
@@ -191,6 +237,7 @@ export function DocumentProductPickerSheet({
                   const checked = selected.has(p.id);
                   const meta = [
                     p.sku,
+                    typeFilter ? undefined : productTypeLabel(p.productType),
                     fmcgOrg
                       ? (p.categoryName ?? p.category)?.trim()
                       : p.productFamily?.trim(),

@@ -313,6 +313,68 @@ export async function pullSharedCatalogFromSfaApi(): Promise<SharedCatalogPullRe
   });
 }
 
+export type MultichainPreviewStatus =
+  | "mapped"
+  | "suggested"
+  | "ambiguous"
+  | "unmatched_sfa"
+  | "unmatched_erp";
+
+export type MultichainPreviewParty = {
+  id: string;
+  name: string;
+  code?: string;
+};
+
+export type MultichainPreviewRow = {
+  status: MultichainPreviewStatus;
+  sfa?: {
+    id: string;
+    name: string;
+    code?: string;
+    address?: string;
+    branchCount: number;
+    linkedErpPartyId?: string;
+  };
+  erp?: MultichainPreviewParty;
+  candidates?: MultichainPreviewParty[];
+};
+
+export type MultichainPreviewResult = {
+  success: boolean;
+  rows: MultichainPreviewRow[];
+  erpParties: MultichainPreviewParty[];
+};
+
+export async function fetchMultichainPreviewApi(): Promise<MultichainPreviewResult> {
+  requireLiveApi("Multichain preview");
+  return apiRequest<MultichainPreviewResult>("/api/integrations/odaflow/multichain/preview");
+}
+
+export async function confirmMultichainLinkApi(params: {
+  sfaSupermarketId: string;
+  erpPartyId: string;
+}): Promise<{ success: boolean; partyId: string; sfaSupermarketId: string }> {
+  requireLiveApi("Multichain link");
+  return apiRequest("/api/integrations/odaflow/multichain/link", {
+    method: "POST",
+    body: params,
+  });
+}
+
+export async function importMultichainBranchesApi(partyId: string): Promise<{
+  success: boolean;
+  imported: number;
+  updated: number;
+  skipped: number;
+}> {
+  requireLiveApi("Multichain branch import");
+  return apiRequest(`/api/integrations/odaflow/multichain/${encodeURIComponent(partyId)}/import-branches`, {
+    method: "POST",
+    body: {},
+  });
+}
+
 export type ProductSfaSyncStatusRow = {
   productId: string;
   barcode?: string;

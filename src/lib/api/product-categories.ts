@@ -34,9 +34,50 @@ export interface ItemCategoryRow {
   code: string;
   name: string;
   description?: string;
-  parentId?: string;
+  parentId?: string | null;
+  parentName?: string | null;
   departmentId?: string;
   isActive: boolean;
+}
+
+export type CategoryPathSource = {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  parentName?: string | null;
+};
+
+export function categoryPathLabel(row: CategoryPathSource, all?: CategoryPathSource[]): string {
+  if (row.parentName) return `${row.parentName} › ${row.name}`;
+  if (row.parentId && all?.length) {
+    const parent = all.find((c) => c.id === row.parentId);
+    if (parent) return `${parent.name} › ${row.name}`;
+  }
+  return row.name;
+}
+
+export function sortCategoriesForTree(rows: ItemCategoryRow[]): ItemCategoryRow[] {
+  const byParent = new Map<string | null, ItemCategoryRow[]>();
+  const ids = new Set(rows.map((r) => r.id));
+  for (const row of rows) {
+    const parentKey =
+      row.parentId && ids.has(row.parentId) ? row.parentId : null;
+    const list = byParent.get(parentKey) ?? [];
+    list.push(row);
+    byParent.set(parentKey, list);
+  }
+  const out: ItemCategoryRow[] = [];
+  const walk = (parentKey: string | null) => {
+    const children = (byParent.get(parentKey) ?? []).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+    for (const child of children) {
+      out.push(child);
+      walk(child.id);
+    }
+  };
+  walk(null);
+  return out;
 }
 
 export async function fetchProductCategoriesApi(): Promise<ItemCategoryRow[]> {
@@ -66,7 +107,13 @@ export async function createProductCategoryApi(payload: {
 
 export async function updateProductCategoryApi(
   id: string,
-  payload: { name?: string; code?: string; description?: string; isActive?: boolean }
+  payload: {
+    name?: string;
+    code?: string;
+    description?: string;
+    parentId?: string | null;
+    isActive?: boolean;
+  }
 ): Promise<ItemCategoryRow> {
   requireLiveApi("Update product category");
   return apiRequest<ItemCategoryRow>(

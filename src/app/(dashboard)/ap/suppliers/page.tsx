@@ -12,6 +12,7 @@ import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { Badge } from "@/components/ui/badge";
 import { fetchApSuppliersPageApi, type ApSupplierSummary } from "@/lib/api/payments";
+import { fetchSupplierCategoriesApi } from "@/lib/api/supplier-categories";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
@@ -77,6 +78,7 @@ export default function APSuppliersPage() {
   >([]);
   const { settings: financialSettings } = useFinancialSettings();
   const [form, setForm] = React.useState<SupplierMasterFormValues>(() => emptySupplierMasterForm());
+  const [supplierCategories, setSupplierCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [pinCertFile, setPinCertFile] = React.useState<File | null>(null);
   const [pinCertExistingUrl, setPinCertExistingUrl] = React.useState<string | null>(null);
   const [companyRegFile, setCompanyRegFile] = React.useState<File | null>(null);
@@ -95,8 +97,9 @@ export default function APSuppliersPage() {
       fetchFinancialCurrenciesApi().catch(
         () => [] as Awaited<ReturnType<typeof fetchFinancialCurrenciesApi>>,
       ),
+      fetchSupplierCategoriesApi().catch(() => []),
     ])
-      .then(([termsData, currenciesData]) => {
+      .then(([termsData, currenciesData, categories]) => {
         setTerms(termsData.map((term) => ({ id: term.id, name: term.name })));
         setCurrencies(
           currenciesData
@@ -108,6 +111,7 @@ export default function APSuppliersPage() {
               isBaseCurrency: c.isBaseCurrency,
             })),
         );
+        setSupplierCategories(categories.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
       })
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "Failed to load supplier settings.");
@@ -189,6 +193,7 @@ export default function APSuppliersPage() {
           supplierBankAccountNumber: party.supplierBankAccountNumber ?? "",
           supplierBankBranchName: party.supplierBankBranchName ?? "",
           ...locationFieldsFromParty(party),
+          supplierCategoryId: party.supplierCategoryId ?? "",
         });
         setPinCertFile(null);
         setPinCertExistingUrl(party.pinCertificateUrl ?? null);
@@ -614,6 +619,7 @@ export default function APSuppliersPage() {
           onCompanyRegFileChange={setCompanyRegFile}
           companyRegExistingUrl={companyRegExistingUrl}
           partyId={editingId}
+          categories={supplierCategories}
         />
       </EntityDrawer>
     </PageShell>

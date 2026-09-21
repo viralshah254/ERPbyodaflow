@@ -13,6 +13,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import {
   Table,
   TableBody,
@@ -28,6 +29,12 @@ import {
 } from "@/lib/api/pricing";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import {
+  categoryPathLabel,
+  fetchProductCategoriesApi,
+  sortCategoriesForTree,
+  type ItemCategoryRow,
+} from "@/lib/api/product-categories";
+import {
   discountFromPriceAndFinal,
   finalFromPriceAndDiscount,
   formatPriceAmount,
@@ -39,6 +46,10 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const PAGE_SIZE = 25;
+const SIZE_FILTERS = ["25kg", "10kg", "5kg", "1kg", "500g", "250g", "100g", "50g"] as const;
+type ProductSortField = "name" | "sku" | "barcode" | "size";
+type SortField = ProductSortField | "price" | "rrp" | "discount" | "final";
+const PRODUCT_SORT = new Set<SortField>(["name", "sku", "barcode", "size"]);
 
 type RowDraft = {
   productId: string;
@@ -46,11 +57,51 @@ type RowDraft = {
   sku: string;
   barcode: string;
   size: string;
+  stock: string;
   pricePerPiece: string;
   rrp: string;
   discountPercent: string;
   finalPrice: string;
 };
+
+function SortableHead({
+  label,
+  field,
+  sortBy,
+  sortDir,
+  onSort,
+  className,
+}: {
+  label: string;
+  field: SortField;
+  sortBy: SortField;
+  sortDir: "asc" | "desc";
+  onSort: (field: SortField) => void;
+  className?: string;
+}) {
+  const active = sortBy === field;
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 font-medium hover:text-foreground"
+        onClick={() => onSort(field)}
+        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      >
+        {label}
+        {active ? (
+          sortDir === "asc" ? (
+            <Icons.ArrowUp className="h-3.5 w-3.5" />
+          ) : (
+            <Icons.ArrowDown className="h-3.5 w-3.5" />
+          )
+        ) : (
+          <Icons.ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+        )}
+      </button>
+    </TableHead>
+  );
+}
 
 type EditDraft = {
   pricePerPiece: string;
@@ -97,6 +148,12 @@ export function FmcgPriceTagItemsEditor({
   const [edits, setEdits] = React.useState<Record<string, EditDraft>>({});
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [categoryId, setCategoryId] = React.useState("");
+  const [sizeFilter, setSizeFilter] = React.useState("");
+  const [pricedStatus, setPricedStatus] = React.useState<"all" | "priced" | "unpriced">("priced");
+  const [sortBy, setSortBy] = React.useState<SortField>("name");
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
+  const [categories, setCategories] = React.useState<ItemCategoryRow[]>([]);
   const [cursor, setCursor] = React.useState("0");
   const [cursorStack, setCursorStack] = React.useState<string[]>([]);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
@@ -119,7 +176,22 @@ export function FmcgPriceTagItemsEditor({
     setCursor("0");
     setCursorStack([]);
     setNextCursor(null);
-  }, [debouncedSearch, priceListId]);
+  }, [debouncedSearch, priceListId, categoryId, sizeFilter, pricedStatus, sortBy, sortDir]);
+
+  const toggleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(field);
+    setSortDir(field === "price" || field === "rrp" || field === "final" ? "desc" : "asc");
+  };
+
+  React.useEffect(() => {
+    void fetchProductCategoriesApi()
+      .then((list) => setCategories(sortCategoriesForTree(list.filter((c) => c.isActive !== false))))
+      .catch(() => setCategories([]));
+  }, []);
 
   const loadPriceList = React.useCallback(async () => {
     try {
@@ -155,25 +227,100 @@ export function FmcgPriceTagItemsEditor({
         setSoftLoading(true);
       }
       try {
-        const page = await fetchProductsPageApi({
-          sellable: true,
-          status: "ACTIVE",
-          search: (opts?.search ?? debouncedSearch) || undefined,
-          limit: PAGE_SIZE,
-          cursor: opts?.cursor ?? cursor,
-          includeStock: false,
-        });
         const sourceList = opts?.priceList ?? listRef.current;
+        const searchQ = opts?.search ?? debouncedSearch;
+        const pageCursor = opts?.cursor ?? cursor;
+        const priceSort = !PRODUCT_SORT.has(sortBy);
+        let pageItems: Awaited<ReturnType<typeof fetchProductsPageApi>>["items"] = [];
+        let pageNext: string | null = null;
+        let pageMore = false;
+
+        if (priceSort && sourceList && !searchQ.trim() && !categoryId && !sizeFilter) {
+          const key = (item: { price?: number; rrp?: number; discountPercent?: number }) => {
+            if (sortBy === "rrp") return item.rrp ?? 0;
+            if (sortBy === "discount") return item.discountPercent ?? 0;
+            if (sortBy === "final") {
+              const price = item.price ?? 0;
+              const disc = item.discountPercent ?? 0;
+              return finalFromPriceAndDiscount(price, disc);
+            }
+            return item.price ?? 0;
+          };
+          const sorted = [...(sourceList.items ?? [])]
+            .filter((i) => pricedStatus === "unpriced" ? !(i.price > 0) : pricedStatus === "priced" ? i.price > 0 : true)
+            .sort((a, b) => {
+              const cmp = key(a) - key(b);
+              return sortDir === "asc" ? cmp : -cmp;
+            });
+          const offset = Number(pageCursor) || 0;
+          const slice = sorted.slice(offset, offset + PAGE_SIZE);
+          const fetched = slice.length
+            ? await fetchProductsPageApi({
+                ids: slice.map((i) => i.productId),
+                sellable: true,
+                status: "ACTIVE",
+                limit: PAGE_SIZE,
+                includeStock: true,
+              })
+            : { items: [], nextCursor: null, hasMore: false };
+          const order = new Map(slice.map((i, idx) => [i.productId, idx]));
+          pageItems = [...fetched.items].sort(
+            (a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99)
+          );
+          pageMore = offset + PAGE_SIZE < sorted.length;
+          pageNext = pageMore ? String(offset + PAGE_SIZE) : null;
+        } else {
+          const page = await fetchProductsPageApi({
+            sellable: true,
+            status: "ACTIVE",
+            search: searchQ || undefined,
+            categoryId: categoryId || undefined,
+            size: sizeFilter || undefined,
+            pricedOnPriceListId: pricedStatus !== "all" ? priceListId : undefined,
+            pricedStatus: pricedStatus !== "all" ? pricedStatus : undefined,
+            sortBy: PRODUCT_SORT.has(sortBy) ? (sortBy as ProductSortField) : "name",
+            sortDir,
+            limit: PAGE_SIZE,
+            cursor: pageCursor,
+            includeStock: true,
+          });
+          pageItems = page.items;
+          pageNext = page.nextCursor;
+          pageMore = page.hasMore;
+          if (priceSort) {
+            const byId = new Map((sourceList?.items ?? []).map((i) => [i.productId, i]));
+            pageItems = [...pageItems].sort((a, b) => {
+              const ea = editsRef.current[a.id] ?? itemToEdit(byId.get(a.id));
+              const eb = editsRef.current[b.id] ?? itemToEdit(byId.get(b.id));
+              const num = (row: EditDraft) => {
+                if (sortBy === "rrp") return parseNumber(row.rrp) ?? 0;
+                if (sortBy === "discount") return parseDiscountPercent(row.discountPercent) ?? 0;
+                if (sortBy === "final") return parseNumber(row.finalPrice) ?? 0;
+                return parseNumber(row.pricePerPiece) ?? 0;
+              };
+              const cmp = num(ea) - num(eb);
+              return sortDir === "asc" ? cmp : -cmp;
+            });
+          }
+        }
+
         const byId = new Map((sourceList?.items ?? []).map((i) => [i.productId, i]));
         const currentEdits = editsRef.current;
-        const drafts: RowDraft[] = page.items.map((p) => {
+        const drafts: RowDraft[] = pageItems.map((p) => {
           const edit = currentEdits[p.id] ?? itemToEdit(byId.get(p.id));
+          const stock =
+            typeof p.currentStock === "number"
+              ? String(p.currentStock)
+              : typeof p.availableQuantity === "number"
+                ? String(p.availableQuantity)
+                : "—";
           return {
             productId: p.id,
             name: p.name,
             sku: p.sku,
             barcode: p.barcode?.trim() || "—",
             size: p.size?.trim() || "—",
+            stock,
             pricePerPiece: edit.pricePerPiece,
             rrp: edit.rrp,
             discountPercent: edit.discountPercent,
@@ -181,8 +328,8 @@ export function FmcgPriceTagItemsEditor({
           };
         });
         setRows(drafts);
-        setNextCursor(page.nextCursor);
-        setHasMore(page.hasMore);
+        setNextCursor(pageNext);
+        setHasMore(pageMore);
         hasLoadedOnce.current = true;
         setListReady(true);
       } catch (e) {
@@ -192,7 +339,7 @@ export function FmcgPriceTagItemsEditor({
         setSoftLoading(false);
       }
     },
-    [debouncedSearch, cursor]
+    [debouncedSearch, cursor, categoryId, sizeFilter, pricedStatus, sortBy, sortDir, priceListId]
   );
 
   // Tag switch / first open — soft progress only; never blank the sidebar/selection.
@@ -202,6 +349,11 @@ export function FmcgPriceTagItemsEditor({
     setEdits({});
     setSearch("");
     setDebouncedSearch("");
+    setCategoryId("");
+    setSizeFilter("");
+    setPricedStatus("priced");
+    setSortBy("name");
+    setSortDir("asc");
     setCursor("0");
     setCursorStack([]);
     setNextCursor(null);
@@ -235,7 +387,7 @@ export function FmcgPriceTagItemsEditor({
     }
     if (!hasLoadedOnce.current) return;
     void loadProductsPage({ soft: true });
-  }, [debouncedSearch, cursor, loadProductsPage]);
+  }, [debouncedSearch, cursor, categoryId, sizeFilter, pricedStatus, sortBy, sortDir, loadProductsPage]);
 
   React.useEffect(() => {
     // After a tag switch resets search/cursor, ignore the next search-effect tick.
@@ -401,10 +553,11 @@ export function FmcgPriceTagItemsEditor({
   }
 
   const pageNumber = cursorStack.length + 1;
+  const hasFilters = Boolean(debouncedSearch.trim() || categoryId || sizeFilter || pricedStatus !== "all");
   const showEmptyCatalog =
-    rows.length === 0 && !debouncedSearch.trim() && !softLoading;
+    rows.length === 0 && !hasFilters && !softLoading;
   const showEmptySearch =
-    rows.length === 0 && Boolean(debouncedSearch.trim()) && !softLoading;
+    rows.length === 0 && hasFilters && !softLoading;
   const tagLabel = list?.name ?? tagName ?? "this tag";
 
   return (
@@ -417,16 +570,54 @@ export function FmcgPriceTagItemsEditor({
         in sync. To bulk-edit, download this tag’s prices above, then import.
       </p>
 
-      <div className="relative">
-        <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search products by name, SKU, or barcode…"
-          className="pl-8"
-          disabled={softLoading && rows.length === 0}
-        />
-      </div>
+      <DataTableToolbar
+        searchPlaceholder="Search products by name, SKU, or barcode…"
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchInputProps={{ disabled: softLoading && rows.length === 0 }}
+        filters={[
+          {
+            id: "priced",
+            label: "Price",
+            options: [
+              { label: "All SKUs", value: "all" },
+              { label: "Priced", value: "priced" },
+              { label: "Unpriced", value: "unpriced" },
+            ],
+            value: pricedStatus,
+            onChange: (v) => setPricedStatus((v || "all") as "all" | "priced" | "unpriced"),
+          },
+          {
+            id: "size",
+            label: "Size",
+            options: [
+              { label: "All sizes", value: "" },
+              ...SIZE_FILTERS.map((s) => ({ label: s, value: s })),
+            ],
+            value: sizeFilter,
+            onChange: setSizeFilter,
+          },
+          {
+            id: "category",
+            label: "Category",
+            options: [
+              { label: "All categories", value: "" },
+              ...categories.map((c) => ({ label: categoryPathLabel(c, categories), value: c.id })),
+            ],
+            value: categoryId,
+            onChange: setCategoryId,
+          },
+        ]}
+        activeFiltersCount={
+          (pricedStatus !== "all" ? 1 : 0) + (sizeFilter ? 1 : 0) + (categoryId ? 1 : 0)
+        }
+        onClearFilters={() => {
+          setPricedStatus("priced");
+          setSizeFilter("");
+          setCategoryId("");
+          setSearch("");
+        }}
+      />
 
       {showEmptyCatalog ? (
         <div className="rounded-md border border-dashed px-6 py-10 text-center space-y-3">
@@ -458,21 +649,22 @@ export function FmcgPriceTagItemsEditor({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Barcode</TableHead>
-                    <TableHead className="w-[88px]">Size</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead className="w-[140px]">Sell / pc</TableHead>
-                    <TableHead className="w-[140px]">RRP / pc</TableHead>
-                    <TableHead className="w-[120px]">Discount %</TableHead>
-                    <TableHead className="w-[140px]">Final price</TableHead>
+                    <SortableHead label="Product" field="name" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableHead label="Barcode" field="barcode" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableHead label="Size" field="size" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[88px]" />
+                    <SortableHead label="SKU" field="sku" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <TableHead className="w-[88px]">Stock</TableHead>
+                    <SortableHead label="Sell / pc" field="price" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
+                    <SortableHead label="RRP / pc" field="rrp" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
+                    <SortableHead label="Discount %" field="discount" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[120px]" />
+                    <SortableHead label="Final price" field="final" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {showEmptySearch ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                        No products match “{debouncedSearch.trim()}”.
+                      <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                        No products match these filters.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -482,6 +674,7 @@ export function FmcgPriceTagItemsEditor({
                         <TableCell className="font-mono text-xs">{r.barcode}</TableCell>
                         <TableCell className="text-sm tabular-nums">{r.size}</TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">{r.sku}</TableCell>
+                        <TableCell className="text-sm tabular-nums">{r.stock}</TableCell>
                         <TableCell>
                           <Input
                             type="number"

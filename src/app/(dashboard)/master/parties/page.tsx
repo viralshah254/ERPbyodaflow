@@ -52,6 +52,7 @@ import {
   type SupplierMasterFormValues,
 } from "@/components/suppliers/SupplierMasterFormFields";
 import { fetchCustomerCategoriesApi } from "@/lib/api/customer-categories";
+import { fetchSupplierCategoriesApi } from "@/lib/api/supplier-categories";
 import { fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
 import { fetchFinancialCurrenciesApi } from "@/lib/api/financial-settings";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
@@ -100,6 +101,7 @@ export default function MasterPartiesPage() {
   const [hasMore, setHasMore] = React.useState(false);
   const [totalCount, setTotalCount] = React.useState<number | undefined>(undefined);
   const [customerCategories, setCustomerCategories] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [supplierCategories, setSupplierCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermRow[]>([]);
   const [currencies, setCurrencies] = React.useState<
     Array<{ id: string; code: string; name: string; isBaseCurrency?: boolean }>
@@ -204,11 +206,13 @@ export default function MasterPartiesPage() {
       setParties(page.items);
       setHasMore(Boolean(page.nextCursor));
       setTotalCount(page.totalCount);
-      const [categories, terms] = await Promise.all([
+      const [categories, supplierCats, terms] = await Promise.all([
         fetchCustomerCategoriesApi(),
+        fetchSupplierCategoriesApi().catch(() => []),
         fetchPaymentTermsApi(),
       ]);
       setCustomerCategories(categories.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
+      setSupplierCategories(supplierCats.filter((item) => item.isActive).map((item) => ({ id: item.id, name: item.name })));
       setPaymentTerms(terms.filter((t) => t.isActive));
     } catch (error) {
       toast.error((error as Error).message);
@@ -481,6 +485,7 @@ export default function MasterPartiesPage() {
       phone: row.phone ?? "",
       taxId: row.taxId ?? "",
       ...locationFieldsFromParty(row),
+      supplierCategoryId: row.supplierCategoryId ?? "",
     });
     setSupplierFormErrors({});
     setPinCertFile(null);
@@ -511,6 +516,7 @@ export default function MasterPartiesPage() {
           supplierBankAccountNumber: detail.supplierBankAccountNumber ?? prev.supplierBankAccountNumber,
           supplierBankBranchName: detail.supplierBankBranchName ?? prev.supplierBankBranchName,
           ...locationFieldsFromParty(detail),
+          supplierCategoryId: detail.supplierCategoryId ?? prev.supplierCategoryId,
         }));
         setPinCertExistingUrl(detail.pinCertificateUrl ?? null);
         setCompanyRegExistingUrl(detail.companyRegistrationUrl ?? null);
@@ -724,6 +730,11 @@ export default function MasterPartiesPage() {
                     { label: "Distributor", value: "DISTRIBUTOR" },
                     { label: "Wholesaler", value: "WHOLESALER" },
                     { label: "Retailer", value: "RETAILER" },
+                    { label: "Multichain", value: "MULTICHAIN" },
+                    { label: "HoReCa", value: "HORECA" },
+                    { label: "Cash", value: "CASH" },
+                    { label: "Export", value: "EXPORT" },
+                    { label: "Industry", value: "INDUSTRY" },
                     { label: "End customer", value: "END_CUSTOMER" },
                   ],
                   value: customerType,
@@ -1003,6 +1014,11 @@ export default function MasterPartiesPage() {
                     <SelectItem value="DISTRIBUTOR">Distributor</SelectItem>
                     <SelectItem value="WHOLESALER">Wholesaler</SelectItem>
                     <SelectItem value="RETAILER">Retailer</SelectItem>
+                    <SelectItem value="MULTICHAIN">Multichain</SelectItem>
+                    <SelectItem value="HORECA">HoReCa</SelectItem>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="EXPORT">Export</SelectItem>
+                    <SelectItem value="INDUSTRY">Industry</SelectItem>
                     {!fmcgOrg ? (
                       <SelectItem value="FRANCHISEE">Franchisee</SelectItem>
                     ) : null}
@@ -1052,6 +1068,7 @@ export default function MasterPartiesPage() {
               onCompanyRegFileChange={setCompanyRegFile}
               companyRegExistingUrl={companyRegExistingUrl}
               partyId={editingId}
+              categories={supplierCategories}
             />
           )}
 

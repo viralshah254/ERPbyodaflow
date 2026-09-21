@@ -36,7 +36,12 @@ export type CustomerType =
   | "WHOLESALER"
   | "RETAILER"
   | "FRANCHISEE"
-  | "END_CUSTOMER";
+  | "END_CUSTOMER"
+  | "CASH"
+  | "EXPORT"
+  | "INDUSTRY"
+  | "HORECA"
+  | "MULTICHAIN";
 
 export type PartyChannel = "MODERN_TRADE" | "GENERAL_TRADE" | "E_COM" | "HORECA" | "OTHER";
 
@@ -70,6 +75,7 @@ export type PartyRow = {
   contactPersonFirstName?: string;
   contactPersonLastName?: string;
   customerCategoryId?: string;
+  supplierCategoryId?: string;
   email?: string;
   phone?: string;
   taxId?: string;

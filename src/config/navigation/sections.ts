@@ -113,7 +113,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     key: "masters",
     label: "Masters",
     moduleKey: "masters",
-    tier: "secondary",
+    tier: "primary",
     order: 2,
     items: [
       { key: "masters-hub", label: "Masters", href: "/master", icon: "Database", moduleKey: "masters", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
@@ -154,8 +154,17 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         moduleKey: "inventory",
         termKey: "product",
         requiresPermissions: ["inventory.read"],
-        // FMCG: catalogue lives under Masters → Finished SKU; stock+cost on Stock Levels.
         excludesTemplates: ["fmcg-manufacturer", "fmcg-distributor"],
+      },
+      {
+        key: "inventory-products-fmcg",
+        label: "Products",
+        href: "/master/products",
+        icon: "Package",
+        moduleKey: "inventory",
+        termKey: "product",
+        requiresPermissions: ["inventory.read"],
+        requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor"],
       },
       { key: "inventory-stock-levels", label: "Stock Levels", href: "/inventory/stock-levels", icon: "Warehouse", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-movements", label: "Stock Movements", href: "/inventory/movements", icon: "ArrowLeftRight", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },

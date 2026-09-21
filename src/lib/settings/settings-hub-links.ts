@@ -93,6 +93,7 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     title: "Sales & customers",
     links: [
       { href: "/settings/customer-categories", label: "Customer categories", description: "Segments and category rules", icon: "Tag", requiresPermissions: ["settings.org.read"] },
+      { href: "/settings/supplier-categories", label: "Supplier categories", description: "Creditor groups for purchasing and AP", icon: "Tags", requiresPermissions: ["settings.org.read"] },
     ],
   },
   {

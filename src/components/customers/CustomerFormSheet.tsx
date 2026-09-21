@@ -60,6 +60,11 @@ const GENERIC_CUSTOMER_TYPES: { value: CustomerType; label: string }[] = [
   { value: "RETAILER", label: "Retailer" },
   { value: "WHOLESALER", label: "Wholesaler" },
   { value: "DISTRIBUTOR", label: "Distributor" },
+  { value: "MULTICHAIN", label: "Multichain" },
+  { value: "HORECA", label: "HoReCa" },
+  { value: "CASH", label: "Cash" },
+  { value: "EXPORT", label: "Export" },
+  { value: "INDUSTRY", label: "Industry" },
   { value: "END_CUSTOMER", label: "End customer" },
 ];
 
@@ -856,7 +861,7 @@ export function CustomerFormSheet({
 
                   {fmcg && form.kindId === "modern-trade" && !parentPartyId?.trim() ? (
                     <div className="space-y-3 rounded-lg border p-3">
-                      <p className="text-sm font-medium text-foreground">Modern trade</p>
+                      <p className="text-sm font-medium text-foreground">Multichain</p>
                       <p className="text-xs text-muted-foreground">
                         New supermarket HQs and branches from SFA appear here automatically.
                         Tax ID and credit stay on this ERP organisation only.

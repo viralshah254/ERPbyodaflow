@@ -26,9 +26,9 @@ export function isFmcgOrg(templateId?: string | null): boolean {
 export function sfaSegmentLabel(segment?: SfaSegment | null): string {
   switch (segment) {
     case "MODERN_TRADE_HQ":
-      return "Modern trade";
+      return "Multichain";
     case "MODERN_TRADE_BRANCH":
-      return "Modern trade branch";
+      return "Multichain branch";
     case "GENERAL_TRADE_CLIENT":
       return "General trade";
     case "DISTRIBUTOR":
@@ -44,12 +44,12 @@ export function sfaSegmentLabel(segment?: SfaSegment | null): string {
 export const CUSTOMER_KIND_OPTIONS = [
   {
     id: "modern-trade",
-    label: "Modern trade",
+    label: "Multichain",
     description:
       "Supermarket HQ or branch — syncs to the shared SFA catalog; tax ID and credit stay on this ERP org",
     sfaSegment: "MODERN_TRADE_HQ" as SfaSegment,
     channel: "MODERN_TRADE" as PartyChannel,
-    customerType: "RETAILER" as const,
+    customerType: "MULTICHAIN" as const,
   },
   /**
    * Branch under a supermarket HQ. Full AR customer (same stepper as HQ).
@@ -57,11 +57,11 @@ export const CUSTOMER_KIND_OPTIONS = [
    */
   {
     id: "modern-trade-branch",
-    label: "Modern trade branch",
+    label: "Multichain branch",
     description: "Outlet under a supermarket — orders and invoices like any customer",
     sfaSegment: "MODERN_TRADE_BRANCH" as SfaSegment,
     channel: "MODERN_TRADE" as PartyChannel,
-    customerType: "RETAILER" as const,
+    customerType: "MULTICHAIN" as const,
   },
   {
     id: "general-trade",
@@ -99,7 +99,7 @@ export const CUSTOMER_KIND_OPTIONS_FOR_CREATE = CUSTOMER_KIND_OPTIONS.filter(
 export function channelLabel(channel?: PartyChannel | null): string {
   switch (channel) {
     case "MODERN_TRADE":
-      return "Modern trade";
+      return "Multichain";
     case "GENERAL_TRADE":
       return "General trade";
     case "E_COM":
@@ -114,7 +114,7 @@ export function channelLabel(channel?: PartyChannel | null): string {
 }
 
 export const CUSTOMER_DIRECTORY_TABS = [
-  { id: "modern-trade", label: "Modern trade", sfaSegment: "MODERN_TRADE_HQ" as SfaSegment, channel: "MODERN_TRADE" as PartyChannel },
+  { id: "modern-trade", label: "Multichain", sfaSegment: "MODERN_TRADE_HQ" as SfaSegment, channel: "MODERN_TRADE" as PartyChannel },
   { id: "general-trade", label: "General trade", sfaSegment: "GENERAL_TRADE_CLIENT" as SfaSegment, channel: "GENERAL_TRADE" as PartyChannel },
   { id: "distributors", label: "Distributors", sfaSegment: "DISTRIBUTOR" as SfaSegment },
   { id: "van-sales", label: "Van sales", sfaSegment: "VAN_SALES" as SfaSegment },

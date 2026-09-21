@@ -83,6 +83,19 @@ export async function updateUomApi(
   });
 }
 
+export async function replaceUomCatalogApi(): Promise<{
+  kept: string[];
+  deleted: string[];
+  remappedProducts: number;
+}> {
+  requireLiveApi("Replace UOM catalog");
+  return apiRequest<{
+    kept: string[];
+    deleted: string[];
+    remappedProducts: number;
+  }>("/api/settings/uom/replace-catalog", { method: "POST" });
+}
+
 export async function deleteUomApi(id: string): Promise<void> {
   requireLiveApi("Delete UOM");
   await apiRequest(`/api/settings/uom/${encodeURIComponent(id)}`, {

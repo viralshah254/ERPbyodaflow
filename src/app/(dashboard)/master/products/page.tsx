@@ -35,10 +35,19 @@ import { createProductApi, fetchProductSkusApi, fetchProductCodesApi, fetchProdu
 import { saveProductPackagingApi } from "@/lib/api/product-master";
 import {
   importProductsApi,
+  importTallyStockGroupApi,
+  previewTallyStockGroupApi,
   exportProductsCsvApi,
   downloadProductsTemplateAsFormatApi,
 } from "@/lib/api/import-export";
-import type { ImportProductsProgress, ImportProductsResult } from "@/lib/api/import-export";
+import type {
+  ImportProductsProgress,
+  ImportProductsResult,
+  TallyMissingBarcodeRow,
+  TallyStockGroupPreview,
+} from "@/lib/api/import-export";
+import { reviewTallyImportWithGaia } from "@/lib/gaia/gaia-service";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu,
@@ -51,6 +60,7 @@ import {
   createProductCategoryApi,
   normalizeCategoryCode,
   suggestCategoryCodeFromName,
+  categoryPathLabel,
 } from "@/lib/api/product-categories";
 import { fetchProductDepartmentsApi } from "@/lib/api/product-departments";
 import { fetchProductUomsApi } from "@/lib/api/uom";
@@ -178,10 +188,15 @@ export default function MasterProductsPage() {
 
   // Bulk import / export
   const [importOpen, setImportOpen] = React.useState(false);
+  const [importMode, setImportMode] = React.useState<"csv" | "tally">(fmcgOrg ? "tally" : "csv");
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [importing, setImporting] = React.useState(false);
   const [importProgress, setImportProgress] = React.useState<ImportProductsProgress | null>(null);
   const [importResult, setImportResult] = React.useState<ImportProductsResult | null>(null);
+  const [tallyPreview, setTallyPreview] = React.useState<TallyStockGroupPreview | null>(null);
+  const [tallyExcludeRows, setTallyExcludeRows] = React.useState<number[]>([]);
+  const [gaiaReviewing, setGaiaReviewing] = React.useState(false);
+  const [gaiaExcludeNotes, setGaiaExcludeNotes] = React.useState<Array<{ row: number; reason: string }>>([]);
   const [dragOver, setDragOver] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -207,6 +222,27 @@ export default function MasterProductsPage() {
     }
     setImportFile(file);
     setImportResult(null);
+    setTallyPreview(null);
+    setTallyExcludeRows([]);
+    setGaiaExcludeNotes([]);
+  };
+
+  const downloadMissingBarcodeCsv = (rows: TallyMissingBarcodeRow[]) => {
+    const header = "row,name,category,subcategory";
+    const body = rows
+      .map((r) =>
+        [r.row, r.name, r.category, r.subcategory ?? ""]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(",")
+      )
+      .join("\n");
+    const blob = new Blob([`${header}\n${body}\n`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tally-missing-barcodes-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   React.useEffect(() => {
@@ -302,7 +338,7 @@ export default function MasterProductsPage() {
   }, [drawerOpen]);
 
   const categoryNameById = React.useMemo(
-    () => new Map(categories.map((c) => [c.id, c.name])),
+    () => new Map(categories.map((c) => [c.id, categoryPathLabel(c, categories)])),
     [categories]
   );
 
@@ -749,15 +785,110 @@ export default function MasterProductsPage() {
     }
   };
 
+  const handleTallyPreview = async () => {
+    if (!importFile) {
+      toast.error("Choose a Tally Stock Group .xls or .xlsx first.");
+      return;
+    }
+    if (!/\.(xls|xlsx)$/i.test(importFile.name)) {
+      toast.error("Tally import needs an Excel .xls or .xlsx file.");
+      return;
+    }
+    setImporting(true);
+    setTallyPreview(null);
+    setImportResult(null);
+    try {
+      const preview = await previewTallyStockGroupApi(importFile);
+      setTallyPreview(preview);
+      setTallyExcludeRows([]);
+      setGaiaExcludeNotes([]);
+      toast.success(
+        `Preview: ${preview.skuCount} SKUs · ${preview.wouldCreate} new · ${preview.wouldUpdate} existing barcodes.`
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Preview failed.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const toggleTallyExclude = (row: number, checked: boolean) => {
+    setTallyExcludeRows((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(row);
+      else next.delete(row);
+      return [...next];
+    });
+  };
+
+  const handleGaiaReview = async () => {
+    if (!tallyPreview) return;
+    const candidates = tallyPreview.askGaia?.length
+      ? tallyPreview.askGaia
+      : (tallyPreview.previewSkus ?? []).filter((s) => s.reviewBucket === "askGaia");
+    if (candidates.length === 0) {
+      toast.message("Nothing ambiguous to review — rules already skipped junk groups.");
+      return;
+    }
+    setGaiaReviewing(true);
+    try {
+      const suggestions = await reviewTallyImportWithGaia(candidates);
+      setGaiaExcludeNotes(suggestions);
+      if (suggestions.length === 0) {
+        toast.message("Gaia did not suggest extra skips.");
+        return;
+      }
+      setTallyExcludeRows((prev) => [...new Set([...prev, ...suggestions.map((s) => s.row)])]);
+      toast.success(`Gaia suggested skipping ${suggestions.length} row${suggestions.length === 1 ? "" : "s"}. Confirm below, then Import.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gaia review failed. Rules-only skip still applies.");
+    } finally {
+      setGaiaReviewing(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!importFile) {
-      toast.error("Choose a CSV file to import first.");
+      toast.error(importMode === "tally" ? "Choose a Tally file to import first." : "Choose a CSV file to import first.");
       return;
     }
     setImporting(true);
     setImportProgress({ phase: "preparing", done: 0, total: 0 });
     setImportResult(null);
     try {
+      if (importMode === "tally") {
+        const result = await importTallyStockGroupApi(importFile, { excludeRows: tallyExcludeRows });
+        setImportResult(result);
+        const skippedCount = result.skipped?.length ?? 0;
+        const missingCount = result.missingBarcode?.length ?? 0;
+        if (skippedCount > 0 || missingCount > 0) {
+          toast.warning(
+            `Imported ${result.imported} (${result.created} new, ${result.updated} updated).${
+              missingCount ? ` ${missingCount} without barcode.` : ""
+            }${skippedCount ? ` ${skippedCount} skipped.` : ""}`
+          );
+        } else {
+          toast.success(
+            `Imported ${result.imported} product${result.imported === 1 ? "" : "s"} (${result.created} new, ${result.updated} updated).`
+          );
+        }
+        setImportFile(null);
+        setTallyPreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        setListCursor("0");
+        setListCursorStack([]);
+        await refreshProducts();
+        void loadCategories();
+        void loadFamilies();
+        if (
+          skippedCount === 0 &&
+          (result.warnings?.length ?? 0) === 0 &&
+          (result.missingBarcode?.length ?? 0) === 0
+        ) {
+          setImportOpen(false);
+        }
+        return;
+      }
       const result = await importProductsApi(importFile, setImportProgress);
       setImportResult(result);
       const skippedCount = result.skipped?.length ?? 0;
@@ -934,7 +1065,7 @@ export default function MasterProductsPage() {
               label: "Category",
               options: [
                 { label: "All categories", value: "" },
-                ...categories.map((c) => ({ label: c.name, value: c.id })),
+                ...categories.map((c) => ({ label: categoryPathLabel(c, categories), value: c.id })),
               ],
               value: categoryFilter,
               onChange: (v) => setCategoryFilter(v),
@@ -1274,7 +1405,7 @@ export default function MasterProductsPage() {
                       <SelectItem value="__none__">None</SelectItem>
                       {categories.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name} ({c.code})
+                          {categoryPathLabel(c, categories)} ({c.code})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1517,7 +1648,7 @@ export default function MasterProductsPage() {
                     <SelectItem value="__none__">None</SelectItem>
                     {categories.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.name} ({c.code})
+                        {categoryPathLabel(c, categories)} ({c.code})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1705,13 +1836,54 @@ export default function MasterProductsPage() {
       />
 
       {/* ── Bulk import sheet ─────────────────────────────────────────────── */}
-      <Sheet open={importOpen} onOpenChange={(o) => { if (!o) { setImportFile(null); setImportResult(null); } setImportOpen(o); }}>
+      <Sheet open={importOpen} onOpenChange={(o) => { if (!o) { setImportFile(null); setImportResult(null); setTallyPreview(null); } setImportOpen(o); }}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Import {productLabel.toLowerCase()}s</SheetTitle>
           </SheetHeader>
           <div className="space-y-5 py-4">
+            {fmcgOrg ? (
+              <div className="flex rounded-lg border p-1 text-sm">
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-2 py-1.5 ${importMode === "csv" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  onClick={() => {
+                    setImportMode("csv");
+                    setTallyPreview(null);
+                    setImportResult(null);
+                  }}
+                >
+                  CSV / Excel
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-2 py-1.5 ${importMode === "tally" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                  onClick={() => {
+                    setImportMode("tally");
+                    setTallyPreview(null);
+                    setImportResult(null);
+                  }}
+                >
+                  Tally stock group
+                </button>
+              </div>
+            ) : null}
+
             <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground space-y-2">
+              {importMode === "tally" && fmcgOrg ? (
+                <>
+                  <p className="font-medium text-foreground">Tally Stock Group Summary</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li>Titles are parents: <span className="font-medium text-foreground">Finished Goods</span>, <span className="font-medium text-foreground">Packaging Material</span>, <span className="font-medium text-foreground">Raw Material</span>.</li>
+                    <li>Next allowlisted name is the category — e.g. CANDY KENYA, CARTON. Flavour/chemical Tally groups stay as products, not categories.</li>
+                    <li>Barcode and grammage are extracted onto the product — <code>100 GMS</code> → <code>100g</code>, trailing <code>(616…)</code> → barcode.</li>
+                    <li>Category rollups (CARTON + 48438) and junk (DEACTIVE, DELIVERY FEE) are not products.</li>
+                    <li>Preview first. Ask Gaia to suggest extra skips; you confirm before Import.</li>
+                    <li>PCS / CTN closing qty sets carton pieces only — no opening stock.</li>
+                  </ul>
+                </>
+              ) : (
+              <>
               <p className="font-medium text-foreground">Columns</p>
               {fmcgOrg ? (
                 <ul className="list-disc pl-4 space-y-1">
@@ -1748,8 +1920,11 @@ export default function MasterProductsPage() {
                   </>
                 )}
               </p>
+              </>
+              )}
             </div>
 
+            {importMode !== "tally" ? (
             <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed p-3">
               <div className="flex items-center gap-2 text-sm">
                 <Icons.FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
@@ -1801,6 +1976,7 @@ export default function MasterProductsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+            ) : null}
 
             <input
               ref={fileInputRef}
@@ -1835,12 +2011,16 @@ export default function MasterProductsPage() {
                 <div className="flex flex-col items-center gap-1.5">
                   <Icons.UploadCloud className="h-8 w-8 text-muted-foreground" />
                   <p className="text-sm font-medium text-foreground">Drag &amp; drop your file here</p>
-                  <p className="text-xs text-muted-foreground">or click to browse · CSV, XLSX or XLS</p>
+                  <p className="text-xs text-muted-foreground">
+                    {importMode === "tally" ? "or click to browse · Tally .XLS or .XLSX" : "or click to browse · CSV, XLSX or XLS"}
+                  </p>
                 </div>
               )}
             </button>
             <p className="text-xs text-muted-foreground text-center">
-              Excel files are converted automatically — no need to save as CSV first.
+              {importMode === "tally"
+                ? "Uses the Stock Group Summary sheet as-is (name + size + pack type, barcode, carton)."
+                : "Excel files are converted automatically — no need to save as CSV first."}
             </p>
 
             {importing && (
@@ -1862,6 +2042,137 @@ export default function MasterProductsPage() {
               </div>
             )}
 
+            {tallyPreview && (
+              <div className="space-y-2 rounded-lg border p-3 text-sm">
+                <p className="font-medium text-foreground">
+                  Preview: {tallyPreview.skuCount} SKUs · {tallyPreview.wouldCreate} new · {tallyPreview.wouldUpdate} existing
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {tallyPreview.categories.length} categor{tallyPreview.categories.length === 1 ? "y" : "ies"} / subcategor{tallyPreview.categories.length === 1 ? "y" : "ies"}
+                  {tallyPreview.categories.length > 0
+                    ? `: ${tallyPreview.categories
+                        .slice(0, 12)
+                        .map((c) => (c.parent ? `${c.parent} › ${c.name}` : c.name))
+                        .join(", ")}${tallyPreview.categories.length > 12 ? "…" : ""}`
+                    : ""}
+                </p>
+                {(tallyPreview.previewSkus?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">Extracted barcode + size</p>
+                    <ul className="max-h-40 overflow-y-auto text-xs text-muted-foreground space-y-1">
+                      {tallyPreview.previewSkus!.slice(0, 40).map((s) => (
+                        <li key={s.row}>
+                          {s.path} · {s.name}
+                          {s.barcode ? ` · ${s.barcode}` : " · no barcode"}
+                          {s.size ? ` · ${s.size}` : " · no size"}
+                        </li>
+                      ))}
+                      {tallyPreview.previewSkus!.length > 40 ? (
+                        <li>…and {tallyPreview.previewSkus!.length - 40} more</li>
+                      ) : null}
+                    </ul>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={gaiaReviewing || importing}
+                    onClick={() => void handleGaiaReview()}
+                  >
+                    {gaiaReviewing ? "Gaia reviewing…" : "Ask Gaia to review"}
+                  </Button>
+                  {tallyExcludeRows.length > 0 ? (
+                    <span className="text-xs text-muted-foreground">
+                      {tallyExcludeRows.length} row{tallyExcludeRows.length === 1 ? "" : "s"} excluded
+                    </span>
+                  ) : null}
+                </div>
+                {(tallyPreview.askGaia?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <p className="font-medium text-amber-600">
+                      {tallyPreview.askGaia!.length} ambiguous — tick to skip
+                    </p>
+                    <ul className="max-h-40 overflow-y-auto space-y-1">
+                      {tallyPreview.askGaia!.slice(0, 60).map((s) => {
+                        const gaiaNote = gaiaExcludeNotes.find((n) => n.row === s.row);
+                        return (
+                          <li key={s.row} className="flex items-start gap-2 text-xs">
+                            <Checkbox
+                              checked={tallyExcludeRows.includes(s.row)}
+                              onCheckedChange={(v) => toggleTallyExclude(s.row, v === true)}
+                              className="mt-0.5"
+                            />
+                            <span>
+                              Row {s.row}: {s.name}
+                              {s.path ? ` · ${s.path}` : ""}
+                              {s.reviewReason ? ` — ${s.reviewReason}` : ""}
+                              {gaiaNote ? ` — Gaia: ${gaiaNote.reason}` : ""}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+                {gaiaExcludeNotes.filter((n) => !(tallyPreview.askGaia ?? []).some((s) => s.row === n.row)).length > 0 && (
+                  <ul className="max-h-24 overflow-y-auto space-y-1 text-xs text-muted-foreground">
+                    {gaiaExcludeNotes
+                      .filter((n) => !(tallyPreview.askGaia ?? []).some((s) => s.row === n.row))
+                      .map((n) => (
+                        <li key={n.row} className="flex items-start gap-2">
+                          <Checkbox
+                            checked={tallyExcludeRows.includes(n.row)}
+                            onCheckedChange={(v) => toggleTallyExclude(n.row, v === true)}
+                            className="mt-0.5"
+                          />
+                          <span>Row {n.row}: Gaia — {n.reason}</span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+                {(tallyPreview.missingBarcode?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-amber-600">
+                        {tallyPreview.missingBarcode!.length} without barcode (will still import)
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => downloadMissingBarcodeCsv(tallyPreview.missingBarcode!)}
+                      >
+                        Download list
+                      </Button>
+                    </div>
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground max-h-40 overflow-y-auto">
+                      {tallyPreview.missingBarcode!.slice(0, 80).map((s, idx) => (
+                        <li key={idx}>
+                          Row {s.row}: {s.name}
+                          {s.subcategory || s.category ? ` · ${s.subcategory ? `${s.category} › ${s.subcategory}` : s.category}` : ""}
+                        </li>
+                      ))}
+                      {tallyPreview.missingBarcode!.length > 80 ? (
+                        <li>…and {tallyPreview.missingBarcode!.length - 80} more in the CSV</li>
+                      ) : null}
+                    </ul>
+                  </div>
+                )}
+                {(tallyPreview.skipped?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <p className="font-medium text-red-600">{tallyPreview.skipped!.length} will be skipped</p>
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground max-h-40 overflow-y-auto">
+                      {tallyPreview.skipped!.map((s, idx) => (
+                        <li key={idx}>Row {s.row}{s.code ? ` (${s.code})` : ""}: {s.reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             {importResult && (
               <div className="space-y-2 rounded-lg border p-3 text-sm">
                 <p className="font-medium text-foreground">
@@ -1873,6 +2184,31 @@ export default function MasterProductsPage() {
                   <p className="text-xs text-muted-foreground">
                     Created {importResult.categoriesCreated!.length} new categor{importResult.categoriesCreated!.length === 1 ? "y" : "ies"}: {importResult.categoriesCreated!.join(", ")}
                   </p>
+                )}
+                {(importResult.missingBarcode?.length ?? 0) > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-amber-600">
+                        {importResult.missingBarcode!.length} imported without barcode
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => downloadMissingBarcodeCsv(importResult.missingBarcode!)}
+                      >
+                        Download list
+                      </Button>
+                    </div>
+                    <ul className="list-disc pl-4 text-xs text-muted-foreground max-h-40 overflow-y-auto">
+                      {importResult.missingBarcode!.slice(0, 80).map((s, idx) => (
+                        <li key={idx}>
+                          Row {s.row}: {s.name}
+                          {s.subcategory || s.category ? ` · ${s.subcategory ? `${s.category} › ${s.subcategory}` : s.category}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
                 {(importResult.skipped?.length ?? 0) > 0 && (
                   <div className="space-y-1">
@@ -1904,12 +2240,24 @@ export default function MasterProductsPage() {
               onClick={() => {
                 setImportFile(null);
                 setImportResult(null);
+                setTallyPreview(null);
+                setTallyExcludeRows([]);
+                setGaiaExcludeNotes([]);
                 setImportProgress(null);
                 setImportOpen(false);
               }}
             >
               {importResult ? "Close" : "Cancel"}
             </Button>
+            {importMode === "tally" ? (
+              <Button
+                variant="outline"
+                disabled={!importFile || importing}
+                onClick={() => void handleTallyPreview()}
+              >
+                {importing && !tallyPreview ? "Previewing..." : "Preview"}
+              </Button>
+            ) : null}
             <Button disabled={!importFile || importing} onClick={() => void handleImport()}>
               {importing
                 ? importProgress && importProgress.total > 0

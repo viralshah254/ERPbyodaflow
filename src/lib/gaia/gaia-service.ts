@@ -119,3 +119,42 @@ export function clearGaiaSessionCache(): void {
   cachedGaiaToken = null;
   cachedGaiaExpiry = 0;
 }
+
+export type GaiaImportExclude = { row: number; reason: string };
+
+export async function reviewTallyImportWithGaia(
+  candidates: Array<{ row: number; path: string; name: string; barcode?: string; size?: string; reviewReason?: string }>
+): Promise<GaiaImportExclude[]> {
+  if (candidates.length === 0) return [];
+  const compact = candidates.slice(0, 80).map((c) => ({
+    row: c.row,
+    path: c.path,
+    name: c.name,
+    barcode: c.barcode ?? "",
+    size: c.size ?? "",
+    hint: c.reviewReason ?? "",
+  }));
+  const reply = await sendGaiaMessage(
+    [
+      "You are reviewing a Tally stock-group import for Top Food EA Ltd.",
+      "Titles are Finished Goods, Packaging Material, Raw Material. Categories are brands/types like CANDY KENYA or CARTON.",
+      "Suggest which rows should NOT become products (junk groups, rollups, samples, discontinued leftovers, group names without a SKU).",
+      "Reply with JSON only: {\"exclude\":[{\"row\":123,\"reason\":\"one line\"}]}",
+      "Candidates:",
+      JSON.stringify(compact),
+    ].join("\n")
+  );
+  const match = reply.match(/\{[\s\S]*\}/);
+  if (!match) return [];
+  try {
+    const parsed = JSON.parse(match[0]) as { exclude?: Array<{ row?: unknown; reason?: unknown }> };
+    return (parsed.exclude ?? [])
+      .map((item) => ({
+        row: Number(item.row),
+        reason: String(item.reason ?? "Gaia suggested skip").trim(),
+      }))
+      .filter((item) => Number.isFinite(item.row) && item.row > 0);
+  } catch {
+    return [];
+  }
+}

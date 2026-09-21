@@ -17,8 +17,11 @@ import * as Icons from "lucide-react";
 
 export type SupplierPaymentMethod = "BANK" | "MPESA" | "PAYBILL" | "TILL";
 
+export type SupplierCategoryOption = { id: string; name: string };
+
 export type SupplierMasterFormValues = {
   coolcatchSupplierKind: CoolcatchSupplierKind;
+  supplierCategoryId: string;
   code: string;
   onHold: boolean;
   notes: string;
@@ -46,6 +49,7 @@ export type SupplierMasterFormValues = {
 
 export const emptySupplierMasterForm = (defaultCurrency = "KES"): SupplierMasterFormValues => ({
   coolcatchSupplierKind: "FARM",
+  supplierCategoryId: "",
   code: "",
   onHold: false,
   notes: "",
@@ -85,6 +89,7 @@ type SupplierMasterFormFieldsProps = {
   /** When editing an existing supplier — enables View/Download on stored documents. */
   partyId?: string | null;
   showPaymentFields?: boolean;
+  categories?: SupplierCategoryOption[];
 };
 
 export function SupplierMasterFormFields({
@@ -102,6 +107,7 @@ export function SupplierMasterFormFields({
   companyRegExistingUrl,
   partyId,
   showPaymentFields = true,
+  categories = [],
 }: SupplierMasterFormFieldsProps) {
   const pinCertInputRef = React.useRef<HTMLInputElement>(null);
   const companyRegInputRef = React.useRef<HTMLInputElement>(null);
@@ -204,6 +210,28 @@ export function SupplierMasterFormFields({
         />
         {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
       </div>
+
+      {categories.length ? (
+        <div className="space-y-2">
+          <Label>Supplier category</Label>
+          <Select
+            value={form.supplierCategoryId || "__none__"}
+            onValueChange={(value) => patch({ supplierCategoryId: value === "__none__" ? "" : value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label>Supplier code</Label>
@@ -756,6 +784,7 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
     lastKnownLatitude: form.latitude,
     lastKnownLongitude: form.longitude,
     supplierType: form.coolcatchSupplierKind === "FARM" ? ("RAW_MATERIAL" as const) : ("OTHER" as const),
+    supplierCategoryId: form.supplierCategoryId.trim() || undefined,
     status: "ACTIVE" as const,
   };
 }

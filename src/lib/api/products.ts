@@ -89,6 +89,11 @@ export type FetchProductsOptions = {
   includeStock?: boolean;
   /** Restrict stock aggregation to this fulfilment warehouse (with includeStock). */
   warehouseId?: string;
+  sortBy?: "name" | "sku" | "barcode" | "size";
+  sortDir?: "asc" | "desc";
+  size?: string;
+  pricedOnPriceListId?: string;
+  pricedStatus?: "priced" | "unpriced";
 };
 
 export type FetchProductsPageResult = {
@@ -113,6 +118,11 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.stockBand) params.set("stockBand", opts.stockBand);
   if (opts.includeStock !== undefined) params.set("includeStock", opts.includeStock ? "true" : "false");
   if (opts.warehouseId?.trim()) params.set("warehouseId", opts.warehouseId.trim());
+  if (opts.sortBy) params.set("sortBy", opts.sortBy);
+  if (opts.sortDir) params.set("sortDir", opts.sortDir);
+  if (opts.size?.trim()) params.set("size", opts.size.trim());
+  if (opts.pricedOnPriceListId?.trim()) params.set("pricedOnPriceListId", opts.pricedOnPriceListId.trim());
+  if (opts.pricedStatus) params.set("pricedStatus", opts.pricedStatus);
   const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 25;
   params.set("limit", String(lim));
   if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);

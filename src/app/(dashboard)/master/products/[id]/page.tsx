@@ -55,6 +55,8 @@ import {
   normalizeCategoryCode,
   updateProductCategoryApi,
   deleteProductCategoryApi,
+  categoryPathLabel,
+  type ItemCategoryRow,
 } from "@/lib/api/product-categories";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
@@ -222,7 +224,7 @@ export default function ProductDetailPage() {
   const [sizeUomDraft, setSizeUomDraft] = React.useState("g");
   const [grossWeightDraft, setGrossWeightDraft] = React.useState("");
   const [grossVolumeDraft, setGrossVolumeDraft] = React.useState("");
-  const [categoryList, setCategoryList] = React.useState<{ id: string; name: string }[]>([]);
+  const [categoryList, setCategoryList] = React.useState<ItemCategoryRow[]>([]);
   const [familyOptions, setFamilyOptions] = React.useState<string[]>([]);
   const [savingAll, setSavingAll] = React.useState(false);
 
@@ -321,7 +323,7 @@ export default function ProductDetailPage() {
   const loadCategories = React.useCallback(async () => {
     try {
       const list = await fetchProductCategoriesApi();
-      setCategoryList(list.filter((c) => c.isActive).map((c) => ({ id: c.id, name: c.name })));
+      setCategoryList(list.filter((c) => c.isActive));
     } catch {
       setCategoryList([]);
     }
@@ -535,7 +537,8 @@ export default function ProductDetailPage() {
       const merged: Record<string, unknown> = { ...patch };
       if (patch.baseUom !== undefined) merged.unit = patch.baseUom;
       if (patch.category !== undefined) {
-        merged.categoryName = categoryList.find((c) => c.id === patch.category)?.name;
+        const cat = categoryList.find((c) => c.id === patch.category);
+        merged.categoryName = cat ? categoryPathLabel(cat, categoryList) : undefined;
       }
       setProduct((p) => (p ? { ...p, ...merged } : p));
       toast.success("Changes saved.");
@@ -560,7 +563,9 @@ export default function ProductDetailPage() {
         `CAT-${Date.now().toString().slice(-4)}`;
       const { id: newId } = await createProductCategoryApi({ code, name: trimmed });
       setCategoryList((prev) =>
-        [...prev, { id: newId, name: trimmed }].sort((a, b) => a.name.localeCompare(b.name))
+        [...prev, { id: newId, name: trimmed, code, isActive: true }].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
       );
       setCategoryDraft(newId);
       toast.success(`Category “${trimmed}” created.`);
@@ -577,7 +582,13 @@ export default function ProductDetailPage() {
       setCategoryList((prev) =>
         prev.map((c) => (c.id === catId ? { ...c, name: trimmed } : c)).sort((a, b) => a.name.localeCompare(b.name))
       );
-      setProduct((p) => (p && p.category === catId ? { ...p, categoryName: trimmed } : p));
+      setProduct((p) => {
+        if (!p || p.category !== catId) return p;
+        const next = { ...p, categoryName: trimmed };
+        const cat = categoryList.find((c) => c.id === catId);
+        if (cat) next.categoryName = categoryPathLabel({ ...cat, name: trimmed }, categoryList);
+        return next;
+      });
       toast.success("Category renamed.");
     } catch (err) {
       toast.error((err as Error).message);
@@ -999,7 +1010,10 @@ export default function ProductDetailPage() {
                       <Combobox
                         value={categoryDraft}
                         onChange={setCategoryDraft}
-                        options={categoryList.map((c) => ({ value: c.id, label: c.name }))}
+                        options={categoryList.map((c) => ({
+                          value: c.id,
+                          label: categoryPathLabel(c, categoryList),
+                        }))}
                         placeholder="Select a category"
                         searchPlaceholder="Search or create a category…"
                         emptyMessage="No categories yet."

@@ -22,6 +22,7 @@ type BackendParty = {
   sfaSegment?: SfaSegment;
   parentPartyId?: string;
   customerCategoryId?: string;
+  supplierCategoryId?: string;
   email?: string;
   phone?: string;
   taxId?: string;
@@ -78,6 +79,7 @@ export type PartyPayload = {
   parentPartyId?: string;
   supplierType?: SupplierType;
   customerCategoryId?: string;
+  supplierCategoryId?: string;
   email?: string;
   phone?: string;
   taxId?: string;
@@ -122,6 +124,7 @@ export type PartyPayload = {
 
 export type PartyDetail = PartyRow & {
   customerCategoryId?: string;
+  supplierCategoryId?: string;
   taxId?: string;
   creditLimit?: number;
   creditLimitAmount?: number;
@@ -296,6 +299,7 @@ function mapParty(item: BackendParty): PartyRow {
     contactPersonFirstName: item.contactPersonFirstName,
     contactPersonLastName: item.contactPersonLastName,
     customerCategoryId: item.customerCategoryId,
+    supplierCategoryId: item.supplierCategoryId,
     email: item.email,
     phone: item.phone,
     taxId: item.taxId,
@@ -358,6 +362,7 @@ type PartyListFilters = {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
+  supplierCategoryId?: string;
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
   /** Modern-trade branches under this supermarket HQ. */
@@ -430,6 +435,7 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     contactPersonFirstName: payload.contactPersonFirstName,
     contactPersonLastName: payload.contactPersonLastName,
     customerCategoryId: payload.customerCategoryId,
+    supplierCategoryId: payload.supplierCategoryId,
     email: payload.email,
     phone: payload.phone,
     taxId: payload.taxId,
@@ -540,6 +546,7 @@ export async function searchPartyLookupOptionsApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
+  supplierCategoryId?: string;
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
   parentPartyId?: string;

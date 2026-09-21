@@ -257,6 +257,13 @@ export interface ImportRowIssue {
   reason: string;
 }
 
+export interface TallyMissingBarcodeRow {
+  row: number;
+  name: string;
+  category: string;
+  subcategory?: string;
+}
+
 export interface ImportProductsResult {
   imported: number;
   created?: number;
@@ -265,6 +272,7 @@ export interface ImportProductsResult {
   warnings?: ImportRowIssue[];
   /** Names of categories auto-created from the file during import. */
   categoriesCreated?: string[];
+  missingBarcode?: TallyMissingBarcodeRow[];
 }
 
 export type ImportProductsProgress = {
@@ -453,6 +461,61 @@ export async function importProductsApi(
 
   onProgress?.({ phase: "done", done: total, total });
   return merged;
+}
+
+export interface TallyPreviewSku {
+  row: number;
+  path: string;
+  name: string;
+  barcode?: string;
+  size?: string;
+  productType: "FINISHED" | "RAW";
+  reviewBucket: "import" | "askGaia";
+  reviewReason?: string;
+}
+
+export interface TallyStockGroupPreview {
+  preview: true;
+  skuCount: number;
+  wouldCreate: number;
+  wouldUpdate: number;
+  categories: Array<{ name: string; parent?: string }>;
+  skipped?: ImportRowIssue[];
+  warnings?: ImportRowIssue[];
+  missingBarcode?: TallyMissingBarcodeRow[];
+  askGaia?: TallyPreviewSku[];
+  previewSkus?: TallyPreviewSku[];
+}
+
+export interface TallyStockGroupImportResult {
+  imported: number;
+  created: number;
+  updated: number;
+  skipped?: ImportRowIssue[];
+  warnings?: ImportRowIssue[];
+  missingBarcode?: TallyMissingBarcodeRow[];
+  categoriesUpserted?: number;
+  categoriesCreated?: string[];
+}
+
+export async function previewTallyStockGroupApi(file: File): Promise<TallyStockGroupPreview> {
+  requireLiveApi("Tally stock group preview");
+  const formData = new FormData();
+  formData.append("file", file);
+  return uploadFormData<TallyStockGroupPreview>("/api/import/products/tally-stock-group?preview=1", formData);
+}
+
+export async function importTallyStockGroupApi(
+  file: File,
+  opts?: { excludeRows?: number[] }
+): Promise<TallyStockGroupImportResult> {
+  requireLiveApi("Tally stock group import");
+  const formData = new FormData();
+  formData.append("file", file);
+  if (opts?.excludeRows?.length) {
+    formData.append("excludeRows", JSON.stringify(opts.excludeRows));
+  }
+  return uploadFormData<TallyStockGroupImportResult>("/api/import/products/tally-stock-group", formData);
 }
 
 export interface ImportPriceListsResult {
