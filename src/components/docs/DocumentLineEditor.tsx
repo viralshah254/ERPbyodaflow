@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
@@ -14,15 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import {
   listProducts,
@@ -41,31 +31,24 @@ import {
   resolveUnitsPerPiece,
   type FmcgCatalogItem,
 } from "@/lib/fmcg/pricing";
-import { DocumentProductPickerSheet } from "@/components/docs/DocumentProductPickerSheet";
+import { DocumentProductPickerSheet, type CatalogAddItem } from "@/components/docs/DocumentProductPickerSheet";
+import { AddPackUomDialog } from "@/components/docs/AddPackUomDialog";
+import { cn } from "@/lib/utils";
 import {
   productFamilyKey,
   productFamilyLabel,
   compareProductFamilyKeys,
-  lineProductFamilyKey,
   productFamilySortRank,
 } from "@/lib/products/product-family";
 import {
   productCategoryKey,
   productCategoryLabelFromKey,
-  lineProductCategoryKey,
   compareProductCategoryKeys,
 } from "@/lib/products/product-category-group";
 import { fetchProductVariantsApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
 import { resolveFmcgProductSizeLabel } from "@/lib/products/fmcg-size";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { formatMoney } from "@/lib/money";
-import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export interface DocumentLine {
@@ -159,55 +142,13 @@ interface DocumentLineEditorProps {
   fmcgOrg?: boolean;
   /** Load packaging / pricing for products just added from the picker. */
   onProductsAdded?: (productIds: string[]) => void;
+  /** FMCG: a pack was saved from the line UOM menu. Replace that product's packaging. */
+  onPackagingUpdated?: (productId: string, items: ProductPackaging[]) => void;
   /** Fires when the sellable/purchasable product catalog finishes loading (or is not needed). */
   onCatalogReadyChange?: (ready: boolean) => void;
 }
 
 const defaultPriceListId = "pl-retail";
-
-function fmcgSizeBadges(sizeLabel: string | undefined): AsyncSearchableSelectOption["badges"] {
-  return sizeLabel ? [{ label: sizeLabel, variant: "secondary" }] : undefined;
-}
-
-function productSkuSelectOption(
-  p: ProductRow,
-  fmcgOrg: boolean,
-  variantsByProductId?: Record<string, ProductVariant[]>
-): AsyncSearchableSelectOption {
-  if (fmcgOrg) {
-    const sizeLabel = resolveFmcgProductSizeLabel(p, variantsByProductId?.[p.id]);
-    return {
-      id: p.id,
-      label: p.name,
-      badges: fmcgSizeBadges(sizeLabel),
-    };
-  }
-  return {
-    id: p.id,
-    label: `${p.sku} — ${p.name}`,
-    description: (p.categoryName ?? p.category)?.trim() || undefined,
-  };
-}
-
-function lineSkuSelectedOption(
-  line: DocumentLine,
-  product: ProductRow | undefined,
-  fmcgOrg: boolean,
-  variantsByProductId?: Record<string, ProductVariant[]>
-): AsyncSearchableSelectOption {
-  if (fmcgOrg) {
-    const sizeLabel = resolveFmcgProductSizeLabel(product, variantsByProductId?.[line.productId]);
-    return {
-      id: line.productId,
-      label: line.name || product?.name || line.sku,
-      badges: fmcgSizeBadges(sizeLabel),
-    };
-  }
-  return {
-    id: line.productId,
-    label: `${line.sku} — ${line.name}`,
-  };
-}
 
 function mergeProductIntoCache(product: ProductRow): void {
   const existing = listProducts();
@@ -230,6 +171,17 @@ function productMatchesLineSearch(p: ProductRow, query: string): boolean {
     .join(" ")
     .toLowerCase();
   return tokens.every((t) => hay.includes(t));
+}
+
+/** Trailing whole number, or "x 24", is a quantity when the rest still matches products. */
+function splitTrailingQty(raw: string): { text: string; stripped: string | null; qty: number | null } {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(.*?)(?:\s+x)?\s+(\d+)$/i);
+  if (!match) return { text: trimmed, qty: null, stripped: null };
+  const stripped = match[1].trim();
+  const qty = Number(match[2]);
+  if (!stripped || !Number.isInteger(qty) || qty < 1) return { text: trimmed, qty: null, stripped: null };
+  return { text: trimmed, stripped, qty };
 }
 
 /** Packs that are actually configured (pieces-per-pack > 1). */
@@ -373,11 +325,23 @@ export function DocumentLineEditor({
   fmcgCatalogByProductId,
   fmcgOrg = false,
   onProductsAdded,
+  onPackagingUpdated,
   onCatalogReadyChange,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
+  const editorRef = React.useRef<HTMLDivElement | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const setProductRef = React.useRef<(lineId: string, productId: string) => void>(() => {});
   const [productPickerOpen, setProductPickerOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [highlightIndex, setHighlightIndex] = React.useState(0);
+  const [categoryChip, setCategoryChip] = React.useState<string | null>(null);
+  const [swapLineId, setSwapLineId] = React.useState<string | null>(null);
+  const [pendingQtyFocusId, setPendingQtyFocusId] = React.useState<string | null>(null);
+  const [expandedLineIds, setExpandedLineIds] = React.useState<Record<string, boolean>>({});
+  const [remoteMatches, setRemoteMatches] = React.useState<ProductRow[]>([]);
 
   /** In-progress qty/price/discount text while typing (avoids coercing `3.` → 3 mid-entry). */
   const [lineFieldDrafts, setLineFieldDrafts] = React.useState<
@@ -508,57 +472,6 @@ export function DocumentLineEditor({
     onCatalogReadyChange?.(catalogReady);
   }, [productFilter, filteredProducts, onCatalogReadyChange]);
 
-  const loadSkuOptionsForLine = React.useCallback(
-    async (line: DocumentLine, query: string): Promise<AsyncSearchableSelectOption[]> => {
-      const groupKey = fmcgOrg
-        ? lineProductCategoryKey(products, line.productId)
-        : lineProductFamilyKey(products, line.productId);
-      const q = query.trim();
-      const mapRows = (rows: ProductRow[]) => {
-        const filtered = rows.filter((p) => {
-          const inGroup = fmcgOrg
-            ? productCategoryKey(p) === groupKey
-            : productFamilyKey(p) === groupKey;
-          return inGroup && productMatchesLineSearch(p, query);
-        });
-        const sorted =
-          q.length === 0
-            ? [...filtered].sort((a, b) => {
-                if (mode === "purchasing") {
-                  const aS = a.name.toLowerCase().includes("sourcing") ? 0 : 1;
-                  const bS = b.name.toLowerCase().includes("sourcing") ? 0 : 1;
-                  if (aS !== bS) return aS - bS;
-                  const rA = a.productType === "RAW" ? 0 : 1;
-                  const rB = b.productType === "RAW" ? 0 : 1;
-                  if (rA !== rB) return rA - rB;
-                }
-                if (!fmcgOrg) {
-                  const famCmp = productFamilySortRank(a.productFamily) - productFamilySortRank(b.productFamily);
-                  if (famCmp !== 0) return famCmp;
-                }
-                return a.sku.localeCompare(b.sku);
-              }).slice(0, 100)
-            : [...filtered].sort((a, b) => a.sku.localeCompare(b.sku));
-        return sorted.map((p) => productSkuSelectOption(p, fmcgOrg, variantsByProductId));
-      };
-      if (isApiConfigured() && productFilter && productFilter !== "all") {
-        try {
-          const rows = await fetchProductsApi({
-            purchasable: productFilter === "purchasable",
-            sellable: productFilter === "sellable",
-            ...(q ? { search: q } : {}),
-            limit: 50,
-            includeStock: false,
-          });
-          return mapRows(rows);
-        } catch {
-          return mapRows(products);
-        }
-      }
-      return mapRows(products);
-    },
-    [products, productFilter, fmcgOrg, mode, variantsByProductId]
-  );
   /** CoolCatch: product family. FMCG: product category. */
   const groupOptions = React.useMemo(() => {
     const keys = new Set<string>();
@@ -666,44 +579,108 @@ export function DocumentLineEditor({
   const resolvePriceRef = React.useRef(resolvePrice);
   resolvePriceRef.current = resolvePrice;
 
-  const addProductsAsLines = React.useCallback(
-    (picked: ProductRow[]) => {
-      if (!picked.length) return;
-      // Keep category / SKU dropdowns aware of products loaded via search pagination.
+  const commitProducts = React.useCallback(
+    (items: CatalogAddItem[], replaceLineId?: string, focusQty = true) => {
+      if (!items.length) return;
+      if (replaceLineId && items[0]) {
+        const cached = listProducts();
+        const byId = new Map(cached.map((p) => [p.id, p]));
+        byId.set(items[0].product.id, items[0].product);
+        setProductsCache([...byId.values()]);
+        setProductRef.current(replaceLineId, items[0].product.id);
+        if (focusQty) setPendingQtyFocusId(replaceLineId);
+        setSwapLineId(null);
+        return;
+      }
+
       const cached = listProducts();
       const byId = new Map(cached.map((p) => [p.id, p]));
-      for (const p of picked) byId.set(p.id, p);
+      for (const item of items) byId.set(item.product.id, item.product);
       setProductsCache([...byId.values()]);
 
       const stamp = Date.now();
-      const newLines: DocumentLine[] = picked.map((p, i) => {
-        ensureVariantsLoaded(p.id);
-        const packaging = packagingByProductId?.[p.id] ?? [];
-        const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
-        const baseQty = computeBaseQty(p.id, uom, 1);
-        const { price, reason, discount } = resolvePrice(p.id, 1, uom);
-        const newLine: DocumentLine = {
-          id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
-          productId: p.id,
-          sku: p.sku,
-          name: p.name,
-          uom,
-          qty: 1,
-          baseQty,
-          price,
-          priceReason: reason,
-          ...(discount != null && discount > 0 ? { discount } : {}),
-          amount: price,
-          taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
-        };
-        const taxed = applyLineTax(newLine, taxCodes, linesAreTaxInclusive);
-        return { ...newLine, tax: taxed.tax, amount: taxed.amount };
+      const created: DocumentLine[] = [];
+      const bumpedIds: string[] = [];
+      let focusId: string | null = null;
+      onLinesChange((prev) => {
+        const next = [...prev];
+        items.forEach((item, i) => {
+          const q = Number.isFinite(item.qty) && item.qty > 0 ? item.qty : 1;
+          if (!item.asNewLine) {
+            const idx = next.findIndex((l) => l.productId === item.product.id);
+            if (idx >= 0) {
+              const line = next[idx]!;
+              const qty = line.qty + q;
+              const baseQty = computeBaseQty(line.productId, line.uom, qty);
+              let merged: DocumentLine;
+              if (useCostPricing || isPreservedCommercialLine(line)) {
+                merged = { ...line, qty, baseQty, amount: qty * line.price };
+              } else {
+                const { price, reason, discount } = resolvePrice(line.productId, qty, line.uom, line.discount);
+                merged = {
+                  ...line,
+                  qty,
+                  baseQty,
+                  price,
+                  priceReason: reason,
+                  discount: discount != null && discount > 0 ? discount : undefined,
+                  amount: qty * price,
+                };
+              }
+              const taxed = applyLineTax(merged, taxCodes, linesAreTaxInclusive);
+              next[idx] = { ...merged, tax: taxed.tax, amount: taxed.amount };
+              bumpedIds.push(line.id);
+              focusId = line.id;
+              return;
+            }
+          }
+          const p = item.product;
+          ensureVariantsLoaded(p.id);
+          const packaging = packagingByProductId?.[p.id] ?? [];
+          const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
+          const baseQty = computeBaseQty(p.id, uom, q);
+          const { price, reason, discount } = resolvePrice(p.id, q, uom);
+          const draft: DocumentLine = {
+            id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+            productId: p.id,
+            sku: p.sku,
+            name: p.name,
+            uom,
+            qty: q,
+            baseQty,
+            price,
+            priceReason: reason,
+            ...(discount != null && discount > 0 ? { discount } : {}),
+            amount: q * price,
+            taxCodeId: p.defaultTaxCodeId ?? defaultLineTaxCodeId ?? undefined,
+          };
+          const taxed = applyLineTax(draft, taxCodes, linesAreTaxInclusive);
+          const newLine = { ...draft, tax: taxed.tax, amount: taxed.amount };
+          next.push(newLine);
+          created.push(newLine);
+          focusId = newLine.id;
+        });
+        return next;
       });
-      onLinesChange((prev) => [...prev, ...newLines]);
-      onProductsAdded?.(picked.map((p) => p.id));
+
+      if (bumpedIds.length) {
+        setLineFieldDrafts((prev) => {
+          const copy = { ...prev };
+          for (const id of bumpedIds) {
+            const row = copy[id];
+            if (!row) continue;
+            const { qty: _qty, ...rest } = row;
+            if (Object.keys(rest).length === 0) delete copy[id];
+            else copy[id] = rest;
+          }
+          return copy;
+        });
+      }
+      if (focusId && focusQty) setPendingQtyFocusId(focusId);
+      if (created.length) onProductsAdded?.(created.map((l) => l.productId));
 
       if (isApiConfigured()) {
-        for (const newLine of newLines) {
+        for (const newLine of created) {
           void fetchProductApi(newLine.productId)
             .then((full) => {
               if (!full?.id) return;
@@ -711,7 +688,7 @@ export function DocumentLineEditor({
                 const idx = prev.findIndex((l) => l.id === newLine.id);
                 if (idx < 0) return prev;
                 const line = prev[idx];
-                if (line.productId !== full.id) return prev;
+                if (!line || line.productId !== full.id) return prev;
                 const nextTax =
                   full.defaultTaxCodeId ?? line.taxCodeId ?? defaultLineTaxCodeId ?? undefined;
                 if (nextTax === line.taxCodeId) return prev;
@@ -727,6 +704,7 @@ export function DocumentLineEditor({
       }
     },
     [
+      computeBaseQty,
       defaultLineTaxCodeId,
       ensureVariantsLoaded,
       fmcgOrg,
@@ -737,6 +715,7 @@ export function DocumentLineEditor({
       packagingByProductId,
       resolvePrice,
       taxCodes,
+      useCostPricing,
     ]
   );
 
@@ -942,34 +921,7 @@ export function DocumentLineEditor({
         .catch(() => {});
     }
   };
-
-  const setLineGroup = (lineId: string, newKey: string) => {
-    const line = linesRef.current.find((l) => l.id === lineId);
-    if (!line) return;
-    const candidates = products
-      .filter((p) => (fmcgOrg ? productCategoryKey(p) === newKey : productFamilyKey(p) === newKey))
-      .sort((a, b) => {
-        if (mode === "purchasing" && !fmcgOrg) {
-          const aS = a.name.toLowerCase().includes("sourcing") ? 0 : 1;
-          const bS = b.name.toLowerCase().includes("sourcing") ? 0 : 1;
-          if (aS !== bS) return aS - bS;
-          const rA = a.productType === "RAW" ? 0 : 1;
-          const rB = b.productType === "RAW" ? 0 : 1;
-          if (rA !== rB) return rA - rB;
-        }
-        return a.sku.localeCompare(b.sku);
-      });
-    if (candidates.length === 0) {
-      toast.error(fmcgOrg ? "No SKUs in this category." : "No SKUs in this product family.");
-      return;
-    }
-    const cur = products.find((p) => p.id === line.productId);
-    if (cur) {
-      const curKey = fmcgOrg ? productCategoryKey(cur) : productFamilyKey(cur);
-      if (curKey === newKey) return;
-    }
-    setProduct(lineId, candidates[0]!.id);
-  };
+  setProductRef.current = setProduct;
 
   const setVariant = (lineId: string, variantId: string) => {
     const line = lines.find((l) => l.id === lineId);
@@ -1110,18 +1062,8 @@ export function DocumentLineEditor({
   const totalTax = lines.reduce((s, l) => s + (l.tax ?? 0), 0);
   const total = lines.reduce((s, l) => s + l.amount, 0);
   // Sales docs: always show Disc% so draft invoices/SOs can edit offered discount.
-  const showDiscountCol = !useCostPricing;
+  const showDiscount = !useCostPricing;
 
-  const showVariantColumn = React.useMemo(
-    () =>
-      lines.some((l) => {
-        const v = variantsByProductId[l.productId];
-        return Boolean(v && v.length > 0);
-      }),
-    [lines, variantsByProductId]
-  );
-
-  // Eagerly load variants for all products already on existing lines
   React.useEffect(() => {
     lines.forEach((l) => ensureVariantsLoaded(l.productId));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1135,272 +1077,490 @@ export function DocumentLineEditor({
     productFilter && productFilter !== "all" && filteredProducts === null
   );
 
+  const productGroupKey = React.useCallback(
+    (p: ProductRow) => (fmcgOrg ? productCategoryKey(p) : productFamilyKey(p)),
+    [fmcgOrg]
+  );
+  const productGroupLabel = React.useCallback(
+    (key: string) => (fmcgOrg ? productCategoryLabelFromKey(key, products) : productFamilyLabel(key)),
+    [fmcgOrg, products]
+  );
+  const priceLabelFor = React.useCallback(
+    (p: ProductRow) => {
+      if (useCostPricing) return "Enter cost";
+      const uom = defaultLineUom(packagingByProductId?.[p.id] ?? [], mode, p, fmcgOrg);
+      const { price } = resolvePrice(p.id, 1, uom);
+      return formatMoney(price, currency);
+    },
+    [currency, fmcgOrg, mode, packagingByProductId, resolvePrice, useCostPricing]
+  );
+
+  const searchSplit = splitTrailingQty(searchQuery);
+  const inChip = React.useCallback(
+    (p: ProductRow) => !categoryChip || productGroupKey(p) === categoryChip,
+    [categoryChip, productGroupKey]
+  );
+  const strippedMatchesLocal = Boolean(
+    searchSplit.stripped &&
+      products.some((p) => inChip(p) && productMatchesLineSearch(p, searchSplit.stripped!))
+  );
+  const remoteSupportsQty = Boolean(
+    searchSplit.stripped &&
+      remoteMatches.some((p) => inChip(p) && productMatchesLineSearch(p, searchSplit.stripped!))
+  );
+  const useQtyFromSearch = strippedMatchesLocal || remoteSupportsQty;
+  const queryForList = useQtyFromSearch && searchSplit.stripped ? searchSplit.stripped : searchSplit.text;
+  const qtyForAdd = useQtyFromSearch ? searchSplit.qty : null;
+
+  React.useEffect(() => {
+    if (!searchOpen || !isApiConfigured() || !productFilter || productFilter === "all") {
+      setRemoteMatches([]);
+      return;
+    }
+    const queries = [searchSplit.text, searchSplit.stripped]
+      .map((q) => q?.trim() ?? "")
+      .filter((q, i, all) => q.length > 0 && all.indexOf(q) === i);
+    if (!queries.length) {
+      setRemoteMatches([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void Promise.all(
+        queries.map((search) =>
+          fetchProductsApi({
+            purchasable: productFilter === "purchasable" ? true : undefined,
+            sellable: productFilter === "sellable" ? true : undefined,
+            search,
+            limit: 30,
+            includeStock: false,
+          }).catch(() => [] as ProductRow[])
+        )
+      ).then((pages) => {
+        if (cancelled) return;
+        const byId = new Map<string, ProductRow>();
+        for (const page of pages) for (const row of page) byId.set(row.id, row);
+        setRemoteMatches([...byId.values()]);
+      });
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [productFilter, searchOpen, searchSplit.stripped, searchSplit.text]);
+
+  const searchResults = React.useMemo(() => {
+    const byId = new Map<string, ProductRow>();
+    for (const p of products) byId.set(p.id, p);
+    for (const p of remoteMatches) byId.set(p.id, p);
+    const q = queryForList.trim();
+    return [...byId.values()]
+      .filter((p) => inChip(p) && (!q || productMatchesLineSearch(p, q)))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, q ? 40 : 30);
+  }, [inChip, products, queryForList, remoteMatches]);
+
+  React.useEffect(() => {
+    setHighlightIndex(0);
+  }, [searchQuery, categoryChip]);
+
+  React.useEffect(() => {
+    if (!pendingQtyFocusId) return;
+    const id = pendingQtyFocusId;
+    const timer = window.setTimeout(() => {
+      const el = editorRef.current?.querySelector<HTMLInputElement>(
+        `[data-line-qty="${CSS.escape(id)}"]`
+      );
+      if (!el) return;
+      el.focus();
+      window.setTimeout(() => el.select(), 30);
+      el.closest("[data-line-row]")?.scrollIntoView({ block: "nearest" });
+      setPendingQtyFocusId(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [lines, pendingQtyFocusId]);
+
+  React.useEffect(() => {
+    if (!searchOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (editorRef.current?.querySelector("[data-line-composer]")?.contains(target)) return;
+      setSearchOpen(false);
+      setSwapLineId(null);
+    };
+    document.addEventListener("mousedown", onPointer);
+    return () => document.removeEventListener("mousedown", onPointer);
+  }, [searchOpen]);
+
+  const addFromSearch = (product: ProductRow, keepSearch: boolean) => {
+    const qty = qtyForAdd && qtyForAdd > 0 ? qtyForAdd : 1;
+    const replacing = swapLineId;
+    commitProducts([{ product, qty, asNewLine: false }], replacing ?? undefined, !keepSearch || Boolean(replacing));
+    setSearchQuery("");
+    setCategoryChip(null);
+    if (keepSearch && !replacing) {
+      setSearchOpen(true);
+      searchInputRef.current?.focus();
+    } else {
+      setSearchOpen(false);
+    }
+  };
+
+  const moveFieldFocus = (lineId: string, field: "qty" | "price", dir: -1 | 1) => {
+    const idx = lines.findIndex((l) => l.id === lineId);
+    const next = lines[idx + dir];
+    if (!next) return;
+    const el = editorRef.current?.querySelector<HTMLInputElement>(
+      `[data-line-id="${CSS.escape(next.id)}"][data-line-field="${field}"]`
+    );
+    if (!el) return;
+    el.focus();
+    window.setTimeout(() => el.select(), 30);
+  };
+
+  const onFieldKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    lineId: string,
+    field: "qty" | "price"
+  ) => {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      moveFieldFocus(lineId, field, event.key === "ArrowUp" ? -1 : 1);
+    }
+  };
+
+  const onEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || !event.shiftKey) return;
+    if (productPickerOpen) return;
+    if (document.querySelector("[data-radix-select-content]")) return;
+    event.preventDefault();
+    const target = event.target;
+    const inSearch = target === searchInputRef.current;
+    if (inSearch && searchOpen && searchResults[highlightIndex]) {
+      addFromSearch(searchResults[highlightIndex]!, true);
+      return;
+    }
+    if (target instanceof HTMLElement && target !== searchInputRef.current) target.blur();
+    setSearchOpen(true);
+    setSwapLineId(null);
+    searchInputRef.current?.focus();
+  };
+
+  const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSearchOpen(true);
+      setHighlightIndex((i) => Math.min(i + 1, Math.max(searchResults.length - 1, 0)));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSearchOpen(true);
+      setHighlightIndex((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (event.key === "Escape") {
+      setSearchOpen(false);
+      setSwapLineId(null);
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const product = searchResults[highlightIndex];
+      if (product) addFromSearch(product, false);
+    }
+  };
+
+  const showChips = searchOpen && !searchQuery.trim() && groupOptions.length > 0;
+  const swapLine = swapLineId ? lines.find((l) => l.id === swapLineId) : undefined;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Label>{lineItemsLabel}</Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setProductPickerOpen(true)}
-          disabled={productListLoading}
-          title={productListLoading ? "Loading product list…" : "Search and select products to add"}
-        >
-          <Icons.Plus className="mr-2 h-4 w-4" />
-          Add line
-        </Button>
+    <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
+      <Label>{lineItemsLabel}</Label>
+      <div data-line-composer className="relative space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={searchInputRef}
+              value={searchQuery}
+              disabled={productListLoading}
+              placeholder={productListLoading ? "Loading products…" : "Search name, SKU, or barcode"}
+              className="h-9 pl-9"
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchQuery(value);
+                if (!value.trim()) setCategoryChip(null);
+                setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={onSearchKeyDown}
+              aria-label="Search products to add"
+              aria-expanded={searchOpen}
+              aria-controls="line-product-results"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setProductPickerOpen(true)}
+            disabled={productListLoading}
+          >
+            Browse
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd> new line
+          <span className="mx-1.5">·</span>
+          Type a quantity, like seasoning 24
+        </p>
+        {swapLine ? (
+          <p className="text-xs text-muted-foreground">
+            Replacing {swapLine.name}. Pick a product, or press Escape to keep it.
+          </p>
+        ) : null}
+        {searchOpen ? (
+          <div
+            id="line-product-results"
+            className="max-h-80 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-sm"
+          >
+            {showChips ? (
+              <div className="flex flex-wrap gap-1.5 border-b p-2">
+                {groupOptions.map((key) => {
+                  const active = categoryChip === key;
+                  const label = productGroupLabel(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-xs",
+                        active
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border text-muted-foreground hover:bg-muted/60"
+                      )}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setCategoryChip(active ? null : key)}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {searchResults.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">No products match.</p>
+            ) : (
+              <ul>
+                {searchResults.map((p, index) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-start gap-3 px-3 py-2 text-left",
+                        index === highlightIndex ? "bg-muted" : "hover:bg-muted/60"
+                      )}
+                      onMouseEnter={() => setHighlightIndex(index)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => addFromSearch(p, false)}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium leading-snug">{p.name}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {[p.sku, p.size?.trim(), productGroupLabel(productGroupKey(p))]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          {qtyForAdd ? ` · Add at qty ${qtyForAdd}` : ""}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-sm tabular-nums">{priceLabelFor(p)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
       </div>
+
       <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
         productFilter={productFilter ?? (mode === "purchasing" ? "purchasable" : "sellable")}
         fmcgOrg={fmcgOrg}
-        onConfirm={addProductsAsLines}
+        products={products}
+        loading={productListLoading}
+        priceLabel={priceLabelFor}
+        groupKey={productGroupKey}
+        groupLabel={productGroupLabel}
+        groupOptions={groupOptions.map((key) => ({ key, label: productGroupLabel(key) }))}
+        existingProductIds={lines.map((l) => l.productId)}
+        onAddMany={(items) => commitProducts(items)}
       />
+
       {lines.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          {useCostPricing
-            ? `No lines yet. Use Add line to search and select products. Then set ${fmcgOrg ? "category" : "product family"} / SKU if needed, UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, and cost per unit.`
-            : `No lines yet. Use Add line to search and check products to add. Then set UOM, ${lineColumnLabels ? lineColumnLabels.qtyHeader.toLowerCase() : "qty"}, and confirm price (${fmcgOrg ? "from price tag" : "from price list"}).`}
-        </div>
+        <p className="text-sm text-muted-foreground">No lines yet. Search above to add the first product.</p>
       ) : (
-        <>
-          <div className="rounded-md border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[8rem] w-[12%]">{fmcgOrg ? "Category" : "Product"}</TableHead>
-                  <TableHead className="min-w-[8rem] sm:min-w-[11rem] w-[24%]">{fmcgOrg ? "Product" : "SKU"}</TableHead>
-                  {showVariantColumn && <TableHead className="min-w-[7rem]">Packaging variant</TableHead>}
-                  <TableHead>UOM</TableHead>
-                  <TableHead className="w-28">
-                    {lineColumnLabels ? (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-default">
-                              {lineColumnLabels.qtyHeader}
-                              <Icons.HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
-                            {lineColumnLabels.qtyTooltip}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      "Qty"
-                    )}
-                  </TableHead>
-                  <TableHead className="w-28">
-                    {lineColumnLabels ? (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-default">
-                              {lineColumnLabels.baseQtyHeader}
-                              <Icons.HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
-                            {lineColumnLabels.baseQtyTooltip}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      "Base qty"
-                    )}
-                  </TableHead>
-                  {!lineColumnLabels ? (
-                    <TableHead className="w-28">
-                      {fmcgOrg ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex items-center gap-1 cursor-default">
-                                Base price
-                                <Icons.HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[260px] text-xs leading-snug">
-                              Net unit price per piece (base UOM) for the selected pack UOM and discount.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        "Base price"
-                      )}
-                    </TableHead>
+        <div className="min-w-0 space-y-2">
+          <div className="min-w-0 overflow-hidden rounded-md border">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Product</th>
+                  <th className="w-[5.25rem] px-2 py-2 font-medium" title={lineColumnLabels?.qtyTooltip}>
+                    {lineColumnLabels?.qtyHeader ?? "Qty"}
+                  </th>
+                  {lineColumnLabels ? (
+                    <th className="w-[5.25rem] px-2 py-2 font-medium" title={lineColumnLabels.baseQtyTooltip}>
+                      {lineColumnLabels.baseQtyHeader}
+                    </th>
                   ) : null}
-                  <TableHead className="w-28">{useCostPricing ? "Cost / unit" : "Price"}</TableHead>
-                  {showDiscountCol ? (
-                    <TableHead className="w-20 whitespace-nowrap">Disc %</TableHead>
-                  ) : null}
-                  <TableHead>{useCostPricing ? "Source" : "Price reason"}</TableHead>
-                  {taxCodes.length > 0 && <TableHead className="w-36">Tax</TableHead>}
-                  {taxCodes.length > 0 && <TableHead className="w-28">Tax amount</TableHead>}
-                  <TableHead className="w-28">Total</TableHead>
-                  <TableHead className="w-12" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lines.map((l) => {
-                  const lineVariants = variantsByProductId[l.productId];
-                  return (
-                  <TableRow key={l.id}>
-                    <TableCell>
-                      <Select
-                        value={
-                          fmcgOrg
-                            ? lineProductCategoryKey(products, l.productId)
-                            : lineProductFamilyKey(products, l.productId)
+                  <th className="w-[6rem] px-2 py-2 font-medium">UOM</th>
+                  <th className="w-[7rem] px-2 py-2 font-medium">{useCostPricing ? "Cost" : "Price"}</th>
+                  <th className="w-[7.25rem] px-2 py-2 font-medium">Total</th>
+                  <th className="w-10 px-1 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+          {lines.map((l) => {
+            const product = products.find((p) => p.id === l.productId);
+            const taxCode = taxCodes.find((t) => t.id === l.taxCodeId);
+            const baseQtyShown = l.poQty != null ? l.poQty : l.baseQty;
+            const baseUnitPrice = computeBaseUnitPrice(l);
+            const lineVariants = variantsByProductId[l.productId] ?? [];
+            const expanded = Boolean(expandedLineIds[l.id]);
+            const taxRateLabel = taxCode ? `${taxCode.rate}%` : null;
+            const meta = [l.sku, taxRateLabel].filter(Boolean).join(" · ");
+            const colSpan = lineColumnLabels ? 7 : 6;
+            return (
+              <React.Fragment key={l.id}>
+              <tr data-line-row className="border-b align-middle">
+                  <td className="min-w-0 px-3 py-2">
+                    <div className="flex min-w-0 items-start gap-1">
+                      <button
+                        type="button"
+                        className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-expanded={expanded}
+                        aria-label={expanded ? `Hide details for ${l.name}` : `Show details for ${l.name}`}
+                        onClick={() =>
+                          setExpandedLineIds((prev) => ({ ...prev, [l.id]: !prev[l.id] }))
                         }
-                        onValueChange={(v) => setLineGroup(l.id, v)}
                       >
-                        <SelectTrigger className="w-[10rem] sm:w-[12rem]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {groupOptions.map((k) => (
-                            <SelectItem key={k} value={k}>
-                              {fmcgOrg
-                                ? productCategoryLabelFromKey(k, products)
-                                : productFamilyLabel(k)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="min-w-0 max-w-[min(100%,20rem)] w-full">
-                        <AsyncSearchableSelect
-                          value={l.productId}
-                          onValueChange={(v) => setProduct(l.id, v)}
-                          loadOptions={(q) => loadSkuOptionsForLine(l, q)}
-                          selectedOption={lineSkuSelectedOption(
-                            l,
-                            products.find((p) => p.id === l.productId),
-                            fmcgOrg,
-                            variantsByProductId
-                          )}
-                          placeholder={
-                            productListLoading ? "Loading products…" : fmcgOrg ? "Search product…" : "Search SKU…"
-                          }
-                          searchPlaceholder={
-                            fmcgOrg
-                              ? "Type SKU, barcode, name, category, or any words…"
-                              : "Type SKU, name, product family, or any words…"
-                          }
-                          emptyMessage={
-                            productListLoading
-                              ? "Loading products…"
-                              : fmcgOrg
-                                ? productFilter === "purchasable"
-                                  ? "No purchasable SKUs match in this category. Try another search."
-                                  : productFilter === "sellable"
-                                    ? "No sellable SKUs match in this category. Try another search."
-                                    : "No SKUs match in this category. Try different words."
-                                : productFilter === "purchasable"
-                                  ? "No purchasable SKUs match in this product family. Try another search."
-                                  : productFilter === "sellable"
-                                    ? "No sellable SKUs match in this product family. Try another search."
-                                    : "No SKUs match in this product family. Try different words."
-                          }
-                          minSearchLength={0}
-                          searchDebounceMs={150}
-                          wrapLabels
-                          disabled={productListLoading}
-                          listMaxHeightClassName="max-h-[min(28rem,55vh)]"
-                        />
+                        {expanded ? (
+                          <Icons.ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <Icons.ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          className="line-clamp-2 text-left text-sm font-medium leading-snug hover:underline"
+                          onClick={() => {
+                            setSwapLineId(l.id);
+                            setSearchQuery("");
+                            setSearchOpen(true);
+                            searchInputRef.current?.focus();
+                          }}
+                        >
+                          {l.name || product?.name || l.sku}
+                        </button>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
                       </div>
-                    </TableCell>
-                    {showVariantColumn && (
-                    <TableCell>
-                      {lineVariants && lineVariants.length > 0 ? (
-                        <Select value={l.variantId ?? "_none_"} onValueChange={(v) => setVariant(l.id, v)}>
-                          <SelectTrigger className="w-32">
-                            <SelectValue placeholder="No variant" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="_none_">—</SelectItem>
-                            {lineVariants.filter((v) => v.status === "ACTIVE").map((v) => (
-                              <SelectItem key={v.id} value={v.id}>{v.sku}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    )}
-                    <TableCell>
-                      <UomSelect
-                        lineId={l.id}
-                        productId={l.productId}
-                        value={l.uom}
-                        onChange={setUom}
-                        packagingForProduct={packagingByProductId?.[l.productId]}
-                        catalogUomCodes={catalogUomCodes}
-                        fmcgOrg={fmcgOrg}
-                        baseUom={
-                          products.find((p) => p.id === l.productId)?.baseUom ||
-                          products.find((p) => p.id === l.productId)?.unit ||
-                          "PCS"
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
+                    </div>
+                  </td>
+                  <td className="px-2 py-2">
+                    <FormattedDecimalInput
+                      data-line-qty={l.id}
+                      data-line-id={l.id}
+                      data-line-field="qty"
+                      className="h-8 w-full px-2"
+                      aria-label={`${lineColumnLabels?.qtyHeader ?? "Quantity"} for ${l.name}`}
+                      value={lineQtyValue(l)}
+                      onValueChange={(raw) => handleLineQtyDraft(l.id, raw)}
+                      onBlur={() => finalizeLineQtyDraft(l.id, lineQtyValue(l))}
+                      onKeyDown={(event) => onFieldKeyDown(event, l.id, "qty")}
+                    />
+                  </td>
+                  {lineColumnLabels ? (
+                    <td className="px-2 py-2 text-sm tabular-nums text-muted-foreground">
+                      {formatDecimalDisplay(String(baseQtyShown))}
+                    </td>
+                  ) : null}
+                  <td className="px-2 py-2">
+                    <UomSelect
+                      lineId={l.id}
+                      productId={l.productId}
+                      productName={l.name || product?.name}
+                      value={l.uom}
+                      onChange={setUom}
+                      packagingForProduct={packagingByProductId?.[l.productId]}
+                      catalogUomCodes={catalogUomCodes}
+                      fmcgOrg={fmcgOrg}
+                      baseUom={product?.baseUom || product?.unit || "PCS"}
+                      onPackagingUpdated={onPackagingUpdated}
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    {useCostPricing ? (
                       <FormattedDecimalInput
-                        className="w-24"
-                        value={lineQtyValue(l)}
-                        onValueChange={(raw) => handleLineQtyDraft(l.id, raw)}
-                        onBlur={() => finalizeLineQtyDraft(l.id, lineQtyValue(l))}
+                        data-line-id={l.id}
+                        data-line-field="price"
+                        className="h-8 w-full px-2"
+                        aria-label={`Cost for ${l.name}`}
+                        value={linePriceValue(l)}
+                        onValueChange={(raw) => handleLinePriceDraft(l.id, raw)}
+                        onBlur={() => finalizeLinePriceDraft(l.id, linePriceValue(l))}
+                        onKeyDown={(event) => onFieldKeyDown(event, l.id, "price")}
                       />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground tabular-nums">
-                      {l.poQty != null
-                        ? formatDecimalDisplay(String(l.poQty))
-                        : formatDecimalDisplay(String(l.baseQty))}
-                    </TableCell>
-                    {!lineColumnLabels ? (
-                      <TableCell className="text-muted-foreground tabular-nums">
-                        {(() => {
-                          const baseUnitPrice = computeBaseUnitPrice(l);
-                          return baseUnitPrice != null ? formatMoney(baseUnitPrice, currency) : "—";
-                        })()}
-                      </TableCell>
-                    ) : null}
-                    <TableCell>
-                      {useCostPricing ? (
+                    ) : (
+                      <span className="block truncate text-sm tabular-nums">{formatMoney(l.price, currency)}</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2">
+                    <span className="block truncate text-sm font-medium tabular-nums">
+                      {formatMoney(l.amount, currency)}
+                    </span>
+                  </td>
+                  <td className="px-1 py-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      aria-label={`Remove ${l.name}`}
+                      onClick={() => removeLine(l.id)}
+                    >
+                      <Icons.Trash2 className="h-4 w-4" />
+                    </Button>
+                  </td>
+              </tr>
+                {expanded ? (
+                  <tr className="border-b bg-muted/30">
+                    <td colSpan={colSpan} className="px-3 py-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {showDiscount ? (
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Discount %</span>
                         <FormattedDecimalInput
-                          className="w-32 min-w-[7rem]"
-                          value={linePriceValue(l)}
-                          onValueChange={(raw) => handleLinePriceDraft(l.id, raw)}
-                          onBlur={() => finalizeLinePriceDraft(l.id, linePriceValue(l))}
-                        />
-                      ) : (
-                        formatMoney(l.price, currency)
-                      )}
-                    </TableCell>
-                    {showDiscountCol ? (
-                      <TableCell>
-                        <FormattedDecimalInput
-                          className="w-16"
+                          className="h-8 w-24"
                           value={lineDiscountValue(l)}
                           onValueChange={(raw) => handleLineDiscountDraft(l.id, raw)}
                           onBlur={() => finalizeLineDiscountDraft(l.id, lineDiscountValue(l))}
                         />
-                      </TableCell>
+                      </label>
                     ) : null}
-                    <TableCell className="text-muted-foreground text-xs">{l.priceReason}</TableCell>
-                    {taxCodes.length > 0 && (
-                      <TableCell>
+                    {taxCodes.length > 0 ? (
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Tax</span>
                         <Select
                           value={l.taxCodeId ?? "__none__"}
                           onValueChange={(v) => updateLine(l.id, { taxCodeId: v === "__none__" ? undefined : v })}
                         >
-                          <SelectTrigger className="w-32">
+                          <SelectTrigger className="h-8 w-full max-w-[14rem]">
                             <SelectValue placeholder="None" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1412,45 +1572,82 @@ export function DocumentLineEditor({
                             ))}
                           </SelectContent>
                         </Select>
-                      </TableCell>
-                    )}
-                    {taxCodes.length > 0 && (
-                      <TableCell className="tabular-nums text-sm text-muted-foreground">
-                        {l.tax && l.tax > 0
-                          ? (linesAreTaxInclusive ? `incl. ${formatMoney(l.tax, currency)}` : `+${formatMoney(l.tax, currency)}`)
-                          : "—"}
-                      </TableCell>
-                    )}
-                    <TableCell className="font-medium">{formatMoney(l.amount, currency)}</TableCell>
-                    <TableCell>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => removeLine(l.id)}>
-                        <Icons.Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        <span className="text-xs text-muted-foreground">
+                          {l.tax && l.tax > 0
+                            ? linesAreTaxInclusive
+                              ? `incl. ${formatMoney(l.tax, currency)}`
+                              : `+${formatMoney(l.tax, currency)}`
+                            : "No tax"}
+                        </span>
+                      </label>
+                    ) : null}
+                    {lineVariants.length > 0 ? (
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Packaging variant</span>
+                        <Select value={l.variantId ?? "_none_"} onValueChange={(v) => setVariant(l.id, v)}>
+                          <SelectTrigger className="h-8 w-full max-w-[14rem]">
+                            <SelectValue placeholder="No variant" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none_">None</SelectItem>
+                            {lineVariants
+                              .filter((v) => v.status === "ACTIVE")
+                              .map((v) => (
+                                <SelectItem key={v.id} value={v.id}>
+                                  {v.sku}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    ) : null}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        {lineColumnLabels ? "Base price" : `Base qty ${formatDecimalDisplay(String(l.baseQty))}`}
+                      </span>
+                      <span className="text-sm tabular-nums text-muted-foreground">
+                        {baseUnitPrice != null ? formatMoney(baseUnitPrice, currency) : "Same as unit price"}
+                      </span>
+                      {l.priceReason ? (
+                        <span className="text-xs text-muted-foreground">{l.priceReason}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+              </tbody>
+            </table>
           </div>
-          <div className="text-sm text-muted-foreground space-y-0.5">
-            {totalTax > 0 && !linesAreTaxInclusive && (
-              <p>
-                Subtotal: {formatMoney(subtotalSum, currency)}
-                <span className="mx-1.5">+</span>
-                Tax: {formatMoney(totalTax, currency)}
-              </p>
-            )}
-            <p className="font-medium text-foreground">
-              Total: {formatMoney(total, currency)}
-              {totalTax > 0 && linesAreTaxInclusive && (
-                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                  (incl. {formatMoney(totalTax, currency)} tax)
-                </span>
-              )}
-            </p>
+          <div className="mt-4 flex justify-end">
+            <dl className="w-full max-w-xs space-y-1.5 text-sm">
+              {totalTax > 0 && !linesAreTaxInclusive ? (
+                <>
+                  <div className="flex items-baseline justify-between gap-8 text-muted-foreground">
+                    <dt>Subtotal</dt>
+                    <dd className="tabular-nums">{formatMoney(subtotalSum, currency)}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-8 text-muted-foreground">
+                    <dt>Tax</dt>
+                    <dd className="tabular-nums">{formatMoney(totalTax, currency)}</dd>
+                  </div>
+                </>
+              ) : null}
+              <div className="flex items-baseline justify-between gap-8 border-t pt-2 font-medium text-foreground">
+                <dt>Total</dt>
+                <dd className="tabular-nums">{formatMoney(total, currency)}</dd>
+              </div>
+              {totalTax > 0 && linesAreTaxInclusive ? (
+                <p className="text-right text-xs font-normal text-muted-foreground">
+                  Includes {formatMoney(totalTax, currency)} tax
+                </p>
+              ) : null}
+            </dl>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -1459,21 +1656,25 @@ export function DocumentLineEditor({
 function UomSelect({
   lineId,
   productId,
+  productName,
   value,
   onChange,
   packagingForProduct = [],
   catalogUomCodes = [],
   fmcgOrg = false,
   baseUom = "PCS",
+  onPackagingUpdated,
 }: {
   lineId: string;
   productId: string;
+  productName?: string;
   value: string;
   onChange: (lineId: string, uom: string) => void;
   packagingForProduct?: ProductPackaging[];
   catalogUomCodes?: string[];
   fmcgOrg?: boolean;
   baseUom?: string;
+  onPackagingUpdated?: (productId: string, items: ProductPackaging[]) => void;
 }) {
   // Always keep the line's current UOM in options (e.g. CARTON from SO/DN/invoice)
   // so edit mode does not collapse to PCS before packaging finishes loading.
@@ -1499,30 +1700,57 @@ function UomSelect({
     onChange(lineId, selectValue);
   }, [fmcgOrg, lineId, onChange, packagingForProduct, selectValue, value, normalizedValue]);
 
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
+
   return (
-    <Select value={selectValue} onValueChange={(v) => onChange(lineId, v)}>
-      <SelectTrigger className="w-28 min-w-[6rem]">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((u) => (
-          <SelectItem key={u} value={u}>
-            {u}
-          </SelectItem>
-        ))}
-        {fmcgOrg && productId ? (
-          <div className="border-t border-border mt-1 pt-1">
-            <Link
-              href={`/master/products/${productId}?tab=packaging`}
-              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              onPointerDown={(e) => e.preventDefault()}
-            >
-              <Icons.Plus className="h-3.5 w-3.5 shrink-0" />
-              Add pack UOM…
-            </Link>
-          </div>
-        ) : null}
-      </SelectContent>
-    </Select>
+    <>
+      <Select
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        value={selectValue}
+        onValueChange={(v) => onChange(lineId, v)}
+      >
+        <SelectTrigger className="h-8 w-full min-w-0 px-2">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((u) => (
+            <SelectItem key={u} value={u}>
+              {u}
+            </SelectItem>
+          ))}
+          {fmcgOrg && productId ? (
+            <div className="border-t border-border mt-1 pt-1">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setAddOpen(true);
+                }}
+              >
+                <Icons.Plus className="h-3.5 w-3.5 shrink-0" />
+                Add pack UOM…
+              </button>
+            </div>
+          ) : null}
+        </SelectContent>
+      </Select>
+      {fmcgOrg && productId ? (
+        <AddPackUomDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          productId={productId}
+          productName={productName}
+          baseUom={baseUom}
+          onSaved={(items, uom) => {
+            onPackagingUpdated?.(productId, items);
+            onChange(lineId, uom);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

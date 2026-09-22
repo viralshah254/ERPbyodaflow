@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, type DataTableSortState } from "@/components/ui/data-table";
 import { RowActions } from "@/components/ui/row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -92,6 +92,8 @@ import * as Icons from "lucide-react";
 const productIcon = "Package" as const;
 const PRODUCTS_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
+const PRODUCT_SERVER_SORT = new Set(["name", "sku", "barcode", "size"]);
+type ProductServerSortField = "name" | "sku" | "barcode" | "size";
 const PRODUCT_CREATE_DRAFT_DEBOUNCE_MS = 500;
 
 /** Next sequential SKU (SKU-001, SKU-002…). Ignores barcode-style SKUs. */
@@ -153,6 +155,12 @@ export default function MasterProductsPage() {
   const [listCursorStack, setListCursorStack] = React.useState<string[]>([]);
   const [listNextCursor, setListNextCursor] = React.useState<string | null>(null);
   const [listHasMore, setListHasMore] = React.useState(false);
+  const [tableSort, setTableSort] = React.useState<DataTableSortState>(null);
+  const serverSortBy =
+    tableSort && PRODUCT_SERVER_SORT.has(tableSort.columnId)
+      ? (tableSort.columnId as ProductServerSortField)
+      : undefined;
+  const serverSortDir = serverSortBy ? tableSort.dir : undefined;
 
   // Step 1 fields
   const [step, setStep] = React.useState<1 | 2>(1);
@@ -293,7 +301,7 @@ export default function MasterProductsPage() {
     setListCursor("0");
     setListCursorStack([]);
     setListNextCursor(null);
-  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, pageSize, tableSort]);
 
   const refreshProducts = React.useCallback(async () => {
     setLoading(true);
@@ -308,6 +316,8 @@ export default function MasterProductsPage() {
         limit: pageSize,
         cursor: listCursor,
         includeStock: true,
+        sortBy: serverSortBy,
+        sortDir: serverSortDir,
       });
       setAllRows(page.items);
       setProductsCache(page.items);
@@ -319,7 +329,7 @@ export default function MasterProductsPage() {
       setLoading(false);
       setHasLoadedOnce(true);
     }
-  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, listCursor, pageSize]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, listCursor, pageSize, serverSortBy, serverSortDir]);
 
   React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
@@ -1131,6 +1141,9 @@ export default function MasterProductsPage() {
                 selectable={fmcgOrg && sfaEnrolled && canWriteProduct}
                 selectedIds={selectedProductIds}
                 onSelectionChange={setSelectedProductIds}
+                sort={tableSort}
+                onSortChange={setTableSort}
+                disableClientSort={Boolean(serverSortBy)}
                 className={cn(
                   "transition-opacity duration-200",
                   loading && "opacity-60",

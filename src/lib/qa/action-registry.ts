@@ -27,7 +27,7 @@ export const ACTION_REGISTRY: ActionInfo[] = [
   // Docs
   { module: "docs", page: "/docs", action: "New document", behavior: "Navigate to wizard", status: "ok" },
   { module: "docs", page: "/docs/[type]", action: "Row click", behavior: "Navigate to detail", status: "ok" },
-  { module: "docs", page: "/docs/[type]/new", action: "Add line", behavior: "Adds row", status: "ok" },
+  { module: "docs", page: "/docs/[type]/new", action: "Browse", behavior: "Opens the product catalog to add lines", status: "ok" },
   { module: "docs", page: "/docs/[type]/new", action: "Generate with Copilot", behavior: "Opens Copilot", status: "ok" },
   { module: "docs", page: "/docs/[type]/new", action: "Save draft", behavior: "Toast + localStorage", status: "ok" },
   { module: "docs", page: "/docs/[type]/[id]", action: "Request approval", behavior: "Persistent document + approval workflow", status: "ok" },

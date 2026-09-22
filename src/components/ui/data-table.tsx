@@ -59,6 +59,7 @@ function compareSortValues(
 
 export type DataTableScrollMode = "fixed" | "fill" | "auto" | "natural";
 export type DataTableSize = "default" | "comfortable";
+export type DataTableSortState = { columnId: string; dir: "asc" | "desc" } | null;
 
 interface DataTableProps<T> {
   data: T[];
@@ -70,6 +71,17 @@ interface DataTableProps<T> {
   selectable?: boolean;
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
+  /**
+   * Controlled sort. When set with `onSortChange`, the parent owns sort state
+   * (e.g. server-side list queries). Omit both to keep table-local sort.
+   */
+  sort?: DataTableSortState;
+  onSortChange?: (sort: DataTableSortState) => void;
+  /**
+   * Skip in-memory reorder. Use when the parent already fetched data in this
+   * sort order (paginated server sort).
+   */
+  disableClientSort?: boolean;
   /**
    * auto — height follows row count up to maxVisibleRows, then scrolls inside the table (default).
    * fill — flex child; scroll only inside parent flex column (parent needs min-h-0 flex-1).
@@ -92,17 +104,19 @@ export function DataTable<T extends object>({
   selectable,
   selectedIds = [],
   onSelectionChange,
+  sort: sortProp,
+  onSortChange,
+  disableClientSort = false,
   scrollMode = "auto",
   maxVisibleRows = 25,
   size = "default",
 }: DataTableProps<T>) {
-  const [sort, setSort] = React.useState<{
-    columnId: string;
-    dir: "asc" | "desc";
-  } | null>(null);
+  const [internalSort, setInternalSort] = React.useState<DataTableSortState>(null);
+  const isSortControlled = onSortChange != null;
+  const sort = isSortControlled ? (sortProp ?? null) : internalSort;
 
   const displayData = React.useMemo(() => {
-    if (!sort) return data;
+    if (disableClientSort || !sort) return data;
     const col = columns.find((c) => c.id === sort.columnId);
     if (!col || !columnCanSort(col)) return data;
     const getter: ((row: T) => unknown) | null =
@@ -114,22 +128,33 @@ export function DataTable<T extends object>({
     const arr = [...data];
     arr.sort((a, b) => compareSortValues(getter(a), getter(b), sort.dir));
     return arr;
-  }, [data, sort, columns]);
+  }, [data, sort, columns, disableClientSort]);
+
+  const nextSortState = (
+    prev: DataTableSortState,
+    columnId: string,
+  ): DataTableSortState => {
+    if (!prev || prev.columnId !== columnId) return { columnId, dir: "asc" };
+    if (prev.dir === "asc") return { columnId, dir: "desc" };
+    return null;
+  };
 
   const toggleSort = (columnId: string) => {
     const col = columns.find((c) => c.id === columnId);
     if (!col || !columnCanSort(col)) return;
-    const getter =
-      col.sortValue ??
-      (typeof col.accessor === "string"
-        ? (row: T) => row[col.accessor as keyof T] as unknown
-        : null);
-    if (!getter) return;
-    setSort((prev) => {
-      if (!prev || prev.columnId !== columnId) return { columnId, dir: "asc" };
-      if (prev.dir === "asc") return { columnId, dir: "desc" };
-      return null;
-    });
+    if (!isSortControlled) {
+      const getter =
+        col.sortValue ??
+        (typeof col.accessor === "string"
+          ? (row: T) => row[col.accessor as keyof T] as unknown
+          : null);
+      if (!getter) return;
+    }
+    if (isSortControlled) {
+      onSortChange(nextSortState(sort, columnId));
+      return;
+    }
+    setInternalSort((prev) => nextSortState(prev, columnId));
   };
 
   const checkboxClassName =

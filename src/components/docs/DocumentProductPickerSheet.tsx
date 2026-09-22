@@ -1,14 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,24 +28,52 @@ function defaultTypeFilter(productFilter: "purchasable" | "sellable" | "all"): P
   return "";
 }
 
+export type CatalogAddItem = {
+  product: ProductRow;
+  qty: number;
+  asNewLine: boolean;
+};
+
 type DocumentProductPickerSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** purchasable | sellable | all — matches document line filter. */
   productFilter?: "purchasable" | "sellable" | "all";
   fmcgOrg?: boolean;
-  /** Already on the document — still selectable to add another line of the same SKU. */
+  /** Catalog already loaded for the lines step. */
+  products?: ProductRow[];
+  loading?: boolean;
+  priceLabel?: (product: ProductRow) => string;
+  groupKey?: (product: ProductRow) => string;
+  groupLabel?: (key: string) => string;
+  groupOptions?: Array<{ key: string; label: string }>;
   existingProductIds?: string[];
-  onConfirm: (products: ProductRow[]) => void;
+  onAddMany?: (items: CatalogAddItem[]) => void;
+  /** @deprecated Prefer onAddMany. Kept so older callers still compile. */
+  onConfirm?: (products: ProductRow[]) => void;
 };
 
 const PAGE_SIZE = 40;
+
+function rowQty(map: Record<string, string>, id: string): number {
+  const raw = map[id];
+  const n = raw == null || raw === "" ? 1 : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
 
 export function DocumentProductPickerSheet({
   open,
   onOpenChange,
   productFilter = "sellable",
   fmcgOrg = false,
+  products = [],
+  loading: catalogLoading = false,
+  priceLabel,
+  groupKey,
+  groupLabel,
+  groupOptions = [],
+  existingProductIds = [],
+  onAddMany,
   onConfirm,
 }: DocumentProductPickerSheetProps) {
   const [search, setSearch] = React.useState("");
@@ -60,17 +81,23 @@ export function DocumentProductPickerSheet({
   const [typeFilter, setTypeFilter] = React.useState<ProductTypeFilter>(() =>
     defaultTypeFilter(productFilter)
   );
-  const [items, setItems] = React.useState<ProductRow[]>([]);
+  const [categoryKey, setCategoryKey] = React.useState<string | null>(null);
+  const [remoteItems, setRemoteItems] = React.useState<ProductRow[]>([]);
   const [cursor, setCursor] = React.useState<string | null>("0");
   const [hasMore, setHasMore] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [selected, setSelected] = React.useState<Map<string, ProductRow>>(new Map());
+  const [qtyById, setQtyById] = React.useState<Record<string, string>>({});
+  const [highlight, setHighlight] = React.useState(0);
+  const [addedIds, setAddedIds] = React.useState<Set<string>>(new Set());
   const listRef = React.useRef<HTMLDivElement | null>(null);
+  const searchRef = React.useRef<HTMLInputElement | null>(null);
   const loadGen = React.useRef(0);
+  const existing = React.useMemo(() => new Set(existingProductIds), [existingProductIds]);
 
   React.useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 200);
     return () => window.clearTimeout(id);
   }, [search]);
 
@@ -79,10 +106,16 @@ export function DocumentProductPickerSheet({
     setSearch("");
     setDebouncedSearch("");
     setTypeFilter(defaultTypeFilter(productFilter));
+    setCategoryKey(null);
     setSelected(new Map());
-    setItems([]);
+    setQtyById({});
+    setRemoteItems([]);
     setCursor("0");
     setHasMore(false);
+    setHighlight(0);
+    setAddedIds(new Set());
+    const focusId = window.setTimeout(() => searchRef.current?.focus(), 30);
+    return () => window.clearTimeout(focusId);
   }, [open, productFilter]);
 
   const loadPage = React.useCallback(
@@ -102,14 +135,14 @@ export function DocumentProductPickerSheet({
           includeStock: false,
         });
         if (gen !== loadGen.current) return;
-        setItems((prev) => (opts.reset ? page.items : [...prev, ...page.items]));
+        setRemoteItems((prev) => (opts.reset ? page.items : [...prev, ...page.items]));
         setCursor(page.nextCursor);
         setHasMore(page.hasMore);
       } catch (e) {
         if (gen !== loadGen.current) return;
         toast.error(e instanceof Error ? e.message : "Failed to load products.");
         if (opts.reset) {
-          setItems([]);
+          setRemoteItems([]);
           setHasMore(false);
           setCursor(null);
         }
@@ -125,8 +158,62 @@ export function DocumentProductPickerSheet({
 
   React.useEffect(() => {
     if (!open) return;
+    if (!debouncedSearch) {
+      setRemoteItems([]);
+      setHasMore(false);
+      setCursor(null);
+      return;
+    }
     void loadPage({ reset: true, cursor: "0", search: debouncedSearch });
   }, [open, debouncedSearch, typeFilter, loadPage]);
+
+  const merged = React.useMemo(() => {
+    const byId = new Map<string, ProductRow>();
+    for (const p of products) byId.set(p.id, p);
+    for (const p of remoteItems) byId.set(p.id, p);
+    return [...byId.values()];
+  }, [products, remoteItems]);
+
+  const visible = React.useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return merged.filter((p) => {
+      if (typeFilter && p.productType && p.productType !== typeFilter) return false;
+      if (categoryKey && groupKey && groupKey(p) !== categoryKey) return false;
+      if (!tokens.length) return true;
+      const hay = [p.sku, p.barcode ?? "", p.name, p.size ?? "", p.categoryName ?? "", p.category ?? "", p.productFamily ?? ""]
+        .join(" ")
+        .toLowerCase();
+      return tokens.every((t) => hay.includes(t));
+    });
+  }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey]);
+
+  React.useEffect(() => {
+    setHighlight((i) => Math.min(i, Math.max(visible.length - 1, 0)));
+  }, [visible.length]);
+
+  const flashAdded = (id: string) => {
+    setAddedIds((prev) => new Set(prev).add(id));
+    window.setTimeout(() => {
+      setAddedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 1200);
+  };
+
+  const emit = (items: CatalogAddItem[]) => {
+    if (!items.length) return;
+    if (onAddMany) onAddMany(items);
+    else onConfirm?.(items.map((item) => item.product));
+    for (const item of items) flashAdded(item.product.id);
+  };
+
+  const addOne = (product: ProductRow, asNewLine: boolean) => {
+    emit([{ product, qty: rowQty(qtyById, product.id), asNewLine }]);
+  };
 
   const toggle = (product: ProductRow) => {
     setSelected((prev) => {
@@ -139,44 +226,83 @@ export function DocumentProductPickerSheet({
 
   const selectedCount = selected.size;
 
-  const handleConfirm = () => {
+  const addSelected = () => {
     if (selectedCount === 0) {
       toast.error("Select at least one product.");
       return;
     }
-    onConfirm([...selected.values()]);
-    onOpenChange(false);
+    emit(
+      [...selected.values()].map((product) => ({
+        product,
+        qty: rowQty(qtyById, product.id),
+        asNewLine: false,
+      }))
+    );
+    setSelected(new Map());
   };
 
-  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (!hasMore || loadingMore || loading) return;
-    const el = e.currentTarget;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight > 80) return;
-    if (cursor == null) return;
-    void loadPage({ reset: false, cursor, search: debouncedSearch });
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((i) => Math.min(i + 1, Math.max(visible.length - 1, 0)));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const product = visible[highlight];
+      if (product) addOne(product, false);
+    }
   };
+
+  const showChips = !debouncedSearch && groupOptions.length > 0;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>Add products</SheetTitle>
-          <SheetDescription>
-            Search and check the SKUs to add as lines
-            {fmcgOrg ? " (qty and pack UOM can be set after)." : "."}
-          </SheetDescription>
-        </SheetHeader>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-hidden rounded-lg border bg-background p-5 shadow-lg",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+          )}
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            searchRef.current?.focus();
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <Dialog.Title className="text-lg font-semibold">Add products</Dialog.Title>
+              <Dialog.Description className="text-sm text-muted-foreground">
+                Click a product to add it. The dialog stays open so you can add the next one.
+                {fmcgOrg ? " Set the quantity on the row before you click." : ""}
+              </Dialog.Description>
+            </div>
+            <Dialog.Close asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label="Close">
+                <Icons.X className="h-4 w-4" />
+              </Button>
+            </Dialog.Close>
+          </div>
 
-        <div className="mt-4 space-y-3 flex-1 min-h-0 flex flex-col">
           <div className="grid gap-2 sm:grid-cols-[1fr_11rem]">
             <div className="relative">
               <Icons.Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={searchRef}
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  if (!e.target.value.trim()) setCategoryKey(null);
+                }}
+                onKeyDown={onSearchKeyDown}
                 placeholder="Search name, SKU, barcode…"
                 className="pl-9"
-                autoFocus
               />
             </div>
             <div className="space-y-1">
@@ -198,83 +324,116 @@ export function DocumentProductPickerSheet({
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              {selectedCount === 0
-                ? "None selected"
-                : `${selectedCount} selected`}
-            </span>
-            {selectedCount > 0 ? (
-              <button
-                type="button"
-                className="underline underline-offset-2 hover:text-foreground"
-                onClick={() => setSelected(new Map())}
-              >
-                Clear
-              </button>
-            ) : null}
-          </div>
+          {showChips ? (
+            <div className="flex flex-wrap gap-1.5">
+              {groupOptions.map((opt) => {
+                const active = categoryKey === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-xs",
+                      active
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted/60"
+                    )}
+                    onClick={() => setCategoryKey(active ? null : opt.key)}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
           <div
             ref={listRef}
-            onScroll={onScroll}
-            className="flex-1 min-h-[16rem] max-h-[min(60vh,28rem)] overflow-y-auto rounded-md border"
+            className="min-h-[16rem] flex-1 overflow-y-auto rounded-md border"
           >
-            {loading && items.length === 0 ? (
+            {(loading || catalogLoading) && visible.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">Loading products…</p>
-            ) : items.length === 0 ? (
+            ) : visible.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">
                 No products match
                 {debouncedSearch ? ` “${debouncedSearch}”` : ""}
-                {typeFilter
-                  ? ` in ${TYPE_FILTER_OPTIONS.find((o) => o.value === typeFilter)?.label ?? "this type"}`
-                  : ""}
+                {categoryKey && groupLabel ? ` in ${groupLabel(categoryKey)}` : ""}
                 .
               </p>
             ) : (
-              <ul className="divide-y">
-                {items.map((p) => {
+              <ul>
+                {visible.map((p, index) => {
                   const checked = selected.has(p.id);
+                  const onOrder = existing.has(p.id);
+                  const justAdded = addedIds.has(p.id);
                   const meta = [
                     p.sku,
-                    typeFilter ? undefined : productTypeLabel(p.productType),
-                    fmcgOrg
-                      ? (p.categoryName ?? p.category)?.trim()
-                      : p.productFamily?.trim(),
                     p.size?.trim(),
+                    groupKey && groupLabel ? groupLabel(groupKey(p)) : fmcgOrg ? (p.categoryName ?? p.category)?.trim() : p.productFamily?.trim(),
+                    typeFilter ? undefined : productTypeLabel(p.productType),
                   ]
                     .filter(Boolean)
                     .join(" · ");
                   return (
-                    <li key={p.id}>
-                      <label
-                        className={cn(
-                          "flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-muted/50",
-                          checked && "bg-primary/5"
-                        )}
+                    <li
+                      key={p.id}
+                      className={cn(
+                        "flex items-center gap-2 border-b px-2 py-2 last:border-b-0",
+                        index === highlight && "bg-muted/60",
+                        justAdded && "bg-primary/10"
+                      )}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggle(p)}
+                        aria-label={`Select ${p.name}`}
+                      />
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => addOne(p, false)}
+                        onMouseEnter={() => setHighlight(index)}
                       >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => toggle(p)}
-                          className="mt-0.5"
-                          aria-label={`Select ${p.sku}`}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium leading-snug">{p.name}</span>
-                          <span className="block text-xs text-muted-foreground font-mono mt-0.5">
-                            {meta || p.id}
-                          </span>
+                        <span className="block text-sm font-medium leading-snug">{p.name}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>
+                      </button>
+                      <span className="hidden shrink-0 text-sm tabular-nums sm:block">
+                        {priceLabel ? priceLabel(p) : ""}
+                      </span>
+                      <Input
+                        className="h-8 w-16 shrink-0 tabular-nums"
+                        inputMode="decimal"
+                        aria-label={`Quantity for ${p.name}`}
+                        value={qtyById[p.id] ?? "1"}
+                        onChange={(e) =>
+                          setQtyById((prev) => ({ ...prev, [p.id]: e.target.value.replace(/[^\d.]/g, "") }))
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      {onOrder ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 px-2 text-xs"
+                          onClick={() => addOne(p, true)}
+                        >
+                          Add as new line
+                        </Button>
+                      ) : (
+                        <span className="w-[7.5rem] shrink-0 text-right text-xs text-muted-foreground">
+                          {justAdded ? "Added" : ""}
                         </span>
-                      </label>
+                      )}
                     </li>
                   );
                 })}
               </ul>
             )}
             {loadingMore ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground text-center">Loading more…</p>
+              <p className="px-3 py-2 text-center text-xs text-muted-foreground">Loading more…</p>
             ) : null}
-            {!loading && !loadingMore && hasMore ? (
+            {!loading && !loadingMore && hasMore && debouncedSearch ? (
               <div className="p-2 text-center">
                 <Button
                   type="button"
@@ -290,18 +449,32 @@ export function DocumentProductPickerSheet({
               </div>
             ) : null}
           </div>
-        </div>
 
-        <SheetFooter className="mt-4 gap-2 sm:gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button type="button" disabled={selectedCount === 0} onClick={handleConfirm}>
-            Add {selectedCount > 0 ? `${selectedCount} ` : ""}
-            {selectedCount === 1 ? "line" : "lines"}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">
+              {selectedCount === 0 ? "Click a row to add it" : `${selectedCount} selected`}
+              {selectedCount > 0 ? (
+                <button
+                  type="button"
+                  className="ml-2 underline underline-offset-2 hover:text-foreground"
+                  onClick={() => setSelected(new Map())}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </span>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Done
+              </Button>
+              <Button type="button" disabled={selectedCount === 0} onClick={addSelected}>
+                Add {selectedCount > 0 ? `${selectedCount} ` : ""}
+                {selectedCount === 1 ? "line" : "lines"}
+              </Button>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

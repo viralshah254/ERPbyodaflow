@@ -54,15 +54,12 @@ import {
 } from "@/lib/api/documents";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
-  fetchPartiesApi,
   fetchPartyByIdApi,
   fetchPartyCreditSummaryApi,
   searchPartyLookupOptionsApi,
-  sortPartyLookupOptions,
   toPartyLookupOption,
   type PartyDetail,
   type PartyCreditSummary,
-  type PartyLookupOption,
 } from "@/lib/api/parties";
 import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchFranchiseOutletHqSupplier } from "@/lib/api/cool-catch";
@@ -94,7 +91,7 @@ import {
   fetchProductPricingApi,
 } from "@/lib/api/product-master";
 import { fetchProductUomsApi } from "@/lib/api/uom";
-import type { ProductPrice } from "@/lib/products/pricing-types";
+import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import { cn } from "@/lib/utils";
 import {
   deleteDocumentDraftApi,
@@ -214,24 +211,9 @@ function PartyEntityField({
   selectedPartyOption?: { id: string; label: string; description?: string } | null;
   onCreateNewCustomer?: (searchQuery: string) => void;
   onCreateNewSupplier?: (searchQuery: string) => void;
-  /** FMCG: optional supermarket filter so HQ + branches are easy to pick. */
   fmcgOrg?: boolean;
 }) {
   const key = fieldIdToKey(field.id);
-  const [supermarketFilterId, setSupermarketFilterId] = React.useState<string>("__all__");
-  const [supermarkets, setSupermarkets] = React.useState<Array<{ id: string; name: string }>>([]);
-
-  React.useEffect(() => {
-    if (!fmcgOrg || role !== "customer") return;
-    void fetchPartiesApi({
-      role: "customer",
-      sfaSegment: "MODERN_TRADE_HQ",
-      status: "ACTIVE",
-      limit: 100,
-    })
-      .then((items) => setSupermarkets(items.map((p) => ({ id: p.id, name: p.name }))))
-      .catch(() => setSupermarkets([]));
-  }, [fmcgOrg, role]);
 
   /** Stable reference required: AsyncSearchableSelect effect depends on loadOptions; inline arrows retrigger search every parent render. */
   const loadPartyLookupOptions = React.useCallback(
@@ -240,63 +222,13 @@ function PartyEntityField({
         role,
         status: "ACTIVE",
         search: query,
-        limit: 20,
+        limit: role === "customer" ? 40 : 20,
       }),
     [role]
   );
 
-  const loadFmcgCustomerOptions = React.useCallback(
-    async (query: string): Promise<PartyLookupOption[]> => {
-      const q = query.trim();
-      // Narrow to one supermarket: HQ itself + its branch customers.
-      if (supermarketFilterId && supermarketFilterId !== "__all__") {
-        const hq = supermarkets.find((s) => s.id === supermarketFilterId);
-        const [hqMatch, branches] = await Promise.all([
-          searchPartyLookupOptionsApi({
-            role: "customer",
-            status: "ACTIVE",
-            search: q || undefined,
-            limit: 20,
-          }).then((rows) => rows.filter((r) => r.id === supermarketFilterId)),
-          searchPartyLookupOptionsApi({
-            role: "customer",
-            status: "ACTIVE",
-            parentPartyId: supermarketFilterId,
-            sfaSegment: "MODERN_TRADE_BRANCH",
-            search: q || undefined,
-            limit: 50,
-          }),
-        ]);
-        // If search excluded the HQ name, still offer HQ when query empty.
-        const hqOption: PartyLookupOption | null =
-          hqMatch[0] ??
-          (!q && hq
-            ? toPartyLookupOption({
-                id: hq.id,
-                name: hq.name,
-                sfaSegment: "MODERN_TRADE_HQ",
-              })
-            : null);
-        const combined = [...(hqOption ? [hqOption] : []), ...branches.filter((b) => b.id !== supermarketFilterId)];
-        return sortPartyLookupOptions(combined, q);
-      }
-      // All customers — parties lookup includes segment badges (Supermarket / Branch).
-      return searchPartyLookupOptionsApi({
-        role: "customer",
-        status: "ACTIVE",
-        search: q || undefined,
-        limit: 40,
-      });
-    },
-    [supermarketFilterId, supermarkets]
-  );
-
   const loadOptions =
-    role === "customer"
-      ? fmcgOrg
-        ? loadFmcgCustomerOptions
-        : searchArCustomerOptionsApi
-      : loadPartyLookupOptions;
+    role === "customer" && !fmcgOrg ? searchArCustomerOptionsApi : loadPartyLookupOptions;
 
   return (
     <div className="space-y-2">
@@ -310,43 +242,15 @@ function PartyEntityField({
           label={`Explain ${field.label}`}
         />
       </div>
-      {fmcgOrg && role === "customer" && supermarkets.length > 0 ? (
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground font-normal">
-            Narrow by supermarket (optional)
-          </Label>
-          <Select value={supermarketFilterId} onValueChange={setSupermarketFilterId}>
-            <SelectTrigger>
-              <SelectValue placeholder="All customers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All customers</SelectItem>
-              {supermarkets.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
       <AsyncSearchableSelect
-        key={`party-${role}-${supermarketFilterId}`}
+        key={`party-${role}`}
         value={(form.watch(key) as string | undefined) || ""}
         onValueChange={(value) => form.setValue(key, value)}
         loadOptions={loadOptions}
         selectedOption={selectedPartyOption}
         placeholder={`Select ${field.label.toLowerCase()}`}
-        searchPlaceholder={
-          fmcgOrg && role === "customer"
-            ? "Type supermarket, branch, code, phone…"
-            : "Type name, code, phone, or email"
-        }
-        emptyMessage={
-          fmcgOrg && role === "customer" && supermarketFilterId !== "__all__"
-            ? "No branches (or HQ) match. Try another search or clear the supermarket filter."
-            : `No ${field.label.toLowerCase()}s found.`
-        }
+        searchPlaceholder="Type name, code, phone, or email"
+        emptyMessage={`No ${field.label.toLowerCase()}s found.`}
         recentStorageKey={role === "customer" ? "lookup:recent-customers" : "lookup:recent-suppliers"}
         onCreateNew={role === "customer" ? onCreateNewCustomer : onCreateNewSupplier}
         createNewLabel={role === "customer" ? "Add new customer" : "Add new supplier"}
@@ -787,7 +691,7 @@ export function DocumentCreateWizard({
       setLines((prev) => {
         if (prev.length === 0) return prev;
         return prev.map((l) => {
-          const merged = { ...l, taxCodeId: cfg.taxCodeId };
+          const merged = { ...l, taxCodeId: l.taxCodeId || cfg.taxCodeId };
           const taxed = applyLineTax(merged, codes, cfg.pricesAreTaxInclusive);
           return { ...merged, tax: taxed.tax, amount: taxed.amount };
         });
@@ -1276,6 +1180,10 @@ export function DocumentCreateWizard({
     },
     [form]
   );
+
+  const handlePackagingUpdated = React.useCallback((productId: string, items: ProductPackaging[]) => {
+    setPackagingByProductId((prev) => ({ ...prev, [productId]: items }));
+  }, []);
 
   /** Fetch packaging / pricing for SKUs added via the product picker (beyond the initial cache page). */
   const handleProductsAdded = React.useCallback(
@@ -1778,7 +1686,26 @@ export function DocumentCreateWizard({
     setPostingPreviewError(null);
     try {
       setLoadingPostingPreview(true);
-      setPostingPreview(await previewDocumentPostingApi(type as DocTypeKey, buildDraftPayload()));
+      const payload = buildDraftPayload();
+      let items = await previewDocumentPostingApi(type as DocTypeKey, payload);
+      // Older APIs return nothing for customer orders. Those orders post on the invoice,
+      // so fall back to that entry when the order itself has a total.
+      if (
+        items.length === 0 &&
+        (type === "sales-order" || type === "quote") &&
+        (payload.total ?? 0) > 0
+      ) {
+        try {
+          const invoiceLines = await previewDocumentPostingApi("invoice", payload);
+          items = invoiceLines.map((row) => ({
+            ...row,
+            memo: row.memo.replace(/^Invoice PREVIEW/, "Posts on invoice"),
+          }));
+        } catch {
+          items = [];
+        }
+      }
+      setPostingPreview(items);
     } catch (error) {
       const err = error as Error & { status?: number };
       if (err.status === 403 || err.message?.toLowerCase().includes("forbidden")) {
@@ -2713,6 +2640,7 @@ export function DocumentCreateWizard({
               defaultLineTaxCodeId={defaultLineTaxCodeId}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
               onProductsAdded={handleProductsAdded}
+              onPackagingUpdated={handlePackagingUpdated}
               onCatalogReadyChange={setLineCatalogReady}
               lineColumnLabels={
                 type === "grn"
@@ -2735,8 +2663,8 @@ export function DocumentCreateWizard({
                   {effectiveTaxConfig.pricesAreTaxInclusive ? "inclusive" : "exclusive"})
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Change the tax tag above to switch exclusive / inclusive VAT. Manage tags under Pricing → Tax
-                  tags.
+                  The tax tag sets whether prices include VAT. Each product keeps its own rate (16% or 0%).
+                  Change the tag to switch exclusive / inclusive. Manage tags under Pricing → Tax tags.
                 </p>
               </div>
             ) : (
@@ -2856,7 +2784,13 @@ export function DocumentCreateWizard({
           <Card>
             <CardHeader>
               <CardTitle>Posting Preview</CardTitle>
-              <p className="text-sm text-muted-foreground">Preview draft GL impact in base currency before creation.</p>
+              <p className="text-sm text-muted-foreground">
+                {type === "sales-order" || type === "quote"
+                  ? "This document does not post to the ledger. These are the lines that post when you invoice, in base currency."
+                  : type === "purchase-order" || type === "purchase-request"
+                    ? "This document does not post to the ledger. Stock and payables post on the goods receipt or supplier bill."
+                    : "Preview draft GL impact in base currency before creation."}
+              </p>
             </CardHeader>
             <CardContent>
               <div className="rounded border text-sm">
@@ -2886,9 +2820,11 @@ export function DocumentCreateWizard({
                   ))
                 ) : (
                   <div className="p-3 text-sm text-muted-foreground">
-                    {type === "purchase-order"
-                      ? "Purchase orders are commitment documents — GL entries are created when the linked GRN or Bill is posted."
-                      : "No GL lines to preview — total is zero or this document type posts on a later action."}
+                    {type === "purchase-order" || type === "purchase-request"
+                      ? "No ledger lines on this document. Entries are created when the linked goods receipt or supplier bill is posted."
+                      : type === "delivery-note"
+                        ? "Delivery notes do not post to the ledger. Revenue and receivables post when you invoice."
+                        : "No GL lines to preview — the document total is zero."}
                   </div>
                 )}
                 {selectedCurrency !== baseCurrency && (
