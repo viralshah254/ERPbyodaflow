@@ -13,6 +13,7 @@ import {
   exportPriceTagPricesAsFormatApi,
   importPriceListsApi,
   type PartySheetExportFormat,
+  type PriceTagExportScope,
 } from "@/lib/api/import-export";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -63,11 +64,13 @@ export function PriceTagSheetActions({
   mode,
   priceListId,
   tagName,
+  exportScope,
   onImported,
 }: {
   mode: "multi" | "single";
   priceListId?: string;
   tagName?: string;
+  exportScope?: PriceTagExportScope;
   onImported?: () => void;
 }) {
   const [importing, setImporting] = React.useState(false);
@@ -122,14 +125,26 @@ export function PriceTagSheetActions({
     if (!priceListId || !tagName) return;
     setDownloading(true);
     void (async () => {
-      const ok = await exportPriceTagPricesAsFormatApi(priceListId, tagName, format, (msg) =>
-        toast.error(msg)
+      const ok = await exportPriceTagPricesAsFormatApi(
+        priceListId,
+        tagName,
+        format,
+        (msg) => toast.error(msg),
+        exportScope
       );
       if (ok) {
+        const view =
+          exportScope?.pricedStatus === "unpriced"
+            ? "products with no price yet"
+            : exportScope?.search || exportScope?.categoryId || exportScope?.size
+              ? "the filtered products"
+              : exportScope?.pricedStatus === "all"
+                ? "all SKUs"
+                : "products that already have a price";
         toast.success(
           format === "xlsx"
-            ? `“${tagName}” prices downloaded as Excel — edit and import back.`
-            : `“${tagName}” prices downloaded as CSV — edit and import back.`
+            ? `Downloaded ${view} for “${tagName}” as Excel. Fill prices and import — only those rows update.`
+            : `Downloaded ${view} for “${tagName}” as CSV. Fill prices and import — only those rows update.`
         );
       }
       setDownloading(false);
@@ -147,7 +162,17 @@ export function PriceTagSheetActions({
       />
       {mode === "single" ? (
         <FormatMenu
-          label={downloading ? "Downloading…" : "Download prices"}
+          label={
+            downloading
+              ? "Downloading…"
+              : exportScope?.pricedStatus === "unpriced" ||
+                  exportScope?.search ||
+                  exportScope?.categoryId ||
+                  exportScope?.size ||
+                  exportScope?.pricedStatus === "all"
+                ? "Download this view"
+                : "Download prices"
+          }
           icon={Icons.Download}
           disabled={downloading || !priceListId}
           onPick={handleDownload}

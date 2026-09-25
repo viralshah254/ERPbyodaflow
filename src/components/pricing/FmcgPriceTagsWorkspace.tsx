@@ -17,7 +17,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FmcgPriceTagItemsEditor } from "@/components/pricing/FmcgPriceTagItemsEditor";
+import {
+  FmcgPriceTagItemsEditor,
+  type PriceTagViewScope,
+} from "@/components/pricing/FmcgPriceTagItemsEditor";
 import { PriceTagSheetActions } from "@/components/pricing/PriceTagSheetActions";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import type { PriceList } from "@/lib/products/pricing-types";
@@ -49,6 +52,12 @@ export function FmcgPriceTagsWorkspace({
 }) {
   const [query, setQuery] = React.useState("");
   const [editorEpoch, setEditorEpoch] = React.useState(0);
+  const [viewScope, setViewScope] = React.useState<PriceTagViewScope>({
+    search: "",
+    categoryId: "",
+    size: "",
+    pricedStatus: "priced",
+  });
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -230,6 +239,7 @@ export function FmcgPriceTagsWorkspace({
                   mode="single"
                   priceListId={selected.id}
                   tagName={selected.name}
+                  exportScope={viewScope}
                   onImported={() => {
                     setEditorEpoch((n) => n + 1);
                     onSaved();
@@ -243,6 +253,7 @@ export function FmcgPriceTagsWorkspace({
                 priceListId={selected.id}
                 tagName={selected.name}
                 onSaved={onSaved}
+                onViewChange={setViewScope}
               />
             </div>
           </>

@@ -605,34 +605,81 @@ function triggerBlobDownload(blob: Blob, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
+export type PriceTagExportScope = {
+  search?: string;
+  categoryId?: string;
+  size?: string;
+  pricedStatus?: "all" | "priced" | "unpriced";
+};
+
 /**
- * Download every product on a price tag as CSV or Excel so manufacturers can
- * bulk-edit piece prices and re-import. The file is named after the tag.
+ * Download the current price-tag view as CSV or Excel so manufacturers can
+ * bulk-edit piece prices and re-import. Rows follow the open filters
+ * (search, size, category, has a price / no price yet). Import updates only
+ * the rows in the file.
  */
 export async function exportPriceTagPricesAsFormatApi(
   priceListId: string,
   tagName: string,
   format: PartySheetExportFormat,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  scope?: PriceTagExportScope
 ): Promise<boolean> {
   requireLiveApi("Price tag export");
   try {
-    const { fetchCatalogPricesApi } = await import("./pricing");
+    const { fetchPriceListByIdApi } = await import("./pricing");
+    const { fetchProductsPageApi } = await import("./products");
     const { finalFromPriceAndDiscount } = await import("../pricing/price-tag-math");
-    const catalog = await fetchCatalogPricesApi(priceListId);
+    const pricedStatus = scope?.pricedStatus ?? "priced";
+    const list = await fetchPriceListByIdApi(priceListId);
+    const priceByProduct = new Map(
+      (list?.items ?? []).map((item) => [item.productId, item])
+    );
+    const products: Array<{ id: string; name: string; sku: string; barcode?: string }> = [];
+    let cursor = "0";
+    for (let page = 0; page < 200; page++) {
+      const batch = await fetchProductsPageApi({
+        sellable: true,
+        status: "ACTIVE",
+        search: scope?.search?.trim() || undefined,
+        categoryId: scope?.categoryId?.trim() || undefined,
+        size: scope?.size?.trim() || undefined,
+        pricedOnPriceListId: pricedStatus !== "all" ? priceListId : undefined,
+        pricedStatus: pricedStatus !== "all" ? pricedStatus : undefined,
+        sortBy: "name",
+        sortDir: "asc",
+        limit: 100,
+        cursor,
+        includeStock: false,
+      });
+      products.push(...batch.items);
+      if (!batch.hasMore || !batch.nextCursor) break;
+      cursor = batch.nextCursor;
+    }
     const header = ["product", "sku", "barcode", "price", "discountPercent", "finalPrice"];
-    const dataRows = catalog.items.map((item) => {
-      const price = item.source === "price_list" && item.price != null ? item.price : "";
+    const dataRows = products.map((item) => {
+      const priced = priceByProduct.get(item.id);
+      const price =
+        priced?.price != null && Number(priced.price) > 0 ? priced.price : "";
       const discount =
-        item.discountPercent != null && item.discountPercent > 0 ? item.discountPercent : "";
+        priced?.discountPercent != null && priced.discountPercent > 0
+          ? priced.discountPercent
+          : "";
       const final =
         typeof price === "number"
           ? finalFromPriceAndDiscount(price, typeof discount === "number" ? discount : 0)
           : "";
       return [item.name ?? "", item.sku ?? "", item.barcode ?? "", price, discount, final];
     });
+    const catalog = { priceListName: list?.name ?? tagName };
     const rows: Array<Array<string | number>> = [header, ...dataRows];
-    const stem = priceTagFileStem(tagName || catalog.priceListName);
+    const stemBase = priceTagFileStem(tagName || catalog.priceListName);
+    const stem =
+      pricedStatus === "unpriced"
+        ? `${stemBase}-no-price-yet`
+        : scope?.search?.trim() || scope?.categoryId || scope?.size
+          ? `${stemBase}-filtered`
+          : stemBase;
     const note =
       "# Discount %: type 20 for 20% off (or 0.5 for 50%). Final price is price after discount — type a final price to set the discount.";
 

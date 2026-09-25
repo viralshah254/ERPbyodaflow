@@ -132,14 +132,23 @@ function itemToEdit(item?: { price?: number; rrp?: number; discountPercent?: num
   };
 }
 
+export type PriceTagViewScope = {
+  search: string;
+  categoryId: string;
+  size: string;
+  pricedStatus: "all" | "priced" | "unpriced";
+};
+
 export function FmcgPriceTagItemsEditor({
   priceListId,
   tagName,
   onSaved,
+  onViewChange,
 }: {
   priceListId: string;
   tagName?: string;
   onSaved?: () => void;
+  onViewChange?: (scope: PriceTagViewScope) => void;
 }) {
   const [list, setList] = React.useState<PriceListDetail | null>(null);
   const [listReady, setListReady] = React.useState(false);
@@ -162,6 +171,7 @@ export function FmcgPriceTagItemsEditor({
   const [softLoading, setSoftLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const hasLoadedOnce = React.useRef(false);
+  const requestId = React.useRef(0);
   const editsRef = React.useRef(edits);
   editsRef.current = edits;
   const listRef = React.useRef(list);
@@ -221,6 +231,7 @@ export function FmcgPriceTagItemsEditor({
       cursor?: string;
     }) => {
       const soft = opts?.soft ?? hasLoadedOnce.current;
+      const request = ++requestId.current;
       if (!soft) {
         setInitialLoading(true);
       } else {
@@ -327,16 +338,20 @@ export function FmcgPriceTagItemsEditor({
             finalPrice: edit.finalPrice || finalFromDraft(edit.pricePerPiece, edit.discountPercent),
           };
         });
+        if (request !== requestId.current) return;
         setRows(drafts);
         setNextCursor(pageNext);
         setHasMore(pageMore);
         hasLoadedOnce.current = true;
         setListReady(true);
       } catch (e) {
+        if (request !== requestId.current) return;
         toast.error(e instanceof Error ? e.message : "Failed to load products");
       } finally {
-        setInitialLoading(false);
-        setSoftLoading(false);
+        if (request === requestId.current) {
+          setInitialLoading(false);
+          setSoftLoading(false);
+        }
       }
     },
     [debouncedSearch, cursor, categoryId, sizeFilter, pricedStatus, sortBy, sortDir, priceListId]
@@ -377,10 +392,10 @@ export function FmcgPriceTagItemsEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tag change only
   }, [priceListId]);
 
-  // Search / page changes (not tag switch — that path passes explicit search/cursor).
+  // Skip only the first mount. A later flag that stayed true was swallowing the
+  // first search/filter after a tag opened, so the grid kept the previous page.
   const skipSearchEffect = React.useRef(true);
   React.useEffect(() => {
-    // Skip the mount + the reset that follows a tag switch.
     if (skipSearchEffect.current) {
       skipSearchEffect.current = false;
       return;
@@ -390,9 +405,13 @@ export function FmcgPriceTagItemsEditor({
   }, [debouncedSearch, cursor, categoryId, sizeFilter, pricedStatus, sortBy, sortDir, loadProductsPage]);
 
   React.useEffect(() => {
-    // After a tag switch resets search/cursor, ignore the next search-effect tick.
-    skipSearchEffect.current = true;
-  }, [priceListId]);
+    onViewChange?.({
+      search: debouncedSearch.trim(),
+      categoryId,
+      size: sizeFilter,
+      pricedStatus,
+    });
+  }, [debouncedSearch, categoryId, sizeFilter, pricedStatus, onViewChange]);
 
   const setRowEdit = (productId: string, patch: Partial<EditDraft>) => {
     setEdits((prev) => {
@@ -567,7 +586,9 @@ export function FmcgPriceTagItemsEditor({
         optional <span className="font-medium text-foreground">RRP</span> for{" "}
         <span className="font-medium text-foreground">{tagLabel}</span>. Sell is what you
         charge; RRP is the recommended reseller price. Discount % and final price stay
-        in sync. To bulk-edit, download this tag’s prices above, then import.
+        in sync. To add prices for SKUs that are still blank, set Price to{" "}
+        <span className="font-medium text-foreground">No price yet</span>, download this
+        view, fill the sheet, and import it. Import updates only the rows in the file.
       </p>
 
       <DataTableToolbar
@@ -581,8 +602,8 @@ export function FmcgPriceTagItemsEditor({
             label: "Price",
             options: [
               { label: "All SKUs", value: "all" },
-              { label: "Priced", value: "priced" },
-              { label: "Unpriced", value: "unpriced" },
+              { label: "Has a price", value: "priced" },
+              { label: "No price yet", value: "unpriced" },
             ],
             value: pricedStatus,
             onChange: (v) => setPricedStatus((v || "all") as "all" | "priced" | "unpriced"),
@@ -664,7 +685,11 @@ export function FmcgPriceTagItemsEditor({
                   {showEmptySearch ? (
                     <TableRow>
                       <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                        No products match these filters.
+                        {pricedStatus === "priced"
+                          ? "No SKUs with a price match. Choose “No price yet” to list products still missing a price on this tag."
+                          : pricedStatus === "unpriced"
+                            ? "Every matching SKU already has a price on this tag."
+                            : "No products match these filters."}
                       </TableCell>
                     </TableRow>
                   ) : (
