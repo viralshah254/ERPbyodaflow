@@ -213,6 +213,7 @@ type BackendDocumentDetail = {
   odaflowSourcePdfUrl?: string;
   odaflowCustomerId?: string;
   odaflowCustomerName?: string;
+  deliveryAddress?: string;
   createdAt?: string;
 };
 
@@ -611,6 +612,7 @@ function mapDocumentDetail(
     ...(payload.odaflowSourcePdfUrl ? { odaflowSourcePdfUrl: payload.odaflowSourcePdfUrl } : {}),
     ...(payload.odaflowCustomerId ? { odaflowCustomerId: payload.odaflowCustomerId } : {}),
     ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
+    ...(payload.deliveryAddress ? { deliveryAddress: payload.deliveryAddress } : {}),
     ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };
 }

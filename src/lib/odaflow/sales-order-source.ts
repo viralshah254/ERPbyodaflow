@@ -12,6 +12,7 @@ export type OdaflowSalesOrderFields = {
   odaflowSalesRepPhone?: string;
   odaflowSourcePdfUrl?: string;
   odaflowCustomerName?: string;
+  deliveryAddress?: string;
 };
 
 export function isOdaflowSalesOrder(doc: OdaflowSalesOrderFields | null | undefined): boolean {
@@ -29,6 +30,7 @@ export function odaflowSourceFromDocument(
     orderTitle: doc.odaflowOrderTitle,
     odaflowChannel: doc.odaflowChannel,
     sfaCustomerName: doc.odaflowCustomerName,
+    deliveryAddress: doc.deliveryAddress,
     salesRepName: doc.odaflowSalesRepName,
     salesRepPhone: doc.odaflowSalesRepPhone,
     sourcePdfUrl: doc.odaflowSourcePdfUrl,

@@ -18,6 +18,8 @@ export type OdaflowSourceInfo = {
   odaflowChannel?: string;
   /** SFA customer name from the original order. */
   sfaCustomerName?: string;
+  /** SFA branch the goods are delivered to. Billing stays on the supermarket customer. */
+  deliveryAddress?: string;
   salesRepName?: string;
   salesRepPhone?: string;
   sourcePdfUrl?: string;
@@ -153,6 +155,11 @@ export function OdaflowSourceCard({
                 SFA customer: <span className="font-medium text-foreground">{info.sfaCustomerName}</span>
               </p>
             ) : null}
+            {info.deliveryAddress ? (
+              <p className="text-xs text-muted-foreground">
+                Deliver to: <span className="font-medium text-foreground">{info.deliveryAddress}</span>
+              </p>
+            ) : null}
             {info.salesRepName ? (
               <PlacedByRow name={info.salesRepName} phone={info.salesRepPhone} compact />
             ) : (
@@ -207,6 +214,12 @@ export function OdaflowSourceCard({
             <div className="sm:col-span-2">
               <p className="text-xs text-muted-foreground">SFA customer</p>
               <p className="font-medium">{info.sfaCustomerName}</p>
+            </div>
+          ) : null}
+          {info.deliveryAddress ? (
+            <div className="sm:col-span-2">
+              <p className="text-xs text-muted-foreground">Deliver to</p>
+              <p className="font-medium">{info.deliveryAddress}</p>
             </div>
           ) : null}
           {channel ? (
