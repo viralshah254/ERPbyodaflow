@@ -78,6 +78,11 @@ describe("formatPackQty", () => {
     expect(formatPackQty(24, { unitsPer: 1, baseUom: "PCS" })).toBe("24 pcs");
     expect(formatPackQty(24, {})).toBe("24 pcs");
   });
+
+  it("does not treat a 25kg product size as the order unit", () => {
+    expect(formatPackQty(1, { unitsPer: 1, documentUnit: "PCS", baseUom: "KG" })).toBe("1 pcs");
+    expect(formatPackQty(0, { documentUnit: "PCS", baseUom: "KG" })).toBe("0 pcs");
+  });
 });
 
 describe("suggestedCartonsCount", () => {

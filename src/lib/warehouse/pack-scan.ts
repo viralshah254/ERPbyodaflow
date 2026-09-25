@@ -44,6 +44,10 @@ const UNIT_WORDS: Record<string, [string, string]> = {
   outer: ["outer", "outers"],
 };
 
+/** Catalog weight/volume (a 25kg tub) is the product size, not the order quantity unit. */
+const SIZE_UOMS = new Set(["kg", "g", "mg", "ton", "tonne", "l", "ml", "lb"]);
+const PIECE_UOMS = new Set(["ea", "pc", "pcs", "piece", "pieces", "unit", "rrp"]);
+
 function norm(value: string | undefined | null): string {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -122,6 +126,17 @@ export function matchPackScan(
   };
 }
 
+/**
+ * Count unit for a line that is not broken into a larger pack.
+ * A 25kg product ordered as 1 PCS stays "1 pcs". Weight on the product master is ignored.
+ * A configured pack unit on the order (carton, box) is kept.
+ */
+function countUnitLabel(line: { documentUnit?: string }, count: number): string {
+  const doc = norm(line.documentUnit);
+  if (!doc || PIECE_UOMS.has(doc) || SIZE_UOMS.has(doc)) return "pcs";
+  return unitWord(line.documentUnit || doc, count);
+}
+
 /** Pieces shown in the order’s pack (carton, box) plus leftover pieces. */
 export function formatPackQty(
   pieces: number,
@@ -129,9 +144,7 @@ export function formatPackQty(
 ): string {
   const n = Number.isFinite(pieces) ? Math.max(0, pieces) : 0;
   const per = line.unitsPer ?? 0;
-  const base = norm(line.baseUom) || "pcs";
-  const pieceLabel = base === "ea" || base === "pcs" ? "pcs" : base;
-  if (!(per > 1)) return `${trimNum(n)} ${pieceLabel}`;
+  if (!(per > 1)) return `${trimNum(n)} ${countUnitLabel(line, n)}`;
   const unit = line.documentUnit || "carton";
   const cartons = Math.floor(n / per + 1e-9);
   const rem = Math.round((n - cartons * per) * 1000) / 1000;
