@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPackQty, matchPackScan, parsePackScan, suggestedCartonsCount } from "./pack-scan";
+import { createScannerBuffer, formatPackQty, matchPackScan, parsePackScan, pushScannerKey, suggestedCartonsCount } from "./pack-scan";
 import type { PackScanLine } from "./pack-scan";
 
 const cartonLine: PackScanLine = {
@@ -24,6 +24,31 @@ describe("parsePackScan", () => {
 
   it("rejects a zero piece count", () => {
     expect(parsePackScan("65433213113 0")).toEqual({ error: "Piece count must be greater than zero" });
+  });
+});
+
+describe("pushScannerKey", () => {
+  it("captures a fast barcode even when the scan field is not focused", () => {
+    let buffer = createScannerBuffer();
+    let now = 1_000;
+    for (const key of "65433213113 24") {
+      const result = pushScannerKey(buffer, key, now, { scanFieldFocused: false });
+      if (buffer.text.length > 0) expect(result.swallow).toBe(true);
+      buffer = result.buffer;
+      now += 10;
+    }
+    const done = pushScannerKey(buffer, "Enter", now, { scanFieldFocused: false });
+    expect(done.scan).toBe("65433213113 24");
+    expect(done.swallow).toBe(true);
+  });
+
+  it("ignores slow typing outside the scan field", () => {
+    let buffer = createScannerBuffer();
+    const first = pushScannerKey(buffer, "a", 1_000, { scanFieldFocused: false });
+    buffer = first.buffer;
+    const second = pushScannerKey(buffer, "b", 1_400, { scanFieldFocused: false });
+    expect(second.swallow).toBe(false);
+    expect(second.scan).toBeUndefined();
   });
 });
 

@@ -64,6 +64,65 @@ function unitWord(unit: string, count: number): string {
   return lower || "pack";
 }
 
+/** Keys from a USB scanner arrive faster than typing. */
+export const SCANNER_KEY_GAP_MS = 50;
+
+export type ScannerBuffer = {
+  text: string;
+  lastAt: number;
+  rapid: boolean;
+};
+
+export function createScannerBuffer(): ScannerBuffer {
+  return { text: "", lastAt: 0, rapid: true };
+}
+
+export type ScannerKeyResult = {
+  buffer: ScannerBuffer;
+  /** Stop the key from landing in whatever field is focused. */
+  swallow: boolean;
+  /** Complete barcode read, including an optional piece count. */
+  scan?: string;
+};
+
+/**
+ * A supermarket scanner types into whatever is focused and ends with Enter.
+ * Rapid keys are captured even when a product row is focused. Slow typing in
+ * another field is left alone.
+ */
+export function pushScannerKey(
+  buffer: ScannerBuffer,
+  key: string,
+  now: number,
+  opts: { scanFieldFocused: boolean }
+): ScannerKeyResult {
+  if (key === "Enter") {
+    const raw = buffer.text.trim();
+    const next = createScannerBuffer();
+    const accept = raw.length > 0 && (opts.scanFieldFocused || (buffer.rapid && raw.length >= 3));
+    if (!accept) return { buffer: next, swallow: false };
+    return { buffer: next, swallow: true, scan: raw };
+  }
+  if (key.length !== 1) return { buffer, swallow: false };
+  if (opts.scanFieldFocused) {
+    const gap = buffer.lastAt === 0 ? 0 : now - buffer.lastAt;
+    const rapid = buffer.text.length === 0 || gap <= SCANNER_KEY_GAP_MS;
+    return {
+      buffer: { text: buffer.text + key, lastAt: now, rapid: buffer.text.length === 0 ? true : rapid },
+      swallow: false,
+    };
+  }
+  const gap = buffer.lastAt === 0 ? SCANNER_KEY_GAP_MS + 1 : now - buffer.lastAt;
+  const continuing = buffer.text.length > 0 && gap <= SCANNER_KEY_GAP_MS;
+  if (!continuing) {
+    return { buffer: { text: key, lastAt: now, rapid: false }, swallow: false };
+  }
+  return {
+    buffer: { text: buffer.text + key, lastAt: now, rapid: true },
+    swallow: true,
+  };
+}
+
 export function parsePackScan(raw: string): ParsedPackScan | { error: string } {
   const text = raw.trim();
   if (!text) return { error: "Scan a barcode" };

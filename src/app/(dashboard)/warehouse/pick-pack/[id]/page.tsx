@@ -42,7 +42,7 @@ import {
   isRoundFishMixLine,
   sizeProductsForBreakdown,
 } from "@/lib/warehouse/pick-pack-round-fish";
-import { formatPackQty, matchPackScan, pickedPiecesByLine, suggestedCartonsCount } from "@/lib/warehouse/pack-scan";
+import { createScannerBuffer, formatPackQty, matchPackScan, pickedPiecesByLine, pushScannerKey, suggestedCartonsCount } from "@/lib/warehouse/pack-scan";
 import {
   createDistributionVehicle,
   fetchDistributionVehicles,
@@ -404,6 +404,10 @@ export default function PickPackDetailPage() {
       if (!cartonsEdited) {
         setCartons(String(suggestedCartonsCount(task.lines, pickedPiecesByLine(nextDraft))));
       }
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-pack-line="${hit.lineId}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+        scanInputRef.current?.focus();
+      });
     },
     [task, linePickedDraft, cartonsEdited]
   );
@@ -424,6 +428,47 @@ export default function PickPackDetailPage() {
     setScanError(null);
     scanInputRef.current?.focus();
   }, [lastScan, task, cartonsEdited]);
+
+  const applyPackScanRef = React.useRef(applyPackScan);
+  applyPackScanRef.current = applyPackScan;
+
+  React.useEffect(() => {
+    if (!fmcg || !canWrite || (task?.status ?? "").trim().toUpperCase() !== "PENDING") return;
+    let buffer = createScannerBuffer();
+    const onKeyDown = (event: KeyboardEvent) => {
+      const scanFieldFocused = document.activeElement === scanInputRef.current;
+      const target = event.target;
+      const manualField =
+        target instanceof HTMLElement &&
+        Boolean(target.closest("input, textarea, select, [role='combobox']")) &&
+        !target.closest("[data-pack-qty]") &&
+        target !== scanInputRef.current;
+      if (manualField) return;
+      const result = pushScannerKey(buffer, event.key, Date.now(), { scanFieldFocused });
+      buffer = result.buffer;
+      if (result.swallow) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (result.scan) {
+        const typed = result.scan;
+        setScanValue("");
+        applyPackScanRef.current(typed);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest("input, textarea, select, button, a, [role='combobox'], [role='option']")) return;
+      scanInputRef.current?.focus();
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [fmcg, canWrite, task?.status]);
 
   React.useEffect(() => {
     void fetchWarehouseOptions()
@@ -1146,10 +1191,7 @@ export default function PickPackDetailPage() {
             <CardDescription>
               {fmcg ? (
                 <>
-                  Scan a packed box to match it to this order. A read like <strong>65433213113 24</strong> adds 24
-                  pieces of that product. Quantities show in the order&apos;s carton or box when packaging is set, and
-                  in pieces when it is not. The piece field is a fallback if the scanner misses a code. Set scanned
-                  pieces to 0 to skip a line.
+                  Scan a packed box. You do not click the product first. The barcode finds that line and updates scanned and still to pack on its own. A read like <strong>65433213113 24</strong> adds 24 pieces. The same product scanned again adds to the same row.
                 </>
               ) : (
                 <>
@@ -1177,13 +1219,8 @@ export default function PickPackDetailPage() {
                 ref={scanInputRef}
                 value={scanValue}
                 autoComplete="off"
-                placeholder="Barcode and pieces, e.g. 65433213113 24"
+                placeholder="Scan a pack — the matching product updates on its own"
                 onChange={(e) => setScanValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  e.preventDefault();
-                  applyPackScan(scanValue);
-                }}
               />
               <div className="flex flex-wrap items-center gap-2">
                 {scanError ? <p className="text-sm text-destructive">{scanError}</p> : null}
@@ -1238,6 +1275,7 @@ export default function PickPackDetailPage() {
                   return (
                     <TableRow
                       key={line.id}
+                      data-pack-line={line.id}
                       className={cn(
                         scanFlash?.lineId === line.id && scanFlash.tone === "ok" && "bg-emerald-500/15",
                         scanFlash?.lineId === line.id && scanFlash.tone === "over" && "bg-destructive/15"
@@ -1347,6 +1385,7 @@ export default function PickPackDetailPage() {
                                 min={0}
                                 step="any"
                                 className="h-8 tabular-nums"
+                                data-pack-qty=""
                                 aria-label={`Scanned pieces for ${line.productName ?? line.sku ?? line.productId}`}
                                 value={linePickedDraft[line.id] ?? "0"}
                                 onChange={(e) =>
