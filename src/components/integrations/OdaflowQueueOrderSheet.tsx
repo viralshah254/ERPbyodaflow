@@ -354,6 +354,7 @@ export function OdaflowQueueOrderSheet({
     ? {
         orderTitle: order.orderTitle ?? `${channelLabel(order.channel)} Order`,
         odaflowChannel: order.channel,
+        purchaseOrderNumber: order.purchaseOrderNumber,
         salesRepName: order.salesRepName,
         salesRepPhone: order.salesRepPhone,
         sourcePdfUrl: order.documentUrl,

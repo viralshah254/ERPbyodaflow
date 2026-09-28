@@ -19,6 +19,7 @@ import { formatNairobiRelativeTime } from "@/lib/format/nairobi-datetime";
 import {
   formatOrderAmount,
   orderTypeLabel,
+  placerRoleLabel,
   resolveCustomerLabel,
   resolveSalesRepName,
   resolveSalesRepPhone,
@@ -35,11 +36,23 @@ const ALL_CHANNELS = "__all__";
 
 const EVENT_TYPE_OPTIONS = [
   { value: ALL_CHANNELS, label: "All channels" },
-  { value: "order.modern_trade", label: "Modern Trade" },
+  { value: "order.modern_trade", label: "All modern trade" },
+  { value: "order.modern_trade|email_lpo", label: "Email LPO" },
+  { value: "order.modern_trade|field", label: "Merchandiser / sales rep" },
   { value: "order.distributor", label: "Distributor" },
   { value: "order.direct", label: "Direct Customer" },
   { value: "order.van_sales", label: "Van Sales" },
 ];
+
+function parseChannelFilter(value: string): {
+  eventType?: string;
+  intake?: "email_lpo" | "field";
+} {
+  if (value === ALL_CHANNELS) return {};
+  const [eventType, intake] = value.split("|");
+  if (intake === "email_lpo" || intake === "field") return { eventType, intake };
+  return { eventType };
+}
 
 function issueSummary(item: OdaflowQueueItem): string {
   const mappings = item.unresolvedMappings ?? [];
@@ -120,9 +133,11 @@ export function OdaflowSyncQueuePanel({
   const loadQueue = React.useCallback(async () => {
     setQueueLoading(true);
     try {
+      const channel = parseChannelFilter(queueEventType);
       const res = await fetchOdaflowQueue({
         status: queueStatus,
-        eventType: queueEventType === ALL_CHANNELS ? undefined : queueEventType,
+        eventType: channel.eventType,
+        intake: channel.intake,
         page: queuePage,
         limit: 20,
         customer: debouncedCustomer || undefined,
@@ -216,7 +231,7 @@ export function OdaflowSyncQueuePanel({
                 setQueuePage(1);
               }}
             >
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-56">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -272,6 +287,7 @@ export function OdaflowSyncQueuePanel({
               const salesRep = resolveSalesRepName(item, summary);
               const salesRepPhone = resolveSalesRepPhone(item, summary);
               const orderType = orderTypeLabel(item, summary);
+              const role = placerRoleLabel(item, summary);
               const amount = formatOrderAmount(item, summary);
               const when = formatNairobiRelativeTime(item.createdAt);
 
@@ -307,9 +323,11 @@ export function OdaflowSyncQueuePanel({
                                 Placed by{" "}
                                 <span className="font-medium text-foreground">{salesRep}</span>
                               </span>
-                              <span className="text-[10px] uppercase tracking-wide rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-                                Sales rep
-                              </span>
+                              {role ? (
+                                <span className="text-[10px] uppercase tracking-wide rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                                  {role}
+                                </span>
+                              ) : null}
                               {salesRepPhone ? (
                                 <span className="text-xs text-muted-foreground">{salesRepPhone}</span>
                               ) : null}

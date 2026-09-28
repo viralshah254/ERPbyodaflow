@@ -18,11 +18,80 @@ function payloadRecord(item: OdaflowQueueItem): Record<string, unknown> | undefi
   return item.rawPayload as Record<string, unknown> | undefined;
 }
 
+/** Email LPO vs an order a merchandiser or sales rep sent from the supermarket. */
+export type ModernTradeArrival = "email_lpo" | "field";
+
+const FIELD_PO_PREFIX = /^(MPO|MTO)-/i;
+
+export function modernTradeArrival(input: {
+  eventType?: string;
+  channel?: string;
+  orderTitle?: string;
+  purchaseOrderNumber?: string;
+  intake?: string;
+}): ModernTradeArrival | null {
+  const modern =
+    input.eventType === "order.modern_trade" ||
+    input.channel === "modern_trade" ||
+    /modern trade/i.test(input.orderTitle ?? "");
+  if (!modern && input.intake !== "field" && input.intake !== "email_lpo") return null;
+  if (input.intake === "field") return "field";
+  if (input.intake === "email_lpo") return "email_lpo";
+  const title = input.orderTitle ?? "";
+  const po = input.purchaseOrderNumber ?? "";
+  if (/merchandiser/i.test(title) || FIELD_PO_PREFIX.test(po)) return "field";
+  if (modern) return "email_lpo";
+  return null;
+}
+
+export function arrivalOrderLabel(arrival: ModernTradeArrival): string {
+  return arrival === "field"
+    ? "Modern Trade — Merchandiser / sales rep"
+    : "Modern Trade — Email LPO";
+}
+
+function arrivalFromItem(
+  item: OdaflowQueueItem,
+  summary?: OdaflowQueueOrderSummary | null
+): ModernTradeArrival | null {
+  const payload = payloadRecord(item);
+  const meta = payload?.metadata as Record<string, unknown> | undefined;
+  const intake =
+    summary?.intake ??
+    (typeof payload?.intake === "string" ? payload.intake : undefined) ??
+    (typeof meta?.intake === "string" ? meta.intake : undefined);
+  return modernTradeArrival({
+    eventType: item.eventType,
+    channel: summary?.channel ?? (typeof payload?.channel === "string" ? payload.channel : undefined),
+    orderTitle:
+      summary?.orderTitle ??
+      (typeof payload?.orderTitle === "string" ? payload.orderTitle : undefined) ??
+      (typeof meta?.orderTitle === "string" ? meta.orderTitle : undefined),
+    purchaseOrderNumber:
+      summary?.purchaseOrderNumber ??
+      (typeof payload?.purchaseOrderNumber === "string" ? payload.purchaseOrderNumber : undefined),
+    intake,
+  });
+}
+
+/** Badge next to the person who sent the order. Email LPOs have no field role. */
+export function placerRoleLabel(
+  item: OdaflowQueueItem,
+  summary?: OdaflowQueueOrderSummary | null
+): string | null {
+  const arrival = arrivalFromItem(item, summary);
+  if (arrival === "field") return "Merchandiser";
+  if (arrival === "email_lpo") return null;
+  return "Sales rep";
+}
+
 export function channelLabelFromEventType(eventType: string): string {
   return EVENT_TYPE_LABELS[eventType] ?? eventType.replace(/^order\./, "").replace(/_/g, " ");
 }
 
 export function orderTypeLabel(item: OdaflowQueueItem, summary?: OdaflowQueueOrderSummary | null): string {
+  const arrival = arrivalFromItem(item, summary);
+  if (arrival) return arrivalOrderLabel(arrival);
   if (summary?.orderTitle?.trim()) return summary.orderTitle.trim();
   if (summary?.channel && CHANNEL_LABELS[summary.channel]) return CHANNEL_LABELS[summary.channel];
   return channelLabelFromEventType(item.eventType);
