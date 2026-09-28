@@ -16,5 +16,7 @@ export type SalesDocRow = {
   /** Odaflow SFA sync metadata (sales orders only). */
   externalSource?: string;
   odaflowChannel?: string;
+  odaflowOrderTitle?: string;
+  odaflowSalesRepName?: string;
   odaflowSourcePdfUrl?: string;
 };

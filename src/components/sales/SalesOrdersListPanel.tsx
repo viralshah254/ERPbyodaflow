@@ -24,6 +24,9 @@ import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
+import { modernTradeArrival } from "@/lib/odaflow/queue-display";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
 import {
   DropdownMenu,
@@ -48,6 +51,23 @@ const CHANNEL_OPTIONS = [
   { label: "WhatsApp", value: "whatsapp" },
 ];
 
+const TYPE_OPTIONS = [
+  { label: "All types", value: "" },
+  { label: "Email LPO", value: "email_lpo" },
+  { label: "Merchandiser / sales rep", value: "field" },
+];
+
+function salesOrderTypeLabel(row: SalesDocRow): string | null {
+  const arrival = modernTradeArrival({
+    channel: row.odaflowChannel,
+    orderTitle: row.odaflowOrderTitle,
+    purchaseOrderNumber: row.number,
+  });
+  if (arrival === "field") return "Merchandiser / sales rep";
+  if (arrival === "email_lpo") return "Email LPO";
+  return null;
+}
+
 function isWhatsAppStyleSalesOrder(r: SalesDocRow): boolean {
   return (
     r.orderChannel === "WHATSAPP" ||
@@ -68,10 +88,14 @@ type SalesOrdersListPanelProps = {
 export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: SalesOrdersListPanelProps) {
   const router = useRouter();
   const baseCurrency = useBaseCurrency();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [channelFilter, setChannelFilter] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(savedViewsScope));
@@ -96,6 +120,8 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
           search: debouncedSearch.trim() || undefined,
           status: statusFilter || undefined,
           orderChannels: channelFilter === "whatsapp" ? "WHATSAPP,COOLCATCH_WA" : undefined,
+          sfaIntake:
+            fmcg && (typeFilter === "email_lpo" || typeFilter === "field") ? typeFilter : undefined,
         });
         setRows(
           [...page.items].sort((a, b) => {
@@ -113,7 +139,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
         setLoading(false);
       }
     },
-    [debouncedSearch, statusFilter, channelFilter]
+    [debouncedSearch, statusFilter, channelFilter, fmcg, typeFilter]
   );
 
   React.useEffect(() => {
@@ -141,9 +167,13 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
     if (channelFilter === "whatsapp") chips.push({ id: "channel", label: "Channel", value: "WhatsApp" });
+    if (fmcg && typeFilter) {
+      const opt = TYPE_OPTIONS.find((o) => o.value === typeFilter);
+      chips.push({ id: "type", label: "Type", value: opt?.label ?? typeFilter });
+    }
     if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
     return chips;
-  }, [statusFilter, channelFilter, search]);
+  }, [statusFilter, channelFilter, fmcg, typeFilter, search]);
 
   const columns = React.useMemo(
     () => [
@@ -163,6 +193,27 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
         ),
       },
       { id: "party", header: "Customer", accessor: "party" as keyof SalesDocRow },
+      ...(fmcg
+        ? [
+            {
+              id: "type",
+              header: "Type",
+              accessor: (r: SalesDocRow) => {
+                const type = salesOrderTypeLabel(r);
+                const placedBy = r.odaflowSalesRepName?.trim();
+                if (!type && !placedBy) return <span className="text-muted-foreground">—</span>;
+                return (
+                  <div className="min-w-[10rem]">
+                    {type ? <p className="text-sm">{type}</p> : null}
+                    {placedBy ? (
+                      <p className="text-xs text-muted-foreground truncate">Placed by {placedBy}</p>
+                    ) : null}
+                  </div>
+                );
+              },
+            },
+          ]
+        : []),
       {
         id: "total",
         header: "Total",
@@ -257,25 +308,27 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
         ),
       },
     ],
-    [actionLoadingId, baseCurrency, loadPage, pageOffset]
+    [actionLoadingId, baseCurrency, fmcg, loadPage, pageOffset]
   );
 
   const handleClearFilters = () => {
     setStatusFilter("");
     setChannelFilter("");
+    setTypeFilter("");
     setSearch("");
   };
 
   const handleRemoveFilterChip = (id: string) => {
     if (id === "status") setStatusFilter("");
     if (id === "channel") setChannelFilter("");
+    if (id === "type") setTypeFilter("");
     if (id === "q") setSearch("");
   };
 
   const handleSaveView = () => {
     const v = saveView(savedViewsScope, {
       name: `View ${savedViews.length + 1}`,
-      filters: { q: search, status: statusFilter, channel: channelFilter },
+      filters: { q: search, status: statusFilter, channel: channelFilter, type: typeFilter },
     });
     setSavedViews(getSavedViews(savedViewsScope));
     setCurrentViewId(v.id);
@@ -287,6 +340,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
       setSearch((v.filters.q as string) ?? "");
       setStatusFilter((v.filters.status as string) ?? "");
       setChannelFilter((v.filters.channel as string) ?? "");
+      setTypeFilter(fmcg ? ((v.filters.type as string) ?? "") : "");
     }
     setCurrentViewId(id);
   };
@@ -323,6 +377,18 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
             value: channelFilter,
             onChange: (v) => setChannelFilter(v),
           },
+          ...(fmcg
+            ? [
+                {
+                  id: "type",
+                  label: "Type",
+                  options: TYPE_OPTIONS,
+                  value: typeFilter,
+                  onChange: (v: string) => setTypeFilter(v),
+                  triggerClassName: "w-[220px]",
+                },
+              ]
+            : []),
         ]}
         activeFiltersCount={filterChips.length}
         onClearFilters={handleClearFilters}
@@ -358,7 +424,14 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
         }}
       />
       {loading ? (
-        <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-20", "w-24", "w-36", "w-28", "w-24", "w-8"]} />
+        <SkeletonDataTable
+          rows={PAGE_SIZE}
+          columnWidths={
+            fmcg
+              ? ["w-20", "w-24", "w-36", "w-40", "w-28", "w-24", "w-8"]
+              : ["w-20", "w-24", "w-36", "w-28", "w-24", "w-8"]
+          }
+        />
       ) : (
         <DataTable<SalesDocRow>
           data={rows}
