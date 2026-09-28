@@ -55,9 +55,11 @@ const TYPE_OPTIONS = [
   { label: "All types", value: "" },
   { label: "Email LPO", value: "email_lpo" },
   { label: "Merchandiser / sales rep", value: "field" },
+  { label: "Direct order", value: "direct" },
 ];
 
 function salesOrderTypeLabel(row: SalesDocRow): string | null {
+  if (row.odaflowChannel === "direct") return "Direct order";
   const arrival = modernTradeArrival({
     channel: row.odaflowChannel,
     orderTitle: row.odaflowOrderTitle,
@@ -121,7 +123,9 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
           status: statusFilter || undefined,
           orderChannels: channelFilter === "whatsapp" ? "WHATSAPP,COOLCATCH_WA" : undefined,
           sfaIntake:
-            fmcg && (typeFilter === "email_lpo" || typeFilter === "field") ? typeFilter : undefined,
+            fmcg && (typeFilter === "email_lpo" || typeFilter === "field" || typeFilter === "direct")
+              ? typeFilter
+              : undefined,
         });
         setRows(
           [...page.items].sort((a, b) => {

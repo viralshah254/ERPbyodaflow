@@ -74,8 +74,8 @@ export type FetchSalesDocumentsPageOpts = {
   status?: string;
   /** Comma-separated channel codes, e.g. WHATSAPP,COOLCATCH_WA */
   orderChannels?: string;
-  /** FMCG modern-trade arrival. email_lpo or field (merchandiser / sales rep). */
-  sfaIntake?: "email_lpo" | "field";
+  /** FMCG type. email_lpo, field (supermarket), or direct (general-trade client). */
+  sfaIntake?: "email_lpo" | "field" | "direct";
 };
 
 export async function fetchSalesDocumentsPageApi(
