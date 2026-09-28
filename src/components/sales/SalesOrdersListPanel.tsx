@@ -21,6 +21,7 @@ import { downloadCsv } from "@/lib/export/csv";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { LIST_TABLE_SURFACE_CLASS } from "@/components/layout/page-shell";
 import { cn } from "@/lib/utils";
 import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
@@ -360,7 +361,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
   const rangeEnd = pageOffset + rows.length;
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <DataTableToolbar
         className="shrink-0"
         searchPlaceholder="Search by number, customer..."
@@ -427,29 +428,34 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
           );
         }}
       />
-      {loading ? (
-        <SkeletonDataTable
-          rows={PAGE_SIZE}
-          columnWidths={
-            fmcg
-              ? ["w-20", "w-24", "w-36", "w-40", "w-28", "w-24", "w-8"]
-              : ["w-20", "w-24", "w-36", "w-28", "w-24", "w-8"]
-          }
-        />
-      ) : (
-        <DataTable<SalesDocRow>
-          data={rows}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/sales-order/${row.id}`)}
-          emptyMessage="No sales orders yet."
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          scrollMode="natural"
-          size="comfortable"
-        />
-      )}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className={LIST_TABLE_SURFACE_CLASS}>
+        {loading ? (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <SkeletonDataTable
+              rows={8}
+              columnWidths={
+                fmcg
+                  ? ["w-20", "w-24", "w-36", "w-40", "w-28", "w-24", "w-8"]
+                  : ["w-20", "w-24", "w-36", "w-28", "w-24", "w-8"]
+              }
+            />
+          </div>
+        ) : (
+          <DataTable<SalesDocRow>
+            data={rows}
+            columns={columns}
+            onRowClick={(row) => router.push(`/docs/sales-order/${row.id}`)}
+            emptyMessage="No sales orders yet."
+            selectable
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+            scrollMode="fill"
+            size="comfortable"
+            className="min-h-0 flex-1 border-0"
+          />
+        )}
+      </div>
+      <div className="flex shrink-0 flex-col gap-2 rounded-xl border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground tabular-nums">
           {loading
             ? "Loading sales orders…"

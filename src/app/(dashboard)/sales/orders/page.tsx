@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -430,10 +430,10 @@ export default function SalesOrdersPage() {
           </Button>
         ) : undefined}
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+      <div className={LIST_PAGE_BODY_CLASS}>
         {isFranchisor ? (
-          <Tabs defaultValue="orders">
-            <TabsList>
+          <Tabs defaultValue="orders" className="flex min-h-0 flex-1 flex-col">
+            <TabsList className="w-fit shrink-0">
               <TabsTrigger value="orders">Sales Orders</TabsTrigger>
               <TabsTrigger value="franchise-orders" className="gap-1.5">
                 Franchise Orders
@@ -445,10 +445,10 @@ export default function SalesOrdersPage() {
                 ) : null}
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="franchise-orders" className="mt-4">
+            <TabsContent value="franchise-orders" className="mt-4 flex min-h-0 flex-1 flex-col overflow-y-auto">
               <FranchiseOrdersTab canWrite={canWrite} />
             </TabsContent>
-            <TabsContent value="orders" className="mt-4">
+            <TabsContent value="orders" className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
               <SalesOrdersPanel />
             </TabsContent>
           </Tabs>
