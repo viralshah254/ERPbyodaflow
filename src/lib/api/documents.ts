@@ -231,6 +231,7 @@ type BackendDocumentListItem = {
   id: string;
   number: string;
   date: string;
+  createdAt?: string;
   party?: string;
   partyId?: string;
   total?: number;
@@ -622,7 +623,9 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     id: item.id,
     number: item.number,
     date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
+    createdAt: item.createdAt,
     party: item.party ?? item.partyId,
+    partyId: item.partyId,
     total: item.total,
     currency: item.currency,
     exchangeRate: item.exchangeRate,

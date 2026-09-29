@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { useRouter } from "next/navigation";
 import * as Icons from "lucide-react";
 import {
@@ -302,7 +303,13 @@ export default function MasterPartiesPage() {
           }
           return (
             <div className="space-y-1">
-              <div className="font-medium">{r.name}</div>
+              <div className="font-medium">
+                {r.roles?.includes("customer") || r.type === "customer" ? (
+                  <CustomerLink id={r.id} name={r.name} />
+                ) : (
+                  r.name
+                )}
+              </div>
               <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
                 {r.roles?.includes("customer") || r.type === "customer" ? (
                   <Link

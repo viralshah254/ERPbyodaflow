@@ -23,6 +23,7 @@ import {
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { toast } from "sonner";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { bulkDocumentActionApi } from "@/lib/api/documents";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -118,7 +119,11 @@ export default function SalesDeliveriesPage() {
         sticky: true,
       },
       { id: "date", header: "Date", accessor: "date" as keyof SalesDocRow },
-      { id: "party", header: "Customer", accessor: "party" as keyof SalesDocRow },
+      {
+        id: "party",
+        header: "Customer",
+        accessor: (r: SalesDocRow) => <CustomerLink id={r.partyId} name={r.party} />,
+      },
       {
         id: "total",
         header: "Total",

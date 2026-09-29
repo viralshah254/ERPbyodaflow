@@ -12,6 +12,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { type OverdueInvoiceRow } from "@/lib/types/treasury";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { fetchCollectionsApi } from "@/lib/api/treasury-ops";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
@@ -52,7 +53,11 @@ export default function CollectionsPage() {
   const columns = React.useMemo(
     () => [
       { id: "number", header: "Invoice", accessor: (r: OverdueInvoiceRow) => <span className="font-medium">{r.number}</span>, sticky: true },
-      { id: "customerName", header: "Customer", accessor: "customerName" as keyof OverdueInvoiceRow },
+      {
+        id: "customerName",
+        header: "Customer",
+        accessor: (r: OverdueInvoiceRow) => <CustomerLink id={r.customerId} name={r.customerName} />,
+      },
       {
         id: "outstanding",
         header: "Outstanding",

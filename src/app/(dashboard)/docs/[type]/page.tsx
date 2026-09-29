@@ -48,6 +48,16 @@ import { KraSigningBadge } from "@/components/kra/KraSigningBadge";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { SalesOrdersListPanel } from "@/components/sales/SalesOrdersListPanel";
+import { CustomerLink } from "@/components/customers/CustomerLink";
+
+const CUSTOMER_DOC_TYPES = new Set([
+  "quote",
+  "sales-order",
+  "delivery-note",
+  "invoice",
+  "credit-note",
+  "debit-note",
+]);
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE = 25;
@@ -131,6 +141,8 @@ function buildColumns(
           compact
         />
       );
+    } else if (accessor === "party" && CUSTOMER_DOC_TYPES.has(type)) {
+      acc = (r) => <CustomerLink id={r.partyId} name={r.party} />;
     } else if (accessor === "number") {
       acc = (r) => (
         <DocumentNumber value={r.number ?? "—"} className="font-medium" />

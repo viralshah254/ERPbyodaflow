@@ -66,6 +66,7 @@ import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchPartyByIdApi, formatPartyDisplayName, type PartyLookupOption } from "@/lib/api/parties";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
   DocumentDetailHeader,
@@ -1362,7 +1363,14 @@ export default function DocViewPage() {
                 value:
                   displayPartyName !== "—" || odaflowSalesOrder ? (
                     <div className="space-y-1.5">
-                      <span>{displayPartyName !== "—" ? displayPartyName : "—"}</span>
+                      {!isPurchaseDoc && document?.partyId ? (
+                        <CustomerLink
+                          id={document.partyId}
+                          name={displayPartyName !== "—" ? displayPartyName : undefined}
+                        />
+                      ) : (
+                        <span>{displayPartyName !== "—" ? displayPartyName : "—"}</span>
+                      )}
                       {odaflowSalesOrder ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge

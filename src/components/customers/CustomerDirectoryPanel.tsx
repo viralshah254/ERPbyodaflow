@@ -45,6 +45,7 @@ import {
   CustomerHideConfirmDialog,
   type CustomerHideKind,
 } from "@/components/customers/CustomerHideConfirmDialog";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 
 type TabId = (typeof CUSTOMER_DIRECTORY_TABS)[number]["id"];
 
@@ -266,7 +267,7 @@ export function CustomerDirectoryPanel({
               <TableRow key={party.id}>
                 <TableCell>
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{party.name}</p>
+                    <CustomerLink id={party.id} name={party.name} className="font-medium" />
                     {party.tradingName ? (
                       <p className="text-xs text-muted-foreground truncate">{party.tradingName}</p>
                     ) : null}
@@ -363,7 +364,7 @@ export function CustomerDirectoryPanel({
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <p className="font-medium truncate">{party.name}</p>
+                      <CustomerLink id={party.id} name={party.name} className="font-medium" />
                       {party.tradingName ? (
                         <span className="text-sm text-muted-foreground truncate">
                           ({party.tradingName})

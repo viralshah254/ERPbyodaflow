@@ -17,6 +17,7 @@ import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { fetchProductsApi } from "@/lib/api/products";
 import type { DocListRow } from "@/lib/types/documents";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -63,7 +64,11 @@ export default function SalesReturnsPage() {
     () => [
       { id: "number", header: "Number", accessor: (r: DocListRow) => <span className="font-medium">{r.number}</span>, sticky: true },
       { id: "date", header: "Date", accessor: "date" as keyof DocListRow },
-      { id: "party", header: "Customer", accessor: "party" as keyof DocListRow },
+      {
+        id: "party",
+        header: "Customer",
+        accessor: (r: DocListRow) => <CustomerLink id={r.partyId} name={r.party} />,
+      },
       { id: "warehouse", header: "Warehouse", accessor: "warehouse" as keyof DocListRow },
       { id: "total", header: "Total", accessor: (r: DocListRow) => r.total?.toLocaleString() ?? "—" },
       { id: "status", header: "Status", accessor: "status" as keyof DocListRow },

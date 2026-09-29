@@ -6,6 +6,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   LIST_PAGE_BODY_CLASS,
   LIST_PAGE_SHELL_CLASS,
@@ -293,7 +294,7 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
         sticky: true,
         accessor: (r: CustomerDefaultPriceListRow) => (
           <div className="min-w-0">
-            <div className="font-medium truncate">{r.customerName ?? r.customerId}</div>
+            <CustomerLink id={r.customerId} name={r.customerName ?? r.customerId} className="font-medium" />
             {r.customerCode ? (
               <div className="text-xs text-muted-foreground font-mono">{r.customerCode}</div>
             ) : null}

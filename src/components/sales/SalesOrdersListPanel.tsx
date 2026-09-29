@@ -27,6 +27,7 @@ import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
 import { modernTradeArrival } from "@/lib/odaflow/queue-display";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import * as Icons from "lucide-react";
 import {
@@ -197,7 +198,11 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
           </span>
         ),
       },
-      { id: "party", header: "Customer", accessor: "party" as keyof SalesDocRow },
+      {
+        id: "party",
+        header: "Customer",
+        accessor: (r: SalesDocRow) => <CustomerLink id={r.partyId} name={r.party} />,
+      },
       ...(fmcg
         ? [
             {

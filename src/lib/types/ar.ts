@@ -23,4 +23,10 @@ export type PaymentRow = {
   status: string;
   paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
   mpesaTransactionNo?: string;
+  allocations?: Array<{
+    documentType?: string;
+    documentId: string;
+    documentNumber?: string;
+    amount: number;
+  }>;
 };

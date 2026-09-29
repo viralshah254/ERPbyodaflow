@@ -5,7 +5,9 @@ export type DocListRow = {
   id: string;
   number: string;
   date: string;
+  createdAt?: string;
   party?: string;
+  partyId?: string;
   total?: number;
   currency?: string;
   exchangeRate?: number;

@@ -16,12 +16,15 @@ import { useTerminology } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 
 export default function DistributionCollectionsPage() {
   const terminology = useTerminology();
   const canWrite = useCanWriteDistribution();
   const collectionLabel = t("collection", terminology);
-  const [rows, setRows] = React.useState<Array<{ id: string; party: string; due: number; overdue: number; aging: string }>>([]);
+  const [rows, setRows] = React.useState<
+    Array<{ id: string; customerId: string; party: string; due: number; overdue: number; aging: string }>
+  >([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -32,6 +35,7 @@ export default function DistributionCollectionsPage() {
         if (cancelled) return;
         setRows(items.map((item) => ({
           id: item.id,
+          customerId: item.customerId,
           party: item.customerName,
           due: item.total,
           overdue: item.outstanding,
@@ -50,7 +54,12 @@ export default function DistributionCollectionsPage() {
   }, []);
 
   const columns = [
-    { id: "party", header: "Party", accessor: (r: (typeof rows)[number]) => <span className="font-medium">{r.party}</span>, sticky: true },
+    {
+      id: "party",
+      header: "Customer",
+      accessor: (r: (typeof rows)[number]) => <CustomerLink id={r.customerId} name={r.party} />,
+      sticky: true,
+    },
     { id: "due", header: "Due", accessor: (r: (typeof rows)[number]) => `KES ${r.due.toLocaleString()}` },
     { id: "overdue", header: "Overdue", accessor: (r: (typeof rows)[number]) => `KES ${r.overdue.toLocaleString()}` },
     { id: "aging", header: "Aging", accessor: "aging" as keyof (typeof rows)[number] },

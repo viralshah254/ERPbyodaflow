@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { useRouter } from "next/navigation";
 import { LIST_TABLE_PAGINATION_CLASS, LIST_TABLE_STATIC_CLASS } from "@/components/layout/page-shell";
 import { DataTable } from "@/components/ui/data-table";
@@ -344,7 +345,7 @@ export function CustomerAccountsPanel({
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <div className="font-medium truncate">{row.name}</div>
+              <CustomerLink id={row.id} name={row.name} className="font-medium" />
               <div className="text-xs text-muted-foreground truncate">{row.email ?? row.code ?? ""}</div>
             </div>
           </div>

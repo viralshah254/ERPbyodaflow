@@ -9,6 +9,7 @@ import { InsightCard, KpiHero } from "@/components/analytics";
 import { fetchAnalyticsInsights } from "@/lib/api/analytics";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 
 export default function AnalyticsFinancePage() {
   const [insights, setInsights] = React.useState<Awaited<ReturnType<typeof fetchAnalyticsInsights>> | null>(null);
@@ -82,7 +83,9 @@ export default function AnalyticsFinancePage() {
                 {rows.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.number}</td>
-                    <td className="px-3 py-2">{r.partyName ?? r.partyId ?? "Customer"}</td>
+                    <td className="px-3 py-2">
+                      <CustomerLink id={r.partyId} name={r.partyName ?? r.partyId} />
+                    </td>
                     <td className="px-3 py-2">{r.customerCategory ?? "—"}</td>
                     <td className="px-3 py-2">{r.channel ?? "—"}</td>
                     <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.amount ?? 0, "KES")}</td>

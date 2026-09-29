@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,7 +49,7 @@ export default function DispatchReturnsPage() {
               <div>
                 <p className="font-medium">{row.number}</p>
                 <p className="text-sm text-muted-foreground">
-                  {row.partyName ?? "—"} · Driver {row.dispatcherName}
+                  <CustomerLink id={row.partyId} name={row.partyName} /> · Driver {row.dispatcherName}
                   {row.tripLabel ? ` · Trip ${row.tripLabel}` : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">
