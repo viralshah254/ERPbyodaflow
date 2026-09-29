@@ -36,8 +36,10 @@ import {
 } from "@/lib/api/product-categories";
 import {
   discountFromPriceAndFinal,
+  exclFromIncl,
   finalFromPriceAndDiscount,
   formatPriceAmount,
+  inclFromExcl,
   normalizeDiscountInput,
   parseDiscountPercent,
   parseNumber,
@@ -59,6 +61,8 @@ type RowDraft = {
   size: string;
   stock: string;
   pricePerPiece: string;
+  priceExcl: string;
+  vatRate: string;
   rrp: string;
   discountPercent: string;
   finalPrice: string;
@@ -105,6 +109,8 @@ function SortableHead({
 
 type EditDraft = {
   pricePerPiece: string;
+  priceExcl: string;
+  vatRate: string;
   rrp: string;
   discountPercent: string;
   finalPrice: string;
@@ -117,7 +123,13 @@ function finalFromDraft(priceStr: string, discountStr: string): string {
   return formatPriceAmount(finalFromPriceAndDiscount(price, discount));
 }
 
-function itemToEdit(item?: { price?: number; rrp?: number; discountPercent?: number }): EditDraft {
+function itemToEdit(item?: {
+  price?: number;
+  rrp?: number;
+  discountPercent?: number;
+  priceExcl?: number;
+  vatRate?: number;
+}): EditDraft {
   const pricePerPiece = item?.price != null ? String(item.price) : "";
   const rrp = item?.rrp != null ? String(item.rrp) : "";
   const discountPercent =
@@ -126,6 +138,8 @@ function itemToEdit(item?: { price?: number; rrp?: number; discountPercent?: num
       : "";
   return {
     pricePerPiece,
+    priceExcl: item?.priceExcl != null ? String(item.priceExcl) : "",
+    vatRate: item?.vatRate != null ? String(item.vatRate) : "",
     rrp,
     discountPercent,
     finalPrice: finalFromDraft(pricePerPiece, discountPercent),
@@ -333,6 +347,8 @@ export function FmcgPriceTagItemsEditor({
             size: p.size?.trim() || "—",
             stock,
             pricePerPiece: edit.pricePerPiece,
+            priceExcl: edit.priceExcl,
+            vatRate: edit.vatRate,
             rrp: edit.rrp,
             discountPercent: edit.discountPercent,
             finalPrice: edit.finalPrice || finalFromDraft(edit.pricePerPiece, edit.discountPercent),
@@ -430,10 +446,45 @@ export function FmcgPriceTagItemsEditor({
     const current =
       edits[productId] ??
       itemToEdit(list?.items.find((i) => i.productId === productId));
+    const vat = parseNumber(current.vatRate);
+    const sell = parseNumber(pricePerPiece);
+    const priceExcl =
+      sell != null && vat != null && vat > 0
+        ? formatPriceAmount(exclFromIncl(sell, vat))
+        : current.priceExcl;
     setRowEdit(productId, {
+      pricePerPiece,
+      priceExcl,
+      finalPrice: finalFromDraft(pricePerPiece, current.discountPercent),
+    });
+  };
+
+  const editExcl = (productId: string, priceExcl: string) => {
+    const current =
+      edits[productId] ??
+      itemToEdit(list?.items.find((i) => i.productId === productId));
+    const vat = parseNumber(current.vatRate) ?? 0;
+    const excl = parseNumber(priceExcl);
+    const pricePerPiece =
+      excl != null ? formatPriceAmount(inclFromExcl(excl, vat)) : current.pricePerPiece;
+    setRowEdit(productId, {
+      priceExcl,
       pricePerPiece,
       finalPrice: finalFromDraft(pricePerPiece, current.discountPercent),
     });
+  };
+
+  const editVat = (productId: string, vatRate: string) => {
+    const current =
+      edits[productId] ??
+      itemToEdit(list?.items.find((i) => i.productId === productId));
+    const vat = parseNumber(vatRate);
+    const sell = parseNumber(current.pricePerPiece);
+    const priceExcl =
+      sell != null && vat != null && vat > 0
+        ? formatPriceAmount(exclFromIncl(sell, vat))
+        : current.priceExcl;
+    setRowEdit(productId, { vatRate, priceExcl });
   };
 
   const editDiscount = (productId: string, discountPercent: string) => {
@@ -490,11 +541,15 @@ export function FmcgPriceTagItemsEditor({
         }
         const discountPercent = parseDiscountPercent(edit.discountPercent);
         const rrp = Number(edit.rrp);
+        const priceExcl = parseNumber(edit.priceExcl);
+        const vatRate = parseNumber(edit.vatRate);
         byId.set(productId, {
           productId,
           price,
           ...(Number.isFinite(rrp) && rrp > 0 && edit.rrp.trim() !== "" ? { rrp } : {}),
           ...(discountPercent != null && discountPercent > 0 ? { discountPercent } : {}),
+          ...(priceExcl != null && priceExcl > 0 ? { priceExcl } : {}),
+          ...(vatRate != null && edit.vatRate.trim() !== "" ? { vatRate } : {}),
         });
       }
 
@@ -508,11 +563,15 @@ export function FmcgPriceTagItemsEditor({
         }
         const discountPercent = parseDiscountPercent(r.discountPercent);
         const rrp = Number(r.rrp);
+        const priceExcl = parseNumber(r.priceExcl);
+        const vatRate = parseNumber(r.vatRate);
         byId.set(r.productId, {
           productId: r.productId,
           price,
           ...(Number.isFinite(rrp) && rrp > 0 && r.rrp.trim() !== "" ? { rrp } : {}),
           ...(discountPercent != null && discountPercent > 0 ? { discountPercent } : {}),
+          ...(priceExcl != null && priceExcl > 0 ? { priceExcl } : {}),
+          ...(vatRate != null && r.vatRate.trim() !== "" ? { vatRate } : {}),
         });
       }
 
@@ -523,6 +582,8 @@ export function FmcgPriceTagItemsEditor({
         ...(i.discountPercent != null && i.discountPercent > 0
           ? { discountPercent: i.discountPercent }
           : {}),
+        ...(i.priceExcl != null && i.priceExcl > 0 ? { priceExcl: i.priceExcl } : {}),
+        ...(i.vatRate != null ? { vatRate: i.vatRate } : {}),
       }));
 
       const saved = await updatePriceListApi(list.id, { items });
@@ -585,8 +646,9 @@ export function FmcgPriceTagItemsEditor({
         Enter <span className="font-medium text-foreground">sell price per piece</span> and
         optional <span className="font-medium text-foreground">RRP</span> for{" "}
         <span className="font-medium text-foreground">{tagLabel}</span>. Sell is what you
-        charge; RRP is the recommended reseller price. Discount % and final price stay
-        in sync. To add prices for SKUs that are still blank, set Price to{" "}
+        charge. On a VAT-inclusive list that is the PDF cost incl; cost excl and VAT % sit
+        on the same row. RRP is the recommended shelf price. Discount % and final price stay
+        in sync, taken off the sell price. To add prices for SKUs that are still blank, set Price to{" "}
         <span className="font-medium text-foreground">No price yet</span>, download this
         view, fill the sheet, and import it. Import updates only the rows in the file.
       </p>
@@ -675,7 +737,9 @@ export function FmcgPriceTagItemsEditor({
                     <SortableHead label="Size" field="size" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[88px]" />
                     <SortableHead label="SKU" field="sku" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <TableHead className="w-[88px]">Stock</TableHead>
-                    <SortableHead label="Sell / pc" field="price" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
+                    <TableHead className="w-[120px]">Cost excl</TableHead>
+                    <TableHead className="w-[88px]">VAT %</TableHead>
+                    <SortableHead label="Sell incl" field="price" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
                     <SortableHead label="RRP / pc" field="rrp" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
                     <SortableHead label="Discount %" field="discount" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[120px]" />
                     <SortableHead label="Final price" field="final" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
@@ -684,7 +748,7 @@ export function FmcgPriceTagItemsEditor({
                 <TableBody>
                   {showEmptySearch ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                         {pricedStatus === "priced"
                           ? "No SKUs with a price match. Choose “No price yet” to list products still missing a price on this tag."
                           : pricedStatus === "unpriced"
@@ -700,6 +764,29 @@ export function FmcgPriceTagItemsEditor({
                         <TableCell className="text-sm tabular-nums">{r.size}</TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">{r.sku}</TableCell>
                         <TableCell className="text-sm tabular-nums">{r.stock}</TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="h-8"
+                            value={r.priceExcl}
+                            onChange={(e) => editExcl(r.productId, e.target.value)}
+                            placeholder="0"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step="0.01"
+                            className="h-8"
+                            value={r.vatRate}
+                            onChange={(e) => editVat(r.productId, e.target.value)}
+                            placeholder="0"
+                          />
+                        </TableCell>
                         <TableCell>
                           <Input
                             type="number"

@@ -18,6 +18,19 @@ export function parseDiscountPercent(raw: string | number | null | undefined): n
   return Math.round(pct * 100) / 100;
 }
 
+/** VAT-inclusive amount from an ex-VAT price. 16 means 16%. */
+export function inclFromExcl(excl: number, vatRate: number): number {
+  const rate = Number.isFinite(vatRate) && vatRate > 0 ? vatRate : 0;
+  return Math.round(excl * (1 + rate / 100) * 100) / 100;
+}
+
+/** Ex-VAT amount from a VAT-inclusive price. */
+export function exclFromIncl(incl: number, vatRate: number): number {
+  const rate = Number.isFinite(vatRate) && vatRate > 0 ? vatRate : 0;
+  if (rate === 0) return incl;
+  return Math.round((incl / (1 + rate / 100)) * 100) / 100;
+}
+
 export function finalFromPriceAndDiscount(price: number, discountPercent: number): number {
   const pct = Math.min(100, Math.max(0, discountPercent));
   return Math.round(price * (1 - pct / 100) * 100) / 100;

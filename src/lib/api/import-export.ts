@@ -656,7 +656,7 @@ export async function exportPriceTagPricesAsFormatApi(
       if (!batch.hasMore || !batch.nextCursor) break;
       cursor = batch.nextCursor;
     }
-    const header = ["product", "sku", "barcode", "price", "discountPercent", "finalPrice"];
+    const header = ["product", "sku", "barcode", "costExcl", "vatRate", "price", "rrp", "discountPercent", "finalPrice"];
     const dataRows = products.map((item) => {
       const priced = priceByProduct.get(item.id);
       const price =
@@ -669,7 +669,17 @@ export async function exportPriceTagPricesAsFormatApi(
         typeof price === "number"
           ? finalFromPriceAndDiscount(price, typeof discount === "number" ? discount : 0)
           : "";
-      return [item.name ?? "", item.sku ?? "", item.barcode ?? "", price, discount, final];
+      return [
+        item.name ?? "",
+        item.sku ?? "",
+        item.barcode ?? "",
+        priced?.priceExcl != null && priced.priceExcl > 0 ? priced.priceExcl : "",
+        priced?.vatRate != null ? priced.vatRate : "",
+        price,
+        priced?.rrp != null && priced.rrp > 0 ? priced.rrp : "",
+        discount,
+        final,
+      ];
     });
     const catalog = { priceListName: list?.name ?? tagName };
     const rows: Array<Array<string | number>> = [header, ...dataRows];

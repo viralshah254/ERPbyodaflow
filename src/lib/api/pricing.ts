@@ -56,6 +56,10 @@ export interface PriceListDetail {
     rrp?: number;
     /** FMCG: discount % on this tag for the SKU. */
     discountPercent?: number;
+    /** Trade price before VAT. `price` is the amount charged (cost incl when VAT is inside the price). */
+    priceExcl?: number;
+    /** VAT percent on this row, e.g. 16. */
+    vatRate?: number;
   }>;
   channel?: string;
   tier?: string;
@@ -357,7 +361,15 @@ export async function createPriceListApi(body: {
   name: string;
   code?: string;
   currency?: string;
-  items?: Array<{ productId: string; price: number; currency?: string; rrp?: number; discountPercent?: number }>;
+  items?: Array<{
+    productId: string;
+    price: number;
+    currency?: string;
+    rrp?: number;
+    discountPercent?: number;
+    priceExcl?: number;
+    vatRate?: number;
+  }>;
   parentPriceListId?: string;
   markupType?: "PERCENT" | "FLAT";
   markupValue?: number;
@@ -386,7 +398,15 @@ export async function updatePriceListApi(
     name: string;
     code?: string;
     currency: string;
-    items: Array<{ productId: string; price: number; currency?: string; rrp?: number; discountPercent?: number }>;
+    items: Array<{
+      productId: string;
+      price: number;
+      currency?: string;
+      rrp?: number;
+      discountPercent?: number;
+      priceExcl?: number;
+      vatRate?: number;
+    }>;
     parentPriceListId: string | null;
     markupType: "PERCENT" | "FLAT" | null;
     markupValue: number | null;
