@@ -22,7 +22,7 @@ interface DocumentAttachmentsProps {
   onDownload?: (file: AttachmentFile) => void;
 }
 
-const MOCK_FILES = [
+const MOCK_FILES: AttachmentFile[] = [
   { id: "1", name: "contract-signed.pdf", size: "240 KB" },
   { id: "2", name: "delivery-scan.png", size: "1.2 MB" },
 ];
