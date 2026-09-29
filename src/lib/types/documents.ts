@@ -52,6 +52,8 @@ export type DocumentAttachmentRecord = {
   id: string;
   name: string;
   size?: string;
+  /** External file, such as the original SFA order PDF. Opens directly instead of the ERP download. */
+  href?: string;
 };
 
 export type DocumentCommentRecord = {

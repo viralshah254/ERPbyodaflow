@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -55,13 +57,24 @@ import { useOrgContextStore } from "@/stores/orgContextStore";
 import { CustomerPriceTagsWorkspace } from "@/components/pricing/CustomerPriceTagsWorkspace";
 
 export default function PricingRulesPage() {
+  return (
+    <Suspense fallback={null}>
+      <PricingRulesPageInner />
+    </Suspense>
+  );
+}
+
+function PricingRulesPageInner() {
+  const presetPriceListId = useSearchParams().get("tag") ?? "";
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
 
   if (!seafoodOrg) {
-    return <CustomerPriceTagsWorkspace fmcgOrg={fmcgOrg} />;
+    return (
+      <CustomerPriceTagsWorkspace fmcgOrg={fmcgOrg} presetPriceListId={presetPriceListId} />
+    );
   }
 
   return <SeafoodPricingRulesPage />;

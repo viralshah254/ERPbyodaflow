@@ -128,6 +128,7 @@ export function OdaflowSourceCard({
   compact = false,
   showPdfPreview = true,
   pdfPreviewDefaultExpanded = true,
+  pdfInAttachments = false,
   className,
 }: {
   info: OdaflowSourceInfo;
@@ -135,6 +136,8 @@ export function OdaflowSourceCard({
   showPdfPreview?: boolean;
   /** When showPdfPreview is true, start with the inline iframe collapsed if false. */
   pdfPreviewDefaultExpanded?: boolean;
+  /** The order page shows the PDF in the Attachments tab, so the card stays a summary. */
+  pdfInAttachments?: boolean;
   className?: string;
 }) {
   const arrival = modernTradeArrival({
@@ -257,7 +260,11 @@ export function OdaflowSourceCard({
         ) : null}
 
         {info.sourcePdfUrl ? (
-          showPdfPreview ? (
+          pdfInAttachments ? (
+            <p className="text-xs text-muted-foreground border-t border-sky-200/60 pt-2 dark:border-sky-900/40">
+              The original order PDF is in the Attachments tab.
+            </p>
+          ) : showPdfPreview ? (
             <OdaflowPdfPreview
               url={info.sourcePdfUrl}
               title={`Original SFA order — ${title}`}

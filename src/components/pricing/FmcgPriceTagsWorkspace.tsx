@@ -22,6 +22,11 @@ import {
   type PriceTagViewScope,
 } from "@/components/pricing/FmcgPriceTagItemsEditor";
 import { PriceTagSheetActions } from "@/components/pricing/PriceTagSheetActions";
+import {
+  PriceTagAssignmentBar,
+  useOrgDefaultPriceListId,
+} from "@/components/pricing/PriceTagAssignmentBar";
+import type { CustomerDefaultPriceListRow } from "@/lib/api/pricing";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { cn } from "@/lib/utils";
@@ -50,6 +55,8 @@ export function FmcgPriceTagsWorkspace({
   onDelete: (pl: PriceList) => void;
   onSaved: () => void;
 }) {
+  const [orgDefaultId, setOrgDefaultId] = useOrgDefaultPriceListId();
+  const [assignmentRows, setAssignmentRows] = React.useState<CustomerDefaultPriceListRow[]>([]);
   const [query, setQuery] = React.useState("");
   const [editorEpoch, setEditorEpoch] = React.useState(0);
   const [viewScope, setViewScope] = React.useState<PriceTagViewScope>({
@@ -58,6 +65,15 @@ export function FmcgPriceTagsWorkspace({
     size: "",
     pricedStatus: "priced",
   });
+
+  const customerCountByTag = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of assignmentRows) {
+      if (!row.priceListId || row.source === "category") continue;
+      counts.set(row.priceListId, (counts.get(row.priceListId) ?? 0) + 1);
+    }
+    return counts;
+  }, [assignmentRows]);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -127,6 +143,8 @@ export function FmcgPriceTagsWorkspace({
               {filtered.map((pl) => {
                 const active = selectedId === pl.id;
                 const priced = pl.pricedSkuCount ?? 0;
+                const isDefault = pl.isDefault || pl.id === orgDefaultId;
+                const customerCount = customerCountByTag.get(pl.id) ?? 0;
                 return (
                   <li key={pl.id}>
                     <div
@@ -153,7 +171,7 @@ export function FmcgPriceTagsWorkspace({
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
                             <span className="truncate text-sm font-medium">{pl.name}</span>
-                            {pl.isDefault ? (
+                            {isDefault ? (
                               <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
                                 Default
                               </Badge>
@@ -165,6 +183,14 @@ export function FmcgPriceTagsWorkspace({
                             <span>
                               {priced} SKU{priced === 1 ? "" : "s"} priced
                             </span>
+                            {customerCount > 0 ? (
+                              <>
+                                <span aria-hidden>·</span>
+                                <span>
+                                  {customerCount} customer{customerCount === 1 ? "" : "s"}
+                                </span>
+                              </>
+                            ) : null}
                           </span>
                         </span>
                       </button>
@@ -187,6 +213,12 @@ export function FmcgPriceTagsWorkspace({
                           <DropdownMenuItem onClick={() => onSelect(pl.id)}>
                             <Icons.Tag className="mr-2 h-3.5 w-3.5" />
                             Set piece prices
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/pricing/rules?tag=${encodeURIComponent(pl.id)}`}>
+                              <Icons.Users className="mr-2 h-3.5 w-3.5" />
+                              Assign customers
+                            </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => onEdit(pl)}>
                             <Icons.Pencil className="mr-2 h-3.5 w-3.5" />
@@ -248,6 +280,15 @@ export function FmcgPriceTagsWorkspace({
               </div>
             </header>
             <div className="flex-1 overflow-auto p-4 sm:p-5">
+              <div className="mb-4">
+                <PriceTagAssignmentBar
+                  priceListId={selected.id}
+                  tagName={selected.name}
+                  isDefault={selected.isDefault || selected.id === orgDefaultId}
+                  onDefaultChange={setOrgDefaultId}
+                  onAssignmentsChange={setAssignmentRows}
+                />
+              </div>
               <FmcgPriceTagItemsEditor
                 key={`${selected.id}-${editorEpoch}`}
                 priceListId={selected.id}

@@ -9,6 +9,7 @@ import { DocumentTabs } from "@/components/docs/DocumentTabs";
 import { DocumentRightPanel } from "@/components/docs/DocumentRightPanel";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { DocumentAttachments } from "@/components/docs/DocumentAttachments";
+import { DocumentPriceTagControl } from "@/components/docs/DocumentPriceTagControl";
 import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
 import { DocumentTabLoading } from "@/components/docs/DocumentTabLoading";
@@ -547,11 +548,7 @@ export default function DocViewPage() {
   const odaflowSource = odaflowSourceFromDetail(document);
   const odaflowHeaderExtraFields =
     (odaflowSalesOrder && document?.odaflowSalesRepName ? 1 : 0) +
-    (fmcgOrg &&
-    ["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) &&
-    (document?.priceListName || document?.priceListId)
-      ? 1
-      : 0) +
+    (["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) ? 1 : 0) +
     (type === "delivery-note" ? 1 : 0);
   const detailHeaderColumns = Math.min(4 + odaflowHeaderExtraFields, 6);
 
@@ -1414,13 +1411,22 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
-              ...(fmcgOrg &&
-              ["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) &&
-              (document?.priceListName || document?.priceListId)
+              ...(["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) && document
                 ? [
                     {
                       label: "Price tag",
-                      value: document?.priceListName ?? document?.priceListId ?? "—",
+                      value: (
+                        <DocumentPriceTagControl
+                          docType={type as DocTypeKey}
+                          docId={id}
+                          partyId={document.partyId}
+                          priceListId={document.priceListId}
+                          priceListName={document.priceListName}
+                          status={document.status}
+                          lines={document.lines}
+                          onApplied={() => refreshDocument(true)}
+                        />
+                      ),
                     },
                   ]
                 : []),
@@ -1454,11 +1460,7 @@ export default function DocViewPage() {
           />
         )}
         {odaflowSource ? (
-          <OdaflowSourceCard
-            info={odaflowSource}
-            showPdfPreview
-            pdfPreviewDefaultExpanded={type !== "delivery-note"}
-          />
+          <OdaflowSourceCard info={odaflowSource} showPdfPreview={false} pdfInAttachments />
         ) : null}
         {type === "sales-order" && packagingBlocksConversion ? (
           <FmcgPackagingConversionBlocker
@@ -1955,7 +1957,19 @@ export default function DocViewPage() {
           }
           attachments={
             <DocumentAttachments
-              files={document?.attachments}
+              files={[
+                ...(document?.odaflowSourcePdfUrl
+                  ? [
+                      {
+                        id: `sfa-pdf-${document.id}`,
+                        name: `${document.number || "SFA order"}.pdf`,
+                        size: "Original SFA order",
+                        href: document.odaflowSourcePdfUrl,
+                      },
+                    ]
+                  : []),
+                ...(document?.attachments ?? []),
+              ]}
               loading={extrasLoading || initialLoading}
               onUpload={async (file) => {
                 await uploadDocumentAttachmentApi(type as DocTypeKey, id, file);

@@ -234,7 +234,7 @@ export default function PricingOverviewPage() {
                 <Link href="/pricing/workspace/lists">{tagLabel}</Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link href="/pricing/rules">Customer tags</Link>
+                <Link href="/pricing/rules">Assign to customers</Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link href="/sales/customers">Customers</Link>
@@ -276,7 +276,7 @@ export default function PricingOverviewPage() {
                   </Link>{" "}
                   (or under{" "}
                   <Link href="/pricing/rules" className="text-primary underline">
-                    Customer tags
+                    All customer assignments
                   </Link>
                   ) so new orders start with that tag pre-selected.
                 </li>
