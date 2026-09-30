@@ -1,4 +1,4 @@
-import { resolveIndustryCategoryFromTemplateId } from "@/config/industry";
+import { canonicalIndustryTemplateId, resolveIndustryCategoryFromTemplateId } from "@/config/industry";
 
 export const SFA_SEGMENTS = [
   "MODERN_TRADE_HQ",
@@ -12,10 +12,11 @@ export type SfaSegment = (typeof SFA_SEGMENTS)[number];
 
 export type PartyChannel = "MODERN_TRADE" | "GENERAL_TRADE" | "E_COM" | "HORECA" | "OTHER";
 
-export const FMCG_TEMPLATE_IDS = new Set(["fmcg-manufacturer", "fmcg-distributor"]);
+export const FMCG_TEMPLATE_IDS = new Set(["fmcg-manufacturer", "fmcg-distributor", "fmcg-bakery"]);
 
 export function isFmcgTemplateId(templateId?: string | null): boolean {
-  return Boolean(templateId && FMCG_TEMPLATE_IDS.has(templateId));
+  const id = canonicalIndustryTemplateId(templateId);
+  return Boolean(id && FMCG_TEMPLATE_IDS.has(id));
 }
 
 export function isFmcgOrg(templateId?: string | null): boolean {

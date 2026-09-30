@@ -1,11 +1,35 @@
 export type IndustryCategory = "FMCG" | "SEAFOOD" | "OTHER";
 
-const FMCG_TEMPLATE_IDS = new Set([
+/** Bakery plant. Same FMCG selling screens as fmcg-manufacturer; recipes stay on this template. */
+export const FMCG_BAKERY_TEMPLATE_ID = "fmcg-bakery";
+
+/** Price lists, dispatch, products, tax tags — shared by FMCG manufacturers and bakeries. */
+export const FMCG_SELLING_TEMPLATE_IDS = [
   "fmcg-manufacturer",
   "fmcg-distributor",
+  FMCG_BAKERY_TEMPLATE_ID,
+] as const;
+
+/** Selling screens that retail multi-store also uses. */
+export const FMCG_COMMERCE_TEMPLATE_IDS = [
+  ...FMCG_SELLING_TEMPLATE_IDS,
   "retail-multi-store",
-  "bakex",
+] as const;
+
+const FMCG_TEMPLATE_IDS = new Set<string>([
+  ...FMCG_COMMERCE_TEMPLATE_IDS,
 ]);
+
+/**
+ * `bakex` was the first bakery customer's name used as a template id.
+ * Joy Superbakers and any later bakery use `fmcg-bakery`.
+ */
+export function canonicalIndustryTemplateId(templateId?: string | null): string {
+  const raw = (templateId ?? "").trim();
+  const id = raw.toLowerCase().replace(/_/g, "-");
+  if (id === "bakex" || id === "bakery" || id === "fmcg-bakery") return FMCG_BAKERY_TEMPLATE_ID;
+  return raw;
+}
 
 const SEAFOOD_TEMPLATE_IDS = new Set([
   "seafood-distributor",
@@ -23,7 +47,7 @@ export function industryCategoryLabel(category: IndustryCategory): string {
 }
 
 export function resolveIndustryCategoryFromTemplateId(templateId?: string | null): IndustryCategory {
-  const id = templateId?.trim();
+  const id = canonicalIndustryTemplateId(templateId);
   if (!id) return "FMCG";
   if (FMCG_TEMPLATE_IDS.has(id)) return "FMCG";
   if (SEAFOOD_TEMPLATE_IDS.has(id)) return "SEAFOOD";
