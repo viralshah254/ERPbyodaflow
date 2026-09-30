@@ -1,5 +1,6 @@
 import type { User } from "@/types/erp";
 import type { TemplateOrgType, ModuleKey, FeatureFlagKey, TerminologyOverrides } from "@/config/industryTemplates/index";
+import { canonicalIndustryTemplateId } from "@/config/industry";
 import { t } from "@/lib/terminology";
 import type { NavSectionConfig, NavItemConfig } from "./types";
 import { NAV_SECTIONS_CONFIG } from "./sections";
@@ -65,12 +66,13 @@ function itemPasses(item: NavItemConfig, input: BuildVisibleNavInput): boolean {
     const hasPermission = item.requiresPermissions.some((perm) => hasRuntimePermission(input.permissions, perm));
     if (!hasPermission) return false;
   }
+  const templateId = canonicalIndustryTemplateId(input.templateId);
   if (item.requiresOrgRole && input.orgRole !== item.requiresOrgRole) return false;
   if (item.requiresTemplates?.length) {
-    if (!input.templateId || !item.requiresTemplates.includes(input.templateId)) return false;
+    if (!templateId || !item.requiresTemplates.includes(templateId)) return false;
   }
   if (item.excludesTemplates?.length) {
-    if (input.templateId && item.excludesTemplates.includes(input.templateId)) return false;
+    if (templateId && item.excludesTemplates.includes(templateId)) return false;
   }
   return true;
 }

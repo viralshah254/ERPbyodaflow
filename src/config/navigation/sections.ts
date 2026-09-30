@@ -1,4 +1,5 @@
 import type { NavSectionConfig } from "./types";
+import { FMCG_COMMERCE_TEMPLATE_IDS, FMCG_SELLING_TEMPLATE_IDS } from "../industry";
 
 export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
   {
@@ -132,7 +133,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         href: "/master/departments",
         icon: "Layers",
         moduleKey: "masters",
-        requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
+        requiresTemplates: [...FMCG_COMMERCE_TEMPLATE_IDS],
         requiresPermissions: ["inventory.read", "purchase.read", "sales.read"],
       },
       { key: "masters-parties", label: "Parties", href: "/master/parties", icon: "Users", moduleKey: "masters", requiresPermissions: ["sales.read", "purchase.read", "finance.ar.read", "finance.ap.read"] },
@@ -154,7 +155,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         moduleKey: "inventory",
         termKey: "product",
         requiresPermissions: ["inventory.read"],
-        excludesTemplates: ["fmcg-manufacturer", "fmcg-distributor"],
+        excludesTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },
       {
         key: "inventory-products-fmcg",
@@ -164,7 +165,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         moduleKey: "inventory",
         termKey: "product",
         requiresPermissions: ["inventory.read"],
-        requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor"],
+        requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },
       { key: "inventory-stock-levels", label: "Stock Levels", href: "/inventory/stock-levels", icon: "Warehouse", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-movements", label: "Stock Movements", href: "/inventory/movements", icon: "ArrowLeftRight", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
@@ -195,7 +196,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         icon: "Truck",
         moduleKey: "inventory",
         requiresPermissions: ["inventory.write"],
-        requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor"],
+        requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },
       { key: "warehouse-dispatch-returns", label: "Driver returns", href: "/warehouse/dispatch-returns", icon: "Undo2", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
       { key: "warehouse-putaway", label: "Putaway", href: "/warehouse/putaway", icon: "MapPin", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
@@ -516,7 +517,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
             moduleKey: "pricing",
             requiresPermissions: ["sales.write", "admin.settings"],
             /** FMCG VAT configurations (exclusive / inclusive) for invoicing. */
-            requiresTemplates: ["fmcg-manufacturer", "fmcg-distributor", "retail-multi-store"],
+            requiresTemplates: [...FMCG_COMMERCE_TEMPLATE_IDS],
           },
           {
             key: "pricing-workspace-zones",
