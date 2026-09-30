@@ -160,7 +160,7 @@ export default function MasterProductsPage() {
     tableSort && PRODUCT_SERVER_SORT.has(tableSort.columnId)
       ? (tableSort.columnId as ProductServerSortField)
       : undefined;
-  const serverSortDir = serverSortBy ? tableSort.dir : undefined;
+  const serverSortDir = tableSort && serverSortBy ? tableSort.dir : undefined;
 
   // Step 1 fields
   const [step, setStep] = React.useState<1 | 2>(1);

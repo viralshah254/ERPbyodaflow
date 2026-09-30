@@ -42,6 +42,10 @@ export type WarehousePickPackRow = {
     documentQuantity?: number;
     unitsPer?: number;
     baseUom?: string;
+    /** Product barcode used by pack scanning. */
+    barcode?: string;
+    /** Packaging-row barcodes; a scan of one of these adds one pack. */
+    packBarcodes?: Array<{ barcode: string; unitsPer?: number }>;
     /** True when pack UOM has no unitsPer > 1 on packaging (FMCG). */
     packagingConversionMissing?: boolean;
     suggestedBin?: string;

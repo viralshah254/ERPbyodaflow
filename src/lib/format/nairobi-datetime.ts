@@ -121,3 +121,71 @@ export function formatDocumentCreatedLabel(
   const dayLabel = `${ordinal(Number(d))} ${monthLabel}`;
   return Number(y) === nowYear ? dayLabel : `${dayLabel} ${y}`;
 }
+
+function calendarDayUtc(date: Date): number {
+  const parts = nairobiParts(date);
+  return Date.UTC(parts.year, parts.month - 1, parts.day);
+}
+
+function parseActivityInstant(value: string): { date: Date; hasTime: boolean } | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  const hasTime = /T\d|\d:\d{2}/.test(raw);
+  const date = hasTime ? new Date(raw) : new Date(`${raw.slice(0, 10)}T12:00:00+03:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return { date, hasTime };
+}
+
+/** "an hour ago", "Yesterday", "4 days ago". Falls back to a short calendar date. */
+export function formatActivityWhen(value?: string | null): string {
+  if (!value?.trim()) return "—";
+  const parsed = parseActivityInstant(value);
+  if (!parsed) return value.trim();
+
+  const now = new Date();
+  const dayDelta = Math.round((calendarDayUtc(now) - calendarDayUtc(parsed.date)) / 86_400_000);
+
+  if (parsed.hasTime && dayDelta <= 0) {
+    const diffMin = Math.floor((now.getTime() - parsed.date.getTime()) / 60_000);
+    if (diffMin < 1) return "Just now";
+    if (diffMin < 60) return diffMin === 1 ? "a minute ago" : `${diffMin} minutes ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return diffHours === 1 ? "an hour ago" : `${diffHours} hours ago`;
+  }
+
+  if (dayDelta <= 0) return "Today";
+  if (dayDelta === 1) return "Yesterday";
+  if (dayDelta < 31) return `${dayDelta} days ago`;
+
+  const parts = nairobiParts(parsed.date);
+  const month = MONTH_NAMES[parts.month - 1] ?? "";
+  return parts.year === nairobiParts(now).year
+    ? `${parts.day} ${month}`
+    : `${parts.day} ${month} ${parts.year}`;
+}
+
+/** Full date for tooltips and printed statements. */
+export function formatActivityExact(value?: string | null): string {
+  if (!value?.trim()) return "";
+  const parsed = parseActivityInstant(value);
+  if (!parsed) return value.trim();
+  const parts = nairobiParts(parsed.date);
+  const month = MONTH_NAMES[parts.month - 1] ?? "";
+  const day = `${parts.day} ${month} ${parts.year}`;
+  if (!parsed.hasTime) return day;
+  return `${day}, ${formatClock(parts)}`;
+}
+
+/** Due date as "Due today", "Due in 3 days", or "5 days overdue". */
+export function formatDueWhen(value?: string | null): string {
+  if (!value?.trim()) return "—";
+  const parsed = parseActivityInstant(value.slice(0, 10));
+  if (!parsed) return value.trim();
+  const dayDelta = Math.round((calendarDayUtc(new Date()) - calendarDayUtc(parsed.date)) / 86_400_000);
+  if (dayDelta === 0) return "Due today";
+  if (dayDelta < 0) {
+    const ahead = -dayDelta;
+    return ahead === 1 ? "Due tomorrow" : `Due in ${ahead} days`;
+  }
+  return dayDelta === 1 ? "1 day overdue" : `${dayDelta} days overdue`;
+}

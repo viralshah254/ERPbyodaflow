@@ -12,6 +12,7 @@ import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 
 export default function AccountsReceivablePage() {
   const baseCurrency = useBaseCurrency();
@@ -96,7 +97,9 @@ export default function AccountsReceivablePage() {
                 {invoices.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>{item.number}</TableCell>
-                    <TableCell>{item.customerName}</TableCell>
+                    <TableCell>
+                      <CustomerLink id={item.customerId} name={item.customerName} />
+                    </TableCell>
                     <TableCell>{item.dueDate}</TableCell>
                     <TableCell className="text-right">
                       <DualCurrencyAmount

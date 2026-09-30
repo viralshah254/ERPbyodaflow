@@ -101,6 +101,7 @@ import {
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { QuickAddSupplierSheet } from "@/components/suppliers/QuickAddSupplierSheet";
 import { OdaflowSalesOrderCorrectionDialog } from "@/components/integrations/OdaflowSalesOrderCorrectionDialog";
 import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
@@ -260,6 +261,9 @@ function PartyEntityField({
           {form.formState.errors[key]?.message as string}
         </p>
       )}
+      {role === "customer" && selectedPartyOption?.id ? (
+        <CustomerLink id={selectedPartyOption.id} name="Open customer record" className="text-xs" />
+      ) : null}
     </div>
   );
 }

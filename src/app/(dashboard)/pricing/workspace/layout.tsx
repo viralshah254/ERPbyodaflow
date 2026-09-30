@@ -52,7 +52,7 @@ export default function PricingWorkspaceLayout({ children }: { children: React.R
               path.startsWith("/pricing/rules") && "text-foreground"
             )}
           >
-            {seafood ? "Rules →" : "Customer tags →"}
+            {seafood ? "Rules →" : "All customer assignments →"}
           </Link>
         </nav>
       </div>

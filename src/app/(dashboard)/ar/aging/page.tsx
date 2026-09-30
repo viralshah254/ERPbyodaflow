@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   LIST_PAGE_BODY_CLASS,
   LIST_PAGE_SHELL_CLASS,
@@ -173,9 +173,7 @@ export default function ArAgingPage() {
                   {filtered.map((row) => (
                     <tr key={row.partyId} className="border-b transition-colors hover:bg-muted/20">
                       <td className="px-4 py-2">
-                        <Link href={`/master/parties?search=${encodeURIComponent(row.partyName)}`} className="text-primary hover:underline">
-                          {row.partyName}
-                        </Link>
+                        <CustomerLink id={row.partyId} name={row.partyName} />
                       </td>
                       <td className={`px-3 py-2 text-right ${heatColor(row.current, "current")}`}>
                         {row.current > 0 ? fmt(row.current) : "—"}

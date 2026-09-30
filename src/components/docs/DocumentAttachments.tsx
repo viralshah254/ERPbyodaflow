@@ -6,15 +6,23 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+interface AttachmentFile {
+  id: string;
+  name: string;
+  size?: string;
+  /** When set, open this URL instead of downloading a stored ERP file. */
+  href?: string;
+}
+
 interface DocumentAttachmentsProps {
-  files?: { id: string; name: string; size?: string }[];
+  files?: AttachmentFile[];
   /** When true, show a loading state instead of “No attachments”. */
   loading?: boolean;
   onUpload?: (file: File) => void | Promise<void>;
-  onDownload?: (file: { id: string; name: string; size?: string }) => void;
+  onDownload?: (file: AttachmentFile) => void;
 }
 
-const MOCK_FILES = [
+const MOCK_FILES: AttachmentFile[] = [
   { id: "1", name: "contract-signed.pdf", size: "240 KB" },
   { id: "2", name: "delivery-scan.png", size: "1.2 MB" },
 ];
@@ -29,6 +37,8 @@ export function DocumentAttachments({
   const [isDragOver, setIsDragOver] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const list = files ?? (onUpload ? [] : MOCK_FILES);
+  const preview = list.find((file) => file.href);
+  const showUpload = Boolean(onUpload) && !loading && !preview;
 
   const handleFiles = async (fileList: FileList | null) => {
     const file = fileList?.[0];
@@ -45,38 +55,42 @@ export function DocumentAttachments({
 
   return (
     <div className="space-y-4">
-      <input
-        ref={inputRef}
-        type="file"
-        className="hidden"
-        onChange={(e) => {
-          void handleFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
-      <div
-        className={cn(
-          "rounded-lg border-2 border-dashed p-6 text-center transition-colors",
-          isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 bg-muted/20"
-        )}
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setIsDragOver(false);
-          void handleFiles(e.dataTransfer.files);
-        }}
-      >
-        <p className="text-sm text-muted-foreground mb-2">Drag and drop files here, or</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => inputRef.current?.click()}
-        >
-          <Icons.Upload className="mr-2 h-4 w-4" />
-          Upload file
-        </Button>
-      </div>
+      {showUpload ? (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              void handleFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <div
+            className={cn(
+              "rounded-lg border-2 border-dashed p-6 text-center transition-colors",
+              isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 bg-muted/20"
+            )}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragOver(false);
+              void handleFiles(e.dataTransfer.files);
+            }}
+          >
+            <p className="text-sm text-muted-foreground mb-2">Drag and drop files here, or</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => inputRef.current?.click()}
+            >
+              <Icons.Upload className="mr-2 h-4 w-4" />
+              Upload file
+            </Button>
+          </div>
+        </>
+      ) : null}
       {loading ? (
         <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground" role="status">
           <Icons.Loader2 className="h-4 w-4 animate-spin" />
@@ -97,24 +111,41 @@ export function DocumentAttachments({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {f.size && <span className="text-xs text-muted-foreground">{f.size}</span>}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7"
-                  onClick={() => {
-                    onDownload?.(f);
-                    if (!onDownload) {
-                      toast.success(`Attachment preview for ${f.name} is only available in demo mode.`);
-                    }
-                  }}
-                >
-                  <Icons.Download className="h-4 w-4" />
-                </Button>
+                {f.href ? (
+                  <Button variant="ghost" size="sm" className="h-7" asChild>
+                    <a href={f.href} target="_blank" rel="noopener noreferrer">
+                      <Icons.ExternalLink className="h-4 w-4" />
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => {
+                      onDownload?.(f);
+                      if (!onDownload) {
+                        toast.success(`Attachment preview for ${f.name} is only available in demo mode.`);
+                      }
+                    }}
+                  >
+                    <Icons.Download className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
+      {preview?.href ? (
+        <div className="overflow-hidden rounded-md border bg-white dark:bg-muted/20">
+          <iframe
+            title={preview.name}
+            src={preview.href}
+            className="h-[min(70vh,720px)] w-full border-0"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -6,6 +6,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   LIST_PAGE_BODY_CLASS,
   LIST_PAGE_SHELL_CLASS,
@@ -15,6 +16,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RowActions } from "@/components/ui/row-actions";
@@ -58,7 +61,14 @@ import { cn } from "@/lib/utils";
 
 type SheetMode = "assign" | "edit";
 
-export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
+export function CustomerPriceTagsWorkspace({
+  fmcgOrg,
+  presetPriceListId = "",
+}: {
+  fmcgOrg: boolean;
+  /** Opened from a price tag menu. The tag stays selected while customers are added. */
+  presetPriceListId?: string;
+}) {
   const tagLabel = fmcgOrg ? "Price tag" : "Price list";
   const tagLabelPlural = fmcgOrg ? "Price tags" : "Price lists";
 
@@ -89,6 +99,12 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
   const [partyId, setPartyId] = React.useState("");
   const [partyOption, setPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [listId, setListId] = React.useState("");
+  const [tagFilter, setTagFilter] = React.useState(presetPriceListId);
+  const [pickedCustomers, setPickedCustomers] = React.useState<PartyLookupOption[]>([]);
+  const [pickerQuery, setPickerQuery] = React.useState("");
+  const [pickerChannel, setPickerChannel] = React.useState<"" | PartyChannel>("");
+  const [pickerOptions, setPickerOptions] = React.useState<PartyLookupOption[]>([]);
+  const [pickerLoading, setPickerLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [removeCustomerId, setRemoveCustomerId] = React.useState<string | null>(null);
   const [removeSupplierId, setRemoveSupplierId] = React.useState<string | null>(null);
@@ -98,6 +114,10 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
       .then(setPriceListOptions)
       .catch(() => setPriceListOptions([]));
   }, []);
+
+  React.useEffect(() => {
+    setTagFilter(presetPriceListId);
+  }, [presetPriceListId]);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedCustomerSearch(customerSearch), 250);
@@ -181,13 +201,35 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
     []
   );
 
+  const presetTagName =
+    priceListOptions.find((pl) => pl.id === presetPriceListId)?.name ?? "";
+
+  const openedForTag = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!presetPriceListId || openedForTag.current === presetPriceListId) return;
+    openedForTag.current = presetPriceListId;
+    setSheetKind("customer");
+    setSheetMode("assign");
+    setSheetCustomerChannel("");
+    setPartyId("");
+    setPartyOption(null);
+    setListId(presetPriceListId);
+    setPickedCustomers([]);
+    setPickerQuery("");
+    setPickerChannel("");
+    setSheetOpen(true);
+  }, [presetPriceListId]);
+
   const openAssignCustomer = () => {
     setSheetKind("customer");
     setSheetMode("assign");
     setSheetCustomerChannel("");
     setPartyId("");
     setPartyOption(null);
-    setListId("");
+    setListId(presetPriceListId || tagFilter || "");
+    setPickedCustomers([]);
+    setPickerQuery("");
+    setPickerChannel("");
     setSheetOpen(true);
   };
 
@@ -226,8 +268,52 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
     setSheetOpen(true);
   };
 
+  React.useEffect(() => {
+    if (!sheetOpen || sheetKind !== "customer" || sheetMode !== "assign") return;
+    const handle = window.setTimeout(() => {
+      setPickerLoading(true);
+      void searchPartyLookupOptionsApi({
+        role: "customer",
+        status: "ACTIVE",
+        search: pickerQuery,
+        limit: 50,
+        ...(pickerChannel ? { channel: pickerChannel } : {}),
+      })
+        .then(setPickerOptions)
+        .catch(() => setPickerOptions([]))
+        .finally(() => setPickerLoading(false));
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [sheetOpen, sheetKind, sheetMode, pickerQuery, pickerChannel]);
+
+  const togglePickedCustomer = (option: PartyLookupOption) => {
+    setPickedCustomers((current) =>
+      current.some((row) => row.id === option.id)
+        ? current.filter((row) => row.id !== option.id)
+        : [...current, option]
+    );
+  };
+
+  const toggleAllShownCustomers = () => {
+    const shownIds = new Set(pickerOptions.map((option) => option.id));
+    const allShown =
+      pickerOptions.length > 0 &&
+      pickerOptions.every((option) => pickedCustomers.some((row) => row.id === option.id));
+    setPickedCustomers((current) => {
+      if (allShown) return current.filter((row) => !shownIds.has(row.id));
+      const have = new Set(current.map((row) => row.id));
+      return [...current, ...pickerOptions.filter((option) => !have.has(option.id))];
+    });
+  };
+
   const handleSaveSheet = async () => {
-    if (!partyId.trim() || !listId) {
+    const assigningCustomers = sheetKind === "customer" && sheetMode === "assign";
+    if (assigningCustomers) {
+      if (!listId || pickedCustomers.length === 0) {
+        toast.error(`Choose one ${tagLabel.toLowerCase()} and at least one customer.`);
+        return;
+      }
+    } else if (!partyId.trim() || !listId) {
       toast.error(
         sheetKind === "customer"
           ? `Select a customer and ${tagLabel.toLowerCase()}.`
@@ -237,7 +323,33 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
     }
     setSaving(true);
     try {
-      if (sheetKind === "customer") {
+      if (assigningCustomers) {
+        const failed: string[] = [];
+        let added = 0;
+        for (const customer of pickedCustomers) {
+          try {
+            await setCustomerDefaultPriceList(customer.id, listId);
+            added += 1;
+          } catch {
+            failed.push(customer.label);
+          }
+        }
+        const tagName =
+          priceListOptions.find((pl) => pl.id === listId)?.name || presetTagName || tagLabel;
+        if (added > 0) {
+          toast.success(
+            `${added} customer${added === 1 ? "" : "s"} now use ${tagName}.`
+          );
+        }
+        if (failed.length > 0) {
+          toast.error(`Could not assign ${failed.slice(0, 3).join(", ")}.`);
+        }
+        if (failed.length === 0) {
+          setSheetOpen(false);
+          setPickedCustomers([]);
+        }
+        await loadCustomers();
+      } else if (sheetKind === "customer") {
         await setCustomerDefaultPriceList(partyId.trim(), listId);
         toast.success(`${tagLabel} assigned.`);
         setSheetOpen(false);
@@ -293,7 +405,7 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
         sticky: true,
         accessor: (r: CustomerDefaultPriceListRow) => (
           <div className="min-w-0">
-            <div className="font-medium truncate">{r.customerName ?? r.customerId}</div>
+            <CustomerLink id={r.customerId} name={r.customerName ?? r.customerId} className="font-medium" />
             {r.customerCode ? (
               <div className="text-xs text-muted-foreground font-mono">{r.customerCode}</div>
             ) : null}
@@ -414,6 +526,10 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
     []
   );
 
+  const customersOnPreset = tagFilter
+    ? customerRows.filter((row) => row.priceListId === tagFilter)
+    : customerRows;
+
   const removeCustomer = removeCustomerId
     ? customerRows.find((r) => r.customerId === removeCustomerId)
     : undefined;
@@ -424,11 +540,19 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
-        title={fmcgOrg ? "Customer price tags" : "Customer defaults"}
+        title={
+          presetPriceListId
+            ? `Customers on ${presetTagName || "this tag"}`
+            : fmcgOrg
+              ? "Customer price tags"
+              : "Customer defaults"
+        }
         description={
-          fmcgOrg
-            ? "Assign which price tag each customer uses on sales orders. Click a row to edit or remove."
-            : "Assign a default price list per customer. Click a row to edit or remove."
+          presetPriceListId
+            ? `Search and add the customers who should use ${presetTagName || "this tag"}. Each one you save stays on the list.`
+            : fmcgOrg
+              ? "Assign which price tag each customer uses on sales orders. Click a row to edit or remove."
+              : "Assign a default price list per customer. Click a row to edit or remove."
         }
         breadcrumbs={[
           { label: "Pricing", href: "/pricing/workspace/overview" },
@@ -441,6 +565,11 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
             <Button variant="outline" size="sm" asChild>
               <Link href="/pricing/workspace/lists">{tagLabelPlural}</Link>
             </Button>
+            {presetPriceListId ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/pricing/rules">All customers</Link>
+              </Button>
+            ) : null}
             <Button
               size="sm"
               onClick={tab === "customers" ? openAssignCustomer : openAssignSupplier}
@@ -464,23 +593,33 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
               searchPlaceholder="Search customers by name, code, phone…"
               searchValue={customerSearch}
               onSearchChange={setCustomerSearch}
-              filters={
-                fmcgOrg
+              filters={[
+                ...(fmcgOrg
                   ? [
                       {
                         id: "channel",
                         label: "Channel",
                         value: customerChannel,
-                        onChange: (v) => setCustomerChannel((v as "" | PartyChannel) || ""),
+                        onChange: (v: string) => setCustomerChannel((v as "" | PartyChannel) || ""),
                         options: [
                           { label: "All channels", value: "" },
-                          { label: "Modern trade", value: "MODERN_TRADE" },
+                          { label: "Multichain", value: "MODERN_TRADE" },
                           { label: "General trade", value: "GENERAL_TRADE" },
                         ],
                       },
                     ]
-                  : undefined
-              }
+                  : []),
+                {
+                  id: "tag",
+                  label: tagLabel,
+                  value: tagFilter,
+                  onChange: (v: string) => setTagFilter(v),
+                  options: [
+                    { label: `All ${tagLabelPlural.toLowerCase()}`, value: "" },
+                    ...priceListOptions.map((pl) => ({ label: pl.name, value: pl.id })),
+                  ],
+                },
+              ]}
             />
             {!customersLoaded ? (
               <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border">
@@ -491,17 +630,25 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
                   ))}
                 </div>
               </div>
-            ) : customerRows.length === 0 ? (
+            ) : customersOnPreset.length === 0 ? (
               <EmptyState
                 icon="Tags"
-                title={debouncedCustomerSearch || customerChannel ? "No matching assignments" : `No ${tagLabel.toLowerCase()} assignments`}
+                title={
+                  tagFilter
+                    ? `No customers on ${priceListOptions.find((pl) => pl.id === tagFilter)?.name || presetTagName || "this tag"} yet`
+                    : debouncedCustomerSearch || customerChannel
+                      ? "No matching assignments"
+                      : `No ${tagLabel.toLowerCase()} assignments`
+                }
                 description={
-                  debouncedCustomerSearch || customerChannel
-                    ? "Try another search or channel filter."
-                    : `Assign a ${tagLabel.toLowerCase()} to customers that need one.`
+                  tagFilter
+                    ? "Add the customers who should pay these prices, or clear the tag filter."
+                    : debouncedCustomerSearch || customerChannel
+                      ? "Try another search or channel filter."
+                      : `Assign a ${tagLabel.toLowerCase()} to customers that need one.`
                 }
                 action={{
-                  label: `Assign ${tagLabel.toLowerCase()}`,
+                  label: presetPriceListId ? "Add a customer" : `Assign ${tagLabel.toLowerCase()}`,
                   onClick: openAssignCustomer,
                 }}
               />
@@ -509,7 +656,7 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
               <div className="relative min-h-0 flex-1">
                 <TopProgressBar active={customersSoftLoading} />
                 <DataTable<CustomerDefaultPriceListRow>
-                  data={customerRows}
+                  data={customersOnPreset}
                   columns={customerColumns}
                   onRowClick={openEditCustomer}
                   emptyMessage="No assignments."
@@ -571,27 +718,54 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="overflow-y-auto sm:max-w-md">
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
           <div ref={setSheetPortalHost} className="flex flex-col gap-4">
             <SheetHeader>
               <SheetTitle>
                 {sheetKind === "customer"
                   ? sheetMode === "edit"
                     ? `Edit ${tagLabel.toLowerCase()}`
-                    : `Assign ${tagLabel.toLowerCase()}`
+                    : presetPriceListId
+                      ? `Add customers to ${presetTagName || "this tag"}`
+                      : `Assign ${tagLabel.toLowerCase()}`
                   : sheetMode === "edit"
                     ? "Edit cost list"
                     : "Assign cost list"}
               </SheetTitle>
               <SheetDescription>
-                {sheetKind === "customer"
-                  ? fmcgOrg
-                    ? "Orders use this tag’s piece prices; pack prices calculate from packaging."
-                    : "Default price list for this customer on sales documents."
-                  : "Default cost list for purchase orders from this supplier."}
+                {sheetKind === "customer" && sheetMode === "assign"
+                  ? "Pick one price tag, filter the list, then select every customer who should use it."
+                  : sheetKind === "customer"
+                    ? fmcgOrg
+                      ? "Orders use this tag’s piece prices; pack prices calculate from packaging."
+                      : "Default price list for this customer on sales documents."
+                    : "Default cost list for purchase orders from this supplier."}
               </SheetDescription>
             </SheetHeader>
 
+            {sheetKind === "customer" && sheetMode === "assign" ? (
+              <AssignCustomersFields
+                tagLabel={tagLabel}
+                listId={listId}
+                onListIdChange={setListId}
+                lockTag={Boolean(presetPriceListId)}
+                lockedTagName={presetTagName}
+                priceLists={priceListOptions}
+                query={pickerQuery}
+                onQueryChange={setPickerQuery}
+                channel={pickerChannel}
+                onChannelChange={setPickerChannel}
+                showChannelFilter={fmcgOrg}
+                options={pickerOptions}
+                loading={pickerLoading}
+                selected={pickedCustomers}
+                onToggle={togglePickedCustomer}
+                onToggleShown={toggleAllShownCustomers}
+                onRemoveSelected={(id) =>
+                  setPickedCustomers((current) => current.filter((row) => row.id !== id))
+                }
+              />
+            ) : (
             <div className="space-y-4 py-2">
               <div className="grid gap-2">
                 <Label>{sheetKind === "customer" ? "Customer" : "Supplier"}</Label>
@@ -676,6 +850,11 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
               </div>
               <div className="grid gap-2">
                 <Label>{sheetKind === "customer" ? tagLabel : "Cost list"}</Label>
+                {sheetKind === "customer" && presetPriceListId && sheetMode === "assign" ? (
+                  <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
+                    {presetTagName || "This tag"}
+                  </div>
+                ) : (
                 <Select value={listId} onValueChange={setListId}>
                   <SelectTrigger>
                     <SelectValue
@@ -694,8 +873,10 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
                     ))}
                   </SelectContent>
                 </Select>
+                )}
               </div>
             </div>
+            )}
 
             <SheetFooter className="gap-2 sm:justify-between">
               {sheetMode === "edit" && sheetKind === "customer" ? (
@@ -730,7 +911,13 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
                   Cancel
                 </Button>
                 <Button onClick={() => void handleSaveSheet()} disabled={saving}>
-                  {saving ? "Saving…" : "Save"}
+                  {saving
+                    ? "Saving…"
+                    : sheetKind === "customer" && sheetMode === "assign"
+                      ? pickedCustomers.length > 0
+                        ? `Assign ${pickedCustomers.length} customer${pickedCustomers.length === 1 ? "" : "s"}`
+                        : "Assign customers"
+                      : "Save"}
                 </Button>
               </div>
             </SheetFooter>
@@ -772,5 +959,179 @@ export function CustomerPriceTagsWorkspace({ fmcgOrg }: { fmcgOrg: boolean }) {
         onConfirm={() => void handleRemoveSupplier()}
       />
     </PageShell>
+  );
+}
+
+function AssignCustomersFields({
+  tagLabel,
+  listId,
+  onListIdChange,
+  lockTag,
+  lockedTagName,
+  priceLists,
+  query,
+  onQueryChange,
+  channel,
+  onChannelChange,
+  showChannelFilter,
+  options,
+  loading,
+  selected,
+  onToggle,
+  onToggleShown,
+  onRemoveSelected,
+}: {
+  tagLabel: string;
+  listId: string;
+  onListIdChange: (id: string) => void;
+  lockTag: boolean;
+  lockedTagName: string;
+  priceLists: Array<{ id: string; name: string }>;
+  query: string;
+  onQueryChange: (value: string) => void;
+  channel: "" | PartyChannel;
+  onChannelChange: (value: "" | PartyChannel) => void;
+  showChannelFilter: boolean;
+  options: PartyLookupOption[];
+  loading: boolean;
+  selected: PartyLookupOption[];
+  onToggle: (option: PartyLookupOption) => void;
+  onToggleShown: () => void;
+  onRemoveSelected: (id: string) => void;
+}) {
+  const selectedIds = new Set(selected.map((row) => row.id));
+  const allShown =
+    options.length > 0 && options.every((option) => selectedIds.has(option.id));
+  const channels = [
+    { value: "" as const, label: "All channels" },
+    { value: "MODERN_TRADE" as const, label: "Multichain" },
+    { value: "GENERAL_TRADE" as const, label: "General trade" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-1.5">
+        <Label>{tagLabel}</Label>
+        {lockTag ? (
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
+            {lockedTagName || "This tag"}
+          </div>
+        ) : (
+          <Select value={listId} onValueChange={onListIdChange}>
+            <SelectTrigger>
+              <SelectValue placeholder={`Select one ${tagLabel.toLowerCase()}`} />
+            </SelectTrigger>
+            <SelectContent>
+              {priceLists.map((pl) => (
+                <SelectItem key={pl.id} value={pl.id}>
+                  {pl.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <p className="text-xs text-muted-foreground">One tag applies to every customer you select.</p>
+      </div>
+
+      <div className="grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Customers</Label>
+          <span className="text-xs text-muted-foreground">
+            {selected.length} selected
+          </span>
+        </div>
+        <div className="relative">
+          <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="Filter by name, code, or phone"
+            className="pl-8"
+          />
+        </div>
+        {showChannelFilter ? (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter customers by channel">
+            {channels.map((opt) => {
+              const active = channel === opt.value;
+              return (
+                <button
+                  key={opt.label}
+                  type="button"
+                  aria-pressed={active}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-xs transition-colors",
+                    active
+                      ? "border-primary/40 bg-primary/10 text-foreground"
+                      : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  onClick={() => onChannelChange(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        {selected.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {selected.map((row) => (
+              <span
+                key={row.id}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs"
+              >
+                <span className="truncate">{row.label}</span>
+                <button
+                  type="button"
+                  className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label={`Remove ${row.label}`}
+                  onClick={() => onRemoveSelected(row.id)}
+                >
+                  <Icons.X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="overflow-hidden rounded-md border">
+          <label className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs">
+            <Checkbox
+              checked={allShown}
+              disabled={loading || options.length === 0}
+              onCheckedChange={() => onToggleShown()}
+            />
+            Select all shown
+          </label>
+          <ul className="max-h-72 overflow-y-auto">
+            {loading ? (
+              <li className="px-3 py-8 text-center text-sm text-muted-foreground">Loading customers…</li>
+            ) : options.length === 0 ? (
+              <li className="px-3 py-8 text-center text-sm text-muted-foreground">
+                No customers match this filter.
+              </li>
+            ) : (
+              options.map((option) => (
+                <li key={option.id} className="border-b last:border-b-0">
+                  <label className="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-muted/40">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={selectedIds.has(option.id)}
+                      onCheckedChange={() => onToggle(option)}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm">{option.label}</span>
+                      {option.description ? (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {option.description}
+                        </span>
+                      ) : null}
+                    </span>
+                  </label>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }

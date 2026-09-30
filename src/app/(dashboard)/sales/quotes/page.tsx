@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { bulkDocumentActionApi } from "@/lib/api/documents";
 import * as Icons from "lucide-react";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -90,7 +91,11 @@ export default function SalesQuotesPage() {
         sticky: true,
       },
       { id: "date", header: "Date", accessor: "date" as keyof SalesDocRow },
-      { id: "party", header: "Customer", accessor: "party" as keyof SalesDocRow },
+      {
+        id: "party",
+        header: "Customer",
+        accessor: (r: SalesDocRow) => <CustomerLink id={r.partyId} name={r.party} />,
+      },
       {
         id: "total",
         header: "Total",

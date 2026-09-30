@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/table";
 import {
   fetchPriceListsForUi,
+  setOrgDefaultPriceListApi,
   createPriceListApi,
   updatePriceListApi,
   deletePriceListApi,
@@ -602,7 +603,11 @@ function PriceListsContent() {
                     currency: pl.currency,
                     code: pl.code || "Retail",
                   });
+                  if (pl.isDefault) await setOrgDefaultPriceListApi(created.id);
                   selectList(created.id);
+                }
+                if (editing && pl.isDefault) {
+                  await setOrgDefaultPriceListApi(editing.id);
                 }
               } else if (editing) {
                 await updatePriceListApi(editing.id, {
@@ -618,7 +623,7 @@ function PriceListsContent() {
                   markupValue: pl.markupValue ?? null,
                 });
               } else {
-                await createPriceListApi({
+                const created = await createPriceListApi({
                   name: pl.name,
                   currency: pl.currency,
                   code: pl.code || undefined,
@@ -628,6 +633,10 @@ function PriceListsContent() {
                   markupType: pl.markupType,
                   markupValue: pl.markupValue,
                 });
+                if (pl.isDefault) await setOrgDefaultPriceListApi(created.id);
+              }
+              if (seafoodOrg && editing && pl.isDefault) {
+                await setOrgDefaultPriceListApi(editing.id);
               }
               await refresh();
               setSheetOpen(false);

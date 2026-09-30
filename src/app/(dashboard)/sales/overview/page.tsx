@@ -15,6 +15,7 @@ import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 
 const NAV_LINKS = [
   { href: "/sales/quotes", label: "Quotes", icon: "FileText" as const },
@@ -213,7 +214,9 @@ export default function SalesOverviewPage() {
                           <Link href={`/docs/sales-order/${order.id}`} className="font-medium text-primary hover:underline">
                             {order.number}
                           </Link>
-                          <p className="text-xs text-muted-foreground">{order.party ?? "—"}</p>
+                          <p className="text-xs">
+                            <CustomerLink id={order.partyId} name={order.party} className="text-xs" />
+                          </p>
                         </td>
                         <td className="px-4 py-2.5">
                           <DualCurrencyAmount

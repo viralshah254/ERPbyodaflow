@@ -22,6 +22,7 @@ export interface DataTableToolbarFilter {
   options: { label: string; value: string }[];
   value?: string;
   onChange?: (value: string) => void;
+  triggerClassName?: string;
 }
 
 interface DataTableToolbarProps {
@@ -91,6 +92,7 @@ export function DataTableToolbar({
             options: f.options,
             value: f.value,
             onChange: f.onChange,
+            triggerClassName: f.triggerClassName,
           }))}
           activeFiltersCount={activeFiltersCount}
           onClearFilters={onClearFilters}

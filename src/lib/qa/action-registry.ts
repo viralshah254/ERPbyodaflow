@@ -46,6 +46,7 @@ export const ACTION_REGISTRY: ActionInfo[] = [
   { module: "warehouse", page: "/warehouse/transfers/[id]", action: "Mark received", behavior: "Persistent status update", status: "ok" },
   { module: "warehouse", page: "/warehouse/pick-pack", action: "New pick", behavior: "Opens drawer", status: "ok" },
   { module: "warehouse", page: "/warehouse/pick-pack/[id]", action: "Complete", behavior: "Persistent pick-pack completion", status: "ok" },
+  { module: "warehouse", page: "/warehouse/dispatch", action: "Dispatch selected", behavior: "Dispatches packed delivery notes on one batch", status: "ok" },
   { module: "warehouse", page: "/warehouse/putaway/[id]", action: "Confirm", behavior: "Persistent putaway confirmation", status: "ok" },
   { module: "warehouse", page: "/warehouse/cycle-counts", action: "New count", behavior: "Opens drawer", status: "ok" },
   { module: "warehouse", page: "/warehouse/cycle-counts/[id]", action: "Submit", behavior: "Persistent cycle count submission", status: "ok" },

@@ -56,6 +56,10 @@ export interface PriceListDetail {
     rrp?: number;
     /** FMCG: discount % on this tag for the SKU. */
     discountPercent?: number;
+    /** Trade price before VAT. `price` is the amount charged (cost incl when VAT is inside the price). */
+    priceExcl?: number;
+    /** VAT percent on this row, e.g. 16. */
+    vatRate?: number;
   }>;
   channel?: string;
   tier?: string;
@@ -64,6 +68,7 @@ export interface PriceListDetail {
   franchiseId?: string;
   lastCalculatedAt?: string;
   updatedAt?: string;
+  isDefault?: boolean;
   parentPriceListId?: string;
   parentName?: string;
   markupType?: "PERCENT" | "FLAT";
@@ -122,6 +127,36 @@ export async function fetchCustomerDefaultPriceLists(opts?: {
     { params },
   );
   return res.items ?? [];
+}
+
+/** Which price tag customers use when they have none of their own. */
+export async function fetchOrgDefaultPriceListId(): Promise<string | null> {
+  requireLiveApi("Organization default price tag");
+  try {
+    const org = await apiRequest<{ defaultPriceListId?: string | null }>("/api/org");
+    const id = org.defaultPriceListId?.trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Set the tag used when a customer has no tag of their own. */
+export async function setOrgDefaultPriceListApi(priceListId: string): Promise<void> {
+  requireLiveApi("Set default price tag");
+  try {
+    await apiRequest("/api/pricing/org-default-price-list", {
+      method: "POST",
+      body: { priceListId },
+    });
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status !== 404) throw e;
+    await apiRequest("/api/org", {
+      method: "PATCH",
+      body: { defaultPriceListId: priceListId },
+    });
+  }
 }
 
 export async function setCustomerDefaultPriceList(customerId: string, priceListId: string): Promise<void> {
@@ -189,6 +224,7 @@ type PriceListApiItem = {
   name: string;
   code?: string;
   currency?: string;
+  isDefault?: boolean;
   channel?: string;
   tier?: string;
   zoneId?: string;
@@ -217,6 +253,7 @@ function mapPriceListDetail(item: PriceListApiItem): PriceListDetail {
     franchiseId: item.franchiseId,
     lastCalculatedAt: item.lastCalculatedAt,
     updatedAt: item.updatedAt,
+    isDefault: item.isDefault === true,
     parentPriceListId: item.parentPriceListId,
     parentName: item.parentName,
     markupType: item.markupType,
@@ -238,7 +275,7 @@ function mapPriceListForUi(d: PriceListDetail): PriceList {
     franchiseId: d.franchiseId,
     lastCalculatedAt: d.lastCalculatedAt,
     updatedAt: d.updatedAt,
-    isDefault: false,
+    isDefault: d.isDefault === true,
     parentPriceListId: d.parentPriceListId,
     parentName: d.parentName,
     markupType: d.markupType,
@@ -357,7 +394,15 @@ export async function createPriceListApi(body: {
   name: string;
   code?: string;
   currency?: string;
-  items?: Array<{ productId: string; price: number; currency?: string; rrp?: number; discountPercent?: number }>;
+  items?: Array<{
+    productId: string;
+    price: number;
+    currency?: string;
+    rrp?: number;
+    discountPercent?: number;
+    priceExcl?: number;
+    vatRate?: number;
+  }>;
   parentPriceListId?: string;
   markupType?: "PERCENT" | "FLAT";
   markupValue?: number;
@@ -386,7 +431,15 @@ export async function updatePriceListApi(
     name: string;
     code?: string;
     currency: string;
-    items: Array<{ productId: string; price: number; currency?: string; rrp?: number; discountPercent?: number }>;
+    items: Array<{
+      productId: string;
+      price: number;
+      currency?: string;
+      rrp?: number;
+      discountPercent?: number;
+      priceExcl?: number;
+      vatRate?: number;
+    }>;
     parentPriceListId: string | null;
     markupType: "PERCENT" | "FLAT" | null;
     markupValue: number | null;

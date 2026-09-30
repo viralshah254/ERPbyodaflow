@@ -12,14 +12,18 @@ import {
   odaflowBuyerTypeLabel,
   odaflowChannelLabel,
 } from "@/lib/odaflow/channel-labels";
+import { arrivalOrderLabel, modernTradeArrival } from "@/lib/odaflow/queue-display";
 
 export type OdaflowSourceInfo = {
   orderTitle?: string;
   odaflowChannel?: string;
   /** SFA customer name from the original order. */
   sfaCustomerName?: string;
+  /** SFA branch the goods are delivered to. Billing stays on the supermarket customer. */
+  deliveryAddress?: string;
   salesRepName?: string;
   salesRepPhone?: string;
+  purchaseOrderNumber?: string;
   sourcePdfUrl?: string;
   externalOrderId?: string;
 };
@@ -95,10 +99,12 @@ function BuyerTypeBadge({ channel }: { channel?: string }) {
 function PlacedByRow({
   name,
   phone,
+  role,
   compact = false,
 }: {
   name: string;
   phone?: string;
+  role?: string | null;
   compact?: boolean;
 }) {
   return (
@@ -107,9 +113,11 @@ function PlacedByRow({
       <span className="text-muted-foreground">
         Placed by <span className="font-medium text-foreground">{name}</span>
       </span>
-      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
-        {ODAFLOW_SALES_REP_ROLE}
-      </Badge>
+      {role ? (
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+          {role}
+        </Badge>
+      ) : null}
       {phone ? <span className="text-xs text-muted-foreground">{phone}</span> : null}
     </div>
   );
@@ -120,6 +128,7 @@ export function OdaflowSourceCard({
   compact = false,
   showPdfPreview = true,
   pdfPreviewDefaultExpanded = true,
+  pdfInAttachments = false,
   className,
 }: {
   info: OdaflowSourceInfo;
@@ -127,12 +136,22 @@ export function OdaflowSourceCard({
   showPdfPreview?: boolean;
   /** When showPdfPreview is true, start with the inline iframe collapsed if false. */
   pdfPreviewDefaultExpanded?: boolean;
+  /** The order page shows the PDF in the Attachments tab, so the card stays a summary. */
+  pdfInAttachments?: boolean;
   className?: string;
 }) {
-  const title =
-    info.orderTitle ??
-    (info.odaflowChannel ? `${odaflowChannelLabel(info.odaflowChannel)} order` : "Odaflow order");
+  const arrival = modernTradeArrival({
+    channel: info.odaflowChannel,
+    orderTitle: info.orderTitle,
+    purchaseOrderNumber: info.purchaseOrderNumber,
+  });
+  const title = arrival
+    ? arrivalOrderLabel(arrival)
+    : info.orderTitle ??
+      (info.odaflowChannel ? `${odaflowChannelLabel(info.odaflowChannel)} order` : "Odaflow order");
   const channel = odaflowChannelLabel(info.odaflowChannel);
+  const placerRole =
+    arrival === "field" ? "Merchandiser" : arrival === "email_lpo" ? null : ODAFLOW_SALES_REP_ROLE;
 
   if (compact) {
     return (
@@ -153,8 +172,13 @@ export function OdaflowSourceCard({
                 SFA customer: <span className="font-medium text-foreground">{info.sfaCustomerName}</span>
               </p>
             ) : null}
+            {info.deliveryAddress ? (
+              <p className="text-xs text-muted-foreground">
+                Deliver to: <span className="font-medium text-foreground">{info.deliveryAddress}</span>
+              </p>
+            ) : null}
             {info.salesRepName ? (
-              <PlacedByRow name={info.salesRepName} phone={info.salesRepPhone} compact />
+              <PlacedByRow name={info.salesRepName} phone={info.salesRepPhone} role={placerRole} compact />
             ) : (
               <p className="text-xs text-muted-foreground">{channel}</p>
             )}
@@ -209,6 +233,12 @@ export function OdaflowSourceCard({
               <p className="font-medium">{info.sfaCustomerName}</p>
             </div>
           ) : null}
+          {info.deliveryAddress ? (
+            <div className="sm:col-span-2">
+              <p className="text-xs text-muted-foreground">Deliver to</p>
+              <p className="font-medium">{info.deliveryAddress}</p>
+            </div>
+          ) : null}
           {channel ? (
             <div>
               <p className="text-xs text-muted-foreground">Channel</p>
@@ -225,12 +255,16 @@ export function OdaflowSourceCard({
 
         {info.salesRepName ? (
           <div className="rounded-md border border-sky-200/60 bg-white/60 px-3 py-2 dark:border-sky-900/40 dark:bg-sky-950/20">
-            <PlacedByRow name={info.salesRepName} phone={info.salesRepPhone} />
+            <PlacedByRow name={info.salesRepName} phone={info.salesRepPhone} role={placerRole} />
           </div>
         ) : null}
 
         {info.sourcePdfUrl ? (
-          showPdfPreview ? (
+          pdfInAttachments ? (
+            <p className="text-xs text-muted-foreground border-t border-sky-200/60 pt-2 dark:border-sky-900/40">
+              The original order PDF is in the Attachments tab.
+            </p>
+          ) : showPdfPreview ? (
             <OdaflowPdfPreview
               url={info.sourcePdfUrl}
               title={`Original SFA order — ${title}`}

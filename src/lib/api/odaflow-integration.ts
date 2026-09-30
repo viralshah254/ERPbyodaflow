@@ -58,6 +58,7 @@ export interface OdaflowQueueOrderSummary {
   salesRepName?: string;
   salesRepPhone?: string;
   orderTitle?: string;
+  intake?: "email_lpo" | "field";
   channel?: string;
   purchaseOrderNumber?: string;
   totalAmount?: number;
@@ -198,6 +199,7 @@ export async function fetchOdaflowQueue(params: {
   q?: string;
   customer?: string;
   salesRep?: string;
+  intake?: "email_lpo" | "field";
 }): Promise<OdaflowQueueResponse> {
   requireLiveApi("Odaflow integration");
   const qs = new URLSearchParams();
@@ -208,6 +210,7 @@ export async function fetchOdaflowQueue(params: {
   if (params.q?.trim()) qs.set("q", params.q.trim());
   if (params.customer?.trim()) qs.set("customer", params.customer.trim());
   if (params.salesRep?.trim()) qs.set("salesRep", params.salesRep.trim());
+  if (params.intake) qs.set("intake", params.intake);
   return apiRequest<OdaflowQueueResponse>(`/api/integrations/odaflow/sync/queue?${qs.toString()}`);
 }
 

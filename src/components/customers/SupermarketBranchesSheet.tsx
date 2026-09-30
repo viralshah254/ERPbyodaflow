@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   Sheet,
   SheetContent,
@@ -229,7 +230,7 @@ export function SupermarketBranchesSheet({
                   <TableRow key={branch.id}>
                     <TableCell>
                       <div className="min-w-0">
-                        <p className="font-medium truncate">{branch.name}</p>
+                        <CustomerLink id={branch.id} name={branch.name} className="font-medium" />
                         {branch.phone ? (
                           <p className="text-xs text-muted-foreground">{branch.phone}</p>
                         ) : null}

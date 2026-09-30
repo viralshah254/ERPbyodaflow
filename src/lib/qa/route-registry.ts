@@ -56,6 +56,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/warehouse/transfers", module: "warehouse", description: "Transfers list", inNav: true },
   { path: "/warehouse/transfers/1", module: "warehouse", description: "Transfer detail (sample)", inNav: false, dynamic: true },
   { path: "/warehouse/pick-pack", module: "warehouse", description: "Pick & pack list", inNav: true },
+  { path: "/warehouse/dispatch", module: "warehouse", description: "Dispatch packed delivery notes", inNav: true },
   { path: "/warehouse/pick-pack/1", module: "warehouse", description: "Pick & pack detail (sample)", inNav: false, dynamic: true },
   { path: "/warehouse/putaway", module: "warehouse", description: "Putaway list", inNav: true },
   { path: "/warehouse/putaway/1", module: "warehouse", description: "Putaway detail (sample)", inNav: false, dynamic: true },

@@ -255,20 +255,30 @@ export async function fetchApSuppliersPageApi(
   return { items, limit, offset: parsedOffset, hasMore, nextCursor };
 }
 
-export async function fetchArPaymentsApi(): Promise<PaymentRow[]> {
+export async function fetchArPaymentsApi(partyId?: string): Promise<PaymentRow[]> {
   requireLiveApi("AR payments");
-  const payload = await apiRequest<{ items: BackendPayment[] }>("/api/ar/payments");
-  return payload.items.map((item) => ({
-    id: item.id,
-    number: item.number,
-    date: item.date,
-    customerId: item.partyId,
-    customerName: item.partyName ?? item.partyId,
-    amount: item.amount,
-    status: item.status,
-    paymentMethod: item.paymentMethod,
-    mpesaTransactionNo: item.mpesaTransactionNo,
-  }));
+  const params = new URLSearchParams();
+  if (partyId?.trim()) params.set("partyId", partyId.trim());
+  const payload = await apiRequest<{ items: BackendPayment[] }>("/api/ar/payments", { params });
+  return payload.items
+    .filter((item) => !partyId?.trim() || item.partyId === partyId.trim())
+    .map((item) => ({
+      id: item.id,
+      number: item.number,
+      date: item.date,
+      customerId: item.partyId,
+      customerName: item.partyName ?? item.partyId,
+      amount: item.amount,
+      status: item.status,
+      paymentMethod: item.paymentMethod,
+      mpesaTransactionNo: item.mpesaTransactionNo,
+      allocations: (item.allocations ?? []).map((allocation) => ({
+        documentType: allocation.documentType,
+        documentId: allocation.documentId,
+        documentNumber: allocation.documentNumber,
+        amount: allocation.amount,
+      })),
+    }));
 }
 
 export async function fetchArCustomersApi(search?: string): Promise<Array<{ id: string; name: string }>> {

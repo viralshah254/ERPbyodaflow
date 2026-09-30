@@ -34,6 +34,7 @@ interface FiltersBarProps {
     options: FilterOption[];
     value?: string;
     onChange?: (value: string) => void;
+    triggerClassName?: string;
   }>;
   activeFiltersCount?: number;
   onClearFilters?: () => void;
@@ -105,7 +106,7 @@ export function FiltersBar({
             value={internalValue}
             onValueChange={(v) => filter.onChange?.(mapToExternal(v))}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className={cn("w-[180px]", filter.triggerClassName)}>
               <SelectValue placeholder={filter.label} />
             </SelectTrigger>
             <SelectContent>

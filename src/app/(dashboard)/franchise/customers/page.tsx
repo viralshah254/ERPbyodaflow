@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -152,7 +153,7 @@ function Customer360Sheet({
                   {data.outletAccounts.map((outlet) => (
                     <div key={outlet.partyId} className="p-3 flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{outlet.outletName}</p>
+                        <CustomerLink id={outlet.partyId} name={outlet.outletName} className="text-sm font-medium" />
                         <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
                           {outlet.franchiseCode && <span>{outlet.franchiseCode}</span>}
                           {outlet.franchiseTerritory && <span>{outlet.franchiseTerritory}</span>}

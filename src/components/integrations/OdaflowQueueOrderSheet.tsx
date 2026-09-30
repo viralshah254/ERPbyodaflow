@@ -91,6 +91,55 @@ function buildProductCreateReturnUrl(queueId: string) {
   return `/sales/odaflow-sync-queue?${params.toString()}`;
 }
 
+function toProductOption(product: ProductRow): AsyncSearchableSelectOption {
+  return {
+    id: product.id,
+    label: product.name,
+    description: [product.sku, product.barcode].filter(Boolean).join(" · ") || undefined,
+  };
+}
+
+/**
+ * Queued orders often keep a product id from before the SKU was recreated.
+ * Use that id when it is still in the catalog; otherwise match the line barcode.
+ */
+async function resolveCatalogProduct(line: {
+  erpProductId?: string;
+  barcode?: string;
+  productName?: string;
+}, currentId?: string): Promise<AsyncSearchableSelectOption | null> {
+  const id = (currentId || line.erpProductId || "").trim();
+  if (id) {
+    try {
+      const page = await fetchProductsPageApi({ ids: [id], status: "ACTIVE", limit: 1 });
+      const hit = page.items.find((product) => product.id === id);
+      if (hit) return toProductOption(hit);
+    } catch {
+      /* try the barcode below */
+    }
+  }
+
+  const barcode = line.barcode?.trim();
+  if (!barcode) {
+    return id
+      ? { id, label: line.productName || id }
+      : null;
+  }
+
+  try {
+    const page = await fetchProductsPageApi({
+      search: barcode,
+      status: "ACTIVE",
+      sellable: true,
+      limit: 5,
+    });
+    const hit = page.items.find((product) => (product.barcode ?? "").trim() === barcode);
+    return hit ? toProductOption(hit) : null;
+  } catch {
+    return id ? { id, label: line.productName || id } : null;
+  }
+}
+
 export function OdaflowQueueOrderSheet({
   queueId,
   open,
@@ -158,15 +207,22 @@ export function OdaflowQueueOrderSheet({
 
         const qty: Record<number, number> = {};
         const products: Record<number, AsyncSearchableSelectOption> = {};
-        for (const line of data.order.lines) {
-          qty[line.index] = line.qty;
-          if (line.erpProductId) {
-            products[line.index] = {
-              id: line.erpProductId,
-              label: line.erpProductName ?? line.productName ?? line.erpProductId,
-            };
-          }
-        }
+        await Promise.all(
+          data.order.lines.map(async (line) => {
+            qty[line.index] = line.qty;
+            const resolved = await resolveCatalogProduct(line, line.erpProductId);
+            if (resolved) {
+              products[line.index] = resolved;
+              return;
+            }
+            if (line.erpProductId) {
+              products[line.index] = {
+                id: line.erpProductId,
+                label: line.erpProductName ?? line.productName ?? line.erpProductId,
+              };
+            }
+          })
+        );
         setLineQty(qty);
         setLineProducts(products);
       }
@@ -306,11 +362,27 @@ export function OdaflowQueueOrderSheet({
     if (!queueId || !order || !erpPartyId) return;
     setSubmitting(true);
     try {
+      const resolvedProducts: Record<number, AsyncSearchableSelectOption> = { ...lineProducts };
+      await Promise.all(
+        order.lines.map(async (line) => {
+          const live = await resolveCatalogProduct(line, resolvedProducts[line.index]?.id);
+          if (live) resolvedProducts[line.index] = live;
+        })
+      );
+      setLineProducts(resolvedProducts);
+
+      const missing = order.lines.find((line) => !resolvedProducts[line.index]?.id);
+      if (missing) {
+        toast.error(`Product on line ${missing.index + 1} is not in your catalog. Pick it before creating the order.`);
+        return;
+      }
+
       const result = await createSalesOrderFromQueueItem(queueId, {
         erpPartyId,
-        lineProducts: order.lines
-          .filter((line) => lineProducts[line.index]?.id)
-          .map((line) => ({ lineIndex: line.index, erpProductId: lineProducts[line.index]!.id })),
+        lineProducts: order.lines.map((line) => ({
+          lineIndex: line.index,
+          erpProductId: resolvedProducts[line.index]!.id,
+        })),
         lineQty: order.lines.map((line) => ({ lineIndex: line.index, qty: lineQty[line.index] ?? line.qty })),
         saveMappings,
       });
@@ -354,6 +426,7 @@ export function OdaflowQueueOrderSheet({
     ? {
         orderTitle: order.orderTitle ?? `${channelLabel(order.channel)} Order`,
         odaflowChannel: order.channel,
+        purchaseOrderNumber: order.purchaseOrderNumber,
         salesRepName: order.salesRepName,
         salesRepPhone: order.salesRepPhone,
         sourcePdfUrl: order.documentUrl,

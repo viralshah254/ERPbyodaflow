@@ -5,7 +5,9 @@ export type DocListRow = {
   id: string;
   number: string;
   date: string;
+  createdAt?: string;
   party?: string;
+  partyId?: string;
   total?: number;
   currency?: string;
   exchangeRate?: number;
@@ -50,6 +52,8 @@ export type DocumentAttachmentRecord = {
   id: string;
   name: string;
   size?: string;
+  /** External file, such as the original SFA order PDF. Opens directly instead of the ERP download. */
+  href?: string;
 };
 
 export type DocumentCommentRecord = {
@@ -328,6 +332,8 @@ export type DocumentDetailRecord = {
   odaflowCustomerId?: string;
   /** Customer name as captured on the SFA order (may differ from mapped ERP party). */
   odaflowCustomerName?: string;
+  /** SFA branch deliver-to. The invoice customer is the supermarket party. */
+  deliveryAddress?: string;
   createdAt?: string;
 };
 

@@ -16,6 +16,8 @@ type BackendSalesDoc = {
   reference?: string;
   externalSource?: string;
   odaflowChannel?: string;
+  odaflowOrderTitle?: string;
+  odaflowSalesRepName?: string;
   odaflowSourcePdfUrl?: string;
 };
 
@@ -42,6 +44,8 @@ function mapSalesDoc(item: BackendSalesDoc): SalesDocRow {
     reference: item.reference,
     externalSource: item.externalSource,
     odaflowChannel: item.odaflowChannel,
+    odaflowOrderTitle: item.odaflowOrderTitle,
+    odaflowSalesRepName: item.odaflowSalesRepName,
     odaflowSourcePdfUrl: item.odaflowSourcePdfUrl,
   };
 }
@@ -70,6 +74,8 @@ export type FetchSalesDocumentsPageOpts = {
   status?: string;
   /** Comma-separated channel codes, e.g. WHATSAPP,COOLCATCH_WA */
   orderChannels?: string;
+  /** FMCG type. email_lpo, field (supermarket), or direct (general-trade client). */
+  sfaIntake?: "email_lpo" | "field" | "direct";
 };
 
 export async function fetchSalesDocumentsPageApi(
@@ -84,6 +90,7 @@ export async function fetchSalesDocumentsPageApi(
   if (opts?.search?.trim()) params.set("search", opts.search.trim());
   if (opts?.status?.trim()) params.set("status", opts.status.trim());
   if (opts?.orderChannels?.trim()) params.set("orderChannels", opts.orderChannels.trim());
+  if (opts?.sfaIntake) params.set("sfaIntake", opts.sfaIntake);
   const payload = await apiRequest<{
     items: BackendSalesDoc[];
     limit?: number;

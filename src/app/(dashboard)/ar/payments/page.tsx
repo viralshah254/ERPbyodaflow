@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PaymentRow, OpenInvoiceRow } from "@/lib/types/ar";
+import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   allocateArPaymentApi,
   createArPaymentApi,
@@ -108,7 +109,11 @@ export default function ARPaymentsPage() {
         sticky: true,
       },
       { id: "date", header: "Date", accessor: "date" as keyof PaymentRow },
-      { id: "customerName", header: "Customer", accessor: "customerName" as keyof PaymentRow },
+      {
+        id: "customerName",
+        header: "Customer",
+        accessor: (r: PaymentRow) => <CustomerLink id={r.customerId} name={r.customerName} />,
+      },
       {
         id: "amount",
         header: "Amount",
