@@ -112,6 +112,8 @@ export interface OdaflowQueueOrderPreview {
   channel?: string;
   orderTitle?: string;
   customerName?: string;
+  branchName?: string;
+  deliveryAddress?: string;
   odaflowCustomerId?: string;
   orderDate?: string;
   expectedDeliveryDate?: string;

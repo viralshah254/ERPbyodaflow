@@ -66,6 +66,16 @@ type MappingConflictState =
       existingMappings: OdaflowErmLookupMapping[];
     };
 
+function deliverToLabel(branchName?: string, deliveryAddress?: string) {
+  const branch = branchName?.trim();
+  const address = deliveryAddress?.trim();
+  if (branch && address) {
+    if (address.toLowerCase().includes(branch.toLowerCase())) return address;
+    return `${branch}, ${address}`;
+  }
+  return branch || address || undefined;
+}
+
 function channelLabel(channel?: string) {
   const map: Record<string, string> = {
     modern_trade: "Modern Trade",
@@ -427,6 +437,8 @@ export function OdaflowQueueOrderSheet({
         orderTitle: order.orderTitle ?? `${channelLabel(order.channel)} Order`,
         odaflowChannel: order.channel,
         purchaseOrderNumber: order.purchaseOrderNumber,
+        sfaCustomerName: order.customerName,
+        deliveryAddress: deliverToLabel(order.branchName, order.deliveryAddress),
         salesRepName: order.salesRepName,
         salesRepPhone: order.salesRepPhone,
         sourcePdfUrl: order.documentUrl,
