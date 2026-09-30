@@ -36,6 +36,8 @@ interface AsyncSearchableSelectProps {
   searchDebounceMs?: number;
   /** When true, option and trigger labels wrap (full text visible) instead of ellipsis. */
   wrapLabels?: boolean;
+  /** When false, the selected label stays on one line and can widen its cell for horizontal scroll. */
+  clipLabels?: boolean;
   /** Extra classes for the dropdown panel (width, shadow). */
   dropdownClassName?: string;
   /** Extra classes for the trigger button (e.g. min-height for multi-line label). */
@@ -82,6 +84,7 @@ export function AsyncSearchableSelect({
   minSearchLength = 0,
   searchDebounceMs = 250,
   wrapLabels = false,
+  clipLabels = true,
   dropdownClassName,
   triggerClassName,
   listMaxHeightClassName = "max-h-[min(24rem,50vh)]",
@@ -513,7 +516,8 @@ export function AsyncSearchableSelect({
       >
         <span
           className={cn(
-            "text-left flex-1 min-w-0 relative",
+            "text-left relative",
+            clipLabels ? "flex-1 min-w-0" : "whitespace-nowrap",
             effectiveSelected?.badges?.length ? "pr-1" : ""
           )}
         >
@@ -533,7 +537,7 @@ export function AsyncSearchableSelect({
           <span
             className={cn(
               "block",
-              wrapLabels ? "whitespace-normal break-words line-clamp-2" : "truncate",
+              wrapLabels ? "whitespace-normal break-words line-clamp-2" : clipLabels ? "truncate" : "whitespace-nowrap",
               effectiveSelected?.badges?.length ? "pr-14" : ""
             )}
             title={wrapLabels ? (effectiveSelected?.label ?? undefined) : undefined}

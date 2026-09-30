@@ -112,6 +112,8 @@ export interface OdaflowQueueOrderPreview {
   channel?: string;
   orderTitle?: string;
   customerName?: string;
+  branchName?: string;
+  deliveryAddress?: string;
   odaflowCustomerId?: string;
   orderDate?: string;
   expectedDeliveryDate?: string;
@@ -226,6 +228,7 @@ export async function createSalesOrderFromQueueItem(
     lineProducts?: Array<{ lineIndex: number; erpProductId: string }>;
     lineQty?: Array<{ lineIndex: number; qty: number }>;
     saveMappings?: boolean;
+    deliveryAddress?: string;
   }
 ): Promise<{ success: true; erpDocumentId: string; action: string }> {
   requireLiveApi("Odaflow integration");

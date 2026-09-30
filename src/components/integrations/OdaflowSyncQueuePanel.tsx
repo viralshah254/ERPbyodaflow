@@ -23,6 +23,7 @@ import {
   resolveCustomerLabel,
   resolveSalesRepName,
   resolveSalesRepPhone,
+  summarizeQueueWarning,
 } from "@/lib/odaflow/queue-display";
 
 const QUEUE_STATUS_OPTIONS = [
@@ -54,6 +55,14 @@ function parseChannelFilter(value: string): {
   return { eventType };
 }
 
+function mappingReason(mapping: NonNullable<OdaflowQueueItem["unresolvedMappings"]>[number]): string {
+  if (mapping.reason?.trim()) return mapping.reason.trim();
+  if (mapping.type === "customer") return `Customer not matched: ${mapping.displayName ?? mapping.odaflowId}`;
+  if (mapping.type === "product") return `Product not matched: ${mapping.displayName ?? mapping.odaflowId}`;
+  if (mapping.type === "price") return `Price missing: ${mapping.displayName ?? mapping.odaflowId}`;
+  return `${mapping.type}: ${mapping.displayName ?? mapping.odaflowId}`;
+}
+
 function issueSummary(item: OdaflowQueueItem): string {
   const mappings = item.unresolvedMappings ?? [];
   const rawLines = (item.rawPayload as { lines?: Array<{ erpProductId?: string }> } | undefined)?.lines ?? [];
@@ -65,23 +74,17 @@ function issueSummary(item: OdaflowQueueItem): string {
     parts.push(`${matched}/${total} products matched`);
   }
 
+  const counts = new Map<string, number>();
   for (const mapping of mappings) {
-    if (mapping.reason) {
-      parts.push(mapping.reason);
-      continue;
-    }
-    if (mapping.type === "customer") {
-      parts.push(`Customer not matched: ${mapping.displayName ?? mapping.odaflowId}`);
-    } else if (mapping.type === "product") {
-      parts.push(`Product not matched: ${mapping.displayName ?? mapping.odaflowId}`);
-    } else if (mapping.type === "price") {
-      parts.push(`Price missing: ${mapping.displayName ?? mapping.odaflowId}`);
-    } else {
-      parts.push(`${mapping.type}: ${mapping.displayName ?? mapping.odaflowId}`);
-    }
+    const reason = mappingReason(mapping);
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  for (const [reason, count] of counts) {
+    parts.push(count > 1 ? `${reason} (${count})` : reason);
   }
 
-  return parts.join(" · ") || item.blockReason || "Needs review";
+  if (parts.length > 0) return parts.join(" · ");
+  return summarizeQueueWarning(item.blockReason ?? "") || "Needs review";
 }
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {

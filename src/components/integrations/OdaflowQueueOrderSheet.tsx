@@ -37,6 +37,7 @@ import {
   hasSameCatalogConflict,
   sfaProductKindFromOrderChannel,
 } from "@/lib/odaflow-mapping-utils";
+import { summarizeQueueWarning } from "@/lib/odaflow/queue-display";
 import { fetchPartiesApi } from "@/lib/api/parties";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { PartyRow, ProductRow } from "@/lib/types/masters";
@@ -65,6 +66,32 @@ type MappingConflictState =
       option: AsyncSearchableSelectOption;
       existingMappings: OdaflowErmLookupMapping[];
     };
+
+function suggestedDeliveryAddress(input: {
+  channel?: string;
+  customerName?: string;
+  branchName?: string;
+  deliveryAddress?: string;
+}) {
+  const branch = input.branchName?.trim();
+  const address = input.deliveryAddress?.trim();
+  if (input.channel === "modern_trade") return deliverToLabel(branch, address) ?? "";
+  const customer = input.customerName?.trim() ?? "";
+  if (customer && address && !address.toLowerCase().includes(customer.toLowerCase())) {
+    return `${customer} — ${address}`;
+  }
+  return address || customer;
+}
+
+function deliverToLabel(branchName?: string, deliveryAddress?: string) {
+  const branch = branchName?.trim();
+  const address = deliveryAddress?.trim();
+  if (branch && address) {
+    if (address.toLowerCase().includes(branch.toLowerCase())) return address;
+    return `${branch}, ${address}`;
+  }
+  return branch || address || undefined;
+}
 
 function channelLabel(channel?: string) {
   const map: Record<string, string> = {
@@ -161,6 +188,7 @@ export function OdaflowQueueOrderSheet({
   const [lineProducts, setLineProducts] = React.useState<Record<number, AsyncSearchableSelectOption>>({});
   const [lineQty, setLineQty] = React.useState<Record<number, number>>({});
   const [saveMappings, setSaveMappings] = React.useState(true);
+  const [deliveryDraft, setDeliveryDraft] = React.useState("");
   const [mappingConflict, setMappingConflict] = React.useState<MappingConflictState | null>(null);
   const [pricingReminderDismissed, setPricingReminderDismissed] = React.useState(false);
   /** True while ERM conflict lookup runs after customer pick — keeps the UI responsive. */
@@ -199,6 +227,20 @@ export function OdaflowQueueOrderSheet({
       const data = await fetchOdaflowQueueItem(queueId);
       setItem(data.item);
       setOrder(data.order);
+      const raw = (data.item.rawPayload ?? {}) as {
+        channel?: string;
+        customerName?: string;
+        branchName?: string;
+        deliveryAddress?: string;
+      };
+      setDeliveryDraft(
+        suggestedDeliveryAddress({
+          channel: data.order?.channel ?? raw.channel,
+          customerName: data.order?.customerName ?? raw.customerName,
+          branchName: data.order?.branchName ?? raw.branchName,
+          deliveryAddress: data.order?.deliveryAddress ?? raw.deliveryAddress,
+        })
+      );
       if (data.order) {
         const customerId = initialCustomerId ?? data.order.erpPartyId;
         const customerLabel = initialCustomerName ?? data.order.erpPartyName ?? data.order.customerName;
@@ -385,6 +427,7 @@ export function OdaflowQueueOrderSheet({
         })),
         lineQty: order.lines.map((line) => ({ lineIndex: line.index, qty: lineQty[line.index] ?? line.qty })),
         saveMappings,
+        deliveryAddress: deliveryDraft.trim(),
       });
       toast.success("Sales order created");
       onOpenChange(false);
@@ -427,6 +470,8 @@ export function OdaflowQueueOrderSheet({
         orderTitle: order.orderTitle ?? `${channelLabel(order.channel)} Order`,
         odaflowChannel: order.channel,
         purchaseOrderNumber: order.purchaseOrderNumber,
+        sfaCustomerName: order.customerName,
+        deliveryAddress: deliverToLabel(order.branchName, order.deliveryAddress),
         salesRepName: order.salesRepName,
         salesRepPhone: order.salesRepPhone,
         sourcePdfUrl: order.documentUrl,
@@ -501,7 +546,7 @@ export function OdaflowQueueOrderSheet({
 
               {item?.blockReason && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30">
-                  {item.blockReason}
+                  {summarizeQueueWarning(item.blockReason)}
                 </div>
               )}
 
@@ -542,6 +587,26 @@ export function OdaflowQueueOrderSheet({
                   onCreateNew={goCreateCustomer}
                   createNewLabel="Add new customer"
                 />
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="odaflow-delivery-address">Delivery address</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {order.channel === "modern_trade"
+                      ? order.branchName
+                        ? "The branch is where this order is delivered. The customer above is who the invoice goes to, unless this LPO is for head office."
+                        : "Head office order. Delivery is the supermarket, not a branch."
+                      : "Delivery is this customer's location. A map pin can be searched even when the place name is missing."}
+                  </p>
+                  <textarea
+                    id="odaflow-delivery-address"
+                    value={deliveryDraft}
+                    onChange={(e) => setDeliveryDraft(e.target.value)}
+                    rows={2}
+                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    placeholder={
+                      order.channel === "modern_trade" ? "Branch the goods go to" : "Customer location"
+                    }
+                  />
+                </div>
                 {checkingCustomer ? (
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Icons.Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
@@ -557,13 +622,13 @@ export function OdaflowQueueOrderSheet({
                     {order.matchedLineCount}/{order.totalLineCount} matched · {order.lines.length} item(s)
                   </span>
                 </div>
-                <div className="rounded-md border overflow-hidden">
-                  <table className="w-full text-sm">
+                <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-md border">
+                  <table className="w-full min-w-[56rem] text-sm">
                     <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                       <tr>
-                        <th className="px-3 py-2 font-medium">Product from Odaflow</th>
+                        <th className="px-3 py-2 font-medium min-w-[16rem]">Product from Odaflow</th>
                         <th className="px-3 py-2 font-medium w-20">Qty</th>
-                        <th className="px-3 py-2 font-medium min-w-[12rem]">Your ERP product</th>
+                        <th className="px-3 py-2 font-medium min-w-[28rem]">Your ERP product</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -624,12 +689,13 @@ export function OdaflowQueueOrderSheet({
                               allowClear
                               disabled={checkingProductLines.has(line.index) || submitting}
                               portalContainer={sheetPortalHost}
+                              clipLabels={false}
                               triggerClassName={
                                 line.hasIssue
-                                  ? "border-red-300 dark:border-red-700"
+                                  ? "w-max min-w-[26rem] border-red-300 dark:border-red-700"
                                   : line.isAutoMatched
-                                    ? "border-green-300 dark:border-green-700"
-                                    : undefined
+                                    ? "w-max min-w-[26rem] border-green-300 dark:border-green-700"
+                                    : "w-max min-w-[26rem]"
                               }
                               onCreateNew={goCreateProduct}
                               createNewLabel="Create new product"

@@ -270,6 +270,8 @@ export default function DocViewPage() {
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
   const [notesDraft, setNotesDraft] = React.useState("");
   const [notesSaving, setNotesSaving] = React.useState(false);
+  const [deliveryDraft, setDeliveryDraft] = React.useState("");
+  const [deliverySaving, setDeliverySaving] = React.useState(false);
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
@@ -677,6 +679,10 @@ export default function DocViewPage() {
   React.useEffect(() => {
     if (!initialLoading && document) setNotesDraft(document.notes ?? "");
   }, [initialLoading, document?.id, document?.notes]);
+
+  React.useEffect(() => {
+    if (!initialLoading && document) setDeliveryDraft(document.deliveryAddress ?? "");
+  }, [initialLoading, document?.id, document?.deliveryAddress]);
 
   // For bills: fetch the GRN's landed cost allocation so we can show the breakdown card
   React.useEffect(() => {
@@ -1546,6 +1552,54 @@ export default function DocViewPage() {
                       }
                     />
                   )}
+                {(type === "sales-order" || type === "delivery-note" || type === "invoice") && document ? (
+                  <div className="mt-4 pt-4 border-t space-y-2">
+                    <Label htmlFor="document-delivery-address">Delivery address</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {document.odaflowChannel === "modern_trade"
+                        ? "Branch the goods go to. The customer on this order is who the invoice goes to, unless the LPO was for head office."
+                        : document.odaflowChannel
+                          ? "Customer location for this delivery."
+                          : "Where these goods are delivered."}
+                    </p>
+                    {document.status === "DRAFT" ? (
+                      <>
+                        <Textarea
+                          id="document-delivery-address"
+                          value={deliveryDraft}
+                          onChange={(e) => setDeliveryDraft(e.target.value)}
+                          placeholder="Branch, shop, or customer location"
+                          rows={2}
+                          className="resize-y min-h-[60px] max-w-3xl"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={deliverySaving || deliveryDraft === (document.deliveryAddress ?? "")}
+                          onClick={async () => {
+                            setDeliverySaving(true);
+                            try {
+                              await patchDocumentApi(type as DocTypeKey, id, {
+                                deliveryAddress: deliveryDraft.trim(),
+                              });
+                              await refreshDocument(true);
+                              toast.success("Delivery address saved.");
+                            } catch (e) {
+                              toast.error((e as Error).message);
+                            } finally {
+                              setDeliverySaving(false);
+                            }
+                          }}
+                        >
+                          {deliverySaving ? "Saving…" : "Save address"}
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-sm font-medium max-w-3xl">{document.deliveryAddress?.trim() || "—"}</p>
+                    )}
+                  </div>
+                ) : null}
                 {/* Invoice payment status bar */}
                 {document?.status === "DRAFT" && (
                   <div className="mt-4 pt-4 border-t space-y-2">
