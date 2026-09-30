@@ -301,21 +301,6 @@ export async function fetchErpSfaEnrollmentApi(): Promise<ErpSfaEnrollmentStatus
   return apiRequest<ErpSfaEnrollmentStatus>("/api/integrations/odaflow/enrollment");
 }
 
-export type SharedCatalogPullResult = {
-  success: boolean;
-  hqs: number;
-  branches: number;
-  failed: number;
-};
-
-export async function pullSharedCatalogFromSfaApi(): Promise<SharedCatalogPullResult> {
-  requireLiveApi("Shared catalog pull");
-  return apiRequest<SharedCatalogPullResult>("/api/integrations/odaflow/shared-catalog/pull", {
-    method: "POST",
-    body: {},
-  });
-}
-
 export type MultichainPreviewStatus =
   | "mapped"
   | "suggested"
@@ -362,19 +347,6 @@ export async function confirmMultichainLinkApi(params: {
   return apiRequest("/api/integrations/odaflow/multichain/link", {
     method: "POST",
     body: params,
-  });
-}
-
-export async function importMultichainBranchesApi(partyId: string): Promise<{
-  success: boolean;
-  imported: number;
-  updated: number;
-  skipped: number;
-}> {
-  requireLiveApi("Multichain branch import");
-  return apiRequest(`/api/integrations/odaflow/multichain/${encodeURIComponent(partyId)}/import-branches`, {
-    method: "POST",
-    body: {},
   });
 }
 

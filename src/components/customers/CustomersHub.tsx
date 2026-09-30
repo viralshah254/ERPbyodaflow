@@ -28,8 +28,7 @@ import { SfaCustomerApprovalPanel } from "@/components/customers/SfaCustomerAppr
 import { CustomerFormSheet } from "@/components/customers/CustomerFormSheet";
 import { PartyImportSheet } from "@/components/masters/PartyImportSheet";
 import { fetchPartyByIdApi } from "@/lib/api/parties";
-import { pullSharedCatalogFromSfaApi } from "@/lib/api/odaflow-integration";
-import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
+import { fetchSfaCustomerApprovalsApi } from "@/lib/api/sfa-customer-approvals";
 import { toast } from "sonner";
 
 export type CustomersHubProps = {
@@ -42,8 +41,6 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   const canWrite = useCanWriteSales();
   const { templateId } = useOrgContext();
   const fmcg = isFmcgOrg(templateId);
-  const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
-  const [pullingCatalog, setPullingCatalog] = React.useState(false);
 
   const editCustomerId = searchParams.get("id");
   const openCreate = searchParams.get("new") === "1";
@@ -76,6 +73,49 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
   const [branchParentName, setBranchParentName] = React.useState<string | null>(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [directoryTab, setDirectoryTab] = React.useState<DirectoryTabId>("modern-trade");
+  const [approvalEnabled, setApprovalEnabled] = React.useState(false);
+  const [approvalCount, setApprovalCount] = React.useState(0);
+  const [approvalChecked, setApprovalChecked] = React.useState(false);
+  const approvalsRequested = searchParams.get("tab") === "approvals";
+
+  React.useEffect(() => {
+    if (!isApiConfigured()) {
+      setApprovalChecked(true);
+      return;
+    }
+    let cancelled = false;
+    fetchSfaCustomerApprovalsApi()
+      .then((result) => {
+        if (cancelled) return;
+        setApprovalEnabled(Boolean(result.enabled));
+        setApprovalCount(result.pendingCount ?? result.items?.length ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setApprovalEnabled(false);
+      })
+      .finally(() => {
+        if (!cancelled) setApprovalChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const setApprovalsOpen = React.useCallback(
+    (open: boolean) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (open) params.set("tab", "approvals");
+      else params.delete("tab");
+      const qs = params.toString();
+      router.replace(qs ? `/sales/customers?${qs}` : "/sales/customers", { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  React.useEffect(() => {
+    if (searchParams.get("tab") !== "approvals") return;
+    router.replace("/sales/customer-approvals");
+  }, [router, searchParams]);
 
   const clearQueryFlags = React.useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -152,26 +192,6 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
     setFormOpen(true);
   }, [editCustomerId, fromFinance]);
 
-  const pullSharedCatalog = React.useCallback(async () => {
-    if (pullingCatalog) return;
-    setPullingCatalog(true);
-    try {
-      const result = await pullSharedCatalogFromSfaApi();
-      setRefreshKey((k) => k + 1);
-      const hqLabel = result.hqs === 1 ? "1 supermarket HQ" : `${result.hqs} supermarket HQs`;
-      const branchLabel = result.branches === 1 ? "1 branch" : `${result.branches} branches`;
-      if (result.failed > 0) {
-        toast.warning(`Updated ${hqLabel} and ${branchLabel}. ${result.failed} could not sync.`);
-      } else {
-        toast.success(`Updated ${hqLabel} and ${branchLabel} from SFA.`);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not refresh from SFA");
-    } finally {
-      setPullingCatalog(false);
-    }
-  }, [pullingCatalog]);
-
   const breadcrumbs = [
     { label: "Sales", href: "/sales/overview" },
     { label: "Customers" },
@@ -211,7 +231,7 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         title="Customers"
         description={
           fmcg
-            ? "SFA holds field outlets (including shared modern trade). Sync from SFA, then use Credit & tax sheet for taxId and credit limits — single edit or bulk download/upload."
+            ? "Each organisation keeps its own customers. New customers sent from SFA wait on the Pending approval tab. Then use Credit & tax sheet for tax ID and credit limits."
             : "Add and manage who you sell to. After SFA sync, update tax ID and credit with Credit & tax sheet or Finance."
         }
         breadcrumbs={breadcrumbs}
@@ -220,21 +240,6 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         actions={
           canWrite ? (
             <div className="flex flex-wrap gap-2">
-              {fmcg && sfaEnrolled ? (
-                <Button
-                  variant="outline"
-                  onClick={() => void pullSharedCatalog()}
-                  disabled={pullingCatalog}
-                  title="Pull shared supermarket HQs and branches from SFA. Works even if automatic customer sync is off."
-                >
-                  {pullingCatalog ? (
-                    <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Icons.RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  {pullingCatalog ? "Refreshing…" : "Refresh from SFA"}
-                </Button>
-              ) : null}
               <Button variant="outline" asChild>
                 <Link href="/ar/customers">
                   <Icons.Wallet className="mr-2 h-4 w-4" />
@@ -259,15 +264,23 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
       />
 
       <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
-        {fmcg ? (
-          <SfaCustomerApprovalPanel key={refreshKey} onApproved={() => setRefreshKey((k) => k + 1)} />
-        ) : null}
         <CustomerDirectoryPanel
           fmcg={fmcg}
           segmentTabs={fmcg}
           branchListRefreshKey={refreshKey}
           activeTab={directoryTab}
           onActiveTabChange={setDirectoryTab}
+          showApprovalTab={approvalEnabled}
+          approvalOpen={approvalsRequested && (approvalEnabled || !approvalChecked)}
+          approvalPendingCount={approvalCount}
+          onApprovalOpenChange={setApprovalsOpen}
+          approvalContent={
+            <SfaCustomerApprovalPanel
+              key={refreshKey}
+              onApproved={() => setRefreshKey((k) => k + 1)}
+              onPendingCount={setApprovalCount}
+            />
+          }
           onAddCustomer={(kindId) => openNewCustomer(kindId)}
           onEditCustomer={(id) => {
             setFormCustomerId(id);
