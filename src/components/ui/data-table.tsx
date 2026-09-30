@@ -58,7 +58,7 @@ function compareSortValues(
 }
 
 export type DataTableScrollMode = "fixed" | "fill" | "auto" | "natural";
-export type DataTableSize = "default" | "comfortable";
+export type DataTableSize = "default" | "comfortable" | "compact";
 export type DataTableSortState = { columnId: string; dir: "asc" | "desc" } | null;
 
 interface DataTableProps<T> {
@@ -91,7 +91,7 @@ interface DataTableProps<T> {
   scrollMode?: DataTableScrollMode;
   /** Cap visible body rows before scrolling (auto mode; defaults to 25). */
   maxVisibleRows?: number;
-  /** Row/cell padding — comfortable for detail pages with few rows. */
+  /** Row/cell padding — comfortable for detail pages, compact for long lists. */
   size?: DataTableSize;
 }
 
@@ -223,7 +223,9 @@ export function DataTable<T extends object>({
   const tableSizeClass =
     size === "comfortable"
       ? "[&_td]:h-auto [&_td]:py-3.5 [&_td]:px-4 [&_th]:h-auto [&_th]:min-h-10 [&_th]:py-3 [&_th]:px-4 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
-      : "[&_td]:h-auto [&_th]:h-auto [&_th]:min-h-10";
+      : size === "compact"
+        ? "[&_td]:min-h-9 [&_td]:py-1.5 [&_td]:px-3 [&_th]:h-9 [&_th]:py-1.5 [&_th]:px-3 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
+        : "[&_td]:h-auto [&_th]:h-auto [&_th]:min-h-10";
 
   return (
     <div
