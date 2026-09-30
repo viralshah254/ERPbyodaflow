@@ -21,7 +21,8 @@ import { downloadCsv } from "@/lib/export/csv";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
-import { LIST_TABLE_SURFACE_CLASS } from "@/components/layout/page-shell";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { LIST_TABLE_STATIC_CLASS } from "@/components/layout/page-shell";
 import { cn } from "@/lib/utils";
 import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
@@ -37,7 +38,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 15, 20, 25, 50] as const;
+const DEFAULT_PAGE_SIZE = 25;
+
+/**
+ * At least a viewport of orders, and never shorter than ~20 compact rows.
+ * The page scrolls only when the window is shorter than that.
+ */
+const ORDERS_TABLE_MIN_HEIGHT_CLASS =
+  "min-h-[max(calc(100dvh-24rem),calc(2.25rem*20+2.5rem))]";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -105,7 +114,10 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(savedViewsScope));
   const [rows, setRows] = React.useState<SalesDocRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
+  const [pageSizeOptions, setPageSizeOptions] = React.useState<number[]>([...PAGE_SIZE_OPTIONS]);
   const [pageOffset, setPageOffset] = React.useState(0);
+  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [hasMore, setHasMore] = React.useState(false);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
 
@@ -119,7 +131,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
       setLoading(true);
       try {
         const page = await fetchSalesDocumentsPageApi("sales-order", {
-          limit: PAGE_SIZE,
+          limit: pageSize,
           cursor: String(offset),
           search: debouncedSearch.trim() || undefined,
           status: statusFilter || undefined,
@@ -129,15 +141,11 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
               ? typeFilter
               : undefined,
         });
-        setRows(
-          [...page.items].sort((a, b) => {
-            const ta = new Date(a.createdAt ?? `${a.date}T00:00:00`).getTime();
-            const tb = new Date(b.createdAt ?? `${b.date}T00:00:00`).getTime();
-            return tb - ta;
-          })
-        );
+        setRows(page.items);
         setPageOffset(page.offset);
+        setNextCursor(page.nextCursor);
         setHasMore(page.hasMore);
+        if (page.pageSizeOptions?.length) setPageSizeOptions(page.pageSizeOptions);
         setSelectedIds([]);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to load sales orders.");
@@ -145,7 +153,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
         setLoading(false);
       }
     },
-    [debouncedSearch, statusFilter, channelFilter, fmcg, typeFilter]
+    [debouncedSearch, statusFilter, channelFilter, fmcg, typeFilter, pageSize]
   );
 
   React.useEffect(() => {
@@ -158,12 +166,20 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
 
   const goToPreviousPage = () => {
     if (pageOffset <= 0 || loading) return;
-    void loadPage(Math.max(0, pageOffset - PAGE_SIZE));
+    void loadPage(Math.max(0, pageOffset - pageSize));
   };
 
   const goToNextPage = () => {
-    if (!hasMore || loading) return;
-    void loadPage(pageOffset + PAGE_SIZE);
+    if (!hasMore || loading || !nextCursor) return;
+    const offset = Number(nextCursor);
+    if (!Number.isFinite(offset) || offset < 0) return;
+    void loadPage(offset);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    if (size === pageSize) return;
+    setPageOffset(0);
+    setPageSize(size);
   };
 
   const filterChips: FilterChip[] = React.useMemo(() => {
@@ -186,7 +202,9 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
       {
         id: "number",
         header: "Number",
-        accessor: (r: SalesDocRow) => <span className="font-medium">{r.number}</span>,
+        accessor: (r: SalesDocRow) => (
+          <span className="font-medium whitespace-nowrap">{r.number}</span>
+        ),
         sticky: true,
       },
       {
@@ -201,7 +219,13 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
       {
         id: "party",
         header: "Customer",
-        accessor: (r: SalesDocRow) => <CustomerLink id={r.partyId} name={r.party} />,
+        accessor: (r: SalesDocRow) => (
+          <CustomerLink
+            id={r.partyId}
+            name={r.party}
+            className="block max-w-[18rem] truncate"
+          />
+        ),
       },
       ...(fmcg
         ? [
@@ -212,13 +236,13 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
                 const type = salesOrderTypeLabel(r);
                 const placedBy = r.odaflowSalesRepName?.trim();
                 if (!type && !placedBy) return <span className="text-muted-foreground">—</span>;
+                const detail = [type, placedBy ? `Placed by ${placedBy}` : null]
+                  .filter(Boolean)
+                  .join(" · ");
                 return (
-                  <div className="min-w-[10rem]">
-                    {type ? <p className="text-sm">{type}</p> : null}
-                    {placedBy ? (
-                      <p className="text-xs text-muted-foreground truncate">Placed by {placedBy}</p>
-                    ) : null}
-                  </div>
+                  <p className="max-w-[18rem] truncate text-sm" title={detail}>
+                    {detail}
+                  </p>
                 );
               },
             },
@@ -245,7 +269,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
         id: "status",
         header: "Status",
         accessor: (r: SalesDocRow) => (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 whitespace-nowrap">
             <StatusBadge status={r.status} />
             {isOdaflowStyleSalesOrder(r) && (
               <Badge
@@ -361,12 +385,8 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
     if (currentViewId === id) setCurrentViewId(null);
   };
 
-  const pageNumber = Math.floor(pageOffset / PAGE_SIZE) + 1;
-  const rangeStart = rows.length > 0 ? pageOffset + 1 : 0;
-  const rangeEnd = pageOffset + rows.length;
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <div className="flex flex-col gap-4">
       <DataTableToolbar
         className="shrink-0"
         searchPlaceholder="Search by number, customer..."
@@ -433,18 +453,16 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
           );
         }}
       />
-      <div className={LIST_TABLE_SURFACE_CLASS}>
+      <div className={cn(LIST_TABLE_STATIC_CLASS, ORDERS_TABLE_MIN_HEIGHT_CLASS)}>
         {loading ? (
-          <div className="min-h-0 flex-1 overflow-auto">
-            <SkeletonDataTable
-              rows={8}
-              columnWidths={
-                fmcg
-                  ? ["w-20", "w-24", "w-36", "w-40", "w-28", "w-24", "w-8"]
-                  : ["w-20", "w-24", "w-36", "w-28", "w-24", "w-8"]
-              }
-            />
-          </div>
+          <SkeletonDataTable
+            rows={pageSize}
+            columnWidths={
+              fmcg
+                ? ["w-20", "w-24", "w-36", "w-40", "w-28", "w-24", "w-8"]
+                : ["w-20", "w-24", "w-36", "w-28", "w-24", "w-8"]
+            }
+          />
         ) : (
           <DataTable<SalesDocRow>
             data={rows}
@@ -454,31 +472,24 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
             selectable
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
-            scrollMode="fill"
-            size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            scrollMode="natural"
+            size="compact"
+            className="border-0 shadow-none"
           />
         )}
       </div>
-      <div className="flex shrink-0 flex-col gap-2 rounded-xl border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground tabular-nums">
-          {loading
-            ? "Loading sales orders…"
-            : rows.length === 0
-              ? "No sales orders match your filters."
-              : `Showing ${rangeStart}–${rangeEnd}`}
-        </p>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={loading || pageOffset <= 0} onClick={goToPreviousPage}>
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground tabular-nums px-1">Page {pageNumber}</span>
-          <Button variant="outline" size="sm" disabled={loading || !hasMore} onClick={goToNextPage}>
-            Next
-          </Button>
-          <span className="text-xs text-muted-foreground tabular-nums">{PAGE_SIZE} per page</span>
-        </div>
-      </div>
+      <TablePagination
+        pageOffset={pageOffset}
+        pageSize={pageSize}
+        itemCount={loading ? 0 : rows.length}
+        hasMore={hasMore}
+        loading={loading}
+        onPrevious={goToPreviousPage}
+        onNext={goToNextPage}
+        entityLabel="sales orders"
+        pageSizeOptions={pageSizeOptions}
+        onPageSizeChange={handlePageSizeChange}
+      />
     </div>
   );
 }

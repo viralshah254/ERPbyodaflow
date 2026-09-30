@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_PAGINATED_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -411,7 +411,7 @@ export default function SalesOrdersPage() {
   const franchiseOrdersBadge = navCounts["franchise-inbound-orders"] ?? 0;
 
   return (
-    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+    <PageShell>
       <PageHeader
         title="Sales Orders"
         description="Orders and fulfillment"
@@ -430,9 +430,9 @@ export default function SalesOrdersPage() {
           </Button>
         ) : undefined}
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         {isFranchisor ? (
-          <Tabs defaultValue="orders" className="flex min-h-0 flex-1 flex-col">
+          <Tabs defaultValue="orders" className="flex flex-col">
             <TabsList className="w-fit shrink-0">
               <TabsTrigger value="orders">Sales Orders</TabsTrigger>
               <TabsTrigger value="franchise-orders" className="gap-1.5">
@@ -445,10 +445,10 @@ export default function SalesOrdersPage() {
                 ) : null}
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="franchise-orders" className="mt-4 flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <TabsContent value="franchise-orders" className="mt-4">
               <FranchiseOrdersTab canWrite={canWrite} />
             </TabsContent>
-            <TabsContent value="orders" className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+            <TabsContent value="orders" className="mt-4">
               <SalesOrdersPanel />
             </TabsContent>
           </Tabs>

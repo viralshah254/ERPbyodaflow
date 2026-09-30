@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   LIST_PAGE_BODY_CLASS,
+  LIST_PAGE_BODY_PAGINATED_CLASS,
   LIST_PAGE_SHELL_CLASS,
   LIST_TABLE_SURFACE_CLASS,
   PageShell,
@@ -500,7 +501,7 @@ export default function DocTypeListPage() {
 
   if (type === "sales-order") {
     return (
-      <PageShell className={LIST_PAGE_SHELL_CLASS}>
+      <PageShell>
         <PageHeader
           title={label}
           description="Orders and fulfillment"
@@ -517,7 +518,7 @@ export default function DocTypeListPage() {
             ) : undefined
           }
         />
-        <div className={LIST_PAGE_BODY_CLASS}>
+        <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
           <SalesOrdersListPanel savedViewsScope="doc-sales-order" />
         </div>
       </PageShell>

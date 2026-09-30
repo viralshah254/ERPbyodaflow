@@ -56,6 +56,8 @@ export type SalesDocumentsPageResult = {
   offset: number;
   hasMore: boolean;
   nextCursor: string | null;
+  /** Server-owned row counts for the list pager. */
+  pageSizeOptions?: number[];
 };
 
 const SALES_AGGREGATE_CAP = 2000;
@@ -97,6 +99,7 @@ export async function fetchSalesDocumentsPageApi(
     offset?: number;
     hasMore?: boolean;
     nextCursor?: string | null;
+    pageSizeOptions?: number[];
   }>(endpointFor(type), { params });
   const limit = typeof payload.limit === "number" ? payload.limit : lim;
   const offset =
@@ -116,7 +119,10 @@ export async function fetchSalesDocumentsPageApi(
   } else {
     nextCursor = null;
   }
-  return { items, limit, offset, hasMore, nextCursor };
+  const pageSizeOptions = Array.isArray(payload.pageSizeOptions)
+    ? payload.pageSizeOptions.filter((n) => typeof n === "number" && n > 0)
+    : undefined;
+  return { items, limit, offset, hasMore, nextCursor, pageSizeOptions };
 }
 
 export async function fetchSalesDocumentsApi(type: SalesDocType): Promise<SalesDocRow[]> {
