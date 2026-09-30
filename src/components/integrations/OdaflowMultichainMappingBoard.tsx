@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   confirmMultichainLinkApi,
   fetchMultichainPreviewApi,
-  importMultichainBranchesApi,
   type MultichainPreviewParty,
   type MultichainPreviewRow,
   type MultichainPreviewStatus,
@@ -81,26 +80,6 @@ export function OdaflowMultichainMappingBoard({ canSave }: { canSave: boolean })
       await loadPreview();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not confirm mapping");
-    } finally {
-      setBusyKey(null);
-    }
-  };
-
-  const handleImport = async (row: MultichainPreviewRow, index: number) => {
-    const partyId = row.erp?.id;
-    if (!partyId) return;
-    const key = `${rowKey(row, index)}-import`;
-    setBusyKey(key);
-    try {
-      const result = await importMultichainBranchesApi(partyId);
-      toast.success(
-        `Imported ${result.imported} branches, updated ${result.updated}${
-          result.skipped ? `, skipped ${result.skipped}` : ""
-        }.`
-      );
-      await loadPreview();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not import branches");
     } finally {
       setBusyKey(null);
     }
@@ -199,22 +178,6 @@ export function OdaflowMultichainMappingBoard({ canSave }: { canSave: boolean })
                               <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : null}
                             Confirm
-                          </Button>
-                        ) : null}
-                        {row.status === "mapped" && row.erp?.id ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!canSave || busyKey === `${key}-import`}
-                            onClick={() => void handleImport(row, index)}
-                          >
-                            {busyKey === `${key}-import` ? (
-                              <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Icons.Download className="mr-2 h-4 w-4" />
-                            )}
-                            Import branches
                           </Button>
                         ) : null}
                         {row.status !== "mapped" ? (

@@ -43,5 +43,8 @@ describe("FMCG selling nav", () => {
     }
     expect(bakery).not.toContain("/inventory/products");
     expect(manufacturer).not.toContain("/inventory/products");
+    expect(manufacturer).toContain("/sales/customer-approvals");
+    expect(bakery).toContain("/sales/customer-approvals");
+    expect(legacyBakex).toContain("/sales/customer-approvals");
   });
 });

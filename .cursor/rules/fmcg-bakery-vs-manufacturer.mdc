@@ -1,0 +1,29 @@
+---
+description: FMCG selling changes also apply to bakery. Production is the only split.
+alwaysApply: true
+---
+
+# FMCG changes include bakery
+
+Most of Joy Superbakers is the FMCG manufacturer product. Her template is `fmcg-bakery`. A new FMCG feature or update applies to bakery in the same change, unless it is production.
+
+| Org | Org id | Template | What she keeps |
+|---|---|---|---|
+| Top Food Ea Ltd | `org-top-food-ea-ltd` | `fmcg-manufacturer` | FMCG plant, including production: blend formula, blend / production run |
+| Joy Superbakers ltd | `org-sfa-6a890b7765042fb41c9d89a6` | `fmcg-bakery` | Same FMCG selling and operations. Her own production: recipe, production batch |
+
+## Do this on every FMCG change
+
+- Customers, products, departments, price lists, tax tags, dispatch, orders, approvals, navigation, and permissions on those screens are shared.
+- Put `fmcg-bakery` on the same gate as `fmcg-manufacturer`. Use `FMCG_SELLING_TEMPLATE_IDS`.
+- `bakex` and `bakery` resolve to `fmcg-bakery`. That id is the bakery production path. It is not the company Bakex Millers.
+- Do not copy an FMCG screen into a second bakery implementation.
+- Do not ship an FMCG selling or operations change that only `fmcg-manufacturer` can see.
+
+## Leave these alone
+
+- Production wording and modules stay on each template. Do not give Joy blend / production run. Do not give Top Food recipe / production batch.
+- Leave `fmcg-manufacturer` terminology as Top Food's FMCG plant.
+- `seed-fmcg-manufacturing.ts` must leave a bakery org on `fmcg-bakery`.
+
+Shareable note: `ERPbyodaflow-backend/guides/fmcg-manufacturer-and-bakery.md`.

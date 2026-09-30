@@ -150,5 +150,21 @@ export function applySidebarLayout(
     }));
   }
 
-  return enforceSectionPins(result, pins);
+  return enforceSectionPins(result, pins).map((sec) => ({
+    ...sec,
+    items:
+      sec.key === "sales"
+        ? pinItemAfter(sec.items, "sales-customer-approvals", "sales-customers")
+        : sec.items,
+  }));
+}
+
+function pinItemAfter(items: ResolvedNavItem[], itemKey: string, afterKey: string): ResolvedNavItem[] {
+  const item = items.find((entry) => entry.key === itemKey);
+  if (!item) return items;
+  const rest = items.filter((entry) => entry.key !== itemKey);
+  const afterIndex = rest.findIndex((entry) => entry.key === afterKey);
+  if (afterIndex < 0) return items;
+  rest.splice(afterIndex + 1, 0, item);
+  return rest;
 }

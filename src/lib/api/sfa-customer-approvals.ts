@@ -21,6 +21,7 @@ export type SfaCustomerApproval = {
   customerType?: string;
   channel?: string;
   sfaSegment?: string;
+  sfaEntityType?: string;
   createdByName?: string;
   createdByPhone?: string;
   createdAt?: string;

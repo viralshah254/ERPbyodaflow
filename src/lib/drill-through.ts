@@ -200,6 +200,9 @@ export function drillFromNotification(notification: NotificationDrillContext): D
   if (notification.entityType === "approval" && notification.entityId) {
     return drillToApprovalInbox(notification.entityId);
   }
+  if (notification.entityType === "sfa-customer-approval") {
+    return { href: "/sales/customer-approvals", label: "Review customers" };
+  }
   if (notification.entityType === "sales-order" && notification.entityId) {
     return drillToDocument("sales-order", notification.entityId);
   }

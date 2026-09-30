@@ -65,6 +65,12 @@ export type CustomerDirectoryPanelProps = {
   /** Controlled tab — e.g. switch to Distributors after creating one. */
   activeTab?: TabId;
   onActiveTabChange?: (tab: TabId) => void;
+  /** Joy and Top Food: SFA customers waiting to be added to this list. */
+  showApprovalTab?: boolean;
+  approvalOpen?: boolean;
+  approvalPendingCount?: number;
+  onApprovalOpenChange?: (open: boolean) => void;
+  approvalContent?: React.ReactNode;
 };
 
 export function CustomerDirectoryPanel({
@@ -77,6 +83,11 @@ export function CustomerDirectoryPanel({
   branchListRefreshKey = 0,
   activeTab: activeTabProp,
   onActiveTabChange,
+  showApprovalTab = false,
+  approvalOpen = false,
+  approvalPendingCount = 0,
+  onApprovalOpenChange,
+  approvalContent,
 }: CustomerDirectoryPanelProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -123,6 +134,10 @@ export function CustomerDirectoryPanel({
   const tabConfig = segmentTabs ? CUSTOMER_DIRECTORY_TABS.find((t) => t.id === activeTab)! : null;
 
   const loadParties = React.useCallback(async () => {
+    if (approvalOpen) {
+      setLoading(false);
+      return;
+    }
     if (!isApiConfigured()) {
       setParties([]);
       setLoading(false);
@@ -159,7 +174,7 @@ export function CustomerDirectoryPanel({
     } finally {
       setLoading(false);
     }
-  }, [activeTab, canReadAr, pageOffset, pageSize, paymentClass, search, segmentTabs, tabConfig]);
+  }, [activeTab, approvalOpen, canReadAr, pageOffset, pageSize, paymentClass, search, segmentTabs, tabConfig]);
 
   React.useEffect(() => {
     void loadParties();
@@ -515,23 +530,57 @@ export function CustomerDirectoryPanel({
   return (
     <div className="space-y-4 pb-16">
       {segmentTabs ? (
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
+        <Tabs
+          value={approvalOpen ? "approvals" : activeTab}
+          onValueChange={(v) => {
+            if (v === "approvals") {
+              onApprovalOpenChange?.(true);
+              return;
+            }
+            onApprovalOpenChange?.(false);
+            setActiveTab(v as TabId);
+          }}
+        >
           <TabsList className="flex h-auto flex-wrap gap-1">
             {CUSTOMER_DIRECTORY_TABS.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id}>
                 {tab.label}
               </TabsTrigger>
             ))}
+            {showApprovalTab ? (
+              <TabsTrigger value="approvals">
+                Pending approval
+                {approvalPendingCount > 0 ? (
+                  <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                    {approvalPendingCount}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+            ) : null}
           </TabsList>
-          <div className="mt-4">{searchRow}</div>
-          {CUSTOMER_DIRECTORY_TABS.map((tab) => (
-            <TabsContent key={tab.id} value={tab.id} className="mt-4">
-              {renderPartyList(tab.id, tab.label)}
-            </TabsContent>
-          ))}
+          {approvalOpen ? (
+            <div className="mt-4">{approvalContent}</div>
+          ) : (
+            <>
+              <div className="mt-4">{searchRow}</div>
+              {CUSTOMER_DIRECTORY_TABS.map((tab) => (
+                <TabsContent key={tab.id} value={tab.id} className="mt-4">
+                  {renderPartyList(tab.id, tab.label)}
+                </TabsContent>
+              ))}
+            </>
+          )}
         </Tabs>
+      ) : approvalOpen ? (
+        <div className="space-y-4">{approvalContent}</div>
       ) : (
         <div className="space-y-4">
+          {showApprovalTab ? (
+            <Button variant="outline" onClick={() => onApprovalOpenChange?.(true)}>
+              Pending approval
+              {approvalPendingCount > 0 ? ` (${approvalPendingCount})` : ""}
+            </Button>
+          ) : null}
           {searchRow}
           {renderPartyList()}
         </div>
