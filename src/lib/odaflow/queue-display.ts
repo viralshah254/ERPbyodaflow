@@ -1,5 +1,27 @@
 import type { OdaflowQueueItem, OdaflowQueueOrderSummary } from "@/lib/api/odaflow-integration";
 
+const WARNING_PREFIX = /^(Still unmatched in SFA\.|Unresolved:)\s*/;
+
+/** Collapse a repeated queue warning into one line, with a count when it applies to many lines. */
+export function summarizeQueueWarning(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  const prefixMatch = trimmed.match(WARNING_PREFIX);
+  const prefix = prefixMatch?.[1] ?? "";
+  const body = prefix ? trimmed.slice(prefixMatch[0].length) : trimmed;
+  const parts = body
+    .split(/\s*(?:,|·)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const counts = new Map<string, number>();
+  for (const part of parts) counts.set(part, (counts.get(part) ?? 0) + 1);
+  const summarized = [...counts.entries()].map(([reason, count]) =>
+    count > 1 ? `${reason} (${count})` : reason
+  );
+  const line = summarized.join(". ");
+  return prefix && line ? `${prefix} ${line}` : line || trimmed;
+}
+
 const CHANNEL_LABELS: Record<string, string> = {
   modern_trade: "Modern Trade",
   distributor: "General Trade · Distributor",

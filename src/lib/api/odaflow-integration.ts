@@ -228,6 +228,7 @@ export async function createSalesOrderFromQueueItem(
     lineProducts?: Array<{ lineIndex: number; erpProductId: string }>;
     lineQty?: Array<{ lineIndex: number; qty: number }>;
     saveMappings?: boolean;
+    deliveryAddress?: string;
   }
 ): Promise<{ success: true; erpDocumentId: string; action: string }> {
   requireLiveApi("Odaflow integration");
