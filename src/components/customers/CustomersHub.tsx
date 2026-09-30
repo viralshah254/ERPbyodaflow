@@ -24,6 +24,7 @@ type DirectoryTabId = (typeof CUSTOMER_DIRECTORY_TABS)[number]["id"];
 import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { CustomerDirectoryPanel } from "@/components/customers/CustomerDirectoryPanel";
+import { SfaCustomerApprovalPanel } from "@/components/customers/SfaCustomerApprovalPanel";
 import { CustomerFormSheet } from "@/components/customers/CustomerFormSheet";
 import { PartyImportSheet } from "@/components/masters/PartyImportSheet";
 import { fetchPartyByIdApi } from "@/lib/api/parties";
@@ -258,6 +259,9 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
       />
 
       <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
+        {fmcg ? (
+          <SfaCustomerApprovalPanel key={refreshKey} onApproved={() => setRefreshKey((k) => k + 1)} />
+        ) : null}
         <CustomerDirectoryPanel
           fmcg={fmcg}
           segmentTabs={fmcg}
