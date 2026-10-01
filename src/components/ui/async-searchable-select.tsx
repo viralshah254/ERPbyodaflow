@@ -115,6 +115,7 @@ export function AsyncSearchableSelect({
   const [lastSelectedOption, setLastSelectedOption] = React.useState<AsyncSearchableSelectOption | null>(selectedOption ?? null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [floatingPos, setFloatingPos] = React.useState<{
     top: number;
     left: number;
@@ -239,6 +240,32 @@ export function AsyncSearchableSelect({
       window.removeEventListener("resize", onScrollOrResize);
     };
   }, [open, floating, updateFloatingPosition]);
+
+  // The panel is portaled to document.body so it can be dragged past the sheet.
+  // A modal sheet traps focus and pulls it back inside on every focusin, which
+  // clears the search box as soon as the card is dragged. Stop those events
+  // while focus is in this panel and the panel is not already inside the dialog.
+  React.useEffect(() => {
+    if (!open) return;
+    const inPanelOutsideDialog = (node: EventTarget | null) => {
+      if (!(node instanceof Element)) return false;
+      if (!panelRef.current?.contains(node)) return false;
+      const dialog = node.closest("[role='dialog']");
+      return !dialog || !dialog.contains(node);
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (inPanelOutsideDialog(event.target)) event.stopPropagation();
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      if (inPanelOutsideDialog(event.relatedTarget)) event.stopPropagation();
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+    document.addEventListener("focusout", onFocusOut, true);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn, true);
+      document.removeEventListener("focusout", onFocusOut, true);
+    };
+  }, [open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -405,13 +432,19 @@ export function AsyncSearchableSelect({
       <div className="relative" data-no-drag="">
         <TableLinearProgress active={loading} className="rounded-none" />
         <Input
+        ref={searchInputRef}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={handleKeyDown}
         onPointerDown={(event) => {
           event.stopPropagation();
-          event.currentTarget.focus();
+          const el = event.currentTarget;
+          el.focus({ preventScroll: true });
+          queueMicrotask(() => {
+            if (document.activeElement !== el) el.focus({ preventScroll: true });
+          });
         }}
+        onMouseDown={(event) => event.stopPropagation()}
         placeholder={searchPlaceholder}
         autoFocus
         className="cursor-text bg-background"
@@ -540,7 +573,14 @@ export function AsyncSearchableSelect({
       role="listbox"
       aria-label={searchPlaceholder}
       onPointerDown={onPanelPointerDown}
-      onMouseDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+        const target = event.target instanceof Element ? event.target : null;
+        // Keep the caret in the search box. A mousedown elsewhere on the card
+        // would blur it, and the sheet would take focus back.
+        if (target?.closest("input, textarea, [data-no-drag]")) return;
+        event.preventDefault();
+      }}
     >
       {panelInner}
     </div>
