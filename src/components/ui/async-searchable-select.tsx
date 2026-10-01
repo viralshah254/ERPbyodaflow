@@ -134,6 +134,7 @@ export function AsyncSearchableSelect({
     loadOptionsRef.current = loadOptions;
   }, [loadOptions]);
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+  const dragMovedRef = React.useRef(false);
 
   const updateFloatingPosition = React.useCallback(() => {
     const btn = triggerRef.current;
@@ -356,68 +357,64 @@ export function AsyncSearchableSelect({
 
   const showRecentHeading = !query.trim() && recentOptions.length > 0;
 
-  const listScrollStyle =
-    floating && floatingPos
-      ? { maxHeight: floatingPos.maxH }
+  const listMaxPx = dragOrigin
+    ? Math.max(220, Math.min(384, window.innerHeight - dragOrigin.top - 96))
+    : floating && floatingPos
+      ? floatingPos.maxH
       : undefined;
+  const listScrollStyle = listMaxPx != null ? { maxHeight: listMaxPx } : undefined;
 
-  const startMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
+  const onPanelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.stopPropagation();
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, [data-no-drag]")) return;
     const panel = panelRef.current;
-    if (!panel) return;
+    if (!panel || event.button !== 0) return;
     const rect = panel.getBoundingClientRect();
     const startX = event.clientX;
     const startY = event.clientY;
     const originLeft = rect.left;
     const originTop = rect.top;
     const width = rect.width;
-    const height = rect.height;
+    dragMovedRef.current = false;
     const move = (pointer: PointerEvent) => {
+      const dx = pointer.clientX - startX;
+      const dy = pointer.clientY - startY;
+      if (!dragMovedRef.current && Math.hypot(dx, dy) < 5) return;
+      dragMovedRef.current = true;
       const margin = 8;
       const maxLeft = Math.max(margin, window.innerWidth - Math.min(width, 120) - margin);
       const maxTop = Math.max(margin, window.innerHeight - 48 - margin);
-      const left = Math.min(maxLeft, Math.max(margin, originLeft + pointer.clientX - startX));
-      const top = Math.min(maxTop, Math.max(margin, originTop + pointer.clientY - startY));
-      setDragOrigin({ left, top });
+      setDragOrigin({
+        left: Math.min(maxLeft, Math.max(margin, originLeft + dx)),
+        top: Math.min(maxTop, Math.max(margin, originTop + dy)),
+      });
     };
     const stop = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   };
 
   const panelInner = (
     <>
-      <div className="mb-1 flex items-center justify-between">
-        <button
-          type="button"
-          aria-label="Drag the search list anywhere on the screen"
-          className="flex h-6 w-6 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
-          onPointerDown={startMove}
-        >
-          <Icons.Grip className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          aria-label="Drag the search list anywhere on the screen"
-          className="flex h-6 w-6 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
-          onPointerDown={startMove}
-        >
-          <Icons.Grip className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="relative">
+      <div className="relative" data-no-drag="">
         <TableLinearProgress active={loading} className="rounded-none" />
         <Input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={handleKeyDown}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          event.currentTarget.focus();
+        }}
         placeholder={searchPlaceholder}
         autoFocus
-        className="bg-background"
+        className="cursor-text bg-background"
       />
       </div>
       {listHeader ? <div className="mt-2">{listHeader}</div> : null}
@@ -463,9 +460,12 @@ export function AsyncSearchableSelect({
                 highlightedIndex === index ? "bg-muted" : ""
               }`}
               onMouseEnter={() => setHighlightedIndex(index)}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
+              onClick={(e) => {
+                if (dragMovedRef.current) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return;
+                }
                 commitSelection(option);
               }}
             >
@@ -515,6 +515,7 @@ export function AsyncSearchableSelect({
       {onCreateNew ? (
         <button
           type="button"
+          data-no-drag=""
           className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-primary hover:bg-primary/10 border-t border-border/50"
           onPointerDown={(e) => {
             e.preventDefault();
@@ -534,11 +535,11 @@ export function AsyncSearchableSelect({
     <div
       ref={panelRef}
       data-async-searchable-panel=""
-      className={opts.className}
+      className={cn(opts.className, "cursor-grab active:cursor-grabbing")}
       style={opts.style}
       role="listbox"
       aria-label={searchPlaceholder}
-      onPointerDown={(event) => event.stopPropagation()}
+      onPointerDown={onPanelPointerDown}
       onMouseDown={(event) => event.stopPropagation()}
     >
       {panelInner}
@@ -632,7 +633,7 @@ export function AsyncSearchableSelect({
                 top: dragOrigin?.top ?? floatingPos!.top,
                 left: dragOrigin?.left ?? floatingPos!.left,
                 width: floatingPos!.width,
-                maxHeight: floatingPos!.maxH + 120,
+                maxHeight: (listMaxPx ?? floatingPos!.maxH) + 120,
               },
             }),
             portalTarget
