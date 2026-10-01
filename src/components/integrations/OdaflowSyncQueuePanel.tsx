@@ -118,6 +118,9 @@ export function OdaflowSyncQueuePanel({
   const [queueItems, setQueueItems] = React.useState<OdaflowQueueItem[]>([]);
   const [queueTotal, setQueueTotal] = React.useState(0);
   const [queueLoading, setQueueLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const hasLoadedRef = React.useRef(false);
+  const requestSeq = React.useRef(0);
   const [queueStatus, setQueueStatus] = React.useState("pending");
   const [queueEventType, setQueueEventType] = React.useState(ALL_CHANNELS);
   const [queuePage, setQueuePage] = React.useState(1);
@@ -134,7 +137,10 @@ export function OdaflowSyncQueuePanel({
   } | null>(null);
 
   const loadQueue = React.useCallback(async () => {
-    setQueueLoading(true);
+    const seq = ++requestSeq.current;
+    const firstLoad = !hasLoadedRef.current;
+    if (firstLoad) setQueueLoading(true);
+    else setRefreshing(true);
     try {
       const channel = parseChannelFilter(queueEventType);
       const res = await fetchOdaflowQueue({
@@ -146,6 +152,8 @@ export function OdaflowSyncQueuePanel({
         customer: debouncedCustomer || undefined,
         salesRep: debouncedSalesRep || undefined,
       });
+      if (seq !== requestSeq.current) return;
+      hasLoadedRef.current = true;
       setQueueItems(
         res.items
           .filter((i) => i.eventType.startsWith("order."))
@@ -156,9 +164,13 @@ export function OdaflowSyncQueuePanel({
       );
       setQueueTotal(res.total);
     } catch {
+      if (seq !== requestSeq.current) return;
       toast.error("Failed to load orders");
     } finally {
-      setQueueLoading(false);
+      if (seq === requestSeq.current) {
+        setQueueLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [queueStatus, queueEventType, queuePage, debouncedCustomer, debouncedSalesRep]);
 
@@ -270,13 +282,13 @@ export function OdaflowSyncQueuePanel({
               />
             </div>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue()} disabled={queueLoading}>
-            <Icons.RefreshCw className={`h-3.5 w-3.5 mr-1 ${queueLoading ? "animate-spin" : ""}`} />
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadQueue()} disabled={queueLoading || refreshing}>
+            <Icons.RefreshCw className={`h-3.5 w-3.5 mr-1 ${queueLoading || refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
 
-        {queueLoading ? (
+        {queueLoading && queueItems.length === 0 ? (
           <div className="text-muted-foreground text-sm py-4">Loading orders…</div>
         ) : queueItems.length === 0 ? (
           <div className="text-muted-foreground text-sm py-6 text-center">

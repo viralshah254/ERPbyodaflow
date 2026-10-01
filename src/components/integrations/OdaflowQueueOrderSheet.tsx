@@ -193,7 +193,6 @@ export function OdaflowQueueOrderSheet({
   onDeepLinkConsumed,
 }: Props) {
   const router = useRouter();
-  const [sheetPortalHost, setSheetPortalHost] = React.useState<HTMLElement | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [item, setItem] = React.useState<OdaflowQueueItem | null>(null);
@@ -597,7 +596,6 @@ export function OdaflowQueueOrderSheet({
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-          <div ref={setSheetPortalHost} className="contents" />
           <SheetHeader>
             <SheetTitle>{order?.purchaseOrderNumber ?? item?.displayRef ?? "Odaflow order"}</SheetTitle>
             <SheetDescription>
@@ -691,7 +689,6 @@ export function OdaflowQueueOrderSheet({
                   emptyMessage="No customers found."
                   allowClear
                   disabled={checkingCustomer || submitting}
-                  portalContainer={sheetPortalHost}
                   triggerClassName={order.customerNeedsMatch ? "border-amber-300" : undefined}
                   onCreateNew={goCreateCustomer}
                   createNewLabel="Add new customer"
@@ -797,7 +794,6 @@ export function OdaflowQueueOrderSheet({
                               emptyMessage="No products found."
                               allowClear
                               disabled={checkingProductLines.has(line.index) || submitting}
-                              portalContainer={sheetPortalHost}
                               clipLabels={false}
                               showSelectedDescription
                               triggerClassName={
@@ -877,7 +873,6 @@ export function OdaflowQueueOrderSheet({
                                   emptyMessage="No products found."
                                   allowClear
                                   disabled={submitting}
-                                  portalContainer={sheetPortalHost}
                                   clipLabels={false}
                                   showSelectedDescription
                                   triggerClassName="w-max min-w-[26rem]"

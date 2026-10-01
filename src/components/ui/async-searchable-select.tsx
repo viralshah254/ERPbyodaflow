@@ -115,6 +115,7 @@ export function AsyncSearchableSelect({
   const [lastSelectedOption, setLastSelectedOption] = React.useState<AsyncSearchableSelectOption | null>(selectedOption ?? null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [floatingPos, setFloatingPos] = React.useState<{
     top: number;
     left: number;
@@ -122,12 +123,19 @@ export function AsyncSearchableSelect({
     maxH: number;
   } | null>(null);
   const requestIdRef = React.useRef(0);
+  /** Viewport position after the user drags the panel. Null until they move it. */
+  const [dragOrigin, setDragOrigin] = React.useState<{ left: number; top: number } | null>(null);
+
+  React.useEffect(() => {
+    if (!open) setDragOrigin(null);
+  }, [open]);
   /** Always call latest loader without putting it in effect deps (inline handlers would retrigger searches every parent render). */
   const loadOptionsRef = React.useRef(loadOptions);
   React.useLayoutEffect(() => {
     loadOptionsRef.current = loadOptions;
   }, [loadOptions]);
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+  const dragMovedRef = React.useRef(false);
 
   const updateFloatingPosition = React.useCallback(() => {
     const btn = triggerRef.current;
@@ -232,6 +240,32 @@ export function AsyncSearchableSelect({
       window.removeEventListener("resize", onScrollOrResize);
     };
   }, [open, floating, updateFloatingPosition]);
+
+  // The panel is portaled to document.body so it can be dragged past the sheet.
+  // A modal sheet traps focus and pulls it back inside on every focusin, which
+  // clears the search box as soon as the card is dragged. Stop those events
+  // while focus is in this panel and the panel is not already inside the dialog.
+  React.useEffect(() => {
+    if (!open) return;
+    const inPanelOutsideDialog = (node: EventTarget | null) => {
+      if (!(node instanceof Element)) return false;
+      if (!panelRef.current?.contains(node)) return false;
+      const dialog = node.closest("[role='dialog']");
+      return !dialog || !dialog.contains(node);
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (inPanelOutsideDialog(event.target)) event.stopPropagation();
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      if (inPanelOutsideDialog(event.relatedTarget)) event.stopPropagation();
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+    document.addEventListener("focusout", onFocusOut, true);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn, true);
+      document.removeEventListener("focusout", onFocusOut, true);
+    };
+  }, [open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -350,22 +384,70 @@ export function AsyncSearchableSelect({
 
   const showRecentHeading = !query.trim() && recentOptions.length > 0;
 
-  const listScrollStyle =
-    floating && floatingPos
-      ? { maxHeight: floatingPos.maxH }
+  const listMaxPx = dragOrigin
+    ? Math.max(220, Math.min(384, window.innerHeight - dragOrigin.top - 96))
+    : floating && floatingPos
+      ? floatingPos.maxH
       : undefined;
+  const listScrollStyle = listMaxPx != null ? { maxHeight: listMaxPx } : undefined;
+
+  const onPanelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, [data-no-drag]")) return;
+    const panel = panelRef.current;
+    if (!panel || event.button !== 0) return;
+    const rect = panel.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const originLeft = rect.left;
+    const originTop = rect.top;
+    const width = rect.width;
+    dragMovedRef.current = false;
+    const move = (pointer: PointerEvent) => {
+      const dx = pointer.clientX - startX;
+      const dy = pointer.clientY - startY;
+      if (!dragMovedRef.current && Math.hypot(dx, dy) < 5) return;
+      dragMovedRef.current = true;
+      const margin = 8;
+      const maxLeft = Math.max(margin, window.innerWidth - Math.min(width, 120) - margin);
+      const maxTop = Math.max(margin, window.innerHeight - 48 - margin);
+      setDragOrigin({
+        left: Math.min(maxLeft, Math.max(margin, originLeft + dx)),
+        top: Math.min(maxTop, Math.max(margin, originTop + dy)),
+      });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
 
   const panelInner = (
     <>
-      <div className="relative">
+      <div className="relative" data-no-drag="">
         <TableLinearProgress active={loading} className="rounded-none" />
         <Input
+        ref={searchInputRef}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={handleKeyDown}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          const el = event.currentTarget;
+          el.focus({ preventScroll: true });
+          queueMicrotask(() => {
+            if (document.activeElement !== el) el.focus({ preventScroll: true });
+          });
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
         placeholder={searchPlaceholder}
         autoFocus
-        className="bg-background"
+        className="cursor-text bg-background"
       />
       </div>
       {listHeader ? <div className="mt-2">{listHeader}</div> : null}
@@ -411,9 +493,12 @@ export function AsyncSearchableSelect({
                 highlightedIndex === index ? "bg-muted" : ""
               }`}
               onMouseEnter={() => setHighlightedIndex(index)}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
+              onClick={(e) => {
+                if (dragMovedRef.current) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return;
+                }
                 commitSelection(option);
               }}
             >
@@ -463,6 +548,7 @@ export function AsyncSearchableSelect({
       {onCreateNew ? (
         <button
           type="button"
+          data-no-drag=""
           className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-primary hover:bg-primary/10 border-t border-border/50"
           onPointerDown={(e) => {
             e.preventDefault();
@@ -482,12 +568,19 @@ export function AsyncSearchableSelect({
     <div
       ref={panelRef}
       data-async-searchable-panel=""
-      className={opts.className}
+      className={cn(opts.className, "cursor-grab active:cursor-grabbing")}
       style={opts.style}
       role="listbox"
       aria-label={searchPlaceholder}
-      onPointerDown={(event) => event.stopPropagation()}
-      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={onPanelPointerDown}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+        const target = event.target instanceof Element ? event.target : null;
+        // Keep the caret in the search box. A mousedown elsewhere on the card
+        // would blur it, and the sheet would take focus back.
+        if (target?.closest("input, textarea, [data-no-drag]")) return;
+        event.preventDefault();
+      }}
     >
       {panelInner}
     </div>
@@ -560,10 +653,11 @@ export function AsyncSearchableSelect({
       {open && !floating
         ?             panelShell({
               className: cn(
-                "absolute z-50 mt-2 left-0 rounded-lg border bg-popover p-2 text-popover-foreground shadow-xl pointer-events-auto",
-                "min-w-full w-max max-w-[min(100vw-1.5rem,48rem)]",
+                "z-50 rounded-lg border bg-popover p-2 text-popover-foreground shadow-xl pointer-events-auto",
+                dragOrigin ? "fixed" : "absolute mt-2 left-0 min-w-full w-max max-w-[min(100vw-1.5rem,48rem)]",
                 dropdownClassName
               ),
+              style: dragOrigin ? { top: dragOrigin.top, left: dragOrigin.left } : undefined,
             })
         : null}
       {floatingReady && portalTarget
@@ -571,14 +665,15 @@ export function AsyncSearchableSelect({
             panelShell({
               className: cn(
                 "fixed z-[400] rounded-lg border bg-popover p-2 text-popover-foreground shadow-2xl outline-none pointer-events-auto",
-                "ring-1 ring-border/60 animate-in fade-in-0 zoom-in-95 duration-100",
+                "ring-1 ring-border/60",
+                dragOrigin == null && "animate-in fade-in-0 zoom-in-95 duration-100",
                 dropdownClassName
               ),
               style: {
-                top: floatingPos!.top,
-                left: floatingPos!.left,
+                top: dragOrigin?.top ?? floatingPos!.top,
+                left: dragOrigin?.left ?? floatingPos!.left,
                 width: floatingPos!.width,
-                maxHeight: floatingPos!.maxH + 120,
+                maxHeight: (listMaxPx ?? floatingPos!.maxH) + 120,
               },
             }),
             portalTarget
