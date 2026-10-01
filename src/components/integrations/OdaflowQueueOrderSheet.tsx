@@ -118,11 +118,19 @@ function buildProductCreateReturnUrl(queueId: string) {
   return `/sales/odaflow-sync-queue?${params.toString()}`;
 }
 
+function productOptionDetail(product: Pick<ProductRow, "size" | "barcode">): string | undefined {
+  const lines = [
+    product.size?.trim() ? `Size ${product.size.trim()}` : null,
+    product.barcode?.trim() ? `Barcode ${product.barcode.trim()}` : null,
+  ].filter((line): line is string => Boolean(line));
+  return lines.length ? lines.join("\n") : undefined;
+}
+
 function toProductOption(product: ProductRow): AsyncSearchableSelectOption {
   return {
     id: product.id,
     label: product.name,
-    description: [product.sku, product.barcode].filter(Boolean).join(" · ") || undefined,
+    description: productOptionDetail(product),
   };
 }
 
@@ -341,11 +349,7 @@ export function OdaflowQueueOrderSheet({
       includeBarcodedRaw: true,
       limit: 20,
     });
-    return page.items.map((p: ProductRow) => ({
-      id: p.id,
-      label: p.name,
-      description: [p.sku, p.barcode].filter(Boolean).join(" · ") || undefined,
-    }));
+    return page.items.map((p: ProductRow) => toProductOption(p));
   }, []);
 
   async function checkCustomerMapping(option: AsyncSearchableSelectOption | null) {
@@ -718,6 +722,7 @@ export function OdaflowQueueOrderSheet({
                               disabled={checkingProductLines.has(line.index) || submitting}
                               portalContainer={sheetPortalHost}
                               clipLabels={false}
+                              showSelectedDescription
                               triggerClassName={
                                 line.hasIssue
                                   ? "w-max min-w-[26rem] border-red-300 dark:border-red-700"

@@ -38,6 +38,8 @@ interface AsyncSearchableSelectProps {
   wrapLabels?: boolean;
   /** When false, the selected label stays on one line and can widen its cell for horizontal scroll. */
   clipLabels?: boolean;
+  /** Show the option description under the selected name. */
+  showSelectedDescription?: boolean;
   /** Extra classes for the dropdown panel (width, shadow). */
   dropdownClassName?: string;
   /** Extra classes for the trigger button (e.g. min-height for multi-line label). */
@@ -85,6 +87,7 @@ export function AsyncSearchableSelect({
   searchDebounceMs = 250,
   wrapLabels = false,
   clipLabels = true,
+  showSelectedDescription = false,
   dropdownClassName,
   triggerClassName,
   listMaxHeightClassName = "max-h-[min(24rem,50vh)]",
@@ -443,7 +446,9 @@ export function AsyncSearchableSelect({
                   <span
                     className={cn(
                       "block text-xs text-muted-foreground",
-                      wrapLabels ? "whitespace-normal break-words" : "truncate"
+                      option.description.includes("\n") || wrapLabels
+                        ? "whitespace-pre-line break-words"
+                        : "truncate"
                     )}
                   >
                     {option.description}
@@ -544,6 +549,11 @@ export function AsyncSearchableSelect({
           >
             {effectiveSelected?.label ?? placeholder}
           </span>
+          {showSelectedDescription && effectiveSelected?.description ? (
+            <span className="mt-0.5 block whitespace-pre-line text-xs font-normal text-muted-foreground">
+              {effectiveSelected.description}
+            </span>
+          ) : null}
         </span>
         <Icons.ChevronsUpDown className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
       </Button>
