@@ -38,6 +38,13 @@ import {
   sfaProductKindFromOrderChannel,
 } from "@/lib/odaflow-mapping-utils";
 import { summarizeQueueWarning } from "@/lib/odaflow/queue-display";
+import {
+  clearOdaflowQueueOrderDraft,
+  readOdaflowQueueOrderDraft,
+  writeOdaflowQueueOrderDraft,
+  type QueueDraftExtraLine,
+  type QueueDraftOption,
+} from "@/lib/odaflow/queue-order-draft";
 import { fetchPartiesApi } from "@/lib/api/parties";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { PartyRow, ProductRow } from "@/lib/types/masters";
@@ -200,6 +207,9 @@ export function OdaflowQueueOrderSheet({
   const [mappingConflict, setMappingConflict] = React.useState<MappingConflictState | null>(null);
   /** Product line → ERP product id the user confirmed via "Change mapping anyway". */
   const [replacedProductLines, setReplacedProductLines] = React.useState<Record<number, string>>({});
+  const [extraLines, setExtraLines] = React.useState<QueueDraftExtraLine[]>([]);
+  /** False until this open has loaded the queue item and any saved draft. */
+  const [draftHydrated, setDraftHydrated] = React.useState(false);
   const [pricingReminderDismissed, setPricingReminderDismissed] = React.useState(false);
   /** True while ERM conflict lookup runs after customer pick — keeps the UI responsive. */
   const [checkingCustomer, setCheckingCustomer] = React.useState(false);
@@ -246,30 +256,43 @@ export function OdaflowQueueOrderSheet({
   const load = React.useCallback(async () => {
     if (!queueId) return;
     setLoading(true);
+    setDraftHydrated(false);
     try {
       const data = await fetchOdaflowQueueItem(queueId);
+      const draft = readOdaflowQueueOrderDraft(queueId);
       setItem(data.item);
       setOrder(data.order);
-      setReplacedProductLines({});
+      const replaced: Record<number, string> = {};
+      for (const [index, productId] of Object.entries(draft?.replacedProductLines ?? {})) {
+        replaced[Number(index)] = productId;
+      }
+      setReplacedProductLines(replaced);
+      setExtraLines(draft?.extraLines ?? []);
       const raw = (data.item.rawPayload ?? {}) as {
         channel?: string;
         customerName?: string;
         branchName?: string;
         deliveryAddress?: string;
       };
-      setDeliveryDraft(
-        suggestedDeliveryAddress({
-          channel: data.order?.channel ?? raw.channel,
-          customerName: data.order?.customerName ?? raw.customerName,
-          branchName: data.order?.branchName ?? raw.branchName,
-          deliveryAddress: data.order?.deliveryAddress ?? raw.deliveryAddress,
-        })
-      );
+      const suggestedAddress = suggestedDeliveryAddress({
+        channel: data.order?.channel ?? raw.channel,
+        customerName: data.order?.customerName ?? raw.customerName,
+        branchName: data.order?.branchName ?? raw.branchName,
+        deliveryAddress: data.order?.deliveryAddress ?? raw.deliveryAddress,
+      });
+      setDeliveryDraft(draft ? draft.deliveryAddress : suggestedAddress);
       if (data.order) {
-        const customerId = initialCustomerId ?? data.order.erpPartyId;
-        const customerLabel = initialCustomerName ?? data.order.erpPartyName ?? data.order.customerName;
+        const draftCustomer = initialCustomerId ? null : draft?.customer;
+        const customerId = initialCustomerId ?? draftCustomer?.id ?? data.order.erpPartyId;
+        const customerLabel =
+          (initialCustomerId ? initialCustomerName : draftCustomer?.label) ??
+          initialCustomerName ??
+          data.order.erpPartyName ??
+          data.order.customerName;
         setErpPartyId(customerId);
-        setSelectedCustomer(customerId && customerLabel ? { id: customerId, label: customerLabel } : null);
+        setSelectedCustomer(
+          draftCustomer ?? (customerId && customerLabel ? { id: customerId, label: customerLabel } : null)
+        );
 
         const qty: Record<number, number> = {};
         const products: Record<number, AsyncSearchableSelectOption> = {};
@@ -289,9 +312,18 @@ export function OdaflowQueueOrderSheet({
             }
           })
         );
+        if (draft) {
+          for (const [index, option] of Object.entries(draft.lineProducts)) {
+            products[Number(index)] = option;
+          }
+          for (const [index, savedQty] of Object.entries(draft.lineQty)) {
+            qty[Number(index)] = savedQty;
+          }
+        }
         setLineQty(qty);
         setLineProducts(products);
       }
+      setDraftHydrated(true);
       if (initialCustomerId || showPricingReminder) {
         onDeepLinkConsumed?.();
       }
@@ -309,14 +341,51 @@ export function OdaflowQueueOrderSheet({
       void load();
     }
     if (!open) {
+      setDraftHydrated(false);
       setItem(null);
       setOrder(null);
+      setExtraLines([]);
       setMappingConflict(null);
       setPricingReminderDismissed(false);
       setCheckingCustomer(false);
       setCheckingProductLines(new Set());
     }
   }, [open, queueId, load]);
+
+  React.useEffect(() => {
+    if (!open || !queueId || !draftHydrated) return;
+    const lineProductDraft: Record<string, QueueDraftOption> = {};
+    for (const [index, option] of Object.entries(lineProducts)) {
+      if (!option?.id) continue;
+      lineProductDraft[index] = {
+        id: option.id,
+        label: option.label,
+        description: option.description,
+      };
+    }
+    writeOdaflowQueueOrderDraft(queueId, {
+      customer: selectedCustomer
+        ? { id: selectedCustomer.id, label: selectedCustomer.label, description: selectedCustomer.description }
+        : null,
+      lineProducts: lineProductDraft,
+      lineQty: Object.fromEntries(Object.entries(lineQty).map(([index, qty]) => [index, qty])),
+      deliveryAddress: deliveryDraft,
+      extraLines,
+      replacedProductLines: Object.fromEntries(
+        Object.entries(replacedProductLines).map(([index, productId]) => [index, productId])
+      ),
+    });
+  }, [
+    open,
+    queueId,
+    draftHydrated,
+    selectedCustomer,
+    lineProducts,
+    lineQty,
+    deliveryDraft,
+    extraLines,
+    replacedProductLines,
+  ]);
 
   React.useEffect(() => {
     if (!open || !initialCustomerId || deepLinkAppliedRef.current) return;
@@ -426,7 +495,8 @@ export function OdaflowQueueOrderSheet({
   const mappingCheckBusy = checkingCustomer || checkingProductLines.size > 0;
   const customerReady = Boolean(erpPartyId);
   const allProductsReady = order?.lines.every((line) => Boolean(lineProducts[line.index]?.id)) ?? false;
-  const canSubmit = customerReady && allProductsReady && !submitting && !mappingCheckBusy;
+  const extraLinesReady = extraLines.every((line) => Boolean(line.product?.id) && line.qty >= 1);
+  const canSubmit = customerReady && allProductsReady && extraLinesReady && !submitting && !mappingCheckBusy;
 
   async function handleCreateSalesOrder() {
     if (!queueId || !order || !erpPartyId) return;
@@ -460,14 +530,17 @@ export function OdaflowQueueOrderSheet({
             ? Object.keys(replacedProductLines).map(Number)
             : undefined,
         deliveryAddress: deliveryDraft.trim(),
+        extraLines: extraLines
+          .filter((line) => line.product?.id)
+          .map((line) => ({ erpProductId: line.product!.id, qty: line.qty })),
       });
+      clearOdaflowQueueOrderDraft(queueId);
       toast.success("Sales order created");
       onOpenChange(false);
       onChanged?.();
       router.push(`/docs/sales-order/${result.erpDocumentId}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create sales order");
-      void load();
     } finally {
       setSubmitting(false);
     }
@@ -489,6 +562,10 @@ export function OdaflowQueueOrderSheet({
     if (!queueId) return;
     onOpenChange(false);
     router.push(buildCustomerCreateUrl(queueId, order?.customerName));
+  }
+
+  function addExtraLine() {
+    setExtraLines((prev) => [...prev, { key: `extra-${Date.now()}-${prev.length}`, qty: 1, product: null }]);
   }
 
   function goCreateProduct() {
@@ -651,7 +728,7 @@ export function OdaflowQueueOrderSheet({
                 <div className="flex items-center justify-between gap-2">
                   <Label>Order lines</Label>
                   <span className="text-xs text-muted-foreground">
-                    {order.matchedLineCount}/{order.totalLineCount} matched · {order.lines.length} item(s)
+                    {order.matchedLineCount}/{order.totalLineCount} matched · {order.lines.length + extraLines.length} item(s)
                   </span>
                 </div>
                 <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-md border">
@@ -742,9 +819,94 @@ export function OdaflowQueueOrderSheet({
                           </td>
                         </tr>
                       ))}
+                      {extraLines.map((extra) => (
+                        <tr key={extra.key} className="border-t align-top">
+                          <td className="px-3 py-3">
+                            <p className="font-medium">Added item</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">Not on the Odaflow order</p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <Input
+                              type="number"
+                              min={1}
+                              className="h-8 w-16"
+                              value={extra.qty}
+                              onChange={(e) =>
+                                setExtraLines((prev) =>
+                                  prev.map((line) =>
+                                    line.key === extra.key
+                                      ? { ...line, qty: Math.max(1, Number(e.target.value) || 1) }
+                                      : line
+                                  )
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-start gap-2">
+                              <div className="min-w-0 flex-1">
+                                <AsyncSearchableSelect
+                                  value={extra.product?.id}
+                                  selectedOption={extra.product}
+                                  onValueChange={(id) => {
+                                    if (!id) {
+                                      setExtraLines((prev) =>
+                                        prev.map((line) => (line.key === extra.key ? { ...line, product: null } : line))
+                                      );
+                                    }
+                                  }}
+                                  onOptionSelect={(opt) =>
+                                    setExtraLines((prev) =>
+                                      prev.map((line) =>
+                                        line.key === extra.key
+                                          ? {
+                                              ...line,
+                                              product: opt
+                                                ? { id: opt.id, label: opt.label, description: opt.description }
+                                                : null,
+                                            }
+                                          : line
+                                      )
+                                    )
+                                  }
+                                  loadOptions={loadProductOptions}
+                                  minSearchLength={0}
+                                  searchDebounceMs={200}
+                                  placeholder="Select product"
+                                  searchPlaceholder="Search products…"
+                                  emptyMessage="No products found."
+                                  allowClear
+                                  disabled={submitting}
+                                  portalContainer={sheetPortalHost}
+                                  clipLabels={false}
+                                  showSelectedDescription
+                                  triggerClassName="w-max min-w-[26rem]"
+                                  onCreateNew={goCreateProduct}
+                                  createNewLabel="Create new product"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="shrink-0"
+                                disabled={submitting}
+                                onClick={() => setExtraLines((prev) => prev.filter((line) => line.key !== extra.key))}
+                                aria-label="Remove added item"
+                              >
+                                <Icons.Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
+                <Button type="button" variant="outline" size="sm" onClick={addExtraLine} disabled={submitting}>
+                  <Icons.Plus className="mr-1.5 h-4 w-4" />
+                  Add item
+                </Button>
               </div>
 
               <div className="flex items-start gap-2">
