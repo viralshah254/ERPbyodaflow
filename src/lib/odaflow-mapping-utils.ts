@@ -42,22 +42,18 @@ export function isSameOdaflowPackSize(a?: string, b?: string): boolean {
 }
 
 /**
- * One ERP product may link to at most one SFA product per catalog (MT or GT).
- * Cross-catalog links (MT + GT, same size) are allowed.
+ * A saved link conflicts only when this line is a different size.
+ * The same size may already be linked in Modern Trade and General Trade,
+ * or under another SFA id that spells the size differently.
  */
 export function filterConflictingProductMappings(
   currentExternalId: string,
   currentPackSize: string | undefined,
-  currentKind: SfaProductKind | undefined,
+  _currentKind: SfaProductKind | undefined,
   existing: ExistingProductMapping[]
 ): ExistingProductMapping[] {
   return existing.filter((mapping) => {
     if (mapping.externalId === currentExternalId) return false;
-
-    if (currentKind && mapping.sfaProductKind && currentKind === mapping.sfaProductKind) {
-      return true;
-    }
-
     return !isSameOdaflowPackSize(currentPackSize, mapping.odaflowPackSize);
   });
 }

@@ -32,4 +32,20 @@ describe("odaflow pack size matching", () => {
     ]);
     expect(conflicts).toHaveLength(1);
   });
+
+  it("does not warn when a Modern Trade line is the same sachet already linked", () => {
+    const conflicts = filterConflictingProductMappings(
+      "incoming-line",
+      "10GM(SACHET)",
+      "modern_trade",
+      [
+        {
+          externalId: "697213d94201ed09ac409209",
+          odaflowPackSize: "10GM",
+          sfaProductKind: "modern_trade",
+        },
+      ]
+    );
+    expect(conflicts).toHaveLength(0);
+  });
 });
