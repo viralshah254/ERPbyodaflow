@@ -10,6 +10,7 @@ export type ManufacturingBomItem = {
   type?: string;
   isOptional?: boolean;
   scrapFactor?: number;
+  unitCost?: number;
 };
 
 export type ManufacturingBom = {

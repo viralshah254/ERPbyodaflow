@@ -20,6 +20,8 @@ import {
   emptySupplierMasterForm,
   supplierMasterFormToPayload,
 } from "@/components/suppliers/SupplierMasterFormFields";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
+import { useOrgContext } from "@/stores/orgContextStore";
 
 interface QuickAddSupplierSheetProps {
   open: boolean;
@@ -66,6 +68,8 @@ export function QuickAddSupplierSheet({
   });
 
   const kind = watch("coolcatchSupplierKind");
+  const { templateId } = useOrgContext();
+  const bakery = canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
 
   React.useEffect(() => {
     if (open) {
@@ -91,7 +95,7 @@ export function QuickAddSupplierSheet({
       email: values.email,
       phone: values.phone,
       taxId: values.taxId,
-    });
+    }, { bakery });
     const created = await createPartyApi(payload);
     const descParts = [created.code, values.phone.trim(), values.email.trim(), values.taxId.trim()].filter(Boolean);
     onSuccess({
@@ -121,6 +125,7 @@ export function QuickAddSupplierSheet({
           onSubmit={handleSubmit(onSubmit)}
           className="flex-1 overflow-y-auto py-4 space-y-4"
         >
+          {bakery ? null : (
           <div className="space-y-2">
             <Label>Supplier kind</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -136,10 +141,11 @@ export function QuickAddSupplierSheet({
               ))}
             </div>
           </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="qas-name">
-              {kind === "FARM" ? "Farm name" : "Company name"}{" "}
+              {bakery ? "Supplier name" : kind === "FARM" ? "Farm name" : "Company name"}{" "}
               <span className="text-destructive">*</span>
             </Label>
             <Input

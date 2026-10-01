@@ -226,6 +226,7 @@ export default function BomDetailPage() {
                   <TableHead>UOM</TableHead>
                   <TableHead>Optional</TableHead>
                   <TableHead>Scrap %</TableHead>
+                  <TableHead>Unit cost</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -239,6 +240,7 @@ export default function BomDetailPage() {
                     <TableCell>{item.uom}</TableCell>
                     <TableCell>{item.isOptional ? "Yes" : "No"}</TableCell>
                     <TableCell>{item.scrapFactor ?? "—"}</TableCell>
+                    <TableCell>{item.unitCost != null ? item.unitCost.toLocaleString() : "—"}</TableCell>
                     <TableCell>
                       {canWrite && (
                         <>

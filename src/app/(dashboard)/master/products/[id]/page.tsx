@@ -927,6 +927,12 @@ export default function ProductDetailPage() {
                   <div className="grid grid-cols-[120px_1fr] gap-y-2">
                     <span className="text-muted-foreground">SKU</span>
                     <span className="font-mono font-medium">{product.sku}</span>
+                    {product.legacySku ? (
+                      <>
+                        <span className="text-muted-foreground">Previous code</span>
+                        <span className="font-mono text-muted-foreground">{product.legacySku}</span>
+                      </>
+                    ) : null}
                     <span className="text-muted-foreground align-top pt-1.5">Barcode</span>
                     <div className="min-w-0">
                       <Input

@@ -4,6 +4,7 @@ import { apiRequest, requireLiveApi } from "./client";
 type BackendProduct = {
   id: string;
   sku?: string;
+  legacySku?: string;
   name: string;
   barcode?: string | null;
   size?: string | null;
@@ -48,6 +49,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
   return {
     id: item.id,
     sku: item.sku ?? item.id,
+    legacySku: item.legacySku || undefined,
     name: item.name,
     barcode: item.barcode ?? undefined,
     size: item.size ?? undefined,

@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CoolcatchSupplierKind, PartyRole } from "@/lib/types/masters";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
+import { useOrgContext } from "@/stores/orgContextStore";
 import { LocationPickerField, type ResolvedLocation } from "@/components/location/LocationPickerField";
 import * as Icons from "lucide-react";
 
@@ -111,7 +113,9 @@ export function SupplierMasterFormFields({
 }: SupplierMasterFormFieldsProps) {
   const pinCertInputRef = React.useRef<HTMLInputElement>(null);
   const companyRegInputRef = React.useRef<HTMLInputElement>(null);
-  const isFarm = form.coolcatchSupplierKind === "FARM";
+  const { templateId } = useOrgContext();
+  const bakery = canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
+  const isFarm = !bakery && form.coolcatchSupplierKind === "FARM";
   const [docBusy, setDocBusy] = React.useState<"pin-view" | "pin-dl" | "reg-view" | "reg-dl" | null>(null);
 
   const openPinView = async () => {
@@ -180,6 +184,7 @@ export function SupplierMasterFormFields({
 
   return (
     <div className="space-y-4">
+      {bakery ? null : (
       <div className="space-y-2">
         <Label>Supplier kind</Label>
         <div className="grid grid-cols-2 gap-2">
@@ -195,10 +200,11 @@ export function SupplierMasterFormFields({
           ))}
         </div>
       </div>
+      )}
 
       <div className="space-y-2">
         <Label>
-          {isFarm ? "Farm name" : "Company name"} <span className="text-destructive">*</span>
+          {bakery ? "Supplier name" : isFarm ? "Farm name" : "Company name"} <span className="text-destructive">*</span>
         </Label>
         <Input
           value={form.name}
@@ -737,7 +743,7 @@ export function validateSupplierMasterForm(form: SupplierMasterFormValues): Reco
   return errors;
 }
 
-export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
+export function supplierMasterFormToPayload(form: SupplierMasterFormValues, options?: { bakery?: boolean }) {
   const address =
     form.locationFormattedAddress.trim() ||
     form.addressCity.trim() ||
@@ -765,7 +771,7 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
     onHold: form.onHold,
     notes: form.notes.trim() || undefined,
     roles: ["supplier"] as PartyRole[],
-    coolcatchSupplierKind: form.coolcatchSupplierKind,
+    ...(options?.bakery ? {} : { coolcatchSupplierKind: form.coolcatchSupplierKind }),
     contactPersonFirstName: form.contactPersonFirstName.trim(),
     contactPersonLastName: form.contactPersonLastName.trim(),
     ...(email ? { email } : {}),
@@ -783,7 +789,7 @@ export function supplierMasterFormToPayload(form: SupplierMasterFormValues) {
     address,
     lastKnownLatitude: form.latitude,
     lastKnownLongitude: form.longitude,
-    supplierType: form.coolcatchSupplierKind === "FARM" ? ("RAW_MATERIAL" as const) : ("OTHER" as const),
+    supplierType: options?.bakery || form.coolcatchSupplierKind !== "FARM" ? ("OTHER" as const) : ("RAW_MATERIAL" as const),
     supplierCategoryId: form.supplierCategoryId.trim() || undefined,
     status: "ACTIVE" as const,
   };

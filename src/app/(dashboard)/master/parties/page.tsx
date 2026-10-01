@@ -61,6 +61,7 @@ import { t } from "@/lib/terminology";
 import { useOrgContext, useTerminology } from "@/stores/orgContextStore";
 import { useAuthStore } from "@/stores/auth-store";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
 import { PartyImportSheet } from "@/components/masters/PartyImportSheet";
 import { toast } from "sonner";
 
@@ -567,7 +568,7 @@ export default function MasterPartiesPage() {
       const maxAgeDaysNum = formMaxOutstandingAgeDays ? parseInt(formMaxOutstandingAgeDays, 10) : undefined;
       const perInvoiceCapNum = formPerInvoiceDaysToPayCap ? parseInt(formPerInvoiceDaysToPayCap, 10) : undefined;
       const warningPctNum = formCreditWarningThresholdPct ? parseFloat(formCreditWarningThresholdPct) : undefined;
-      const supplierPayload = tab === "suppliers" ? supplierMasterFormToPayload(supplierForm) : null;
+      const supplierPayload = tab === "suppliers" ? supplierMasterFormToPayload(supplierForm, { bakery: canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID }) : null;
       const payload = tab === "suppliers" && supplierPayload
         ? {
             ...supplierPayload,

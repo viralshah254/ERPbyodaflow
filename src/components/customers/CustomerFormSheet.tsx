@@ -41,6 +41,7 @@ import {
   type PartyPayload,
 } from "@/lib/api/parties";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { fetchSalesRepsApi } from "@/lib/api/parties";
 import {
   fetchPriceListOptions,
   fetchTaxConfigsApi,
@@ -99,6 +100,7 @@ type FormState = {
   googlePlaceId: string;
   creditLimit: string;
   paymentTermsId: string;
+  salesRepId: string;
   defaultPriceListId: string;
   defaultTaxConfigId: string;
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID";
@@ -128,6 +130,7 @@ const emptyForm = (kindId: CustomerKindId = "general-trade"): FormState => ({
   googlePlaceId: "",
   creditLimit: "",
   paymentTermsId: "",
+  salesRepId: "",
   defaultPriceListId: "",
   defaultTaxConfigId: "",
   creditControlMode: "AMOUNT",
@@ -341,6 +344,7 @@ export function CustomerFormSheet({
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
+  const [salesReps, setSalesReps] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [priceLists, setPriceLists] = React.useState<Array<{ id: string; name: string }>>([]);
   const [taxConfigs, setTaxConfigs] = React.useState<TaxConfigRow[]>([]);
   const [nextCodePreview, setNextCodePreview] = React.useState("");
@@ -384,6 +388,9 @@ export function CustomerFormSheet({
     void fetchPaymentTermsApi()
       .then((items) => setTerms(items.map((t) => ({ id: t.id, name: t.name, code: t.code }))))
       .catch(() => setTerms([]));
+    void fetchSalesRepsApi()
+      .then(setSalesReps)
+      .catch(() => setSalesReps([]));
     void fetchPriceListOptions()
       .then(setPriceLists)
       .catch(() => setPriceLists([]));
@@ -458,6 +465,7 @@ export function CustomerFormSheet({
                 ? String(party.creditLimitAmount)
                 : "",
             paymentTermsId: party.paymentTermsId ?? "",
+            salesRepId: party.salesRepId ?? "",
             defaultPriceListId: party.defaultPriceListId ?? "",
             defaultTaxConfigId: party.defaultTaxConfigId ?? "",
             creditControlMode: party.creditControlMode ?? "AMOUNT",
@@ -628,6 +636,7 @@ export function CustomerFormSheet({
       creditLimit: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
       creditLimitAmount: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
       paymentTermsId: form.paymentTermsId || undefined,
+      salesRepId: form.salesRepId || undefined,
       creditControlMode: form.creditControlMode,
       status: "ACTIVE",
       customerType: fmcg ? kind.customerType : form.customerType,
@@ -1138,6 +1147,25 @@ export function CustomerFormSheet({
                     <p className="text-xs text-muted-foreground">
                       Cash = pay on invoice. Credit (Debtors) = sundry debtors / account.
                     </p>
+                  </div>
+                  <div className="space-y-2">
+                    <FieldLabel optional>Sales rep</FieldLabel>
+                    <Select
+                      value={form.salesRepId || "__none__"}
+                      onValueChange={(v) => setField("salesRepId", v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="No sales rep" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No sales rep</SelectItem>
+                        {salesReps.map((rep) => (
+                          <SelectItem key={rep.id} value={rep.id}>
+                            {rep.code} — {rep.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   {fmcg ? (
                     <div className="space-y-2">
