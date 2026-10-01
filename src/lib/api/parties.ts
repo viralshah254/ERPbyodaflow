@@ -88,11 +88,11 @@ export type PartyPayload = {
   arApGroup?: ArApGroup;
   onHold?: boolean;
   notes?: string;
-  creditLimit?: number;
-  creditLimitAmount?: number;
+  creditLimit?: number | null;
+  creditLimitAmount?: number | null;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
-  maxOutstandingInvoiceAgeDays?: number;
-  perInvoiceDaysToPayCap?: number;
+  maxOutstandingInvoiceAgeDays?: number | null;
+  perInvoiceDaysToPayCap?: number | null;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
   salesRepId?: string;

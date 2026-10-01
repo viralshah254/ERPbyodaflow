@@ -24,6 +24,7 @@ import type { PartyCreditSummary } from "@/lib/api/parties";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { formatMoney } from "@/lib/money";
+import { formatCustomerCreditLimit } from "@/lib/customers/format-credit-limit";
 import { can } from "@/lib/rbac/can";
 import { useCanWriteFinance, useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
@@ -183,11 +184,12 @@ export default function Customer360Page() {
                     <CardTitle className="text-sm text-muted-foreground">Credit limit</CardTitle>
                   </CardHeader>
                   <CardContent className="text-2xl font-semibold">
-                    {credit?.creditLimitAmount != null
-                      ? formatMoney(credit.creditLimitAmount, currency)
-                      : party.creditLimitAmount != null
-                        ? formatMoney(party.creditLimitAmount, currency)
-                        : "No limit"}
+                    {formatCustomerCreditLimit({
+                      mode: credit?.creditControlMode ?? party.creditControlMode,
+                      amount: credit?.creditLimitAmount ?? party.creditLimitAmount,
+                      days: credit?.maxOutstandingInvoiceAgeDays ?? party.maxOutstandingInvoiceAgeDays,
+                      currency,
+                    })}
                   </CardContent>
                 </Card>
                 <Card>

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchPartyByIdApi, updatePartyApi, type PartyDetail } from "@/lib/api/parties";
 import { paymentTermDisplayName } from "@/lib/fmcg/payment-class";
+import { creditModeUses } from "@/lib/customers/format-credit-limit";
 import { useCanWriteFinance, useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
@@ -63,27 +64,45 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
 
   const save = async () => {
     if (!party) return;
-    if (creditLimit.trim()) {
+    const { amount: usesAmount, days: usesDays } = creditModeUses(creditControlMode);
+    if (usesAmount && creditLimit.trim()) {
       const value = Number(creditLimit);
       if (!Number.isFinite(value) || value < 0) {
         toast.error("Credit limit must be a non-negative number.");
         return;
       }
     }
+    if (usesDays && maxAge.trim()) {
+      const value = Number(maxAge);
+      if (!Number.isInteger(value) || value < 0) {
+        toast.error("Credit days must be a whole number, zero or greater.");
+        return;
+      }
+    }
+    if (usesDays && daysCap.trim()) {
+      const value = Number(daysCap);
+      if (!Number.isInteger(value) || value < 0) {
+        toast.error("Per-invoice days cap must be a whole number, zero or greater.");
+        return;
+      }
+    }
     setSaving(true);
     try {
+      const amountValue = usesAmount && creditLimit.trim() ? Number(creditLimit) : null;
+      const ageValue = usesDays && maxAge.trim() ? Number(maxAge) : null;
+      const capValue = usesDays && daysCap.trim() ? Number(daysCap) : null;
       await updatePartyApi(props.partyId, {
         name: party.name,
         roles: party.roles?.length ? party.roles : ["customer"],
-        creditLimit: creditLimit.trim() ? Number(creditLimit) : undefined,
-        creditLimitAmount: creditLimit.trim() ? Number(creditLimit) : undefined,
+        creditLimit: amountValue,
+        creditLimitAmount: amountValue,
         paymentTermsId: paymentTermsId || undefined,
         creditControlMode,
         onHold,
         sageDcLink: sageDcLink.trim() ? Number(sageDcLink) : undefined,
         arApGroup: (arApGroup || undefined) as PartyDetail["arApGroup"],
-        maxOutstandingInvoiceAgeDays: maxAge.trim() ? Number(maxAge) : undefined,
-        perInvoiceDaysToPayCap: daysCap.trim() ? Number(daysCap) : undefined,
+        maxOutstandingInvoiceAgeDays: ageValue,
+        perInvoiceDaysToPayCap: capValue,
         creditWarningThresholdPct: warningPct.trim() ? Number(warningPct) : undefined,
       });
       toast.success("Credit settings saved.");
@@ -103,15 +122,35 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
   return (
     <div className="max-w-xl space-y-4">
       <div className="space-y-2">
-        <Label>Credit limit</Label>
-        <Input
-          type="number"
-          value={creditLimit}
-          onChange={(e) => setCreditLimit(e.target.value)}
+        <Label>Credit control</Label>
+        <Select
+          value={creditControlMode}
+          onValueChange={(v) => setCreditControlMode(v as "AMOUNT" | "DAYS" | "HYBRID")}
           disabled={!canEdit}
-          placeholder="Leave blank for no limit"
-        />
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="AMOUNT">Cash amount</SelectItem>
+            <SelectItem value="DAYS">Days</SelectItem>
+            <SelectItem value="HYBRID">Cash amount + days</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+      {creditModeUses(creditControlMode).amount ? (
+        <div className="space-y-2">
+          <Label>Cash credit limit</Label>
+          <Input
+            type="number"
+            min={0}
+            value={creditLimit}
+            onChange={(e) => setCreditLimit(e.target.value)}
+            disabled={!canEdit}
+            placeholder="Leave blank for no cash limit"
+          />
+        </div>
+      ) : null}
       <div className="space-y-2">
         <Label>Cash or credit</Label>
         <Select value={paymentTermsId || "__none__"} onValueChange={(v) => setPaymentTermsId(v === "__none__" ? "" : v)} disabled={!canEdit}>
@@ -125,23 +164,6 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
                 {paymentTermDisplayName(term)}
               </SelectItem>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label>Credit control mode</Label>
-        <Select
-          value={creditControlMode}
-          onValueChange={(v) => setCreditControlMode(v as "AMOUNT" | "DAYS" | "HYBRID")}
-          disabled={!canEdit}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="AMOUNT">Amount</SelectItem>
-            <SelectItem value="DAYS">Days</SelectItem>
-            <SelectItem value="HYBRID">Hybrid</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -178,16 +200,34 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
           </Select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>Max outstanding age (days)</Label>
-          <Input type="number" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} disabled={!canEdit} />
+      {creditModeUses(creditControlMode).days ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label>Credit days</Label>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={maxAge}
+              onChange={(e) => setMaxAge(e.target.value)}
+              disabled={!canEdit}
+              placeholder="Unpaid invoice age"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Per-invoice days cap</Label>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={daysCap}
+              onChange={(e) => setDaysCap(e.target.value)}
+              disabled={!canEdit}
+              placeholder="Terms on this invoice"
+            />
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label>Per-invoice days cap</Label>
-          <Input type="number" value={daysCap} onChange={(e) => setDaysCap(e.target.value)} disabled={!canEdit} />
-        </div>
-      </div>
+      ) : null}
       <div className="space-y-2">
         <Label>Warning threshold (%)</Label>
         <Input type="number" value={warningPct} onChange={(e) => setWarningPct(e.target.value)} disabled={!canEdit} />
