@@ -231,6 +231,7 @@ export async function createSalesOrderFromQueueItem(
     /** Line indexes where the user confirmed overriding an existing SFA product link. */
     replaceProductMappingLines?: number[];
     deliveryAddress?: string;
+    extraLines?: Array<{ erpProductId: string; qty: number }>;
   }
 ): Promise<{ success: true; erpDocumentId: string; action: string }> {
   requireLiveApi("Odaflow integration");
