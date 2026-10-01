@@ -1,3 +1,5 @@
+import { normalizeFmcgSize } from "@/lib/products/fmcg-size";
+
 export type SfaProductKind = "modern_trade" | "general_trade";
 
 export function sfaProductKindFromOrderChannel(channel?: string): SfaProductKind | undefined {
@@ -20,11 +22,21 @@ export type ExistingProductMapping = {
   sfaProductKind?: SfaProductKind;
 };
 
+const CANONICAL_SIZE_RE = /^\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)?(?:g|kg|ml|l|cl|pcs)$/i;
+
+/** "60G", "60 GM", and "60GM" all become "60g". Other labels stay as written. */
+function normalizePackSizeLabel(value?: string): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+  const sized = normalizeFmcgSize(trimmed);
+  if (sized && CANONICAL_SIZE_RE.test(sized)) return sized.toLowerCase();
+  return trimmed.toLowerCase().replace(/\s+/g, "");
+}
+
 /** True when sizes match, or when either side is unknown. */
 export function isSameOdaflowPackSize(a?: string, b?: string): boolean {
-  const normalize = (value?: string) => value?.trim().toLowerCase().replace(/\s+/g, "") ?? "";
-  const left = normalize(a);
-  const right = normalize(b);
+  const left = normalizePackSizeLabel(a);
+  const right = normalizePackSizeLabel(b);
   if (!left || !right) return true;
   return left === right;
 }
