@@ -40,11 +40,20 @@ function OdaflowSyncQueuePageContent() {
   }, [refreshSummary, refreshKey]);
 
   React.useEffect(() => {
-    return subscribeRealtimeInbox((event) => {
-      if (event === "odaflow.sync-queue.changed") {
+    let timer: number | null = null;
+    const unsubscribe = subscribeRealtimeInbox((event) => {
+      if (event !== "odaflow.sync-queue.changed") return;
+      // A burst of order alerts should reload the list once, not once per alert.
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
         setRefreshKey((k) => k + 1);
-      }
+      }, 700);
     });
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 
   return (
