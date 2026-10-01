@@ -317,6 +317,8 @@ export type DocumentDraftPayload = {
   tax?: number;
   total: number;
   currency?: string;
+  /** Deliver-to text. Modern trade: the branch. Direct: the customer location. */
+  deliveryAddress?: string;
   /** Document currency → base currency. From exchange rate API or user override. */
   exchangeRate?: number;
   linesAreTaxInclusive?: boolean;

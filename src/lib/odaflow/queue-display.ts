@@ -14,7 +14,7 @@ export function summarizeQueueWarning(text: string): string {
   }
   const prefixMatch = trimmed.match(WARNING_PREFIX);
   const prefix = prefixMatch?.[1] ?? "";
-  const body = prefix ? trimmed.slice(prefixMatch[0].length) : trimmed;
+  const body = prefixMatch ? trimmed.slice(prefixMatch[0].length) : trimmed;
   const parts = body
     .split(/\s*(?:,|·)\s*/)
     .map((part) => part.trim())
