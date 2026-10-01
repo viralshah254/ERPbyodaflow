@@ -122,6 +122,35 @@ export function AsyncSearchableSelect({
     maxH: number;
   } | null>(null);
   const requestIdRef = React.useRef(0);
+  const [panelSize, setPanelSize] = React.useState<{ width: number; height: number } | null>(null);
+  const [dragBox, setDragBox] = React.useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem("erp:search-panel-size");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { width?: number; height?: number };
+      if (
+        typeof parsed.width === "number" &&
+        typeof parsed.height === "number" &&
+        parsed.width >= 280 &&
+        parsed.height >= 200
+      ) {
+        setPanelSize({ width: parsed.width, height: parsed.height });
+      }
+    } catch {
+      /* ignore a bad saved size */
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) setDragBox(null);
+  }, [open]);
   /** Always call latest loader without putting it in effect deps (inline handlers would retrigger searches every parent render). */
   const loadOptionsRef = React.useRef(loadOptions);
   React.useLayoutEffect(() => {
@@ -350,10 +379,63 @@ export function AsyncSearchableSelect({
 
   const showRecentHeading = !query.trim() && recentOptions.length > 0;
 
+  const explicitHeight = dragBox?.height ?? (floating ? panelSize?.height : undefined);
   const listScrollStyle =
-    floating && floatingPos
-      ? { maxHeight: floatingPos.maxH }
-      : undefined;
+    explicitHeight != null
+      ? undefined
+      : floating && floatingPos
+        ? { maxHeight: floatingPos.maxH }
+        : undefined;
+
+  const startResize = (corner: "se" | "sw") => (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origin = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    const move = (pointer: PointerEvent) => {
+      const dx = pointer.clientX - startX;
+      const dy = pointer.clientY - startY;
+      const margin = 8;
+      const minW = 320;
+      const minH = 220;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      let width = corner === "se" ? origin.width + dx : origin.width - dx;
+      let height = origin.height + dy;
+      width = Math.max(minW, Math.min(width, vw - margin * 2));
+      height = Math.max(minH, height);
+      let left = corner === "se" ? origin.left : origin.left + origin.width - width;
+      left = Math.max(margin, Math.min(left, vw - margin - width));
+      let top = origin.top;
+      if (top + height > vh - margin) {
+        top = Math.max(margin, vh - margin - height);
+        height = Math.min(height, vh - margin - top);
+      }
+      const next = { left, top, width, height };
+      setDragBox(next);
+      setPanelSize({ width, height });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      setPanelSize((current) => {
+        if (current) {
+          try {
+            window.sessionStorage.setItem("erp:search-panel-size", JSON.stringify(current));
+          } catch {
+            /* ignore */
+          }
+        }
+        return current;
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
 
   const panelInner = (
     <>
@@ -372,7 +454,7 @@ export function AsyncSearchableSelect({
       <div
         className={cn(
           "mt-2 overflow-auto rounded-md border bg-muted/20",
-          !(floating && floatingPos) && listMaxHeightClassName
+          explicitHeight != null ? "min-h-0 flex-1" : !(floating && floatingPos) && listMaxHeightClassName
         )}
         style={listScrollStyle}
       >
@@ -463,7 +545,7 @@ export function AsyncSearchableSelect({
       {onCreateNew ? (
         <button
           type="button"
-          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-primary hover:bg-primary/10 border-t border-border/50"
+          className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 pr-8 text-left text-sm font-medium text-primary hover:bg-primary/10 border-t border-border/50"
           onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -490,6 +572,22 @@ export function AsyncSearchableSelect({
       onMouseDown={(event) => event.stopPropagation()}
     >
       {panelInner}
+      <button
+        type="button"
+        aria-label="Drag the bottom left corner to resize the search list"
+        className="absolute bottom-1 left-1 z-10 flex h-6 w-6 cursor-nesw-resize items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        onPointerDown={startResize("sw")}
+      >
+        <Icons.Grip className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Drag the bottom right corner to resize the search list"
+        className="absolute bottom-1 right-1 z-10 flex h-6 w-6 cursor-nwse-resize items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        onPointerDown={startResize("se")}
+      >
+        <Icons.Grip className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 
@@ -560,26 +658,43 @@ export function AsyncSearchableSelect({
       {open && !floating
         ?             panelShell({
               className: cn(
-                "absolute z-50 mt-2 left-0 rounded-lg border bg-popover p-2 text-popover-foreground shadow-xl pointer-events-auto",
-                "min-w-full w-max max-w-[min(100vw-1.5rem,48rem)]",
+                "absolute z-50 mt-2 left-0 flex flex-col rounded-lg border bg-popover p-2 text-popover-foreground shadow-xl pointer-events-auto",
+                explicitHeight == null && "min-w-full w-max max-w-[min(100vw-1.5rem,48rem)]",
                 dropdownClassName
               ),
+              style: explicitHeight != null ? { width: panelSize?.width, height: explicitHeight } : undefined,
             })
         : null}
       {floatingReady && portalTarget
         ? createPortal(
             panelShell({
               className: cn(
-                "fixed z-[400] rounded-lg border bg-popover p-2 text-popover-foreground shadow-2xl outline-none pointer-events-auto",
-                "ring-1 ring-border/60 animate-in fade-in-0 zoom-in-95 duration-100",
+                "fixed z-[400] flex flex-col rounded-lg border bg-popover p-2 text-popover-foreground shadow-2xl outline-none pointer-events-auto",
+                "ring-1 ring-border/60",
+                dragBox == null && "animate-in fade-in-0 zoom-in-95 duration-100",
                 dropdownClassName
               ),
-              style: {
-                top: floatingPos!.top,
-                left: floatingPos!.left,
-                width: floatingPos!.width,
-                maxHeight: floatingPos!.maxH + 120,
-              },
+              style: (() => {
+                const pos = floatingPos!;
+                const margin = 8;
+                const width = Math.min(dragBox?.width ?? panelSize?.width ?? pos.width, window.innerWidth - margin * 2);
+                let left = dragBox?.left ?? pos.left;
+                if (left + width > window.innerWidth - margin) {
+                  left = Math.max(margin, window.innerWidth - width - margin);
+                }
+                let top = dragBox?.top ?? pos.top;
+                const height = dragBox?.height ?? panelSize?.height;
+                if (height != null && top + height > window.innerHeight - margin) {
+                  top = Math.max(margin, window.innerHeight - margin - height);
+                }
+                return {
+                  top,
+                  left,
+                  width,
+                  height,
+                  maxHeight: height == null ? pos.maxH + 120 : undefined,
+                };
+              })(),
             }),
             portalTarget
           )
