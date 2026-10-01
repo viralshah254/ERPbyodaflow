@@ -76,6 +76,8 @@ export type FetchProductsOptions = {
   status?: string;
   purchasable?: boolean;
   sellable?: boolean;
+  /** With sellable: also list active raw SKUs that have a barcode and are not labels. */
+  includeBarcodedRaw?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
   categoryId?: string;
   departmentId?: string;
@@ -113,6 +115,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.status) params.set("status", opts.status);
   if (opts.purchasable) params.set("purchasable", "true");
   if (opts.sellable) params.set("sellable", "true");
+  if (opts.includeBarcodedRaw) params.set("includeBarcodedRaw", "true");
   if (opts.productType) params.set("productType", opts.productType);
   if (opts.categoryId?.trim()) params.set("categoryId", opts.categoryId.trim());
   if (opts.departmentId?.trim()) params.set("departmentId", opts.departmentId.trim());

@@ -334,7 +334,13 @@ export function OdaflowQueueOrderSheet({
   }, []);
 
   const loadProductOptions = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
-    const page = await fetchProductsPageApi({ search: query, status: "ACTIVE", sellable: true, limit: 20 });
+    const page = await fetchProductsPageApi({
+      search: query,
+      status: "ACTIVE",
+      sellable: true,
+      includeBarcodedRaw: true,
+      limit: 20,
+    });
     return page.items.map((p: ProductRow) => ({
       id: p.id,
       label: p.name,
