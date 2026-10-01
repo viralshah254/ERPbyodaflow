@@ -31,12 +31,31 @@ export type SfaCustomerApprovalList = {
   success: boolean;
   enabled: boolean;
   pendingCount: number;
+  totalCount: number;
   items: SfaCustomerApproval[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 };
 
-export async function fetchSfaCustomerApprovalsApi(): Promise<SfaCustomerApprovalList> {
+export type FetchSfaCustomerApprovalsParams = {
+  q?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export async function fetchSfaCustomerApprovalsApi(
+  params: FetchSfaCustomerApprovalsParams = {}
+): Promise<SfaCustomerApprovalList> {
   requireLiveApi("SFA customer approvals");
-  return apiRequest<SfaCustomerApprovalList>("/api/integrations/odaflow/customer-approvals");
+  const query = new URLSearchParams();
+  if (params.q?.trim()) query.set("q", params.q.trim());
+  if (params.limit != null) query.set("limit", String(params.limit));
+  if (params.offset != null && params.offset > 0) query.set("offset", String(params.offset));
+  const qs = query.toString();
+  return apiRequest<SfaCustomerApprovalList>(
+    `/api/integrations/odaflow/customer-approvals${qs ? `?${qs}` : ""}`
+  );
 }
 
 export async function approveSfaCustomerApi(id: string): Promise<{ partyId: string }> {
