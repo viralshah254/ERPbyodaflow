@@ -25,6 +25,8 @@ type BackendStockLevel = {
   ownership?: "CoolCatch" | "Franchise";
   ageDays?: number;
   lastMovementAt?: string;
+  averageCost?: number | null;
+  lastCost?: number | null;
 };
 
 function mapStatus(status: BackendStockLevel["status"]): StockRow["status"] {
@@ -53,6 +55,8 @@ function mapStock(item: BackendStockLevel): InventoryStockRow {
     ownership: item.ownership,
     ageDays: item.ageDays,
     lastMovementAt: item.lastMovementAt,
+    averageCost: item.averageCost ?? null,
+    lastCost: item.lastCost ?? null,
   };
 }
 
@@ -61,6 +65,8 @@ export type InventoryStockRow = StockRow & {
   ownership?: "CoolCatch" | "Franchise";
   ageDays?: number;
   lastMovementAt?: string;
+  averageCost?: number | null;
+  lastCost?: number | null;
 };
 
 export type FetchStockLevelsPageOpts = {

@@ -14,6 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,6 +69,7 @@ export default function ChartOfAccountsPage() {
     currency: string;
     parentId: string;
     description: string;
+    posts: boolean;
   }>({
     code: "",
     name: "",
@@ -75,6 +77,7 @@ export default function ChartOfAccountsPage() {
     currency: baseCurrency,
     parentId: "",
     description: "",
+    posts: true,
   });
   const [currencies, setCurrencies] = React.useState<{ code: string; name: string }[]>(
     () => CURRENCY_LIST.map((c) => ({ code: c.code, name: c.name }))
@@ -174,7 +177,7 @@ export default function ChartOfAccountsPage() {
   const openCreate = () => {
     setEditing(null);
     const initialCode = suggestNextCodeFromRows(rows);
-    setForm({ code: initialCode, name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "" });
+    setForm({ code: initialCode, name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "", posts: true });
     setCreateOpen(true);
     void fetchSuggestedFinanceAccountCodeApi()
       .then(({ code }) => setForm((prev) => ({ ...prev, code })))
@@ -190,6 +193,7 @@ export default function ChartOfAccountsPage() {
       currency: row.currency || baseCurrency,
       parentId: row.parentId || "",
       description: row.description || "",
+      posts: row.posts !== false,
     });
   };
 
@@ -374,6 +378,19 @@ export default function ChartOfAccountsPage() {
                 Default currency for balances in this account. Leave empty for multi-currency or functional currency.
               </p>
             </div>
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="account-posts"
+                checked={form.posts}
+                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, posts: checked === true }))}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="account-posts">Posting account</Label>
+                <p className="text-xs text-muted-foreground">
+                  Journals can use this account. Turn it off for a heading that only groups other accounts.
+                </p>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Description</Label>
               <Input
@@ -403,6 +420,7 @@ export default function ChartOfAccountsPage() {
                       parentId: form.parentId || undefined,
                       currency: form.currency || undefined,
                       description: form.description.trim() || undefined,
+                      posts: form.posts,
                     });
                     toast.success("Account updated.");
                   } else {
@@ -414,13 +432,14 @@ export default function ChartOfAccountsPage() {
                       parentId: form.parentId || undefined,
                       currency: form.currency || undefined,
                       description: form.description.trim() || undefined,
+                      posts: form.posts,
                     });
                     toast.success(`Account created — code ${created.code}.`);
                   }
                   await refresh();
                   setCreateOpen(false);
                   setEditing(null);
-                  setForm({ code: "", name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "" });
+                  setForm({ code: "", name: "", type: "ASSET", currency: baseCurrency, parentId: "", description: "", posts: true });
                 } catch (error) {
                   toast.error((error as Error).message || "Failed to save account.");
                 } finally {

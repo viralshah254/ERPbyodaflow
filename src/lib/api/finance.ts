@@ -144,6 +144,7 @@ export type FinanceAccount = {
   currency?: string;
   parentId?: string;
   description?: string;
+  posts?: boolean;
 };
 
 export type PostingMappingKey =
@@ -364,6 +365,7 @@ export async function createFinanceAccountApi(payload: {
   parentId?: string;
   currency?: string;
   description?: string;
+  posts?: boolean;
 }): Promise<{ id: string; code: string }> {
   requireLiveApi("Finance account creation");
   return apiRequest<{ id: string; code: string }>("/api/finance/accounts", {
@@ -374,7 +376,7 @@ export async function createFinanceAccountApi(payload: {
 
 export async function updateFinanceAccountApi(
   id: string,
-  payload: { code?: string; name?: string; type?: string; parentId?: string; currency?: string; description?: string }
+  payload: { code?: string; name?: string; type?: string; parentId?: string; currency?: string; description?: string; posts?: boolean }
 ): Promise<void> {
   requireLiveApi("Finance account update");
   await apiRequest(`/api/master-data/finance/accounts/${encodeURIComponent(id)}`, {

@@ -228,6 +228,8 @@ export async function createSalesOrderFromQueueItem(
     lineProducts?: Array<{ lineIndex: number; erpProductId: string }>;
     lineQty?: Array<{ lineIndex: number; qty: number }>;
     saveMappings?: boolean;
+    /** Line indexes where the user confirmed overriding an existing SFA product link. */
+    replaceProductMappingLines?: number[];
     deliveryAddress?: string;
   }
 ): Promise<{ success: true; erpDocumentId: string; action: string }> {

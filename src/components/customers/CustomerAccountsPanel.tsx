@@ -30,6 +30,7 @@ import {
   type PartyPayload,
 } from "@/lib/api/parties";
 import { formatMoney } from "@/lib/money";
+import { creditModeUses, formatCustomerCreditLimit } from "@/lib/customers/format-credit-limit";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -243,9 +244,22 @@ export function CustomerAccountsPanel({
   function validateForm(): boolean {
     const nextErrors: Record<string, string> = {};
     if (!form.name.trim()) nextErrors.name = "Name is required.";
-    if (form.creditLimit.trim()) {
+    const { amount: usesAmount, days: usesDays } = creditModeUses(form.creditControlMode);
+    if (usesAmount && form.creditLimit.trim()) {
       const value = Number(form.creditLimit);
       if (!Number.isFinite(value) || value < 0) nextErrors.creditLimit = "Credit limit must be a non-negative number.";
+    }
+    if (usesDays && form.maxOutstandingInvoiceAgeDays.trim()) {
+      const value = Number(form.maxOutstandingInvoiceAgeDays);
+      if (!Number.isInteger(value) || value < 0) {
+        nextErrors.maxOutstandingInvoiceAgeDays = "Credit days must be a whole number, zero or greater.";
+      }
+    }
+    if (usesDays && form.perInvoiceDaysToPayCap.trim()) {
+      const value = Number(form.perInvoiceDaysToPayCap);
+      if (!Number.isInteger(value) || value < 0) {
+        nextErrors.perInvoiceDaysToPayCap = "Per-invoice days cap must be a whole number, zero or greater.";
+      }
     }
     const code = form.defaultCurrency.trim().toUpperCase();
     if (code && !/^[A-Z]{3}$/.test(code)) nextErrors.defaultCurrency = "Currency must be a 3-letter code (e.g. KES).";
@@ -258,18 +272,20 @@ export function CustomerAccountsPanel({
       toast.error("Please fix validation errors.");
       return;
     }
+    const { amount: usesAmount, days: usesDays } = creditModeUses(form.creditControlMode);
+    const amountValue = usesAmount && form.creditLimit.trim() ? Number(form.creditLimit) : null;
     const payload: PartyPayload = {
       name: form.name.trim(),
       roles: ["customer"],
       email: form.email.trim() || undefined,
-      creditLimit: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
-      creditLimitAmount: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
+      creditLimit: amountValue,
+      creditLimitAmount: amountValue,
       customerCategoryId: form.customerCategoryId || undefined,
       creditControlMode: form.creditControlMode,
-      maxOutstandingInvoiceAgeDays: form.maxOutstandingInvoiceAgeDays.trim()
-        ? Number(form.maxOutstandingInvoiceAgeDays)
-        : undefined,
-      perInvoiceDaysToPayCap: form.perInvoiceDaysToPayCap.trim() ? Number(form.perInvoiceDaysToPayCap) : undefined,
+      maxOutstandingInvoiceAgeDays:
+        usesDays && form.maxOutstandingInvoiceAgeDays.trim() ? Number(form.maxOutstandingInvoiceAgeDays) : null,
+      perInvoiceDaysToPayCap:
+        usesDays && form.perInvoiceDaysToPayCap.trim() ? Number(form.perInvoiceDaysToPayCap) : null,
       creditWarningThresholdPct: form.creditWarningThresholdPct.trim()
         ? Number(form.creditWarningThresholdPct)
         : undefined,
@@ -393,12 +409,16 @@ export function CustomerAccountsPanel({
       {
         id: "creditLimit",
         header: "Credit limit",
-        accessor: (row: ArCustomerSummary) => {
-          const amt = row.creditLimit ?? row.creditLimitAmount;
-          return (
-            <div className="text-right">{amt != null && Number.isFinite(amt) ? formatMoney(amt, currency) : "—"}</div>
-          );
-        },
+        accessor: (row: ArCustomerSummary) => (
+          <div className="text-right">
+            {formatCustomerCreditLimit({
+              mode: row.creditControlMode,
+              amount: row.creditLimitAmount ?? row.creditLimit,
+              days: row.maxOutstandingInvoiceAgeDays ?? row.perInvoiceDaysToPayCap,
+              currency,
+            })}
+          </div>
+        ),
       },
       {
         id: "outstanding",
@@ -698,19 +718,22 @@ export function CustomerAccountsPanel({
           </div>
           <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Credit settings</p>
-            <div className="space-y-2">
-              <Label>Credit limit</Label>
-              <Input
-                type="number"
-                placeholder="Leave blank for no limit / cash only"
-                value={form.creditLimit}
-                onChange={(e) => {
-                  setForm((prev) => ({ ...prev, creditLimit: e.target.value }));
-                  if (errors.creditLimit) setErrors((prev) => ({ ...prev, creditLimit: "" }));
-                }}
-              />
-              {errors.creditLimit ? <p className="text-xs text-destructive">{errors.creditLimit}</p> : null}
-            </div>
+            {creditModeUses(form.creditControlMode).amount ? (
+              <div className="space-y-2">
+                <Label>Cash credit limit</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Leave blank for no cash limit"
+                  value={form.creditLimit}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, creditLimit: e.target.value }));
+                    if (errors.creditLimit) setErrors((prev) => ({ ...prev, creditLimit: "" }));
+                  }}
+                />
+                {errors.creditLimit ? <p className="text-xs text-destructive">{errors.creditLimit}</p> : null}
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label>Cash or credit</Label>
               <Select
@@ -750,9 +773,9 @@ export function CustomerAccountsPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="AMOUNT">Amount</SelectItem>
+                  <SelectItem value="AMOUNT">Cash amount</SelectItem>
                   <SelectItem value="DAYS">Days</SelectItem>
-                  <SelectItem value="HYBRID">Hybrid</SelectItem>
+                  <SelectItem value="HYBRID">Cash amount + days</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -788,24 +811,38 @@ export function CustomerAccountsPanel({
               </Button>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Max outstanding invoice age (days)</Label>
-            <Input
-              type="number"
-              placeholder="Optional"
-              value={form.maxOutstandingInvoiceAgeDays}
-              onChange={(e) => setForm((prev) => ({ ...prev, maxOutstandingInvoiceAgeDays: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Per-invoice days to pay cap</Label>
-            <Input
-              type="number"
-              placeholder="Optional"
-              value={form.perInvoiceDaysToPayCap}
-              onChange={(e) => setForm((prev) => ({ ...prev, perInvoiceDaysToPayCap: e.target.value }))}
-            />
-          </div>
+          {creditModeUses(form.creditControlMode).days ? (
+            <>
+              <div className="space-y-2">
+                <Label>Credit days</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="Unpaid invoice age"
+                  value={form.maxOutstandingInvoiceAgeDays}
+                  onChange={(e) => setForm((prev) => ({ ...prev, maxOutstandingInvoiceAgeDays: e.target.value }))}
+                />
+                {errors.maxOutstandingInvoiceAgeDays ? (
+                  <p className="text-xs text-destructive">{errors.maxOutstandingInvoiceAgeDays}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label>Per-invoice days to pay cap</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  placeholder="Terms on this invoice"
+                  value={form.perInvoiceDaysToPayCap}
+                  onChange={(e) => setForm((prev) => ({ ...prev, perInvoiceDaysToPayCap: e.target.value }))}
+                />
+                {errors.perInvoiceDaysToPayCap ? (
+                  <p className="text-xs text-destructive">{errors.perInvoiceDaysToPayCap}</p>
+                ) : null}
+              </div>
+            </>
+          ) : null}
           <div className="space-y-2">
             <Label>Credit warning threshold (%)</Label>
             <Input

@@ -1,6 +1,8 @@
 export type ProductRow = {
   id: string;
   sku: string;
+  /** Previous bakery code when the SKU was rewritten to a Sage code. */
+  legacySku?: string;
   name: string;
   /** Commercial barcode / EAN — unique per org; join key for SFA MT+GT. */
   barcode?: string;
@@ -105,6 +107,7 @@ export type PartyRow = {
   lastKnownLatitude?: number;
   lastKnownLongitude?: number;
   paymentTermsId?: string;
+  salesRepId?: string;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
   creditLimitAmount?: number;
   maxOutstandingInvoiceAgeDays?: number;

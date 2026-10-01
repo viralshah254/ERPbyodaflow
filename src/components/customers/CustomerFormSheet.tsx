@@ -32,6 +32,7 @@ import {
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
 import { paymentTermDisplayName, sortPaymentTerms } from "@/lib/fmcg/payment-class";
+import { creditModeUses } from "@/lib/customers/format-credit-limit";
 import {
   createPartyApi,
   fetchNextCustomerCodeApi,
@@ -41,6 +42,7 @@ import {
   type PartyPayload,
 } from "@/lib/api/parties";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
+import { fetchSalesRepsApi } from "@/lib/api/parties";
 import {
   fetchPriceListOptions,
   fetchTaxConfigsApi,
@@ -98,7 +100,9 @@ type FormState = {
   longitude: string;
   googlePlaceId: string;
   creditLimit: string;
+  creditDays: string;
   paymentTermsId: string;
+  salesRepId: string;
   defaultPriceListId: string;
   defaultTaxConfigId: string;
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID";
@@ -127,7 +131,9 @@ const emptyForm = (kindId: CustomerKindId = "general-trade"): FormState => ({
   longitude: "",
   googlePlaceId: "",
   creditLimit: "",
+  creditDays: "",
   paymentTermsId: "",
+  salesRepId: "",
   defaultPriceListId: "",
   defaultTaxConfigId: "",
   creditControlMode: "AMOUNT",
@@ -189,6 +195,49 @@ function clearDraft() {
   }
 }
 
+function limitInput(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return "";
+  return String(value);
+}
+
+function validateCreditFields(form: FormState): Record<string, string> {
+  const next: Record<string, string> = {};
+  const { amount, days } = creditModeUses(form.creditControlMode);
+  if (amount && form.creditLimit.trim()) {
+    const n = Number(form.creditLimit);
+    if (!Number.isFinite(n) || n < 0) next.creditLimit = "Credit limit must be zero or greater.";
+  }
+  if (days && form.creditDays.trim()) {
+    const n = Number(form.creditDays);
+    if (!Number.isInteger(n) || n < 0) next.creditDays = "Credit days must be a whole number, zero or greater.";
+  }
+  return next;
+}
+
+function creditLimitReview(form: FormState): string {
+  const { amount, days } = creditModeUses(form.creditControlMode);
+  const parts: string[] = [];
+  if (amount && form.creditLimit.trim()) parts.push(form.creditLimit.trim());
+  if (days && form.creditDays.trim()) parts.push(`${form.creditDays.trim()} days`);
+  return parts.length ? parts.join(" + ") : "Not set";
+}
+
+function creditPayload(form: FormState): Pick<
+  PartyPayload,
+  "creditLimit" | "creditLimitAmount" | "maxOutstandingInvoiceAgeDays" | "perInvoiceDaysToPayCap" | "creditControlMode"
+> {
+  const { amount, days } = creditModeUses(form.creditControlMode);
+  const amountValue = amount && form.creditLimit.trim() ? Number(form.creditLimit) : null;
+  const daysValue = days && form.creditDays.trim() ? Number(form.creditDays) : null;
+  return {
+    creditLimit: amountValue,
+    creditLimitAmount: amountValue,
+    maxOutstandingInvoiceAgeDays: daysValue,
+    perInvoiceDaysToPayCap: daysValue,
+    creditControlMode: form.creditControlMode,
+  };
+}
+
 function FieldLabel({
   htmlFor,
   children,
@@ -206,6 +255,79 @@ function FieldLabel({
       {required ? <span className="text-xs font-medium text-destructive">Required</span> : null}
       {optional ? <span className="text-xs font-normal text-muted-foreground">Optional</span> : null}
     </Label>
+  );
+}
+
+function CreditLimitFields({
+  form,
+  setField,
+  errors,
+  idPrefix,
+}: {
+  form: FormState;
+  setField: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  errors: Record<string, string>;
+  idPrefix: string;
+}) {
+  const { amount, days } = creditModeUses(form.creditControlMode);
+  return (
+    <>
+      <div className="space-y-2">
+        <FieldLabel optional>Credit control</FieldLabel>
+        <Select
+          value={form.creditControlMode}
+          onValueChange={(v) => setField("creditControlMode", v as FormState["creditControlMode"])}
+        >
+          <SelectTrigger id={`${idPrefix}-mode`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="AMOUNT">Cash amount</SelectItem>
+            <SelectItem value="DAYS">Days</SelectItem>
+            <SelectItem value="HYBRID">Cash amount + days</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Limit by cash, by how long invoices can stay unpaid, or by both.
+        </p>
+      </div>
+      {amount ? (
+        <div className="space-y-2">
+          <FieldLabel htmlFor={`${idPrefix}-amount`} optional>
+            Cash credit limit
+          </FieldLabel>
+          <Input
+            id={`${idPrefix}-amount`}
+            type="number"
+            min={0}
+            placeholder="Leave blank for no cash limit"
+            value={form.creditLimit}
+            onChange={(e) => setField("creditLimit", e.target.value)}
+          />
+          {errors.creditLimit ? <p className="text-xs text-destructive">{errors.creditLimit}</p> : null}
+        </div>
+      ) : null}
+      {days ? (
+        <div className="space-y-2">
+          <FieldLabel htmlFor={`${idPrefix}-days`} optional>
+            Credit days
+          </FieldLabel>
+          <Input
+            id={`${idPrefix}-days`}
+            type="number"
+            min={0}
+            step={1}
+            placeholder="Leave blank for no day limit"
+            value={form.creditDays}
+            onChange={(e) => setField("creditDays", e.target.value)}
+          />
+          {errors.creditDays ? <p className="text-xs text-destructive">{errors.creditDays}</p> : null}
+          <p className="text-xs text-muted-foreground">
+            New credit sales stop when an unpaid invoice is older than this, or when this invoice&apos;s terms are longer.
+          </p>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -341,6 +463,7 @@ export function CustomerFormSheet({
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
+  const [salesReps, setSalesReps] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [priceLists, setPriceLists] = React.useState<Array<{ id: string; name: string }>>([]);
   const [taxConfigs, setTaxConfigs] = React.useState<TaxConfigRow[]>([]);
   const [nextCodePreview, setNextCodePreview] = React.useState("");
@@ -384,6 +507,9 @@ export function CustomerFormSheet({
     void fetchPaymentTermsApi()
       .then((items) => setTerms(items.map((t) => ({ id: t.id, name: t.name, code: t.code }))))
       .catch(() => setTerms([]));
+    void fetchSalesRepsApi()
+      .then(setSalesReps)
+      .catch(() => setSalesReps([]));
     void fetchPriceListOptions()
       .then(setPriceLists)
       .catch(() => setPriceLists([]));
@@ -453,11 +579,10 @@ export function CustomerFormSheet({
                   ? String(party.lastKnownLongitude)
                   : "",
             googlePlaceId: party.googlePlaceId ?? "",
-            creditLimit:
-              party.creditLimitAmount != null && Number.isFinite(party.creditLimitAmount)
-                ? String(party.creditLimitAmount)
-                : "",
+            creditLimit: limitInput(party.creditLimitAmount ?? party.creditLimit),
+            creditDays: limitInput(party.maxOutstandingInvoiceAgeDays ?? party.perInvoiceDaysToPayCap),
             paymentTermsId: party.paymentTermsId ?? "",
+            salesRepId: party.salesRepId ?? "",
             defaultPriceListId: party.defaultPriceListId ?? "",
             defaultTaxConfigId: party.defaultTaxConfigId ?? "",
             creditControlMode: party.creditControlMode ?? "AMOUNT",
@@ -489,7 +614,7 @@ export function CustomerFormSheet({
     } else {
       const draft = loadDraft(fmcg);
       if (draft) {
-        setForm(draft.form);
+        setForm({ ...emptyForm(kindId), ...draft.form, creditDays: draft.form.creditDays ?? "" });
         setStep(Math.min(Math.max(draft.step, 0), createSteps.length - 1));
         setDraftRestored(true);
       } else {
@@ -580,10 +705,7 @@ export function CustomerFormSheet({
       }
     }
     if (id === "credit") {
-      if (form.creditLimit.trim()) {
-        const n = Number(form.creditLimit);
-        if (!Number.isFinite(n) || n < 0) next.creditLimit = "Credit limit must be zero or greater.";
-      }
+      Object.assign(next, validateCreditFields(form));
     }
     setStepErrors(next);
     if (Object.keys(next).length > 0) {
@@ -625,10 +747,9 @@ export function CustomerFormSheet({
       latitude: form.latitude.trim() ? Number(form.latitude) : undefined,
       longitude: form.longitude.trim() ? Number(form.longitude) : undefined,
       googlePlaceId: form.googlePlaceId.trim() || undefined,
-      creditLimit: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
-      creditLimitAmount: form.creditLimit.trim() ? Number(form.creditLimit) : undefined,
+      ...creditPayload(form),
       paymentTermsId: form.paymentTermsId || undefined,
-      creditControlMode: form.creditControlMode,
+      salesRepId: form.salesRepId || undefined,
       status: "ACTIVE",
       customerType: fmcg ? kind.customerType : form.customerType,
     };
@@ -659,10 +780,12 @@ export function CustomerFormSheet({
     } else if (!form.name.trim()) {
       toast.error("Name is required.");
       return;
-    } else if (form.creditLimit.trim()) {
-      const n = Number(form.creditLimit);
-      if (!Number.isFinite(n) || n < 0) {
-        toast.error("Credit limit must be zero or greater.");
+    } else {
+      const creditErrors = validateCreditFields(form);
+      const first = Object.values(creditErrors)[0];
+      if (first) {
+        setStepErrors(creditErrors);
+        toast.error(first);
         return;
       }
     }
@@ -1102,21 +1225,7 @@ export function CustomerFormSheet({
                     All fields on this step are optional. You can set credit now, or leave blank — Finance
                     can raise limits later on this customer.
                   </p>
-                  <div className="space-y-2">
-                    <FieldLabel optional>Credit limit</FieldLabel>
-                    <Input
-                      type="number"
-                      placeholder="Leave blank for cash / no limit"
-                      value={form.creditLimit}
-                      onChange={(e) => setField("creditLimit", e.target.value)}
-                    />
-                    {stepErrors.creditLimit ? (
-                      <p className="text-xs text-destructive">{stepErrors.creditLimit}</p>
-                    ) : null}
-                    <p className="text-xs text-muted-foreground">
-                      Optional. Finance can also raise limits later under Customer credit.
-                    </p>
-                  </div>
+                  <CreditLimitFields form={form} setField={setField} errors={stepErrors} idPrefix="cust-credit" />
                   <div className="space-y-2">
                     <FieldLabel>Cash or credit</FieldLabel>
                     <Select
@@ -1138,6 +1247,25 @@ export function CustomerFormSheet({
                     <p className="text-xs text-muted-foreground">
                       Cash = pay on invoice. Credit (Debtors) = sundry debtors / account.
                     </p>
+                  </div>
+                  <div className="space-y-2">
+                    <FieldLabel optional>Sales rep</FieldLabel>
+                    <Select
+                      value={form.salesRepId || "__none__"}
+                      onValueChange={(v) => setField("salesRepId", v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="No sales rep" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No sales rep</SelectItem>
+                        {salesReps.map((rep) => (
+                          <SelectItem key={rep.id} value={rep.id}>
+                            {rep.code} — {rep.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   {fmcg ? (
                     <div className="space-y-2">
@@ -1187,24 +1315,6 @@ export function CustomerFormSheet({
                       </p>
                     </div>
                   ) : null}
-                  <div className="space-y-2">
-                    <FieldLabel optional>Credit control</FieldLabel>
-                    <Select
-                      value={form.creditControlMode}
-                      onValueChange={(v) =>
-                        setField("creditControlMode", v as "AMOUNT" | "DAYS" | "HYBRID")
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="AMOUNT">Amount</SelectItem>
-                        <SelectItem value="DAYS">Days</SelectItem>
-                        <SelectItem value="HYBRID">Hybrid</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
               ) : null}
 
@@ -1234,9 +1344,7 @@ export function CustomerFormSheet({
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt>Credit limit</dt>
-                      <dd className="text-foreground text-right">
-                        {form.creditLimit.trim() || "Not set"}
-                      </dd>
+                      <dd className="text-foreground text-right">{creditLimitReview(form)}</dd>
                     </div>
                     {fmcg ? (
                       <div className="flex justify-between gap-3">
@@ -1548,18 +1656,7 @@ function EditAllFields({
         <p className="text-xs text-muted-foreground">
           Optional. Finance can also raise limits later under Customer credit.
         </p>
-        <div className="space-y-2">
-          <FieldLabel optional>Credit limit</FieldLabel>
-          <Input
-            type="number"
-            placeholder="Leave blank for cash / no limit"
-            value={form.creditLimit}
-            onChange={(e) => setField("creditLimit", e.target.value)}
-          />
-          {stepErrors.creditLimit ? (
-            <p className="text-xs text-destructive">{stepErrors.creditLimit}</p>
-          ) : null}
-        </div>
+        <CreditLimitFields form={form} setField={setField} errors={stepErrors} idPrefix="edit-credit" />
         <div className="space-y-2">
           <FieldLabel>Cash or credit</FieldLabel>
           <Select
@@ -1631,22 +1728,6 @@ function EditAllFields({
             </p>
           </div>
         ) : null}
-        <div className="space-y-2">
-          <FieldLabel optional>Credit control</FieldLabel>
-          <Select
-            value={form.creditControlMode}
-            onValueChange={(v) => setField("creditControlMode", v as "AMOUNT" | "DAYS" | "HYBRID")}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="AMOUNT">Amount</SelectItem>
-              <SelectItem value="DAYS">Days</SelectItem>
-              <SelectItem value="HYBRID">Hybrid</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
     </div>
   );

@@ -29,6 +29,7 @@ export interface BOMItemRow {
   uom: string;
   isOptional: boolean;
   scrapFactor?: number;
+  unitCost?: number;
 }
 
 /** Formula co-product: produced alongside main output. */

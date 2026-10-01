@@ -190,6 +190,8 @@ export function OdaflowQueueOrderSheet({
   const [saveMappings, setSaveMappings] = React.useState(true);
   const [deliveryDraft, setDeliveryDraft] = React.useState("");
   const [mappingConflict, setMappingConflict] = React.useState<MappingConflictState | null>(null);
+  /** Product line → ERP product id the user confirmed via "Change mapping anyway". */
+  const [replacedProductLines, setReplacedProductLines] = React.useState<Record<number, string>>({});
   const [pricingReminderDismissed, setPricingReminderDismissed] = React.useState(false);
   /** True while ERM conflict lookup runs after customer pick — keeps the UI responsive. */
   const [checkingCustomer, setCheckingCustomer] = React.useState(false);
@@ -218,6 +220,19 @@ export function OdaflowQueueOrderSheet({
       else delete next[lineIndex];
       return next;
     });
+    setReplacedProductLines((prev) => {
+      const confirmedId = prev[lineIndex];
+      if (!confirmedId) return prev;
+      if (option && option.id === confirmedId) return prev;
+      const next = { ...prev };
+      delete next[lineIndex];
+      return next;
+    });
+  }, []);
+
+  const confirmProductOverride = React.useCallback((lineIndex: number, option: AsyncSearchableSelectOption) => {
+    setLineProducts((prev) => ({ ...prev, [lineIndex]: option }));
+    setReplacedProductLines((prev) => ({ ...prev, [lineIndex]: option.id }));
   }, []);
 
   const load = React.useCallback(async () => {
@@ -227,6 +242,7 @@ export function OdaflowQueueOrderSheet({
       const data = await fetchOdaflowQueueItem(queueId);
       setItem(data.item);
       setOrder(data.order);
+      setReplacedProductLines({});
       const raw = (data.item.rawPayload ?? {}) as {
         channel?: string;
         customerName?: string;
@@ -361,6 +377,8 @@ export function OdaflowQueueOrderSheet({
     // Optimistic: show the pick immediately.
     applyProduct(lineIndex, option);
     if (!odaflowProductId) return;
+    // User already confirmed override for this line onto this ERP product — keep it.
+    if (replacedProductLines[lineIndex] === option.id) return;
 
     setProductLineChecking(lineIndex, true);
     try {
@@ -427,6 +445,10 @@ export function OdaflowQueueOrderSheet({
         })),
         lineQty: order.lines.map((line) => ({ lineIndex: line.index, qty: lineQty[line.index] ?? line.qty })),
         saveMappings,
+        replaceProductMappingLines:
+          saveMappings && Object.keys(replacedProductLines).length > 0
+            ? Object.keys(replacedProductLines).map(Number)
+            : undefined,
         deliveryAddress: deliveryDraft.trim(),
       });
       toast.success("Sales order created");
@@ -784,7 +806,7 @@ export function OdaflowQueueOrderSheet({
           if (mappingConflict.kind === "customer") {
             applyCustomer(mappingConflict.option);
           } else {
-            applyProduct(mappingConflict.lineIndex, mappingConflict.option);
+            confirmProductOverride(mappingConflict.lineIndex, mappingConflict.option);
           }
           setMappingConflict(null);
         }}

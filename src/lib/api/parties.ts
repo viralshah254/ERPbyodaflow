@@ -37,6 +37,7 @@ type BackendParty = {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  salesRepId?: string;
   defaultPriceListId?: string;
   defaultTaxConfigId?: string;
   defaultCurrency?: string;
@@ -87,13 +88,14 @@ export type PartyPayload = {
   arApGroup?: ArApGroup;
   onHold?: boolean;
   notes?: string;
-  creditLimit?: number;
-  creditLimitAmount?: number;
+  creditLimit?: number | null;
+  creditLimitAmount?: number | null;
   creditControlMode?: "AMOUNT" | "DAYS" | "HYBRID";
-  maxOutstandingInvoiceAgeDays?: number;
-  perInvoiceDaysToPayCap?: number;
+  maxOutstandingInvoiceAgeDays?: number | null;
+  perInvoiceDaysToPayCap?: number | null;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  salesRepId?: string;
   defaultPriceListId?: string;
   defaultTaxConfigId?: string;
   defaultCurrency?: string;
@@ -133,6 +135,7 @@ export type PartyDetail = PartyRow & {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  salesRepId?: string;
   defaultPriceListId?: string;
   defaultTaxConfigId?: string;
   defaultCurrency?: string;
@@ -308,6 +311,7 @@ function mapParty(item: BackendParty): PartyRow {
     onHold: item.onHold,
     notes: item.notes,
     paymentTermsId: item.paymentTermsId,
+    salesRepId: item.salesRepId,
     address: item.address,
     route: item.route,
     latitude: item.latitude,
@@ -469,6 +473,12 @@ export async function hidePartyInOrgApi(id: string): Promise<{
   return apiRequest(`/api/parties/${encodeURIComponent(id)}/hide-in-org`, {
     method: "POST",
   });
+}
+
+export async function fetchSalesRepsApi(): Promise<Array<{ id: string; code: string; name: string }>> {
+  requireLiveApi("Sales reps");
+  const data = await apiRequest<{ items: Array<{ id: string; code: string; name: string }> }>("/api/master/sales-reps");
+  return data.items ?? [];
 }
 
 export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null> {

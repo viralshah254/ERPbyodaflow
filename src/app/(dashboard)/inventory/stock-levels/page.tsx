@@ -440,7 +440,7 @@ export default function StockLevelsPage() {
             header: "Avg inventory cost",
             accessor: (row: InventoryStockRow) => {
               const pid = row.productId;
-              const v = pid ? avgCostByProduct.get(pid) : undefined;
+              const v = row.averageCost ?? (pid ? avgCostByProduct.get(pid) : undefined);
               if (v == null) {
                 return <div className="text-right text-muted-foreground">—</div>;
               }
@@ -454,7 +454,7 @@ export default function StockLevelsPage() {
             header: "Inventory value",
             accessor: (row: InventoryStockRow) => {
               const pid = row.productId;
-              const unit = pid ? avgCostByProduct.get(pid) : undefined;
+              const unit = row.averageCost ?? (pid ? avgCostByProduct.get(pid) : undefined);
               if (unit == null) {
                 return <div className="text-right text-muted-foreground">—</div>;
               }
@@ -463,6 +463,16 @@ export default function StockLevelsPage() {
                   {formatMoney(unit * (row.quantity ?? 0), "KES")}
                 </div>
               );
+            },
+          },
+          {
+            id: "lastCost",
+            header: "Last cost",
+            accessor: (row: InventoryStockRow) => {
+              if (row.lastCost == null) {
+                return <div className="text-right text-muted-foreground">—</div>;
+              }
+              return <div className="text-right tabular-nums text-sm">{formatMoney(row.lastCost, "KES")}</div>;
             },
           },
         ]

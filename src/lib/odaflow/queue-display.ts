@@ -1,14 +1,20 @@
 import type { OdaflowQueueItem, OdaflowQueueOrderSummary } from "@/lib/api/odaflow-integration";
 
 const WARNING_PREFIX = /^(Still unmatched in SFA\.|Unresolved:)\s*/;
+const LEGACY_AWAITING_ONLY =
+  /^Still unmatched in SFA\.\s*ERP can match the customer and products here; the sales order is created when SFA finishes matching\.?$/i;
 
 /** Collapse a repeated queue warning into one line, with a count when it applies to many lines. */
 export function summarizeQueueWarning(text: string): string {
   const trimmed = text.replace(/\s+/g, " ").trim();
   if (!trimmed) return "";
+  // Old copy blocked create until SFA finished. ERP creates once customer + products are matched here.
+  if (LEGACY_AWAITING_ONLY.test(trimmed)) {
+    return "Match the customer and products here to create the sales order.";
+  }
   const prefixMatch = trimmed.match(WARNING_PREFIX);
   const prefix = prefixMatch?.[1] ?? "";
-  const body = prefix ? trimmed.slice(prefixMatch[0].length) : trimmed;
+  const body = prefixMatch ? trimmed.slice(prefixMatch[0].length) : trimmed;
   const parts = body
     .split(/\s*(?:,|·)\s*/)
     .map((part) => part.trim())

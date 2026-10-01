@@ -43,6 +43,8 @@ import {
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
 import { useRouter } from "next/navigation";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
+import { useOrgContext } from "@/stores/orgContextStore";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -57,6 +59,8 @@ type APSupplierRow = ApSupplierSummary & {
 };
 
 export default function APSuppliersPage() {
+  const { templateId } = useOrgContext();
+  const bakery = canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
   const router = useRouter();
   const [searchInput, setSearchInput] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -243,7 +247,7 @@ export default function APSuppliersPage() {
       toast.error("Please fix validation errors.");
       return;
     }
-    const payload = supplierMasterFormToPayload(form);
+    const payload = supplierMasterFormToPayload(form, { bakery });
     setSaving(true);
     try {
       let savedId = editingId;
