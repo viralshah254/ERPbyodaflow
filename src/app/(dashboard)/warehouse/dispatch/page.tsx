@@ -35,6 +35,50 @@ function suggestFleetCode(vehicles: DistributionVehicleRow[]): string {
   return `LSE-${String(next).padStart(3, "0")}`;
 }
 
+function formatQty(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function lineLoad(line: WarehousePickPackRow["lines"][number]): { qty: number; unit: string } {
+  if (typeof line.documentQuantity === "number" && line.documentQuantity > 0) {
+    return { qty: line.documentQuantity, unit: (line.documentUnit || "PCS").toUpperCase() };
+  }
+  const qty = line.pickedQty && line.pickedQty > 0 ? line.pickedQty : line.quantity;
+  return { qty, unit: (line.baseUom || line.documentUnit || "PCS").toUpperCase() };
+}
+
+function qtyByUnit(rows: WarehousePickPackRow[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    for (const line of row.lines) {
+      const { qty, unit } = lineLoad(line);
+      if (qty > 0) totals.set(unit, (totals.get(unit) ?? 0) + qty);
+    }
+  }
+  return totals;
+}
+
+function loadSummary(rows: WarehousePickPackRow[]): string {
+  if (!rows.length) return "Nothing selected";
+  const customers = new Set(rows.map((row) => row.customer).filter(Boolean));
+  const cartons = rows.reduce((sum, row) => sum + (row.cartonsCount ?? 0), 0);
+  const parts = [
+    `${rows.length} note${rows.length === 1 ? "" : "s"}`,
+    `${customers.size} customer${customers.size === 1 ? "" : "s"}`,
+  ];
+  if (cartons > 0) parts.push(`${formatQty(cartons)} carton${cartons === 1 ? "" : "s"}`);
+  for (const [unit, qty] of qtyByUnit(rows)) {
+    parts.push(`${formatQty(qty)} ${unit.toLowerCase()}`);
+  }
+  return parts.join(" · ");
+}
+
+function rowQty(row: WarehousePickPackRow): string {
+  const totals = qtyByUnit([row]);
+  if (!totals.size) return "—";
+  return [...totals.entries()].map(([unit, qty]) => `${formatQty(qty)} ${unit.toLowerCase()}`).join(" · ");
+}
+
 export default function WarehouseDispatchPage() {
   const canWrite = useCanWriteInventory();
   const [rows, setRows] = React.useState<WarehousePickPackRow[]>([]);
@@ -45,8 +89,8 @@ export default function WarehouseDispatchPage() {
   const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
   const [vehicleId, setVehicleId] = React.useState("");
   const [carrier, setCarrier] = React.useState("");
-  const [batchLabel, setBatchLabel] = React.useState("");
   const [trackingRef, setTrackingRef] = React.useState("");
+  const [showWaybill, setShowWaybill] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [addVehicleOpen, setAddVehicleOpen] = React.useState(false);
   const [addVehicleSaving, setAddVehicleSaving] = React.useState(false);
@@ -56,7 +100,6 @@ export default function WarehouseDispatchPage() {
     registration: "",
     monthlyCost: "",
   });
-  const lastAutoBatch = React.useRef("");
 
   const loadVehicles = React.useCallback(async () => {
     try {
@@ -92,27 +135,9 @@ export default function WarehouseDispatchPage() {
     void loadVehicles();
   }, [load, loadVehicles]);
 
-  const selectedRows = React.useMemo(
-    () => rows.filter((row) => selected.has(row.id)),
-    [rows, selected]
-  );
-  const sharedRoutes = React.useMemo(() => {
-    const labels = selectedRows.map((row) => row.batchLabel?.trim()).filter((label): label is string => Boolean(label));
-    return [...new Set(labels)];
-  }, [selectedRows]);
-
-  React.useEffect(() => {
-    if (sharedRoutes.length !== 1) return;
-    const route = sharedRoutes[0]!;
-    setBatchLabel((current) => {
-      if (!current || current === lastAutoBatch.current) {
-        lastAutoBatch.current = route;
-        return route;
-      }
-      return current;
-    });
-  }, [sharedRoutes]);
-
+  const selectedRows = React.useMemo(() => rows.filter((row) => selected.has(row.id)), [rows, selected]);
+  const vehicleReady = vehicleMode === "LEASED" ? Boolean(vehicleId) : Boolean(carrier.trim());
+  const chosenVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId);
   const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id));
 
   function toggleAll(checked: boolean) {
@@ -138,6 +163,15 @@ export default function WarehouseDispatchPage() {
     setAddVehicleOpen(true);
   }
 
+  function tripName(): string {
+    const routes = [...new Set(selectedRows.map((row) => row.batchLabel?.trim()).filter(Boolean))] as string[];
+    if (routes.length === 1) return routes[0]!;
+    const day = new Date().toLocaleDateString("en-KE", { day: "numeric", month: "short" });
+    if (vehicleMode === "SPOT_HIRE") return `${carrier.trim()} ${day}`;
+    const label = chosenVehicle?.registration || chosenVehicle?.code || "Fleet";
+    return `${label} ${day}`;
+  }
+
   async function handleCreateVehicle() {
     const code = addVehicleForm.code.trim().toUpperCase();
     if (!code) {
@@ -160,7 +194,7 @@ export default function WarehouseDispatchPage() {
       if (id) setVehicleId(id);
       setVehicleMode("LEASED");
       setAddVehicleOpen(false);
-      toast.success("Vehicle added to the fleet.");
+      toast.success("Vehicle added. Now choose the delivery notes.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to add vehicle.");
     } finally {
@@ -169,24 +203,16 @@ export default function WarehouseDispatchPage() {
   }
 
   async function dispatchSelected() {
+    if (!vehicleReady) {
+      toast.error("Choose the vehicle first.");
+      return;
+    }
     const ids = selectedRows.map((row) => row.id);
     if (!ids.length) {
-      toast.error("Select at least one packed delivery note.");
+      toast.error("Select the delivery notes going on this vehicle.");
       return;
     }
-    const batch = batchLabel.trim();
-    if (!batch) {
-      toast.error("Enter a dispatch batch so these notes travel together.");
-      return;
-    }
-    if (vehicleMode === "LEASED" && !vehicleId) {
-      toast.error("Select a fleet vehicle, or add one.");
-      return;
-    }
-    if (vehicleMode === "SPOT_HIRE" && !carrier.trim()) {
-      toast.error("Enter the spot-hire carrier.");
-      return;
-    }
+    const batch = tripName();
     setSaving(true);
     const failed: string[] = [];
     let sent = 0;
@@ -210,9 +236,7 @@ export default function WarehouseDispatchPage() {
     }
     setSaving(false);
     if (sent > 0 && !failed.length) {
-      toast.success(
-        `Dispatched ${sent} delivery note${sent === 1 ? "" : "s"} together on ${batch}.`
-      );
+      toast.success(`${sent} delivery note${sent === 1 ? "" : "s"} loaded. The phone can deliver them now.`);
     } else if (sent > 0) {
       toast.error(`Some notes stayed packed: ${failed.join(", ")}`);
     }
@@ -223,7 +247,7 @@ export default function WarehouseDispatchPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Dispatch"
-        description="Send packed delivery notes from different customers on one vehicle and batch."
+        description="Pick the vehicle, then the delivery notes going on it. The phone delivers the same notes."
         breadcrumbs={[
           { label: "Warehouse", href: "/warehouse/overview" },
           { label: "Dispatch" },
@@ -233,36 +257,10 @@ export default function WarehouseDispatchPage() {
       <div className={`${LIST_PAGE_BODY_CLASS} gap-4`}>
         <Card>
           <CardHeader>
-            <CardTitle>Run</CardTitle>
-            <CardDescription>
-              Choose the packed notes below, then one vehicle and one batch name. Every selected note leaves on that same outbound trip.
-            </CardDescription>
+            <CardTitle>1. Vehicle</CardTitle>
+            <CardDescription>One vehicle takes this load. Add one if the fleet list is empty.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setVehicleMode("LEASED")}
-                className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium ${
-                  vehicleMode === "LEASED"
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-muted/30 text-muted-foreground"
-                }`}
-              >
-                Fleet vehicle
-              </button>
-              <button
-                type="button"
-                onClick={() => setVehicleMode("SPOT_HIRE")}
-                className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium ${
-                  vehicleMode === "SPOT_HIRE"
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-muted/30 text-muted-foreground"
-                }`}
-              >
-                Spot hire
-              </button>
-            </div>
+          <CardContent className="space-y-3">
             {vehicleMode === "LEASED" ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
@@ -275,7 +273,7 @@ export default function WarehouseDispatchPage() {
                   ) : null}
                 </div>
                 <Select value={vehicleId} onValueChange={setVehicleId}>
-                  <SelectTrigger aria-label="Fleet vehicle">
+                  <SelectTrigger aria-label="Vehicle">
                     <SelectValue placeholder={vehicles.length ? "Select vehicle…" : "No fleet vehicles yet"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -286,77 +284,45 @@ export default function WarehouseDispatchPage() {
                         {vehicle.registration ? ` (${vehicle.registration})` : ""}
                       </SelectItem>
                     ))}
-                    {canWrite ? (
-                      <div className="mt-1 border-t border-border pt-1">
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                          onPointerDown={(event) => event.preventDefault()}
-                          onClick={openAddVehicle}
-                        >
-                          <Plus className="h-3.5 w-3.5 shrink-0" />
-                          Add vehicle…
-                        </button>
-                      </div>
-                    ) : null}
                   </SelectContent>
                 </Select>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => {
+                    setVehicleMode("SPOT_HIRE");
+                    setVehicleId("");
+                  }}
+                >
+                  Hired truck instead
+                </button>
               </div>
             ) : (
               <div className="space-y-2">
-                <Label>Carrier name</Label>
-                <Input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Carrier / driver name" />
+                <Label>Carrier or driver</Label>
+                <Input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Name of the hired truck" />
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => setVehicleMode("LEASED")}
+                >
+                  Use a fleet vehicle
+                </button>
               </div>
             )}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Dispatch batch</Label>
-                <Input
-                  value={batchLabel}
-                  onChange={(e) => {
-                    lastAutoBatch.current = "";
-                    setBatchLabel(e.target.value);
-                  }}
-                  placeholder="e.g. Kitengela, Ruiru, Mathare"
-                />
-                {sharedRoutes.length === 1 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Selected notes share the route {sharedRoutes[0]}. That name is filled in so they leave together.
-                  </p>
-                ) : null}
-                {sharedRoutes.length > 1 ? (
-                  <p className="text-xs text-muted-foreground">
-                    These notes are on different routes ({sharedRoutes.join(", ")}). The batch name above still puts them on one vehicle.
-                  </p>
-                ) : null}
-              </div>
-              <div className="space-y-2">
-                <Label>Waybill / courier tracking</Label>
-                <Input
-                  value={trackingRef}
-                  onChange={(e) => setTrackingRef(e.target.value)}
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-            {canWrite ? (
-              <Button disabled={saving || selected.size === 0} onClick={() => void dispatchSelected()}>
-                {saving ? "Dispatching…" : `Dispatch selected (${selected.size})`}
-              </Button>
-            ) : null}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={vehicleReady ? undefined : "opacity-60"}>
           <CardHeader>
-            <CardTitle>Packed delivery notes</CardTitle>
+            <CardTitle>2. Delivery notes</CardTitle>
             <CardDescription>
-              {loading
-                ? "Loading…"
-                : `${rows.length} ready to leave the warehouse. Pick and pack must be confirmed before a note appears here.`}
+              {vehicleReady
+                ? "Tick every note this vehicle is taking. The total is what leaves the warehouse."
+                : "Choose a vehicle first. Packed notes appear here."}
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="space-y-4 p-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -365,14 +331,12 @@ export default function WarehouseDispatchPage() {
                       checked={allSelected}
                       onCheckedChange={(value) => toggleAll(value === true)}
                       aria-label="Select all packed notes"
-                      disabled={!rows.length}
+                      disabled={!vehicleReady || !rows.length}
                     />
                   </TableHead>
                   <TableHead>Delivery</TableHead>
                   <TableHead>Customer</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead className="text-right">Lines</TableHead>
-                  <TableHead className="text-right">Cartons</TableHead>
+                  <TableHead>Load</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -383,111 +347,113 @@ export default function WarehouseDispatchPage() {
                         checked={selected.has(row.id)}
                         onCheckedChange={(value) => toggleOne(row.id, value === true)}
                         aria-label={`Select ${row.sourceDocumentNumber ?? row.number}`}
+                        disabled={!vehicleReady}
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col">
-                        {row.sourceDocumentId ? (
-                          <Link
-                            href={`/docs/delivery-note/${row.sourceDocumentId}`}
-                            className="font-medium underline-offset-2 hover:underline"
-                          >
-                            {row.sourceDocumentNumber ?? row.number}
-                          </Link>
-                        ) : (
-                          <span className="font-medium">{row.sourceDocumentNumber ?? row.number}</span>
-                        )}
+                      {row.sourceDocumentId ? (
                         <Link
-                          href={`/warehouse/pick-pack/${row.id}`}
-                          className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                          href={`/docs/delivery-note/${row.sourceDocumentId}`}
+                          className="font-medium underline-offset-2 hover:underline"
                         >
-                          {row.number}
+                          {row.sourceDocumentNumber ?? row.number}
                         </Link>
-                      </div>
+                      ) : (
+                        <span className="font-medium">{row.sourceDocumentNumber ?? row.number}</span>
+                      )}
                     </TableCell>
                     <TableCell>{row.customer ?? "—"}</TableCell>
-                    <TableCell>{row.batchLabel?.trim() || "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.lines.length}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.cartonsCount ?? 0}</TableCell>
+                    <TableCell className="tabular-nums">{rowQty(row)}</TableCell>
                   </TableRow>
                 ))}
                 {!loading && !rows.length ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                      No packed delivery notes.{" "}
+                    <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                      Nothing is packed yet.{" "}
                       <Link href="/warehouse/pick-pack" className="underline underline-offset-2">
                         Confirm pick and pack
                       </Link>{" "}
-                      on an order first, then select the notes here and send them on one vehicle.
+                      first.
                     </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
             </Table>
+            {vehicleReady ? (
+              <div className="flex flex-col gap-3 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-medium">{loadSummary(selectedRows)}</p>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  {canWrite ? (
+                    <Button disabled={saving || selected.size === 0} onClick={() => void dispatchSelected()}>
+                      {saving ? "Sending…" : "Send on this vehicle"}
+                    </Button>
+                  ) : null}
+                  {!showWaybill ? (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                      onClick={() => setShowWaybill(true)}
+                    >
+                      Add a waybill number
+                    </button>
+                  ) : (
+                    <Input
+                      value={trackingRef}
+                      onChange={(e) => setTrackingRef(e.target.value)}
+                      placeholder="Waybill, optional"
+                      className="h-8 w-56"
+                      aria-label="Waybill"
+                    />
+                  )}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Open runs</CardTitle>
-            <CardDescription>
-              Trips already on the road. Each run holds every delivery note dispatched under that batch.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Batch</TableHead>
-                  <TableHead>Vehicle</TableHead>
-                  <TableHead className="text-right">Notes</TableHead>
-                  <TableHead>Delivery notes</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {runs.map((run) => (
-                  <TableRow key={run.id}>
-                    <TableCell className="font-medium">{run.label}</TableCell>
-                    <TableCell>{run.vehicleCode || "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{run.stopCount}</TableCell>
-                    <TableCell className="max-w-md truncate text-muted-foreground">
-                      {run.deliveryNoteNumbers.length ? run.deliveryNoteNumbers.join(", ") : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!loading && !runs.length ? (
+        {runs.length ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Already out</CardTitle>
+              <CardDescription>These loads are on the road. The phone delivers them.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                      No open runs yet. Dispatched notes will collect here under one batch.
-                    </TableCell>
+                    <TableHead>Trip</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead className="text-right">Notes</TableHead>
+                    <TableHead>Delivery notes</TableHead>
                   </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {runs.map((run) => (
+                    <TableRow key={run.id}>
+                      <TableCell className="font-medium">{run.label}</TableCell>
+                      <TableCell>{run.vehicleCode || "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{run.stopCount}</TableCell>
+                      <TableCell className="max-w-md truncate text-muted-foreground">
+                        {run.deliveryNoteNumbers.length ? run.deliveryNoteNumbers.join(", ") : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       <Sheet open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
         <SheetContent className="overflow-y-auto sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Add fleet vehicle</SheetTitle>
-            <SheetDescription>
-              Register a leased vehicle. It is selected for this dispatch as soon as you save it.
-            </SheetDescription>
+            <SheetDescription>It is selected as soon as you save it. Then choose the notes.</SheetDescription>
           </SheetHeader>
           <div className="space-y-4 py-6">
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="dispatch-vehicle-code">Code</Label>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                  onClick={() => setAddVehicleForm((form) => ({ ...form, code: suggestFleetCode(vehicles) }))}
-                >
-                  Use suggested
-                </button>
-              </div>
+              <Label htmlFor="dispatch-vehicle-code">Code</Label>
               <Input
                 id="dispatch-vehicle-code"
                 value={addVehicleForm.code}
@@ -512,17 +478,6 @@ export default function WarehouseDispatchPage() {
                 value={addVehicleForm.registration}
                 onChange={(e) => setAddVehicleForm((form) => ({ ...form, registration: e.target.value }))}
                 placeholder="e.g. KDA 123A"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dispatch-vehicle-cost">Monthly cost (optional)</Label>
-              <Input
-                id="dispatch-vehicle-cost"
-                type="number"
-                min={0}
-                value={addVehicleForm.monthlyCost}
-                onChange={(e) => setAddVehicleForm((form) => ({ ...form, monthlyCost: e.target.value }))}
-                placeholder="0"
               />
             </div>
           </div>
