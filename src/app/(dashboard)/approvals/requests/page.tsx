@@ -19,6 +19,7 @@ export default function ApprovalsRequestsPage() {
   const [items, setItems] = React.useState<ApprovalItem[]>([]);
   const [filter, setFilter] = React.useState<"all" | "credit-breach">("all");
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
 
   const openSheet = (item: ApprovalItem) => {
     setSelected(item);
@@ -27,10 +28,13 @@ export default function ApprovalsRequestsPage() {
 
   const refreshItems = React.useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       setItems(await fetchApprovalRequests());
     } catch (error) {
-      toast.error((error as Error).message);
+      const message = (error as Error).message || "Could not load your requests.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -87,7 +91,7 @@ export default function ApprovalsRequestsPage() {
         showCommandHint
       />
       <div className="p-6">
-        <Card>
+        <Card data-tutorial-hint="approval-request-status">
           <CardHeader>
             <CardTitle>Submitted</CardTitle>
             <div className="flex gap-2 pt-2">
@@ -112,6 +116,13 @@ export default function ApprovalsRequestsPage() {
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Loading approval requests...
               </p>
+            ) : loadError ? (
+              <div className="py-8 text-center" role="alert">
+                <p className="text-sm text-destructive">{loadError}</p>
+                <Button className="mt-4" variant="outline" onClick={() => void refreshItems()}>
+                  Retry
+                </Button>
+              </div>
             ) : filteredItems.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 {filter === "credit-breach"
@@ -125,6 +136,15 @@ export default function ApprovalsRequestsPage() {
                     key={a.id}
                     className="flex items-center justify-between gap-4 rounded-lg border p-4 hover:bg-muted/50 cursor-pointer transition-colors"
                     onClick={() => openSheet(a)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openSheet(a);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open approval request ${a.documentNumber}`}
                   >
                     <div className="flex items-center gap-3">
                       <Icons.Send className="h-5 w-5 text-muted-foreground shrink-0" />

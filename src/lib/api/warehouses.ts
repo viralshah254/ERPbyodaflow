@@ -6,6 +6,8 @@ type BackendWarehouse = {
   code?: string;
   name: string;
   branchId?: string;
+  purpose?: WarehouseUpsertInput["purpose"];
+  capabilities?: string[];
   status?: string;
 };
 
@@ -13,6 +15,8 @@ export type WarehouseUpsertInput = {
   code: string;
   name: string;
   branchId?: string;
+  purpose: "STORAGE" | "RECEIVING" | "QUARANTINE" | "DISPATCH" | "TRANSIT";
+  capabilities: string[];
   status?: string;
 };
 
@@ -54,6 +58,8 @@ export function mapWarehouseRow(
     code: warehouse.code ?? "",
     name: warehouse.name,
     branch: warehouse.branchId ? branchLabels?.get(warehouse.branchId) ?? warehouse.branchId : undefined,
+    purpose: warehouse.purpose,
+    capabilities: warehouse.capabilities ?? [],
     status: warehouse.status ?? "ACTIVE",
   };
 }

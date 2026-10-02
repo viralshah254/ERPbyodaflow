@@ -21,6 +21,7 @@ type BackendParty = {
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
   parentPartyId?: string;
+  multichainBillTo?: "PARENT" | "BRANCH";
   customerCategoryId?: string;
   supplierCategoryId?: string;
   email?: string;
@@ -78,6 +79,7 @@ export type PartyPayload = {
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
   parentPartyId?: string;
+  multichainBillTo?: "PARENT" | "BRANCH";
   supplierType?: SupplierType;
   customerCategoryId?: string;
   supplierCategoryId?: string;
@@ -297,6 +299,7 @@ function mapParty(item: BackendParty): PartyRow {
     channel: item.channel,
     sfaSegment: item.sfaSegment,
     parentPartyId: item.parentPartyId,
+    multichainBillTo: item.multichainBillTo === "BRANCH" ? "BRANCH" : "PARENT",
     supplierType: item.supplierType,
     coolcatchSupplierKind: item.coolcatchSupplierKind,
     contactPersonFirstName: item.contactPersonFirstName,
@@ -369,6 +372,10 @@ type PartyListFilters = {
   supplierCategoryId?: string;
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
+  /** Customers with no supermarket or route segment. Sage account customers. */
+  unsegmented?: boolean;
+  /** Sales customer directory: master list or a channel derived from it. */
+  directory?: "all" | "multichain" | "general-trade" | "distributors" | "van-sales";
   /** Modern-trade branches under this supermarket HQ. */
   parentPartyId?: string;
   supplierType?: SupplierType | "";
@@ -390,7 +397,9 @@ export async function fetchPartiesPageApi(filters?: PartyListFilters): Promise<{
   if (filters?.customerType) params.set("customerType", filters.customerType);
   if (filters?.customerCategoryId) params.set("customerCategoryId", filters.customerCategoryId);
   if (filters?.channel) params.set("channel", filters.channel);
-  if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
+  if (filters?.directory) params.set("directory", filters.directory);
+  else if (filters?.unsegmented) params.set("unsegmented", "1");
+  else if (filters?.sfaSegment) params.set("sfaSegment", filters.sfaSegment);
   if (filters?.parentPartyId) params.set("parentPartyId", filters.parentPartyId);
   if (filters?.supplierType) params.set("supplierType", filters.supplierType);
   if (filters?.status) params.set("status", filters.status);
@@ -410,6 +419,17 @@ export async function fetchPartiesPageApi(filters?: PartyListFilters): Promise<{
     nextCursor: data.nextCursor ?? null,
     totalCount: typeof data.totalCount === "number" ? data.totalCount : undefined,
   };
+}
+
+export async function fetchCustomerDirectorySummaryApi(): Promise<{
+  all: number;
+  multichain: number;
+  generalTrade: number;
+  distributors: number;
+  vanSales: number;
+}> {
+  requireLiveApi("Customer directory");
+  return apiRequest("/api/parties/customer-directory-summary");
 }
 
 export async function fetchPartiesApi(filters?: PartyListFilters): Promise<PartyRow[]> {

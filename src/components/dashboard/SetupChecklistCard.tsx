@@ -39,6 +39,11 @@ function setMarkedIncomplete(ids: Set<string>) {
   }
 }
 
+export function isOrgSetupComplete(status: SetupStatus | null): boolean {
+  if (!status) return false;
+  return STEPS.every((step) => status[step.statusKey] === true);
+}
+
 function completedFromStatus(status: SetupStatus | null): Set<string> {
   if (!status) return new Set();
   const set = new Set<string>();
@@ -48,7 +53,7 @@ function completedFromStatus(status: SetupStatus | null): Set<string> {
   return set;
 }
 
-export function SetupChecklistCard() {
+export function SetupChecklistCard({ hideWhenComplete = false }: { hideWhenComplete?: boolean }) {
   const [apiCompleted, setApiCompleted] = React.useState<Set<string>>(new Set());
   const [markedIncomplete, setMarkedIncompleteState] = React.useState<Set<string>>(new Set());
   const [loading, setLoading] = React.useState(true);
@@ -95,6 +100,7 @@ export function SetupChecklistCard() {
 
   const done = completed.size;
   const total = STEPS.length;
+  if (hideWhenComplete && (loading || done === total)) return null;
 
   return (
     <Card>

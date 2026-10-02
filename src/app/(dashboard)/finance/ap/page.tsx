@@ -6,7 +6,7 @@ import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchApPaymentsApi, fetchOpenBillsApi } from "@/lib/api/payments";
+import { fetchApOpenPageApi, fetchApPaymentsApi } from "@/lib/api/payments";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
@@ -15,13 +15,17 @@ import * as Icons from "lucide-react";
 
 export default function AccountsPayablePage() {
   const baseCurrency = useBaseCurrency();
-  const [bills, setBills] = React.useState<Awaited<ReturnType<typeof fetchOpenBillsApi>>>([]);
+  const [bills, setBills] = React.useState<Awaited<ReturnType<typeof fetchApOpenPageApi>>["items"]>([]);
+  const [outstandingTotal, setOutstandingTotal] = React.useState(0);
+  const [openCount, setOpenCount] = React.useState(0);
   const [payments, setPayments] = React.useState<Awaited<ReturnType<typeof fetchApPaymentsApi>>>([]);
 
   React.useEffect(() => {
-    Promise.all([fetchOpenBillsApi(), fetchApPaymentsApi()])
+    Promise.all([fetchApOpenPageApi(), fetchApPaymentsApi()])
       .then(([openBills, apPayments]) => {
-        setBills(openBills);
+        setBills(openBills.items);
+        setOutstandingTotal(openBills.outstandingTotal);
+        setOpenCount(openBills.openCount);
         setPayments(apPayments);
       })
       .catch((error) => toast.error((error as Error).message || "Failed to load payables."));
@@ -44,18 +48,12 @@ export default function AccountsPayablePage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader><CardTitle className="text-sm">Open bills</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-semibold">{bills.length}</CardContent>
+            <CardContent className="text-2xl font-semibold">{openCount}</CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-sm">Outstanding</CardTitle></CardHeader>
             <CardContent className="text-2xl font-semibold">
-              {formatMoney(
-                bills.reduce((sum, item) => {
-                  const rate = item.currency && item.currency !== baseCurrency ? (item.exchangeRate ?? 1) : 1;
-                  return sum + item.outstanding * rate;
-                }, 0),
-                baseCurrency
-              )}
+              {formatMoney(outstandingTotal, baseCurrency)}
             </CardContent>
           </Card>
           <Card>
@@ -105,9 +103,13 @@ export default function AccountsPayablePage() {
                 {bills.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
-                      <Link href={`/docs/bill/${item.id}`} className="hover:underline font-medium">
-                        {item.number}
-                      </Link>
+                      {item.id.startsWith("opening:") ? (
+                        item.number
+                      ) : (
+                        <Link href={`/docs/bill/${item.id}`} className="hover:underline font-medium">
+                          {item.number}
+                        </Link>
+                      )}
                     </TableCell>
                     <TableCell>{item.supplierName}</TableCell>
                     <TableCell>{item.dueDate ?? "—"}</TableCell>

@@ -10,15 +10,23 @@ export type ApprovalPolicyRule = {
   isActive?: boolean;
 };
 
-export async function fetchApprovalPolicyApi(): Promise<{ rules: ApprovalPolicyRule[] }> {
+export type ApprovalPolicyConfig = {
+  version: number;
+  rules: ApprovalPolicyRule[];
+};
+
+export async function fetchApprovalPolicyApi(): Promise<ApprovalPolicyConfig> {
   requireLiveApi("Approval policy");
-  return apiRequest<{ rules: ApprovalPolicyRule[] }>("/api/settings/approvals/policy");
+  return apiRequest<ApprovalPolicyConfig>("/api/settings/approvals/policy");
 }
 
-export async function saveApprovalPolicyApi(rules: ApprovalPolicyRule[]): Promise<{ rules: ApprovalPolicyRule[] }> {
+export async function saveApprovalPolicyApi(
+  version: number,
+  rules: ApprovalPolicyRule[],
+): Promise<ApprovalPolicyConfig> {
   requireLiveApi("Save approval policy");
-  return apiRequest<{ rules: ApprovalPolicyRule[] }>("/api/settings/approvals/policy", {
+  return apiRequest<ApprovalPolicyConfig>("/api/settings/approvals/policy", {
     method: "PUT",
-    body: { rules },
+    body: { version, rules },
   });
 }

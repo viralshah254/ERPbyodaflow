@@ -7,6 +7,8 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -62,12 +64,21 @@ export default function WorkOrderDetailPage() {
   const [acting, setActing] = React.useState(false);
   const [availLines, setAvailLines] = React.useState<MaterialAvailabilityLine[]>([]);
   const [availLoading, setAvailLoading] = React.useState(false);
+  const [completionQuantity, setCompletionQuantity] = React.useState("");
+  const [measuredWeight, setMeasuredWeight] = React.useState("");
+  const [deviceReadingId, setDeviceReadingId] = React.useState("");
+  const [actualInputs, setActualInputs] = React.useState<Record<string, { issue: string; consume: string; returnQty: string }>>({});
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
       const next = await fetchManufacturingWorkOrder(id);
       setOrder(next);
+      setCompletionQuantity(String(next.openQuantity));
+      setActualInputs(Object.fromEntries(next.materialLines.map((line) => {
+        const remaining = Math.max(0, line.plannedQuantity - line.consumedQuantity);
+        return [line.lineId, { issue: String(remaining), consume: String(remaining), returnQty: "0" }];
+      })));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load work order.");
       setOrder(null);
@@ -81,13 +92,14 @@ export default function WorkOrderDetailPage() {
   }, [refresh]);
 
   React.useEffect(() => {
-    if (!order?.bomId || order.status === "COMPLETED" || order.status === "CANCELLED") {
+    const inputWarehouseId = order?.materialLines?.[0]?.warehouseId;
+    if (!order?.bomId || !inputWarehouseId || order.status === "COMPLETED" || order.status === "CANCELLED") {
       setAvailLines([]);
       return;
     }
     let cancelled = false;
     setAvailLoading(true);
-    void checkWorkOrderAvailability(order.bomId, order.quantity)
+    void checkWorkOrderAvailability(order.bomId, order.quantity, inputWarehouseId)
       .then((result) => {
         if (!cancelled) setAvailLines(result.lines);
       })
@@ -100,7 +112,7 @@ export default function WorkOrderDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [order?.bomId, order?.quantity, order?.status]);
+  }, [order?.bomId, order?.quantity, order?.status, order?.materialLines]);
 
   const shortfalls = availLines.filter((line) => line.shortfall > 0);
   const currentStep = order ? stepIndex(order.status) : 0;
@@ -113,10 +125,25 @@ export default function WorkOrderDetailPage() {
         action,
         producedQuantity:
           action === "complete"
-            ? order.openQuantity > 0
-              ? order.quantity
-              : order.producedQuantity
+            ? Number(completionQuantity)
             : undefined,
+        idempotencyKey: action === "complete" ? crypto.randomUUID() : undefined,
+        measuredWeight: action === "complete" && measuredWeight ? Number(measuredWeight) : undefined,
+        deviceReadingId: action === "complete" ? deviceReadingId || undefined : undefined,
+        inputLines: action === "complete" ? order.materialLines.map((line) => ({
+          lineId: line.lineId,
+          productId: line.productId,
+          warehouseId: line.warehouseId,
+          quantity: Number(actualInputs[line.lineId]?.issue ?? 0),
+          consumedQuantity: Number(actualInputs[line.lineId]?.consume ?? 0),
+          returnedQuantity: Number(actualInputs[line.lineId]?.returnQty ?? 0),
+        })) : undefined,
+        outputLines: action === "complete" ? order.outputLines.map((line) => ({
+          lineId: line.lineId,
+          productId: line.productId,
+          warehouseId: line.warehouseId,
+          quantity: Number(completionQuantity),
+        })) : undefined,
       });
       setOrder(next);
       toast.success(
@@ -176,7 +203,7 @@ export default function WorkOrderDetailPage() {
           <p className="text-sm text-muted-foreground">This work order does not exist or you cannot open it.</p>
         ) : (
           <>
-            <Card>
+            <Card data-tutorial-hint="work-order-lifecycle">
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <CardTitle className="text-lg">Production steps</CardTitle>
@@ -215,7 +242,63 @@ export default function WorkOrderDetailPage() {
                 )}
 
                 {canWrite && order.status !== "COMPLETED" && order.status !== "CANCELLED" ? (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-4">
+                    {(order.status === "RELEASED" || order.status === "IN_PROGRESS") && (
+                      <div
+                        className="grid gap-3 rounded-lg border p-3 sm:grid-cols-3"
+                        data-tutorial-hint="work-order-measurement"
+                      >
+                        <div className="space-y-1.5">
+                          <Label htmlFor="completion-quantity">Complete now</Label>
+                          <Input id="completion-quantity" type="number" min="0.001" max={order.openQuantity} step="0.001" value={completionQuantity} onChange={(event) => setCompletionQuantity(event.target.value)} />
+                        </div>
+                        {order.measurementMode !== "COUNT_ONLY" && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="measured-weight">Measured weight</Label>
+                            <Input id="measured-weight" type="number" min="0.001" step="0.001" value={measuredWeight} onChange={(event) => setMeasuredWeight(event.target.value)} />
+                          </div>
+                        )}
+                        {(order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="reading-id">Reading reference</Label>
+                            <Input id="reading-id" value={deviceReadingId} onChange={(event) => setDeviceReadingId(event.target.value)} />
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground sm:col-span-3">
+                          {order.measurementMode === "COUNT_ONLY" ? "Weighing is optional and disabled for this order." : `Mode: ${order.measurementMode.replaceAll("_", " ").toLowerCase()}.`}
+                        </p>
+                        {order.materialLines.length > 0 && (
+                          <div className="overflow-x-auto sm:col-span-3">
+                            <table className="w-full min-w-[34rem] text-xs">
+                              <thead><tr className="border-b text-muted-foreground"><th className="py-2 text-left">Material / store</th><th>Issue</th><th>Consume</th><th>Return</th></tr></thead>
+                              <tbody>
+                                {order.materialLines.map((line) => (
+                                  <tr key={line.lineId} className="border-b last:border-0">
+                                    <td className="py-2 pr-2">{line.sku ?? line.productName ?? line.productId}<span className="block text-muted-foreground">{line.warehouseId}</span></td>
+                                    {(["issue", "consume", "returnQty"] as const).map((field) => (
+                                      <td key={field} className="p-1">
+                                        <Input
+                                          className="h-8 min-w-24"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={actualInputs[line.lineId]?.[field] ?? "0"}
+                                          onChange={(event) => setActualInputs((current) => ({
+                                            ...current,
+                                            [line.lineId]: { ...(current[line.lineId] ?? { issue: "0", consume: "0", returnQty: "0" }), [field]: event.target.value },
+                                          }))}
+                                        />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
                     {order.status === "DRAFT" && (
                       <Button size="sm" disabled={acting} onClick={() => void runAction("release")}>
                         Release this order
@@ -229,7 +312,7 @@ export default function WorkOrderDetailPage() {
                     {(order.status === "RELEASED" || order.status === "IN_PROGRESS") && (
                       <Button
                         size="sm"
-                        disabled={acting || shortfalls.length > 0 || availLoading}
+                        disabled={acting || shortfalls.length > 0 || availLoading || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
                         onClick={() => void runAction("complete")}
                       >
                         Complete this order
@@ -240,6 +323,7 @@ export default function WorkOrderDetailPage() {
                         Cancel
                       </Button>
                     )}
+                    </div>
                   </div>
                 ) : null}
               </CardContent>
@@ -305,6 +389,22 @@ export default function WorkOrderDetailPage() {
                 </CardContent>
               </Card>
             ) : null}
+
+            <Card data-tutorial-hint="work-order-reconciliation">
+              <CardHeader>
+                <CardTitle className="text-lg">Production reconciliation</CardTitle>
+                <CardDescription>Actual WIP, mass, count, and cost closure from posted partial completions.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <p>WIP <strong className="block tabular-nums">{order.wipQuantity}</strong></p>
+                <p>Mass variance <strong className="block tabular-nums">{order.reconciliation.massVariance}</strong></p>
+                <p>Count variance <strong className="block tabular-nums">{order.reconciliation.countVariance}</strong></p>
+                <p>Cost variance <strong className="block tabular-nums">{order.reconciliation.costVariance}</strong></p>
+                <p className="text-muted-foreground sm:col-span-2 lg:col-span-4">
+                  {order.completions.length} completion posting{order.completions.length === 1 ? "" : "s"} · snapshots and posting history are immutable.
+                </p>
+              </CardContent>
+            </Card>
           </>
         )}
       </div>

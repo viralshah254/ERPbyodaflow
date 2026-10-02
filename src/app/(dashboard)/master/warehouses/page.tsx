@@ -58,7 +58,13 @@ export default function MasterWarehousesPage() {
   const [saving, setSaving] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [form, setForm] = React.useState({ code: "", name: "", branchId: "none" });
+  const [form, setForm] = React.useState({
+    code: "",
+    name: "",
+    branchId: "none",
+    purpose: "RECEIVING" as "STORAGE" | "RECEIVING" | "QUARANTINE" | "DISPATCH" | "TRANSIT",
+    capabilities: ["RECEIVE", "STORE", "QUARANTINE", "QC"],
+  });
 
   const reload = React.useCallback(async () => {
     setLoading(true);
@@ -102,20 +108,30 @@ export default function MasterWarehousesPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ code: "", name: "", branchId: "none" });
+    setForm({ code: "", name: "", branchId: "none", purpose: "RECEIVING", capabilities: ["RECEIVE", "STORE", "QUARANTINE", "QC"] });
     setDrawerOpen(true);
   };
 
   const openEdit = (row: WarehouseRow) => {
     setEditingId(row.id);
     const branchId = branches.find((branch) => branch.label === row.branch)?.id ?? "none";
-    setForm({ code: row.code, name: row.name, branchId });
+    setForm({
+      code: row.code,
+      name: row.name,
+      branchId,
+      purpose: row.purpose ?? "STORAGE",
+      capabilities: row.capabilities,
+    });
     setDrawerOpen(true);
   };
 
   const handleSave = async () => {
     if (!form.name.trim()) {
       toast.error("Warehouse name is required.");
+      return;
+    }
+    if (form.capabilities.length === 0) {
+      toast.error("Select at least one warehouse capability.");
       return;
     }
 
@@ -125,6 +141,8 @@ export default function MasterWarehousesPage() {
         code: form.code.trim(),
         name: form.name.trim(),
         branchId: form.branchId === "none" ? undefined : form.branchId,
+        purpose: form.purpose,
+        capabilities: form.capabilities,
       };
       if (editingId) {
         await updateWarehouseApi(editingId, payload);
@@ -152,6 +170,8 @@ export default function MasterWarehousesPage() {
       },
       { id: "name", header: "Name", accessor: "name" as keyof WarehouseRow },
       { id: "branch", header: "Branch", accessor: "branch" as keyof WarehouseRow },
+      { id: "purpose", header: "Purpose", accessor: (r: WarehouseRow) => r.purpose ?? "Not configured" },
+      { id: "capabilities", header: "Capabilities", accessor: (r: WarehouseRow) => r.capabilities.join(", ") || "None" },
       {
         id: "status",
         header: "Status",
@@ -256,6 +276,45 @@ export default function MasterWarehousesPage() {
               value={form.name}
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Purpose</Label>
+            <Select
+              value={form.purpose}
+              onValueChange={(value) => setForm((current) => ({ ...current, purpose: value as typeof current.purpose }))}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {["STORAGE", "RECEIVING", "QUARANTINE", "DISPATCH", "TRANSIT"].map((purpose) => (
+                  <SelectItem key={purpose} value={purpose}>{purpose}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Capabilities</Label>
+            <div className="flex flex-wrap gap-2">
+              {["RECEIVE", "STORE", "QUARANTINE", "QC", "PICK", "DISPATCH"].map((capability) => {
+                const selected = form.capabilities.includes(capability);
+                return (
+                  <Button
+                    key={capability}
+                    type="button"
+                    size="sm"
+                    variant={selected ? "default" : "outline"}
+                    onClick={() => setForm((current) => ({
+                      ...current,
+                      capabilities: selected
+                        ? current.capabilities.filter((value) => value !== capability)
+                        : [...current.capabilities, capability],
+                    }))}
+                  >
+                    {capability}
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">GRNs fail closed unless RECEIVE is explicitly enabled. QC release requires QC.</p>
           </div>
           <div className="space-y-2">
             <Label>Branch</Label>

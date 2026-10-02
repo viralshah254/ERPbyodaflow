@@ -32,7 +32,16 @@ function rowKey(row: MultichainPreviewRow, index: number) {
   return row.sfa?.id ?? row.erp?.id ?? `row-${index}`;
 }
 
-export function OdaflowMultichainMappingBoard({ canSave }: { canSave: boolean }) {
+export function OdaflowMultichainMappingBoard({
+  canSave,
+  reviewOnly = false,
+  onChanged,
+}: {
+  canSave: boolean;
+  /** Customers tab: suggested, unmatched, and ambiguous chains only. */
+  reviewOnly?: boolean;
+  onChanged?: () => void;
+}) {
   const [rows, setRows] = React.useState<MultichainPreviewRow[]>([]);
   const [erpParties, setErpParties] = React.useState<MultichainPreviewParty[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -62,7 +71,11 @@ export function OdaflowMultichainMappingBoard({ canSave }: { canSave: boolean })
     void loadPreview();
   }, [loadPreview]);
 
-  const visibleRows = rows.filter((row, index) => !skipped.has(rowKey(row, index)));
+  const visibleRows = rows.filter((row, index) => {
+    if (skipped.has(rowKey(row, index))) return false;
+    if (!reviewOnly) return true;
+    return row.status === "suggested" || row.status === "ambiguous" || row.status === "unmatched_sfa";
+  });
 
   const handleConfirm = async (row: MultichainPreviewRow, index: number) => {
     const sfaId = row.sfa?.id;
@@ -76,8 +89,9 @@ export function OdaflowMultichainMappingBoard({ canSave }: { canSave: boolean })
     setBusyKey(key);
     try {
       await confirmMultichainLinkApi({ sfaSupermarketId: sfaId, erpPartyId });
-      toast.success(`Mapped ${row.sfa?.name ?? "supermarket"} to the ERP party.`);
+      toast.success(`Mapped ${row.sfa?.name ?? "supermarket"} to the customer master.`);
       await loadPreview();
+      onChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not confirm mapping");
     } finally {
@@ -92,12 +106,15 @@ export function OdaflowMultichainMappingBoard({ canSave }: { canSave: boolean })
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Review SFA supermarket HQs against existing Multichain parties, confirm each pair, then import
-        that chain&apos;s branches. Suggested matches are not applied until you confirm.
+        {reviewOnly
+          ? "Multichain is a customer-master row that matches an SFA supermarket. Confirm a unique name match. Chains with no master customer, or more than one possible name, stay listed here and are not created."
+          : "Match SFA supermarket HQs to customers in the master. Suggested matches are not applied until you confirm."}
       </p>
       {visibleRows.length === 0 ? (
         <div className="text-sm text-muted-foreground py-4 text-center">
-          No Multichain HQs to review.
+          {reviewOnly
+            ? "No unmatched SFA chains. Confirmed chains are in the list below."
+            : "No Multichain HQs to review."}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -105,7 +122,7 @@ export function OdaflowMultichainMappingBoard({ canSave }: { canSave: boolean })
             <thead>
               <tr className="border-b">
                 <th className="text-left py-2 pr-4 font-medium text-muted-foreground">SFA supermarket</th>
-                <th className="text-left py-2 pr-4 font-medium text-muted-foreground">ERP Multichain party</th>
+                <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Customer master</th>
                 <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Status</th>
                 <th className="text-left py-2 font-medium text-muted-foreground">Actions</th>
               </tr>

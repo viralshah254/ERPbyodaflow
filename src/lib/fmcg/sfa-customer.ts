@@ -114,9 +114,20 @@ export function channelLabel(channel?: PartyChannel | null): string {
   }
 }
 
+/** Joy Superbakers has no van-sales book. Other FMCG orgs keep the tab. */
+export const JOY_SUPERBAKERS_ORG_ID = "org-sfa-6a890b7765042fb41c9d89a6";
+
 export const CUSTOMER_DIRECTORY_TABS = [
-  { id: "modern-trade", label: "Multichain", sfaSegment: "MODERN_TRADE_HQ" as SfaSegment, channel: "MODERN_TRADE" as PartyChannel },
-  { id: "general-trade", label: "General trade", sfaSegment: "GENERAL_TRADE_CLIENT" as SfaSegment, channel: "GENERAL_TRADE" as PartyChannel },
-  { id: "distributors", label: "Distributors", sfaSegment: "DISTRIBUTOR" as SfaSegment },
-  { id: "van-sales", label: "Van sales", sfaSegment: "VAN_SALES" as SfaSegment },
+  { id: "all", label: "All customers", directory: "all" as const },
+  { id: "modern-trade", label: "Multichain", directory: "multichain" as const },
+  { id: "general-trade", label: "General trade", directory: "general-trade" as const },
+  { id: "distributors", label: "Distributors", directory: "distributors" as const },
+  { id: "van-sales", label: "Van sales", directory: "van-sales" as const },
 ] as const;
+
+export function customerDirectoryTabsForOrg(orgId?: string | null) {
+  if (orgId === JOY_SUPERBAKERS_ORG_ID) {
+    return CUSTOMER_DIRECTORY_TABS.filter((tab) => tab.id !== "van-sales");
+  }
+  return CUSTOMER_DIRECTORY_TABS;
+}

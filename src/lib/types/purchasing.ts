@@ -60,6 +60,14 @@ export type GrnLineRow = {
   paidVarianceKg?: number;
   varianceReasonCode?: string;
   varianceReason?: string;
+  lotNumber?: string;
+  expiryDate?: string;
+  lotStatus?: "QUARANTINED" | "RELEASED" | "REJECTED";
+  qcStatus?: "PENDING" | "ACCEPTED" | "REJECTED";
+  receivedUom?: string;
+  baseUomSnapshot?: string;
+  uomToBaseFactorSnapshot?: number;
+  receivedQuantitySnapshot?: number;
 };
 
 export type GrnDetailRow = PurchasingDocRow & {

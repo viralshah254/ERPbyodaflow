@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /** Indeterminate bar shown along the top edge of a table while data is refetching. */

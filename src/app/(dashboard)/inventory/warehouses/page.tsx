@@ -38,7 +38,13 @@ export default function WarehousesPage() {
   const [loading, setLoading] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<WarehouseRow | null>(null);
-  const [form, setForm] = React.useState({ code: "", name: "", branchId: "none" });
+  const [form, setForm] = React.useState({
+    code: "",
+    name: "",
+    branchId: "none",
+    purpose: "RECEIVING" as "STORAGE" | "RECEIVING" | "QUARANTINE" | "DISPATCH" | "TRANSIT",
+    capabilities: ["RECEIVE", "STORE", "QUARANTINE", "QC"],
+  });
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -68,14 +74,14 @@ export default function WarehousesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ code: "", name: "", branchId: "none" });
+    setForm({ code: "", name: "", branchId: "none", purpose: "RECEIVING", capabilities: ["RECEIVE", "STORE", "QUARANTINE", "QC"] });
     setDrawerOpen(true);
   };
 
   const openEdit = React.useCallback((row: WarehouseRow) => {
     setEditing(row);
     const branchId = branches.find((branch) => branch.label === row.branch)?.id ?? "none";
-    setForm({ code: row.code, name: row.name, branchId });
+    setForm({ code: row.code, name: row.name, branchId, purpose: row.purpose ?? "STORAGE", capabilities: row.capabilities });
     setDrawerOpen(true);
   }, [branches]);
 
@@ -84,6 +90,7 @@ export default function WarehousesPage() {
       { id: "code", header: "Code", accessor: (row: WarehouseRow) => <span className="font-medium">{row.code}</span> },
       { id: "name", header: "Name", accessor: "name" as keyof WarehouseRow },
       { id: "branch", header: "Branch", accessor: (row: WarehouseRow) => row.branch || "—" },
+      { id: "purpose", header: "Purpose", accessor: (row: WarehouseRow) => row.purpose ?? "Not configured" },
       { id: "status", header: "Status", accessor: "status" as keyof WarehouseRow },
       {
         id: "actions",
@@ -162,6 +169,38 @@ export default function WarehousesPage() {
                 <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} placeholder="Main Warehouse" />
               </div>
               <div className="space-y-2">
+                <Label>Purpose</Label>
+                <Select value={form.purpose} onValueChange={(value) => setForm((prev) => ({ ...prev, purpose: value as typeof prev.purpose }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["STORAGE", "RECEIVING", "QUARANTINE", "DISPATCH", "TRANSIT"].map((purpose) => (
+                      <SelectItem key={purpose} value={purpose}>{purpose}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Capabilities</Label>
+                <div className="flex flex-wrap gap-2">
+                  {["RECEIVE", "STORE", "QUARANTINE", "QC", "PICK", "DISPATCH"].map((capability) => (
+                    <Button
+                      key={capability}
+                      type="button"
+                      size="sm"
+                      variant={form.capabilities.includes(capability) ? "default" : "outline"}
+                      onClick={() => setForm((prev) => ({
+                        ...prev,
+                        capabilities: prev.capabilities.includes(capability)
+                          ? prev.capabilities.filter((value) => value !== capability)
+                          : [...prev.capabilities, capability],
+                      }))}
+                    >
+                      {capability}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
                 <Label>Branch</Label>
                 <Select value={form.branchId} onValueChange={(value) => setForm((prev) => ({ ...prev, branchId: value }))}>
                   <SelectTrigger>
@@ -187,11 +226,17 @@ export default function WarehousesPage() {
                       toast.error("Warehouse name is required.");
                       return;
                     }
+                    if (form.capabilities.length === 0) {
+                      toast.error("Select at least one warehouse capability.");
+                      return;
+                    }
                     try {
                       const payload = {
                         code: form.code.trim(),
                         name: form.name.trim(),
                         branchId: form.branchId === "none" ? undefined : form.branchId,
+                        purpose: form.purpose,
+                        capabilities: form.capabilities,
                       };
                       if (editing) {
                         await updateWarehouseApi(editing.id, payload);

@@ -67,6 +67,8 @@ export async function validateAnalyticsQueryApi(query: AnalyticsQuery): Promise<
 export interface InventoryInsightItem {
   type: "low_stock" | string;
   productId?: string;
+  productName?: string;
+  productSku?: string;
   warehouseId?: string;
   quantity?: number;
   minThreshold?: number;

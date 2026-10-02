@@ -123,14 +123,13 @@ export async function fetchPurchaseReturns(status?: string, search?: string): Pr
   return rows;
 }
 
-export async function createPurchaseReturnApi(): Promise<{ id: string; number: string }> {
-  return apiRequest("/api/purchasing/purchase-returns", {
+export async function submitPurchaseReturnApi(id: string): Promise<void> {
+  await apiRequest(`/api/purchasing/purchase-returns/${encodeURIComponent(id)}/submit`, {
     method: "POST",
-    body: { lines: [] },
   });
 }
 
-export async function approvePurchaseReturnApi(id: string): Promise<void> {
+export async function postPurchaseReturnApi(id: string): Promise<void> {
   await apiRequest(`/api/purchasing/purchase-returns/${encodeURIComponent(id)}/approve`, {
     method: "POST",
   });

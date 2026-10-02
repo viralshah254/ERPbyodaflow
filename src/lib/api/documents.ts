@@ -297,6 +297,8 @@ export type DocumentDraftPayload = {
   sourceDocumentId?: string;
   sourceDocumentType?: DocTypeKey;
   sourceDocumentNumber?: string;
+  returnResolution?: "LINKED_SOURCE" | "AMBIGUOUS_ACCEPTED";
+  returnReason?: string;
   lines: Array<{
     productId?: string;
     description?: string;

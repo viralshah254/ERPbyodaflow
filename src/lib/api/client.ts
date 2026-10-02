@@ -370,6 +370,8 @@ export type ApiRequestOptions = {
   body?: unknown;
   /** Query params; caller can pass URLSearchParams or Record. */
   params?: Record<string, string> | URLSearchParams;
+  /** Override the configured API origin for this call. */
+  baseUrl?: string;
 };
 
 /**
@@ -381,8 +383,9 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  const { method = "GET", body, params } = options;
-  let url = apiUrl(path);
+  const { method = "GET", body, params, baseUrl } = options;
+  const origin = (baseUrl ?? getApiBase()).replace(/\/$/, "");
+  let url = `${origin}${path.startsWith("/") ? path : `/${path}`}`;
   if (params) {
     const search = params instanceof URLSearchParams ? params : new URLSearchParams(params);
     const qs = search.toString();

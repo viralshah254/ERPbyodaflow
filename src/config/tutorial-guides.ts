@@ -36,6 +36,20 @@ export const ITEM_GUIDES: Partial<
       "Bookmark a morning routine: Control Tower → Approvals Inbox → key exception list.",
       "If something looks wrong, check whether the period close or stock valuation run is up to date—stale data can skew KPIs.",
     ],
+    elementHints: [
+      {
+        selector: "[data-tutorial-hint=fmcg-control-tower-date-range]",
+        hint: "Choose the sales and finance reporting window. Lot, quality, and period-close controls remain current.",
+      },
+      {
+        selector: "[data-tutorial-hint=fmcg-control-tower-kpis]",
+        hint: "Every tile is calculated from posted documents and operational records. Select one to open its source workspace.",
+      },
+      {
+        selector: "[data-tutorial-hint=fmcg-control-tower-exceptions]",
+        hint: "Start here: each exception drills into the canonical document, work order, or control that needs action.",
+      },
+    ],
     recommendedNextStep: { label: "Dashboard", href: "/dashboard" },
   },
   dashboard: {
@@ -87,6 +101,16 @@ export const ITEM_GUIDES: Partial<
       "Use keyboard-friendly flows if your org trains speed: open → review → approve → next.",
       "If the same submitter repeats errors, consider a training snippet in the rejection comment or a Copilot prompt to explain the policy.",
     ],
+    elementHints: [
+      {
+        selector: "[data-tutorial-hint=approval-review-queue]",
+        hint: "Filter the queue, then open the source document before making a material decision.",
+      },
+      {
+        selector: "[data-tutorial-hint=approval-review-item]",
+        hint: "Review evidence and policy in context. Approval authorises the next step; it does not post the document.",
+      },
+    ],
     recommendedNextStep: { label: "Tasks", href: "/tasks" },
   },
   "approvals-requests": {
@@ -101,6 +125,12 @@ export const ITEM_GUIDES: Partial<
     ],
     guideTips: [
       "Pair with the Inbox on the other side: you learn what approvers see and write clearer submissions.",
+    ],
+    elementHints: [
+      {
+        selector: "[data-tutorial-hint=approval-request-status]",
+        hint: "Track the existing request here. Do not duplicate a source document while approval is pending.",
+      },
     ],
     recommendedNextStep: { label: "Documents", href: "/docs" },
   },
@@ -409,9 +439,21 @@ export const ITEM_GUIDES: Partial<
       "Capture variance with notes when supplier short-ships or over-ships—finance may need that for debit/credit notes.",
       "After post, verify movements and stock levels for the SKUs you received.",
       "If your process includes QC holds, do not move goods to available bins until released.",
+      "On the receipt detail, capture the supplier or manufacturer lot before post. Posted lots start quarantined; Release or Reject records the QC decision.",
+      "For measured goods, record received and processed weight separately. Confirm processing only after checking mass loss because confirmation locks the measurement and adjusts stock.",
     ],
     guideTips: [
       "The Create button often deep-links to the document composer—same rules as /docs/grn.",
+    ],
+    elementHints: [
+      {
+        selector: "[data-tutorial-hint=grn-lot-qc-measurement]",
+        hint: "Capture lot, receipt UOM, measured weights, variance reason, and QC release on each line.",
+      },
+      {
+        selector: "[data-tutorial-hint=grn-confirm-processing]",
+        hint: "Confirm only after measured output is final; this locks processing weights and posts the stock adjustment.",
+      },
     ],
     recommendedNextStep: { label: "Putaway", href: "/warehouse/putaway" },
   },
@@ -564,9 +606,15 @@ export const ITEM_GUIDES: Partial<
       "Hand off to shipping or loading with documentation for cold chain if applicable.",
       "Complete the task in-system only when the physical pick matches.",
       "Escalate inventory mismatches to cycle count rather than overriding silently.",
+      "Stage stock before packing, preserve lot and location traceability, then verify packed units or scanner counts against the picked quantity.",
+      "Create the dispatch hand-off only after vehicle, package count, and shortage reasons are complete.",
     ],
     guideTips: [
       "Batch picking and wave picking may change UI—follow training for your deployment.",
+    ],
+    elementHints: [
+      { selector: "[data-tutorial-hint=pick-pack-stock]", hint: "Verify assigned warehouse stock, picked quantity, and shortage reasons line by line." },
+      { selector: "[data-tutorial-hint=pick-pack-pack]", hint: "Confirm package units, lot traceability, and dispatch hand-off details before completion." },
     ],
     recommendedNextStep: { label: "Deliveries", href: "/sales/deliveries" },
   },
@@ -823,16 +871,17 @@ export const ITEM_GUIDES: Partial<
   },
   "purchasing-returns": {
     guideSummary:
-      "Purchase Returns covers sending goods back to suppliers and the related debit notes. Inventory must decrease, payables may reduce, and logistics must pick up or destroy stock per supplier instructions.",
+      "Purchase Returns sends received goods back to a supplier. A posted return reduces both inventory and the supplier payable. Price corrections without a physical return belong in a separate supplier credit process.",
     guideSteps: [
-      "Create from PO or GRN context when possible.",
-      "Coordinate pickup or RMA number with the supplier.",
-      "Post only when goods have left your control or scrap is authorised.",
-      "Expect a supplier credit note to mirror your debit note in their system.",
-      "Analyse return reasons for quality programmes.",
+      "Select Start from GRN and open the receipt that contains the goods being returned.",
+      "Enter only the affected receipt lines, quantities, warehouse, and supplier return or RMA reference.",
+      "Save the draft, verify the physical quantity and value, then select Submit for approval.",
+      "An authorised approver reviews the request in Approvals Inbox; the return cannot approve itself.",
+      "After approval, select Post return when the goods have left your control. Posting reduces stock and accounts payable together.",
     ],
     guideTips: [
-      "Do not mix purchase returns with informal supplier credits recorded only in email.",
+      "Do not use this workflow for a price-only allowance: no goods should move for a commercial credit.",
+      "Posted returns are corrected by a linked reversal, never by editing or deleting their history.",
     ],
     recommendedNextStep: { label: "Purchase orders", href: "/purchasing/orders" },
   },
@@ -946,10 +995,22 @@ export const ITEM_GUIDES: Partial<
   },
   "finance-bank-recon": {
     guideSummary:
-      "Bank Reconciliation matches bank statement lines to system payments and receipts. Reconcile to keep your cash ledger in sync with the bank.",
+      "Bank Reconciliation matches each statement line to one eligible payment or receipt. Automatic matching stops on ambiguous equal amounts and never reuses a payment.",
     guideSteps: [
-      "Import or enter statement lines.",
-      "Match lines to payments/receipts; post reconciliation.",
+      "Import a statement and verify its bank account, date range, opening balance, and closing balance.",
+      "Review suggested matches. Suggested is not matched: confirm the payment, reference, amount, and date.",
+      "Resolve ambiguous lines manually; choose an account for every fee or other adjustment.",
+      "Confirm matches, then verify the bank closing balance agrees to the reconciled GL balance before closing.",
+    ],
+    elementHints: [
+      {
+        selector: "[data-tutorial-hint=bank-match-workspace]",
+        hint: "A suggestion is not a match. Verify reference, amount, date, and counterparty before confirming.",
+      },
+      {
+        selector: "[data-tutorial-hint=bank-close]",
+        hint: "Close only when the statement closing balance and reconciled GL balance agree.",
+      },
     ],
   },
   // Assets
@@ -1029,9 +1090,26 @@ export const ITEM_GUIDES: Partial<
       "Post receipt of finished goods into inventory; backflush components if your model uses it.",
       "Close WO when fully reported; investigate open WOs at period end—they hide WIP and cost.",
       "Tie to quality holds: do not receive into sellable stock until QC passes if applicable.",
+      "Follow the lifecycle on the detail page: release, start, then complete. List status alone does not issue or receive stock.",
+      "When weighing is required, enter the measured weight and the scale or weighbridge reading reference. Count-only orders intentionally omit weight.",
+      "At completion, reconcile issue, consume, and return quantities; review immutable WIP, mass, count, and cost variance afterwards.",
     ],
     guideTips: [
       "Partial completions are normal—track remaining qty and reason codes for scrap.",
+    ],
+    elementHints: [
+      {
+        selector: "[data-tutorial-hint=work-order-lifecycle]",
+        hint: "Advance the batch in sequence. Completion issues inputs and receives finished goods.",
+      },
+      {
+        selector: "[data-tutorial-hint=work-order-measurement]",
+        hint: "Measurement mode controls whether weight and a device reading reference are required.",
+      },
+      {
+        selector: "[data-tutorial-hint=work-order-reconciliation]",
+        hint: "Use immutable completion postings to explain WIP, mass, count, and cost variance.",
+      },
     ],
     recommendedNextStep: { label: "MRP", href: "/manufacturing/mrp" },
   },
@@ -1375,8 +1453,23 @@ export const ITEM_GUIDES: Partial<
   },
   "finance-period-close": {
     guideSummary:
-      "Period Close locks a period so no more postings can be made. Run close after all entries are posted and reconciled.",
-    guideSteps: ["Review open items and reconciliations.", "Run period close for the month.", "Reopen only if you need to correct."],
+      "Period Close locks a fiscal period after the required operational and finance checks pass. Posting outside an open period is blocked.",
+    guideSteps: [
+      "Select the period and resolve every red checklist item, including unposted bills, invoices, payroll, and unmatched bank lines.",
+      "Confirm the bank and control-account reconciliations agree before selecting Close period.",
+      "Close the period. If another user changed it first, refresh and review the checklist again.",
+      "Reopen only with authorised correction evidence; post a reversal or correcting entry instead of rewriting history.",
+    ],
+    elementHints: [
+      {
+        selector: "[data-tutorial-hint=period-close-checklist]",
+        hint: "Resolve operational, payroll, bank, and ledger blockers before close.",
+      },
+      {
+        selector: "[data-tutorial-hint=period-close-action]",
+        hint: "Close locks posting for the period. Refresh if another user changed the period first.",
+      },
+    ],
   },
   "finance-ledger": {
     guideSummary:
@@ -1509,7 +1602,17 @@ export const ITEM_GUIDES: Partial<
   "automation-rules": {
     guideSummary:
       "Rules Engine lets you define triggers, conditions, and actions. When a trigger fires and conditions match, the action runs (e.g. create task, send alert).",
-    guideSteps: ["Create a rule and set trigger (e.g. document posted).", "Add conditions and action.", "Enable and test."],
+    guideSteps: [
+      "Create a rule and choose one precise business event as its trigger.",
+      "Add narrow conditions, then define the action and whether execution itself requires approval.",
+      "Test with a non-production example and verify the resulting task, alert, or draft document.",
+      "Review version and status before enabling; disabling stops future runs but does not reverse completed actions.",
+    ],
+    elementHints: [
+      { selector: "[data-tutorial-hint=automation-create-rule]", hint: "Start a draft rule; it does nothing until its trigger, conditions, and actions are saved." },
+      { selector: "[data-tutorial-hint=automation-rules-list]", hint: "Review status, version, action types, and approval requirement before enabling." },
+      { selector: "[data-tutorial-hint=automation-rule-builder]", hint: "Keep conditions narrow and add approval where an automated action creates financial or stock risk." },
+    ],
   },
   "automation-alerts": {
     guideSummary:
@@ -1569,8 +1672,37 @@ export const ITEM_GUIDES: Partial<
   },
   "settings-users-roles": {
     guideSummary:
-      "Users & Roles lists users and roles. Invite users, assign roles, and enable or disable access. Enable Copilot per user here.",
-    guideSteps: ["Invite a user and set role.", "Edit permissions via role or user override.", "Enable Copilot for users who need it."],
+      "Users & Roles controls live backend access and the effective mobile workspace. User creation can enter billing approval; role edits affect every assigned user.",
+    guideSteps: [
+      "Use Users to stage or edit a person, then assign the smallest role set that covers their job.",
+      "Use Roles to inspect exact permission keys and the mobile shell. Provision standard roles before inventing duplicates.",
+      "Do not edit a role assigned to your own account; another administrator should make that change.",
+      "Test denied and allowed paths with a non-admin account after changing access.",
+      "Password reset requests are separate from role assignment; resolve or dismiss them from the Users tab.",
+    ],
+    elementHints: [
+      { selector: "[data-tutorial-hint=users-roles-tabs]", hint: "Users receive roles; roles group backend permissions and select the mobile workspace." },
+      { selector: "[data-tutorial-hint=users-role-assignment]", hint: "Assign least privilege. New users may require billing confirmation before sign-in is active." },
+      { selector: "[data-tutorial-hint=roles-permissions]", hint: "A role change affects all assigned users. Review exact permission keys before saving." },
+      { selector: "[data-tutorial-hint=roles-provision]", hint: "Provision the template-aware standard catalogue as a safe starting point." },
+    ],
+    recommendedNextStep: { label: "Approval policy", href: "/settings/approval-policy" },
+  },
+  "settings-approval-policy": {
+    guideSummary:
+      "Approval Policy Configurator defines maker-checker routing by document type, minimum amount, branch, and designated approver. The highest matching threshold wins.",
+    guideSteps: [
+      "Add the most general low threshold first, then higher thresholds for elevated authority.",
+      "Use the exact document type expected by the posting workflow and scope by branch only when required.",
+      "Keep maker-checker enabled when submitter and approver must be different people.",
+      "Save and test with a draft document; verify the request appears in the designated approver's Inbox.",
+    ],
+    elementHints: [
+      { selector: "[data-tutorial-hint=approval-policy-rules]", hint: "The highest matching amount threshold is applied for the document and branch." },
+      { selector: "[data-tutorial-hint=approval-policy-add]", hint: "Add a rule, then set document type, threshold, branch, and approver." },
+      { selector: "[data-tutorial-hint=approval-policy-save]", hint: "Saving creates a new policy version; test routing before relying on it." },
+    ],
+    recommendedNextStep: { label: "Approvals Inbox", href: "/approvals/inbox" },
   },
   "settings-sequences": {
     guideSummary:

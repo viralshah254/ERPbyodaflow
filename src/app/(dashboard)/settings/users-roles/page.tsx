@@ -419,6 +419,10 @@ export default function UsersRolesPage() {
     : false;
 
   const canAssignOwnerRole = editingUserIsOwner || ownerRoleIds.length === 0;
+  const currentUserRoleIds =
+    users.find((user) => user.id === currentUserId)?.roleIds ?? [];
+  const editingOwnRole =
+    editingRole != null && currentUserRoleIds.includes(editingRole.id);
 
   const toggleRolePermission = (perm: string) => {
     setRoleForm((p) => ({
@@ -442,7 +446,11 @@ export default function UsersRolesPage() {
         showCommandHint
       />
       <div className="p-6">
-        <Tabs defaultValue="users" className="space-y-4">
+        <Tabs
+          defaultValue="users"
+          className="space-y-4"
+          data-tutorial-hint="users-roles-tabs"
+        >
           <TabsList>
             <TabsTrigger value="users" className="gap-2">
               Users
@@ -596,7 +604,7 @@ export default function UsersRolesPage() {
                 </CardContent>
               </Card>
             )}
-            <Card>
+            <Card data-tutorial-hint="users-role-assignment">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Users</CardTitle>
@@ -709,7 +717,7 @@ export default function UsersRolesPage() {
           </TabsContent>
 
           <TabsContent value="roles" className="space-y-4">
-            <Card>
+            <Card data-tutorial-hint="roles-permissions">
               <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
                 <div>
                   <CardTitle>Roles</CardTitle>
@@ -723,6 +731,7 @@ export default function UsersRolesPage() {
                   <Button
                     size="sm"
                     variant="secondary"
+                    data-tutorial-hint="roles-provision"
                     disabled={seedingRoles}
                     onClick={async () => {
                       try {
@@ -812,6 +821,12 @@ export default function UsersRolesPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            disabled={currentUserRoleIds.includes(r.id)}
+                            title={
+                              currentUserRoleIds.includes(r.id)
+                                ? "Another administrator must edit a role assigned to you."
+                                : undefined
+                            }
                             onClick={() => openEditRole(r)}
                           >
                             Edit
@@ -995,6 +1010,7 @@ export default function UsersRolesPage() {
               copilotProductEnabled={copilotProductEnabled}
               canAssignOwnerRole={canAssignOwnerRole}
               isEdit={Boolean(editingUser)}
+              rolesReadOnly={editingUser?.id === currentUserId}
             />
 
             {editingUser ? (
@@ -1165,7 +1181,9 @@ export default function UsersRolesPage() {
                         copilotEnabled: copilotProductEnabled
                           ? userForm.copilotEnabled
                           : false,
-                        roleIds: userForm.roleIds,
+                        ...(editingUser.id === currentUserId
+                          ? {}
+                          : { roleIds: userForm.roleIds }),
                         phoneNumber: userForm.phoneNumber || undefined,
                         nationalId: userForm.nationalId || undefined,
                         employeeCode: userForm.employeeCode || undefined,
@@ -1302,6 +1320,7 @@ export default function UsersRolesPage() {
                             <Checkbox
                               className="mt-0.5"
                               checked={roleForm.permissions.includes(perm.key)}
+                              disabled={editingOwnRole}
                               onCheckedChange={() =>
                                 toggleRolePermission(perm.key)
                               }
@@ -1326,7 +1345,7 @@ export default function UsersRolesPage() {
               Cancel
             </Button>
             <Button
-              disabled={savingRole}
+              disabled={savingRole || editingOwnRole}
               onClick={async () => {
                 try {
                   setSavingRole(true);

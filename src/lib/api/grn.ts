@@ -173,6 +173,10 @@ export async function patchGRNLine(
     orderedWeightKg?: number;
     varianceReasonCode?: string;
     varianceReason?: string;
+    lotNumber?: string;
+    expiryDate?: string;
+    receivedUom?: string;
+    uomToBaseFactor?: number;
   }
 ): Promise<GrnDetailRow> {
   requireLiveApi("Patch GRN line");
@@ -180,6 +184,30 @@ export async function patchGRNLine(
     method: "PATCH",
     body,
   });
+}
+
+export async function recordGRNLineQc(
+  grnId: string,
+  lineId: number,
+  outcome: "ACCEPTED" | "REJECTED",
+  note?: string,
+): Promise<GrnDetailRow> {
+  requireLiveApi("Record receipt quality control");
+  return apiRequest<GrnDetailRow>(
+    `/api/purchasing/grn/${encodeURIComponent(grnId)}/lines/${lineId}/qc`,
+    { method: "POST", body: { outcome, note } },
+  );
+}
+
+export async function recordGRNBulkQc(
+  grnId: string,
+  lines: Array<{ lineIndex: number; outcome: "ACCEPTED" | "REJECTED"; note?: string }>,
+): Promise<{ recorded: number; grn: GrnDetailRow }> {
+  requireLiveApi("Record bulk receipt quality control");
+  return apiRequest<{ recorded: number; grn: GrnDetailRow }>(
+    `/api/purchasing/grn/${encodeURIComponent(grnId)}/qc/bulk`,
+    { method: "POST", body: { lines } },
+  );
 }
 
 function toCsv(rows: Array<Record<string, string | number | null | undefined>>): string {

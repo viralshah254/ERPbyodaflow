@@ -21,7 +21,7 @@ import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocati
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
-import { fetchGRNById, postGRN, patchGRNLine, patchGrnHeaderApi, confirmGRNProcessing, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow, type GrnPostError } from "@/lib/api/grn";
+import { fetchGRNById, postGRN, patchGRNLine, patchGrnHeaderApi, confirmGRNProcessing, recordGRNLineQc, recordGRNBulkQc, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow, type GrnPostError } from "@/lib/api/grn";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
@@ -67,6 +67,8 @@ export default function ReceiptDetailPage() {
   const [editingWeight, setEditingWeight] = React.useState<Record<number, string>>({});
   const [editingProcessedWeight, setEditingProcessedWeight] = React.useState<Record<number, string>>({});
   const [editingVarianceReason, setEditingVarianceReason] = React.useState<Record<number, string>>({});
+  const [editingLot, setEditingLot] = React.useState<Record<number, string>>({});
+  const [editingExpiry, setEditingExpiry] = React.useState<Record<number, string>>({});
 
   // GRN header edit dialog
   const [editHeaderOpen, setEditHeaderOpen] = React.useState(false);
@@ -142,25 +144,26 @@ export default function ReceiptDetailPage() {
 
   /** Persist edited received kg before post — blur may not have fired if the user goes straight to Post. */
   const flushPendingReceivedWeights = React.useCallback(async () => {
-    if (!grn || !hasCashWeightAudit) return;
+    if (!grn) return;
     let working = grn;
     let anyPatch = false;
     for (let idx = 0; idx < working.lines.length; idx++) {
-      const pending = editingWeight[idx];
-      if (pending === undefined) continue;
-      const trimmed = pending.trim();
-      if (trimmed === "") continue;
-      const num = parseFloat(trimmed);
-      if (Number.isNaN(num) || num < 0) continue;
       const line = working.lines[idx];
-      const persisted = Number(line.receivedWeightKg ?? line.qty);
-      if (Math.abs(num - persisted) < 1e-6) continue;
+      const pending = editingWeight[idx];
+      const num = pending?.trim() ? parseFloat(pending) : Number(line.receivedWeightKg ?? line.qty);
+      const lotNumber = (editingLot[idx] ?? line.lotNumber ?? "").trim();
+      const expiryDate = (editingExpiry[idx] ?? line.expiryDate ?? "").trim();
+      if (!lotNumber) throw new Error(`Enter a lot number for line ${idx + 1}.`);
       const orderedKg = line.orderedWeightKg ?? line.qty ?? 0;
       const reasonCode = editingVarianceReason[idx] ?? line.varianceReasonCode;
       const updated = await patchGRNLine(working.id, idx, {
-        receivedWeightKg: num,
-        ...(orderedKg > 0 ? { orderedWeightKg: orderedKg } : {}),
+        ...(hasCashWeightAudit && Number.isFinite(num) ? { receivedWeightKg: num } : {}),
+        ...(hasCashWeightAudit && orderedKg > 0 ? { orderedWeightKg: orderedKg } : {}),
         ...(reasonCode ? { varianceReasonCode: reasonCode } : {}),
+        lotNumber,
+        ...(expiryDate ? { expiryDate } : {}),
+        receivedUom: (line.receivedUom ?? line.uom) || "EA",
+        uomToBaseFactor: line.uomToBaseFactorSnapshot ?? 1,
       });
       if (updated) {
         working = updated;
@@ -171,8 +174,9 @@ export default function ReceiptDetailPage() {
       setGrn(working);
       setEditingWeight({});
       setEditingVarianceReason({});
+      setEditingLot({});
     }
-  }, [grn, hasCashWeightAudit, editingWeight, editingVarianceReason]);
+  }, [grn, hasCashWeightAudit, editingWeight, editingVarianceReason, editingLot, editingExpiry]);
 
   React.useEffect(() => {
     setLoading(true);
@@ -239,6 +243,10 @@ export default function ReceiptDetailPage() {
   const totalPaidWeight = grn.lines.reduce((acc, line) => acc + (Number(line.paidWeightKg) || 0), 0);
   const totalProcessedWeight = grn.lines.reduce((acc, line) => acc + (Number(line.processedWeightKg) || 0), 0);
   const totalQty = grn.lines.reduce((acc, line) => acc + (Number(line.qty) || 0), 0);
+  const pendingQcLineIndexes = grn.lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => (line.qcStatus ?? "PENDING") === "PENDING" && !!line.lotNumber)
+    .map(({ index }) => index);
   const waterLossKg = totalReceivedWeight > 0 && totalProcessedWeight > 0
     ? Math.max(0, totalReceivedWeight - totalProcessedWeight)
     : null;
@@ -322,6 +330,70 @@ export default function ReceiptDetailPage() {
     { id: "sku", header: "SKU", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.sku ?? "—", sticky: true },
     { id: "product", header: "Product", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.productName ?? "—" },
     { id: "qty", header: "Qty", accessor: (line: GrnLineRow & { _lineIndex?: number }) => `${(line.qty ?? 0).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${line.uom ?? ""}`.trim() },
+    {
+      id: "lot",
+      header: "Lot / QC",
+      accessor: (line: GrnLineRow & { _lineIndex?: number }) => {
+        const idx = line._lineIndex ?? 0;
+        if (grn.status === "DRAFT") {
+          return (
+            <div className="space-y-1">
+              <Input
+                className="h-8 w-36"
+                placeholder="Lot number *"
+                value={editingLot[idx] ?? line.lotNumber ?? ""}
+                onChange={(event) => setEditingLot((current) => ({ ...current, [idx]: event.target.value }))}
+                onBlur={async (event) => {
+                  const lotNumber = event.target.value.trim();
+                  if (!lotNumber) return;
+                  try {
+                    const updated = await patchGRNLine(grn.id, idx, {
+                      lotNumber,
+                      receivedUom: line.uom || "EA",
+                      uomToBaseFactor: 1,
+                    });
+                    setGrn(updated);
+                    toast.success("Lot and receipt UOM captured.");
+                  } catch (error) {
+                    toast.error((error as Error).message);
+                  }
+                }}
+              />
+              <Input
+                type="date"
+                className="h-8 w-36"
+                aria-label={`Expiry date for line ${idx + 1}`}
+                value={(editingExpiry[idx] ?? line.expiryDate ?? "").slice(0, 10)}
+                onChange={(event) => setEditingExpiry((current) => ({ ...current, [idx]: event.target.value }))}
+                onBlur={async (event) => {
+                  if (!event.target.value) return;
+                  try {
+                    setGrn(await patchGRNLine(grn.id, idx, { expiryDate: event.target.value }));
+                    toast.success("Expiry date captured for FEFO.");
+                  } catch (error) {
+                    toast.error((error as Error).message);
+                  }
+                }}
+              />
+              <span className="text-[10px] text-muted-foreground">Frozen as {line.receivedUom ?? line.uom ?? "EA"} × {line.uomToBaseFactorSnapshot ?? 1}</span>
+            </div>
+          );
+        }
+        return (
+          <div className="space-y-1">
+            <div className="font-medium">{line.lotNumber ?? "—"}</div>
+            {line.expiryDate ? <div className="text-xs text-muted-foreground">Expires {line.expiryDate.slice(0, 10)}</div> : null}
+            <Badge variant="outline">{line.lotStatus ?? "QUARANTINED"}</Badge>
+            {line.qcStatus === "PENDING" && canWrite ? (
+              <div className="flex gap-1">
+                <Button size="sm" variant="outline" className="h-7 px-2" onClick={async () => setGrn(await recordGRNLineQc(grn.id, idx, "ACCEPTED"))}>Release</Button>
+                <Button size="sm" variant="outline" className="h-7 px-2 text-destructive" onClick={async () => setGrn(await recordGRNLineQc(grn.id, idx, "REJECTED"))}>Reject</Button>
+              </div>
+            ) : null}
+          </div>
+        );
+      },
+    },
     { id: "value", header: "Value", accessor: (line: GrnLineRow & { _lineIndex?: number }) => (
       <DualCurrencyAmount
         amount={line.value ?? 0}
@@ -907,10 +979,33 @@ export default function ReceiptDetailPage() {
               ) : null}
             </div>
 
-            <Card ref={weightTableRef}>
-              <CardHeader className="space-y-0 p-4 pb-2">
-                <CardTitle className="text-base">Receipt Lines</CardTitle>
-                <CardDescription className="text-xs">Received quantity and financial value per line.</CardDescription>
+            <Card ref={weightTableRef} data-tutorial-hint="grn-lot-qc-measurement">
+              <CardHeader className="flex-row items-start justify-between space-y-0 p-4 pb-2">
+                <div>
+                  <CardTitle className="text-base">Receipt Lines</CardTitle>
+                  <CardDescription className="text-xs">Received quantity and financial value per line.</CardDescription>
+                </div>
+                {canWrite && grn.status !== "DRAFT" && pendingQcLineIndexes.length > 1 ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const result = await recordGRNBulkQc(
+                          grn.id,
+                          pendingQcLineIndexes.map((lineIndex) => ({ lineIndex, outcome: "ACCEPTED" as const })),
+                        );
+                        setGrn(result.grn);
+                        toast.success(`${result.recorded} receipt lines released.`);
+                      } catch (error) {
+                        toast.error((error as Error).message ?? "Bulk QC failed.");
+                      }
+                    }}
+                  >
+                    <Icons.CheckCheck className="mr-2 h-4 w-4" />
+                    Release all pending
+                  </Button>
+                ) : null}
               </CardHeader>
               <CardContent className="p-0">
                 <div className="max-h-[min(38vh,20rem)] overflow-auto">
@@ -965,6 +1060,7 @@ export default function ReceiptDetailPage() {
                     <div className="flex items-center gap-3">
                       <Button
                         size="sm"
+                        data-tutorial-hint="grn-confirm-processing"
                         disabled={confirmingProcessing}
                         onClick={handleConfirmProcessing}
                       >

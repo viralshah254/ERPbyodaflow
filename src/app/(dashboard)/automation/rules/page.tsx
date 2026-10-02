@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -35,14 +34,18 @@ export default function AutomationRulesPage() {
   const [formRequireApproval, setFormRequireApproval] = React.useState(false);
   const [allRows, setAllRows] = React.useState<AutomationRule[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [requiringId, setRequiringId] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       setAllRows(await fetchAutomationRulesApi());
     } catch (e) {
-      toast.error((e as Error).message);
+      const message = (e as Error).message || "Could not load automation rules.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -64,7 +67,7 @@ export default function AutomationRulesPage() {
     return allRows.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
-        r.trigger.toLowerCase().includes(q)
+        JSON.stringify(r.trigger).toLowerCase().includes(q)
     );
   }, [allRows, search]);
 
@@ -78,9 +81,23 @@ export default function AutomationRulesPage() {
         ),
         sticky: true,
       },
-      { id: "trigger", header: "Trigger", accessor: "trigger" as keyof AutomationRule },
-      { id: "conditions", header: "Conditions", accessor: "conditions" as keyof AutomationRule },
-      { id: "actions", header: "Actions", accessor: "actions" as keyof AutomationRule },
+      {
+        id: "trigger",
+        header: "Trigger",
+        accessor: (r: AutomationRule) =>
+          r.trigger.type === "event" ? r.trigger.eventType || "event" : r.trigger.type,
+      },
+      {
+        id: "conditions",
+        header: "Conditions",
+        accessor: (r: AutomationRule) => `${r.conditions.length} condition(s)`,
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        accessor: (r: AutomationRule) => r.actions.map((action) => action.type).join(", ") || "None",
+      },
+      { id: "version", header: "Version", accessor: (r: AutomationRule) => `v${r.version}` },
       {
         id: "enabled",
         header: "Status",
@@ -158,7 +175,10 @@ export default function AutomationRulesPage() {
         sticky
         showCommandHint
         actions={
-          <Button onClick={() => handleOpenCreate(true)}>
+          <Button
+            onClick={() => handleOpenCreate(true)}
+            data-tutorial-hint="automation-create-rule"
+          >
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create Rule
           </Button>
@@ -170,11 +190,17 @@ export default function AutomationRulesPage() {
           searchValue={search}
           onSearchChange={setSearch}
         />
-        <div className={LIST_TABLE_SURFACE_CLASS}>
+        <div className={LIST_TABLE_SURFACE_CLASS} data-tutorial-hint="automation-rules-list">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Rules</h3>
             <p className="text-xs text-muted-foreground">{filtered.length} rule(s). Create rules to automate workflows and notifications.</p>
           </div>
+          {loadError && !loading ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8" role="alert">
+              <p className="text-sm text-destructive">{loadError}</p>
+              <Button variant="outline" onClick={() => void refresh()}>Retry</Button>
+            </div>
+          ) : (
           <DataTable<AutomationRule>
               data={filtered}
               columns={columns}
@@ -183,6 +209,7 @@ export default function AutomationRulesPage() {
               size="comfortable"
               className="min-h-0 flex-1 border-0"
               />
+          )}
         </div>
       </div>
 
@@ -207,7 +234,7 @@ export default function AutomationRulesPage() {
                 Generate rule with Copilot
               </Button>
             ) : null}
-            <div className="border-t pt-4 space-y-4">
+            <div className="border-t pt-4 space-y-4" data-tutorial-hint="automation-rule-builder">
               <div className="space-y-2">
                 <Label>Trigger</Label>
                 <div className="flex flex-wrap gap-1.5">
@@ -284,7 +311,20 @@ export default function AutomationRulesPage() {
                     try {
                       await createAutomationRuleApi({
                         name: formTrigger.slice(0, 80),
-                        trigger: formTrigger,
+                        trigger: { type: "event", eventType: formTrigger },
+                        conditions: formConditions.trim()
+                          ? [{ field: "expression", operator: "eq", value: formConditions.trim() }]
+                          : [],
+                        actions: formActions
+                          .split(",")
+                          .map((value) => value.trim())
+                          .filter(Boolean)
+                          .map((value) => ({
+                            type: value.toLowerCase().includes("schedule")
+                              ? ("run-schedule" as const)
+                              : ("notify" as const),
+                            config: { instruction: value },
+                          })),
                         enabled: true,
                         requireApproval: formRequireApproval,
                       });
