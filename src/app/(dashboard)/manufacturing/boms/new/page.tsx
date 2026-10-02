@@ -16,12 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AsyncSearchableSelect,
+  type AsyncSearchableSelectOption,
+} from "@/components/ui/async-searchable-select";
 import { createManufacturingBom, fetchNextManufacturingBomCode } from "@/lib/api/manufacturing";
-import { hydrateProductsFromApi, listProducts } from "@/lib/data/products.repo";
+import { fetchProductsPageApi } from "@/lib/api/products";
 import { fetchUomsApi } from "@/lib/api/uom";
 import { setUomsCache, listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
-import type { ProductRow } from "@/lib/types/masters";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -43,13 +46,14 @@ export default function NewBomPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const isCoolCatchTemplate = templateId === "cool-catch";
 
-  const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [uomCodes, setUomCodes] = React.useState<string[]>([]);
   const [hydrating, setHydrating] = React.useState(true);
 
   const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
   const [finishedProductId, setFinishedProductId] = React.useState<string | undefined>(undefined);
+  const [finishedProductOption, setFinishedProductOption] =
+    React.useState<AsyncSearchableSelectOption | null>(null);
   const [quantity, setQuantity] = React.useState(1);
   const [uom, setUom] = React.useState("EA");
   const [type, setType] = React.useState<BomType>("bom");
@@ -60,7 +64,6 @@ export default function NewBomPage() {
       setHydrating(true);
       try {
         await Promise.all([
-          hydrateProductsFromApi(),
           fetchUomsApi().then((rows) => {
             setUomsCache(rows);
             setUomCodes(rows.map((r) => r.code));
@@ -69,9 +72,8 @@ export default function NewBomPage() {
             if (!cancelled && c) setCode(c);
           }),
         ]);
-        if (!cancelled) setProducts(listProducts());
       } catch {
-        toast.error("Failed to load products or numbering. Retry from the BOM list.");
+        toast.error("Failed to load units or numbering. Retry from the BOM list.");
       } finally {
         if (!cancelled) setHydrating(false);
       }
@@ -92,6 +94,18 @@ export default function NewBomPage() {
     }
     defaultsApplied.current = true;
   }, [hydrating, uomCodes, isCoolCatchTemplate]);
+
+  const loadFinishedProducts = React.useCallback(async (query: string) => {
+    const page = await fetchProductsPageApi({
+      search: query.trim() || undefined,
+      limit: 50,
+      includeStock: false,
+    });
+    return page.items.map((product) => ({
+      id: product.id,
+      label: product.sku ? `${product.sku} — ${product.name}` : product.name,
+    }));
+  }, []);
 
   if (!canWrite) {
     return <div className="p-8 text-center text-muted-foreground">You do not have write access to manufacturing.</div>;
@@ -163,22 +177,17 @@ export default function NewBomPage() {
               </div>
               <div className="space-y-2">
                 <Label>Finished product</Label>
-                <Select
-                  disabled={hydrating || products.length === 0}
+                <AsyncSearchableSelect
                   value={finishedProductId}
+                  selectedOption={finishedProductOption}
                   onValueChange={setFinishedProductId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={hydrating ? "Loading products…" : products.length ? "Select product" : "No products — add catalog items first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.sku} — {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onOptionSelect={setFinishedProductOption}
+                  loadOptions={loadFinishedProducts}
+                  placeholder="Select product"
+                  searchPlaceholder="Search SKU or name"
+                  emptyMessage="No products match that search."
+                  searchDebounceMs={250}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

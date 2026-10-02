@@ -80,7 +80,7 @@ export default function AnalyticsInsightsPage() {
             .map((i, idx) => (
               <AnomalyCard
                 key={`${i.productId}-${i.warehouseId}-${idx}`}
-                title={`Low stock: ${i.productId} @ ${i.warehouseId}`}
+                title={`Low stock: ${i.productName || i.productSku || i.productId} @ ${i.warehouseId}`}
                 summary={`Quantity ${i.quantity} vs threshold ${i.minThreshold}.`}
                 severity="WARNING"
                 actionLabel="Review stock levels"
