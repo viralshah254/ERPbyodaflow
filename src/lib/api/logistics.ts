@@ -28,6 +28,26 @@ export async function fetchDistributionVehicles(params?: {
   return res?.items ?? [];
 }
 
+export type DispatchBatchRow = {
+  id: string;
+  tripId: string;
+  label: string;
+  reference?: string;
+  status: string;
+  stopCount: number;
+  vehicleCode?: string;
+  deliveryNoteNumbers: string[];
+};
+
+/** Open outbound trips that already group one or more delivery notes. */
+export async function fetchDispatchBatches(): Promise<DispatchBatchRow[]> {
+  requireLiveApi("Dispatch batches");
+  const res = await apiRequest<{ items: DispatchBatchRow[] }>("/api/distribution/dispatch-batches", {
+    params: { status: "PLANNED,IN_TRANSIT" },
+  });
+  return res?.items ?? [];
+}
+
 export type FuelEventRow = {
   id: string;
   vehicleId: string;

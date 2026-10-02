@@ -12,8 +12,61 @@ export type PendingWarehouseDropRow = {
   tripId?: string;
   tripLabel?: string;
   draftGrnId?: string;
-  lines: Array<{ lineId: string; droppedWeightKg: number }>;
+  lines: Array<{
+    lineId: string;
+    droppedWeightKg: number;
+    description?: string;
+    unit?: string;
+    shippedQty?: number;
+  }>;
 };
+
+export type DriverReturnLine = {
+  lineId: string;
+  productId?: string;
+  description?: string;
+  unit?: string;
+  shippedQty: number;
+};
+
+export type OpenDriverReturnRow = {
+  deliveryNoteId: string;
+  number: string;
+  status: string;
+  partyId?: string;
+  partyName?: string;
+  warehouseId?: string;
+  tripId?: string;
+  tripLabel?: string;
+  vehicleCode?: string;
+  dispatchedAt?: string;
+  lines: DriverReturnLine[];
+};
+
+export type DriverReturnBoard = {
+  onRoad: OpenDriverReturnRow[];
+  pending: PendingWarehouseDropRow[];
+};
+
+export async function fetchDriverReturnBoard(): Promise<DriverReturnBoard> {
+  const res = await apiRequest<DriverReturnBoard>("/api/dispatch/driver-returns");
+  return { onRoad: res.onRoad ?? [], pending: res.pending ?? [] };
+}
+
+export async function postDriverReturn(
+  deliveryNoteId: string,
+  body: {
+    dispatcherName: string;
+    warehouseId: string;
+    note?: string;
+    lines: Array<{ lineId: string; returnedQty: number; condition: "GOOD" | "DAMAGED" }>;
+  }
+): Promise<{ id: string; status: string; fullReturn: boolean }> {
+  return apiRequest(`/api/dispatch/driver-returns/${encodeURIComponent(deliveryNoteId)}`, {
+    method: "POST",
+    body,
+  });
+}
 
 export async function fetchPendingWarehouseDrops(): Promise<PendingWarehouseDropRow[]> {
   const res = await apiRequest<{ items: PendingWarehouseDropRow[] }>(
