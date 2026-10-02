@@ -94,6 +94,8 @@ export interface OdaflowQueueOrderLinePreview {
   productName?: string;
   barcode?: string;
   packSize?: string;
+  /** Packing column as printed. Missing means pieces. */
+  packing?: string;
   qty: number;
   unitPrice?: number;
   subTotal?: number;
@@ -227,11 +229,12 @@ export async function createSalesOrderFromQueueItem(
     erpPartyId?: string;
     lineProducts?: Array<{ lineIndex: number; erpProductId: string }>;
     lineQty?: Array<{ lineIndex: number; qty: number }>;
+    linePacking?: Array<{ lineIndex: number; packing: string }>;
     saveMappings?: boolean;
     /** Line indexes where the user confirmed overriding an existing SFA product link. */
     replaceProductMappingLines?: number[];
     deliveryAddress?: string;
-    extraLines?: Array<{ erpProductId: string; qty: number }>;
+    extraLines?: Array<{ erpProductId: string; qty: number; packing?: string }>;
   }
 ): Promise<{ success: true; erpDocumentId: string; action: string }> {
   requireLiveApi("Odaflow integration");
