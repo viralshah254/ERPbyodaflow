@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_PAGINATED_CLASS, LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -52,7 +52,7 @@ export function PartyStatementView(props: {
           </Button>
         }
       />
-      <div className={`${LIST_PAGE_BODY_CLASS} space-y-4 print:space-y-3`}>
+      <div className={`${LIST_PAGE_BODY_PAGINATED_CLASS} space-y-4 pb-16 print:space-y-3`}>
         <Card className="print:hidden">
           <CardContent className="pt-6">
             <div className="space-y-2">
