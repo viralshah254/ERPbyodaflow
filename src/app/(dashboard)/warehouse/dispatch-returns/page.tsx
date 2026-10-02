@@ -16,6 +16,7 @@ import {
   type OpenDriverReturnRow,
   type PendingWarehouseDropRow,
 } from "@/lib/api/dispatch-warehouse";
+import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
 import { toast } from "sonner";
 
 const RETURN_PAGE_SIZES = [20, 25, 30, 50];
@@ -51,6 +52,23 @@ export default function DispatchReturnsPage() {
   const [pageSizeOptions, setPageSizeOptions] = React.useState<number[]>(RETURN_PAGE_SIZES);
   const [totalCount, setTotalCount] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(false);
+  const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
+
+  React.useEffect(() => {
+    void fetchDistributionVehicles({ active: true })
+      .then(setVehicles)
+      .catch(() => {
+        /* The code still shows if the fleet list cannot be loaded. */
+      });
+  }, []);
+
+  const fleetByCode = React.useMemo(() => {
+    const byCode = new Map<string, DistributionVehicleRow>();
+    for (const vehicle of vehicles) {
+      if (vehicle.code) byCode.set(vehicle.code, vehicle);
+    }
+    return byCode;
+  }, [vehicles]);
 
   React.useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -142,7 +160,11 @@ export default function DispatchReturnsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {onRoad.map((row) => (
+                {onRoad.map((row) => {
+                  const fleet = row.vehicleCode ? fleetByCode.get(row.vehicleCode) : undefined;
+                  const vehicleName = row.vehicleName || fleet?.name;
+                  const vehiclePlate = row.vehicleRegistration || fleet?.registration;
+                  return (
                   <TableRow key={row.deliveryNoteId}>
                     <TableCell>
                       <Link
@@ -156,7 +178,10 @@ export default function DispatchReturnsPage() {
                       <CustomerLink id={row.partyId} name={row.partyName} />
                     </TableCell>
                     <TableCell>{row.tripLabel || "—"}</TableCell>
-                    <TableCell>{row.vehicleCode || "—"}</TableCell>
+                    <TableCell>
+                      <div>{vehicleName || row.vehicleCode || "—"}</div>
+                      {vehiclePlate ? <div className="text-xs text-muted-foreground">{vehiclePlate}</div> : null}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{row.lines.length}</TableCell>
                     <TableCell className="whitespace-nowrap">{formatLeftAt(row.dispatchedAt)}</TableCell>
                     {canWrite ? (
@@ -167,7 +192,8 @@ export default function DispatchReturnsPage() {
                       </TableCell>
                     ) : null}
                   </TableRow>
-                ))}
+                  );
+                })}
                 {!loading && !onRoad.length ? (
                   <TableRow>
                     <TableCell colSpan={canWrite ? 7 : 6} className="py-8 text-center text-sm text-muted-foreground">
