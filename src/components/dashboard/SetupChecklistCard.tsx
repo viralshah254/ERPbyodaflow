@@ -39,6 +39,11 @@ function setMarkedIncomplete(ids: Set<string>) {
   }
 }
 
+export function isOrgSetupComplete(status: SetupStatus | null): boolean {
+  if (!status) return false;
+  return STEPS.every((step) => status[step.statusKey] === true);
+}
+
 function completedFromStatus(status: SetupStatus | null): Set<string> {
   if (!status) return new Set();
   const set = new Set<string>();

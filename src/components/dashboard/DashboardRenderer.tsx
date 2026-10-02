@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
@@ -8,12 +11,12 @@ import type { ApprovalItem, AlertItem, RecentDoc } from "@/lib/types/dashboard";
 import { fetchDashboardWidgets } from "@/lib/api/dashboard";
 import { DashboardKpiCard } from "./cards/DashboardKpiCard";
 import { MyApprovalsCard } from "./cards/MyApprovalsCard";
-import { MyTasksCard } from "./cards/MyTasksCard";
 import { AlertsCard } from "./cards/AlertsCard";
 import { CopilotSuggestionsCard } from "./cards/CopilotSuggestionsCard";
 import { RecentDocumentsCard } from "./cards/RecentDocumentsCard";
-import { SetupChecklistCard } from "./SetupChecklistCard";
+import { isOrgSetupComplete, SetupChecklistCard } from "./SetupChecklistCard";
 import { DashboardGuidanceCard } from "./DashboardGuidanceCard";
+import { fetchSetupStatusApi } from "@/lib/api/context";
 
 const ADMIN_KPI_IDS = [
   "pending-approvals",
@@ -35,6 +38,7 @@ export function DashboardRenderer() {
   const user = useAuthStore((s) => s.user);
   const { template, defaultRoleDashboards } = useOrgContextStore();
   const copilotEnabled = useCopilotFeatureEnabled();
+  const [showSetupGuidance, setShowSetupGuidance] = React.useState(false);
   const [widgets, setWidgets] = React.useState<{
     approvals: ApprovalItem[];
     alerts: AlertItem[];
@@ -46,6 +50,16 @@ export function DashboardRenderer() {
     suggestions: [],
     recentDocuments: [],
   });
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetchSetupStatusApi().then((status) => {
+      if (!cancelled) setShowSetupGuidance(status != null && !isOrgSetupComplete(status));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -122,7 +136,10 @@ export function DashboardRenderer() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" data-tour-step="dashboard-kpis">
+      <div
+        className={`grid gap-4 md:grid-cols-2 ${kpiIds.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}
+        data-tour-step="dashboard-kpis"
+      >
         {kpiIds.map((id) => {
           const k = kpiById[id];
           if (!k) return null;
@@ -136,26 +153,56 @@ export function DashboardRenderer() {
               description={k.description}
               icon={k.icon}
               sparkline={k.sparkline}
+              href={
+                id === "pending-approvals"
+                  ? "/approvals/inbox"
+                  : id === "active-alerts"
+                    ? "/inbox"
+                    : id === "recent-documents"
+                      ? "/docs"
+                      : undefined
+              }
             />
           );
         })}
       </div>
 
-      {/* Guided workflow for new users + Setup checklist (hidden for compact operational templates e.g. seafood) */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {!compactOps ? (
-          <>
-            <DashboardGuidanceCard pendingApprovals={approvals.length} />
-            <SetupChecklistCard hideWhenComplete />
-          </>
-        ) : null}
-        <MyApprovalsCard items={approvals} />
-        <MyTasksCard items={[]} />
-        <AlertsCard items={alerts} />
-      </div>
+      {!compactOps && showSetupGuidance ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <DashboardGuidanceCard pendingApprovals={approvals.length} />
+          <SetupChecklistCard />
+        </div>
+      ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {copilotEnabled ? <CopilotSuggestionsCard items={suggestions} /> : null}
+      {approvals.length === 0 && alerts.length === 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" aria-hidden />
+            </span>
+            <div>
+              <p className="text-sm font-medium">Nothing waiting on you</p>
+              <p className="text-xs text-muted-foreground">Approvals and alerts are clear.</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/approvals/inbox">Approvals</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/inbox">Inbox</Link>
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {approvals.length > 0 ? <MyApprovalsCard items={approvals} /> : null}
+          {alerts.length > 0 ? <AlertsCard items={alerts} /> : null}
+        </div>
+      )}
+
+      <div className={copilotEnabled && suggestions.length > 0 ? "grid gap-4 lg:grid-cols-2" : ""}>
+        {copilotEnabled && suggestions.length > 0 ? <CopilotSuggestionsCard items={suggestions} /> : null}
         <RecentDocumentsCard items={recentDocs} />
       </div>
     </div>

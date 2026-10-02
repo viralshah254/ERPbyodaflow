@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, getApiBase } from "./client";
 
 export type FmcgControlTowerException = {
   id: string;
@@ -31,9 +31,23 @@ export type FmcgControlTowerSnapshot = {
   exceptions: FmcgControlTowerException[];
 };
 
-export function fetchFmcgControlTower(params: {
+export async function fetchFmcgControlTower(params: {
   from: string;
   to: string;
 }): Promise<FmcgControlTowerSnapshot> {
-  return apiRequest<FmcgControlTowerSnapshot>("/api/control-tower/fmcg", { params });
+  const path = "/api/control-tower/fmcg";
+  const request = { params };
+  try {
+    return await apiRequest<FmcgControlTowerSnapshot>(path, request);
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    const local = "http://localhost:4000";
+    const onLocalPage =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+    if (status === 404 && onLocalPage && getApiBase() !== local) {
+      return apiRequest<FmcgControlTowerSnapshot>(path, { ...request, baseUrl: local });
+    }
+    throw error;
+  }
 }
