@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { PageShell, LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS } from "@/components/layout/page-shell";
+import { PageShell, LIST_PAGE_BODY_PAGINATED_CLASS, LIST_PAGE_SHELL_CLASS } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -254,7 +254,7 @@ export default function WarehouseDispatchPage() {
         ]}
         sticky
       />
-      <div className={`${LIST_PAGE_BODY_CLASS} gap-4`}>
+      <div className={`${LIST_PAGE_BODY_PAGINATED_CLASS} gap-4 pb-16`}>
         <Card>
           <CardHeader>
             <CardTitle>1. Vehicle</CardTitle>
