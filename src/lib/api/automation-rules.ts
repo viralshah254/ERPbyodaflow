@@ -4,9 +4,10 @@ import type { AutomationRule } from "@/lib/types/automation-rules";
 type BackendRule = {
   id: string;
   name: string;
-  trigger?: string;
-  conditions?: Record<string, unknown>;
-  actions?: unknown[];
+  trigger?: AutomationRule["trigger"] | string;
+  conditions?: AutomationRule["conditions"];
+  actions?: AutomationRule["actions"];
+  version?: number;
   enabled?: boolean;
   requireApproval?: boolean;
 };
@@ -15,9 +16,15 @@ function mapRule(r: BackendRule): AutomationRule {
   return {
     id: r.id,
     name: r.name,
-    trigger: r.trigger ?? "manual",
-    conditions: r.conditions ? JSON.stringify(r.conditions) : "",
-    actions: Array.isArray(r.actions) ? r.actions.map(String).join(", ") : "",
+    trigger:
+      typeof r.trigger === "string"
+        ? r.trigger === "manual"
+          ? { type: "manual" }
+          : { type: "event", eventType: r.trigger }
+        : r.trigger ?? { type: "manual" },
+    conditions: r.conditions ?? [],
+    actions: r.actions ?? [],
+    version: r.version ?? 1,
     enabled: r.enabled ?? true,
     requireApproval: r.requireApproval ?? false,
   };
@@ -31,7 +38,9 @@ export async function fetchAutomationRulesApi(): Promise<AutomationRule[]> {
 
 export async function createAutomationRuleApi(body: {
   name: string;
-  trigger?: string;
+  trigger?: AutomationRule["trigger"];
+  conditions?: AutomationRule["conditions"];
+  actions?: AutomationRule["actions"];
   enabled?: boolean;
   requireApproval?: boolean;
 }): Promise<{ id: string }> {
@@ -41,7 +50,13 @@ export async function createAutomationRuleApi(body: {
 
 export async function updateAutomationRuleApi(
   id: string,
-  body: Partial<{ name: string; trigger: string; enabled: boolean }>
+  body: Partial<{
+    name: string;
+    trigger: AutomationRule["trigger"];
+    conditions: AutomationRule["conditions"];
+    actions: AutomationRule["actions"];
+    enabled: boolean;
+  }>
 ): Promise<AutomationRule> {
   requireLiveApi("Update automation rule");
   const payload = await apiRequest<BackendRule>(`/api/automation/rules/${encodeURIComponent(id)}`, {

@@ -1170,7 +1170,10 @@ export default function PickPackDetailPage() {
           </CardContent>
         </Card>
 
-        <Card className={cn(picklistCardTone || undefined)}>
+        <Card
+          className={cn(picklistCardTone || undefined)}
+          data-tutorial-hint="pick-pack-stock"
+        >
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle>Picklist</CardTitle>
@@ -1328,6 +1331,13 @@ export default function PickPackDetailPage() {
                             )}
                             .
                           </p>
+                        ) : null}
+                        {line.lotSplits?.length ? (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Actual lots: {line.lotSplits.map((lot) => `${lot.lotNumber} × ${formatKg(lot.quantity)}`).join(", ")}
+                          </p>
+                        ) : canDispatch ? (
+                          <p className="mt-1 text-[11px] text-muted-foreground">Released lots allocate FEFO at dispatch.</p>
                         ) : null}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">{line.sku ?? "—"}</TableCell>
@@ -1521,7 +1531,7 @@ export default function PickPackDetailPage() {
         ) : null}
 
         <div className="grid gap-6 md:grid-cols-2">
-          <Card>
+          <Card data-tutorial-hint="pick-pack-pack">
             <CardHeader>
               <CardTitle>Pack</CardTitle>
             </CardHeader>

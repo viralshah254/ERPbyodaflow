@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OperationalKpiCard } from "@/components/operational/OperationalKpiCard";
+import { FmcgControlTower } from "@/components/operational/FmcgControlTower";
 import { MassBalanceChart } from "@/components/operational/MassBalanceChart";
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { YieldBreakdownCard } from "@/components/operational/YieldBreakdownCard";
@@ -50,6 +51,7 @@ import type { WIPBalanceRow, SubcontractOrderRow } from "@/lib/mock/manufacturin
 import type { CommissionRunRow, TopUpRow } from "@/lib/mock/franchise/commission";
 import type { FranchiseeStockRow, VMIReplenishmentOrderRow } from "@/lib/mock/franchise/vmi";
 import { isPerishableVerticalEnabled } from "@/lib/perishable-vertical";
+import { canonicalIndustryTemplateId, FMCG_SELLING_TEMPLATE_IDS } from "@/config/industry";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useUIStore } from "@/stores/ui-store";
 import { formatMoney } from "@/lib/money";
@@ -118,6 +120,12 @@ export default function ControlTowerPage() {
   const featureFlags = useOrgContextStore((s) => s.featureFlags);
 
   const perishableControlTowerEnabled = isPerishableVerticalEnabled(templateId, featureFlags ?? {});
+  const canonicalTemplateId = canonicalIndustryTemplateId(templateId);
+  const fmcgControlTowerEnabled =
+    FMCG_SELLING_TEMPLATE_IDS.includes(
+      canonicalTemplateId as (typeof FMCG_SELLING_TEMPLATE_IDS)[number]
+    ) &&
+    (canonicalTemplateId === "fmcg-manufacturer" || canonicalTemplateId === "fmcg-bakery");
 
   // ——— Date range ———
   const [dateFrom, setDateFrom] = React.useState(() => {
@@ -160,10 +168,16 @@ export default function ControlTowerPage() {
     totalPayout: number;
   } | null>(null);
   const [commissionRuns, setCommissionRuns] = React.useState<CommissionRunRow[]>([]);
+  const handleFmcgLoading = React.useCallback((nextLoading: boolean) => {
+    setLoading(nextLoading);
+  }, []);
+  const handleFmcgRefreshed = React.useCallback((at: Date) => {
+    setLastRefreshed(at);
+  }, []);
 
   // ——— Fetch all data ———
   React.useEffect(() => {
-    if (!perishableControlTowerEnabled) {
+    if (!perishableControlTowerEnabled || fmcgControlTowerEnabled) {
       setLoading(false);
       return;
     }
@@ -201,7 +215,7 @@ export default function ControlTowerPage() {
     return () => {
       cancelled = true;
     };
-  }, [perishableControlTowerEnabled, dateFrom, dateTo, refreshKey]);
+  }, [perishableControlTowerEnabled, fmcgControlTowerEnabled, dateFrom, dateTo, refreshKey]);
 
   // ——— Derived KPIs ———
   const poWeightKg = auditLines.reduce((acc, l) => acc + (l.orderedQty ?? 0), 0);
@@ -449,11 +463,19 @@ export default function ControlTowerPage() {
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
-        title={perishableControlTowerEnabled ? "Perishable Command Center" : "Control Tower"}
+        title={
+          fmcgControlTowerEnabled
+            ? "FMCG Control Tower"
+            : perishableControlTowerEnabled
+              ? "Perishable Command Center"
+              : "Control Tower"
+        }
         description={
-          perishableControlTowerEnabled
-            ? "Real-time sourcing, processing, cold chain, franchise, and finance visibility."
-            : "Supply chain command layer for template-enabled modules."
+          fmcgControlTowerEnabled
+            ? "Reconciled sales, lot quality, production, automation, banking, and close controls."
+            : perishableControlTowerEnabled
+              ? "Real-time sourcing, processing, cold chain, franchise, and finance visibility."
+              : "Supply chain command layer for template-enabled modules."
         }
         breadcrumbs={[{ label: "Control Tower" }]}
         sticky
@@ -483,7 +505,43 @@ export default function ControlTowerPage() {
       />
 
       <div className="space-y-6 p-6">
-        {!perishableControlTowerEnabled ? (
+        {fmcgControlTowerEnabled ? (
+          <>
+            <div
+              className="flex flex-wrap items-center gap-3"
+              data-tutorial-hint="fmcg-control-tower-date-range"
+            >
+              <div className="flex items-center gap-2">
+                <Label className="shrink-0 text-xs text-muted-foreground">From</Label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                  className="h-8 w-36 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="shrink-0 text-xs text-muted-foreground">To</Label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                  className="h-8 w-36 text-sm"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sales and finance use this range; current lot and close controls remain live.
+              </p>
+            </div>
+            <FmcgControlTower
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              refreshKey={refreshKey}
+              onLoadingChange={handleFmcgLoading}
+              onRefreshed={handleFmcgRefreshed}
+            />
+          </>
+        ) : !perishableControlTowerEnabled ? (
           <GenericControlTower />
         ) : (
           <>

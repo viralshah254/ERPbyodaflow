@@ -74,6 +74,43 @@ export type ManufacturingWorkOrder = {
   releasedAt?: string;
   startedAt?: string;
   completedAt?: string;
+  measurementMode: "COUNT_ONLY" | "MANUAL_SCALE" | "DEVICE_SCALE" | "WEIGHBRIDGE";
+  weighingRequired: boolean;
+  measuredWeight?: number;
+  deviceReadingId?: string;
+  materialLines: Array<{
+    lineId: string;
+    productId: string;
+    productName?: string;
+    sku?: string;
+    uom?: string;
+    plannedQuantity: number;
+    issuedQuantity: number;
+    returnedQuantity: number;
+    consumedQuantity: number;
+    warehouseId: string;
+  }>;
+  outputLines: Array<{
+    lineId: string;
+    productId: string;
+    productName?: string;
+    sku?: string;
+    uom?: string;
+    plannedQuantity: number;
+    producedQuantity: number;
+    warehouseId: string;
+  }>;
+  completions: Array<{ idempotencyKey: string; quantity: number; postedAt: string }>;
+  wipQuantity: number;
+  reconciliation: {
+    inputMass: number;
+    outputMass: number;
+    massVariance: number;
+    countVariance: number;
+    inputCost: number;
+    outputCost: number;
+    costVariance: number;
+  };
   notes?: string;
 };
 
@@ -388,6 +425,10 @@ export async function createManufacturingWorkOrder(payload: {
   bomId?: string;
   routingId?: string;
   grnId?: string;
+  inputWarehouseId: string;
+  outputWarehouseId: string;
+  measurementMode?: ManufacturingWorkOrder["measurementMode"];
+  weighingRequired?: boolean;
   quantity: number;
   dueDate?: string;
   plannedDate?: string;
@@ -398,7 +439,28 @@ export async function createManufacturingWorkOrder(payload: {
 
 export async function runManufacturingWorkOrderAction(
   id: string,
-  payload: { action: "release" | "start" | "complete" | "cancel"; producedQuantity?: number; scrapQuantity?: number }
+  payload: {
+    action: "release" | "start" | "complete" | "cancel";
+    producedQuantity?: number;
+    scrapQuantity?: number;
+    idempotencyKey?: string;
+    measuredWeight?: number;
+    deviceReadingId?: string;
+    inputLines?: Array<{
+      lineId: string;
+      productId: string;
+      warehouseId: string;
+      quantity: number;
+      consumedQuantity: number;
+      returnedQuantity: number;
+    }>;
+    outputLines?: Array<{
+      lineId: string;
+      productId: string;
+      warehouseId: string;
+      quantity: number;
+    }>;
+  }
 ): Promise<ManufacturingWorkOrder> {
   return apiRequest(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/action`, {
     method: "POST",
@@ -566,9 +628,10 @@ export type MaterialAvailabilityLine = {
 
 export async function checkWorkOrderAvailability(
   bomId: string,
-  quantity: number
+  quantity: number,
+  warehouseId: string
 ): Promise<{ lines: MaterialAvailabilityLine[] }> {
   requireLiveApi("Work order availability check");
-  const params = new URLSearchParams({ bomId, quantity: String(quantity) });
+  const params = new URLSearchParams({ bomId, quantity: String(quantity), warehouseId });
   return apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/availability?${params.toString()}`);
 }

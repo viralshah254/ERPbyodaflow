@@ -2,6 +2,8 @@ import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 export default defineConfig({
+  // Tests must not load runtime or developer secrets from the project root.
+  envDir: "./test-env",
   test: {
     environment: "jsdom",
     globals: true,

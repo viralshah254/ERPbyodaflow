@@ -238,3 +238,61 @@ export async function fetchBankReconOpenItemsApi(params: {
     ? fetchOpenInvoicesApi(params.partyId)
     : fetchOpenBillsApi(params.partyId);
 }
+
+export type BankAllocationProposal = {
+  _id: string;
+  statementLineId: string;
+  partyId: string;
+  allocations: Array<{ documentId: string; amount: number }>;
+  source: "MANUAL" | "GAIA";
+  rationale?: string;
+  status: "SUGGESTED" | "APPROVED" | "POSTED" | "CLOSED";
+  paymentId?: string;
+};
+
+export async function suggestBankAllocationApi(body: {
+  statementLineId: string;
+  partyId: string;
+  allocations: Array<{ documentId: string; amount: number }>;
+  source?: "MANUAL" | "GAIA";
+  rationale?: string;
+}) {
+  return apiRequest<{ id: string; status: string }>("/api/finance/bank-recon/allocation-proposals", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function fetchBankAllocationProposalsApi(statementLineId?: string) {
+  const result = await apiRequest<{ items: BankAllocationProposal[] }>(
+    "/api/finance/bank-recon/allocation-proposals",
+    { params: statementLineId ? { statementLineId } : undefined },
+  );
+  return result.items ?? [];
+}
+
+export async function advanceBankAllocationProposalApi(
+  id: string,
+  action: "approve" | "post" | "close",
+) {
+  return apiRequest<{ id: string; status: string; paymentId?: string }>(
+    `/api/finance/bank-recon/allocation-proposals/${encodeURIComponent(id)}/action`,
+    { method: "POST", body: { action } },
+  );
+}
+
+export async function fetchControlAccountReconciliationApi() {
+  const result = await apiRequest<{
+    items: Array<{
+      side: "AR" | "AP";
+      controlAccountCode: string;
+      controlAccountName?: string;
+      glBalance?: number;
+      subledgerBalance?: number;
+      difference?: number;
+      reconciled?: boolean;
+      error?: string;
+    }>;
+  }>("/api/finance/control-account-reconciliation");
+  return result.items ?? [];
+}

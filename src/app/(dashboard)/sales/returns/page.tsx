@@ -36,6 +36,9 @@ export default function SalesReturnsPage() {
   const [description, setDescription] = React.useState("Returned goods");
   const [quantity, setQuantity] = React.useState("1");
   const [amount, setAmount] = React.useState("0");
+  const [sourceDocumentId, setSourceDocumentId] = React.useState("");
+  const [ambiguousAccepted, setAmbiguousAccepted] = React.useState(false);
+  const [returnReason, setReturnReason] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [products, setProducts] = React.useState<Array<{ id: string; name: string; sku: string }>>([]);
   const [productId, setProductId] = React.useState("");
@@ -189,6 +192,32 @@ export default function SalesReturnsPage() {
               <Label>Description</Label>
               <Input value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
+            <div className="space-y-2">
+              <Label>Original invoice or delivery ID</Label>
+              <Input
+                value={sourceDocumentId}
+                onChange={(e) => setSourceDocumentId(e.target.value)}
+                placeholder="Link the original document when known"
+              />
+            </div>
+            {!sourceDocumentId.trim() ? (
+              <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={ambiguousAccepted}
+                    onChange={(e) => setAmbiguousAccepted(e.target.checked)}
+                  />
+                  <span>I confirm the original sale is ambiguous and cannot be linked.</span>
+                </label>
+                <Input
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                  placeholder="Required reason and evidence reference"
+                />
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Quantity</Label>
@@ -209,12 +238,20 @@ export default function SalesReturnsPage() {
                   toast.error("Select a customer and product.");
                   return;
                 }
+                if (!sourceDocumentId.trim() && (!ambiguousAccepted || !returnReason.trim())) {
+                  toast.error("Link the original document or explicitly record why the return is ambiguous.");
+                  return;
+                }
                 setSaving(true);
                 try {
                   const created = await createDocumentApi("credit-note", {
                     date: new Date().toISOString().slice(0, 10),
                     partyId: customerId,
                     warehouseId: warehouseId || undefined,
+                    sourceDocumentId: sourceDocumentId.trim() || undefined,
+                    sourceDocumentType: sourceDocumentId.trim() ? "invoice" : undefined,
+                    returnResolution: sourceDocumentId.trim() ? "LINKED_SOURCE" : "AMBIGUOUS_ACCEPTED",
+                    returnReason: returnReason.trim() || undefined,
                     lines: [
                       {
                         productId,

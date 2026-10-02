@@ -23,7 +23,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
-import { fetchPartiesApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { fetchPartiesApi, hidePartyInOrgApi, updatePartyApi } from "@/lib/api/parties";
 import type { PartyRow } from "@/lib/types/masters";
 import { CustomerHideConfirmDialog, type CustomerHideKind } from "@/components/customers/CustomerHideConfirmDialog";
 
@@ -63,6 +63,40 @@ export function SupermarketBranchesSheet({
     name: string;
     kind: CustomerHideKind;
   } | null>(null);
+  const [chainBillTo, setChainBillTo] = React.useState<"PARENT" | "BRANCH">("PARENT");
+  const [savingBillTo, setSavingBillTo] = React.useState(false);
+
+  React.useEffect(() => {
+    setChainBillTo(supermarket?.multichainBillTo === "BRANCH" ? "BRANCH" : "PARENT");
+  }, [supermarket?.id, supermarket?.multichainBillTo]);
+
+  const saveChainBillTo = async (next: "PARENT" | "BRANCH") => {
+    if (!supermarket) return;
+    setChainBillTo(next);
+    setSavingBillTo(true);
+    try {
+      await updatePartyApi(supermarket.id, { multichainBillTo: next });
+      toast.success(
+        next === "PARENT"
+          ? "Invoices for every branch go to this chain."
+          : "Invoices go to a branch only when that outlet is its own customer."
+      );
+    } catch (err) {
+      setChainBillTo(supermarket.multichainBillTo === "BRANCH" ? "BRANCH" : "PARENT");
+      toast.error(err instanceof Error ? err.message : "Could not save invoice setting");
+    } finally {
+      setSavingBillTo(false);
+    }
+  };
+
+  const saveBranchBillTo = async (branchId: string, next: "PARENT" | "BRANCH") => {
+    try {
+      await updatePartyApi(branchId, { multichainBillTo: next });
+      await loadBranches();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save branch invoice setting");
+    }
+  };
 
   const loadBranches = React.useCallback(async () => {
     if (!supermarket?.id) {
@@ -152,9 +186,8 @@ export function SupermarketBranchesSheet({
                 {supermarket?.name ?? "Branches"}
               </SheetTitle>
               <SheetDescription>
-                Branch customers
-                {supermarket?.code ? ` · ${supermarket.code}` : ""}
-                {" — each can order and invoice like HQ"}
+                Outlets supplied under this chain
+                {supermarket?.code ? ` · ${supermarket.code}` : ""}. Delivery stays on the branch.
               </SheetDescription>
             </div>
             {supermarket ? (
@@ -181,6 +214,21 @@ export function SupermarketBranchesSheet({
               </div>
             ) : null}
           </div>
+          {supermarket ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="mt-chain-bill-to">Who gets the invoice</Label>
+              <select
+                id="mt-chain-bill-to"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={chainBillTo}
+                disabled={savingBillTo}
+                onChange={(e) => void saveChainBillTo(e.target.value as "PARENT" | "BRANCH")}
+              >
+                <option value="PARENT">Invoice the chain — one customer for every branch</option>
+                <option value="BRANCH">Invoice the branch — only when that outlet is its own customer</option>
+              </select>
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="mt-branch-search">Search branches</Label>
             <Input
@@ -234,6 +282,17 @@ export function SupermarketBranchesSheet({
                         {branch.phone ? (
                           <p className="text-xs text-muted-foreground">{branch.phone}</p>
                         ) : null}
+                        <select
+                          className="mt-1 h-8 max-w-[11rem] rounded-md border border-input bg-background px-2 text-xs"
+                          value={branch.multichainBillTo === "BRANCH" ? "BRANCH" : "PARENT"}
+                          aria-label={`Invoice setting for ${branch.name}`}
+                          onChange={(e) =>
+                            void saveBranchBillTo(branch.id, e.target.value as "PARENT" | "BRANCH")
+                          }
+                        >
+                          <option value="PARENT">Invoice the chain</option>
+                          <option value="BRANCH">Invoice this branch</option>
+                        </select>
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">

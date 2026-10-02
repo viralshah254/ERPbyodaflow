@@ -27,6 +27,7 @@ export type UserFormFieldsProps = {
   /** When false, Owner role is hidden from assignable list unless editingUserIsOwner. */
   canAssignOwnerRole: boolean;
   isEdit: boolean;
+  rolesReadOnly?: boolean;
 };
 
 export function UserFormFields({
@@ -36,10 +37,11 @@ export function UserFormFields({
   copilotProductEnabled,
   canAssignOwnerRole,
   isEdit,
+  rolesReadOnly = false,
 }: UserFormFieldsProps) {
   const assignableRoles = sortedRoles.filter((r) => {
     if (r.name === "Owner") return canAssignOwnerRole;
-    return true;
+    return r.grantable !== false || form.roleIds.includes(r.id);
   });
 
   const toggleRole = (roleId: string) => {
@@ -130,6 +132,7 @@ export function UserFormFields({
                 <Checkbox
                   className="mt-0.5"
                   checked={form.roleIds.includes(r.id)}
+                  disabled={rolesReadOnly || r.grantable === false}
                   onCheckedChange={() => toggleRole(r.id)}
                 />
                 <span className="text-sm leading-snug">
@@ -146,9 +149,10 @@ export function UserFormFields({
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Select one or more roles. Permissions are combined. Mobile app routing uses the
-          highest-priority assigned role. New users are staged for checkout first — nothing is
-          activated or billed until you confirm the pending checkout from Billing.
+          {rolesReadOnly
+            ? "You cannot change your own role assignments. Ask another administrator."
+            : "Select one or more roles. Permissions are combined. Mobile app routing uses the "}
+          {!rolesReadOnly ? "highest-priority assigned role. New users are staged for checkout first — nothing is activated or billed until you confirm the pending checkout from Billing." : null}
         </p>
       </div>
 

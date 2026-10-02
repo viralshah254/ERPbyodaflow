@@ -146,7 +146,7 @@ export function DashboardRenderer() {
         {!compactOps ? (
           <>
             <DashboardGuidanceCard pendingApprovals={approvals.length} />
-            <SetupChecklistCard />
+            <SetupChecklistCard hideWhenComplete />
           </>
         ) : null}
         <MyApprovalsCard items={approvals} />

@@ -6,7 +6,7 @@ import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchArPaymentsApi, fetchOpenInvoicesApi } from "@/lib/api/payments";
+import { fetchArOpenPageApi, fetchArPaymentsApi } from "@/lib/api/payments";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
@@ -16,13 +16,17 @@ import { CustomerLink } from "@/components/customers/CustomerLink";
 
 export default function AccountsReceivablePage() {
   const baseCurrency = useBaseCurrency();
-  const [invoices, setInvoices] = React.useState<Awaited<ReturnType<typeof fetchOpenInvoicesApi>>>([]);
+  const [invoices, setInvoices] = React.useState<Awaited<ReturnType<typeof fetchArOpenPageApi>>["items"]>([]);
+  const [outstandingTotal, setOutstandingTotal] = React.useState(0);
+  const [openCount, setOpenCount] = React.useState(0);
   const [payments, setPayments] = React.useState<Awaited<ReturnType<typeof fetchArPaymentsApi>>>([]);
 
   React.useEffect(() => {
-    Promise.all([fetchOpenInvoicesApi(), fetchArPaymentsApi()])
+    Promise.all([fetchArOpenPageApi(), fetchArPaymentsApi()])
       .then(([openInvoices, arPayments]) => {
-        setInvoices(openInvoices);
+        setInvoices(openInvoices.items);
+        setOutstandingTotal(openInvoices.outstandingTotal);
+        setOpenCount(openInvoices.openCount);
         setPayments(arPayments);
       })
       .catch((error) => toast.error((error as Error).message || "Failed to load receivables."));
@@ -53,19 +57,12 @@ export default function AccountsReceivablePage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader><CardTitle className="text-sm">Open invoices</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-semibold">{invoices.length}</CardContent>
+            <CardContent className="text-2xl font-semibold">{openCount}</CardContent>
           </Card>
           <Card>
             <CardHeader><CardTitle className="text-sm">Outstanding</CardTitle></CardHeader>
             <CardContent className="text-2xl font-semibold">
-              {formatMoney(
-                invoices.reduce((sum, item) => {
-                  const isBase = (item.currency ?? baseCurrency).toUpperCase() === baseCurrency.toUpperCase();
-                  const kes = isBase ? item.outstanding : item.outstanding * (item.exchangeRate ?? 1);
-                  return sum + kes;
-                }, 0),
-                baseCurrency
-              )}
+              {formatMoney(outstandingTotal, baseCurrency)}
             </CardContent>
           </Card>
           <Card>

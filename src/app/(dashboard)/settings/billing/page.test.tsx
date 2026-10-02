@@ -120,6 +120,10 @@ describe("Settings billing page", () => {
       invoiceId: "invoice-1",
       quoteTotalCents: 2200,
       lineItems: [],
+      stripe: {
+        charged: false,
+        reason: "stripe_not_configured",
+      },
     });
   });
 

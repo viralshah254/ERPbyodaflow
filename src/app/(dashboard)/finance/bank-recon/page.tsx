@@ -38,13 +38,17 @@ import {
   autoMatchBankReconApi,
   completeBankReconApi,
   createBankReconAdjustingEntryApi,
-  createBankReconPaymentFromStatementApi,
+  advanceBankAllocationProposalApi,
+  fetchBankAllocationProposalsApi,
+  fetchControlAccountReconciliationApi,
   fetchBankReconOpenItemsApi,
   fetchBankReconSessionsApi,
   fetchBankReconSnapshotApi,
   fetchBankReconSuggestionsApi,
   matchBankReconLinesApi,
   matchBankReconToDocumentApi,
+  suggestBankAllocationApi,
+  type BankAllocationProposal,
   type BankReconOpenItemSuggestion,
   type BankStatementLine,
   type BankReconSnapshot,
@@ -99,6 +103,11 @@ export default function BankReconPage() {
   const [sessions, setSessions] = React.useState<BankReconciliationSessionRecord[]>([]);
   const [viewPaymentDetail, setViewPaymentDetail] = React.useState<APPaymentRow | null>(null);
   const [loadingPaymentDetail, setLoadingPaymentDetail] = React.useState(false);
+  const [allocationProposals, setAllocationProposals] = React.useState<BankAllocationProposal[]>([]);
+  const [controlAccounts, setControlAccounts] = React.useState<Array<{
+    side: "AR" | "AP"; controlAccountCode: string; controlAccountName?: string;
+    glBalance?: number; subledgerBalance?: number; difference?: number; reconciled?: boolean; error?: string;
+  }>>([]);
 
   const refreshSnapshot = React.useCallback(async (accountId?: string) => {
     setLoading(true);
@@ -113,6 +122,12 @@ export default function BankReconPage() {
       }
       const sessionList = await fetchBankReconSessionsApi(accountId || data.bankAccounts[0]?.id);
       setSessions(sessionList);
+      const [proposals, controls] = await Promise.all([
+        fetchBankAllocationProposalsApi(),
+        fetchControlAccountReconciliationApi(),
+      ]);
+      setAllocationProposals(proposals);
+      setControlAccounts(controls);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -293,8 +308,13 @@ export default function BankReconPage() {
       const allocations = Object.entries(openItemAllocations)
         .filter(([, amount]) => amount > 0)
         .map(([documentId, amount]) => ({ documentId, amount }));
-      const result = await createBankReconPaymentFromStatementApi(pendingLine, counterpartyId, allocations);
-      toast.success(`Created and matched payment ${result.number}.`);
+      await suggestBankAllocationApi({
+        statementLineId: pendingLine.id,
+        partyId: counterpartyId,
+        allocations,
+        source: "MANUAL",
+      });
+      toast.success("Grouped allocation suggested. A different user must approve, post, and close it.");
       setCreateOpen(false);
       setPendingLine(null);
       setCounterpartyId("");
@@ -400,6 +420,58 @@ export default function BankReconPage() {
           </CardContent>
         </Card>
 
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Allocation authorization</CardTitle>
+              <CardDescription>Suggest → approve → post → close. Each step requires a different authorized user; GAIA can only suggest.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {allocationProposals.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No grouped allocation proposals.</p>
+              ) : allocationProposals.slice(0, 8).map((proposal) => {
+                const next = proposal.status === "SUGGESTED" ? "approve" : proposal.status === "APPROVED" ? "post" : proposal.status === "POSTED" ? "close" : null;
+                return (
+                  <div key={proposal._id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                    <div>
+                      <p className="font-medium">{proposal.allocations.length} allocation(s) · {proposal.status}</p>
+                      <p className="text-xs text-muted-foreground">{proposal.source === "GAIA" ? "GAIA proposal — never auto-posted" : "Manual proposal"}</p>
+                    </div>
+                    {next ? (
+                      <Button size="sm" variant="outline" onClick={async () => {
+                        try {
+                          await advanceBankAllocationProposalApi(proposal._id, next);
+                          toast.success(`Allocation ${next} complete.`);
+                          await refreshSnapshot(bankAccountId);
+                        } catch (error) {
+                          toast.error(error instanceof Error ? error.message : "Action failed.");
+                        }
+                      }}>{next[0].toUpperCase() + next.slice(1)}</Button>
+                    ) : <Badge>Closed</Badge>}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Control-account reconciliation</CardTitle>
+              <CardDescription>AR/AP subledger outstanding compared with GL control accounts.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {controlAccounts.map((row) => (
+                <div key={row.side} className="rounded-md border p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{row.side} · {row.controlAccountCode}</span>
+                    <Badge variant={row.reconciled ? "default" : "destructive"}>{row.error ? "Missing" : row.reconciled ? "Reconciled" : "Difference"}</Badge>
+                  </div>
+                  {!row.error ? <p className="mt-1 text-xs text-muted-foreground">GL {formatMoney(row.glBalance ?? 0, currency)} · Subledger {formatMoney(row.subledgerBalance ?? 0, currency)} · Difference {formatMoney(row.difference ?? 0, currency)}</p> : <p className="mt-1 text-xs text-destructive">{row.error}</p>}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
             <div>
@@ -453,6 +525,7 @@ export default function BankReconPage() {
               </Badge>
               <Button
                 size="sm"
+                data-tutorial-hint="bank-close"
                 disabled={completing || !bankAccountId || unmatchedStmt.length > 0 || statements.length === 0}
                 onClick={() => void handleCompleteReconciliation()}
               >
@@ -462,7 +535,10 @@ export default function BankReconPage() {
           </CardHeader>
         </Card>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+        <div
+          className="grid gap-6 xl:grid-cols-[1fr_380px]"
+          data-tutorial-hint="bank-match-workspace"
+        >
           <Card>
             <CardHeader>
               <CardTitle>Bank statement lines</CardTitle>
@@ -873,7 +949,7 @@ export default function BankReconPage() {
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button onClick={() => void handleCreatePaymentSubmit()} disabled={creating || !counterpartyId}>
-              {creating ? "Creating…" : "Create and match payment"}
+              {creating ? "Saving…" : "Suggest grouped allocation"}
             </Button>
           </SheetFooter>
         </SheetContent>

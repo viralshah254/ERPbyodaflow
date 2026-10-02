@@ -6,6 +6,8 @@ export type AutomationScheduleRow = {
   cron?: string;
   taskType?: string;
   enabled: boolean;
+  version: number;
+  maxAttempts: number;
   lastRunAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -17,6 +19,9 @@ export type AutomationScheduleRunRow = {
   endedAt: string;
   status: "SUCCESS" | "FAILED";
   message?: string;
+  idempotencyKey?: string;
+  attempt?: number;
+  actorType?: "USER" | "SERVICE_PRINCIPAL";
 };
 
 type BackendScheduleRow = {
@@ -25,6 +30,8 @@ type BackendScheduleRow = {
   cron?: string;
   taskType?: string;
   enabled?: boolean;
+  version?: number;
+  maxAttempts?: number;
   lastRunAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -37,6 +44,8 @@ function mapSchedule(item: BackendScheduleRow): AutomationScheduleRow {
     cron: item.cron,
     taskType: item.taskType,
     enabled: item.enabled ?? true,
+    version: item.version ?? 1,
+    maxAttempts: item.maxAttempts ?? 3,
     lastRunAt: item.lastRunAt,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -55,6 +64,7 @@ export async function createAutomationScheduleApi(body: {
   taskType?: string;
   enabled?: boolean;
   config?: Record<string, unknown>;
+  maxAttempts?: number;
 }): Promise<{ id: string }> {
   requireLiveApi("Create automation schedule");
   return apiRequest<{ id: string }>("/api/automation/schedules", {
@@ -65,7 +75,7 @@ export async function createAutomationScheduleApi(body: {
 
 export async function updateAutomationScheduleApi(
   id: string,
-  body: Partial<{ name: string; cron: string; taskType: string; enabled: boolean; config: Record<string, unknown> }>
+  body: Partial<{ name: string; cron: string; taskType: string; enabled: boolean; config: Record<string, unknown>; maxAttempts: number }>
 ): Promise<AutomationScheduleRow> {
   requireLiveApi("Update automation schedule");
   const payload = await apiRequest<BackendScheduleRow>(`/api/automation/schedules/${encodeURIComponent(id)}`, {

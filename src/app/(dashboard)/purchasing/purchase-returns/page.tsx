@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
@@ -19,8 +20,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { downloadCsv } from "@/lib/export/csv";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import {
-  approvePurchaseReturnApi,
-  createPurchaseReturnApi,
+  postPurchaseReturnApi,
+  submitPurchaseReturnApi,
   exportPurchaseReturnsApi,
   fetchPurchaseReturnsPageApi,
   type PurchaseReturnRow,
@@ -29,7 +30,7 @@ import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
+import { useCanWritePurchasing, useHasPermission } from "@/lib/rbac/use-write-guard";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -47,11 +48,11 @@ const scope = "purchasing-returns";
 export default function PurchaseReturnsPage() {
   const baseCurrency = useBaseCurrency();
   const canWrite = useCanWritePurchasing();
+  const canPost = useHasPermission("purchase.approve");
   const [searchInput, setSearchInput] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-  const [creating, setCreating] = React.useState(false);
   const [approving, setApproving] = React.useState(false);
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [selectedReturn, setSelectedReturn] = React.useState<PurchaseReturnRow | null>(null);
@@ -229,19 +230,6 @@ export default function PurchaseReturnsPage() {
 
   const refreshCurrentPage = () => void loadPage(pageOffset);
 
-  const handleCreateReturn = async () => {
-    setCreating(true);
-    try {
-      await createPurchaseReturnApi();
-      await loadPage(0);
-      toast.success("Purchase return created.");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const handleExport = () => {
     exportPurchaseReturnsApi((message) => {
       downloadCsv(
@@ -265,10 +253,14 @@ export default function PurchaseReturnsPage() {
     setApproving(true);
     try {
       for (const returnId of selectedIds) {
-        await approvePurchaseReturnApi(returnId);
+        const row = rows.find((item) => item.id === returnId);
+        if (row?.status !== "DRAFT") {
+          throw new Error(`${row?.number ?? returnId} is not a draft and cannot be submitted.`);
+        }
+        await submitPurchaseReturnApi(returnId);
       }
       await refreshCurrentPage();
-      toast.success(`Approved ${selectedIds.length} return(s).`);
+      toast.success(`Submitted ${selectedIds.length} return(s) for approval.`);
       setSelectedIds([]);
     } catch (e) {
       toast.error((e as Error).message);
@@ -298,9 +290,11 @@ export default function PurchaseReturnsPage() {
         ]}
         showCommandHint
         actions={canWrite ? (
-          <Button disabled={creating} onClick={() => void handleCreateReturn()}>
-            <Icons.Plus className="mr-2 h-4 w-4" />
-            Create Return
+          <Button asChild data-tutorial-hint="purchase-return-start">
+            <Link href="/purchasing/grn">
+              <Icons.Undo2 className="mr-2 h-4 w-4" />
+              Start from GRN
+            </Link>
           </Button>
         ) : undefined}
       />
@@ -336,7 +330,7 @@ export default function PurchaseReturnsPage() {
                     <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
                     {canWrite && (
                       <Button variant="outline" size="sm" disabled={approving} onClick={() => void handleBulkApprove()}>
-                        Approve
+                        Submit for approval
                       </Button>
                     )}
                     <Button variant="outline" size="sm" onClick={handleExport}>
@@ -432,17 +426,32 @@ export default function PurchaseReturnsPage() {
                 <StatusBadge status={selectedReturn.status} />
               </p>
               <div className="pt-4">
-                {canWrite && (
+                {canWrite && selectedReturn.status === "DRAFT" && (
                   <Button
                     size="sm"
                     onClick={async () => {
-                      await approvePurchaseReturnApi(selectedReturn.id);
+                      await submitPurchaseReturnApi(selectedReturn.id);
                       await refreshCurrentPage();
                       setDetailOpen(false);
-                      toast.success("Return approved.");
+                      toast.success("Return submitted for approval.");
                     }}
+                    data-tutorial-hint="purchase-return-submit"
                   >
-                    Approve return
+                    Submit for approval
+                  </Button>
+                )}
+                {canPost && selectedReturn.status === "APPROVED" && (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await postPurchaseReturnApi(selectedReturn.id);
+                      await refreshCurrentPage();
+                      setDetailOpen(false);
+                      toast.success("Return posted. Stock and supplier payable were reduced.");
+                    }}
+                    data-tutorial-hint="purchase-return-post"
+                  >
+                    Post return
                   </Button>
                 )}
               </div>

@@ -72,6 +72,8 @@ export type PartyRow = {
   channel?: PartyChannel;
   sfaSegment?: SfaSegment;
   parentPartyId?: string;
+  /** Multichain: PARENT invoices the chain, BRANCH invoices this outlet. */
+  multichainBillTo?: "PARENT" | "BRANCH";
   supplierType?: SupplierType;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
   contactPersonFirstName?: string;
@@ -126,5 +128,7 @@ export type WarehouseRow = {
   code: string;
   name: string;
   branch?: string;
+  purpose?: "STORAGE" | "RECEIVING" | "QUARANTINE" | "DISPATCH" | "TRANSIT";
+  capabilities: string[];
   status: string;
 };

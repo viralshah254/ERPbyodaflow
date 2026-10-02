@@ -42,6 +42,7 @@ export type WarehousePickPackRow = {
     documentQuantity?: number;
     unitsPer?: number;
     baseUom?: string;
+    lotSplits?: Array<{ lotId: string; lotNumber: string; quantity: number; expiryDate?: string }>;
     /** Product barcode used by pack scanning. */
     barcode?: string;
     /** Packaging-row barcodes; a scan of one of these adds one pack. */

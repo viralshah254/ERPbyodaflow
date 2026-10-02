@@ -5,6 +5,8 @@ export type AutomationWorkflowRow = {
   id: string;
   name: string;
   enabled: boolean;
+  version: number;
+  trigger?: { type: "manual" | "schedule" | "event"; eventType?: string };
   createdAt?: string;
 };
 
@@ -12,6 +14,8 @@ type BackendWorkflow = {
   id: string;
   name: string;
   enabled?: boolean;
+  version?: number;
+  trigger?: AutomationWorkflowRow["trigger"];
   createdAt?: string;
 };
 
@@ -22,6 +26,8 @@ export async function fetchAutomationWorkflowsApi(): Promise<AutomationWorkflowR
     id: item.id,
     name: item.name,
     enabled: item.enabled ?? true,
+    version: item.version ?? 1,
+    trigger: item.trigger,
     createdAt: item.createdAt,
   }));
 }
@@ -30,7 +36,7 @@ export async function createAutomationWorkflowApi(name: string): Promise<{ id: s
   requireLiveApi("Create automation workflow");
   return apiRequest<{ id: string }>("/api/automation/workflows", {
     method: "POST",
-    body: { name, enabled: true },
+    body: { name, enabled: true, trigger: { type: "manual" }, conditions: [], actions: [] },
   });
 }
 

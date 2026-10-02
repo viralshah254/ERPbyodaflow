@@ -89,7 +89,7 @@ export default function ApprovalsWorkflowsPage() {
                   <div>
                     <p className="font-medium">{row.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {row.createdAt ? `Created ${row.createdAt.slice(0, 10)}` : "Live workflow"}
+                      {row.createdAt ? `Created ${row.createdAt.slice(0, 10)} · v${row.version}` : `Live workflow · v${row.version}`}
                     </p>
                   </div>
                   <Badge variant={row.enabled ? "default" : "secondary"}>

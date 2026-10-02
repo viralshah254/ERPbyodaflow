@@ -27,10 +27,13 @@ import { toast } from "sonner";
 import {
   CUSTOMER_DIRECTORY_TABS,
   channelLabel,
+  customerDirectoryTabsForOrg,
   sfaSegmentLabel,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
-import { fetchPartiesPageApi, fetchPartyCreditSummaryApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { fetchCustomerDirectorySummaryApi, fetchPartiesPageApi, fetchPartyCreditSummaryApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { OdaflowMultichainMappingBoard } from "@/components/integrations/OdaflowMultichainMappingBoard";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { paymentTermDisplayName } from "@/lib/fmcg/payment-class";
 import type { PartyRow } from "@/lib/types/masters";
@@ -48,6 +51,14 @@ import {
 import { CustomerLink } from "@/components/customers/CustomerLink";
 
 type TabId = (typeof CUSTOMER_DIRECTORY_TABS)[number]["id"];
+
+const DIRECTORY_COUNT_KEY: Record<TabId, "all" | "multichain" | "generalTrade" | "distributors" | "vanSales"> = {
+  all: "all",
+  "modern-trade": "multichain",
+  "general-trade": "generalTrade",
+  distributors: "distributors",
+  "van-sales": "vanSales",
+};
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -90,11 +101,15 @@ export function CustomerDirectoryPanel({
   approvalContent,
 }: CustomerDirectoryPanelProps) {
   const router = useRouter();
+  const canWrite = useCanWriteSales();
+  const orgId = useAuthStore((s) => s.org?.orgId);
+  const directoryTabs = customerDirectoryTabsForOrg(orgId);
   const user = useAuthStore((s) => s.user);
   const canReadAr = can(user, "finance.ar.read");
   const { settings } = useFinancialSettings();
   const currency = settings.baseCurrency?.trim()?.toUpperCase() || "KES";
-  const [internalTab, setInternalTab] = React.useState<TabId>("modern-trade");
+  const [internalTab, setInternalTab] = React.useState<TabId>("all");
+  const [directoryCounts, setDirectoryCounts] = React.useState<Awaited<ReturnType<typeof fetchCustomerDirectorySummaryApi>> | null>(null);
   const activeTab = activeTabProp ?? internalTab;
   const setActiveTab = React.useCallback(
     (tab: TabId) => {
@@ -145,10 +160,14 @@ export function CustomerDirectoryPanel({
     }
     setLoading(true);
     try {
+      if (segmentTabs) {
+        void fetchCustomerDirectorySummaryApi()
+          .then(setDirectoryCounts)
+          .catch(() => setDirectoryCounts(null));
+      }
       const page = await fetchPartiesPageApi({
-        role: "customer",
-        sfaSegment: segmentTabs && tabConfig ? tabConfig.sfaSegment : undefined,
-        channel: segmentTabs && tabConfig && "channel" in tabConfig ? tabConfig.channel : undefined,
+        role: segmentTabs ? undefined : "customer",
+        directory: segmentTabs && tabConfig && "directory" in tabConfig ? tabConfig.directory : undefined,
         search: search.trim() || undefined,
         paymentClass: paymentClass === "all" ? undefined : paymentClass,
         status: "ACTIVE",
@@ -191,7 +210,8 @@ export function CustomerDirectoryPanel({
   }, [activeTab]);
 
   const requestAdd = (kindId?: CustomerKindId) => {
-    onAddCustomer?.(kindId ?? (segmentTabs ? (activeTab as CustomerKindId) : undefined));
+    const fromTab = segmentTabs && activeTab !== "all" ? (activeTab as CustomerKindId) : undefined;
+    onAddCustomer?.(kindId ?? fromTab);
   };
 
   const openBranches = (party: PartyRow) => {
@@ -258,7 +278,7 @@ export function CustomerDirectoryPanel({
       ) : parties.length === 0 ? (
         <EmptyState
           icon="Users"
-          title="No modern trade yet"
+          title="No multichain customers yet"
           description="Add a supermarket (chain HQ), then open Branches to add outlets as full customers."
           action={{
             label: "Add supermarket",
@@ -364,11 +384,11 @@ export function CustomerDirectoryPanel({
         ) : parties.length === 0 ? (
           <EmptyState
             icon="Users"
-            title={tabLabel ? `No ${tabLabel.toLowerCase()} yet` : "No customers yet"}
+            title={tabId === "all" || !tabLabel ? "No customers yet" : `No ${tabLabel.toLowerCase()} yet`}
             description="Add a customer to start selling and invoicing."
             action={{
-              label: tabLabel ? `Add ${tabLabel.toLowerCase()}` : "Add customer",
-              onClick: () => requestAdd(tabId as CustomerKindId | undefined),
+              label: !tabLabel || tabId === "all" ? "Add customer" : `Add ${tabLabel.toLowerCase()}`,
+              onClick: () => requestAdd(tabId && tabId !== "all" ? (tabId as CustomerKindId) : undefined),
             }}
           />
         ) : (
@@ -406,7 +426,7 @@ export function CustomerDirectoryPanel({
                           PIN {party.taxId}
                         </Badge>
                       ) : null}
-                      {party.sfaSegment && party.sfaSegment !== thisTab?.sfaSegment ? (
+                      {party.sfaSegment && (!thisTab || !("sfaSegment" in thisTab) || party.sfaSegment !== thisTab.sfaSegment) ? (
                         <Badge variant="secondary">{sfaSegmentLabel(party.sfaSegment)}</Badge>
                       ) : null}
                       {party.channel &&
@@ -542,19 +562,23 @@ export function CustomerDirectoryPanel({
           }}
         >
           <TabsList className="flex h-auto flex-wrap gap-1">
-            {CUSTOMER_DIRECTORY_TABS.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
+            {directoryTabs.map((tab) => {
+              const count = directoryCounts?.[DIRECTORY_COUNT_KEY[tab.id]];
+              return (
+                <TabsTrigger key={tab.id} value={tab.id}>
+                  {tab.label}
+                  <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {count ?? 0}
+                  </span>
+                </TabsTrigger>
+              );
+            })}
             {showApprovalTab ? (
               <TabsTrigger value="approvals">
                 Pending approval
-                {approvalPendingCount > 0 ? (
-                  <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-                    {approvalPendingCount}
-                  </span>
-                ) : null}
+                <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                  {approvalPendingCount}
+                </span>
               </TabsTrigger>
             ) : null}
           </TabsList>
@@ -563,8 +587,15 @@ export function CustomerDirectoryPanel({
           ) : (
             <>
               <div className="mt-4">{searchRow}</div>
-              {CUSTOMER_DIRECTORY_TABS.map((tab) => (
-                <TabsContent key={tab.id} value={tab.id} className="mt-4">
+              {directoryTabs.map((tab) => (
+                <TabsContent key={tab.id} value={tab.id} className="mt-4 space-y-4">
+                  {tab.id === "modern-trade" ? (
+                    <OdaflowMultichainMappingBoard
+                      canSave={canWrite}
+                      reviewOnly
+                      onChanged={() => void loadParties()}
+                    />
+                  ) : null}
                   {renderPartyList(tab.id, tab.label)}
                 </TabsContent>
               ))}

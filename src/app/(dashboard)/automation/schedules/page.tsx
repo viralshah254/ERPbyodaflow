@@ -39,7 +39,7 @@ export default function ScheduledJobsPage() {
   const [editing, setEditing] = React.useState<AutomationScheduleRow | null>(null);
   const [runsOpen, setRunsOpen] = React.useState(false);
   const [runs, setRuns] = React.useState<AutomationScheduleRunRow[]>([]);
-  const [form, setForm] = React.useState({ name: "", cron: "0 7 * * *", taskType: "overdue-alert-sync", enabled: true });
+  const [form, setForm] = React.useState({ name: "", cron: "0 7 * * *", taskType: "overdue-alert-sync", maxAttempts: 3, enabled: true });
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -64,7 +64,7 @@ export default function ScheduledJobsPage() {
 
   const resetForm = React.useCallback(() => {
     setEditing(null);
-    setForm({ name: "", cron: "0 7 * * *", taskType: "overdue-alert-sync", enabled: true });
+    setForm({ name: "", cron: "0 7 * * *", taskType: "overdue-alert-sync", maxAttempts: 3, enabled: true });
   }, []);
 
   const openCreate = () => {
@@ -78,6 +78,7 @@ export default function ScheduledJobsPage() {
       name: row.name,
       cron: row.cron ?? "",
       taskType: row.taskType ?? "generic",
+      maxAttempts: row.maxAttempts,
       enabled: row.enabled,
     });
     setDrawerOpen(true);
@@ -98,6 +99,7 @@ export default function ScheduledJobsPage() {
       { id: "name", header: "Name", accessor: (row: AutomationScheduleRow) => <span className="font-medium">{row.name}</span> },
       { id: "cron", header: "Cron", accessor: (row: AutomationScheduleRow) => row.cron || "—" },
       { id: "taskType", header: "Task type", accessor: (row: AutomationScheduleRow) => row.taskType || "generic" },
+      { id: "version", header: "Version", accessor: (row: AutomationScheduleRow) => `v${row.version}` },
       {
         id: "status",
         header: "Status",
@@ -119,6 +121,7 @@ export default function ScheduledJobsPage() {
             <Button
               size="sm"
               variant="outline"
+              disabled={!row.enabled}
               onClick={async () => {
                 try {
                   const result = await runAutomationScheduleNowApi(row.id);
@@ -219,10 +222,25 @@ export default function ScheduledJobsPage() {
             </div>
             <div className="space-y-2">
               <Label>Task type</Label>
-              <Input
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.taskType}
                 onChange={(event) => setForm((prev) => ({ ...prev, taskType: event.target.value }))}
-                placeholder="overdue-alert-sync | generic"
+              >
+                <option value="overdue-alert-sync">Overdue alert sync</option>
+                <option value="anomaly-scan">Anomaly scan</option>
+                <option value="ar-dunning-run">AR dunning run</option>
+                <option value="pricing.daily-engine">Daily pricing engine</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>Maximum attempts</Label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={form.maxAttempts}
+                onChange={(event) => setForm((prev) => ({ ...prev, maxAttempts: Number(event.target.value) }))}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -250,6 +268,7 @@ export default function ScheduledJobsPage() {
                         name: form.name.trim(),
                         cron: form.cron.trim(),
                         taskType: form.taskType.trim(),
+                        maxAttempts: form.maxAttempts,
                         enabled: form.enabled,
                       });
                       toast.success("Schedule updated.");
@@ -258,6 +277,7 @@ export default function ScheduledJobsPage() {
                         name: form.name.trim(),
                         cron: form.cron.trim(),
                         taskType: form.taskType.trim(),
+                        maxAttempts: form.maxAttempts,
                         enabled: form.enabled,
                       });
                       toast.success("Schedule created.");

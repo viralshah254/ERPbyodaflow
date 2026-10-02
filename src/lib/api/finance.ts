@@ -210,6 +210,33 @@ export async function fetchCloseChecklistApi(periodId?: string): Promise<CloseCh
   return apiRequest<CloseChecklist>("/api/finance/close-checklist", { params });
 }
 
+export type InvoiceCogsException = {
+  id: string;
+  number: string;
+  date: string;
+  status: "PENDING" | "FAILED";
+  lastError?: string;
+  attemptCount: number;
+  nextAttemptAt?: string;
+  lastAttemptAt?: string;
+  processing: boolean;
+};
+
+export async function fetchInvoiceCogsExceptionsApi(periodId?: string): Promise<InvoiceCogsException[]> {
+  requireLiveApi("Invoice COGS recovery");
+  const params = new URLSearchParams();
+  if (periodId) params.set("periodId", periodId);
+  const payload = await apiRequest<{ items: InvoiceCogsException[] }>("/api/finance/invoice-cogs", { params });
+  return payload.items ?? [];
+}
+
+export async function retryInvoiceCogsApi(invoiceId: string): Promise<void> {
+  requireLiveApi("Invoice COGS retry");
+  await apiRequest(`/api/finance/invoice-cogs/${encodeURIComponent(invoiceId)}/retry`, {
+    method: "POST",
+  });
+}
+
 export async function closeFinancePeriodApi(periodId: string): Promise<void> {
   requireLiveApi("Close finance period");
   await apiRequest("/api/finance/period-close", {

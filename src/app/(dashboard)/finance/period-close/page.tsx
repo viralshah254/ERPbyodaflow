@@ -11,9 +11,12 @@ import {
   closeFinancePeriodApi,
   fetchCloseChecklistApi,
   fetchFinancePeriodsApi,
+  fetchInvoiceCogsExceptionsApi,
   formatFinancePeriodLoadError,
   reopenFinancePeriodApi,
+  retryInvoiceCogsApi,
   type CloseChecklistItem,
+  type InvoiceCogsException,
 } from "@/lib/api/finance";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -68,6 +71,8 @@ export default function PeriodClosePage() {
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number; status: "OPEN" | "CLOSED" }>>([]);
   const [periodsLoadFailed, setPeriodsLoadFailed] = React.useState(false);
   const [checklist, setChecklist] = React.useState<CloseChecklistItem[]>([]);
+  const [cogsExceptions, setCogsExceptions] = React.useState<InvoiceCogsException[]>([]);
+  const [retryingCogsId, setRetryingCogsId] = React.useState<string | null>(null);
   const [checklistLoading, setChecklistLoading] = React.useState(false);
 
   const openPeriodRow = React.useMemo(() => periods.find((p) => p.status === "OPEN"), [periods]);
@@ -81,29 +86,23 @@ export default function PeriodClosePage() {
   const refreshAll = React.useCallback(async () => {
     setChecklistLoading(true);
     try {
-      const [periodRes, checklistRes] = await Promise.allSettled([
-        fetchFinancePeriodsApi(),
-        fetchCloseChecklistApi(),
-      ]);
-
-      if (periodRes.status === "fulfilled") {
-        setPeriods(periodRes.value);
+      try {
+        const loadedPeriods = await fetchFinancePeriodsApi();
+        setPeriods(loadedPeriods);
         setPeriodsLoadFailed(false);
-      } else {
+        const selectedOpenPeriod = loadedPeriods.find((period) => period.status === "OPEN");
+        const [checklistRes, cogsItems] = await Promise.all([
+          fetchCloseChecklistApi(selectedOpenPeriod?.id),
+          fetchInvoiceCogsExceptionsApi(selectedOpenPeriod?.id),
+        ]);
+        setChecklist(checklistRes.items);
+        setCogsExceptions(cogsItems);
+      } catch (error) {
         setPeriods([]);
-        setPeriodsLoadFailed(true);
-        toast.error(formatFinancePeriodLoadError(periodRes.reason));
-      }
-
-      if (checklistRes.status === "fulfilled") {
-        setChecklist(checklistRes.value.items);
-      } else {
         setChecklist([]);
-        toast.error(
-          checklistRes.reason instanceof Error
-            ? checklistRes.reason.message
-            : "Failed to load period close checklist."
-        );
+        setCogsExceptions([]);
+        setPeriodsLoadFailed(true);
+        toast.error(formatFinancePeriodLoadError(error));
       }
     } finally {
       setChecklistLoading(false);
@@ -165,7 +164,7 @@ export default function PeriodClosePage() {
         </div>
 
         {/* Live checklist */}
-        <Card>
+        <Card data-tutorial-hint="period-close-checklist">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Pre-Close Checklist</CardTitle>
             <Button variant="ghost" size="sm" onClick={() => void refreshAll()} disabled={checklistLoading}>
@@ -194,6 +193,63 @@ export default function PeriodClosePage() {
           </CardContent>
         </Card>
 
+        <Card id="invoice-cogs">
+          <CardHeader>
+            <CardTitle>Invoice COGS Recovery</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {cogsExceptions.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-green-700">
+                <Icons.CheckCircle2 className="h-4 w-4" />
+                No pending or failed invoice COGS for this period.
+              </div>
+            ) : (
+              cogsExceptions.map((item) => (
+                <div key={item.id} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">{item.number}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(item.date).toLocaleDateString()} · Attempt {item.attemptCount}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={item.status === "FAILED" ? "destructive" : "outline"}>
+                        {item.processing ? "PROCESSING" : item.status}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={item.processing || retryingCogsId === item.id}
+                        onClick={async () => {
+                          setRetryingCogsId(item.id);
+                          try {
+                            await retryInvoiceCogsApi(item.id);
+                            await refreshAll();
+                            toast.success(`COGS retry queued for ${item.number}.`);
+                          } catch (error) {
+                            toast.error((error as Error).message);
+                          } finally {
+                            setRetryingCogsId(null);
+                          }
+                        }}
+                      >
+                        <Icons.RotateCcw className="mr-2 h-3.5 w-3.5" />
+                        Retry
+                      </Button>
+                    </div>
+                  </div>
+                  {item.lastError ? (
+                    <p className="text-xs text-destructive break-words">{item.lastError}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Queued for automatic recovery.</p>
+                  )}
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
         {/* Close / Reopen actions */}
         <Card>
           <CardHeader>
@@ -203,6 +259,7 @@ export default function PeriodClosePage() {
             <Button
               className="w-full"
               size="lg"
+              data-tutorial-hint="period-close-action"
               disabled={loading !== null || hasBlockers || !hasOpenPeriod}
               onClick={async () => {
                 setLoading("close");

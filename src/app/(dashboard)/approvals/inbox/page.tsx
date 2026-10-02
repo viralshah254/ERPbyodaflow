@@ -22,6 +22,7 @@ function ApprovalsInboxContent() {
   const [items, setItems] = React.useState<ApprovalItem[]>([]);
   const [filter, setFilter] = React.useState<"all" | "credit-breach">("all");
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const requestedApprovalId = searchParams.get("approvalId");
 
   const openSheet = (item: ApprovalItem) => {
@@ -31,10 +32,13 @@ function ApprovalsInboxContent() {
 
   const refreshItems = React.useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       setItems(await fetchApprovalInbox());
     } catch (e) {
-      toast.error((e as Error).message);
+      const message = (e as Error).message || "Could not load approvals.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -100,7 +104,7 @@ function ApprovalsInboxContent() {
         showCommandHint
       />
       <div className="p-6">
-        <Card>
+        <Card data-tutorial-hint="approval-review-queue">
           <CardHeader>
             <CardTitle>Pending</CardTitle>
             <div className="flex gap-2 pt-2">
@@ -125,6 +129,13 @@ function ApprovalsInboxContent() {
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Loading approvals...
               </p>
+            ) : loadError ? (
+              <div className="py-8 text-center" role="alert">
+                <p className="text-sm text-destructive">{loadError}</p>
+                <Button className="mt-4" variant="outline" onClick={() => void refreshItems()}>
+                  Retry
+                </Button>
+              </div>
             ) : filteredItems.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 {filter === "credit-breach"
@@ -136,8 +147,18 @@ function ApprovalsInboxContent() {
                 {filteredItems.map((a) => (
                   <div
                     key={a.id}
+                    data-tutorial-hint="approval-review-item"
                     className="flex items-center justify-between gap-4 rounded-lg border p-4 hover:bg-muted/50 cursor-pointer transition-colors"
                     onClick={() => openSheet(a)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openSheet(a);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Review approval ${a.documentNumber}`}
                   >
                     <div className="flex items-center gap-3">
                       <Icons.FileText className="h-5 w-5 text-muted-foreground shrink-0" />

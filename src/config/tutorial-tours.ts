@@ -252,6 +252,8 @@ export const TUTORIAL_TOURS: TourDef[] = [
     title: "Pick & Pack tour",
     steps: [
       { element: "h1", title: "Pick & Pack", description: "Pick tasks for orders or shipments. Complete picks to confirm items are picked and packed." },
+      { element: "[data-tutorial-hint=pick-pack-stock]", title: "Verify available stock", description: "Pick from the assigned warehouse and record shortages instead of silently overriding stock." },
+      { element: "[data-tutorial-hint=pick-pack-pack]", title: "Pack and hand off", description: "Confirm units, package count, lot traceability, and vehicle before creating dispatch." },
     ],
   },
   {
@@ -368,6 +370,9 @@ export const TUTORIAL_TOURS: TourDef[] = [
     title: "Work Orders tour",
     steps: [
       { element: "h1", title: "Work Orders", description: "Release production. Consume components and produce finished goods; post to update stock." },
+      { element: "[data-tutorial-hint=work-order-lifecycle]", title: "Lifecycle", description: "Release, start, and complete in sequence. Completion performs the inventory posting." },
+      { element: "[data-tutorial-hint=work-order-measurement]", title: "Measurement", description: "The configured measurement mode controls whether weight and a device reading are mandatory." },
+      { element: "[data-tutorial-hint=work-order-reconciliation]", title: "Reconciliation", description: "Review immutable WIP, mass, count, and cost variance after completion." },
     ],
   },
   {
@@ -399,7 +404,20 @@ export const TUTORIAL_TOURS: TourDef[] = [
     route: "/settings/users-roles",
     title: "Users & Roles tour",
     steps: [
-      { element: "h1", title: "Users & Roles", description: "Invite users, assign roles, and enable or disable access. Enable Copilot per user here." },
+      { element: "h1", title: "Users & Roles", description: "Assign least-privilege roles and verify the effective mobile workspace." },
+      { element: "[data-tutorial-hint=users-roles-tabs]", title: "Users and roles", description: "Users receive one or more roles; roles contain live backend permission keys." },
+      { element: "[data-tutorial-hint=roles-permissions]", title: "Role permissions", description: "A role edit affects every assigned user. Another administrator must edit a role assigned to you." },
+      { element: "[data-tutorial-hint=roles-provision]", title: "Standard catalogue", description: "Provision template-aware standard roles before creating custom duplicates." },
+    ],
+  },
+  {
+    tourId: "settings-approval-policy-tour",
+    route: "/settings/approval-policy",
+    title: "Approval policy tour",
+    steps: [
+      { element: "h1", title: "Approval policy", description: "Configure versioned maker-checker routing by document, amount, branch, and designated approver." },
+      { element: "[data-tutorial-hint=approval-policy-rules]", title: "Matching rules", description: "The highest matching amount threshold applies. Keep maker-checker enabled when submitter and approver must differ." },
+      { element: "[data-tutorial-hint=approval-policy-save]", title: "Save and test", description: "Save a new version, then submit a draft and verify it reaches the expected Inbox." },
     ],
   },
   {
@@ -469,6 +487,8 @@ export const TUTORIAL_TOURS: TourDef[] = [
     steps: [
       { element: "h1", title: "Receipts", description: "Goods receipt documents. Each receipt is tied to a purchase order." },
       { element: "[data-tour-step=create-button]", title: "Create GRN", description: "Create a new GRN from the Create button, linked to a PO." },
+      { element: "[data-tutorial-hint=grn-lot-qc-measurement]", title: "Lot, QC, and measurement", description: "Capture lot and received measurement before post; release quarantined lots only after QC." },
+      { element: "[data-tutorial-hint=grn-confirm-processing]", title: "Confirm processing", description: "Confirm final measured output once; this locks weights and posts the stock adjustment." },
     ],
   },
   {
@@ -496,6 +516,50 @@ export const TUTORIAL_TOURS: TourDef[] = [
     ],
   },
   {
+    tourId: "finance-bank-recon-tour",
+    route: "/finance/bank-recon",
+    title: "Bank reconciliation tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Bank reconciliation",
+        description: "Import statement lines, review suggestions, and confirm only one payment or receipt per bank line.",
+      },
+      {
+        element: "[data-tutorial-hint=bank-match-workspace]",
+        title: "Review before matching",
+        description: "Ambiguous equal amounts require a manual choice. Fees and adjustments also require a ledger account.",
+      },
+      {
+        element: "[data-tutorial-hint=bank-close]",
+        title: "Close only when tied",
+        description: "The statement closing balance must agree to the reconciled GL balance before close.",
+      },
+    ],
+  },
+  {
+    tourId: "finance-period-close-tour",
+    route: "/finance/period-close",
+    title: "Period close tour",
+    steps: [
+      {
+        element: "h1",
+        title: "Period close",
+        description: "Resolve every red checklist item before locking the selected fiscal period.",
+      },
+      {
+        element: "[data-tutorial-hint=period-close-checklist]",
+        title: "Close checklist",
+        description: "Unposted documents, payroll, and unmatched bank lines block close.",
+      },
+      {
+        element: "[data-tutorial-hint=period-close-action]",
+        title: "Close period",
+        description: "After close, posting in this period is blocked. Reopen only under your correction policy.",
+      },
+    ],
+  },
+  {
     tourId: "treasury-overview-tour",
     route: "/treasury/overview",
     title: "Treasury Overview tour",
@@ -509,6 +573,8 @@ export const TUTORIAL_TOURS: TourDef[] = [
     title: "Approvals Inbox tour",
     steps: [
       { element: "h1", title: "Approvals Inbox", description: "Approval requests assigned to you. Approve or reject with optional comments." },
+      { element: "[data-tutorial-hint=approval-review-queue]", title: "Review queue", description: "Open the source document and supporting evidence before deciding." },
+      { element: "[data-tutorial-hint=approval-review-item]", title: "Decision", description: "Approval authorises the next workflow step; it does not post the source document." },
     ],
   },
   {
@@ -525,6 +591,9 @@ export const TUTORIAL_TOURS: TourDef[] = [
     title: "Rules Engine tour",
     steps: [
       { element: "h1", title: "Rules Engine", description: "Define triggers, conditions, and actions. When a trigger fires, the action runs." },
+      { element: "[data-tutorial-hint=automation-create-rule]", title: "Create a rule", description: "Start with one precise event, narrow conditions, and a clearly owned action." },
+      { element: "[data-tutorial-hint=automation-rule-builder]", title: "Control risk", description: "Require approval for automated actions that create financial, stock, or access risk." },
+      { element: "[data-tutorial-hint=automation-rules-list]", title: "Monitor versions", description: "Review status and version before enabling; disabling does not reverse completed runs." },
     ],
   },
   {
@@ -783,7 +852,22 @@ export const TUTORIAL_TOURS: TourDef[] = [
       {
         element: "h1",
         title: "Purchase returns",
-        description: "Returns to suppliers and debit notes: reduce payables and adjust inventory.",
+        description: "Physical returns reduce inventory and the supplier payable after approval and posting.",
+      },
+      {
+        element: "[data-tutorial-hint=purchase-return-start]",
+        title: "Start from the receipt",
+        description: "Open the source GRN so supplier, warehouse, products, and received quantities remain traceable.",
+      },
+      {
+        element: "[data-tutorial-hint=purchase-return-submit]",
+        title: "Submit for approval",
+        description: "Verify the draft, then submit it. Approval happens in the central Approvals Inbox.",
+      },
+      {
+        element: "[data-tutorial-hint=purchase-return-post]",
+        title: "Post the physical return",
+        description: "Post only after approval and when the goods have left your control.",
       },
     ],
   },

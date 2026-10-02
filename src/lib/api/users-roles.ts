@@ -11,6 +11,7 @@ export interface RoleDetailRow extends RoleRow {
   permissions: string[];
   templateKey?: string | null;
   mobileShell?: MobilePersona | null;
+  grantable?: boolean;
 }
 
 type BackendUser = {
@@ -53,6 +54,7 @@ type BackendRole = {
   permissionCount?: number;
   templateKey?: string | null;
   mobileShell?: string | null;
+  grantable?: boolean;
 };
 
 function mapUser(user: BackendUser): UserRow {
@@ -89,6 +91,7 @@ function mapRole(role: BackendRole): RoleDetailRow {
     permissionCount: role.permissionCount ?? role.permissions?.length ?? 0,
     templateKey: role.templateKey ?? null,
     mobileShell: (role.mobileShell ?? null) as MobilePersona | null,
+    grantable: role.grantable !== false,
   };
 }
 

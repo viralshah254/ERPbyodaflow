@@ -37,6 +37,7 @@ import {
   type MaterialAvailabilityLine,
 } from "@/lib/api/manufacturing";
 import { fetchGRNs } from "@/lib/api/grn";
+import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
 import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -81,6 +82,10 @@ export default function WorkOrdersPage() {
   const [productId, setProductId] = React.useState("");
   const [selectedProductOption, setSelectedProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [routingId, setRoutingId] = React.useState("");
+  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; code?: string; name: string }>>([]);
+  const [inputWarehouseId, setInputWarehouseId] = React.useState("");
+  const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
+  const [measurementMode, setMeasurementMode] = React.useState<ManufacturingWorkOrder["measurementMode"]>("COUNT_ONLY");
   const [quantity, setQuantity] = React.useState("1");
   const [dueDate, setDueDate] = React.useState("");
   const [grnId, setGrnId] = React.useState("");
@@ -170,10 +175,12 @@ export default function WorkOrdersPage() {
     void Promise.all([
       fetchManufacturingBoms({ includeItems: true }),
       fetchManufacturingRoutes({ includeOperations: true }),
+      fetchWarehousesApi(),
     ])
-      .then(([nextBoms, nextRoutes]) => {
+      .then(([nextBoms, nextRoutes, nextWarehouses]) => {
         setBoms(nextBoms);
         setRoutes(nextRoutes);
+        setWarehouses(nextWarehouses.filter((warehouse) => warehouse.status !== "INACTIVE"));
       })
       .catch(() => {
         toast.error("Failed to load BOMs and routing for the form.");
@@ -183,14 +190,14 @@ export default function WorkOrdersPage() {
 
   React.useEffect(() => {
     if (availDebounce.current) clearTimeout(availDebounce.current);
-    if (!bomId || !Number(quantity)) {
+    if (!bomId || !Number(quantity) || !inputWarehouseId) {
       setAvailLines([]);
       return;
     }
     availDebounce.current = setTimeout(async () => {
       setAvailLoading(true);
       try {
-        const result = await checkWorkOrderAvailability(bomId, Number(quantity));
+        const result = await checkWorkOrderAvailability(bomId, Number(quantity), inputWarehouseId);
         setAvailLines(result.lines);
       } catch {
         setAvailLines([]);
@@ -201,7 +208,7 @@ export default function WorkOrdersPage() {
     return () => {
       if (availDebounce.current) clearTimeout(availDebounce.current);
     };
-  }, [bomId, quantity]);
+  }, [bomId, quantity, inputWarehouseId]);
 
   const hasShortfall = availLines.some((line) => line.shortfall > 0);
 
@@ -319,6 +326,9 @@ export default function WorkOrdersPage() {
     setBomId("");
     setProductId("");
     setRoutingId("");
+    setInputWarehouseId("");
+    setOutputWarehouseId("");
+    setMeasurementMode("COUNT_ONLY");
     setGrnId("");
     setQuantity("1");
     setDueDate("");
@@ -634,6 +644,48 @@ export default function WorkOrdersPage() {
               />
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Input store</Label>
+                <Select value={inputWarehouseId} onValueChange={setInputWarehouseId}>
+                  <SelectTrigger><SelectValue placeholder="Required input store" /></SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.code ? `${warehouse.code} — ` : ""}{warehouse.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Output store</Label>
+                <Select value={outputWarehouseId} onValueChange={setOutputWarehouseId}>
+                  <SelectTrigger><SelectValue placeholder="Required output store" /></SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.code ? `${warehouse.code} — ` : ""}{warehouse.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Production measurement</Label>
+              <Select value={measurementMode} onValueChange={(value) => setMeasurementMode(value as ManufacturingWorkOrder["measurementMode"])}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="COUNT_ONLY">Count only (no weighing)</SelectItem>
+                  <SelectItem value="MANUAL_SCALE">Manual scale</SelectItem>
+                  <SelectItem value="DEVICE_SCALE">Connected device scale</SelectItem>
+                  <SelectItem value="WEIGHBRIDGE">Weighbridge</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label>Due date</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
@@ -710,7 +762,7 @@ export default function WorkOrdersPage() {
               Cancel
             </Button>
             <Button
-              disabled={saving || sheetMetaLoading || (!productId && !grnId && !bomId)}
+              disabled={saving || sheetMetaLoading || (!productId && !grnId && !bomId) || !inputWarehouseId || !outputWarehouseId}
               onClick={async () => {
                 setSaving(true);
                 try {
@@ -719,6 +771,10 @@ export default function WorkOrdersPage() {
                     bomId: bomId || undefined,
                     routingId: routingId || undefined,
                     grnId: grnId || undefined,
+                    inputWarehouseId,
+                    outputWarehouseId,
+                    measurementMode,
+                    weighingRequired: measurementMode !== "COUNT_ONLY",
                     quantity: Number(quantity) || 0,
                     dueDate: dueDate || undefined,
                   });
