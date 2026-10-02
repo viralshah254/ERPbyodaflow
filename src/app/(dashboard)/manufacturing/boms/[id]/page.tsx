@@ -12,6 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AsyncSearchableSelect,
+  type AsyncSearchableSelectOption,
+} from "@/components/ui/async-searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   fetchManufacturingBom,
@@ -22,7 +26,7 @@ import {
   type ManufacturingBomItem,
   type ManufacturingRoute,
 } from "@/lib/api/manufacturing";
-import { listProducts } from "@/lib/data/products.repo";
+import { fetchProductsPageApi } from "@/lib/api/products";
 import { listUoms } from "@/lib/data/uom.repo";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
@@ -45,7 +49,6 @@ export default function BomDetailPage() {
   const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
-  const products = React.useMemo(() => listProducts(), []);
   const uoms = React.useMemo(() => listUoms().map((item) => item.code), []);
   const [bom, setBom] = React.useState<ManufacturingBom | null>(null);
   const [routes, setRoutes] = React.useState<ManufacturingRoute[]>([]);
@@ -328,7 +331,6 @@ export default function BomDetailPage() {
 
       <BomItemSheet
         open={sheetOpen}
-        products={products}
         uoms={uoms}
         initial={editingItem}
         saving={saving}
@@ -355,9 +357,16 @@ export default function BomDetailPage() {
   );
 }
 
+function componentProductOption(item: ManufacturingBomItem | null): AsyncSearchableSelectOption | null {
+  if (!item?.productId) return null;
+  const name = item.productName?.trim();
+  const sku = item.productSku?.trim();
+  const label = sku && name ? `${sku} — ${name}` : name || sku || "Selected product";
+  return { id: item.productId, label };
+}
+
 function BomItemSheet({
   open,
-  products,
   uoms,
   initial,
   saving,
@@ -365,14 +374,15 @@ function BomItemSheet({
   onSave,
 }: {
   open: boolean;
-  products: Array<{ id: string; sku: string; name: string }>;
   uoms: string[];
   initial: ManufacturingBomItem | null;
   saving: boolean;
   onClose: () => void;
   onSave: (item: Omit<ManufacturingBomItem, "id" | "productName" | "productSku">) => void;
 }) {
+  const [sheetPortalHost, setSheetPortalHost] = React.useState<HTMLElement | null>(null);
   const [productId, setProductId] = React.useState("");
+  const [productOption, setProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [quantity, setQuantity] = React.useState("1");
   const [uom, setUom] = React.useState("EA");
   const [isOptional, setIsOptional] = React.useState("no");
@@ -380,15 +390,29 @@ function BomItemSheet({
 
   React.useEffect(() => {
     setProductId(initial?.productId ?? "");
+    setProductOption(componentProductOption(initial));
     setQuantity(String(initial?.quantity ?? 1));
     setUom(initial?.uom ?? "EA");
     setIsOptional(initial?.isOptional ? "yes" : "no");
     setScrapFactor(initial?.scrapFactor != null ? String(initial.scrapFactor) : "");
   }, [initial, open]);
 
+  const loadProducts = React.useCallback(async (query: string) => {
+    const page = await fetchProductsPageApi({
+      search: query.trim() || undefined,
+      limit: 50,
+      includeStock: false,
+    });
+    return page.items.map((product) => ({
+      id: product.id,
+      label: product.sku ? `${product.sku} — ${product.name}` : product.name,
+      description: product.barcode?.trim() || undefined,
+    }));
+  }, []);
+
   return (
     <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
-      <SheetContent>
+      <SheetContent ref={setSheetPortalHost}>
         <SheetHeader>
           <SheetTitle>{initial ? "Edit component" : "Add component"}</SheetTitle>
           <SheetDescription>Update the live BOM component structure.</SheetDescription>
@@ -396,18 +420,20 @@ function BomItemSheet({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label>Product</Label>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select product" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((product) => (
-                  <SelectItem key={product.id} value={product.id}>
-                    {product.sku} - {product.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AsyncSearchableSelect
+              value={productId}
+              selectedOption={productOption}
+              onValueChange={setProductId}
+              onOptionSelect={setProductOption}
+              loadOptions={loadProducts}
+              placeholder="Select product"
+              searchPlaceholder="Search name, SKU, or barcode"
+              emptyMessage="No products match that search."
+              searchDebounceMs={250}
+              showSelectedDescription
+              portalContainer={sheetPortalHost}
+              recentStorageKey="manufacturing:bom-component-products"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
