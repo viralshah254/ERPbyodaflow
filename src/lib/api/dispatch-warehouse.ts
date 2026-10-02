@@ -39,6 +39,8 @@ export type OpenDriverReturnRow = {
   tripId?: string;
   tripLabel?: string;
   vehicleCode?: string;
+  vehicleName?: string;
+  vehicleRegistration?: string;
   dispatchedAt?: string;
   lines: DriverReturnLine[];
 };
