@@ -36,7 +36,20 @@ export type DispatchBatchRow = {
   status: string;
   stopCount: number;
   vehicleCode?: string;
+  vehicleName?: string;
+  vehicleRegistration?: string;
   deliveryNoteNumbers: string[];
+  deliveryNotes?: Array<{ id: string; number: string }>;
+  plannedAt?: string;
+};
+
+export type DispatchBatchPage = {
+  items: DispatchBatchRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  totalCount: number;
+  pageSizeOptions: number[];
 };
 
 /** Open outbound trips that already group one or more delivery notes. */
@@ -46,6 +59,33 @@ export async function fetchDispatchBatches(): Promise<DispatchBatchRow[]> {
     params: { status: "PLANNED,IN_TRANSIT" },
   });
   return res?.items ?? [];
+}
+
+/** One page of loads already on the road. Search is the vehicle; date is YYYY-MM-DD. */
+export async function fetchDispatchBatchPage(filters: {
+  search?: string;
+  date?: string;
+  limit: number;
+  offset: number;
+}): Promise<DispatchBatchPage> {
+  requireLiveApi("Dispatch batches");
+  const params: Record<string, string> = {
+    status: "PLANNED,IN_TRANSIT",
+    limit: String(filters.limit),
+    offset: String(filters.offset),
+  };
+  if (filters.search?.trim()) params.search = filters.search.trim();
+  if (filters.date) params.date = filters.date;
+  const page = await apiRequest<Partial<DispatchBatchPage>>("/api/distribution/dispatch-batches", { params });
+  const items = page.items ?? [];
+  return {
+    items,
+    limit: page.limit ?? filters.limit,
+    offset: page.offset ?? filters.offset,
+    hasMore: Boolean(page.hasMore),
+    totalCount: typeof page.totalCount === "number" ? page.totalCount : items.length,
+    pageSizeOptions: page.pageSizeOptions?.length ? page.pageSizeOptions : [10, 15, 20, 30],
+  };
 }
 
 export type FuelEventRow = {

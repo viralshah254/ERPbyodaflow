@@ -42,7 +42,7 @@ import {
   isRoundFishMixLine,
   sizeProductsForBreakdown,
 } from "@/lib/warehouse/pick-pack-round-fish";
-import { createScannerBuffer, formatPackQty, matchPackScan, pickedPiecesByLine, pushScannerKey, suggestedCartonsCount } from "@/lib/warehouse/pack-scan";
+import { createScannerBuffer, formatPackQty, matchPackScan, pickedPiecesByLine, pushScannerKey, replacePlaceholderZero, suggestedCartonsCount } from "@/lib/warehouse/pack-scan";
 import {
   createDistributionVehicle,
   fetchDistributionVehicles,
@@ -1194,7 +1194,7 @@ export default function PickPackDetailPage() {
             <CardDescription>
               {fmcg ? (
                 <>
-                  Scan a packed box. You do not click the product first. The barcode finds that line and updates scanned and still to pack on its own. A read like <strong>65433213113 24</strong> adds 24 pieces. The same product scanned again adds to the same row.
+                  <strong>In this warehouse</strong> is stock you can pack from the fulfilment warehouse above. Scan a packed box. You do not click the product first. The barcode finds that line and updates scanned and still to pack on its own. A read like <strong>65433213113 24</strong> adds 24 pieces.
                 </>
               ) : (
                 <>
@@ -1242,11 +1242,15 @@ export default function PickPackDetailPage() {
                   <TableHead className="min-w-[12rem]">Product (substitute)</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>{fmcg ? "Ordered" : "Qty"}</TableHead>
-                  <TableHead className="text-right">Can pick</TableHead>
-                  <TableHead className="text-right">Avail. (MAIN)</TableHead>
-                  <TableHead className="text-right">Avail. (all sites)</TableHead>
-                  <TableHead className="text-right">Avail. at bin</TableHead>
-                  <TableHead>Suggested bin</TableHead>
+                  <TableHead className="text-right">{fmcg ? "In this warehouse" : "Can pick"}</TableHead>
+                  {fmcg ? null : (
+                    <>
+                      <TableHead className="text-right">Avail. (MAIN)</TableHead>
+                      <TableHead className="text-right">Avail. (all sites)</TableHead>
+                      <TableHead className="text-right">Avail. at bin</TableHead>
+                      <TableHead>Suggested bin</TableHead>
+                    </>
+                  )}
                   <TableHead>{fmcg ? "Scanned" : qtyColumnLabel}</TableHead>
                   {fmcg ? <TableHead>Still to pack</TableHead> : null}
                   {canConfirmPick && canWrite ? <TableHead className="w-10" aria-label="Remove line" /> : null}
@@ -1357,30 +1361,34 @@ export default function PickPackDetailPage() {
                           "—"
                         )}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums ${typeof pm === "number" && pm >= line.quantity ? "text-emerald-600/90" : ""}`}>
-                        {lineStock ? (
-                          <LineRunningAvailCell
-                            remaining={lineStock.remainingPrimaryForLine}
-                            thisLinePick={lineStock.thisLinePick}
-                            showDelta={showAvailPickDelta || (taskStatusUpper === "PENDING" && pickedForDelta > 0)}
-                          />
-                        ) : (
-                          <AvailWithPickDelta
-                            value={pm}
-                            pickedQty={pickedForDelta}
-                            showDelta={showAvailPickDelta || (taskStatusUpper === "PENDING" && pickedForDelta > 0)}
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {typeof ow === "number" ? ow : "—"}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right tabular-nums ${binShort ? "text-amber-600 font-medium" : ""}`}
-                      >
-                        {line.locationId != null && typeof atBin === "number" ? atBin : "—"}
-                      </TableCell>
-                      <TableCell>{line.suggestedBin ?? "—"}</TableCell>
+                      {fmcg ? null : (
+                        <>
+                          <TableCell className={`text-right tabular-nums ${typeof pm === "number" && pm >= line.quantity ? "text-emerald-600/90" : ""}`}>
+                            {lineStock ? (
+                              <LineRunningAvailCell
+                                remaining={lineStock.remainingPrimaryForLine}
+                                thisLinePick={lineStock.thisLinePick}
+                                showDelta={showAvailPickDelta || (taskStatusUpper === "PENDING" && pickedForDelta > 0)}
+                              />
+                            ) : (
+                              <AvailWithPickDelta
+                                value={pm}
+                                pickedQty={pickedForDelta}
+                                showDelta={showAvailPickDelta || (taskStatusUpper === "PENDING" && pickedForDelta > 0)}
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {typeof ow === "number" ? ow : "—"}
+                          </TableCell>
+                          <TableCell
+                            className={`text-right tabular-nums ${binShort ? "text-amber-600 font-medium" : ""}`}
+                          >
+                            {line.locationId != null && typeof atBin === "number" ? atBin : "—"}
+                          </TableCell>
+                          <TableCell>{line.suggestedBin ?? "—"}</TableCell>
+                        </>
+                      )}
                       <TableCell className="min-w-[7rem]">
                         {fmcg ? (
                           <div className="space-y-1">
@@ -1398,8 +1406,14 @@ export default function PickPackDetailPage() {
                                 data-pack-qty=""
                                 aria-label={`Scanned pieces for ${line.productName ?? line.sku ?? line.productId}`}
                                 value={linePickedDraft[line.id] ?? "0"}
+                                onFocus={(e) => {
+                                  if (e.currentTarget.value === "0") e.currentTarget.select();
+                                }}
                                 onChange={(e) =>
-                                  setLinePickedDraft((prev) => ({ ...prev, [line.id]: e.target.value }))
+                                  setLinePickedDraft((prev) => ({
+                                    ...prev,
+                                    [line.id]: replacePlaceholderZero(prev[line.id], e.target.value),
+                                  }))
                                 }
                               />
                             ) : null}
@@ -1418,8 +1432,14 @@ export default function PickPackDetailPage() {
                               )}
                               aria-label={`Picked quantity for ${line.productName ?? line.sku ?? line.productId}`}
                               value={linePickedDraft[line.id] ?? String(line.quantity)}
+                              onFocus={(e) => {
+                                if (e.currentTarget.value === "0") e.currentTarget.select();
+                              }}
                               onChange={(e) =>
-                                setLinePickedDraft((prev) => ({ ...prev, [line.id]: e.target.value }))
+                                setLinePickedDraft((prev) => ({
+                                  ...prev,
+                                  [line.id]: replacePlaceholderZero(prev[line.id], e.target.value),
+                                }))
                               }
                             />
                             {lineStock?.overPickThisLine ? (
