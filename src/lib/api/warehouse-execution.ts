@@ -131,6 +131,41 @@ export async function fetchPickPackTasks(filters?: { status?: string; sourceDocu
   return payload.items ?? [];
 }
 
+export type PickPackPage = {
+  items: WarehousePickPackRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  totalCount: number;
+  pageSizeOptions: number[];
+};
+
+/** Packed notes for dispatch. One page from the server, no client-side slice. */
+export async function fetchPickPackPage(filters: {
+  status?: string;
+  search?: string;
+  limit: number;
+  offset: number;
+}): Promise<PickPackPage> {
+  requireLiveApi("Pick-pack tasks");
+  const params: Record<string, string> = {
+    limit: String(filters.limit),
+    offset: String(filters.offset),
+  };
+  if (filters.status) params.status = filters.status;
+  if (filters.search?.trim()) params.search = filters.search.trim();
+  const page = await apiRequest<Partial<PickPackPage>>("/api/warehouse/pick-pack", { params });
+  const items = page.items ?? [];
+  return {
+    items,
+    limit: page.limit ?? filters.limit,
+    offset: page.offset ?? filters.offset,
+    hasMore: Boolean(page.hasMore),
+    totalCount: typeof page.totalCount === "number" ? page.totalCount : items.length,
+    pageSizeOptions: page.pageSizeOptions?.length ? page.pageSizeOptions : [20, 25, 30, 50],
+  };
+}
+
 export async function fetchPickPackTask(id: string): Promise<WarehousePickPackRow> {
   requireLiveApi("Pick-pack task detail");
   return apiRequest<WarehousePickPackRow>(`/api/warehouse/pick-pack/${encodeURIComponent(id)}`);

@@ -11,17 +11,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchPickPackTasks, runPickPackAction, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { fetchPickPackPage, runPickPackAction, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
 import {
   createDistributionVehicle,
-  fetchDispatchBatches,
+  fetchDispatchBatchPage,
   fetchDistributionVehicles,
   type DispatchBatchRow,
   type DistributionVehicleRow,
 } from "@/lib/api/logistics";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 function suggestFleetCode(vehicles: DistributionVehicleRow[]): string {
@@ -73,6 +74,27 @@ function loadSummary(rows: WarehousePickPackRow[]): string {
   return parts.join(" · ");
 }
 
+const NOTE_PAGE_SIZES = [20, 25, 30, 50];
+const RUN_PAGE_SIZES = [10, 15, 20, 30];
+
+function formatDispatchTime(value?: string): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const time = date.toLocaleTimeString("en-KE", { hour: "numeric", minute: "2-digit" });
+  const start = (day: Date) => new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  const today = start(new Date());
+  const day = start(date);
+  if (day === today) return `Today, ${time}`;
+  if (day === today - 86_400_000) return `Yesterday, ${time}`;
+  const when = date.toLocaleDateString("en-KE", {
+    day: "numeric",
+    month: "short",
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  });
+  return `${when}, ${time}`;
+}
+
 function rowQty(row: WarehousePickPackRow): string {
   const totals = qtyByUnit([row]);
   if (!totals.size) return "—";
@@ -83,8 +105,25 @@ export default function WarehouseDispatchPage() {
   const canWrite = useCanWriteInventory();
   const [rows, setRows] = React.useState<WarehousePickPackRow[]>([]);
   const [runs, setRuns] = React.useState<DispatchBatchRow[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [notesLoading, setNotesLoading] = React.useState(true);
+  const [runsLoading, setRunsLoading] = React.useState(true);
+  const [selected, setSelected] = React.useState<Map<string, WarehousePickPackRow>>(new Map());
+  const [noteSearchInput, setNoteSearchInput] = React.useState("");
+  const [noteSearch, setNoteSearch] = React.useState("");
+  const [noteOffset, setNoteOffset] = React.useState(0);
+  const [notePageSize, setNotePageSize] = React.useState(20);
+  const [notePageSizes, setNotePageSizes] = React.useState<number[]>(NOTE_PAGE_SIZES);
+  const [noteTotal, setNoteTotal] = React.useState(0);
+  const [noteHasMore, setNoteHasMore] = React.useState(false);
+  const [runSearchInput, setRunSearchInput] = React.useState("");
+  const [runSearch, setRunSearch] = React.useState("");
+  const [runDate, setRunDate] = React.useState("");
+  const [runOffset, setRunOffset] = React.useState(0);
+  const [runPageSize, setRunPageSize] = React.useState(10);
+  const [runPageSizes, setRunPageSizes] = React.useState<number[]>(RUN_PAGE_SIZES);
+  const [runTotal, setRunTotal] = React.useState(0);
+  const [runHasMore, setRunHasMore] = React.useState(false);
+  const [listVersion, setListVersion] = React.useState(0);
   const [vehicleMode, setVehicleMode] = React.useState<"LEASED" | "SPOT_HIRE">("LEASED");
   const [vehicles, setVehicles] = React.useState<DistributionVehicleRow[]>([]);
   const [vehicleId, setVehicleId] = React.useState("");
@@ -113,42 +152,113 @@ export default function WarehouseDispatchPage() {
     }
   }, []);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const [items, batches] = await Promise.all([
-        fetchPickPackTasks({ status: "PACKED" }),
-        fetchDispatchBatches().catch(() => [] as DispatchBatchRow[]),
-      ]);
-      setRows(items);
-      setRuns(batches);
-      setSelected(new Set());
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to load packed delivery notes.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  React.useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next = noteSearchInput.trim();
+      setNoteSearch((current) => {
+        if (current === next) return current;
+        setNoteOffset(0);
+        return next;
+      });
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [noteSearchInput]);
 
   React.useEffect(() => {
-    void load();
-    void loadVehicles();
-  }, [load, loadVehicles]);
+    const handle = window.setTimeout(() => {
+      const next = runSearchInput.trim();
+      setRunSearch((current) => {
+        if (current === next) return current;
+        setRunOffset(0);
+        return next;
+      });
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [runSearchInput]);
 
-  const selectedRows = React.useMemo(() => rows.filter((row) => selected.has(row.id)), [rows, selected]);
+  React.useEffect(() => {
+    let cancelled = false;
+    setNotesLoading(true);
+    void fetchPickPackPage({ status: "PACKED", search: noteSearch, limit: notePageSize, offset: noteOffset })
+      .then((page) => {
+        if (cancelled) return;
+        setRows(page.items);
+        setNoteTotal(page.totalCount);
+        setNoteHasMore(page.hasMore);
+        if (page.pageSizeOptions.length) setNotePageSizes(page.pageSizeOptions);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setRows([]);
+        setNoteTotal(0);
+        setNoteHasMore(false);
+        toast.error(error instanceof Error ? error.message : "Failed to load packed delivery notes.");
+      })
+      .finally(() => {
+        if (!cancelled) setNotesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [noteSearch, noteOffset, notePageSize, listVersion]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setRunsLoading(true);
+    void fetchDispatchBatchPage({ search: runSearch, date: runDate, limit: runPageSize, offset: runOffset })
+      .then((page) => {
+        if (cancelled) return;
+        setRuns(page.items);
+        setRunTotal(page.totalCount);
+        setRunHasMore(page.hasMore);
+        if (page.pageSizeOptions.length) setRunPageSizes(page.pageSizeOptions);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRuns([]);
+        setRunTotal(0);
+        setRunHasMore(false);
+      })
+      .finally(() => {
+        if (!cancelled) setRunsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runSearch, runDate, runOffset, runPageSize, listVersion]);
+
+  React.useEffect(() => {
+    void loadVehicles();
+  }, [loadVehicles]);
+
+  const selectedRows = React.useMemo(() => [...selected.values()], [selected]);
+  const fleetByCode = React.useMemo(() => {
+    const byCode = new Map<string, DistributionVehicleRow>();
+    for (const vehicle of vehicles) {
+      if (vehicle.code) byCode.set(vehicle.code, vehicle);
+    }
+    return byCode;
+  }, [vehicles]);
   const vehicleReady = vehicleMode === "LEASED" ? Boolean(vehicleId) : Boolean(carrier.trim());
   const chosenVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId);
   const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id));
 
   function toggleAll(checked: boolean) {
-    setSelected(checked ? new Set(rows.map((row) => row.id)) : new Set());
+    setSelected((prev) => {
+      const next = new Map(prev);
+      for (const row of rows) {
+        if (checked) next.set(row.id, row);
+        else next.delete(row.id);
+      }
+      return next;
+    });
   }
 
-  function toggleOne(id: string, checked: boolean) {
+  function toggleOne(row: WarehousePickPackRow, checked: boolean) {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
+      const next = new Map(prev);
+      if (checked) next.set(row.id, row);
+      else next.delete(row.id);
       return next;
     });
   }
@@ -215,7 +325,7 @@ export default function WarehouseDispatchPage() {
     const batch = tripName();
     setSaving(true);
     const failed: string[] = [];
-    let sent = 0;
+    const sentIds: string[] = [];
     for (const id of ids) {
       try {
         await runPickPackAction(id, {
@@ -227,20 +337,27 @@ export default function WarehouseDispatchPage() {
           batchLabel: batch,
           trackingRef: trackingRef.trim() || undefined,
         });
-        sent += 1;
+        sentIds.push(id);
       } catch (error) {
-        const row = rows.find((item) => item.id === id);
+        const row = selected.get(id);
         failed.push(row?.sourceDocumentNumber || row?.number || id);
         toast.error(error instanceof Error ? error.message : "Dispatch failed.");
       }
     }
     setSaving(false);
-    if (sent > 0 && !failed.length) {
-      toast.success(`${sent} delivery note${sent === 1 ? "" : "s"} loaded. The phone can deliver them now.`);
-    } else if (sent > 0) {
+    if (sentIds.length && !failed.length) {
+      toast.success(`${sentIds.length} delivery note${sentIds.length === 1 ? "" : "s"} loaded. The phone can deliver them now.`);
+    } else if (sentIds.length) {
       toast.error(`Some notes stayed packed: ${failed.join(", ")}`);
     }
-    await load();
+    if (sentIds.length) {
+      setSelected((prev) => {
+        const next = new Map(prev);
+        for (const id of sentIds) next.delete(id);
+        return next;
+      });
+      setListVersion((version) => version + 1);
+    }
   }
 
   return (
@@ -272,20 +389,18 @@ export default function WarehouseDispatchPage() {
                     </Button>
                   ) : null}
                 </div>
-                <Select value={vehicleId} onValueChange={setVehicleId}>
-                  <SelectTrigger aria-label="Vehicle">
-                    <SelectValue placeholder={vehicles.length ? "Select vehicle…" : "No fleet vehicles yet"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vehicles.map((vehicle) => (
-                      <SelectItem key={vehicle.id} value={vehicle.id}>
-                        {vehicle.code}
-                        {vehicle.name ? ` — ${vehicle.name}` : ""}
-                        {vehicle.registration ? ` (${vehicle.registration})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={vehicleId}
+                  onValueChange={setVehicleId}
+                  options={vehicles.map((vehicle) => ({
+                    id: vehicle.id,
+                    label: [vehicle.name, vehicle.registration, vehicle.code].filter(Boolean).join(" · "),
+                  }))}
+                  placeholder={vehicles.length ? "Search name or number plate" : "No fleet vehicles yet"}
+                  searchPlaceholder="Name or number plate"
+                  emptyMessage="No vehicle matches that name or plate."
+                  disabled={!vehicles.length}
+                />
                 <button
                   type="button"
                   className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
@@ -323,6 +438,14 @@ export default function WarehouseDispatchPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-0">
+            <div className="px-6 pt-4">
+              <Input
+                value={noteSearchInput}
+                onChange={(event) => setNoteSearchInput(event.target.value)}
+                placeholder="Search delivery note or customer"
+                aria-label="Search packed delivery notes"
+              />
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -345,7 +468,7 @@ export default function WarehouseDispatchPage() {
                     <TableCell>
                       <Checkbox
                         checked={selected.has(row.id)}
-                        onCheckedChange={(value) => toggleOne(row.id, value === true)}
+                        onCheckedChange={(value) => toggleOne(row, value === true)}
                         aria-label={`Select ${row.sourceDocumentNumber ?? row.number}`}
                         disabled={!vehicleReady}
                       />
@@ -366,19 +489,44 @@ export default function WarehouseDispatchPage() {
                     <TableCell className="tabular-nums">{rowQty(row)}</TableCell>
                   </TableRow>
                 ))}
-                {!loading && !rows.length ? (
+                {!notesLoading && !rows.length ? (
                   <TableRow>
                     <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                      Nothing is packed yet.{" "}
-                      <Link href="/warehouse/pick-pack" className="underline underline-offset-2">
-                        Confirm pick and pack
-                      </Link>{" "}
-                      first.
+                      {noteSearch ? (
+                        "No packed notes match that search."
+                      ) : (
+                        <>
+                          Nothing is packed yet.{" "}
+                          <Link href="/warehouse/pick-pack" className="underline underline-offset-2">
+                            Confirm pick and pack
+                          </Link>{" "}
+                          first.
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : null}
               </TableBody>
             </Table>
+            <div className="px-4 pb-4">
+              <TablePagination
+                pageOffset={noteOffset}
+                pageSize={notePageSize}
+                itemCount={rows.length}
+                hasMore={noteHasMore}
+                totalCount={noteTotal}
+                loading={notesLoading && rows.length === 0}
+                busy={notesLoading && rows.length > 0}
+                onPrevious={() => setNoteOffset((offset) => Math.max(0, offset - notePageSize))}
+                onNext={() => setNoteOffset((offset) => offset + notePageSize)}
+                onPageSizeChange={(size) => {
+                  setNotePageSize(size);
+                  setNoteOffset(0);
+                }}
+                pageSizeOptions={notePageSizes}
+                entityLabel="delivery notes"
+              />
+            </div>
             {vehicleReady ? (
               <div className="flex flex-col gap-3 border-t px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-medium">{loadSummary(selectedRows)}</p>
@@ -411,38 +559,106 @@ export default function WarehouseDispatchPage() {
           </CardContent>
         </Card>
 
-        {runs.length ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Already out</CardTitle>
-              <CardDescription>These loads are on the road. The phone delivers them.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Trip</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead className="text-right">Notes</TableHead>
-                    <TableHead>Delivery notes</TableHead>
+        <Card>
+          <CardHeader>
+            <CardTitle>Already out</CardTitle>
+            <CardDescription>These loads are on the road. The phone delivers them.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 p-0">
+            <div className="flex flex-col gap-2 px-6 pt-4 sm:flex-row">
+              <Input
+                value={runSearchInput}
+                onChange={(event) => setRunSearchInput(event.target.value)}
+                placeholder="Search vehicle"
+                aria-label="Search loads by vehicle"
+                className="sm:max-w-xs"
+              />
+              <Input
+                type="date"
+                value={runDate}
+                onChange={(event) => {
+                  setRunDate(event.target.value);
+                  setRunOffset(0);
+                }}
+                aria-label="Dispatch date"
+                className="sm:w-44"
+              />
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Left</TableHead>
+                  <TableHead>Trip</TableHead>
+                  <TableHead>Vehicle</TableHead>
+                  <TableHead className="text-right">Notes</TableHead>
+                  <TableHead>Delivery notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {runs.map((run) => {
+                  const fleet = run.vehicleCode ? fleetByCode.get(run.vehicleCode) : undefined;
+                  const vehicleName = run.vehicleName || fleet?.name;
+                  const vehiclePlate = run.vehicleRegistration || fleet?.registration;
+                  return (
+                  <TableRow key={run.id}>
+                    <TableCell className="whitespace-nowrap">{formatDispatchTime(run.plannedAt)}</TableCell>
+                    <TableCell className="font-medium">{run.label}</TableCell>
+                    <TableCell>
+                      <div>{vehicleName || run.vehicleCode || "—"}</div>
+                      {vehiclePlate ? (
+                        <div className="text-xs text-muted-foreground">{vehiclePlate}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{run.stopCount}</TableCell>
+                    <TableCell>
+                      {run.deliveryNotes?.length ? (
+                        run.deliveryNotes.map((note, index) => (
+                          <span key={note.id}>
+                            {index > 0 ? ", " : null}
+                            <Link href={`/docs/delivery-note/${note.id}`} className="underline-offset-2 hover:underline">
+                              {note.number}
+                            </Link>
+                          </span>
+                        ))
+                      ) : run.deliveryNoteNumbers.length ? (
+                        run.deliveryNoteNumbers.join(", ")
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {runs.map((run) => (
-                    <TableRow key={run.id}>
-                      <TableCell className="font-medium">{run.label}</TableCell>
-                      <TableCell>{run.vehicleCode || "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">{run.stopCount}</TableCell>
-                      <TableCell className="max-w-md truncate text-muted-foreground">
-                        {run.deliveryNoteNumbers.length ? run.deliveryNoteNumbers.join(", ") : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ) : null}
+                  );
+                })}
+                {!runsLoading && !runs.length ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      {runSearch || runDate ? "No loads match that vehicle or date." : "Nothing is on the road."}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+            <div className="px-4 pb-4">
+              <TablePagination
+                pageOffset={runOffset}
+                pageSize={runPageSize}
+                itemCount={runs.length}
+                hasMore={runHasMore}
+                totalCount={runTotal}
+                loading={runsLoading && runs.length === 0}
+                busy={runsLoading && runs.length > 0}
+                onPrevious={() => setRunOffset((offset) => Math.max(0, offset - runPageSize))}
+                onNext={() => setRunOffset((offset) => offset + runPageSize)}
+                onPageSizeChange={(size) => {
+                  setRunPageSize(size);
+                  setRunOffset(0);
+                }}
+                pageSizeOptions={runPageSizes}
+                entityLabel="loads"
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Sheet open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
