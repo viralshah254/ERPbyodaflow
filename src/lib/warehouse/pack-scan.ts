@@ -229,6 +229,18 @@ export function suggestedCartonsCount(
   return total;
 }
 
+/**
+ * A new count replaces the starting 0. Typing 5 into "0" becomes "5", not "05".
+ * "0." is kept so a decimal can still be entered.
+ */
+export function replacePlaceholderZero(previous: string | undefined, next: string): string {
+  const prev = (previous ?? "0").trim();
+  if (prev !== "0") return next;
+  if (next === "" || next === "0" || next.startsWith("0.")) return next;
+  if (next.startsWith("0")) return next.replace(/^0+/, "") || "0";
+  return next;
+}
+
 export function pickedPiecesByLine(draft: Record<string, string>, fallback: Record<string, number> = {}): Record<string, number> {
   const out: Record<string, number> = { ...fallback };
   for (const [id, raw] of Object.entries(draft)) {

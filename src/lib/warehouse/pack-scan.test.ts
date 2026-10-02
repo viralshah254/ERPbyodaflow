@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createScannerBuffer, formatPackQty, matchPackScan, parsePackScan, pushScannerKey, suggestedCartonsCount } from "./pack-scan";
+import { createScannerBuffer, formatPackQty, matchPackScan, parsePackScan, pushScannerKey, replacePlaceholderZero, suggestedCartonsCount } from "./pack-scan";
 import type { PackScanLine } from "./pack-scan";
 
 const cartonLine: PackScanLine = {
@@ -49,6 +49,23 @@ describe("pushScannerKey", () => {
     const second = pushScannerKey(buffer, "b", 1_400, { scanFieldFocused: false });
     expect(second.swallow).toBe(false);
     expect(second.scan).toBeUndefined();
+  });
+});
+
+describe("replacePlaceholderZero", () => {
+  it("drops the starting zero when a count is typed after it", () => {
+    expect(replacePlaceholderZero("0", "05")).toBe("5");
+    expect(replacePlaceholderZero("0", "050")).toBe("50");
+  });
+
+  it("keeps a decimal that starts from zero", () => {
+    expect(replacePlaceholderZero("0", "0.")).toBe("0.");
+    expect(replacePlaceholderZero("0", "0.5")).toBe("0.5");
+  });
+
+  it("leaves a count that is already past zero", () => {
+    expect(replacePlaceholderZero("10", "105")).toBe("105");
+    expect(replacePlaceholderZero("5", "50")).toBe("50");
   });
 });
 
