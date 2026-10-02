@@ -7,6 +7,7 @@ export type QueueDraftOption = {
 export type QueueDraftExtraLine = {
   key: string;
   qty: number;
+  packing?: string;
   product: QueueDraftOption | null;
 };
 
@@ -14,6 +15,7 @@ export type OdaflowQueueOrderDraft = {
   customer: QueueDraftOption | null;
   lineProducts: Record<string, QueueDraftOption>;
   lineQty: Record<string, number>;
+  linePacking: Record<string, string>;
   deliveryAddress: string;
   extraLines: QueueDraftExtraLine[];
   replacedProductLines: Record<string, string>;
@@ -43,13 +45,18 @@ export function readOdaflowQueueOrderDraft(queueId: string): OdaflowQueueOrderDr
     for (const [index, qty] of Object.entries(parsed.lineQty ?? {})) {
       if (typeof qty === "number" && qty > 0) lineQty[index] = qty;
     }
+    const linePacking: Record<string, string> = {};
+    for (const [index, packing] of Object.entries(parsed.linePacking ?? {})) {
+      if (typeof packing === "string" && packing.trim()) linePacking[index] = packing.trim();
+    }
     const extraLines = Array.isArray(parsed.extraLines)
       ? parsed.extraLines.flatMap((line) => {
           if (!line || typeof line !== "object") return [];
           const row = line as QueueDraftExtraLine;
           if (typeof row.key !== "string" || !row.key) return [];
           const qty = typeof row.qty === "number" && row.qty > 0 ? row.qty : 1;
-          return [{ key: row.key, qty, product: isOption(row.product) ? row.product : null }];
+          const packing = typeof row.packing === "string" && row.packing.trim() ? row.packing.trim() : "PCS";
+          return [{ key: row.key, qty, packing, product: isOption(row.product) ? row.product : null }];
         })
       : [];
     const replacedProductLines: Record<string, string> = {};
@@ -60,6 +67,7 @@ export function readOdaflowQueueOrderDraft(queueId: string): OdaflowQueueOrderDr
       customer: isOption(parsed.customer) ? parsed.customer : null,
       lineProducts,
       lineQty,
+      linePacking,
       deliveryAddress: typeof parsed.deliveryAddress === "string" ? parsed.deliveryAddress : "",
       extraLines,
       replacedProductLines,

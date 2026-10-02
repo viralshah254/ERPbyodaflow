@@ -49,6 +49,11 @@ import { fetchPartiesApi } from "@/lib/api/parties";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { PartyRow, ProductRow } from "@/lib/types/masters";
 
+function packingValue(raw?: string | null): string {
+  const text = raw?.trim();
+  return text || "PCS";
+}
+
 type Props = {
   queueId: string | null;
   open: boolean;
@@ -201,6 +206,7 @@ export function OdaflowQueueOrderSheet({
   const [selectedCustomer, setSelectedCustomer] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [lineProducts, setLineProducts] = React.useState<Record<number, AsyncSearchableSelectOption>>({});
   const [lineQty, setLineQty] = React.useState<Record<number, number>>({});
+  const [linePacking, setLinePacking] = React.useState<Record<number, string>>({});
   const [saveMappings, setSaveMappings] = React.useState(true);
   const [deliveryDraft, setDeliveryDraft] = React.useState("");
   const [mappingConflict, setMappingConflict] = React.useState<MappingConflictState | null>(null);
@@ -294,10 +300,12 @@ export function OdaflowQueueOrderSheet({
         );
 
         const qty: Record<number, number> = {};
+        const packing: Record<number, string> = {};
         const products: Record<number, AsyncSearchableSelectOption> = {};
         await Promise.all(
           data.order.lines.map(async (line) => {
             qty[line.index] = line.qty;
+            packing[line.index] = packingValue(line.packing);
             const resolved = await resolveCatalogProduct(line, line.erpProductId);
             if (resolved) {
               products[line.index] = resolved;
@@ -318,8 +326,12 @@ export function OdaflowQueueOrderSheet({
           for (const [index, savedQty] of Object.entries(draft.lineQty)) {
             qty[Number(index)] = savedQty;
           }
+          for (const [index, savedPacking] of Object.entries(draft.linePacking)) {
+            packing[Number(index)] = savedPacking;
+          }
         }
         setLineQty(qty);
+        setLinePacking(packing);
         setLineProducts(products);
       }
       setDraftHydrated(true);
@@ -344,6 +356,7 @@ export function OdaflowQueueOrderSheet({
       setItem(null);
       setOrder(null);
       setExtraLines([]);
+      setLinePacking({});
       setMappingConflict(null);
       setPricingReminderDismissed(false);
       setCheckingCustomer(false);
@@ -368,6 +381,9 @@ export function OdaflowQueueOrderSheet({
         : null,
       lineProducts: lineProductDraft,
       lineQty: Object.fromEntries(Object.entries(lineQty).map(([index, qty]) => [index, qty])),
+      linePacking: Object.fromEntries(
+        Object.entries(linePacking).map(([index, packing]) => [index, packingValue(packing)])
+      ),
       deliveryAddress: deliveryDraft,
       extraLines,
       replacedProductLines: Object.fromEntries(
@@ -381,6 +397,7 @@ export function OdaflowQueueOrderSheet({
     selectedCustomer,
     lineProducts,
     lineQty,
+    linePacking,
     deliveryDraft,
     extraLines,
     replacedProductLines,
@@ -523,6 +540,10 @@ export function OdaflowQueueOrderSheet({
           erpProductId: resolvedProducts[line.index]!.id,
         })),
         lineQty: order.lines.map((line) => ({ lineIndex: line.index, qty: lineQty[line.index] ?? line.qty })),
+        linePacking: order.lines.map((line) => ({
+          lineIndex: line.index,
+          packing: packingValue(linePacking[line.index] ?? line.packing),
+        })),
         saveMappings,
         replaceProductMappingLines:
           saveMappings && Object.keys(replacedProductLines).length > 0
@@ -531,7 +552,11 @@ export function OdaflowQueueOrderSheet({
         deliveryAddress: deliveryDraft.trim(),
         extraLines: extraLines
           .filter((line) => line.product?.id)
-          .map((line) => ({ erpProductId: line.product!.id, qty: line.qty })),
+          .map((line) => ({
+            erpProductId: line.product!.id,
+            qty: line.qty,
+            packing: packingValue(line.packing),
+          })),
       });
       clearOdaflowQueueOrderDraft(queueId);
       toast.success("Sales order created");
@@ -564,7 +589,10 @@ export function OdaflowQueueOrderSheet({
   }
 
   function addExtraLine() {
-    setExtraLines((prev) => [...prev, { key: `extra-${Date.now()}-${prev.length}`, qty: 1, product: null }]);
+    setExtraLines((prev) => [
+      ...prev,
+      { key: `extra-${Date.now()}-${prev.length}`, qty: 1, packing: "PCS", product: null },
+    ]);
   }
 
   function goCreateProduct() {
@@ -729,11 +757,12 @@ export function OdaflowQueueOrderSheet({
                   </span>
                 </div>
                 <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-md border">
-                  <table className="w-full min-w-[56rem] text-sm">
+                  <table className="w-full min-w-[64rem] text-sm">
                     <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 font-medium min-w-[16rem]">Product from Odaflow</th>
                         <th className="px-3 py-2 font-medium w-20">Qty</th>
+                        <th className="px-3 py-2 font-medium w-40">Packing</th>
                         <th className="px-3 py-2 font-medium min-w-[28rem]">Your ERP product</th>
                       </tr>
                     </thead>
@@ -767,15 +796,26 @@ export function OdaflowQueueOrderSheet({
                           <td className="px-3 py-3">
                             <Input
                               type="number"
-                              min={1}
+                              min={0}
+                              step="any"
                               className="h-8 w-16"
                               value={lineQty[line.index] ?? line.qty}
+                              onChange={(e) => {
+                                const next = Number(e.target.value);
+                                if (!Number.isFinite(next) || next < 0) return;
+                                setLineQty((prev) => ({ ...prev, [line.index]: next }));
+                              }}
+                            />
+                          </td>
+                          <td className="px-3 py-3">
+                            <Input
+                              className="h-8 w-36"
+                              value={linePacking[line.index] ?? packingValue(line.packing)}
                               onChange={(e) =>
-                                setLineQty((prev) => ({
-                                  ...prev,
-                                  [line.index]: Math.max(1, Number(e.target.value) || 1),
-                                }))
+                                setLinePacking((prev) => ({ ...prev, [line.index]: e.target.value }))
                               }
+                              placeholder="PCS"
+                              aria-label={`Packing for ${line.productName ?? "line"}`}
                             />
                           </td>
                           <td className="px-3 py-3">
@@ -836,6 +876,21 @@ export function OdaflowQueueOrderSheet({
                                   )
                                 )
                               }
+                            />
+                          </td>
+                          <td className="px-3 py-3">
+                            <Input
+                              className="h-8 w-36"
+                              value={packingValue(extra.packing)}
+                              onChange={(e) =>
+                                setExtraLines((prev) =>
+                                  prev.map((line) =>
+                                    line.key === extra.key ? { ...line, packing: e.target.value } : line
+                                  )
+                                )
+                              }
+                              placeholder="PCS"
+                              aria-label="Packing for added item"
                             />
                           </td>
                           <td className="px-3 py-3">
