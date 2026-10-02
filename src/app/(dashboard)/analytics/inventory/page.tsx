@@ -5,21 +5,30 @@ import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { InsightCard } from "@/components/analytics";
-import { fetchAnalyticsInsights } from "@/lib/api/analytics";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { fetchAnalyticsInsights, fetchLowStockAlertsApi, type LowStockAlertRow } from "@/lib/api/analytics";
 import { fetchInventoryValuation } from "@/lib/api/inventory-costing";
-import { fetchProductApi, fetchProductsPageApi } from "@/lib/api/products";
 import { formatMoney } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
+const LOW_STOCK_PAGE_SIZES = [20, 25, 30, 50];
+
 export default function AnalyticsInventoryPage() {
   const [insights, setInsights] = React.useState<Awaited<ReturnType<typeof fetchAnalyticsInsights>> | null>(null);
   const [valuation, setValuation] = React.useState<Awaited<ReturnType<typeof fetchInventoryValuation>> | null>(null);
-  const [productLabels, setProductLabels] = React.useState<Map<string, { name: string; sku?: string }>>(
-    () => new Map()
-  );
-  const [productLabelsReady, setProductLabelsReady] = React.useState(false);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState(20);
+  const [pageSizeOptions, setPageSizeOptions] = React.useState<number[]>(LOW_STOCK_PAGE_SIZES);
+  const [lowStock, setLowStock] = React.useState<LowStockAlertRow[]>([]);
+  const [lowStockTotal, setLowStockTotal] = React.useState<number | undefined>(undefined);
+  const [lowStockHasMore, setLowStockHasMore] = React.useState(false);
+  const [lowStockLoading, setLowStockLoading] = React.useState(true);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -40,51 +49,47 @@ export default function AnalyticsInventoryPage() {
     };
   }, []);
 
-  const lowStock = insights?.data.filter((item) => item.type === "low_stock") ?? [];
+  const appliedSearch = React.useRef(search);
+  React.useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next = searchInput.trim();
+      if (appliedSearch.current === next) return;
+      appliedSearch.current = next;
+      setSearch(next);
+      setPageOffset(0);
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
 
   React.useEffect(() => {
-    const ids = [
-      ...new Set(
-        (insights?.data ?? [])
-          .filter((item) => item.type === "low_stock" && item.productId && !item.productName)
-          .map((item) => item.productId as string)
-      ),
-    ];
-    if (ids.length === 0) {
-      setProductLabels(new Map());
-      setProductLabelsReady(true);
-      return;
-    }
-    setProductLabelsReady(false);
     let cancelled = false;
-    void (async () => {
-      const labels = new Map<string, { name: string; sku?: string }>();
-      try {
-        const page = await fetchProductsPageApi({ ids, limit: 100, includeStock: false });
-        for (const product of page.items) {
-          if (ids.includes(product.id)) {
-            labels.set(product.id, { name: product.name, sku: product.sku });
-          }
-        }
-      } catch {
-        /* Names are filled from each product below. */
-      }
-      const missing = ids.filter((id) => !labels.has(id));
-      if (missing.length > 0) {
-        const rows = await Promise.all(missing.map((id) => fetchProductApi(id).catch(() => null)));
-        for (const product of rows) {
-          if (product) labels.set(product.id, { name: product.name, sku: product.sku });
-        }
-      }
-      if (!cancelled) {
-        setProductLabels(labels);
-        setProductLabelsReady(true);
-      }
-    })();
+    setLowStockLoading(true);
+    void fetchLowStockAlertsApi({
+      search: search || undefined,
+      limit: pageSize,
+      offset: pageOffset,
+    })
+      .then((page) => {
+        if (cancelled) return;
+        setLowStock(page.items);
+        setLowStockHasMore(page.hasMore);
+        setLowStockTotal(page.totalCount);
+        if (page.pageSizeOptions.length > 0) setPageSizeOptions(page.pageSizeOptions);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setLowStock([]);
+        setLowStockHasMore(false);
+        setLowStockTotal(0);
+        toast.error(error instanceof Error ? error.message : "Failed to load low stock alerts.");
+      })
+      .finally(() => {
+        if (!cancelled) setLowStockLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [insights]);
+  }, [search, pageOffset, pageSize]);
 
   return (
     <PageShell>
@@ -110,52 +115,76 @@ export default function AnalyticsInventoryPage() {
             </Button>
           }
         >
-          <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="text-left font-medium px-3 py-2">Product</th>
-                  <th className="text-left font-medium px-3 py-2">Warehouse</th>
-                  <th className="text-right font-medium px-3 py-2">Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lowStock.map((r, i) => {
-                  const lookedUp = r.productId ? productLabels.get(r.productId) : undefined;
-                  const productName = r.productName || lookedUp?.name;
-                  const productSku = r.productSku || lookedUp?.sku;
-                  const waitingForName = Boolean(r.productId && !productName && !productLabelsReady);
-                  const productLabel = waitingForName
-                    ? "Loading…"
-                    : productName || productSku || r.productId || "Unknown product";
-                  const productHref = r.productId
-                    ? `/master/products/${encodeURIComponent(r.productId)}`
-                    : null;
-                  return (
-                    <tr key={i} className="border-t">
-                      <td className="px-3 py-2">
-                        {productHref ? (
-                          <Link
-                            href={productHref}
-                            className="font-medium text-foreground underline-offset-4 hover:underline"
-                          >
-                            {productLabel}
-                          </Link>
-                        ) : (
-                          productLabel
-                        )}
-                        {productSku && productName ? (
-                          <span className="mt-0.5 block text-xs text-muted-foreground">{productSku}</span>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2">{r.warehouseId}</td>
-                      <td className="text-right tabular-nums px-3 py-2">{r.quantity}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {lowStock.length === 0 && <p className="p-3 text-sm text-muted-foreground">No inventory alerts right now.</p>}
+          <div className="space-y-3">
+            <Input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search name or barcode"
+              aria-label="Search low stock by name or barcode"
+            />
+            <div className="relative rounded-md border overflow-hidden">
+              <TableLinearProgress active={lowStockLoading} />
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left font-medium px-3 py-2">Product</th>
+                    <th className="text-left font-medium px-3 py-2">Warehouse</th>
+                    <th className="text-right font-medium px-3 py-2">Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lowStock.map((row, index) => {
+                    const productLabel = row.productName || row.barcode || "Unknown product";
+                    const productHref = row.productId
+                      ? `/master/products/${encodeURIComponent(row.productId)}`
+                      : null;
+                    return (
+                      <tr key={`${row.productId}-${row.warehouseId}-${index}`} className="border-t">
+                        <td className="px-3 py-2">
+                          {productHref ? (
+                            <Link
+                              href={productHref}
+                              className="font-medium text-foreground underline-offset-4 hover:underline"
+                            >
+                              {productLabel}
+                            </Link>
+                          ) : (
+                            productLabel
+                          )}
+                          {row.barcode && row.productName ? (
+                            <span className="mt-0.5 block text-xs text-muted-foreground">{row.barcode}</span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2">{row.warehouseId}</td>
+                        <td className="text-right tabular-nums px-3 py-2">{row.quantity}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {!lowStockLoading && lowStock.length === 0 && (
+                <p className="p-3 text-sm text-muted-foreground">
+                  {search ? "No products match that name or barcode." : "No inventory alerts right now."}
+                </p>
+              )}
+            </div>
+            <TablePagination
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={lowStock.length}
+              hasMore={lowStockHasMore}
+              totalCount={lowStockTotal}
+              loading={lowStockLoading && lowStock.length === 0}
+              busy={lowStockLoading && lowStock.length > 0}
+              onPrevious={() => setPageOffset((offset) => Math.max(0, offset - pageSize))}
+              onNext={() => setPageOffset((offset) => offset + pageSize)}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPageOffset(0);
+              }}
+              pageSizeOptions={pageSizeOptions}
+              entityLabel="alerts"
+            />
           </div>
         </InsightCard>
 

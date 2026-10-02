@@ -91,6 +91,47 @@ export interface InventoryInsightItem {
   drillId?: string;
 }
 
+export type LowStockAlertRow = {
+  productId: string;
+  productName?: string;
+  barcode?: string;
+  warehouseId?: string;
+  quantity?: number;
+  minThreshold?: number;
+};
+
+export type LowStockAlertPage = {
+  items: LowStockAlertRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+  totalCount: number;
+  pageSizeOptions: number[];
+};
+
+export async function fetchLowStockAlertsApi(opts: {
+  search?: string;
+  limit: number;
+  offset: number;
+}): Promise<LowStockAlertPage> {
+  requireLiveApi("Low stock alerts");
+  const params = new URLSearchParams();
+  if (opts.search?.trim()) params.set("search", opts.search.trim());
+  params.set("limit", String(opts.limit));
+  params.set("offset", String(opts.offset));
+  const page = await apiRequest<LowStockAlertPage>("/api/analytics/inventory/low-stock", { params });
+  return {
+    items: page.items ?? [],
+    limit: page.limit ?? opts.limit,
+    offset: page.offset ?? opts.offset,
+    hasMore: Boolean(page.hasMore),
+    nextCursor: page.nextCursor ?? null,
+    totalCount: typeof page.totalCount === "number" ? page.totalCount : page.items?.length ?? 0,
+    pageSizeOptions: Array.isArray(page.pageSizeOptions) ? page.pageSizeOptions : [20, 25, 30, 50],
+  };
+}
+
 export async function fetchAnalyticsInsights(
   module: string
 ): Promise<{ module: string; data: InventoryInsightItem[] }> {

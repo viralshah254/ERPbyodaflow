@@ -104,6 +104,7 @@ export default function NewBomPage() {
     return page.items.map((product) => ({
       id: product.id,
       label: product.sku ? `${product.sku} — ${product.name}` : product.name,
+      description: product.barcode?.trim() || undefined,
     }));
   }, []);
 
@@ -184,9 +185,10 @@ export default function NewBomPage() {
                   onOptionSelect={setFinishedProductOption}
                   loadOptions={loadFinishedProducts}
                   placeholder="Select product"
-                  searchPlaceholder="Search SKU or name"
+                  searchPlaceholder="Search name, SKU, or barcode"
                   emptyMessage="No products match that search."
                   searchDebounceMs={250}
+                  showSelectedDescription
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
