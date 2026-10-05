@@ -110,7 +110,7 @@ export default function SalesOverviewPage() {
       <div className="p-6 space-y-6">
 
         {/* KPI Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tutorial-hint="sales-kpis">
           <Card>
             <CardContent className="pt-5">
               <div className="flex items-center gap-2 mb-1">

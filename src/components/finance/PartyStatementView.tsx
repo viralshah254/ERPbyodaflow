@@ -53,7 +53,7 @@ export function PartyStatementView(props: {
         }
       />
       <div className={`${LIST_PAGE_BODY_PAGINATED_CLASS} space-y-4 pb-16 print:space-y-3`}>
-        <Card className="print:hidden">
+        <Card className="print:hidden" data-tutorial-hint="statement-party">
           <CardContent className="pt-6">
             <div className="space-y-2">
               <Label>{props.kind === "customer" ? "Customer" : "Supplier"}</Label>

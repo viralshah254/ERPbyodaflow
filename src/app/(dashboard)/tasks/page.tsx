@@ -126,7 +126,7 @@ export default function TasksPage() {
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         <DataTableToolbar className="shrink-0" searchPlaceholder="Search tasks..." searchValue={search} onSearchChange={setSearch} />
-        <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
+        <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm" data-tutorial-hint="my-tasks">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">My Tasks</h3>
           </div>
@@ -144,7 +144,7 @@ export default function TasksPage() {
             )}
         </div>
 
-        <Card>
+        <Card data-tutorial-hint="queue-signals">
           <CardHeader>
             <CardTitle>Global Queue Signals</CardTitle>
           </CardHeader>

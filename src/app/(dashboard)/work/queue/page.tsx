@@ -64,7 +64,17 @@ export default function WorkQueuePage() {
           />
         }
       />
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6" data-tutorial-hint="work-queue">
+        {items.length === 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Nothing waiting</CardTitle>
+              <CardDescription>
+                Payroll, tax, pricing, stock, and approval alerts land here when someone needs to act. Open View on a row to go to the source document.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
         {Array.from(byCategory.keys()).map((cat) => {
           const list = byCategory.get(cat) ?? [];
           if (list.length === 0) return null;

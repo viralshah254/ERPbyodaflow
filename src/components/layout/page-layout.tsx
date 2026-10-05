@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import * as Icons from "lucide-react";
+import { PageHelp } from "@/components/tutorial/PageHelp";
 
 interface PageLayoutProps {
   title: string;
@@ -46,7 +46,7 @@ export function PageLayout({
           </nav>
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
+          <div className="min-w-0" data-tutorial-hint="page-title">
             <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{title}</h1>
             {description ? (
               <p className="mt-0.5 hidden text-xs text-muted-foreground sm:line-clamp-1 sm:block">
@@ -54,7 +54,10 @@ export function PageLayout({
               </p>
             ) : null}
           </div>
-          {actions ? <div className="flex flex-wrap items-center justify-end gap-1.5">{actions}</div> : null}
+          <div className="flex flex-wrap items-center justify-end gap-1.5" data-tutorial-hint="page-actions">
+            {actions}
+            <PageHelp compact />
+          </div>
         </div>
       </div>
       {/* Content — scroll inside page card/sections, not the app chrome */}
