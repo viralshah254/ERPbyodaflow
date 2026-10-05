@@ -96,6 +96,8 @@ export interface OdaflowQueueOrderLinePreview {
   packSize?: string;
   /** Packing column as printed. Missing means pieces. */
   packing?: string;
+  /** Unit printed with the order quantity (PCS, CTN, BAG). */
+  unit?: string;
   qty: number;
   unitPrice?: number;
   subTotal?: number;

@@ -49,9 +49,12 @@ import { fetchPartiesApi } from "@/lib/api/parties";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { PartyRow, ProductRow } from "@/lib/types/masters";
 
-function packingValue(raw?: string | null): string {
+function packingValue(raw?: string | null, unit?: string | null): string {
   const text = raw?.trim();
-  return text || "PCS";
+  if (text) return text;
+  const orderUnit = unit?.trim();
+  if (orderUnit && !/^pcs$/i.test(orderUnit)) return orderUnit;
+  return "PCS";
 }
 
 type Props = {
@@ -305,7 +308,7 @@ export function OdaflowQueueOrderSheet({
         await Promise.all(
           data.order.lines.map(async (line) => {
             qty[line.index] = line.qty;
-            packing[line.index] = packingValue(line.packing);
+            packing[line.index] = packingValue(line.packing, line.unit);
             const resolved = await resolveCatalogProduct(line, line.erpProductId);
             if (resolved) {
               products[line.index] = resolved;
@@ -542,7 +545,7 @@ export function OdaflowQueueOrderSheet({
         lineQty: order.lines.map((line) => ({ lineIndex: line.index, qty: lineQty[line.index] ?? line.qty })),
         linePacking: order.lines.map((line) => ({
           lineIndex: line.index,
-          packing: packingValue(linePacking[line.index] ?? line.packing),
+          packing: packingValue(linePacking[line.index] ?? line.packing, line.unit),
         })),
         saveMappings,
         replaceProductMappingLines:
@@ -761,7 +764,7 @@ export function OdaflowQueueOrderSheet({
                     <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 font-medium min-w-[16rem]">Product from Odaflow</th>
-                        <th className="px-3 py-2 font-medium w-20">Qty</th>
+                        <th className="px-3 py-2 font-medium w-28">Qty</th>
                         <th className="px-3 py-2 font-medium w-40">Packing</th>
                         <th className="px-3 py-2 font-medium min-w-[28rem]">Your ERP product</th>
                       </tr>
@@ -794,23 +797,28 @@ export function OdaflowQueueOrderSheet({
                             ) : null}
                           </td>
                           <td className="px-3 py-3">
-                            <Input
-                              type="number"
-                              min={0}
-                              step="any"
-                              className="h-8 w-16"
-                              value={lineQty[line.index] ?? line.qty}
-                              onChange={(e) => {
-                                const next = Number(e.target.value);
-                                if (!Number.isFinite(next) || next < 0) return;
-                                setLineQty((prev) => ({ ...prev, [line.index]: next }));
-                              }}
-                            />
+                            <div className="flex items-center gap-1.5">
+                              <Input
+                                type="number"
+                                min={0}
+                                step="any"
+                                className="h-8 w-16"
+                                value={lineQty[line.index] ?? line.qty}
+                                onChange={(e) => {
+                                  const next = Number(e.target.value);
+                                  if (!Number.isFinite(next) || next < 0) return;
+                                  setLineQty((prev) => ({ ...prev, [line.index]: next }));
+                                }}
+                              />
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {(line.unit || "PCS").toUpperCase()}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-3 py-3">
                             <Input
                               className="h-8 w-36"
-                              value={linePacking[line.index] ?? packingValue(line.packing)}
+                              value={linePacking[line.index] ?? packingValue(line.packing, line.unit)}
                               onChange={(e) =>
                                 setLinePacking((prev) => ({ ...prev, [line.index]: e.target.value }))
                               }
