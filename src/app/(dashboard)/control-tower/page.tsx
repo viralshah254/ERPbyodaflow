@@ -472,7 +472,7 @@ export default function ControlTowerPage() {
         }
         description={
           fmcgControlTowerEnabled
-            ? "Reconciled sales, lot quality, production, automation, banking, and close controls."
+            ? "What to ship, what to make, and what is still waiting on a person."
             : perishableControlTowerEnabled
               ? "Real-time sourcing, processing, cold chain, franchise, and finance visibility."
               : "Supply chain command layer for template-enabled modules."

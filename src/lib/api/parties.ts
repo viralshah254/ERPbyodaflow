@@ -421,16 +421,7 @@ export async function fetchPartiesPageApi(filters?: PartyListFilters): Promise<{
   };
 }
 
-export async function fetchCustomerDirectorySummaryApi(): Promise<{
-  all: number;
-  multichain: number;
-  generalTrade: number;
-  distributors: number;
-  vanSales: number;
-}> {
-  requireLiveApi("Customer directory");
-  return apiRequest("/api/parties/customer-directory-summary");
-}
+export { fetchCustomerDirectorySummaryApi } from "./customer-directory";
 
 export async function fetchPartiesApi(filters?: PartyListFilters): Promise<PartyRow[]> {
   const page = await fetchPartiesPageApi(filters);

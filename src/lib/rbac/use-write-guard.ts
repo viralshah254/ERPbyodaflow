@@ -58,9 +58,13 @@ const DOC_TYPE_WRITE_PERMISSIONS: Record<string, string[]> = {
   journal: ["finance.gl.write", "finance.write"],
 };
 
-export function useCanWriteDocType(type: string): boolean {
-  const permissions = useAuthStore((s) => s.permissions);
+export function canWriteDocType(permissions: string[], type: string): boolean {
   const perms = DOC_TYPE_WRITE_PERMISSIONS[type];
   if (!perms) return true;
   return hasAnyPermission(permissions, ...perms, "admin.settings");
+}
+
+export function useCanWriteDocType(type: string): boolean {
+  const permissions = useAuthStore((s) => s.permissions);
+  return canWriteDocType(permissions, type);
 }

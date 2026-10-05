@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   LIST_PAGE_BODY_CLASS,
@@ -175,7 +175,9 @@ function buildColumns(
 export default function DocTypeListPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const type = params.type as string;
+  const statusFromUrl = searchParams.get("status") ?? "";
   const terminology = useTerminology();
   const templateId = useOrgContextStore((s) => s.templateId);
   const showKraColumn = isFmcgOrg(templateId);
@@ -198,7 +200,7 @@ export default function DocTypeListPage() {
   const scope = `doc-${type}`;
 
   const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState(statusFromUrl);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
@@ -211,6 +213,10 @@ export default function DocTypeListPage() {
   const [hasMore, setHasMore] = React.useState(false);
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const hasLoadedOnce = React.useRef(false);
+
+  React.useEffect(() => {
+    setStatusFilter(statusFromUrl);
+  }, [type, statusFromUrl]);
 
   React.useEffect(() => {
     hasLoadedOnce.current = false;
@@ -519,7 +525,10 @@ export default function DocTypeListPage() {
           }
         />
         <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
-          <SalesOrdersListPanel savedViewsScope="doc-sales-order" />
+          <SalesOrdersListPanel
+            savedViewsScope="doc-sales-order"
+            initialStatus={statusFromUrl}
+          />
         </div>
       </PageShell>
     );
