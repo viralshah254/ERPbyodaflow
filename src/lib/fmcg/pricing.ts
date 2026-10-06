@@ -55,6 +55,46 @@ export function resolveUnitsPerPiece(
   return 1;
 }
 
+/** Product carton count, unless the LPO states a different number of pieces. */
+export function piecesChargedPerPack(input: {
+  unit?: string | null;
+  packing?: string | null;
+  catalogUnits?: number | null;
+}): number {
+  const unit = (input.unit ?? "").trim();
+  if (!unit || isPieceUom(unit)) return 1;
+  const match = (input.packing ?? "").match(/\s[*x×]\s*(\d+(?:[.,]\d+)?)/i);
+  const statedRaw = match?.[1] ? Number(match[1].replace(",", ".")) : null;
+  const stated = statedRaw != null && Number.isFinite(statedRaw) && statedRaw > 1 ? statedRaw : null;
+  const catalog =
+    input.catalogUnits != null && Number.isFinite(input.catalogUnits) && input.catalogUnits > 1
+      ? input.catalogUnits
+      : null;
+  if (stated && catalog && stated !== catalog) return stated;
+  if (catalog) return catalog;
+  if (stated) return stated;
+  return 1;
+}
+
+const PACK_UOM_GROUPS = [
+  ["CTN", "CARTON", "CARTONS", "CS"],
+  ["OUTER", "OUTERS", "OTR"],
+  ["BALE", "BALES", "BL"],
+  ["PK", "PACK", "PACKS"],
+  ["BOX", "BOXES"],
+];
+
+export function catalogUnitsForUom(
+  packs: Array<{ uom: string; unitsPer: number }> | undefined,
+  unit: string | undefined
+): number | null {
+  const want = normalizeUom(unit);
+  if (!want || isPieceUom(want)) return null;
+  const group = PACK_UOM_GROUPS.find((list) => list.includes(want)) ?? [want];
+  const hit = (packs ?? []).find((row) => group.includes(normalizeUom(row.uom)));
+  return hit && hit.unitsPer > 1 ? hit.unitsPer : null;
+}
+
 export function resolveFmcgClientLinePrice(opts: {
   pricePerPiece: number;
   uom: string;

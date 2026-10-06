@@ -12,6 +12,7 @@ import {
   resolveCustomerPriceListApi,
   type CatalogPriceItem,
 } from "@/lib/api/pricing";
+import { catalogUnitsForUom, isPieceUom, piecesChargedPerPack } from "@/lib/fmcg/pricing";
 
 type OrderLine = {
   id?: string;
@@ -24,23 +25,33 @@ type OrderLine = {
   tax?: number;
   taxCodeId?: string;
   amount?: number;
+  packing?: string;
+  pricedUnitsPer?: number;
 };
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function priceForLine(item: CatalogPriceItem, unit: string | undefined) {
+function priceForLine(item: CatalogPriceItem, unit: string | undefined, packing?: string) {
   const piece = item.pricePerPiece ?? item.price;
   if (piece == null || !Number.isFinite(piece) || piece <= 0) return null;
   const discount = item.discountPercent ?? 0;
-  const uom = (unit ?? "").trim().toUpperCase();
-  const pack = item.packPrices?.find((row) => row.uom.trim().toUpperCase() === uom);
-  if (pack && pack.unitPrice > 0) {
-    const net = pack.unitPriceNet ?? pack.unitPrice * (1 - discount / 100);
-    return { unitPrice: pack.unitPrice, discount, net };
+  const pieces = piecesChargedPerPack({
+    unit,
+    packing,
+    catalogUnits: catalogUnitsForUom(item.packPrices, unit),
+  });
+  if (!isPieceUom(unit ?? "") && pieces > 1) {
+    const unitPrice = round2(piece * pieces);
+    return {
+      unitPrice,
+      discount,
+      net: round2(unitPrice * (1 - discount / 100)),
+      pricedUnitsPer: pieces,
+    };
   }
-  return { unitPrice: piece, discount, net: piece * (1 - discount / 100) };
+  return { unitPrice: piece, discount, net: round2(piece * (1 - discount / 100)), pricedUnitsPer: undefined };
 }
 
 export function DocumentPriceTagControl({
@@ -124,7 +135,7 @@ export function DocumentPriceTagControl({
         const nextLines = lines.map((line) => {
           if (!line.productId) return line;
           const item = byProduct.get(line.productId);
-          const quote = item ? priceForLine(item, line.unit) : null;
+          const quote = item ? priceForLine(item, line.unit, line.packing) : null;
           if (!quote) {
             missing.push(line.description || "A product");
             return line;
@@ -135,6 +146,7 @@ export function DocumentPriceTagControl({
             ...line,
             unitPrice: round2(quote.unitPrice),
             discount: quote.discount > 0 ? quote.discount : undefined,
+            ...(quote.pricedUnitsPer ? { pricedUnitsPer: quote.pricedUnitsPer } : {}),
             amount: round2(quote.net * qty),
           };
         });
@@ -159,6 +171,9 @@ export function DocumentPriceTagControl({
             unit: line.unit,
             unitPrice: line.unitPrice,
             ...(line.discount != null ? { discount: line.discount } : {}),
+            ...(line.pricedUnitsPer != null && line.pricedUnitsPer > 1
+              ? { pricedUnitsPer: line.pricedUnitsPer }
+              : {}),
             ...(line.taxCodeId ? { taxCodeId: line.taxCodeId } : {}),
             ...(line.tax != null ? { tax: line.tax } : {}),
             amount: line.amount,

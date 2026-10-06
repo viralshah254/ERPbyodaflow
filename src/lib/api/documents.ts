@@ -307,6 +307,7 @@ export type DocumentDraftPayload = {
     quantity?: number;
     unit?: string;
     unitPrice?: number;
+    pricedUnitsPer?: number;
     discount?: number;
     taxCodeId?: string;
     tax?: number;

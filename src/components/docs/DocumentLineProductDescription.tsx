@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
   deliveryLineBarcode,
@@ -20,10 +21,18 @@ export function DocumentLineProductDescription({
   nameClassName,
 }: DocumentLineProductDescriptionProps) {
   const name = deliveryLinePrimaryLabel(line);
+  const productId = (line.productId ?? "").trim();
+  const productHref = productId ? `/master/products/${encodeURIComponent(productId)}` : "";
 
   if (fmcgOrg) {
     const sizeLabel = deliveryLineSize(line);
     const barcode = deliveryLineBarcode(line);
+    const nameClass = cn(
+      "block",
+      sizeLabel ? "pr-14" : "",
+      productHref ? "hover:underline underline-offset-2" : "",
+      nameClassName
+    );
 
     return (
       <div className="relative min-w-0">
@@ -35,7 +44,13 @@ export function DocumentLineProductDescription({
             {sizeLabel}
           </Badge>
         ) : null}
-        <span className={cn("block", sizeLabel ? "pr-14" : "", nameClassName)}>{name}</span>
+        {productHref ? (
+          <Link href={productHref} className={nameClass}>
+            {name}
+          </Link>
+        ) : (
+          <span className={nameClass}>{name}</span>
+        )}
         {barcode ? (
           <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{barcode}</p>
         ) : null}
@@ -47,7 +62,13 @@ export function DocumentLineProductDescription({
 
   return (
     <>
-      <span className={nameClassName}>{name}</span>
+      {productHref ? (
+        <Link href={productHref} className={cn(nameClassName, "hover:underline underline-offset-2")}>
+          {name}
+        </Link>
+      ) : (
+        <span className={nameClassName}>{name}</span>
+      )}
       {sku ? <p className="truncate font-mono text-xs text-muted-foreground">{sku}</p> : null}
     </>
   );

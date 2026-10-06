@@ -10,6 +10,7 @@ export type DeliveryLineLabelInput = {
   odaflowPackSize?: string | null | undefined;
   odaflowBarcode?: string | null | undefined;
   description?: string | null | undefined;
+  productId?: string | null | undefined;
 };
 
 export function deliveryLinePrimaryLabel(line: DeliveryLineLabelInput): string {
