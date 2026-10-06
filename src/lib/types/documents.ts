@@ -234,6 +234,8 @@ export type DocumentDetailRecord = {
     description: string;
     qty?: number;
     unit?: string;
+    /** How this quantity is packed, e.g. "1 CTN * 12 PCS". */
+    packing?: string;
     unitPrice?: number;
     /** Line discount percent when offered. */
     discount?: number;

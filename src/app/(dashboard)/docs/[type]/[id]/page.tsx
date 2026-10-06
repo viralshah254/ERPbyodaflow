@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DocumentPageShell } from "@/components/docs/DocumentPageShell";
 import { DocumentFulfilmentLinesTable } from "@/components/docs/DocumentFulfilmentLinesTable";
+import { LinePackingCell } from "@/components/docs/LinePackingCell";
 import { DocumentTabs } from "@/components/docs/DocumentTabs";
 import { DocumentRightPanel } from "@/components/docs/DocumentRightPanel";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
@@ -1802,10 +1803,10 @@ export default function DocViewPage() {
                         isGrnDoc
                           ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                           : showFulfilmentTable
-                          ? "min-w-[920px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                          ? "min-w-[986px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                           : isPurchaseDoc
                           ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                          : "min-w-[792px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                          : "min-w-[858px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                       }
                     >
                       <span>Description</span>
@@ -1865,7 +1866,7 @@ export default function DocViewPage() {
                             isGrnDoc
                               ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                               : showFulfilmentTable
-                              ? `min-w-[920px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0${
+                              ? `min-w-[986px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0${
                                   line.fulfilmentStatus === "NOT_PACKED" ||
                                   line.fulfilmentStatus === "PARTIALLY_PACKED"
                                     ? " bg-amber-50/80 dark:bg-amber-950/20"
@@ -1873,7 +1874,7 @@ export default function DocViewPage() {
                                 }`
                               : isPurchaseDoc
                               ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
-                              : "min-w-[792px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
+                              : "min-w-[858px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                           }
                         >
                           <div className="min-w-0">
@@ -1910,7 +1911,7 @@ export default function DocViewPage() {
                               </p>
                             ) : null}
                           </div>
-                          <span className="text-right font-mono text-xs">{line.unit ?? "—"}</span>
+                          <LinePackingCell unit={line.unit} packing={line.packing} />
                           {isGrnDoc ? (
                             <>
                               <span className="text-right">{orderedQty != null ? orderedQty.toLocaleString() : "—"}</span>

@@ -5,6 +5,7 @@ import { Package, PackageCheck, PackageX, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { DocumentLineProductDescription } from "@/components/docs/DocumentLineProductDescription";
+import { LinePackingCell } from "@/components/docs/LinePackingCell";
 import { deliveryLinePrimaryLabel } from "@/lib/documents/format-delivery-line";
 import { resolveSalesUomQty, scaleQtyWithHeal } from "@/lib/documents/sales-uom-qty";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
@@ -158,9 +159,9 @@ function LineProgressBar({ pct, state }: { pct: number; state: LineState }) {
 
 const FULFIL_COLGROUP = (
   <colgroup>
-    <col style={{ width: "18%" }} />
+    <col style={{ width: "14%" }} />
     <col style={{ width: "9%" }} />
-    <col style={{ width: "5%" }} />
+    <col style={{ width: "12%" }} />
     <col style={{ width: "6%" }} />
     <col style={{ width: "6%" }} />
     <col style={{ width: "6%" }} />
@@ -168,7 +169,7 @@ const FULFIL_COLGROUP = (
     <col style={{ width: "8%" }} />
     <col style={{ width: "5%" }} />
     <col style={{ width: "10%" }} />
-    <col style={{ width: "16%" }} />
+    <col style={{ width: "13%" }} />
   </colgroup>
 );
 
@@ -351,7 +352,9 @@ export function DocumentFulfilmentLinesTable({
                       </Badge>
                     </td>
 
-                    <td className={cn(tdClass, "text-right font-mono text-xs text-muted-foreground")}>{r.line.unit ?? "—"}</td>
+                    <td className={cn(tdClass, "text-right")}>
+                      <LinePackingCell unit={r.line.unit} packing={r.line.packing} />
+                    </td>
                     <td className={cn(tdClass, "text-right tabular-nums")}>{fmtQty(r.ordered)}</td>
                     <td
                       className={cn(

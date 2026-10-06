@@ -27,6 +27,7 @@ type BackendDocumentLine = {
   qty?: number;
   quantity?: number;
   unit?: string;
+  packing?: string;
   unitPrice?: number;
   /** Line discount percent when offered on the price tag / order. */
   discount?: number;
@@ -468,6 +469,7 @@ function mapDocumentDetail(
       accountCode: line.accountCode,
       qty: line.qty ?? line.quantity,
       unit: line.unit,
+      ...(line.packing ? { packing: line.packing } : {}),
       unitPrice: line.unitPrice,
       ...(typeof line.discount === "number" && Number.isFinite(line.discount) && line.discount >= 0
         ? { discount: line.discount }
