@@ -8,7 +8,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { fetchPickPackTasks, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import { fetchPickPackTasks, warehouseStatusLabel, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
 import { toast } from "sonner";
 
 const STATUS_OPTIONS = [
@@ -57,9 +57,9 @@ export default function PickPackPage() {
     () => [
       { id: "reference", header: "Reference", accessor: (r: WarehousePickPackRow) => <span className="font-medium">{r.reference}</span>, sticky: true },
       { id: "delivery", header: "Delivery", accessor: (r: WarehousePickPackRow) => r.sourceDocumentNumber ?? "—" },
-      { id: "deliveryStatus", header: "Delivery status", accessor: (r: WarehousePickPackRow) => r.sourceDocumentStatus ?? "—" },
+      { id: "deliveryStatus", header: "Delivery status", accessor: (r: WarehousePickPackRow) => warehouseStatusLabel(r.sourceDocumentStatus) },
       { id: "customer", header: "Customer", accessor: (r: WarehousePickPackRow) => r.customer ?? "—" },
-      { id: "status", header: "Status", accessor: (r: WarehousePickPackRow) => <Badge variant="outline">{r.status}</Badge> },
+      { id: "status", header: "Status", accessor: (r: WarehousePickPackRow) => <Badge variant="outline">{warehouseStatusLabel(r.status)}</Badge> },
       { id: "lines", header: "Lines", accessor: (r: WarehousePickPackRow) => r.lines.length },
       { id: "cartons", header: "Cartons", accessor: (r: WarehousePickPackRow) => r.cartonsCount ?? 0 },
     ],
@@ -70,7 +70,7 @@ export default function PickPackPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Pick & Pack"
-        description="Live warehouse execution tasks for picking, packing, and dispatch."
+        description="What the floor still has to pick, pack, and send."
         breadcrumbs={[
           { label: "Warehouse", href: "/warehouse/overview" },
           { label: "Pick & Pack" },
@@ -88,7 +88,7 @@ export default function PickPackPage() {
         <div className={LIST_TABLE_SURFACE_CLASS}>
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Execution queue</h3>
-            <p className="text-xs text-muted-foreground">Pick tasks now come from backend warehouse execution state.</p>
+            <p className="text-xs text-muted-foreground">Each row is a delivery note the warehouse is working.</p>
           </div>
           <DataTable<WarehousePickPackRow>
               data={filtered}

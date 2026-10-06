@@ -34,10 +34,32 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
     }));
 
     let lastStepReached = false;
+    let moveQueued = false;
 
     const driverObj = driver({
       showProgress: true,
       steps,
+      // driver.js runs Next on pointerdown. Advancing immediately removes the
+      // button, and the rest of the click lands on the overlay and closes the tour.
+      onNextClick: (_element, _step, { driver: tourDriver }) => {
+        if (moveQueued) return;
+        moveQueued = true;
+        window.setTimeout(() => {
+          moveQueued = false;
+          if (!tourDriver.isActive()) return;
+          if (tourDriver.hasNextStep()) tourDriver.moveNext();
+          else tourDriver.destroy();
+        }, 0);
+      },
+      onPrevClick: (_element, _step, { driver: tourDriver }) => {
+        if (moveQueued) return;
+        moveQueued = true;
+        window.setTimeout(() => {
+          moveQueued = false;
+          if (!tourDriver.isActive()) return;
+          if (tourDriver.hasPreviousStep()) tourDriver.movePrevious();
+        }, 0);
+      },
       onHighlighted: (element, _step, opts) => {
         if (opts.state.activeIndex === liveSteps.length - 1) lastStepReached = true;
         document.querySelectorAll(".driver-active-element").forEach((node) => {

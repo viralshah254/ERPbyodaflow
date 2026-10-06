@@ -25,6 +25,16 @@ const KNOWN: Record<string, string> = {
   "no customers yet": "This view has no customers. Add one, import a file, or switch channel tab if you expected rows.",
   "edit customer":
     "Update the name, contacts, tax PIN, and terms. Orders and invoices raised after you save use the new details.",
+  edit: "Opens this draft so the parties, lines, or notes can be changed. A posted document is not rewritten from here.",
+  "request approval": "Sends this document to the approver. Stock and the ledger stay unchanged until it is approved and posted.",
+  cancel: "Voids this document. A cancelled order is not delivered or invoiced.",
+  more: "Print, export, and the other actions that sit outside the main buttons.",
+  lines: "The products on this document: description, unit, quantity, what is still open, discount, and tax.",
+  "taxes/charges": "Tax and extra charges on this document. Check the rate before you approve.",
+  attachments: "Files saved on this document, including the customer order PDF.",
+  comments: "Notes between your team about this document.",
+  approval: "Who was asked to approve, and whether they have decided.",
+  audit: "The history of changes on this document, in the order they happened.",
   "new document": "Starts a customer order from here. For a purchase order, receipt, invoice, or journal, open that tile and use New on its list.",
   "new order": "Start a sales order already linked to this customer, so you do not pick the party again.",
   "new sales order": "Opens a new customer order. Pick the customer and lines, then save. It stays a draft until you submit it.",
@@ -134,7 +144,7 @@ const SKIP_ACTION = /start tour|tutorial|ask copilot|don't show|search or run|^â
 
 function isPrimaryAction(el: HTMLElement, label: string): boolean {
   if (el.matches("[data-tour-step=create-button]") || Boolean(el.querySelector("[data-tour-step=create-button]"))) return true;
-  return /^(add|new|create|import|edit|post|save|approve|receive|dispatch|credit|debit|pickup)\b/i.test(label);
+  return /^(add|new|create|import|edit|post|save|approve|receive|dispatch|credit|debit|pickup|request|cancel|reverse|more|print|convert)\b/i.test(label);
 }
 
 function clickable(root: Element): HTMLElement[] {

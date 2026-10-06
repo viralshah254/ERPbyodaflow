@@ -253,7 +253,7 @@ export default function PurchaseOrdersPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Purchase Orders"
-        description="Landing, processing, and shop replenishment orders"
+        description="Orders sent to suppliers, and what is still waiting to be received."
         dense
         breadcrumbs={[
           { label: "Purchasing", href: "/purchasing/orders" },

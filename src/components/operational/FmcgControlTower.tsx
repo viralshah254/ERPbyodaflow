@@ -395,6 +395,9 @@ function PlantDay({
           <Button variant="outline" size="sm" asChild>
             <Link href="/inventory/stock-levels">Finished goods</Link>
           </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/manufacturing/mrp">What to make</Link>
+          </Button>
         </div>
       </div>
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15.5rem),1fr))]">

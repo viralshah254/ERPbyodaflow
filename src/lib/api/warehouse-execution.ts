@@ -1,5 +1,33 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
+const WAREHOUSE_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  PICKED: "Picked",
+  PACKED: "Packed",
+  DISPATCHED: "Dispatched",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  DRAFT: "Draft",
+  IN_TRANSIT: "In transit",
+  CONVERTED: "Invoiced",
+  DELIVERED: "Delivered",
+  POSTED: "Posted",
+  APPROVED: "Approved",
+};
+
+/** Readable warehouse and delivery-note status for lists and task headers. */
+export function warehouseStatusLabel(status?: string | null): string {
+  const raw = status?.trim();
+  if (!raw) return "—";
+  const known = WAREHOUSE_STATUS_LABELS[raw.toUpperCase()];
+  if (known) return known;
+  return raw
+    .toLowerCase()
+    .split("_")
+    .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join(" ");
+}
+
 export type WarehousePickPackRow = {
   id: string;
   number: string;
