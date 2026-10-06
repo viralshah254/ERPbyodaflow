@@ -51,6 +51,7 @@ import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { SalesOrdersListPanel } from "@/components/sales/SalesOrdersListPanel";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
+import { useNavCounts } from "@/lib/use-nav-counts";
 
 const CUSTOMER_DOC_TYPES = new Set([
   "quote",
@@ -105,6 +106,15 @@ const STATUS_OPTIONS_BY_TYPE: Partial<
     { label: "Invoiced", value: "CONVERTED" },
   ],
 };
+
+function QueueCount({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold leading-none text-destructive-foreground">
+      {count}
+    </span>
+  );
+}
 
 function readableStatus(status: string, workflow: { id: string; label: string }[]): string {
   const known = workflow.find((step) => step.id === status)?.label;
@@ -209,7 +219,10 @@ export default function DocTypeListPage() {
   const statusFromUrl = searchParams.get("status") ?? "";
   const terminology = useTerminology();
   const templateId = useOrgContextStore((s) => s.templateId);
+  const navCounts = useNavCounts();
   const showKraColumn = isFmcgOrg(templateId);
+  const pickPackWaiting = navCounts["warehouse-pick-pack"] ?? 0;
+  const dispatchWaiting = navCounts["warehouse-dispatch"] ?? 0;
   const config = getDocTypeConfig(type);
   const canWrite = useCanWriteDocType(type);
   const labelKey = (config?.termKey ?? TYPE_LABELS[type]) as string;
@@ -579,12 +592,22 @@ export default function DocTypeListPage() {
         actions={
           <div className="flex items-center gap-2">
             {type === "delivery-note" && isFmcgOrg(templateId) ? (
-              <Button variant="outline" asChild>
-                <Link href="/warehouse/dispatch">
-                  <Icons.Truck className="mr-2 h-4 w-4" />
-                  Dispatch
-                </Link>
-              </Button>
+              <>
+                <Button variant="outline" asChild>
+                  <Link href="/warehouse/pick-pack">
+                    <Icons.PackageCheck className="mr-2 h-4 w-4" />
+                    Pick & pack
+                    <QueueCount count={pickPackWaiting} />
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/warehouse/dispatch">
+                    <Icons.Truck className="mr-2 h-4 w-4" />
+                    Dispatch
+                    <QueueCount count={dispatchWaiting} />
+                  </Link>
+                </Button>
+              </>
             ) : null}
             {canWrite ? (
               <Button asChild>

@@ -38,6 +38,7 @@ export type WarehousePickPackRow = {
   customer?: string;
   warehouseId?: string;
   status: string;
+  createdAt?: string;
   cartonsCount?: number;
   packingNote?: string;
   courier?: string;
