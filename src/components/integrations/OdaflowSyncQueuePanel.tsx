@@ -126,8 +126,10 @@ export function OdaflowSyncQueuePanel({
   const [queuePage, setQueuePage] = React.useState(1);
   const [customerSearch, setCustomerSearch] = React.useState("");
   const [salesRepSearch, setSalesRepSearch] = React.useState("");
+  const [purchaseOrderSearch, setPurchaseOrderSearch] = React.useState("");
   const debouncedCustomer = useDebouncedValue(customerSearch, 300);
   const debouncedSalesRep = useDebouncedValue(salesRepSearch, 300);
+  const debouncedPurchaseOrder = useDebouncedValue(purchaseOrderSearch, 300);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [latchedReturnContext, setLatchedReturnContext] = React.useState<{
@@ -151,6 +153,7 @@ export function OdaflowSyncQueuePanel({
         limit: 20,
         customer: debouncedCustomer || undefined,
         salesRep: debouncedSalesRep || undefined,
+        purchaseOrder: debouncedPurchaseOrder || undefined,
       });
       if (seq !== requestSeq.current) return;
       hasLoadedRef.current = true;
@@ -172,7 +175,7 @@ export function OdaflowSyncQueuePanel({
         setRefreshing(false);
       }
     }
-  }, [queueStatus, queueEventType, queuePage, debouncedCustomer, debouncedSalesRep]);
+  }, [queueStatus, queueEventType, queuePage, debouncedCustomer, debouncedSalesRep, debouncedPurchaseOrder]);
 
   React.useEffect(() => {
     void loadQueue();
@@ -180,7 +183,7 @@ export function OdaflowSyncQueuePanel({
 
   React.useEffect(() => {
     setQueuePage(1);
-  }, [debouncedCustomer, debouncedSalesRep]);
+  }, [debouncedCustomer, debouncedSalesRep, debouncedPurchaseOrder]);
 
   React.useEffect(() => {
     if (!initialOpenQueueId) return;
@@ -206,7 +209,7 @@ export function OdaflowSyncQueuePanel({
     onQueueChanged?.();
   }
 
-  const hasSearch = Boolean(debouncedCustomer || debouncedSalesRep);
+  const hasSearch = Boolean(debouncedCustomer || debouncedSalesRep || debouncedPurchaseOrder);
 
   return (
     <>
@@ -257,6 +260,18 @@ export function OdaflowSyncQueuePanel({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="min-w-[180px] flex-1">
+            <label className="text-xs text-muted-foreground block mb-1">Purchase order</label>
+            <div className="relative">
+              <Icons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={purchaseOrderSearch}
+                onChange={(e) => setPurchaseOrderSearch(e.target.value)}
+                placeholder="PO number from the email"
+                className="pl-8"
+              />
+            </div>
           </div>
           <div className="min-w-[180px] flex-1">
             <label className="text-xs text-muted-foreground block mb-1">Search customer</label>
@@ -349,7 +364,7 @@ export function OdaflowSyncQueuePanel({
                             </span>
                           ) : null}
                           <span className="text-xs font-mono text-muted-foreground/80">
-                            {item.displayRef ?? item.odaflowId}
+                            PO {summary?.purchaseOrderNumber || item.displayRef || item.odaflowId}
                           </span>
                         </div>
 

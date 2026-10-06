@@ -205,6 +205,7 @@ export async function fetchOdaflowQueue(params: {
   q?: string;
   customer?: string;
   salesRep?: string;
+  purchaseOrder?: string;
   intake?: "email_lpo" | "field";
 }): Promise<OdaflowQueueResponse> {
   requireLiveApi("Odaflow integration");
@@ -216,6 +217,7 @@ export async function fetchOdaflowQueue(params: {
   if (params.q?.trim()) qs.set("q", params.q.trim());
   if (params.customer?.trim()) qs.set("customer", params.customer.trim());
   if (params.salesRep?.trim()) qs.set("salesRep", params.salesRep.trim());
+  if (params.purchaseOrder?.trim()) qs.set("purchaseOrder", params.purchaseOrder.trim());
   if (params.intake) qs.set("intake", params.intake);
   return apiRequest<OdaflowQueueResponse>(`/api/integrations/odaflow/sync/queue?${qs.toString()}`);
 }

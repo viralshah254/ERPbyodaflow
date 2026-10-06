@@ -398,7 +398,7 @@ export function SalesOrdersListPanel({
     <div className="flex flex-col gap-4">
       <DataTableToolbar
         className="shrink-0"
-        searchPlaceholder="Search by number, customer..."
+        searchPlaceholder="Search by purchase order, number, or customer"
         searchValue={search}
         onSearchChange={setSearch}
         filters={[

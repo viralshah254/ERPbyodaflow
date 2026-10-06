@@ -838,7 +838,7 @@ export function OdaflowQueueOrderSheet({
                               minSearchLength={0}
                               searchDebounceMs={200}
                               placeholder="Select product"
-                              searchPlaceholder="Search products…"
+                              searchPlaceholder="Name, size, or barcode"
                               emptyMessage="No products found."
                               allowClear
                               disabled={checkingProductLines.has(line.index) || submitting}
@@ -932,7 +932,7 @@ export function OdaflowQueueOrderSheet({
                                   minSearchLength={0}
                                   searchDebounceMs={200}
                                   placeholder="Select product"
-                                  searchPlaceholder="Search products…"
+                                  searchPlaceholder="Name, size, or barcode"
                                   emptyMessage="No products found."
                                   allowClear
                                   disabled={submitting}
