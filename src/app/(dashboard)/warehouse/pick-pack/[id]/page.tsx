@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   fetchPickPackTask,
+  warehouseStatusLabel,
   patchPickPackDispatchDraft,
   patchPickPackLines,
   patchPickPackWarehouse,
@@ -988,10 +989,10 @@ export default function PickPackDetailPage() {
   return (
     <PageShell>
       <PageHeader
-        title={`${task.reference} - ${task.status}`}
+        title={`${task.reference} — ${warehouseStatusLabel(task.status)}`}
         description={
           task.sourceDocumentNumber
-            ? `${task.customer ?? "Customer"} · Delivery ${task.sourceDocumentNumber} (${task.sourceDocumentStatus ?? "DRAFT"})`
+            ? `${task.customer ?? "Customer"} · Delivery ${task.sourceDocumentNumber} (${warehouseStatusLabel(task.sourceDocumentStatus)})`
             : task.customer
         }
         breadcrumbs={[

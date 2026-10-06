@@ -75,6 +75,8 @@ export async function fetchPurchaseOrdersPageApi(
   }
   if (opts?.status?.trim()) params.set("status", opts.status.trim());
   if (opts?.search?.trim()) params.set("search", opts.search.trim());
+  const cursor = opts?.cursor != null ? String(opts.cursor) : "";
+  if (cursor === "" || cursor === "0") params.set("includeSummary", "1");
 
   const payload = await apiRequest<BackendPurchaseOrdersPage>("/api/purchasing/orders", {
     params,

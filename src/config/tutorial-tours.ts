@@ -1,10 +1,17 @@
 /**
- * Spotlight tour definitions for high-value pages.
- * Keys match route pathnames (normalized). Steps use CSS selectors or data-tour-step.
+ * Spotlight tour definitions.
+ * Hand-written tours win on their exact route. Every other screen gets a
+ * page-specific tour from its guide, nav label, or settings hub entry.
+ * Steps use a CSS selector or a function that returns the element to highlight.
  */
 
+import { ITEM_GUIDES, ORPHAN_ROUTE_GUIDES } from "./tutorial-guides";
+import { TUTORIAL_CHAPTERS } from "./tutorial";
+import { NAV_SECTIONS, type NavItem } from "./nav";
+import { SETTINGS_HUB_GROUPS } from "@/lib/settings/settings-hub-links";
+
 export interface TourStep {
-  element: string;
+  element: string | (() => Element);
   title: string;
   description: string;
 }
@@ -1016,22 +1023,354 @@ export const TUTORIAL_TOURS: TourDef[] = [
   },
 ];
 
-/**
- * Get tour definition for a pathname.
- * Prefers exact route match; otherwise longest prefix match so /docs/sales-order gets the SO tour, not the hub.
- */
-export function getTourForRoute(pathname: string): TourDef | null {
-  const normalized = pathname.replace(/\/$/, "") || "/";
-  const exact = TUTORIAL_TOURS.find((t) => normalized === t.route);
-  if (exact) return exact;
+const TOUR_EXCLUDED_PREFIXES = ["/tutorial", "/login", "/signup", "/platform"];
 
-  let best: TourDef | null = null;
+type ScreenGuide = {
+  href: string;
+  label: string;
+  summary: string;
+  steps: string[];
+  hints: { selector: string; hint: string }[];
+};
+
+function normalizePath(pathname: string): string {
+  return pathname.replace(/\/$/, "") || "/";
+}
+
+function clip(text: string, max = 380): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  const slice = clean.slice(0, max);
+  const stop = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("; "));
+  if (stop > 160) return slice.slice(0, stop + 1);
+  return `${slice.replace(/\s+\S*$/, "")}…`;
+}
+
+function firstExisting(selectors: string[]): () => Element {
+  return () => {
+    for (const selector of selectors) {
+      const found = document.querySelector(selector);
+      if (found) return found;
+    }
+    return document.body;
+  };
+}
+
+function workArea(): () => Element {
+  return () => {
+    const root = document.querySelector("[data-tutorial-hint=page-main]");
+    if (!root) return document.querySelector("h1") ?? document.body;
+
+    const table = root.querySelector("table, [role='grid']");
+    if (table) return table;
+
+    const tabs = root.querySelector("[role='tablist']");
+    if (tabs) return tabs;
+
+    const form = [...root.querySelectorAll("form")].find(
+      (el) => !el.closest("[data-tutorial-hint=page-title], [data-tutorial-hint=page-actions]")
+    );
+    if (form) return form;
+
+    const title = root.querySelector("[data-tutorial-hint=page-title]");
+    let node: Element | null = title;
+    while (node && node.parentElement && node.parentElement !== root) {
+      node = node.parentElement;
+      const sibling = node.nextElementSibling;
+      if (sibling && sibling.getBoundingClientRect().height > 48) return sibling;
+    }
+    return root;
+  };
+}
+
+function putScreen(map: Map<string, ScreenGuide>, screen: ScreenGuide) {
+  const href = normalizePath(screen.href);
+  const next = { ...screen, href };
+  const prev = map.get(href);
+  if (!prev || next.summary.length > prev.summary.length) map.set(href, next);
+}
+
+function collectScreens(): ScreenGuide[] {
+  const map = new Map<string, ScreenGuide>();
+
+  for (const chapter of TUTORIAL_CHAPTERS) {
+    for (const item of chapter.items) {
+      if (!item.href) continue;
+      const guideSteps = item.guideSteps ?? [];
+      putScreen(map, {
+        href: item.href,
+        label: item.label,
+        summary:
+          item.guideSummary?.trim() ||
+          `${item.label} is the ${chapter.title} screen for this work. Use the heading to confirm you are in the right place, then act on the list or form below.`,
+        steps:
+          guideSteps.length > 0
+            ? guideSteps
+            : [
+                "Confirm the heading matches the job you came to do.",
+                "Use the main area to review rows, open a record, or complete the form.",
+                "Use the header actions when you need to create, filter, or export.",
+              ],
+        hints: item.elementHints ?? [],
+      });
+    }
+  }
+
+  const walkNav = (items: NavItem[]) => {
+    for (const item of items) {
+      if (item.href) {
+        const guide = ITEM_GUIDES[item.id];
+        putScreen(map, {
+          href: item.href,
+          label: item.label,
+          summary:
+            guide?.guideSummary?.trim() ||
+            `${item.label}. Use this screen to review ${item.label.toLowerCase()} and open a record when you need to change it.`,
+          steps:
+            guide?.guideSteps && guide.guideSteps.length > 0
+              ? guide.guideSteps
+              : [
+                  "Scan the page from the heading down.",
+                  "Open a row or use the header actions to continue the task.",
+                ],
+          hints: guide?.elementHints ?? [],
+        });
+      }
+      if (item.children?.length) walkNav(item.children);
+    }
+  };
+  for (const section of NAV_SECTIONS) walkNav(section.items);
+
+  for (const [href, orphan] of Object.entries(ORPHAN_ROUTE_GUIDES)) {
+    putScreen(map, {
+      href,
+      label: orphan.itemLabel,
+      summary: orphan.guideSummary,
+      steps: orphan.guideSteps,
+      hints: orphan.elementHints ?? [],
+    });
+  }
+
+  putScreen(map, {
+    href: "/settings",
+    label: "Settings",
+    summary:
+      "Settings is the configuration home: organisation, people and access, financial setup, tax, inventory, and integrations. Open a card to change that area. Day-to-day selling and stock stay in the operational menus.",
+    steps: [
+      "Pick the group that matches the change: organisation, people, finance, tax, inventory, or integrations.",
+      "Open one card and save there before starting a second change.",
+      "Use Tutorial on this page when you want the written map of the product.",
+    ],
+    hints: [
+      {
+        selector: "[data-tutorial-hint=settings-hub]",
+        hint: "Each card opens one configuration area. Permissions hide cards you cannot change.",
+      },
+    ],
+  });
+
+  for (const group of SETTINGS_HUB_GROUPS) {
+    for (const link of group.links) {
+      putScreen(map, {
+        href: link.href,
+        label: link.label,
+        summary: `${link.label}. ${link.description}. This sits under Settings → ${group.title}.`,
+        steps: [
+          `Review the current ${link.label.toLowerCase()} values before editing.`,
+          "Save when the values match how the organisation should post and report.",
+          "Return to Settings if the next change belongs in a different card.",
+        ],
+        hints: [],
+      });
+    }
+  }
+
+  return [...map.values()];
+}
+
+let screenCache: ScreenGuide[] | null = null;
+function getScreens(): ScreenGuide[] {
+  if (!screenCache) screenCache = collectScreens();
+  return screenCache;
+}
+
+const synthesizedTours = new Map<string, TourDef>();
+
+function synthesizeTour(screen: ScreenGuide): TourDef {
+  const cached = synthesizedTours.get(screen.href);
+  if (cached) return cached;
+
+  const howTo = screen.steps
+    .slice(0, 4)
+    .map((step, index) => `${index + 1}. ${step}`)
+    .join(" ");
+
+  const steps: TourStep[] = [
+    {
+      element: firstExisting(["[data-tutorial-hint=page-title]", "h1", "[data-tutorial-hint=page-main]"]),
+      title: screen.label,
+      description: clip(screen.summary),
+    },
+    {
+      element: workArea(),
+      title: "How to use this page",
+      description: clip(howTo, 420),
+    },
+  ];
+
+  const tour: TourDef = {
+    tourId: `page-tour:${screen.href}`,
+    route: screen.href,
+    title: `${screen.label} tour`,
+    steps,
+  };
+  synthesizedTours.set(screen.href, tour);
+  return tour;
+}
+
+const genericTours = new Map<string, TourDef>();
+const expandedTours = new Map<string, TourDef>();
+
+const REPLAY_STEP: TourStep = {
+  element: firstExisting([
+    "[data-tutorial-hint=command-search]",
+    "[data-tour-step=command-hint]",
+    "[data-tutorial-hint=page-help]",
+  ]),
+  title: "Jump or replay",
+  description:
+    "Search or run opens the command palette (⌘K or Ctrl+K) so you can jump to a related screen. The tour button in the page header replays this walkthrough, and the book icon opens the written guide.",
+};
+
+function ensureInteractive(tour: TourDef): TourDef {
+  const cached = expandedTours.get(tour.tourId);
+  if (cached) return cached;
+
+  const screen = getScreens().find((item) => item.href === tour.route);
+  const steps = [...tour.steps];
+  const selectors = new Set(
+    steps.filter((step) => typeof step.element === "string").map((step) => step.element as string)
+  );
+
+  if (steps.length < 2) {
+    const howTo =
+      screen?.steps.slice(0, 4).map((step, index) => `${index + 1}. ${step}`).join(" ") ||
+      "Review the main area under the heading, then use header actions to create, filter, or open a record.";
+    steps.push({
+      element: workArea(),
+      title: "How to use this page",
+      description: clip(howTo, 420),
+    });
+  }
+
+  let addedHints = 0;
+  for (const hint of screen?.hints ?? []) {
+    if (selectors.has(hint.selector) || addedHints >= 3) continue;
+    steps.push({
+      element: firstExisting([hint.selector, "[data-tutorial-hint=page-main]", "h1"]),
+      title: screen?.label ?? tour.title,
+      description: hint.hint,
+    });
+    selectors.add(hint.selector);
+    addedHints += 1;
+  }
+
+  if (!steps.some((step) => step.title === "Jump or replay")) {
+    steps.push(REPLAY_STEP);
+  }
+
+  const next = steps.length === tour.steps.length ? tour : { ...tour, steps };
+  expandedTours.set(tour.tourId, next);
+  return next;
+}
+
+function genericTour(route: string): TourDef {
+  const cached = genericTours.get(route);
+  if (cached) return cached;
+  const slug = route.split("/").filter(Boolean).pop()?.replace(/-/g, " ") || "this page";
+  const label = slug.charAt(0).toUpperCase() + slug.slice(1);
+  const tour: TourDef = {
+    tourId: `page-tour:${route}`,
+    route,
+    title: `${label} tour`,
+    steps: [
+      {
+        element: firstExisting(["[data-tutorial-hint=page-title]", "h1", "[data-tutorial-hint=page-main]"]),
+        title: label,
+        description: `${label} is part of the working ERP. Read the heading, then use the content below to review or update records.`,
+      },
+      {
+        element: workArea(),
+        title: "Work in the main area",
+        description:
+          "Lists open into a record. Forms save from the header or the bottom of the page. Filters narrow what you see without changing posted data.",
+      },
+      {
+        element: firstExisting([
+          "[data-tutorial-hint=command-search]",
+          "[data-tour-step=command-hint]",
+          "[data-tutorial-hint=page-help]",
+        ]),
+        title: "Jump or replay",
+        description:
+          "Use Search or run in the top bar to jump elsewhere. Replay this tour from the page header whenever you need the steps again.",
+      },
+    ],
+  };
+  genericTours.set(route, tour);
+  return tour;
+}
+
+function longestPrefix<T extends { route?: string; href?: string }>(
+  items: T[],
+  normalized: string,
+  key: "route" | "href"
+): T | null {
+  let best: T | null = null;
   let bestLen = -1;
-  for (const t of TUTORIAL_TOURS) {
-    if (normalized.startsWith(t.route + "/") && t.route.length > bestLen) {
-      best = t;
-      bestLen = t.route.length;
+  for (const item of items) {
+    const value = item[key];
+    if (!value) continue;
+    if (normalized.startsWith(value + "/") && value.length > bestLen) {
+      best = item;
+      bestLen = value.length;
     }
   }
   return best;
+}
+
+/**
+ * Get tour definition for a pathname.
+ * Exact hand-written tours win. A more specific screen beats a shorter parent tour,
+ * so Journal Entries does not reuse the Finance dashboard tour.
+ * Detail URLs such as /docs/sales-order/123 keep the parent document tour.
+ */
+export function getTourForRoute(pathname: string): TourDef | null {
+  const normalized = normalizePath(pathname);
+  if (TOUR_EXCLUDED_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`))) {
+    return null;
+  }
+
+  const exact = TUTORIAL_TOURS.find((tour) => tour.route === normalized);
+  if (exact) return ensureInteractive(exact);
+
+  const screens = getScreens();
+  const exactScreen = screens.find((screen) => screen.href === normalized);
+  const prefixScreen = longestPrefix(screens, normalized, "href");
+  const prefixTour = longestPrefix(TUTORIAL_TOURS, normalized, "route");
+
+  const screen = exactScreen ?? prefixScreen;
+  if (screen) {
+    const handWritten = TUTORIAL_TOURS.find((tour) => tour.route === screen.href);
+    if (handWritten && (!prefixTour || handWritten.route.length >= prefixTour.route.length)) {
+      return ensureInteractive(handWritten);
+    }
+    if (!prefixTour || screen.href.length > prefixTour.route.length) {
+      return ensureInteractive(synthesizeTour(screen));
+    }
+  }
+
+  if (prefixTour) return ensureInteractive(prefixTour);
+  if (screen) return ensureInteractive(synthesizeTour(screen));
+  return ensureInteractive(genericTour(normalized));
 }

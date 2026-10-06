@@ -73,7 +73,7 @@ export function PageHeader({
         </nav>
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1" data-tutorial-hint="page-title">
           <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
             {title}
           </h1>
@@ -83,7 +83,7 @@ export function PageHeader({
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:shrink-0" data-tutorial-hint="page-actions">
           <PageHelp compact />
           {showCommandHint ? <CommandPaletteHint /> : null}
           {showRightPanelToggle && (

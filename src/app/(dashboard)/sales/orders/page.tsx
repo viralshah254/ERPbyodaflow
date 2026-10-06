@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LIST_PAGE_BODY_PAGINATED_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -398,7 +398,13 @@ function FranchiseOrdersTab({ canWrite }: { canWrite: boolean }) {
 // ─── Sales Orders list (paginated) ───────────────────────────────────────────
 
 function SalesOrdersPanel() {
-  return <SalesOrdersListPanel savedViewsScope="sales-orders" />;
+  const searchParams = useSearchParams();
+  return (
+    <SalesOrdersListPanel
+      savedViewsScope="sales-orders"
+      initialStatus={searchParams.get("status") ?? ""}
+    />
+  );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────

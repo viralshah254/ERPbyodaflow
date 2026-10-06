@@ -139,6 +139,7 @@ export function DashboardRenderer() {
       <div
         className={`grid gap-4 md:grid-cols-2 ${kpiIds.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}
         data-tour-step="dashboard-kpis"
+        data-tutorial-hint="dashboard-kpis"
       >
         {kpiIds.map((id) => {
           const k = kpiById[id];

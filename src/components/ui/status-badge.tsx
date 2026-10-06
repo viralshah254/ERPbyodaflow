@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 
 interface StatusBadgeProps {
   status: string;
+  /** Shown in place of the raw status code. */
+  label?: string;
   variant?: "default" | "success" | "warning" | "danger" | "info";
   className?: string;
 }
@@ -28,6 +30,9 @@ const statusVariants: Record<string, "default" | "success" | "warning" | "danger
   RELEASED: "info",
   IN_PROGRESS: "info",
   COMPLETED: "success",
+  IN_TRANSIT: "info",
+  DELIVERED: "success",
+  DISPATCHED: "info",
   
   // Stock statuses
   "In Stock": "success",
@@ -47,7 +52,7 @@ const badgeStyles = {
   default: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400 border-gray-200 dark:border-gray-800",
 };
 
-export function StatusBadge({ status, variant, className }: StatusBadgeProps) {
+export function StatusBadge({ status, label, variant, className }: StatusBadgeProps) {
   const resolvedVariant = variant || statusVariants[status] || "default";
   
   return (
@@ -59,7 +64,7 @@ export function StatusBadge({ status, variant, className }: StatusBadgeProps) {
         className
       )}
     >
-      {status}
+      {label ?? status}
     </Badge>
   );
 }

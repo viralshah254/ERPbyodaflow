@@ -88,7 +88,7 @@ export default function TrialBalancePage() {
         </Button>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-5" data-tutorial-hint="trial-balance">
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
           <Select

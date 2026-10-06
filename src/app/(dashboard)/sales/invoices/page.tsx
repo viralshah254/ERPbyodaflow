@@ -152,7 +152,7 @@ export default function SalesInvoicesPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Invoices"
-        description="Customer invoices"
+        description="Bills for what left the gate. Delivery sales are invoiced from the delivery note after proof of delivery."
         breadcrumbs={[
           { label: "Sales", href: "/sales/overview" },
           { label: "Invoices" },

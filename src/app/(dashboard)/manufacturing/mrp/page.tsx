@@ -12,10 +12,12 @@ import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
 import {
+  applyManufacturingMrp,
   fetchManufacturingMrpPage,
   type ManufacturingMrpSuggestion,
   type ManufacturingMrpSummary,
 } from "@/lib/api/manufacturing";
+import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
 import type { FilterChip } from "@/components/ui/filter-chips";
@@ -41,6 +43,8 @@ const emptySummary: ManufacturingMrpSummary = {
 export default function MrpPage() {
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
+  const canWrite = useCanWriteManufacturing();
+  const [applying, setApplying] = React.useState<"all" | string | null>(null);
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -130,6 +134,31 @@ export default function MrpPage() {
     if (id === "q") setSearch("");
   };
 
+  const raiseWorkOrders = React.useCallback(
+    async (suggestionIds?: string[]) => {
+      setApplying(suggestionIds?.length === 1 ? suggestionIds[0] : "all");
+      try {
+        const result = await applyManufacturingMrp(suggestionIds);
+        const count = result.created?.length ?? 0;
+        if (count === 0) {
+          toast.info("No draft work orders were created. Make rows need a bill of materials.");
+        } else {
+          toast.success(
+            count === 1
+              ? `Draft work order ${result.created[0]?.number ?? ""} is ready to release.`
+              : `${count} draft work orders are ready to release.`,
+          );
+        }
+        await loadPage(pageOffset);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not raise work orders.");
+      } finally {
+        setApplying(null);
+      }
+    },
+    [loadPage, pageOffset],
+  );
+
   const columns = React.useMemo(
     () => [
       {
@@ -191,15 +220,34 @@ export default function MrpPage() {
           </span>
         ),
       },
+      {
+        id: "action",
+        header: "",
+        accessor: (r: ManufacturingMrpSuggestion) =>
+          r.type === "WORK_ORDER" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canWrite || applying != null}
+              onClick={() => void raiseWorkOrders([r.id])}
+            >
+              {applying === r.id ? "Raising…" : "Raise work order"}
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/docs/purchase-order/new">New purchase order</Link>
+            </Button>
+          ),
+      },
     ],
-    []
+    [applying, canWrite, raiseWorkOrders]
   );
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="MRP"
-        description="Material requirements planning — periods × items, requirements and planned orders"
+        description="What to make and what to buy so open orders can be packed."
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
           { label: "MRP" },
@@ -207,14 +255,21 @@ export default function MrpPage() {
         sticky
         showCommandHint
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/manufacturing/boms">BOMs</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            {canWrite && summary.workOrderSuggestions > 0 ? (
+              <Button size="sm" disabled={applying != null} onClick={() => void raiseWorkOrders()}>
+                {applying === "all" ? "Raising…" : "Raise draft work orders"}
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/manufacturing/boms">Formulas</Link>
+            </Button>
+          </div>
         }
       />
 
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        {!initialLoading && (summary.workOrderSuggestions > 0 || summary.purchaseSuggestions > 0) && (
+        {!initialLoading && (
           <div className="flex flex-wrap gap-3">
             <div className="rounded-lg border bg-card px-4 py-3 text-sm shadow-sm">
               <span className="text-muted-foreground">Make suggestions</span>
@@ -239,9 +294,8 @@ export default function MrpPage() {
 
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground max-w-3xl">
-            Live shortages and replenishment recommendations derived from sales-order demand, on-hand stock, and open
-            work orders. Inbound stock updates when goods are received to a warehouse (post GRNs with a warehouse, and
-            receive subcontract outputs into a chosen warehouse).
+            Open draft, approved, and partly shipped orders are netted against stock on hand. Items with a formula
+            become work orders. Items without one are purchases. Goods already fulfilled are not planned again.
           </p>
         </div>
 
@@ -298,7 +352,11 @@ export default function MrpPage() {
               <DataTable
                 data={rows}
                 columns={columns}
-                emptyMessage="No shortages match your filters."
+                emptyMessage={
+                  !search.trim() && !typeFilter
+                    ? "Nothing to make or buy. Open order quantities are covered by stock on hand."
+                    : "No shortages match your filters."
+                }
                 scrollMode="natural"
                 size="comfortable"
                 />
@@ -306,18 +364,20 @@ export default function MrpPage() {
           </div>
         )}
 
-        <TablePagination
-          sticky
-          pageOffset={pageOffset}
-          pageSize={PAGE_SIZE}
-          itemCount={initialLoading ? 0 : rows.length}
-          hasMore={hasMore}
-          loading={initialLoading || fetching}
-          busy={searchPending}
-          onPrevious={goToPreviousPage}
-          onNext={goToNextPage}
-          entityLabel="suggestions"
-        />
+        {rows.length > 0 || search.trim() || typeFilter ? (
+          <TablePagination
+            sticky
+            pageOffset={pageOffset}
+            pageSize={PAGE_SIZE}
+            itemCount={initialLoading ? 0 : rows.length}
+            hasMore={hasMore}
+            loading={initialLoading || fetching}
+            busy={searchPending}
+            onPrevious={goToPreviousPage}
+            onNext={goToNextPage}
+            entityLabel="shortages"
+          />
+        ) : null}
       </div>
     </PageShell>
   );

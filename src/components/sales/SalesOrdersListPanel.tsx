@@ -96,9 +96,14 @@ function isOdaflowStyleSalesOrder(r: SalesDocRow): boolean {
 type SalesOrdersListPanelProps = {
   /** Saved views scope — use a distinct key when embedding under Documents vs Sales. */
   savedViewsScope?: string;
+  /** Opens the list already filtered, for example from the document center. */
+  initialStatus?: string;
 };
 
-export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: SalesOrdersListPanelProps) {
+export function SalesOrdersListPanel({
+  savedViewsScope = "sales-orders",
+  initialStatus = "",
+}: SalesOrdersListPanelProps) {
   const router = useRouter();
   const baseCurrency = useBaseCurrency();
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -106,7 +111,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
   const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState(initialStatus);
   const [channelFilter, setChannelFilter] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -120,6 +125,10 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [hasMore, setHasMore] = React.useState(false);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setStatusFilter(initialStatus);
+  }, [initialStatus]);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search), 350);
@@ -389,7 +398,7 @@ export function SalesOrdersListPanel({ savedViewsScope = "sales-orders" }: Sales
     <div className="flex flex-col gap-4">
       <DataTableToolbar
         className="shrink-0"
-        searchPlaceholder="Search by number, customer..."
+        searchPlaceholder="Search by purchase order, number, or customer"
         searchValue={search}
         onSearchChange={setSearch}
         filters={[

@@ -6,6 +6,7 @@ import "driver.js/dist/driver.css";
 import type { TourDef } from "@/config/tutorial-tours";
 import { useTutorialProgressStore } from "@/stores/tutorial-progress-store";
 import { emitTutorialEvent } from "@/lib/api/tutorial-events";
+import { expandLiveTourSteps } from "@/lib/tutorial/live-tour";
 
 export interface SpotlightTourProps {
   tour: TourDef | null;
@@ -23,7 +24,8 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
   const startTour = React.useCallback(() => {
     if (!tour || tour.steps.length === 0) return;
 
-    const steps: DriveStep[] = tour.steps.map((s) => ({
+    const liveSteps = expandLiveTourSteps(tour);
+    const steps: DriveStep[] = liveSteps.map((s) => ({
       element: s.element,
       popover: {
         title: s.title,
@@ -32,12 +34,37 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
     }));
 
     let lastStepReached = false;
+    let moveQueued = false;
 
     const driverObj = driver({
       showProgress: true,
       steps,
-      onHighlighted: (_element, _step, opts) => {
-        if (opts.state.activeIndex === steps.length - 1) lastStepReached = true;
+      // driver.js runs Next on pointerdown. Advancing immediately removes the
+      // button, and the rest of the click lands on the overlay and closes the tour.
+      onNextClick: (_element, _step, { driver: tourDriver }) => {
+        if (moveQueued) return;
+        moveQueued = true;
+        window.setTimeout(() => {
+          moveQueued = false;
+          if (!tourDriver.isActive()) return;
+          if (tourDriver.hasNextStep()) tourDriver.moveNext();
+          else tourDriver.destroy();
+        }, 0);
+      },
+      onPrevClick: (_element, _step, { driver: tourDriver }) => {
+        if (moveQueued) return;
+        moveQueued = true;
+        window.setTimeout(() => {
+          moveQueued = false;
+          if (!tourDriver.isActive()) return;
+          if (tourDriver.hasPreviousStep()) tourDriver.movePrevious();
+        }, 0);
+      },
+      onHighlighted: (element, _step, opts) => {
+        if (opts.state.activeIndex === liveSteps.length - 1) lastStepReached = true;
+        document.querySelectorAll(".driver-active-element").forEach((node) => {
+          if (node !== element) node.classList.remove("driver-active-element");
+        });
       },
       onDestroyStarted: () => {
         driverObj.destroy();

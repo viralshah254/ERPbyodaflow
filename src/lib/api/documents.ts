@@ -276,6 +276,7 @@ type BackendDocumentListItem = {
 
 type BackendDocumentListResponse = {
   items: BackendDocumentListItem[];
+  total?: number;
   limit?: number;
   offset?: number;
   hasMore?: boolean;
@@ -710,6 +711,7 @@ export type FetchDocumentListOpts = {
 
 export type FetchDocumentListPageResult = {
   items: DocListRow[];
+  /** Full match count from the server, independent of the page size. */
   total?: number;
   limit: number;
   offset: number;
@@ -766,6 +768,7 @@ export async function fetchDocumentListPageApi(
   }
   return {
     items,
+    total: typeof payload.total === "number" ? payload.total : undefined,
     limit,
     offset: parsedOffset,
     hasMore,

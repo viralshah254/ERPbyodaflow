@@ -154,6 +154,12 @@ export default function InventoryReceiptsPage() {
 
   const searchPending = search.trim() !== debouncedSearch.trim();
   const tableBusy = fetching || searchPending;
+  const unfilteredEmpty =
+    !initialLoading &&
+    rows.length === 0 &&
+    !statusFilter &&
+    !warehouseFilter &&
+    !debouncedSearch.trim();
 
   const filterChips: FilterChip[] = React.useMemo(() => {
     const chips: FilterChip[] = [];
@@ -362,7 +368,7 @@ export default function InventoryReceiptsPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Goods Receipt (GRN)"
-        description="Canonical GRN operations queue: post receipts, complete landed costs, and move to putaway."
+        description="Receive against a purchase order, post the receipt, then put the goods away."
         breadcrumbs={[
           { label: "Inventory", href: "/inventory/products" },
           { label: "Receipts" },
@@ -533,7 +539,11 @@ export default function InventoryReceiptsPage() {
                 scrollMode="fill"
                 className="border-0 shadow-none"
                 onRowClick={(row) => router.push(`/inventory/receipts/${row.id}`)}
-                emptyMessage="No GRNs match your filters."
+                emptyMessage={
+                  unfilteredEmpty
+                    ? "No goods receipts yet. Create a GRN when a supplier delivery arrives."
+                    : "No GRNs match your filters."
+                }
                 selectable
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
@@ -541,20 +551,22 @@ export default function InventoryReceiptsPage() {
             </div>
           </div>
         )}
-        <TablePagination
-          className="shrink-0"
-          pageOffset={pageOffset}
-          pageSize={pageSize}
-          itemCount={initialLoading ? 0 : rows.length}
-          hasMore={hasMore}
-          loading={initialLoading}
-          busy={tableBusy}
-          onPrevious={goToPreviousPage}
-          onNext={goToNextPage}
-          entityLabel="receipts"
-          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
-          onPageSizeChange={handlePageSizeChange}
-        />
+        {unfilteredEmpty ? null : (
+          <TablePagination
+            className="shrink-0"
+            pageOffset={pageOffset}
+            pageSize={pageSize}
+            itemCount={initialLoading ? 0 : rows.length}
+            hasMore={hasMore}
+            loading={initialLoading}
+            busy={tableBusy}
+            onPrevious={goToPreviousPage}
+            onNext={goToNextPage}
+            entityLabel="receipts"
+            pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        )}
       </div>
     </PageShell>
   );

@@ -59,6 +59,7 @@ export function Header() {
       <div className="flex-1 max-w-md">
         <button
           type="button"
+          data-tutorial-hint="command-search"
           onClick={() => setCommandPaletteOpen(true)}
           className="flex w-full items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50"
         >

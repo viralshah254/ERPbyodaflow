@@ -135,8 +135,11 @@
   }
 }
 
-/* Spotlight tours (driver.js) above app header (z-40) and sticky page headers */
-.driver-active .driver-overlay,
-.driver-active .driver-popover {
+/* Spotlight tours (driver.js) above app header (z-40) and sticky page headers.
+   The popover must sit above the overlay, or Next is a click on the dimmed layer and the tour closes. */
+.driver-active .driver-overlay {
   z-index: 10050 !important;
+}
+.driver-active .driver-popover {
+  z-index: 10060 !important;
 }

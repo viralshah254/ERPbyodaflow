@@ -57,7 +57,7 @@ export default function AccountsReceivablePage() {
   return (
     <PageLayout
       title="Accounts Receivable"
-      description="Manage customer invoices and payments"
+      description="What customers still owe, and the receipts already taken."
       actions={
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>

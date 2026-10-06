@@ -40,7 +40,7 @@ export function PageHelp({ compact = false }: { compact?: boolean }) {
 
   return (
     <>
-      <div className="flex items-center gap-1 flex-wrap">
+      <div className="flex items-center gap-1 flex-wrap" data-tutorial-hint="page-help">
         {showTour && (
           <div className="flex items-center gap-0.5">
             <Button

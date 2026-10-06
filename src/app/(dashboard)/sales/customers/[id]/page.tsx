@@ -134,7 +134,7 @@ export default function Customer360Page() {
         ]}
         sticky
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" data-tutorial-hint="record-actions">
             <Button variant="outline" asChild>
               <Link href="/sales/customers">Back to list</Link>
             </Button>
@@ -160,7 +160,7 @@ export default function Customer360Page() {
           <p className="text-sm text-muted-foreground">Customer not found.</p>
         ) : (
           <Tabs value={tab} onValueChange={onTabChange}>
-            <TabsList className="mb-4 flex h-auto flex-wrap">
+            <TabsList className="mb-4 flex h-auto flex-wrap" data-tutorial-hint="customer-tabs">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="orders">Orders</TabsTrigger>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
@@ -170,7 +170,7 @@ export default function Customer360Page() {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-4" data-tutorial-hint="customer-kpis">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm text-muted-foreground">Outstanding</CardTitle>
@@ -207,7 +207,7 @@ export default function Customer360Page() {
                   <CardContent className="text-2xl font-semibold">{clearedCount == null ? "—" : clearedCount}</CardContent>
                 </Card>
               </div>
-              <Card>
+              <Card data-tutorial-hint="customer-profile">
                 <CardHeader>
                   <CardTitle className="text-base">Profile</CardTitle>
                   <CardDescription>Contact and identity on file.</CardDescription>

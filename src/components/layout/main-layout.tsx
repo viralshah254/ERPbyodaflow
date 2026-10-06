@@ -86,7 +86,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <TutorialProgressTracker />
             <FirstVisitBanner />
           </div>
-          <div className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0">
+          <div
+            className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0"
+            data-tutorial-hint="page-main"
+          >
             {children}
           </div>
         </main>

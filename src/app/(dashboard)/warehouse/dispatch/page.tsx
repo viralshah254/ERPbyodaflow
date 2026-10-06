@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { fetchPickPackPage, runPickPackAction, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
+import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import {
   createDistributionVehicle,
   fetchDispatchBatchPage,
@@ -432,9 +433,11 @@ export default function WarehouseDispatchPage() {
           <CardHeader>
             <CardTitle>2. Delivery notes</CardTitle>
             <CardDescription>
-              {vehicleReady
-                ? "Tick every note this vehicle is taking. The total is what leaves the warehouse."
-                : "Choose a vehicle first. Packed notes appear here."}
+              {noteTotal > 0
+                ? `${noteTotal} packed ${noteTotal === 1 ? "note is" : "notes are"} waiting for a vehicle.`
+                : vehicleReady
+                  ? "Tick every note this vehicle is taking. The total is what leaves the warehouse."
+                  : "Nothing is packed and waiting. Pick and pack a delivery note, then it shows up here."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-0">
@@ -458,6 +461,7 @@ export default function WarehouseDispatchPage() {
                     />
                   </TableHead>
                   <TableHead>Delivery</TableHead>
+                  <TableHead>When</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Load</TableHead>
                 </TableRow>
@@ -485,13 +489,16 @@ export default function WarehouseDispatchPage() {
                         <span className="font-medium">{row.sourceDocumentNumber ?? row.number}</span>
                       )}
                     </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground" title={formatActivityExact(row.createdAt) || undefined}>
+                      {formatDocumentCreatedLabel(row.createdAt) || "—"}
+                    </TableCell>
                     <TableCell>{row.customer ?? "—"}</TableCell>
                     <TableCell className="tabular-nums">{rowQty(row)}</TableCell>
                   </TableRow>
                 ))}
                 {!notesLoading && !rows.length ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                       {noteSearch ? (
                         "No packed notes match that search."
                       ) : (

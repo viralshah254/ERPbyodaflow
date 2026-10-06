@@ -12,7 +12,12 @@ import {
   type FmcgControlTowerException,
   type FmcgControlTowerSnapshot,
 } from "@/lib/api/fmcg-control-tower";
+import { fetchDocumentListPageApi } from "@/lib/api/documents";
+import { useNavCounts } from "@/lib/use-nav-counts";
+import { canonicalIndustryTemplateId } from "@/config/industry";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { formatMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 type Props = {
   dateFrom: string;
@@ -21,6 +26,20 @@ type Props = {
   onLoadingChange?: (loading: boolean) => void;
   onRefreshed?: (at: Date) => void;
 };
+
+/** List pages do not have an id route. Open the document itself. */
+function documentWorkHref(href: string): string {
+  const rules: Array<[RegExp, string]> = [
+    [/^\/sales\/orders\/([^/]+)$/, "/docs/sales-order/$1"],
+    [/^\/sales\/invoices\/([^/]+)$/, "/docs/invoice/$1"],
+    [/^\/ap\/bills\/([^/]+)$/, "/docs/bill/$1"],
+  ];
+  for (const [pattern, target] of rules) {
+    const match = href.match(pattern);
+    if (match?.[1]) return target.replace("$1", match[1]);
+  }
+  return href;
+}
 
 const categoryIcon: Record<FmcgControlTowerException["category"], React.ElementType> = {
   DOCUMENT: Icons.FileWarning,
@@ -41,6 +60,12 @@ export function FmcgControlTower({
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [retryKey, setRetryKey] = React.useState(0);
+  const [onTheRoad, setOnTheRoad] = React.useState<number | null>(null);
+  const [waitingToLeave, setWaitingToLeave] = React.useState<number | null>(null);
+  const navCounts = useNavCounts();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const bakery = canonicalIndustryTemplateId(templateId) === "fmcg-bakery";
+  const productionHref = bakery ? "/manufacturing/production-plan" : "/manufacturing/work-orders";
 
   React.useEffect(() => {
     let cancelled = false;
@@ -66,6 +91,21 @@ export function FmcgControlTower({
       cancelled = true;
     };
   }, [dateFrom, dateTo, refreshKey, retryKey, onLoadingChange, onRefreshed]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchDocumentListPageApi("delivery-note", { limit: 1, status: "IN_TRANSIT" }).catch(() => null),
+      fetchDocumentListPageApi("delivery-note", { limit: 1, status: "DRAFT" }).catch(() => null),
+    ]).then(([transit, drafts]) => {
+      if (cancelled) return;
+      setOnTheRoad(transit?.total ?? null);
+      setWaitingToLeave(drafts?.total ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey, retryKey]);
 
   if (loading && !snapshot) {
     return (
@@ -131,11 +171,22 @@ export function FmcgControlTower({
         </Card>
       ) : null}
 
+      <PlantDay
+        openOrders={metrics.openSalesOrders}
+        onTheRoad={onTheRoad}
+        waitingToLeave={waitingToLeave}
+        fieldOrders={navCounts["odaflow-sync-queue"] ?? 0}
+        customersWaiting={navCounts["sales-customer-approvals"] ?? 0}
+        activeWorkOrders={metrics.activeWorkOrders}
+        productionHref={productionHref}
+        bakery={bakery}
+      />
+
       <section className="space-y-3" data-tutorial-hint="fmcg-control-tower-kpis">
         <div>
-          <h2 className="text-base font-semibold">Reconciled operating position</h2>
+          <h2 className="text-base font-semibold">Books, stock, and close</h2>
           <p className="text-sm text-muted-foreground">
-            Canonical documents, stock lots, production, automation, and finance records.
+            Posted sales in the selected dates, plus live lot, production, and period controls.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -218,7 +269,7 @@ export function FmcgControlTower({
                 return (
                   <Link
                     key={exception.id}
-                    href={exception.href}
+                    href={documentWorkHref(exception.href)}
                     className="flex items-start gap-3 p-4 transition-colors hover:bg-muted/50"
                   >
                     <Icon
@@ -247,5 +298,124 @@ export function FmcgControlTower({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function PlantDay({
+  openOrders,
+  onTheRoad,
+  waitingToLeave,
+  fieldOrders,
+  customersWaiting,
+  activeWorkOrders,
+  productionHref,
+  bakery,
+}: {
+  openOrders: number;
+  onTheRoad: number | null;
+  waitingToLeave: number | null;
+  fieldOrders: number;
+  customersWaiting: number;
+  activeWorkOrders: number;
+  productionHref: string;
+  bakery: boolean;
+}) {
+  const lineIdle = activeWorkOrders === 0 && openOrders > 0;
+  const cards: Array<{
+    title: string;
+    value: string;
+    detail: string;
+    href: string;
+    hot: boolean;
+  }> = [
+    {
+      title: "Open orders",
+      value: String(openOrders),
+      detail: "Still to pick, pack, or invoice.",
+      href: "/sales/orders",
+      hot: openOrders > 0,
+    },
+    {
+      title: "On the road",
+      value: onTheRoad == null ? "—" : String(onTheRoad),
+      detail: "Delivery notes that have left the warehouse.",
+      href: "/docs/delivery-note?status=IN_TRANSIT",
+      hot: (onTheRoad ?? 0) > 0,
+    },
+    {
+      title: "Waiting to leave",
+      value: waitingToLeave == null ? "—" : String(waitingToLeave),
+      detail: "Delivery notes still in draft.",
+      href: "/docs/delivery-note?status=DRAFT",
+      hot: (waitingToLeave ?? 0) > 0,
+    },
+    {
+      title: "Field orders",
+      value: String(fieldOrders),
+      detail: "LPOs and rep orders not yet booked.",
+      href: "/sales/odaflow-sync-queue",
+      hot: fieldOrders > 0,
+    },
+    {
+      title: "New customers",
+      value: String(customersWaiting),
+      detail: "Sent from the field, not yet on your books.",
+      href: "/sales/customer-approvals",
+      hot: customersWaiting > 0,
+    },
+    {
+      title: bakery ? "Batches" : "On the line",
+      value: String(activeWorkOrders),
+      detail: lineIdle
+        ? "Orders are open and nothing is in production."
+        : bakery
+          ? "Production batches currently running."
+          : "Work orders released or in progress.",
+      href: productionHref,
+      hot: lineIdle,
+    },
+  ];
+
+  return (
+    <section className="space-y-3" data-tutorial-hint="fmcg-plant-day">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Today on the floor</h2>
+          <p className="text-sm text-muted-foreground">
+            Ship what is promised, book what the field sent, and make what stock cannot cover.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/warehouse/dispatch">Dispatch</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/warehouse/pick-pack">Pick and pack</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/inventory/stock-levels">Finished goods</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/manufacturing/mrp">What to make</Link>
+          </Button>
+        </div>
+      </div>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15.5rem),1fr))]">
+        {cards.map((card) => (
+          <Link
+            key={card.title}
+            href={card.href}
+            className={cn(
+              "rounded-xl border bg-card p-4 transition-colors hover:bg-muted/40",
+              card.hot && "border-amber-500/40",
+            )}
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{card.title}</p>
+            <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight">{card.value}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{card.detail}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }

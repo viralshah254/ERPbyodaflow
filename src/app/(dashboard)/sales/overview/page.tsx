@@ -8,9 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import * as Icons from "lucide-react";
-import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
-import type { SalesDocRow } from "@/lib/types/sales";
-import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
+import { fetchDocumentListPageApi } from "@/lib/api/documents";
+import type { DocListRow } from "@/lib/types/documents";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
@@ -24,14 +23,22 @@ const NAV_LINKS = [
   { href: "/sales/invoices", label: "Invoices", icon: "Receipt" as const },
 ];
 
+const FULFILLMENT = [
+  { status: "DRAFT", label: "Draft", hint: "Not released" },
+  { status: "PENDING_APPROVAL", label: "Waiting approval", hint: "Credit or price" },
+  { status: "APPROVED", label: "Ready to deliver", hint: "Pick and dispatch" },
+  { status: "PARTIALLY_FULFILLED", label: "Partly shipped", hint: "Balance still open" },
+  { status: "FULFILLED", label: "Fulfilled", hint: "Goods have left" },
+] as const;
+
 type KpiData = {
-  openOrdersValue: number;
+  openOrders: number;
   pendingApprovalCount: number;
+  onTheRoad: number;
   arTotal: number;
   arInvoiceCount: number;
-  topCustomer: string | null;
-  recentOrders: SalesDocRow[];
-  pipelineStages: { stage: string; count: number; value: number }[];
+  recentOrders: DocListRow[];
+  stages: Array<{ status: string; label: string; hint: string; count: number }>;
 };
 
 export default function SalesOverviewPage() {
@@ -43,58 +50,46 @@ export default function SalesOverviewPage() {
     if (!isApiConfigured()) return;
     setLoading(true);
     Promise.all([
-      fetchSalesDocumentsApi("sales-order").catch(() => [] as SalesDocRow[]),
+      Promise.all(
+        FULFILLMENT.map((stage) =>
+          fetchDocumentListPageApi("sales-order", { limit: 1, status: stage.status })
+            .then((page) => page.total ?? page.items.length)
+            .catch(() => 0),
+        ),
+      ),
+      fetchDocumentListPageApi("sales-order", { limit: 5 }).catch(() => null),
+      fetchDocumentListPageApi("delivery-note", { limit: 1, status: "IN_TRANSIT" })
+        .then((page) => page.total ?? 0)
+        .catch(() => 0),
       apiRequest<{ totalAr: number; invoiceCount: number }>("/api/finance/ar").catch(() => ({ totalAr: 0, invoiceCount: 0 })),
-    ]).then(([orders, arData]) => {
-      const openOrders = orders.filter((o) => o.status !== "CANCELLED");
-      const pendingApproval = orders.filter((o) => o.status === "PENDING_APPROVAL");
-      // Pipeline stages
-      const stages = [
-        { stage: "Draft", statuses: ["DRAFT"] },
-        { stage: "Pending", statuses: ["PENDING_APPROVAL"] },
-        { stage: "Approved", statuses: ["APPROVED"] },
-        { stage: "Invoiced", statuses: ["FULFILLED", "INVOICED"] },
-        { stage: "Paid", statuses: ["PAID"] },
-      ];
-      const pipelineStages = stages.map((s) => {
-        const matches = orders.filter((o) => s.statuses.includes(o.status));
-        return {
-          stage: s.stage,
-          count: matches.length,
-          value: matches.reduce((sum, o) => sum + (o.total ?? 0), 0),
-        };
-      });
-      // Top customer this month by order value
-      const thisMonth = new Date().toISOString().slice(0, 7);
-      const byCustomer = new Map<string, number>();
-      for (const o of orders) {
-        if (o.date?.startsWith(thisMonth) && o.party) {
-          byCustomer.set(o.party, (byCustomer.get(o.party) ?? 0) + (o.total ?? 0));
-        }
-      }
-      const topCustomer = byCustomer.size
-        ? [...byCustomer.entries()].sort((a, b) => b[1] - a[1])[0][0]
-        : null;
+    ]).then(([counts, recent, onTheRoad, arData]) => {
+      const stages = FULFILLMENT.map((stage, index) => ({
+        ...stage,
+        count: counts[index] ?? 0,
+      }));
+      const openOrders = stages
+        .filter((stage) => stage.status !== "FULFILLED")
+        .reduce((sum, stage) => sum + stage.count, 0);
       setKpis({
-        openOrdersValue: openOrders.reduce((sum, o) => sum + (o.total ?? 0), 0),
-        pendingApprovalCount: pendingApproval.length,
+        openOrders,
+        pendingApprovalCount: stages.find((stage) => stage.status === "PENDING_APPROVAL")?.count ?? 0,
+        onTheRoad,
         arTotal: arData.totalAr,
         arInvoiceCount: arData.invoiceCount,
-        topCustomer,
-        recentOrders: orders.slice(0, 5),
-        pipelineStages,
+        recentOrders: recent?.items ?? [],
+        stages,
       });
     }).catch((e) => toast.error((e as Error).message))
     .finally(() => setLoading(false));
   }, []);
 
-  const maxPipelineValue = Math.max(...(kpis?.pipelineStages.map((s) => s.value) ?? [1]));
+  const maxStageCount = Math.max(...(kpis?.stages.map((stage) => stage.count) ?? [1]), 1);
 
   return (
     <PageShell>
       <PageHeader
         title="Sales"
-        description="Pipeline, orders, and collections overview"
+        description="From the order on the desk to the truck leaving the gate."
         breadcrumbs={[{ label: "Sales" }]}
         sticky
         showCommandHint
@@ -110,29 +105,29 @@ export default function SalesOverviewPage() {
       <div className="p-6 space-y-6">
 
         {/* KPI Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tutorial-hint="sales-kpis">
           <Card>
             <CardContent className="pt-5">
               <div className="flex items-center gap-2 mb-1">
                 <Icons.ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Open Orders</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Open orders</p>
               </div>
-              <p className="text-2xl font-bold">
-                {loading ? "—" : formatMoney(kpis?.openOrdersValue ?? 0, "KES")}
+              <p className="text-2xl font-bold tabular-nums">
+                {loading ? "—" : (kpis?.openOrders ?? 0)}
               </p>
-              <Link href="/sales/orders" className="text-xs text-primary hover:underline">View orders →</Link>
+              <Link href="/sales/orders" className="text-xs text-primary hover:underline">Still to ship</Link>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-5">
               <div className="flex items-center gap-2 mb-1">
                 <Icons.Clock className="h-4 w-4 text-amber-500" />
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending Approval</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Waiting approval</p>
               </div>
-              <p className="text-2xl font-bold text-amber-600">
+              <p className="text-2xl font-bold tabular-nums text-amber-600">
                 {loading ? "—" : (kpis?.pendingApprovalCount ?? 0)}
               </p>
-              <Link href="/sales/orders?status=PENDING_APPROVAL" className="text-xs text-primary hover:underline">Review →</Link>
+              <Link href="/sales/orders?status=PENDING_APPROVAL" className="text-xs text-primary hover:underline">Review</Link>
             </CardContent>
           </Card>
           <Card>
@@ -154,13 +149,13 @@ export default function SalesOverviewPage() {
           <Card>
             <CardContent className="pt-5">
               <div className="flex items-center gap-2 mb-1">
-                <Icons.Star className="h-4 w-4 text-yellow-500" />
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Top Customer</p>
+                <Icons.Truck className="h-4 w-4 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">On the road</p>
               </div>
-              <p className="text-base font-bold truncate">
-                {loading ? "—" : (kpis?.topCustomer ?? "—")}
+              <p className="text-2xl font-bold tabular-nums">
+                {loading ? "—" : (kpis?.onTheRoad ?? 0)}
               </p>
-              <p className="text-xs text-muted-foreground">this month</p>
+              <Link href="/docs/delivery-note?status=IN_TRANSIT" className="text-xs text-primary hover:underline">Delivery notes</Link>
             </CardContent>
           </Card>
         </div>
@@ -170,23 +165,26 @@ export default function SalesOverviewPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Icons.TrendingUp className="h-4 w-4" />
-                Pipeline
+                <Icons.Truck className="h-4 w-4" />
+                Order to delivery
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-end gap-3">
-                {kpis.pipelineStages.map((stage) => (
-                  <div key={stage.stage} className="flex-1 flex flex-col items-center gap-1">
-                    <p className="text-xs font-medium text-muted-foreground">{stage.count}</p>
+                {kpis.stages.map((stage) => (
+                  <Link
+                    key={stage.status}
+                    href={`/sales/orders?status=${stage.status}`}
+                    className="flex-1 flex flex-col items-center gap-1 rounded-md px-1 py-1 hover:bg-muted/40"
+                  >
+                    <p className="text-sm font-semibold tabular-nums">{stage.count}</p>
                     <div
-                      className="w-full rounded-t bg-primary/20 hover:bg-primary/30 transition-colors"
-                      style={{ height: `${Math.max(8, (stage.value / maxPipelineValue) * 80)}px` }}
-                      title={`${stage.stage}: ${formatMoney(stage.value, "KES")}`}
+                      className="w-full rounded-t bg-primary/20"
+                      style={{ height: `${Math.max(8, (stage.count / maxStageCount) * 80)}px` }}
                     />
-                    <p className="text-[10px] text-muted-foreground text-center">{stage.stage}</p>
-                    <p className="text-[10px] text-muted-foreground">{formatMoney(stage.value, "KES")}</p>
-                  </div>
+                    <p className="text-[11px] text-center font-medium">{stage.label}</p>
+                    <p className="text-[10px] text-muted-foreground text-center">{stage.hint}</p>
+                  </Link>
                 ))}
               </div>
             </CardContent>
@@ -219,12 +217,11 @@ export default function SalesOverviewPage() {
                           </p>
                         </td>
                         <td className="px-4 py-2.5">
-                          <DualCurrencyAmount
-                            amount={order.total ?? 0}
-                            currency={order.currency ?? "KES"}
-                            exchangeRate={order.exchangeRate}
-                            size="sm"
-                          />
+                            <span className="tabular-nums">
+                            {formatMoney(order.total ?? 0, order.currency ?? "KES", {
+                              decimals: Number(order.total ?? 0) % 1 === 0 ? 0 : 2,
+                            })}
+                          </span>
                           <div className="mt-0.5">
                             <StatusBadge status={order.status} />
                           </div>
@@ -259,9 +256,9 @@ export default function SalesOverviewPage() {
                   </Link>
                 </Button>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href="/sales/invoices">
-                    <Icons.Receipt className="mr-1.5 h-4 w-4" />
-                    View Invoices
+                  <Link href="/warehouse/dispatch">
+                    <Icons.Truck className="mr-1.5 h-4 w-4" />
+                    Dispatch
                   </Link>
                 </Button>
               </CardContent>

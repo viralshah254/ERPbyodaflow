@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   LIST_PAGE_BODY_CLASS,
@@ -50,6 +50,8 @@ import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { SalesOrdersListPanel } from "@/components/sales/SalesOrdersListPanel";
 import { CustomerLink } from "@/components/customers/CustomerLink";
+import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
+import { useNavCounts } from "@/lib/use-nav-counts";
 
 const CUSTOMER_DOC_TYPES = new Set([
   "quote",
@@ -96,7 +98,34 @@ const STATUS_OPTIONS_BY_TYPE: Partial<
     { label: "Draft", value: "DRAFT" },
     { label: "Posted", value: "POSTED" },
   ],
+  "delivery-note": [
+    { label: "All", value: "" },
+    { label: "Draft", value: "DRAFT" },
+    { label: "In transit", value: "IN_TRANSIT" },
+    { label: "Delivered", value: "DELIVERED" },
+    { label: "Invoiced", value: "CONVERTED" },
+  ],
 };
+
+function QueueCount({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold leading-none text-destructive-foreground">
+      {count}
+    </span>
+  );
+}
+
+function readableStatus(status: string, workflow: { id: string; label: string }[]): string {
+  const known = workflow.find((step) => step.id === status)?.label;
+  if (known) return known;
+  return status
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 function buildColumns(
   type: string,
@@ -122,10 +151,20 @@ function buildColumns(
               decimals: Number(r.total) % 1 === 0 ? 0 : 2,
             })
           : "—";
+    } else if (accessor === "date") {
+      acc = (r) => {
+        const when = formatDocumentCreatedLabel(r.createdAt, r.date) || "—";
+        const exact = formatActivityExact(r.createdAt || r.date);
+        return (
+          <span className="whitespace-nowrap text-muted-foreground" title={exact || undefined}>
+            {when}
+          </span>
+        );
+      };
     } else if (accessor === "status") {
       acc = (r) => (
         <div className="flex flex-col gap-1">
-          <StatusBadge status={r.status} />
+          <StatusBadge status={r.status} label={readableStatus(r.status, config.statusWorkflow)} />
           {r.pendingApprovalReason && r.status === "PENDING_APPROVAL" && (
             <span className="inline-flex items-center gap-1 text-xs rounded bg-amber-500/10 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 font-medium">
               <Icons.AlertTriangle className="h-3 w-3 shrink-0" />
@@ -165,7 +204,7 @@ function buildColumns(
     }
     return {
       id: col.id,
-      header: col.header,
+      header: col.id === "date" ? "When" : col.header,
       accessor: acc,
       sticky: col.sticky ?? false,
     };
@@ -175,10 +214,15 @@ function buildColumns(
 export default function DocTypeListPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const type = params.type as string;
+  const statusFromUrl = searchParams.get("status") ?? "";
   const terminology = useTerminology();
   const templateId = useOrgContextStore((s) => s.templateId);
+  const navCounts = useNavCounts();
   const showKraColumn = isFmcgOrg(templateId);
+  const pickPackWaiting = navCounts["warehouse-pick-pack"] ?? 0;
+  const dispatchWaiting = navCounts["warehouse-dispatch"] ?? 0;
   const config = getDocTypeConfig(type);
   const canWrite = useCanWriteDocType(type);
   const labelKey = (config?.termKey ?? TYPE_LABELS[type]) as string;
@@ -198,7 +242,7 @@ export default function DocTypeListPage() {
   const scope = `doc-${type}`;
 
   const [search, setSearch] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState(statusFromUrl);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
@@ -211,6 +255,10 @@ export default function DocTypeListPage() {
   const [hasMore, setHasMore] = React.useState(false);
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const hasLoadedOnce = React.useRef(false);
+
+  React.useEffect(() => {
+    setStatusFilter(statusFromUrl);
+  }, [type, statusFromUrl]);
 
   React.useEffect(() => {
     hasLoadedOnce.current = false;
@@ -469,7 +517,7 @@ export default function DocTypeListPage() {
   const skeletonColumnWidths = React.useMemo(() => {
     const widths = columns.map((col) => {
       if (col.id === "number") return "w-24";
-      if (col.id === "date") return "w-20";
+      if (col.id === "date") return "w-44";
       if (col.id === "party") return "w-36";
       if (col.id === "total") return "w-28";
       if (col.id === "status") return "w-24";
@@ -483,7 +531,9 @@ export default function DocTypeListPage() {
       ? "Search PO number (letters O, digits 0) or supplier…"
       : type === "journal"
         ? "Search by number or reference…"
-        : `Search by number, party…`;
+        : type === "delivery-note"
+          ? "Number or customer"
+          : `Search by number, party…`;
 
   if (!isValidType) {
     return (
@@ -519,7 +569,10 @@ export default function DocTypeListPage() {
           }
         />
         <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
-          <SalesOrdersListPanel savedViewsScope="doc-sales-order" />
+          <SalesOrdersListPanel
+            savedViewsScope="doc-sales-order"
+            initialStatus={statusFromUrl}
+          />
         </div>
       </PageShell>
     );
@@ -529,18 +582,42 @@ export default function DocTypeListPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={label}
-        description={`List and manage ${label.toLowerCase()}s`}
+        description={
+          type === "delivery-note"
+            ? "What has left the warehouse. Send a load from Dispatch."
+            : `List and manage ${label.toLowerCase()}s`
+        }
         breadcrumbs={[{ label: "Documents", href: "/docs" }, { label }]}
         showCommandHint
         actions={
-          canWrite ? (
-            <Button asChild>
-              <Link href={`/docs/${type}/new`} data-tour-step="create-button">
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                New {label}
-              </Link>
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {type === "delivery-note" && isFmcgOrg(templateId) ? (
+              <>
+                <Button variant="outline" asChild>
+                  <Link href="/warehouse/pick-pack">
+                    <Icons.PackageCheck className="mr-2 h-4 w-4" />
+                    Pick & pack
+                    <QueueCount count={pickPackWaiting} />
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/warehouse/dispatch">
+                    <Icons.Truck className="mr-2 h-4 w-4" />
+                    Dispatch
+                    <QueueCount count={dispatchWaiting} />
+                  </Link>
+                </Button>
+              </>
+            ) : null}
+            {canWrite ? (
+              <Button asChild>
+                <Link href={`/docs/${type}/new`} data-tour-step="create-button">
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  New {label}
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>

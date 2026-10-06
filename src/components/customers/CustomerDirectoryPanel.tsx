@@ -31,7 +31,8 @@ import {
   sfaSegmentLabel,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
-import { fetchCustomerDirectorySummaryApi, fetchPartiesPageApi, fetchPartyCreditSummaryApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { fetchCustomerDirectorySummaryApi } from "@/lib/api/customer-directory";
+import { fetchPartiesPageApi, fetchPartyCreditSummaryApi, hidePartyInOrgApi } from "@/lib/api/parties";
 import { OdaflowMultichainMappingBoard } from "@/components/integrations/OdaflowMultichainMappingBoard";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";

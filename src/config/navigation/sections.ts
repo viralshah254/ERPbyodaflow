@@ -561,9 +561,12 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     order: 6.4,
     items: [
       { key: "docs-hub", label: "Documents", href: "/docs", icon: "FileText", moduleKey: "docs", requiresPermissions: ["sales.read", "purchase.read", "finance.read"] },
+      { key: "docs-quote", label: "Quotes", href: "/docs/quote", icon: "FileText", moduleKey: "docs", termKey: "quote", requiresPermissions: ["sales.orders.read", "sales.read"] },
       { key: "docs-so", label: "Sales Orders", href: "/docs/sales-order", icon: "ShoppingCart", moduleKey: "docs", termKey: "salesOrder", requiresPermissions: ["sales.orders.read", "sales.read"] },
+      { key: "docs-dn", label: "Delivery Notes", href: "/docs/delivery-note", icon: "Truck", moduleKey: "docs", termKey: "deliveryNote", requiresPermissions: ["sales.deliveries.read", "sales.read"] },
       { key: "docs-po", label: "Purchase Orders", href: "/docs/purchase-order", icon: "FileText", moduleKey: "docs", termKey: "purchaseOrder", requiresPermissions: ["purchasing.orders.read", "purchase.read"] },
       { key: "docs-grn", label: "Goods Receipt", href: "/docs/grn", icon: "PackageCheck", moduleKey: "docs", termKey: "goodsReceipt", requiresPermissions: ["purchasing.grn.read", "purchase.read"] },
+      { key: "docs-bill", label: "Supplier Bills", href: "/docs/bill", icon: "FileText", moduleKey: "docs", termKey: "bill", requiresPermissions: ["purchasing.bills.read", "purchase.read"] },
       { key: "docs-invoice", label: "Invoices", href: "/docs/invoice", icon: "Receipt", moduleKey: "docs", termKey: "invoice", requiresPermissions: ["sales.invoices.read", "finance.read"] },
       { key: "docs-credit-note", label: "Sales Credit Notes", href: "/docs/credit-note", icon: "RotateCcw", moduleKey: "docs", requiresPermissions: ["sales.returns.read"] },
       { key: "docs-debit-note", label: "Sales Debit Notes", href: "/docs/debit-note", icon: "BadgePlus", moduleKey: "docs", requiresPermissions: ["sales.returns.read"] },
