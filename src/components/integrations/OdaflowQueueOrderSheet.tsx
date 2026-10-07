@@ -22,6 +22,7 @@ import {
   type AsyncSearchableSelectOption,
 } from "@/components/ui/async-searchable-select";
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
+import { cn } from "@/lib/utils";
 import { OdaflowMappingConflictDialog } from "@/components/integrations/OdaflowMappingConflictDialog";
 import {
   createSalesOrderFromQueueItem,
@@ -626,8 +627,11 @@ export function OdaflowQueueOrderSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-          <SheetHeader>
+        <SheetContent
+          side="right"
+          className="flex h-full w-full max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,92rem)]"
+        >
+          <SheetHeader className="shrink-0 space-y-1 border-b px-6 py-4 pr-12">
             <SheetTitle>{order?.purchaseOrderNumber ?? item?.displayRef ?? "Odaflow order"}</SheetTitle>
             <SheetDescription>
               Match Odaflow customer and products to your ERP catalog. Saved matches are reused on future orders.
@@ -635,9 +639,14 @@ export function OdaflowQueueOrderSheet({
           </SheetHeader>
 
           {loading || !order ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">Loading order…</div>
+            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Loading order…</div>
           ) : (
-            <div className="mt-6 space-y-6">
+            <div className="min-h-0 flex-1 overflow-y-auto lg:overflow-hidden">
+            <div className="grid lg:h-full lg:grid-cols-2 lg:overflow-hidden">
+            <section
+              aria-label="Match customer and products"
+              className="space-y-6 border-b px-6 py-5 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r"
+            >
               {showPricingReminder && initialCustomerId && !pricingReminderDismissed ? (
                 <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-950 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
                   <p className="font-medium flex items-start gap-2">
@@ -660,8 +669,6 @@ export function OdaflowQueueOrderSheet({
                   </div>
                 </div>
               ) : null}
-
-              {odaflowSource ? <OdaflowSourceCard info={odaflowSource} compact /> : null}
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
@@ -759,207 +766,204 @@ export function OdaflowQueueOrderSheet({
                     {order.matchedLineCount}/{order.totalLineCount} matched · {order.lines.length + extraLines.length} item(s)
                   </span>
                 </div>
-                <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-md border">
-                  <table className="w-full min-w-[64rem] text-sm">
-                    <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 font-medium min-w-[16rem]">Product from Odaflow</th>
-                        <th className="px-3 py-2 font-medium w-28">Qty</th>
-                        <th className="px-3 py-2 font-medium w-40">Packing</th>
-                        <th className="px-3 py-2 font-medium min-w-[28rem]">Your ERP product</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {order.lines.map((line) => (
-                        <tr
-                          key={line.index}
-                          className={
-                            line.hasIssue
-                              ? "border-t align-top bg-red-50/70 dark:bg-red-950/20 border-l-2 border-l-red-300 dark:border-l-red-700"
-                              : line.isAutoMatched
-                                ? "border-t align-top bg-green-50/50 dark:bg-green-950/15 border-l-2 border-l-green-300 dark:border-l-green-800"
-                                : "border-t align-top"
-                          }
-                        >
-                          <td className="px-3 py-3">
-                            <p className="font-medium">{line.productName ?? "Unknown product"}</p>
-                            {line.packSize && (
-                              <p className="text-xs text-muted-foreground mt-0.5">Size {line.packSize}</p>
-                            )}
-                            {line.odaflowProductId && (
-                              <p className="text-xs text-muted-foreground mt-0.5">Odaflow ID {line.odaflowProductId}</p>
-                            )}
-                            {line.barcode && <p className="text-xs text-muted-foreground">Barcode {line.barcode}</p>}
-                            {line.hasIssue && line.blockReason ? (
-                              <p className="text-xs text-red-700 dark:text-red-300 mt-1">{line.blockReason}</p>
-                            ) : line.isAutoMatched ? (
-                              <p className="text-xs text-green-700 dark:text-green-300 mt-1">Matched automatically</p>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-1.5">
-                              <Input
-                                type="number"
-                                min={0}
-                                step="any"
-                                className="h-8 w-16"
-                                value={lineQty[line.index] ?? line.qty}
-                                onChange={(e) => {
-                                  const next = Number(e.target.value);
-                                  if (!Number.isFinite(next) || next < 0) return;
-                                  setLineQty((prev) => ({ ...prev, [line.index]: next }));
-                                }}
-                              />
-                              <span className="text-xs font-medium text-muted-foreground">
-                                {(line.unit || "PCS").toUpperCase()}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <Input
-                              className="h-8 w-36"
-                              value={linePacking[line.index] ?? packingValue(line.packing, line.unit)}
-                              onChange={(e) =>
-                                setLinePacking((prev) => ({ ...prev, [line.index]: e.target.value }))
-                              }
-                              placeholder="PCS"
-                              aria-label={`Packing for ${line.productName ?? "line"}`}
-                            />
-                          </td>
-                          <td className="px-3 py-3">
-                            <AsyncSearchableSelect
-                              value={lineProducts[line.index]?.id}
-                              selectedOption={lineProducts[line.index] ?? null}
-                              onValueChange={(id) => {
-                                if (!id) applyProduct(line.index, null);
-                              }}
-                              onOptionSelect={(opt) => void checkProductMapping(line.index, opt)}
-                              loadOptions={loadProductOptions}
-                              minSearchLength={0}
-                              searchDebounceMs={200}
-                              placeholder="Select product"
-                              searchPlaceholder="Name, size, or barcode"
-                              emptyMessage="No products found."
-                              allowClear
-                              disabled={checkingProductLines.has(line.index) || submitting}
-                              clipLabels={false}
-                              showSelectedDescription
-                              triggerClassName={
-                                line.hasIssue
-                                  ? "w-max min-w-[26rem] border-red-300 dark:border-red-700"
-                                  : line.isAutoMatched
-                                    ? "w-max min-w-[26rem] border-green-300 dark:border-green-700"
-                                    : "w-max min-w-[26rem]"
-                              }
-                              onCreateNew={goCreateProduct}
-                              createNewLabel="Create new product"
-                            />
-                            {checkingProductLines.has(line.index) ? (
-                              <p className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
-                                <Icons.Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                                Checking product mapping…
-                              </p>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                      {extraLines.map((extra) => (
-                        <tr key={extra.key} className="border-t align-top">
-                          <td className="px-3 py-3">
-                            <p className="font-medium">Added item</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">Not on the Odaflow order</p>
-                          </td>
-                          <td className="px-3 py-3">
+                <div className="space-y-3">
+                  {order.lines.map((line) => (
+                    <div
+                      key={line.index}
+                      className={cn(
+                        "space-y-3 rounded-md border p-3",
+                        line.hasIssue
+                          ? "border-red-200 bg-red-50/70 dark:border-red-900 dark:bg-red-950/20"
+                          : line.isAutoMatched
+                            ? "border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/15"
+                            : "bg-background"
+                      )}
+                    >
+                      <div>
+                        <p className="font-medium">{line.productName ?? "Unknown product"}</p>
+                        {line.packSize && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">Size {line.packSize}</p>
+                        )}
+                        {line.odaflowProductId && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">Odaflow ID {line.odaflowProductId}</p>
+                        )}
+                        {line.barcode && <p className="text-xs text-muted-foreground">Barcode {line.barcode}</p>}
+                        {line.hasIssue && line.blockReason ? (
+                          <p className="mt-1 text-xs text-red-700 dark:text-red-300">{line.blockReason}</p>
+                        ) : line.isAutoMatched ? (
+                          <p className="mt-1 text-xs text-green-700 dark:text-green-300">Matched automatically</p>
+                        ) : null}
+                      </div>
+                      <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3">
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Qty</p>
+                          <div className="flex items-center gap-1.5">
                             <Input
                               type="number"
-                              min={1}
+                              min={0}
+                              step="any"
                               className="h-8 w-16"
-                              value={extra.qty}
-                              onChange={(e) =>
-                                setExtraLines((prev) =>
-                                  prev.map((line) =>
-                                    line.key === extra.key
-                                      ? { ...line, qty: Math.max(1, Number(e.target.value) || 1) }
-                                      : line
-                                  )
-                                )
-                              }
+                              value={lineQty[line.index] ?? line.qty}
+                              onChange={(e) => {
+                                const next = Number(e.target.value);
+                                if (!Number.isFinite(next) || next < 0) return;
+                                setLineQty((prev) => ({ ...prev, [line.index]: next }));
+                              }}
                             />
-                          </td>
-                          <td className="px-3 py-3">
-                            <Input
-                              className="h-8 w-36"
-                              value={packingValue(extra.packing)}
-                              onChange={(e) =>
-                                setExtraLines((prev) =>
-                                  prev.map((line) =>
-                                    line.key === extra.key ? { ...line, packing: e.target.value } : line
-                                  )
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {(line.unit || "PCS").toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Packing</p>
+                          <Input
+                            className="h-8"
+                            value={linePacking[line.index] ?? packingValue(line.packing, line.unit)}
+                            onChange={(e) =>
+                              setLinePacking((prev) => ({ ...prev, [line.index]: e.target.value }))
+                            }
+                            placeholder="PCS"
+                            aria-label={`Packing for ${line.productName ?? "line"}`}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Your ERP product</p>
+                        <AsyncSearchableSelect
+                          value={lineProducts[line.index]?.id}
+                          selectedOption={lineProducts[line.index] ?? null}
+                          onValueChange={(id) => {
+                            if (!id) applyProduct(line.index, null);
+                          }}
+                          onOptionSelect={(opt) => void checkProductMapping(line.index, opt)}
+                          loadOptions={loadProductOptions}
+                          minSearchLength={0}
+                          searchDebounceMs={200}
+                          placeholder="Select product"
+                          searchPlaceholder="Name, size, or barcode"
+                          emptyMessage="No products found."
+                          allowClear
+                          disabled={checkingProductLines.has(line.index) || submitting}
+                          wrapLabels
+                          showSelectedDescription
+                          triggerClassName={
+                            line.hasIssue
+                              ? "w-full border-red-300 dark:border-red-700"
+                              : line.isAutoMatched
+                                ? "w-full border-green-300 dark:border-green-700"
+                                : "w-full"
+                          }
+                          onCreateNew={goCreateProduct}
+                          createNewLabel="Create new product"
+                        />
+                        {checkingProductLines.has(line.index) ? (
+                          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Icons.Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                            Checking product mapping…
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                  {extraLines.map((extra) => (
+                    <div key={extra.key} className="space-y-3 rounded-md border bg-background p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">Added item</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Not on the Odaflow order</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0"
+                          disabled={submitting}
+                          onClick={() => setExtraLines((prev) => prev.filter((line) => line.key !== extra.key))}
+                          aria-label="Remove added item"
+                        >
+                          <Icons.Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3">
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Qty</p>
+                          <Input
+                            type="number"
+                            min={1}
+                            className="h-8 w-16"
+                            value={extra.qty}
+                            onChange={(e) =>
+                              setExtraLines((prev) =>
+                                prev.map((line) =>
+                                  line.key === extra.key
+                                    ? { ...line, qty: Math.max(1, Number(e.target.value) || 1) }
+                                    : line
                                 )
-                              }
-                              placeholder="PCS"
-                              aria-label="Packing for added item"
-                            />
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-start gap-2">
-                              <div className="min-w-0 flex-1">
-                                <AsyncSearchableSelect
-                                  value={extra.product?.id}
-                                  selectedOption={extra.product}
-                                  onValueChange={(id) => {
-                                    if (!id) {
-                                      setExtraLines((prev) =>
-                                        prev.map((line) => (line.key === extra.key ? { ...line, product: null } : line))
-                                      );
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground">Packing</p>
+                          <Input
+                            className="h-8"
+                            value={packingValue(extra.packing)}
+                            onChange={(e) =>
+                              setExtraLines((prev) =>
+                                prev.map((line) =>
+                                  line.key === extra.key ? { ...line, packing: e.target.value } : line
+                                )
+                              )
+                            }
+                            placeholder="PCS"
+                            aria-label="Packing for added item"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Your ERP product</p>
+                        <AsyncSearchableSelect
+                          value={extra.product?.id}
+                          selectedOption={extra.product}
+                          onValueChange={(id) => {
+                            if (!id) {
+                              setExtraLines((prev) =>
+                                prev.map((line) => (line.key === extra.key ? { ...line, product: null } : line))
+                              );
+                            }
+                          }}
+                          onOptionSelect={(opt) =>
+                            setExtraLines((prev) =>
+                              prev.map((line) =>
+                                line.key === extra.key
+                                  ? {
+                                      ...line,
+                                      product: opt
+                                        ? { id: opt.id, label: opt.label, description: opt.description }
+                                        : null,
                                     }
-                                  }}
-                                  onOptionSelect={(opt) =>
-                                    setExtraLines((prev) =>
-                                      prev.map((line) =>
-                                        line.key === extra.key
-                                          ? {
-                                              ...line,
-                                              product: opt
-                                                ? { id: opt.id, label: opt.label, description: opt.description }
-                                                : null,
-                                            }
-                                          : line
-                                      )
-                                    )
-                                  }
-                                  loadOptions={loadProductOptions}
-                                  minSearchLength={0}
-                                  searchDebounceMs={200}
-                                  placeholder="Select product"
-                                  searchPlaceholder="Name, size, or barcode"
-                                  emptyMessage="No products found."
-                                  allowClear
-                                  disabled={submitting}
-                                  clipLabels={false}
-                                  showSelectedDescription
-                                  triggerClassName="w-max min-w-[26rem]"
-                                  onCreateNew={goCreateProduct}
-                                  createNewLabel="Create new product"
-                                />
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="shrink-0"
-                                disabled={submitting}
-                                onClick={() => setExtraLines((prev) => prev.filter((line) => line.key !== extra.key))}
-                                aria-label="Remove added item"
-                              >
-                                <Icons.Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                                  : line
+                              )
+                            )
+                          }
+                          loadOptions={loadProductOptions}
+                          minSearchLength={0}
+                          searchDebounceMs={200}
+                          placeholder="Select product"
+                          searchPlaceholder="Name, size, or barcode"
+                          emptyMessage="No products found."
+                          allowClear
+                          disabled={submitting}
+                          wrapLabels
+                          showSelectedDescription
+                          triggerClassName="w-full"
+                          onCreateNew={goCreateProduct}
+                          createNewLabel="Create new product"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addExtraLine} disabled={submitting}>
                   <Icons.Plus className="mr-1.5 h-4 w-4" />
@@ -973,41 +977,68 @@ export function OdaflowQueueOrderSheet({
                   checked={saveMappings}
                   onCheckedChange={(v) => setSaveMappings(v === true)}
                 />
-                <Label htmlFor="save-mappings" className="font-normal leading-snug cursor-pointer">
+                <Label htmlFor="save-mappings" className="cursor-pointer font-normal leading-snug">
                   Remember these customer and product matches for future Odaflow orders
                 </Label>
               </div>
+            </section>
+
+            <section
+              aria-label="Original SFA order"
+              className="flex min-h-[28rem] flex-col bg-muted/20 p-4 lg:h-full lg:min-h-0 lg:overflow-hidden"
+            >
+              {odaflowSource ? (
+                <OdaflowSourceCard
+                  info={odaflowSource}
+                  compact
+                  showPdfLink={false}
+                  pdfFill
+                  className="flex min-h-0 flex-1 flex-col"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">No original order to preview.</p>
+              )}
+              {odaflowSource && !odaflowSource.sourcePdfUrl ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  No PDF was attached from Odaflow for this order.
+                </p>
+              ) : null}
+            </section>
+            </div>
             </div>
           )}
 
-          <SheetFooter className="mt-8 gap-2 sm:gap-2">
-            <Button type="button" variant="ghost" onClick={() => void handleDismiss()} disabled={submitting}>
-              Remove from list
-            </Button>
-            <Button type="button" onClick={() => void handleCreateSalesOrder()} disabled={!canSubmit}>
-              {submitting ? (
-                <>
-                  <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating…
-                </>
-              ) : mappingCheckBusy ? (
-                <>
-                  <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Checking…
-                </>
-              ) : (
-                "Create sales order"
-              )}
-            </Button>
+          <SheetFooter className="shrink-0 gap-3 border-t px-6 py-4 sm:items-center sm:justify-between">
+            {order && !canSubmit && !loading ? (
+              <p className="text-xs text-muted-foreground sm:mr-auto">
+                {mappingCheckBusy
+                  ? "Checking your selection against existing mappings…"
+                  : "Select the ERP customer and every product above to continue."}
+              </p>
+            ) : (
+              <span className="hidden sm:block sm:mr-auto" />
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="ghost" onClick={() => void handleDismiss()} disabled={submitting}>
+                Remove from list
+              </Button>
+              <Button type="button" onClick={() => void handleCreateSalesOrder()} disabled={!canSubmit}>
+                {submitting ? (
+                  <>
+                    <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating…
+                  </>
+                ) : mappingCheckBusy ? (
+                  <>
+                    <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Checking…
+                  </>
+                ) : (
+                  "Create sales order"
+                )}
+              </Button>
+            </div>
           </SheetFooter>
-
-          {order && !canSubmit && !loading && (
-            <p className="text-xs text-muted-foreground text-center pb-2">
-              {mappingCheckBusy
-                ? "Checking your selection against existing mappings…"
-                : "Select the ERP customer and every product above to continue."}
-            </p>
-          )}
         </SheetContent>
       </Sheet>
 

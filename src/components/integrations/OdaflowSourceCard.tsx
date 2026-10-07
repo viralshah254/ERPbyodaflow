@@ -32,20 +32,31 @@ export function OdaflowPdfPreview({
   url,
   title,
   defaultExpanded = true,
+  className,
+  fill = false,
 }: {
   url: string;
   title: string;
   defaultExpanded?: boolean;
+  className?: string;
+  /** Stretch the iframe to fill a side pane. */
+  fill?: boolean;
 }) {
   const [expanded, setExpanded] = React.useState(defaultExpanded);
 
   return (
-    <div className="space-y-2 pt-1 border-t border-sky-200/60 dark:border-sky-900/40">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground flex-1 min-w-[12rem]">
+    <div
+      className={cn(
+        "space-y-2 border-t border-sky-200/60 pt-1 dark:border-sky-900/40",
+        expanded && fill && "flex min-h-0 flex-1 flex-col",
+        className
+      )}
+    >
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+        <p className="min-w-[12rem] flex-1 text-xs text-muted-foreground">
           Original SFA order PDF — confirm quantities and customer before approving.
         </p>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
             type="button"
             size="sm"
@@ -74,8 +85,20 @@ export function OdaflowPdfPreview({
         </div>
       </div>
       {expanded ? (
-        <div className="overflow-hidden rounded-md border bg-white dark:bg-muted/20">
-          <iframe title={title} src={url} className="h-[min(70vh,640px)] w-full border-0" />
+        <div
+          className={cn(
+            "overflow-hidden rounded-md border bg-white dark:bg-muted/20",
+            fill && "relative min-h-[24rem] min-w-0 flex-1 lg:min-h-0"
+          )}
+        >
+          <iframe
+            title={title}
+            src={url}
+            className={cn(
+              "w-full border-0 bg-white",
+              fill ? "h-[min(70vh,640px)] lg:absolute lg:inset-0 lg:h-full" : "h-[min(70vh,640px)]"
+            )}
+          />
         </div>
       ) : null}
     </div>
@@ -129,7 +152,9 @@ export function OdaflowSourceCard({
   showPdfPreview = true,
   pdfPreviewDefaultExpanded = true,
   pdfInAttachments = false,
+  showPdfLink = true,
   className,
+  pdfFill = false,
 }: {
   info: OdaflowSourceInfo;
   compact?: boolean;
@@ -138,7 +163,11 @@ export function OdaflowSourceCard({
   pdfPreviewDefaultExpanded?: boolean;
   /** The order page shows the PDF in the Attachments tab, so the card stays a summary. */
   pdfInAttachments?: boolean;
+  /** Compact card link that opens the PDF in a new tab. Hide when a pane already shows the file. */
+  showPdfLink?: boolean;
   className?: string;
+  /** Stretch the inline PDF to fill a side pane. */
+  pdfFill?: boolean;
 }) {
   const arrival = modernTradeArrival({
     channel: info.odaflowChannel,
@@ -161,7 +190,7 @@ export function OdaflowSourceCard({
           className
         )}
       >
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
           <div className="space-y-1.5 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium text-sky-950 dark:text-sky-100">{title}</p>
@@ -183,7 +212,7 @@ export function OdaflowSourceCard({
               <p className="text-xs text-muted-foreground">{channel}</p>
             )}
           </div>
-          {info.sourcePdfUrl ? (
+          {showPdfLink && info.sourcePdfUrl ? (
             <Button type="button" size="sm" variant="outline" className="h-8 shrink-0" asChild>
               <a href={info.sourcePdfUrl} target="_blank" rel="noopener noreferrer">
                 <Icons.FileText className="mr-1.5 h-3.5 w-3.5" />
@@ -193,11 +222,13 @@ export function OdaflowSourceCard({
           ) : null}
         </div>
         {showPdfPreview && info.sourcePdfUrl ? (
-          <div className="mt-3">
+          <div className={cn("mt-3", pdfFill && "flex min-h-0 flex-1 flex-col")}>
             <OdaflowPdfPreview
               url={info.sourcePdfUrl}
               title={`Original SFA order — ${title}`}
               defaultExpanded={pdfPreviewDefaultExpanded}
+              fill={pdfFill}
+              className={pdfFill ? "min-h-0 flex-1 border-0 pt-0" : undefined}
             />
           </div>
         ) : null}
