@@ -928,12 +928,13 @@ export async function requestDocumentApprovalApi(
   type: DocTypeKey,
   id: string,
   comment?: string
-): Promise<void> {
+): Promise<{ autoApproved: boolean }> {
   requireLiveApi("Document approval request");
-  await apiRequest(`/api/documents/${type}/${id}/request-approval`, {
+  const result = await apiRequest<{ autoApproved?: boolean }>(`/api/documents/${type}/${id}/request-approval`, {
     method: "POST",
     body: comment != null ? { comment } : {},
   });
+  return { autoApproved: result.autoApproved === true };
 }
 
 export async function documentActionApi(
