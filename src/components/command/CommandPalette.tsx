@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { searchErpApi, type ErpSearchHit } from "@/lib/api/erp-search";
+import { isRecordListHref, recordHref } from "@/lib/nav/record-destination";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import * as Icons from "lucide-react";
 
@@ -57,6 +58,7 @@ interface SearchResultItem {
   href: string;
   subtitle?: string;
   entityType: ErpSearchHit["entityType"];
+  recordId: string;
 }
 
 type DisplayItem = (CommandItem & { _breadcrumb?: string; _section?: string }) | AskAiItem | SearchResultItem;
@@ -219,9 +221,10 @@ export function CommandPalette() {
               id: `search-${hit.entityType}-${hit.id}`,
               group: "search" as const,
               label: hit.title,
-              href: hit.href,
+              href: recordHref(hit.entityType, hit.id, hit.href),
               subtitle: hit.subtitle,
               entityType: hit.entityType,
+              recordId: hit.id,
             }))
           );
           setSuggestions(response.suggestions?.slice(0, 4) ?? []);
@@ -338,11 +341,63 @@ export function CommandPalette() {
     if (selected >= displayList.length) setSelected(Math.max(0, displayList.length - 1));
   }, [displayList.length, selected]);
 
+  const listPageLabels = React.useMemo(() => {
+    const labels = new Set<string>();
+    for (const item of navItems) {
+      if (isRecordListHref(item.href)) labels.add(item.label.trim().toLowerCase());
+    }
+    return labels;
+  }, [navItems]);
+
   const navigate = React.useCallback(
-    (href: string, label: string, icon?: string) => {
-      recordRecentRoute({ href, label, icon });
+    (
+      href: string,
+      label: string,
+      icon?: string,
+      record?: { entityType: string; recordId: string }
+    ) => {
+      recordRecentRoute({
+        href,
+        label,
+        icon,
+        entityType: record?.entityType,
+        recordId: record?.recordId,
+      });
       setOpen(false);
       router.push(href);
+    },
+    [router, setOpen]
+  );
+
+  const openStoredRecord = React.useCallback(
+    async (label: string, fallbackHref: string) => {
+      setOpen(false);
+      try {
+        const response = await searchErpApi(label);
+        const wanted = label.trim().toLowerCase();
+        const hit =
+          response.hits.find(
+            (item) =>
+              (item.entityType === "product" || item.entityType === "customer") &&
+              item.title.trim().toLowerCase() === wanted
+          ) ??
+          response.hits.find((item) => item.entityType === "product" || item.entityType === "customer");
+        if (hit) {
+          const href = recordHref(hit.entityType, hit.id, hit.href);
+          recordRecentRoute({
+            href,
+            label: hit.title || label,
+            icon: entityIcon(hit.entityType),
+            entityType: hit.entityType,
+            recordId: hit.id,
+          });
+          router.push(href);
+          return;
+        }
+      } catch {
+        // The stored page is still a valid destination.
+      }
+      router.push(fallbackHref);
     },
     [router, setOpen]
   );
@@ -357,8 +412,27 @@ export function CommandPalette() {
       }
       // ERP search result
       if (item.group === "search" && "href" in item) {
-        navigate(item.href, item.label, entityIcon((item as SearchResultItem).entityType));
+        const hit = item as SearchResultItem;
+        navigate(hit.href, hit.label, entityIcon(hit.entityType), {
+          entityType: hit.entityType,
+          recordId: hit.recordId,
+        });
         return;
+      }
+      // A product or customer saved before the result carried its own page.
+      if ((item.group as string) === "recent" && "href" in item && item.href) {
+        const stored = recents.find((route) => route.href === item.href && route.label === item.label);
+        if (stored?.recordId && stored.entityType) {
+          navigate(recordHref(stored.entityType, stored.recordId, stored.href), item.label, stored.icon, {
+            entityType: stored.entityType,
+            recordId: stored.recordId,
+          });
+          return;
+        }
+        if (isRecordListHref(item.href) && !listPageLabels.has(item.label.trim().toLowerCase())) {
+          void openStoredRecord(item.label, item.href);
+          return;
+        }
       }
       // Nav
       if ("href" in item && item.href) {
@@ -391,7 +465,7 @@ export function CommandPalette() {
         }
       }
     },
-    [navigate, router, pathname, setOpen, openDrawer, openDrawerWithPrompt, setContext]
+    [navigate, openStoredRecord, recents, listPageLabels, router, pathname, setOpen, openDrawer, openDrawerWithPrompt, setContext]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

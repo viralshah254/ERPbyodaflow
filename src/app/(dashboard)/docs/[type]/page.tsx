@@ -38,6 +38,7 @@ import {
   filterIdsForBulkPost,
   partitionBulkDocResults,
 } from "@/lib/documents/bulk-eligibility";
+import { isIncotexSignableDocType } from "@/lib/kra/kra-signing";
 import { DocumentNumber } from "@/components/docs/document-number";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
@@ -431,7 +432,7 @@ export default function DocTypeListPage() {
     if (!approveIds.length) {
       if (type === "invoice") {
         toast.info(
-          "Approve only applies to items pending approval (e.g. credit policy). For draft invoices, use Post.",
+          "Approve only applies to items pending approval (e.g. credit policy). For draft invoices, use Sign and post.",
         );
       } else {
         toast.info(
@@ -497,7 +498,9 @@ export default function DocTypeListPage() {
       await loadPage(pageOffset);
       if (succeeded.length) {
         toast.success(
-          `${succeeded.length} ${label.toLowerCase()} record(s) posted.`,
+          isIncotexSignableDocType(type)
+            ? `${succeeded.length} ${label.toLowerCase()} record(s) signed and posted.`
+            : `${succeeded.length} ${label.toLowerCase()} record(s) posted.`,
         );
       }
       if (failed.length) {
@@ -683,7 +686,7 @@ export default function DocTypeListPage() {
                 ) : null}
                 {showBulkPost ? (
                   <Button variant="outline" size="sm" onClick={handleBulkPost}>
-                    Post
+                    {isIncotexSignableDocType(type) ? "Sign and post" : "Post"}
                   </Button>
                 ) : null}
                 <Button variant="outline" size="sm" onClick={handleExport}>

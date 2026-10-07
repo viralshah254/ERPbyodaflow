@@ -545,6 +545,7 @@ export default function DocViewPage() {
   const canRequestApproval = availableActions.includes("submit");
   const canApprove = availableActions.includes("approve");
   const canPost = availableActions.includes("post");
+  const signAndPost = isIncotexSignableDocType(type);
   const canCancel = availableActions.includes("cancel");
   const canReverse = availableActions.includes("reverse");
   const odaflowSalesOrder = type === "sales-order" && isOdaflowSalesOrder(document);
@@ -904,7 +905,7 @@ export default function DocViewPage() {
           await documentActionApi(type as DocTypeKey, id, action as "approve" | "post" | "cancel");
           if (action === "post") {
             setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
-            toast.success("Document posted.");
+            toast.success(isIncotexSignableDocType(type) ? "Signed and posted." : "Document posted.");
             void refreshDocument(true);
           } else {
             await refreshDocument(true);
@@ -1143,7 +1144,7 @@ export default function DocViewPage() {
                     // Optimistically mark as POSTED so the UI updates immediately while the
                     // background refresh fills in the rest of the detail.
                     setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
-                    toast.success("Document posted.");
+                    toast.success(signAndPost ? "Signed and posted." : "Document posted.");
                     void refreshDocument(true);
                   } catch (e) {
                     toast.error((e as Error).message);
@@ -1153,7 +1154,7 @@ export default function DocViewPage() {
                 }}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
-                Post
+                {signAndPost ? "Sign and post" : "Post"}
               </Button>
               )}
             </>
@@ -3072,13 +3073,13 @@ function DynamicNextStepsPanel({
           });
         }
       } else {
-        steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Post invoice to finalize", action: () => void onAction("post"), actionLabel: "Post", variant: "default" });
+        steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Sign and post to finalize", action: () => void onAction("post"), actionLabel: "Sign and post", variant: "default" });
       }
     } else if (status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting credit approval — held due to credit policy breach" });
       steps.push({ icon: <Icons.CheckSquare className="h-4 w-4 text-blue-500" />, text: "Approve in Approvals Inbox", href: "/approvals/inbox", actionLabel: "Go to Inbox", variant: "default" });
     } else if (status === "APPROVED") {
-      steps.push({ icon: <Icons.Send className="h-4 w-4 text-emerald-500" />, text: "Credit override approved — post invoice to finalize", action: () => void onAction("post"), actionLabel: "Post", variant: "default" });
+      steps.push({ icon: <Icons.Send className="h-4 w-4 text-emerald-500" />, text: "Credit override approved — sign and post to finalize", action: () => void onAction("post"), actionLabel: "Sign and post", variant: "default" });
     } else if (status === "POSTED") {
       if (paymentStatus === "PAID") {
         steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4 text-emerald-500" />, text: "Invoice fully settled ✓" });
