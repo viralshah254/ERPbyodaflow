@@ -64,6 +64,7 @@ import {
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
 import {
+  fetchSalesDocumentFlowApi,
   generateInvoiceAndDeliveryNoteApi,
   startPickPackFromSalesOrderApi,
 } from "@/lib/api/sales-document-flow";
@@ -232,6 +233,9 @@ export default function DocViewPage() {
   const canWriteFinance = useCanWriteFinance();
   const authUser = useAuthStore((s) => s.user);
   const org = useAuthStore((s) => s.org);
+  const [salesFlowFallback, setSalesFlowFallback] = React.useState<
+    NonNullable<DocumentDetailRecord["salesFlow"]> | null
+  >(null);
   const [amendOpen, setAmendOpen] = React.useState(false);
   const [amendReason, setAmendReason] = React.useState("");
   const [amendLineRows, setAmendLineRows] = React.useState<
@@ -693,6 +697,62 @@ export default function DocViewPage() {
   }, [refreshDocument]);
 
   React.useEffect(() => {
+    if (!fmcgOrg || type !== "sales-order") {
+      setSalesFlowFallback(null);
+      return;
+    }
+    if (document?.salesFlow) {
+      setSalesFlowFallback(null);
+      return;
+    }
+    const status = String(document?.status ?? "").toUpperCase();
+    if (!["APPROVED", "PARTIALLY_FULFILLED"].includes(status)) {
+      setSalesFlowFallback(null);
+      return;
+    }
+    let cancelled = false;
+    fetchSalesDocumentFlowApi()
+      .then((settings) => {
+        if (cancelled || settings.mode !== "pick_pack_first") {
+          if (!cancelled) setSalesFlowFallback(null);
+          return;
+        }
+        setSalesFlowFallback({
+          mode: "pick_pack_first",
+          steps: [
+            "Sales order",
+            "Pick & pack",
+            "Invoice + delivery note",
+            "Dispatch",
+            "Proof of delivery",
+          ],
+          actions: ["start-pick-pack"],
+          pickPack: null,
+          invoice: null,
+          deliveryNote: null,
+          tracks: {
+            orderStatus: "APPROVED",
+            invoiceStatus: "DRAFT",
+            kraStatus: "NOT_SUBMITTED",
+            dispatchStatus: "PENDING",
+            deliveryStatus: "AWAITING_POD",
+            podStatus: "NOT_RECEIVED",
+          },
+          kraLabel: "KRA: Not submitted",
+          podSource: null,
+          podConfirmedAt: null,
+          receiverName: null,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setSalesFlowFallback(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fmcgOrg, type, document?.id, document?.status, document?.salesFlow]);
+
+  React.useEffect(() => {
     if (!initialLoading && document) setNotesDraft(document.notes ?? "");
   }, [initialLoading, document?.id, document?.notes]);
 
@@ -943,10 +1003,16 @@ export default function DocViewPage() {
     }
   }, [id, refreshDocument, authUser]);
 
+  const documentWithSalesFlow = React.useMemo(() => {
+    if (!document) return document;
+    if (document.salesFlow || !salesFlowFallback) return document;
+    return { ...document, salesFlow: salesFlowFallback };
+  }, [document, salesFlowFallback]);
+
   const rightSlot = (
     <DynamicNextStepsPanel
       type={type}
-      document={document}
+      document={documentWithSalesFlow}
       convertTargets={effectiveConvertTargets}
       linkedDeliveryNote={linkedDeliveryNote}
       canCreateDeliveryNote={canCreateDeliveryNote}
@@ -2164,7 +2230,7 @@ export default function DocViewPage() {
       <Sheet open={convertOpen} onOpenChange={handleConvertOpenChange} modal={false}>
         <SheetContent
           side="right"
-          className="w-full sm:max-w-md"
+          className="w-full"
           onPointerDownOutside={(e) => {
             if (Date.now() < convertSheetDismissShieldUntilRef.current) {
               e.preventDefault();
@@ -2304,7 +2370,7 @@ export default function DocViewPage() {
       </Sheet>
 
       <Sheet open={amendOpen} onOpenChange={setAmendOpen} modal={false}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <div ref={setAmendSheetHostRef} className="flex min-h-0 flex-col">
           <SheetHeader>
             <SheetTitle>Amend dispatch (admin)</SheetTitle>
@@ -2414,7 +2480,7 @@ export default function DocViewPage() {
 
       {fmcgOrg ? (
       <Sheet open={signedPodSheetOpen} onOpenChange={setSignedPodSheetOpen} modal={false}>
-        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Upload signed delivery note</SheetTitle>
             <SheetDescription>
@@ -2540,7 +2606,7 @@ export default function DocViewPage() {
 
       {DELIVERY_NOTE_POD_WEB_ENABLED ? (
       <Sheet open={podSheetOpen} onOpenChange={setPodSheetOpen} modal={false}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Proof of delivery</SheetTitle>
             <SheetDescription>

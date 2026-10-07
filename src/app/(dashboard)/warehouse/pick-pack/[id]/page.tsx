@@ -445,7 +445,11 @@ export default function PickPackDetailPage() {
         !target.closest("[data-pack-qty]") &&
         target !== scanInputRef.current;
       if (manualField) return;
-      const result = pushScannerKey(buffer, event.key, Date.now(), { scanFieldFocused });
+      const result = pushScannerKey(buffer, event.key, Date.now(), {
+        scanFieldFocused,
+        // DOM value is sync (paste / backspace); React state can lag one key behind.
+        scanFieldValue: scanInputRef.current?.value ?? "",
+      });
       buffer = result.buffer;
       if (result.swallow) {
         event.preventDefault();
@@ -968,7 +972,7 @@ export default function PickPackDetailPage() {
     if (isCancelled) return "This task was cancelled.";
     if (taskStatusUpper === "PENDING")
       return fmcg
-        ? "Scan each packed box. The code is the product barcode, then the pieces in the box (for example 65433213113 24). Ordered and scanned show in cartons when packaging is set, otherwise in pieces."
+        ? "Scan each packed box. EAN-13 then tab or space then pieces (for example 6162005202071 then 6) adds that many; the product barcode alone adds one pack when packaging is set. Ordered and scanned show in cartons when packaging is set, otherwise in pieces."
         : "Change the product on a line to substitute (dropdown), set picked qty, then confirm pick & pack. Set picked to 0 to skip.";
     if (taskStatusUpper === "PICKED") return "Pick saved — adjust cartons if needed, then confirm pack.";
     if (taskStatusUpper === "PACKED")
@@ -1195,7 +1199,7 @@ export default function PickPackDetailPage() {
             <CardDescription>
               {fmcg ? (
                 <>
-                  <strong>In this warehouse</strong> is stock you can pack from the fulfilment warehouse above. Scan a packed box. You do not click the product first. The barcode finds that line and updates scanned and still to pack on its own. A read like <strong>65433213113 24</strong> adds 24 pieces.
+                  <strong>In this warehouse</strong> is stock you can pack from the fulfilment warehouse above. Scan a packed box. You do not click the product first. The barcode finds that line and updates scanned and still to pack on its own. Pack labels use EAN-13 then the piece count after a tab or space (for example <strong>6162005202071 → 6</strong>). A product barcode alone adds one pack when packaging is set, otherwise one piece.
                 </>
               ) : (
                 <>

@@ -85,8 +85,27 @@ export type ScannerKeyResult = {
   scan?: string;
 };
 
+export type ScannerKeyOpts = {
+  scanFieldFocused: boolean;
+  /**
+   * Live value of the Scan pack input. Used on Enter when that field is focused so
+   * paste, backspace, and edits win over the key buffer (which ignores Backspace).
+   */
+  scanFieldValue?: string;
+};
+
+/** Pick field vs wedge buffer; keep a tab/space separator the input may have dropped. */
+function resolveScanRaw(fromField: string, fromBuffer: string): string {
+  if (fromField && fromBuffer) {
+    if (/\s/.test(fromBuffer) && !/\s/.test(fromField)) return fromBuffer;
+    return fromField;
+  }
+  return fromField || fromBuffer;
+}
+
 /**
  * A supermarket scanner types into whatever is focused and ends with Enter.
+ * Top Food EAN-13 pack labels often send barcode, then Tab, then piece count.
  * Rapid keys are captured even when a product row is focused. Slow typing in
  * another field is left alone.
  */
@@ -94,14 +113,28 @@ export function pushScannerKey(
   buffer: ScannerBuffer,
   key: string,
   now: number,
-  opts: { scanFieldFocused: boolean }
+  opts: ScannerKeyOpts
 ): ScannerKeyResult {
   if (key === "Enter") {
-    const raw = buffer.text.trim();
+    const fromField = opts.scanFieldFocused ? String(opts.scanFieldValue ?? "").trim() : "";
+    const fromBuffer = buffer.text.trim();
+    const raw = resolveScanRaw(fromField, fromBuffer);
     const next = createScannerBuffer();
-    const accept = raw.length > 0 && (opts.scanFieldFocused || (buffer.rapid && raw.length >= 3));
+    const accept =
+      raw.length > 0 && (opts.scanFieldFocused || (buffer.rapid && fromBuffer.length >= 3));
     if (!accept) return { buffer: next, swallow: false };
     return { buffer: next, swallow: true, scan: raw };
+  }
+  // Scanners suffix the EAN-13 with Tab before the piece count — do not move focus.
+  if (key === "Tab") {
+    const gap = buffer.lastAt === 0 ? SCANNER_KEY_GAP_MS + 1 : now - buffer.lastAt;
+    const inScan =
+      opts.scanFieldFocused || (buffer.text.length > 0 && gap <= SCANNER_KEY_GAP_MS);
+    if (!inScan) return { buffer, swallow: false };
+    return {
+      buffer: { text: `${buffer.text}\t`, lastAt: now, rapid: true },
+      swallow: true,
+    };
   }
   if (key.length !== 1) return { buffer, swallow: false };
   if (opts.scanFieldFocused) {
@@ -123,11 +156,26 @@ export function pushScannerKey(
   };
 }
 
+/**
+ * USB wedge read: EAN-13 (or other product code), optional whitespace (space or tab),
+ * then pieces in the pack. When Tab is swallowed, qty digits may stick to the EAN
+ * (`61620052020716` → code + 6).
+ */
 export function parsePackScan(raw: string): ParsedPackScan | { error: string } {
   const text = raw.trim();
   if (!text) return { error: "Scan a barcode" };
-  const tokens = text.split(/\s+/);
-  if (tokens.length === 1) return { code: tokens[0] };
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) {
+    const only = tokens[0];
+    const ean13WithQty = /^(\d{13})(\d+)$/.exec(only);
+    if (ean13WithQty) {
+      const pieces = Number(ean13WithQty[2]);
+      if (Number.isFinite(pieces) && pieces > 0) {
+        return { code: ean13WithQty[1], pieces };
+      }
+    }
+    return { code: only };
+  }
   if (tokens.length === 2) {
     const pieces = Number(tokens[1]);
     if (!Number.isFinite(pieces) || pieces <= 0) {
@@ -138,24 +186,30 @@ export function parsePackScan(raw: string): ParsedPackScan | { error: string } {
   return { error: "Unrecognised scan. Use the product barcode, or barcode then pieces." };
 }
 
-function productHits(code: string, lines: PackScanLine[], pieces: number | undefined): Array<{ line: PackScanLine; pieces: number }> {
+/** Pieces to add for one scan of this code on a line (explicit qty wins). */
+function piecesForScan(line: PackScanLine, code: string, pieces: number | undefined): number {
+  if (pieces != null) return pieces;
   const n = norm(code);
-  const matched = lines.filter((line) => norm(line.barcode) === n || (line.sku && norm(line.sku) === n));
-  if (!matched.length) return [];
-  const add = pieces ?? 1;
-  return matched.map((line) => ({ line, pieces: add }));
+  const packSizes = (line.packBarcodes ?? [])
+    .filter((row) => norm(row.barcode) === n && row.unitsPer != null && row.unitsPer > 0)
+    .map((row) => row.unitsPer as number);
+  if (packSizes.length) {
+    // Same EAN on inner + carton: prefer the smaller shrink-wrap (e.g. ×6 over ×24).
+    return Math.min(...packSizes);
+  }
+  // Packed-box scan of the product EAN: one outer when the line is in pack UOM.
+  if (line.unitsPer && line.unitsPer > 1) return line.unitsPer;
+  return 1;
 }
 
-function packHits(code: string, lines: PackScanLine[], pieces: number | undefined): Array<{ line: PackScanLine; pieces: number }> {
+function linesMatchingCode(code: string, lines: PackScanLine[]): PackScanLine[] {
   const n = norm(code);
-  const hits: Array<{ line: PackScanLine; pieces: number }> = [];
-  for (const line of lines) {
-    const pack = (line.packBarcodes ?? []).find((row) => norm(row.barcode) === n);
-    if (!pack) continue;
-    const fromPack = pack.unitsPer && pack.unitsPer > 0 ? pack.unitsPer : line.unitsPer && line.unitsPer > 1 ? line.unitsPer : 1;
-    hits.push({ line, pieces: pieces ?? fromPack });
-  }
-  return hits;
+  return lines.filter(
+    (line) =>
+      norm(line.barcode) === n ||
+      (line.sku != null && line.sku.length > 0 && norm(line.sku) === n) ||
+      (line.packBarcodes ?? []).some((row) => norm(row.barcode) === n)
+  );
 }
 
 export function matchPackScan(
@@ -165,11 +219,14 @@ export function matchPackScan(
 ): PackScanHit | PackScanMiss {
   const parsed = parsePackScan(raw);
   if ("error" in parsed) return { ok: false, error: parsed.error };
-  const hits = productHits(parsed.code, lines, parsed.pieces);
-  const resolved = hits.length ? hits : packHits(parsed.code, lines, parsed.pieces);
-  if (!resolved.length) {
+  const matched = linesMatchingCode(parsed.code, lines);
+  if (!matched.length) {
     return { ok: false, error: "Not on this order" };
   }
+  const resolved = matched.map((line) => ({
+    line,
+    pieces: piecesForScan(line, parsed.code, parsed.pieces),
+  }));
   for (const hit of resolved) {
     const picked = pickedByLineId[hit.line.id] ?? 0;
     const next = picked + hit.pieces;
