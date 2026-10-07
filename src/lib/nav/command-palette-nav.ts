@@ -39,6 +39,7 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   "/analytics": ["studio", "intelligence", "metrics", "explore"],
   "/reports": ["reporting", "p&l", "balance sheet"],
   "/settings": ["configuration", "preferences", "org"],
+  "/settings/uom": ["uom", "unit of measure", "units of measure", "packaging", "packs", "units"],
 };
 
 /** Recursively flatten a ResolvedNavItem tree, emitting one entry per node with an href. */
