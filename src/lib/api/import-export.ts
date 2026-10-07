@@ -613,10 +613,11 @@ export type PriceTagExportScope = {
 };
 
 /**
- * Download the current price-tag view as CSV or Excel so manufacturers can
- * bulk-edit piece prices and re-import. Rows follow the open filters
- * (search, size, category, has a price / no price yet). Import updates only
- * the rows in the file.
+ * Download the price-tag sheet as CSV or Excel so manufacturers can bulk-edit
+ * and re-import. Columns match the on-screen editor (product name, barcode,
+ * size, stock, cost, VAT, sell incl, RRP, discount, final). SKU codes are
+ * omitted. Products without a price yet are included and sorted last (unless
+ * the open filter is “No price yet”). Import updates only the rows in the file.
  */
 export async function exportPriceTagPricesAsFormatApi(
   priceListId: string,
@@ -629,13 +630,21 @@ export async function exportPriceTagPricesAsFormatApi(
   try {
     const { fetchPriceListByIdApi } = await import("./pricing");
     const { fetchProductsPageApi } = await import("./products");
-    const { finalFromPriceAndDiscount } = await import("../pricing/price-tag-math");
-    const pricedStatus = scope?.pricedStatus ?? "priced";
+    const viewStatus = scope?.pricedStatus ?? "all";
+    /** Always include unpriced rows (last), except when the user filtered to unpriced only. */
+    const fetchStatus = viewStatus === "unpriced" ? "unpriced" : "all";
     const list = await fetchPriceListByIdApi(priceListId);
     const priceByProduct = new Map(
       (list?.items ?? []).map((item) => [item.productId, item])
     );
-    const products: Array<{ id: string; name: string; sku: string; barcode?: string }> = [];
+    const products: Array<{
+      id: string;
+      name: string;
+      barcode?: string;
+      size?: string;
+      currentStock?: number;
+      availableQuantity?: number;
+    }> = [];
     let cursor = "0";
     for (let page = 0; page < 200; page++) {
       const batch = await fetchProductsPageApi({
@@ -644,82 +653,139 @@ export async function exportPriceTagPricesAsFormatApi(
         search: scope?.search?.trim() || undefined,
         categoryId: scope?.categoryId?.trim() || undefined,
         size: scope?.size?.trim() || undefined,
-        pricedOnPriceListId: pricedStatus !== "all" ? priceListId : undefined,
-        pricedStatus: pricedStatus !== "all" ? pricedStatus : undefined,
+        pricedOnPriceListId: fetchStatus !== "all" ? priceListId : undefined,
+        pricedStatus: fetchStatus !== "all" ? fetchStatus : undefined,
         sortBy: "name",
         sortDir: "asc",
         limit: 100,
         cursor,
-        includeStock: false,
+        includeStock: true,
       });
       products.push(...batch.items);
       if (!batch.hasMore || !batch.nextCursor) break;
       cursor = batch.nextCursor;
     }
-    const header = ["product", "sku", "barcode", "costExcl", "vatRate", "price", "rrp", "discountPercent", "finalPrice"];
+
+    products.sort((a, b) => {
+      const aPriced = (priceByProduct.get(a.id)?.price ?? 0) > 0 ? 0 : 1;
+      const bPriced = (priceByProduct.get(b.id)?.price ?? 0) > 0 ? 0 : 1;
+      if (aPriced !== bPriced) return aPriced - bPriced;
+      return (a.name ?? "").localeCompare(b.name ?? "", undefined, { sensitivity: "base" });
+    });
+
+    // Matches the screen: product, barcode, size, stock, cost excl, VAT %, sell incl, RRP, discount %, final.
+    const header = [
+      "product",
+      "barcode",
+      "size",
+      "stock",
+      "costExcl",
+      "vatRate",
+      "price",
+      "rrp",
+      "discountPercent",
+      "finalPrice",
+    ];
+    const PRICE_COL = 6;
+    const DISCOUNT_COL = 8;
+    const FINAL_COL = 9;
     const dataRows = products.map((item) => {
       const priced = priceByProduct.get(item.id);
       const price =
-        priced?.price != null && Number(priced.price) > 0 ? priced.price : "";
+        priced?.price != null && Number(priced.price) > 0 ? Number(priced.price) : "";
       const discount =
         priced?.discountPercent != null && priced.discountPercent > 0
           ? priced.discountPercent
           : "";
-      const final =
-        typeof price === "number"
-          ? finalFromPriceAndDiscount(price, typeof discount === "number" ? discount : 0)
-          : "";
+      const stock =
+        item.availableQuantity ?? item.currentStock;
       return [
         item.name ?? "",
-        item.sku ?? "",
         item.barcode ?? "",
+        item.size ?? "",
+        stock != null && Number.isFinite(stock) ? stock : "",
         priced?.priceExcl != null && priced.priceExcl > 0 ? priced.priceExcl : "",
         priced?.vatRate != null ? priced.vatRate : "",
         price,
         priced?.rrp != null && priced.rrp > 0 ? priced.rrp : "",
         discount,
-        final,
+        "", // finalPrice filled by Excel formula (CSV uses computed values below)
       ];
     });
     const catalog = { priceListName: list?.name ?? tagName };
-    const rows: Array<Array<string | number>> = [header, ...dataRows];
     const stemBase = priceTagFileStem(tagName || catalog.priceListName);
     const stem =
-      pricedStatus === "unpriced"
+      viewStatus === "unpriced"
         ? `${stemBase}-no-price-yet`
         : scope?.search?.trim() || scope?.categoryId || scope?.size
           ? `${stemBase}-filtered`
           : stemBase;
     const note =
-      "# Discount %: type 20 for 20% off (or 0.5 for 50%). Final price is price after discount — type a final price to set the discount.";
+      "# price = Sell incl (same as on screen). discountPercent: type 20 for 20% off. finalPrice = price after discount (Excel formula). Products with no price yet are at the bottom.";
 
     if (format === "csv") {
-      const csv = [note, ...rows.map((r) => r.map(csvCell).join(","))].join("\n");
+      const { finalFromPriceAndDiscount } = await import("../pricing/price-tag-math");
+      const csvRows = dataRows.map((row) => {
+        const price = typeof row[PRICE_COL] === "number" ? row[PRICE_COL] : "";
+        const discount = typeof row[DISCOUNT_COL] === "number" ? row[DISCOUNT_COL] : 0;
+        const final =
+          typeof price === "number"
+            ? finalFromPriceAndDiscount(price, typeof discount === "number" ? discount : 0)
+            : "";
+        const next = [...row];
+        next[FINAL_COL] = final;
+        return next;
+      });
+      const csv = [note, header, ...csvRows]
+        .map((r) => (Array.isArray(r) ? r : [r]).map(csvCell).join(","))
+        .join("\n");
       triggerBlobDownload(new Blob([csv], { type: "text/csv;charset=utf-8;" }), `${stem}.csv`);
       return true;
     }
 
     const XLSX = await import("xlsx");
+    const rows: Array<Array<string | number>> = [header, ...dataRows];
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const lastRow = rows.length;
     for (let r = 2; r <= lastRow; r++) {
-      ws[XLSX.utils.encode_cell({ r: r - 1, c: 5 })] = {
+      // Final price from sell incl × (1 − discount%). Empty sell → blank final.
+      ws[XLSX.utils.encode_cell({ r: r - 1, c: FINAL_COL })] = {
         t: "n",
-        f: `IF(D${r}="","",ROUND(D${r}*(1-IF(AND(E${r}<>"",E${r}<=1),E${r},N(E${r})/100)),2))`,
+        f: `IF(G${r}="","",ROUND(G${r}*(1-IF(I${r}="",0,IF(AND(I${r}<>"",I${r}<=1),I${r},N(I${r})/100))),2))`,
       };
     }
+    ws["!cols"] = [
+      { wch: 48 },
+      { wch: 16 },
+      { wch: 8 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 12 },
+    ];
     const help = XLSX.utils.aoa_to_sheet([
       ["How to edit this sheet"],
       [],
-      ["Price", "List price per piece."],
+      ["product", "Exact product name (same as on the price tag screen)."],
+      ["barcode", "Trade barcode — used to match the product on import (SKU is not needed)."],
+      ["size / stock", "For reference only; not imported."],
+      ["costExcl", "Cost excluding VAT (optional)."],
+      ["vatRate", "VAT percent, e.g. 16 for 16%."],
+      ["price", "Sell incl — the same sell price shown on screen. Do not replace with a cost formula."],
+      ["rrp", "Recommended retail price per piece."],
       [
-        "Discount %",
-        "Type 20 for 20% off. You can also type 0.5 for 50% off. Final price updates by formula.",
+        "discountPercent",
+        "Type 20 for 20% off (or 0.5 for 50%). Final price updates by formula.",
       ],
       [
-        "Final price",
-        "Selling price after discount. Type a number here to set the discount on import (example: price 100 and final 50 → 50% discount).",
+        "finalPrice",
+        "Excel formula: sell × (1 − discount%). On import, a typed final price can set the discount.",
       ],
+      [],
+      ["Order", "Products that already have a price are first; products with no price yet are last."],
     ]);
     const wb = XLSX.utils.book_new();
     const sheetName = stem.slice(0, 31);

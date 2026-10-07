@@ -8,25 +8,18 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  AsyncSearchableSelect,
-  type AsyncSearchableSelectOption,
-} from "@/components/ui/async-searchable-select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BomComponentEditor } from "@/components/manufacturing/bom-component-editor";
 import {
   fetchManufacturingBom,
   fetchManufacturingRoutes,
   updateManufacturingBom,
   deleteManufacturingBom,
   type ManufacturingBom,
-  type ManufacturingBomItem,
   type ManufacturingRoute,
 } from "@/lib/api/manufacturing";
-import { fetchProductsPageApi } from "@/lib/api/products";
+import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import { listUoms } from "@/lib/data/uom.repo";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
@@ -52,23 +45,23 @@ export default function BomDetailPage() {
   const uoms = React.useMemo(() => listUoms().map((item) => item.code), []);
   const [bom, setBom] = React.useState<ManufacturingBom | null>(null);
   const [routes, setRoutes] = React.useState<ManufacturingRoute[]>([]);
+  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; code?: string; name: string }>>([]);
   const [loading, setLoading] = React.useState(true);
-  const [saving, setSaving] = React.useState(false);
   const [togglingActive, setTogglingActive] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
-  const [sheetOpen, setSheetOpen] = React.useState(false);
-  const [editingItem, setEditingItem] = React.useState<ManufacturingBomItem | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [nextBom, nextRoutes] = await Promise.all([
+      const [nextBom, nextRoutes, nextWarehouses] = await Promise.all([
         fetchManufacturingBom(id),
         fetchManufacturingRoutes(),
+        fetchWarehousesApi().catch(() => []),
       ]);
       setBom(nextBom);
       setRoutes(nextRoutes);
+      setWarehouses(nextWarehouses.filter((warehouse) => warehouse.status !== "INACTIVE"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load BOM.");
     } finally {
@@ -79,25 +72,6 @@ export default function BomDetailPage() {
   React.useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  async function saveItems(items: ManufacturingBomItem[]) {
-    if (!bom) return;
-    setSaving(true);
-    try {
-      const updated = await updateManufacturingBom(bom.id, {
-        items: items.map((item) => ({
-          ...item,
-          id: item.id,
-        })),
-      });
-      setBom(updated);
-      toast.success("BOM components saved.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save BOM.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleToggleActive() {
     if (!bom) return;
@@ -218,69 +192,19 @@ export default function BomDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Components</CardTitle>
-            <CardDescription>Maintain the live component structure used by MRP and work orders.</CardDescription>
+            <CardDescription>
+              Search and add products, then set quantity, unit, store, and scrap on each row. A draft is kept so you can leave and continue. Save components when the list is ready.
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Qty</TableHead>
-                  <TableHead>UOM</TableHead>
-                  <TableHead>Optional</TableHead>
-                  <TableHead>Scrap %</TableHead>
-                  <TableHead>Unit cost</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bom.items.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">
-                      {item.productSku ? `${item.productSku} - ${item.productName}` : item.productName ?? item.productId}
-                    </TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>{item.uom}</TableCell>
-                    <TableCell>{item.isOptional ? "Yes" : "No"}</TableCell>
-                    <TableCell>{item.scrapFactor ?? "—"}</TableCell>
-                    <TableCell>{item.unitCost != null ? item.unitCost.toLocaleString() : "—"}</TableCell>
-                    <TableCell>
-                      {canWrite && (
-                        <>
-                          <Button size="sm" variant="ghost" onClick={() => {
-                            setEditingItem(item);
-                            setSheetOpen(true);
-                          }}>
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive"
-                            onClick={() => {
-                              void saveItems(bom.items.filter((candidate) => candidate.id !== item.id));
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="border-t p-4">
-              {canWrite && (
-                <Button size="sm" onClick={() => {
-                  setEditingItem(null);
-                  setSheetOpen(true);
-                }}>
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Add component
-                </Button>
-              )}
-            </div>
+            <BomComponentEditor
+              bomId={bom.id}
+              savedItems={bom.items}
+              uoms={uoms}
+              warehouses={warehouses}
+              canWrite={canWrite}
+              onSaved={setBom}
+            />
           </CardContent>
         </Card>
 
@@ -328,171 +252,6 @@ export default function BomDetailPage() {
           </CardContent>
         </Card>
       </div>
-
-      <BomItemSheet
-        open={sheetOpen}
-        uoms={uoms}
-        initial={editingItem}
-        saving={saving}
-        onClose={() => {
-          setSheetOpen(false);
-          setEditingItem(null);
-        }}
-        onSave={(item) => {
-          const nextItems = editingItem
-            ? bom.items.map((candidate) => (candidate.id === editingItem.id ? { ...editingItem, ...item } : candidate))
-            : [
-                ...bom.items,
-                {
-                  id: `line-${Date.now()}`,
-                  ...item,
-                },
-              ];
-          void saveItems(nextItems);
-          setSheetOpen(false);
-          setEditingItem(null);
-        }}
-      />
     </PageShell>
-  );
-}
-
-function componentProductOption(item: ManufacturingBomItem | null): AsyncSearchableSelectOption | null {
-  if (!item?.productId) return null;
-  const name = item.productName?.trim();
-  const sku = item.productSku?.trim();
-  const label = sku && name ? `${sku} — ${name}` : name || sku || "Selected product";
-  return { id: item.productId, label };
-}
-
-function BomItemSheet({
-  open,
-  uoms,
-  initial,
-  saving,
-  onClose,
-  onSave,
-}: {
-  open: boolean;
-  uoms: string[];
-  initial: ManufacturingBomItem | null;
-  saving: boolean;
-  onClose: () => void;
-  onSave: (item: Omit<ManufacturingBomItem, "id" | "productName" | "productSku">) => void;
-}) {
-  const [sheetPortalHost, setSheetPortalHost] = React.useState<HTMLElement | null>(null);
-  const [productId, setProductId] = React.useState("");
-  const [productOption, setProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
-  const [quantity, setQuantity] = React.useState("1");
-  const [uom, setUom] = React.useState("EA");
-  const [isOptional, setIsOptional] = React.useState("no");
-  const [scrapFactor, setScrapFactor] = React.useState("");
-
-  React.useEffect(() => {
-    setProductId(initial?.productId ?? "");
-    setProductOption(componentProductOption(initial));
-    setQuantity(String(initial?.quantity ?? 1));
-    setUom(initial?.uom ?? "EA");
-    setIsOptional(initial?.isOptional ? "yes" : "no");
-    setScrapFactor(initial?.scrapFactor != null ? String(initial.scrapFactor) : "");
-  }, [initial, open]);
-
-  const loadProducts = React.useCallback(async (query: string) => {
-    const page = await fetchProductsPageApi({
-      search: query.trim() || undefined,
-      limit: 50,
-      includeStock: false,
-    });
-    return page.items.map((product) => ({
-      id: product.id,
-      label: product.sku ? `${product.sku} — ${product.name}` : product.name,
-      description: product.barcode?.trim() || undefined,
-    }));
-  }, []);
-
-  return (
-    <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
-      <SheetContent ref={setSheetPortalHost}>
-        <SheetHeader>
-          <SheetTitle>{initial ? "Edit component" : "Add component"}</SheetTitle>
-          <SheetDescription>Update the live BOM component structure.</SheetDescription>
-        </SheetHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>Product</Label>
-            <AsyncSearchableSelect
-              value={productId}
-              selectedOption={productOption}
-              onValueChange={setProductId}
-              onOptionSelect={setProductOption}
-              loadOptions={loadProducts}
-              placeholder="Select product"
-              searchPlaceholder="Search name, SKU, or barcode"
-              emptyMessage="No products match that search."
-              searchDebounceMs={250}
-              showSelectedDescription
-              portalContainer={sheetPortalHost}
-              recentStorageKey="manufacturing:bom-component-products"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Quantity</Label>
-              <Input type="number" min="0.001" step="0.001" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>UOM</Label>
-              <Select value={uom} onValueChange={setUom}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {uoms.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Optional</Label>
-              <Select value={isOptional} onValueChange={setIsOptional}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no">No</SelectItem>
-                  <SelectItem value="yes">Yes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Scrap factor %</Label>
-              <Input type="number" min="0" step="0.01" value={scrapFactor} onChange={(e) => setScrapFactor(e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <SheetFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            disabled={saving || !productId}
-            onClick={() =>
-              onSave({
-                productId,
-                quantity: Number(quantity) || 0,
-                uom,
-                isOptional: isOptional === "yes",
-                scrapFactor: scrapFactor ? Number(scrapFactor) : undefined,
-              })
-            }
-          >
-            Save component
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
   );
 }

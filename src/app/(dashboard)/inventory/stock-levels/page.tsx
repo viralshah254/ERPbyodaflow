@@ -912,7 +912,7 @@ export default function StockLevelsPage() {
 
       {/* Stock In — create warehouse quantity for a product (unblocks pick & pack) */}
       <Sheet open={stockInOpen} onOpenChange={setStockInOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>Stock In</SheetTitle>
             <SheetDescription>

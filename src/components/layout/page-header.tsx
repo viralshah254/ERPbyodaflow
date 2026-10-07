@@ -16,7 +16,7 @@ interface Breadcrumb {
 
 interface PageHeaderProps {
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   breadcrumbs?: Breadcrumb[];
   actions?: React.ReactNode;
   /** Sticky header (default true for enterprise UX) */
@@ -78,9 +78,9 @@ export function PageHeader({
             {title}
           </h1>
           {description ? (
-            <p className="mt-0.5 hidden text-xs text-muted-foreground sm:line-clamp-1 sm:block">
+            <div className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
               {description}
-            </p>
+            </div>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:shrink-0" data-tutorial-hint="page-actions">

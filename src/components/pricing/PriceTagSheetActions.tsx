@@ -137,14 +137,12 @@ export function PriceTagSheetActions({
           exportScope?.pricedStatus === "unpriced"
             ? "products with no price yet"
             : exportScope?.search || exportScope?.categoryId || exportScope?.size
-              ? "the filtered products"
-              : exportScope?.pricedStatus === "all"
-                ? "all SKUs"
-                : "products that already have a price";
+              ? "the filtered products (priced first, no price yet last)"
+              : "all products (priced first, no price yet last)";
         toast.success(
           format === "xlsx"
-            ? `Downloaded ${view} for “${tagName}” as Excel. Fill prices and import — only those rows update.`
-            : `Downloaded ${view} for “${tagName}” as CSV. Fill prices and import — only those rows update.`
+            ? `Downloaded ${view} for “${tagName}” as Excel. Sell incl matches the screen; final price is a formula. Import updates only those rows.`
+            : `Downloaded ${view} for “${tagName}” as CSV. Sell incl matches the screen. Import updates only those rows.`
         );
       }
       setDownloading(false);
@@ -165,13 +163,11 @@ export function PriceTagSheetActions({
           label={
             downloading
               ? "Downloading…"
-              : exportScope?.pricedStatus === "unpriced" ||
-                  exportScope?.search ||
-                  exportScope?.categoryId ||
-                  exportScope?.size ||
-                  exportScope?.pricedStatus === "all"
-                ? "Download this view"
-                : "Download prices"
+              : exportScope?.pricedStatus === "unpriced"
+                ? "Download no-price-yet"
+                : exportScope?.search || exportScope?.categoryId || exportScope?.size
+                  ? "Download this view"
+                  : "Download price list"
           }
           icon={Icons.Download}
           disabled={downloading || !priceListId}
@@ -185,7 +181,7 @@ export function PriceTagSheetActions({
         title={
           mode === "single"
             ? `Import prices into “${tagName ?? "this tag"}”. priceTag column is optional.`
-            : "Import several tags at once. Columns: priceTag, sku or barcode, price, and optional costExcl, vatRate, rrp, discountPercent, or finalPrice."
+            : "Import several tags at once. Columns: priceTag, barcode (or sku), price (sell incl), and optional costExcl, vatRate, rrp, discountPercent, or finalPrice."
         }
         disabled={importing || (mode === "single" && !priceListId)}
         onClick={() => fileRef.current?.click()}

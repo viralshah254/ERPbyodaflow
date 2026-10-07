@@ -17,6 +17,7 @@ type KraTaxPinFieldProps = {
   label?: string;
   placeholder?: string;
   optional?: boolean;
+  disabled?: boolean;
   className?: string;
   onClearError?: () => void;
   error?: string;
@@ -28,6 +29,7 @@ export function KraTaxPinField({
   label = "Tax PIN (KRA)",
   placeholder = "e.g. P051234567X",
   optional = true,
+  disabled = false,
   className,
   onClearError,
   error,
@@ -119,6 +121,7 @@ export function KraTaxPinField({
       <div className="relative">
         <Input
           value={value}
+          disabled={disabled}
           onChange={(e) => {
             onChange(e.target.value);
             onClearError?.();
