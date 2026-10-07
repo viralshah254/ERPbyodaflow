@@ -4,6 +4,7 @@
  */
 import type { ResolvedNavSection, ResolvedNavItem } from "@/config/navigation";
 import type { CommandItemNav } from "@/config/command-palette";
+import { isRecordListHref } from "@/lib/nav/record-destination";
 
 /**
  * Extra keyword synonyms for routes that have terse sidebar labels.
@@ -129,6 +130,8 @@ export type RecentRoute = {
   label: string;
   icon?: string;
   visitedAt: number;
+  entityType?: string;
+  recordId?: string;
 };
 
 export function getRecentRoutes(): RecentRoute[] {
@@ -146,7 +149,15 @@ export function getRecentRoutes(): RecentRoute[] {
 export function recordRecentRoute(route: Omit<RecentRoute, "visitedAt">): void {
   if (typeof window === "undefined") return;
   try {
-    const existing = getRecentRoutes().filter((r) => r.href !== route.href);
+    const existing = getRecentRoutes().filter((r) => {
+      if (r.href === route.href) return false;
+      if (route.recordId && r.recordId === route.recordId && r.entityType === route.entityType) return false;
+      // An older click stored the product or customer name against the parent list.
+      if (route.label && r.label === route.label && isRecordListHref(r.href) && !isRecordListHref(route.href)) {
+        return false;
+      }
+      return true;
+    });
     const next: RecentRoute[] = [{ ...route, visitedAt: Date.now() }, ...existing].slice(0, RECENTS_MAX);
     localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
   } catch {
