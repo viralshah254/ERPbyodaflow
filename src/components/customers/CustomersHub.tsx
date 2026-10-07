@@ -231,7 +231,7 @@ function CustomersHubContent({ fromFinance = false }: CustomersHubProps) {
         title="Customers"
         description={
           fmcg
-            ? "Each organisation keeps its own customers. New customers sent from SFA wait on the Pending approval tab. Then use Credit & tax sheet for tax ID and credit limits."
+            ? "Each organisation keeps its own customers. Direct customers sent from SFA wait on the Pending approval tab. Then use Credit & tax sheet for tax ID and credit limits."
             : "Add and manage who you sell to. After SFA sync, update tax ID and credit with Credit & tax sheet or Finance."
         }
         breadcrumbs={breadcrumbs}
