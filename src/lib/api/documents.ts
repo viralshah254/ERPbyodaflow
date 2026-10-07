@@ -204,6 +204,7 @@ type BackendDocumentDetail = {
   warehouseDrop?: BackendWarehouseDrop;
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
   kraSigning?: KraSigningRecord | null;
+  salesFlow?: DocumentDetailRecord["salesFlow"];
   orderChannel?: string;
   externalSource?: string;
   externalOrderId?: string;
@@ -611,6 +612,7 @@ function mapDocumentDetail(
       : undefined,
     dispatchAmendEligibility: payload.dispatchAmendEligibility,
     kraSigning: payload.kraSigning ?? undefined,
+    ...(payload.salesFlow ? { salesFlow: payload.salesFlow } : {}),
     ...(payload.orderChannel ? { orderChannel: payload.orderChannel } : {}),
     ...(payload.externalSource ? { externalSource: payload.externalSource } : {}),
     ...(payload.externalOrderId ? { externalOrderId: payload.externalOrderId } : {}),
