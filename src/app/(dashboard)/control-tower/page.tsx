@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   Card,
@@ -461,7 +461,7 @@ export default function ControlTowerPage() {
   ];
 
   return (
-    <PageShell className={LIST_PAGE_SHELL_CLASS}>
+    <PageShell>
       <PageHeader
         title={
           fmcgControlTowerEnabled

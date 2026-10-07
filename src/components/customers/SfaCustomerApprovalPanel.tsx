@@ -188,8 +188,8 @@ export function SfaCustomerApprovalPanel({
         <div className="border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Pending approval</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            New customers from Odaflow SFA stay here until you approve them. They are not on the
-            customer list yet.
+            Direct customers created in Odaflow SFA stay here until you approve them. They join
+            the customer list after you approve them.
           </p>
         </div>
         {loading ? (
@@ -200,7 +200,7 @@ export function SfaCustomerApprovalPanel({
           <p className="px-4 py-6 text-sm text-muted-foreground">
             {debouncedSearch.trim()
               ? "No pending customers match that search."
-              : "No new SFA customers are waiting for approval."}
+              : "No direct SFA customers are waiting for approval."}
           </p>
         ) : (
           <Table>
