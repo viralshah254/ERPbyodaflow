@@ -217,7 +217,7 @@ export default function KraIntegrationSettingsPage() {
               <CardHeader>
                 <CardTitle className="text-base">Connection checklist</CardTitle>
                 <CardDescription>
-                  Posted invoices stay unsigned until eTIMS is enabled. A KRA outage does not block posting.
+                  Sign and post sends the invoice to KRA first. Posting runs only after KRA accepts the signature.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -268,7 +268,7 @@ export default function KraIntegrationSettingsPage() {
                     onCheckedChange={(c) => setEnabled(c === true)}
                     disabled={!canSave}
                   />
-                  <Label htmlFor="etims-enabled">Enable eTIMS signing on posted invoices</Label>
+                  <Label htmlFor="etims-enabled">Enable eTIMS signing when posting invoices</Label>
                 </div>
                 <div className="space-y-2">
                   <Label>Environment</Label>

@@ -85,12 +85,16 @@ export default function SalesReturnsPage() {
               variant="ghost"
               onClick={async (event) => {
                 event.stopPropagation();
-                await bulkDocumentActionApi("credit-note", "post", [r.id]);
-                toast.success("Credit note posted.");
-                await refresh();
+                try {
+                  await bulkDocumentActionApi("credit-note", "post", [r.id]);
+                  toast.success("Credit note signed and posted.");
+                  await refresh();
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Sign and post failed.");
+                }
               }}
             >
-              Post
+              Sign and post
             </Button>
           ) : null,
       },
