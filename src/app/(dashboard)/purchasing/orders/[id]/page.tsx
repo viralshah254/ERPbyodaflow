@@ -387,8 +387,8 @@ export default function PurchaseOrderDetailPage() {
                   onClick={async () => {
                     setActionLoading(true);
                     try {
-                      await requestDocumentApprovalApi("purchase-order", id);
-                      toast.success("Submitted for approval.");
+                      const result = await requestDocumentApprovalApi("purchase-order", id);
+                      toast.success(result.autoApproved ? "Approved." : "Submitted for approval.");
                       const refreshed = await fetchPurchaseOrderById(id);
                       setOrder(refreshed);
                     } catch {
@@ -491,8 +491,8 @@ export default function PurchaseOrderDetailPage() {
                   onClick={async () => {
                     setActionLoading(true);
                     try {
-                      await requestDocumentApprovalApi("purchase-order", id);
-                      toast.success("Submitted for approval.");
+                      const result = await requestDocumentApprovalApi("purchase-order", id);
+                      toast.success(result.autoApproved ? "Approved." : "Submitted for approval.");
                       const refreshed = await fetchPurchaseOrderById(id);
                       setOrder(refreshed);
                     } catch {

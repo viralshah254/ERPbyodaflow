@@ -565,9 +565,15 @@ export default function DocViewPage() {
     setActionLoading(true);
     try {
       if (odaflowApprovalAction === "request" || odaflowApprovalAction === "submit") {
-        await requestDocumentApprovalApi(type as DocTypeKey, id);
+        const result = await requestDocumentApprovalApi(type as DocTypeKey, id);
         await refreshDocument(true);
-        toast.success(odaflowApprovalAction === "submit" ? "Submitted for approval." : "Approval requested.");
+        toast.success(
+          result.autoApproved
+            ? "Approved."
+            : odaflowApprovalAction === "submit"
+              ? "Submitted for approval."
+              : "Approval requested."
+        );
       } else {
         await documentActionApi(type as DocTypeKey, id, "approve");
         await refreshDocument(true);
@@ -1075,9 +1081,9 @@ export default function DocViewPage() {
                 void (async () => {
                   setActionLoading(true);
                   try {
-                    await requestDocumentApprovalApi(type as DocTypeKey, id);
+                    const result = await requestDocumentApprovalApi(type as DocTypeKey, id);
                     await refreshDocument(true);
-                    toast.success("Approval requested.");
+                    toast.success(result.autoApproved ? "Approved." : "Approval requested.");
                   } catch (e) {
                     toast.error((e as Error).message);
                   } finally {
