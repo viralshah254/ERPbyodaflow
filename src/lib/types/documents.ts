@@ -322,6 +322,28 @@ export type DocumentDetailRecord = {
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
   /** KRA / Incotex signing (invoice, credit note, debit note). */
   kraSigning?: KraSigningRecord | null;
+  /** FMCG sales document flow: separate status tracks and the next warehouse action. */
+  salesFlow?: {
+    mode: "classic" | "pick_pack_first";
+    steps: string[];
+    actions: string[];
+    pickPack?: { id: string; number: string; status: string } | null;
+    invoice?: { id: string; number: string; status: string } | null;
+    deliveryNote?: { id: string; number: string; status: string } | null;
+    tracks: {
+      orderStatus: string;
+      invoiceStatus: string;
+      kraStatus: string;
+      dispatchStatus: string;
+      deliveryStatus: string;
+      podStatus: string;
+    };
+    kraLabel: string;
+    kraError?: string;
+    podSource?: string | null;
+    podConfirmedAt?: string | null;
+    receiverName?: string | null;
+  } | null;
   /** Odaflow SFA source metadata (sales orders synced from Odaflow). */
   orderChannel?: string;
   externalSource?: string;

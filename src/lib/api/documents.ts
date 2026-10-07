@@ -907,6 +907,8 @@ export async function confirmDeliveryPodFromSignedCopyApi(
     signedCopyAttachmentId: string;
     receiverName?: string;
     note?: string;
+    receiptStatus?: "FULL" | "PARTIAL" | "DISCREPANCY" | "REJECTED";
+    receivedAt?: string;
   }
 ): Promise<void> {
   requireLiveApi("Signed delivery note POD");
@@ -920,6 +922,8 @@ export async function confirmDeliveryPodFromSignedCopyApi(
       signedCopyAttachmentId,
       ...(payload.receiverName?.trim() ? { receiverName: payload.receiverName.trim() } : {}),
       ...(payload.note?.trim() ? { note: payload.note.trim() } : {}),
+      ...(payload.receiptStatus ? { receiptStatus: payload.receiptStatus } : {}),
+      ...(payload.receivedAt ? { receivedAt: payload.receivedAt } : {}),
     },
   });
 }
