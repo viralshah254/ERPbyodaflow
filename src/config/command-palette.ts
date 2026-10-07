@@ -55,6 +55,14 @@ export const COMMAND_NAV_FALLBACK_ITEMS: CommandItemNav[] = [
   { id: "search-parties", label: "Search parties", group: "nav", href: "/master/parties", keywords: ["search", "masters", "customers", "suppliers", "parties"], icon: "Search" },
   { id: "nav-inbox", label: "Inbox (alerts & tasks)", group: "nav", href: "/inbox", keywords: ["alerts", "tasks", "notifications"], icon: "Inbox" },
   { id: "nav-work-queue", label: "Work queue", group: "nav", href: "/work/queue", keywords: ["work", "queue", "payroll", "tax", "pricing", "alerts"], icon: "ListTodo" },
+  {
+    id: "nav-uom-catalog",
+    label: "UOM catalog",
+    group: "nav",
+    href: "/settings/uom",
+    keywords: ["uom", "unit of measure", "units of measure", "packaging", "packs", "units"],
+    icon: "Ruler",
+  },
 ];
 
 /** @deprecated Use COMMAND_NAV_FALLBACK_ITEMS + flattenNavSectionsToCommandItems instead. */

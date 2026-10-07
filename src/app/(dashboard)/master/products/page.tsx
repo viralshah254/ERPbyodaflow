@@ -193,6 +193,7 @@ export default function MasterProductsPage() {
   const [categoryCodeManual, setCategoryCodeManual] = React.useState(false);
   const [addingCategory, setAddingCategory] = React.useState(false);
   const [uomOptions, setUomOptions] = React.useState<string[]>([]);
+  const [catalogUoms, setCatalogUoms] = React.useState<Array<{ code: string; name: string }>>([]);
 
   // Bulk import / export
   const [importOpen, setImportOpen] = React.useState(false);
@@ -283,7 +284,19 @@ export default function MasterProductsPage() {
       const list = await fetchProductUomsApi();
       const codes = list.map((u) => u.code);
       setUomOptions(codes.length > 0 ? codes : ["EA", "KG", "L", "M", "PCS"]);
-    } catch { setUomOptions(["EA", "KG", "L", "M", "PCS"]); }
+      setCatalogUoms(
+        list
+          .map((uom) => ({
+            code: uom.code.trim().toUpperCase(),
+            name: (uom.name || uom.code).trim(),
+          }))
+          .filter((uom) => uom.code.length > 0)
+          .sort((a, b) => a.code.localeCompare(b.code))
+      );
+    } catch {
+      setUomOptions(["EA", "KG", "L", "M", "PCS"]);
+      setCatalogUoms([]);
+    }
   }, []);
 
   const loadFamilies = React.useCallback(async () => {
@@ -1431,28 +1444,54 @@ export default function MasterProductsPage() {
                   <div>
                     <Label>Packing (optional)</Label>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Pieces per pack for this product only (e.g. 1 CARTON = 24 PCS). Leave empty if you only sell by piece. Required later before converting sales orders that sell in that pack.
+                      Choose a unit from the UOM catalog and set how many pieces are in that pack. Leave empty if you only sell by piece.
                     </p>
                   </div>
                   <div className="space-y-2">
-                    {createPackRows.length === 0 ? (
+                    {catalogUoms.length === 0 ? (
                       <p className="text-xs text-muted-foreground">
-                        No packs added. Use Add pack only if this SKU also sells as carton, bale, outer, etc.
+                        Add this manufacturer’s units on the{" "}
+                        <Link href="/settings/uom" className="underline underline-offset-2">
+                          UOM catalog
+                        </Link>{" "}
+                        before setting packs.
+                      </p>
+                    ) : createPackRows.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No packs added. Add a pack when this SKU also sells in a catalog unit such as carton or bale.
                       </p>
                     ) : (
                       createPackRows.map((row, idx) => (
                         <div key={idx} className="grid grid-cols-[1fr_100px_auto] gap-2 items-end">
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Pack name</Label>
-                            <Input
-                              value={row.uom}
-                              onChange={(e) => {
+                            <Select
+                              value={row.uom || undefined}
+                              onValueChange={(code) => {
                                 const next = [...createPackRows];
-                                next[idx] = { ...next[idx], uom: e.target.value };
+                                next[idx] = { ...next[idx], uom: code };
                                 setCreatePackRows(next);
                               }}
-                              placeholder="CARTON / BALE / OUTER…"
-                            />
+                            >
+                              <SelectTrigger className="h-9 font-mono">
+                                <SelectValue placeholder="Select unit" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {catalogUoms
+                                  .filter(
+                                    (uom) =>
+                                      uom.code === row.uom ||
+                                      !createPackRows.some((other, otherIdx) => otherIdx !== idx && other.uom === uom.code)
+                                  )
+                                  .map((uom) => (
+                                    <SelectItem key={uom.code} value={uom.code}>
+                                      {uom.name && uom.name.toUpperCase() !== uom.code
+                                        ? `${uom.code} · ${uom.name}`
+                                        : uom.code}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Pieces</Label>
@@ -1484,14 +1523,16 @@ export default function MasterProductsPage() {
                       ))
                     )}
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCreatePackRows((rows) => [...rows, { uom: "", unitsPer: "" }])}
-                  >
-                    Add pack
-                  </Button>
+                  {catalogUoms.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCreatePackRows((rows) => [...rows, { uom: "", unitsPer: "" }])}
+                    >
+                      Add pack
+                    </Button>
+                  ) : null}
                 </div>
               </>
           ) : step === 1 ? (

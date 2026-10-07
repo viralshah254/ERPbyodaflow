@@ -6,9 +6,17 @@
  */
 
 import * as React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -21,6 +29,7 @@ import {
   fetchProductPackagingDetailApi,
   saveProductPackagingApi,
 } from "@/lib/api/product-master";
+import { fetchProductUomsApi } from "@/lib/api/uom";
 import type { ProductPackaging } from "@/lib/products/pricing-types";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -33,7 +42,40 @@ type PackRow = {
   barcode?: string;
 };
 
-const SUGGESTED_UOMS = ["CARTON", "BALE", "OUTER", "BOX", "PACK", "DOZEN"] as const;
+type CatalogUom = { code: string; name: string };
+
+function catalogLabel(uom: CatalogUom): string {
+  const name = uom.name.trim();
+  if (!name || name.toUpperCase() === uom.code) return uom.code;
+  return `${uom.code} · ${name}`;
+}
+
+function PackUomSelect({
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  options: CatalogUom[];
+  disabled?: boolean;
+  onChange: (code: string) => void;
+}) {
+  return (
+    <Select value={value || undefined} onValueChange={onChange} disabled={disabled || options.length === 0}>
+      <SelectTrigger className="h-8 w-56 font-mono">
+        <SelectValue placeholder="Select unit" />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((uom) => (
+          <SelectItem key={uom.code} value={uom.code}>
+            {catalogLabel(uom)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 function toSaveItems(rows: PackRow[]): ProductPackaging[] {
   const seen = new Set<string>();
@@ -67,6 +109,7 @@ export function FmcgProductPacksEditor({
   onChanged?: (items: ProductPackaging[]) => void;
 }) {
   const [rows, setRows] = React.useState<PackRow[]>([]);
+  const [catalog, setCatalog] = React.useState<CatalogUom[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
@@ -102,6 +145,43 @@ export function FmcgProductPacksEditor({
     void reload();
   }, [reload]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    fetchProductUomsApi()
+      .then((list) => {
+        if (cancelled) return;
+        const next = list
+          .map((uom) => ({
+            code: uom.code.trim().toUpperCase(),
+            name: (uom.name || uom.code).trim(),
+          }))
+          .filter((uom) => uom.code.length > 0)
+          .sort((a, b) => a.code.localeCompare(b.code));
+        setCatalog(next);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const choicesFor = React.useCallback(
+    (current?: string): CatalogUom[] => {
+      const used = new Set(
+        rows.map((row) => row.uom.trim().toUpperCase()).filter((code) => code && code !== current)
+      );
+      const options = catalog.filter((uom) => !used.has(uom.code));
+      const code = current?.trim().toUpperCase();
+      if (code && !options.some((uom) => uom.code === code)) {
+        options.unshift({ code, name: code });
+      }
+      return options;
+    },
+    [catalog, rows]
+  );
+
   const patchRow = (key: string, patch: Partial<PackRow>) => {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
     setDirty(true);
@@ -116,7 +196,11 @@ export function FmcgProductPacksEditor({
     const uom = newUom.trim().toUpperCase();
     const unitsPer = Number(newUnits);
     if (!uom) {
-      toast.error("Enter a pack name (e.g. CARTON, BALE).");
+      toast.error("Choose a unit from the UOM catalog.");
+      return;
+    }
+    if (!catalog.some((item) => item.code === uom)) {
+      toast.error("That unit is not in the UOM catalog.");
       return;
     }
     if (!Number.isFinite(unitsPer) || unitsPer <= 1) {
@@ -131,6 +215,7 @@ export function FmcgProductPacksEditor({
       ...prev,
       { key: `${uom}-${Date.now()}`, uom, unitsPer: String(unitsPer) },
     ]);
+    setNewUom("");
     setNewUnits("");
     setDirty(true);
   };
@@ -164,9 +249,11 @@ export function FmcgProductPacksEditor({
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-xs text-muted-foreground max-w-xl">
-          Set packing for <strong>this product only</strong> — how many pieces (PCS) are in each carton,
-          bale, outer, etc. Different SKUs can differ. Required before converting a sales order to a
-          delivery note when you sell in that pack.
+          Set packing for <strong>this product only</strong>. Choose a unit from the{" "}
+          <Link href="/settings/uom" className="underline underline-offset-2">
+            UOM catalog
+          </Link>
+          , then enter how many pieces (PCS) are in that pack. Different SKUs can differ.
         </p>
         {canWrite ? (
           <Button type="button" size="sm" disabled={saving || !dirty} onClick={() => void handleSave()}>
@@ -223,12 +310,15 @@ export function FmcgProductPacksEditor({
               {rows.map((r) => (
                 <TableRow key={r.key}>
                   <TableCell>
-                    <Input
-                      className="h-8 font-mono uppercase"
-                      disabled={!canWrite}
-                      value={r.uom}
-                      onChange={(e) => patchRow(r.key, { uom: e.target.value.toUpperCase() })}
-                    />
+                    {canWrite ? (
+                      <PackUomSelect
+                        value={r.uom}
+                        options={choicesFor(r.uom)}
+                        onChange={(code) => patchRow(r.key, { uom: code })}
+                      />
+                    ) : (
+                      <span className="font-mono">{r.uom}</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -257,22 +347,23 @@ export function FmcgProductPacksEditor({
         </div>
       )}
 
-      {canWrite ? (
+      {canWrite && catalog.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Add this manufacturer’s units on the{" "}
+          <Link href="/settings/uom" className="underline underline-offset-2">
+            UOM catalog
+          </Link>
+          , then choose them here.
+        </p>
+      ) : canWrite ? (
         <div className="flex flex-wrap items-end gap-2 rounded-md border border-dashed p-3">
           <div className="space-y-1">
             <Label className="text-xs">Pack name</Label>
-            <Input
-              list="fmcg-pack-uom-suggestions"
-              className="h-8 w-36 font-mono uppercase"
+            <PackUomSelect
               value={newUom}
-              onChange={(e) => setNewUom(e.target.value.toUpperCase())}
-              placeholder="CARTON"
+              options={choicesFor()}
+              onChange={setNewUom}
             />
-            <datalist id="fmcg-pack-uom-suggestions">
-              {SUGGESTED_UOMS.map((u) => (
-                <option key={u} value={u} />
-              ))}
-            </datalist>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Pieces packed</Label>
@@ -285,7 +376,7 @@ export function FmcgProductPacksEditor({
               placeholder="e.g. 24"
             />
           </div>
-          <Button type="button" size="sm" variant="secondary" onClick={addRow}>
+          <Button type="button" size="sm" variant="secondary" onClick={addRow} disabled={choicesFor().length === 0}>
             <Icons.Plus className="mr-1 h-3.5 w-3.5" />
             Add pack
           </Button>
