@@ -66,6 +66,34 @@ export async function approveSfaCustomerApi(id: string): Promise<{ partyId: stri
   );
 }
 
+export type SfaCustomerApprovalEdits = {
+  name: string;
+  tradingName?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  taxId?: string;
+  customerCode?: string;
+  address?: {
+    line1?: string;
+    city?: string;
+    region?: string;
+    country?: string;
+  };
+};
+
+export async function updateSfaCustomerApprovalApi(
+  id: string,
+  edits: SfaCustomerApprovalEdits
+): Promise<SfaCustomerApproval> {
+  requireLiveApi("SFA customer approvals");
+  const result = await apiRequest<{ success: boolean; item: SfaCustomerApproval }>(
+    `/api/integrations/odaflow/customer-approvals/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: edits }
+  );
+  return result.item;
+}
+
 export async function rejectSfaCustomerApi(id: string, reason?: string): Promise<void> {
   requireLiveApi("SFA customer approvals");
   await apiRequest(

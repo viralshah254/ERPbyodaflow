@@ -23,6 +23,8 @@ import {
   rejectSfaCustomerApi,
   type SfaCustomerApproval,
 } from "@/lib/api/sfa-customer-approvals";
+import { SfaCustomerApprovalSheet } from "@/components/customers/SfaCustomerApprovalSheet";
+import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50] as const;
 const DEFAULT_PAGE_SIZE = 20;
@@ -70,6 +72,8 @@ export function SfaCustomerApprovalPanel({
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [hasMore, setHasMore] = React.useState(false);
   const [reloadToken, setReloadToken] = React.useState(0);
+  const [selected, setSelected] = React.useState<SfaCustomerApproval | null>(null);
+  const canEdit = useCanWriteSales();
 
   const onPendingCountRef = React.useRef(onPendingCount);
   onPendingCountRef.current = onPendingCount;
@@ -117,7 +121,7 @@ export function SfaCustomerApprovalPanel({
     setReloadToken((token) => token + 1);
   }
 
-  async function approve(row: SfaCustomerApproval) {
+  async function approve(row: SfaCustomerApproval): Promise<boolean> {
     setBusyId(row._id);
     try {
       await approveSfaCustomerApi(row._id);
@@ -128,16 +132,18 @@ export function SfaCustomerApprovalPanel({
       } else {
         refresh();
       }
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not approve customer");
+      return false;
     } finally {
       setBusyId(null);
     }
   }
 
-  async function reject(row: SfaCustomerApproval) {
+  async function reject(row: SfaCustomerApproval): Promise<boolean> {
     const reason = window.prompt(`Reject ${row.name}? You can add a short reason.`, "") ?? null;
-    if (reason === null) return;
+    if (reason === null) return false;
     setBusyId(row._id);
     try {
       await rejectSfaCustomerApi(row._id, reason);
@@ -147,8 +153,10 @@ export function SfaCustomerApprovalPanel({
       } else {
         refresh();
       }
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not reject customer");
+      return false;
     } finally {
       setBusyId(null);
     }
@@ -188,8 +196,8 @@ export function SfaCustomerApprovalPanel({
         <div className="border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Pending approval</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Direct customers created in Odaflow SFA stay here until you approve them. They join
-            the customer list after you approve them.
+            Direct customers created in Odaflow SFA stay here until you approve them. Open a row to
+            correct the phone, KRA PIN, or address, then approve them onto the customer list.
           </p>
         </div>
         {loading ? (
@@ -220,9 +228,19 @@ export function SfaCustomerApprovalPanel({
                 const busy = busyId === row._id;
                 const place = locationLabel(row);
                 return (
-                  <TableRow key={row._id}>
+                  <TableRow
+                    key={row._id}
+                    className="cursor-pointer"
+                    onClick={() => setSelected(row)}
+                  >
                     <TableCell>
-                      <div className="font-medium">{namesLabel(row)}</div>
+                      <button
+                        type="button"
+                        className="text-left font-medium hover:underline"
+                        onClick={() => setSelected(row)}
+                      >
+                        {namesLabel(row)}
+                      </button>
                       <div className="text-xs text-muted-foreground">{kindLabel(row)}</div>
                       {row.customerCode ? (
                         <div className="text-xs text-muted-foreground">{row.customerCode}</div>
@@ -245,7 +263,7 @@ export function SfaCustomerApprovalPanel({
                         <div className="text-xs text-muted-foreground">{row.createdByPhone}</div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
                       <div className="flex justify-end gap-2">
                         <Button
                           size="sm"
@@ -268,6 +286,30 @@ export function SfaCustomerApprovalPanel({
           </Table>
         )}
       </section>
+
+      <SfaCustomerApprovalSheet
+        row={selected}
+        open={selected != null}
+        canEdit={canEdit}
+        busy={selected != null && busyId === selected._id}
+        onOpenChange={(next) => {
+          if (!next) setSelected(null);
+        }}
+        onSaved={(updated) => {
+          setItems((current) => current.map((item) => (item._id === updated._id ? { ...item, ...updated } : item)));
+          setSelected(updated);
+        }}
+        onApprove={(row) => {
+          void approve(row).then((ok) => {
+            if (ok) setSelected(null);
+          });
+        }}
+        onReject={(row) => {
+          void reject(row).then((ok) => {
+            if (ok) setSelected(null);
+          });
+        }}
+      />
 
       <TablePagination
         pageOffset={pageOffset}

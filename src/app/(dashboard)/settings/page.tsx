@@ -6,6 +6,8 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuthStore } from "@/stores/auth-store";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { SETTINGS_HUB_GROUPS } from "@/lib/settings/settings-hub-links";
 import { canSeeHubItem } from "@/lib/settings/hub-permissions";
 import * as Icons from "lucide-react";
@@ -20,18 +22,22 @@ function IconByName({ name, className }: { name: string; className?: string }) {
 export default function SettingsHubPage() {
   const permissions = useAuthStore((s) => s.permissions);
   const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
 
   const visibleGroups = React.useMemo(() => {
     return SETTINGS_HUB_GROUPS.map((g) => ({
       ...g,
-      links: g.links.filter((l) =>
-        canSeeHubItem(permissions, l.requiresPermissions, {
+      links: g.links.filter((l) => {
+        if (l.requiresFmcg && !fmcg) return false;
+        return canSeeHubItem(permissions, l.requiresPermissions, {
           isPlatformOperator,
           requiresPlatformOperator: l.requiresPlatformOperator,
-        })
-      ),
+        });
+      }),
     })).filter((g) => g.links.length > 0);
-  }, [permissions, isPlatformOperator]);
+  }, [permissions, isPlatformOperator, fmcg]);
 
   const hasAnySettingsLink = visibleGroups.length > 0;
 

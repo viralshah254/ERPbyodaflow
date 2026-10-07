@@ -11,6 +11,9 @@ export type ManufacturingBomItem = {
   isOptional?: boolean;
   scrapFactor?: number;
   unitCost?: number;
+  /** Store this component is issued from. Empty means the work order input store. */
+  warehouseId?: string;
+  warehouseName?: string;
 };
 
 export type ManufacturingBom = {
@@ -55,6 +58,7 @@ export type ManufacturingWorkOrder = {
   productId: string;
   productName?: string;
   productSku?: string;
+  productBarcode?: string;
   bomId?: string;
   bomName?: string;
   routingId?: string;
@@ -83,6 +87,7 @@ export type ManufacturingWorkOrder = {
     productId: string;
     productName?: string;
     sku?: string;
+    barcode?: string;
     uom?: string;
     plannedQuantity: number;
     issuedQuantity: number;
@@ -95,6 +100,7 @@ export type ManufacturingWorkOrder = {
     productId: string;
     productName?: string;
     sku?: string;
+    barcode?: string;
     uom?: string;
     plannedQuantity: number;
     producedQuantity: number;
@@ -425,7 +431,8 @@ export async function createManufacturingWorkOrder(payload: {
   bomId?: string;
   routingId?: string;
   grnId?: string;
-  inputWarehouseId: string;
+  inputWarehouseId?: string;
+  inputWarehouseIds?: string[];
   outputWarehouseId: string;
   measurementMode?: ManufacturingWorkOrder["measurementMode"];
   weighingRequired?: boolean;
@@ -619,19 +626,28 @@ export type MaterialAvailabilityLine = {
   productId: string;
   productName: string;
   productSku?: string;
+  barcode?: string;
   requiredQty: number;
   onHandQty: number;
   shortfall: number;
   uom: string;
   type: string;
+  warehouseId?: string;
+  warehouseName?: string;
 };
 
 export async function checkWorkOrderAvailability(
   bomId: string,
   quantity: number,
-  warehouseId: string
+  warehouseIds: string | string[]
 ): Promise<{ lines: MaterialAvailabilityLine[] }> {
   requireLiveApi("Work order availability check");
-  const params = new URLSearchParams({ bomId, quantity: String(quantity), warehouseId });
+  const ids = (Array.isArray(warehouseIds) ? warehouseIds : [warehouseIds]).map((id) => id.trim()).filter(Boolean);
+  const params = new URLSearchParams({
+    bomId,
+    quantity: String(quantity),
+    warehouseIds: ids.join(","),
+  });
+  if (ids[0]) params.set("warehouseId", ids[0]);
   return apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/availability?${params.toString()}`);
 }

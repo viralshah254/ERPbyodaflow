@@ -3,8 +3,12 @@
 import Link from "next/link";
 import type { MaterialAvailabilityLine } from "@/lib/api/manufacturing";
 
-export function materialStockHref(line: Pick<MaterialAvailabilityLine, "productSku" | "productName">): string {
-  return `/inventory/stock-levels?search=${encodeURIComponent(line.productSku || line.productName)}`;
+export function materialStockHref(
+  line: Pick<MaterialAvailabilityLine, "productSku" | "productName" | "barcode">
+): string {
+  return `/inventory/stock-levels?search=${encodeURIComponent(
+    line.barcode || line.productName || line.productSku || ""
+  )}`;
 }
 
 function isPurchasedSku(sku?: string): boolean {
@@ -20,21 +24,21 @@ export function MaterialComponentLinks({
   compact?: boolean;
 }) {
   const stockHref = materialStockHref(line);
-  const label = line.productSku
-    ? compact
-      ? line.productSku
-      : `${line.productSku} — ${line.productName}`
-    : line.productName;
+  const label = line.productName || line.productSku || line.productId;
   const purchased = isPurchasedSku(line.productSku);
+  const barcode = line.barcode?.trim();
 
   return (
     <div className="space-y-0.5">
       <Link
         href={stockHref}
-        className="inline-block whitespace-nowrap font-medium text-primary underline-offset-2 hover:underline"
+        className="inline-block font-medium text-primary underline-offset-2 hover:underline"
       >
         {label}
       </Link>
+      {barcode && !compact ? (
+        <p className="font-mono text-[11px] text-muted-foreground">{barcode}</p>
+      ) : null}
       <div className="flex flex-wrap gap-x-2 gap-y-0.5">
         <Link
           href={stockHref}

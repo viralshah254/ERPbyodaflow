@@ -92,14 +92,16 @@ export default function WorkOrderDetailPage() {
   }, [refresh]);
 
   React.useEffect(() => {
-    const inputWarehouseId = order?.materialLines?.[0]?.warehouseId;
-    if (!order?.bomId || !inputWarehouseId || order.status === "COMPLETED" || order.status === "CANCELLED") {
+    const inputWarehouseIds = [
+      ...new Set((order?.materialLines ?? []).map((line) => line.warehouseId).filter(Boolean)),
+    ];
+    if (!order?.bomId || inputWarehouseIds.length === 0 || order.status === "COMPLETED" || order.status === "CANCELLED") {
       setAvailLines([]);
       return;
     }
     let cancelled = false;
     setAvailLoading(true);
-    void checkWorkOrderAvailability(order.bomId, order.quantity, inputWarehouseId)
+    void checkWorkOrderAvailability(order.bomId, order.quantity, inputWarehouseIds)
       .then((result) => {
         if (!cancelled) setAvailLines(result.lines);
       })
@@ -163,11 +165,8 @@ export default function WorkOrderDetailPage() {
     }
   }
 
-  const productLabel = order
-    ? order.productSku
-      ? `${order.productSku} — ${order.productName ?? ""}`
-      : (order.productName ?? order.productId)
-    : "";
+  const productName = order?.productName?.trim() || order?.productId || "";
+  const productBarcode = order?.productBarcode?.trim();
 
   return (
     <PageShell>
@@ -177,7 +176,17 @@ export default function WorkOrderDetailPage() {
           loading
             ? "Loading…"
             : order
-              ? `${productLabel}. Walk this batch through release, start, and complete — not from the list.`
+              ? (
+                  <>
+                    <span className="block">{productName}</span>
+                    {productBarcode ? (
+                      <span className="mt-0.5 block font-mono text-xs">{productBarcode}</span>
+                    ) : null}
+                    <span className="mt-1 block">
+                      Walk this batch through release, start, and complete — not from the list.
+                    </span>
+                  </>
+                )
               : "Work order not found."
         }
         breadcrumbs={[
@@ -274,7 +283,15 @@ export default function WorkOrderDetailPage() {
                               <tbody>
                                 {order.materialLines.map((line) => (
                                   <tr key={line.lineId} className="border-b last:border-0">
-                                    <td className="py-2 pr-2">{line.sku ?? line.productName ?? line.productId}<span className="block text-muted-foreground">{line.warehouseId}</span></td>
+                                    <td className="py-2 pr-2">
+                                      <span className="block font-medium">{line.productName ?? line.productId}</span>
+                                      {line.barcode?.trim() ? (
+                                        <span className="block font-mono text-[11px] text-muted-foreground">
+                                          {line.barcode.trim()}
+                                        </span>
+                                      ) : null}
+                                      <span className="block text-muted-foreground">{line.warehouseId}</span>
+                                    </td>
                                     {(["issue", "consume", "returnQty"] as const).map((field) => (
                                       <td key={field} className="p-1">
                                         <Input
@@ -362,6 +379,7 @@ export default function WorkOrderDetailPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Component</TableHead>
+                            <TableHead>Store</TableHead>
                             <TableHead className="text-right">Required</TableHead>
                             <TableHead className="text-right">On hand</TableHead>
                             <TableHead className="text-right">Short</TableHead>
@@ -369,10 +387,11 @@ export default function WorkOrderDetailPage() {
                         </TableHeader>
                         <TableBody>
                           {availLines.map((line) => (
-                            <TableRow key={line.productId} className={line.shortfall > 0 ? "bg-destructive/10" : undefined}>
+                            <TableRow key={`${line.productId}-${line.warehouseId ?? ""}`} className={line.shortfall > 0 ? "bg-destructive/10" : undefined}>
                               <TableCell>
                                 <MaterialComponentLinks line={line} />
                               </TableCell>
+                              <TableCell className="text-muted-foreground">{line.warehouseName ?? "—"}</TableCell>
                               <TableCell className="text-right tabular-nums">
                                 {line.requiredQty} {line.uom}
                               </TableCell>

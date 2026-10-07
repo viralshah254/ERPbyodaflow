@@ -63,6 +63,10 @@ import {
   sendInvoiceEmailApi,
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
+import {
+  generateInvoiceAndDeliveryNoteApi,
+  startPickPackFromSalesOrderApi,
+} from "@/lib/api/sales-document-flow";
 import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
@@ -288,6 +292,10 @@ export default function DocViewPage() {
   const [signedPodFile, setSignedPodFile] = React.useState<File | null>(null);
   const [signedPodReceiverName, setSignedPodReceiverName] = React.useState("");
   const [signedPodNote, setSignedPodNote] = React.useState("");
+  const [signedPodReceivedDate, setSignedPodReceivedDate] = React.useState("");
+  const [signedPodReceiptStatus, setSignedPodReceiptStatus] = React.useState<
+    "FULL" | "PARTIAL" | "DISCREPANCY" | "REJECTED"
+  >("FULL");
   const [signedPodSaving, setSignedPodSaving] = React.useState(false);
   const [podReceiverName, setPodReceiverName] = React.useState("");
   const [podReceiverPhone, setPodReceiverPhone] = React.useState("");
@@ -744,6 +752,17 @@ export default function DocViewPage() {
           return;
         }
         if (type === "sales-order") {
+          const flowPack = document.salesFlow?.pickPack;
+          if (document.salesFlow?.mode === "pick_pack_first" && flowPack?.id) {
+            const packStatus = String(flowPack.status ?? "").trim().toUpperCase();
+            if (!["COMPLETED", "CANCELLED", "DISPATCHED"].includes(packStatus)) {
+              setWarehouseTaskLink({
+                label: `Open pick-pack ${flowPack.number}`,
+                href: `/warehouse/pick-pack/${flowPack.id}`,
+              });
+              return;
+            }
+          }
           const dn = pickActiveLinkedDeliveryNote(document.relatedDocuments);
           if (!dn?.id) {
             setWarehouseTaskLink(null);
@@ -873,6 +892,57 @@ export default function DocViewPage() {
     setConvertOpen(open);
   }, []);
 
+  const handleStartPickPack = React.useCallback(async () => {
+    setActionLoading(true);
+    try {
+      const result = await startPickPackFromSalesOrderApi(id);
+      toast.success(`Pick & pack ${result.number} is ready.`);
+      router.push(`/warehouse/pick-pack/${result.pickPackId}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setActionLoading(false);
+    }
+  }, [id, router]);
+
+  const handleGenerateInvoiceAndDeliveryNote = React.useCallback(async () => {
+    setActionLoading(true);
+    try {
+      const result = await generateInvoiceAndDeliveryNoteApi(id);
+      if (result.kraStatus === "FAILED") {
+        toast.error(result.kraLabel, { description: result.kraError || "KRA signing failed. This is not a signed tax invoice." });
+      } else if (result.kraStatus === "SIGNED") {
+        toast.success(`${result.kraLabel}. Invoice ${result.invoiceNumber ?? ""} and ${result.deliveryNoteNumber} are ready.`);
+      } else {
+        toast.success(`Invoice ${result.invoiceNumber ?? ""} and ${result.deliveryNoteNumber} created. ${result.kraLabel}.`);
+      }
+      await refreshDocument(true);
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      const canOverride =
+        can(authUser, Permissions.SALES_APPROVE) || can(authUser, Permissions.ADMIN_SETTINGS);
+      if (err.message.includes("authorized user") && canOverride) {
+        const reason = window.prompt("Reason for invoicing above the packed quantity");
+        if (reason?.trim()) {
+          try {
+            const result = await generateInvoiceAndDeliveryNoteApi(id, {
+              overridePackedQuantity: true,
+              overrideReason: reason.trim(),
+            });
+            toast.success(`Override recorded. ${result.deliveryNoteNumber} created.`);
+            await refreshDocument(true);
+          } catch (overrideErr) {
+            toast.error((overrideErr as Error).message);
+          }
+        }
+      } else {
+        toast.error(err.message);
+      }
+    } finally {
+      setActionLoading(false);
+    }
+  }, [id, refreshDocument, authUser]);
+
   const rightSlot = (
     <DynamicNextStepsPanel
       type={type}
@@ -916,6 +986,8 @@ export default function DocViewPage() {
       }}
       onConvert={openConvertSheet}
       onSendEmail={() => { setEmailTo(""); setEmailDialogOpen(true); }}
+      onStartPickPack={() => void handleStartPickPack()}
+      onGenerateInvoiceAndDeliveryNote={() => void handleGenerateInvoiceAndDeliveryNote()}
     />
   );
 
@@ -2346,8 +2418,9 @@ export default function DocViewPage() {
           <SheetHeader>
             <SheetTitle>Upload signed delivery note</SheetTitle>
             <SheetDescription>
-              Upload the customer-signed (and stamped) delivery note scan or photo. This confirms proof of delivery as
-              shipped quantities and unlocks Create Invoice from this DN. AI verification of the scan is planned later.
+              {document?.salesFlow?.mode === "pick_pack_first"
+                ? "Upload the signed delivery note the driver brought back. The original delivery note stays on file. POD source is recorded as an internal upload."
+                : "Upload the customer-signed (and stamped) delivery note scan or photo. This confirms proof of delivery as shipped quantities and unlocks Create Invoice from this DN."}
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -2380,7 +2453,32 @@ export default function DocViewPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="signed-dn-note">Note (optional)</Label>
+              <Label htmlFor="signed-dn-received">Received date</Label>
+              <Input
+                id="signed-dn-received"
+                type="date"
+                value={signedPodReceivedDate}
+                onChange={(e) => setSignedPodReceivedDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signed-dn-status">Receipt status</Label>
+              <select
+                id="signed-dn-status"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={signedPodReceiptStatus}
+                onChange={(e) =>
+                  setSignedPodReceiptStatus(e.target.value as "FULL" | "PARTIAL" | "DISCREPANCY" | "REJECTED")
+                }
+              >
+                <option value="FULL">Received in full</option>
+                <option value="PARTIAL">Partially received</option>
+                <option value="DISCREPANCY">Received with discrepancy</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signed-dn-note">Comments</Label>
               <Textarea
                 id="signed-dn-note"
                 value={signedPodNote}
@@ -2414,8 +2512,10 @@ export default function DocViewPage() {
                       ? { receiverName: signedPodReceiverName.trim() }
                       : {}),
                     ...(signedPodNote.trim() ? { note: signedPodNote.trim() } : {}),
+                    receiptStatus: signedPodReceiptStatus,
+                    ...(signedPodReceivedDate ? { receivedAt: signedPodReceivedDate } : {}),
                   });
-                  toast.success("Signed delivery note saved — POD confirmed. You can create the invoice.");
+                  toast.success("Proof of delivery uploaded. POD source: internal upload.");
                   setSignedPodSheetOpen(false);
                   setSignedPodFile(null);
                   await refreshDocument(true);
@@ -2872,6 +2972,48 @@ export default function DocViewPage() {
 
 // ─── Dynamic Next Steps Panel ────────────────────────────────────────────────
 
+function trackLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+    .join(" ");
+}
+
+function SalesFlowStatusStrip({
+  flow,
+}: {
+  flow: NonNullable<import("@/lib/types/documents").DocumentDetailRecord["salesFlow"]>;
+}) {
+  const rows: Array<[string, string]> = [
+    ["Order", trackLabel(flow.tracks.orderStatus)],
+    ["Invoice", trackLabel(flow.tracks.invoiceStatus)],
+    ["KRA", flow.kraLabel.replace(/^KRA:\s*/, "")],
+    ["Dispatch", trackLabel(flow.tracks.dispatchStatus)],
+    ["Delivery", flow.tracks.deliveryStatus === "DISPUTED" ? "Received with discrepancy" : trackLabel(flow.tracks.deliveryStatus)],
+    ["POD", flow.podSource === "CUSTOMER_QR" ? "QR submitted" : flow.podSource === "INTERNAL_UPLOAD" ? "Internal upload" : trackLabel(flow.tracks.podStatus)],
+  ];
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Document status</p>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-2">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-medium text-right">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {flow.kraError ? <p className="text-xs text-destructive">{flow.kraError}</p> : null}
+      {flow.podSource ? (
+        <p className="text-xs text-muted-foreground">
+          POD source: {flow.podSource === "CUSTOMER_QR" ? "Customer QR submission" : "Internal upload"}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function DynamicNextStepsPanel({
   type,
   document,
@@ -2891,6 +3033,8 @@ function DynamicNextStepsPanel({
   onAction,
   onConvert,
   onSendEmail,
+  onStartPickPack,
+  onGenerateInvoiceAndDeliveryNote,
 }: {
   type: string;
   document: DocumentDetailRecord | null;
@@ -2916,6 +3060,8 @@ function DynamicNextStepsPanel({
   onAction: (action: string) => Promise<void>;
   onConvert: (target: DocTypeKey) => void | Promise<void>;
   onSendEmail: () => void;
+  onStartPickPack?: () => void;
+  onGenerateInvoiceAndDeliveryNote?: () => void;
 }) {
   const [notesPreviewOpen, setNotesPreviewOpen] = React.useState(false);
 
@@ -2936,6 +3082,43 @@ function DynamicNextStepsPanel({
     } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
     } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
+      if (document?.salesFlow?.mode === "pick_pack_first") {
+        const pack = document.salesFlow.pickPack;
+        const packStatus = String(pack?.status ?? "").toUpperCase();
+        if (document.salesFlow.actions.includes("start-pick-pack")) {
+          steps.push({
+            icon: <Icons.Package className="h-4 w-4 text-blue-500" />,
+            text: "Approved. Start pick & pack from this sales order.",
+            action: onStartPickPack,
+            actionLabel: "Start pick & pack",
+            variant: "default",
+          });
+        } else if (pack && ["PENDING", "PICKED"].includes(packStatus)) {
+          steps.push({
+            icon: <Icons.Package className="h-4 w-4 text-blue-500" />,
+            text: `${pack.number} is ${packStatus === "PICKED" ? "picked" : "waiting to be picked"}.`,
+            href: `/warehouse/pick-pack/${pack.id}`,
+            actionLabel: "Open pick & pack",
+            variant: "default",
+          });
+        } else if (document.salesFlow.actions.includes("generate-invoice-and-delivery-note")) {
+          steps.push({
+            icon: <Icons.FileText className="h-4 w-4 text-emerald-600" />,
+            text: "Packed. Generate the invoice and delivery note from the packed quantities.",
+            action: onGenerateInvoiceAndDeliveryNote,
+            actionLabel: "Generate invoice & delivery note",
+            variant: "default",
+          });
+        } else if (document.salesFlow.invoice) {
+          steps.push({
+            icon: <Icons.FileText className="h-4 w-4" />,
+            text: `${document.salesFlow.kraLabel}. Invoice ${document.salesFlow.invoice.number}.`,
+            href: `/docs/invoice/${document.salesFlow.invoice.id}`,
+            actionLabel: "Open invoice",
+            variant: "outline",
+          });
+        }
+      } else {
       const dn = linkedDeliveryNote;
       if (fulfilmentInProgress && dn) {
         if (warehouseTaskLink) {
@@ -2992,6 +3175,7 @@ function DynamicNextStepsPanel({
           variant: "default",
         });
       }
+      }
     }
   } else if (type === "delivery-note") {
     const st = status.toUpperCase();
@@ -3026,7 +3210,9 @@ function DynamicNextStepsPanel({
           steps.push({
             icon: <Icons.Upload className="h-4 w-4 text-amber-600" />,
             text:
-              "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
+              document?.salesFlow?.mode === "pick_pack_first"
+                ? "Upload the signed delivery note brought back by the driver. This records an internal proof of delivery and leaves the original delivery note unchanged."
+                : "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
             action: canRecordSignedPod ? onUploadSignedDn : undefined,
             actionLabel: canRecordSignedPod ? "Upload signed DN" : undefined,
             variant: "default",
@@ -3191,6 +3377,7 @@ function DynamicNextStepsPanel({
   return (
     <DocumentRightPanel>
       <div className="space-y-4">
+        {document?.salesFlow ? <SalesFlowStatusStrip flow={document.salesFlow} /> : null}
         <div>
           <p className="font-medium text-sm mb-1 flex items-center gap-1">
             <Icons.Compass className="h-3.5 w-3.5" />

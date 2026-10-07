@@ -184,6 +184,7 @@ export function FmcgPriceTagItemsEditor({
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [softLoading, setSoftLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [bulkDiscount, setBulkDiscount] = React.useState("");
   const hasLoadedOnce = React.useRef(false);
   const requestId = React.useRef(0);
   const editsRef = React.useRef(edits);
@@ -503,6 +504,60 @@ export function FmcgPriceTagItemsEditor({
     editDiscount(productId, normalized);
   };
 
+  /** Apply one discount % to every product that already has a sell price on this tag. */
+  const applyBulkDiscount = () => {
+    const normalized = normalizeDiscountInput(bulkDiscount);
+    const pct = parseDiscountPercent(normalized) ?? 0;
+    const discountStr = pct > 0 ? formatPriceAmount(pct) : "";
+    const pricedIds = new Set(
+      (list?.items ?? [])
+        .filter((item) => item.price != null && Number(item.price) > 0)
+        .map((item) => item.productId)
+    );
+    for (const row of rows) {
+      const edit =
+        edits[row.productId] ??
+        itemToEdit(list?.items.find((i) => i.productId === row.productId));
+      if (parseNumber(edit.pricePerPiece) != null && Number(edit.pricePerPiece) > 0) {
+        pricedIds.add(row.productId);
+      }
+    }
+    if (pricedIds.size === 0) {
+      toast.error("No products with a sell price yet. Set sell prices first, then apply the discount.");
+      return;
+    }
+    setEdits((prev) => {
+      const next = { ...prev };
+      for (const productId of pricedIds) {
+        const current =
+          next[productId] ??
+          itemToEdit(list?.items.find((i) => i.productId === productId));
+        next[productId] = {
+          ...current,
+          discountPercent: discountStr,
+          finalPrice: finalFromDraft(current.pricePerPiece, discountStr),
+        };
+      }
+      return next;
+    });
+    setRows((prev) =>
+      prev.map((r) => {
+        if (!pricedIds.has(r.productId)) return r;
+        return {
+          ...r,
+          discountPercent: discountStr,
+          finalPrice: finalFromDraft(r.pricePerPiece, discountStr),
+        };
+      })
+    );
+    setBulkDiscount(discountStr);
+    toast.success(
+      discountStr
+        ? `Applied ${discountStr}% discount to ${pricedIds.size} product${pricedIds.size === 1 ? "" : "s"}. Save to keep it.`
+        : `Cleared discount on ${pricedIds.size} product${pricedIds.size === 1 ? "" : "s"}. Save to keep it.`
+    );
+  };
+
   const editFinal = (productId: string, finalPrice: string) => {
     const current =
       edits[productId] ??
@@ -648,13 +703,38 @@ export function FmcgPriceTagItemsEditor({
         <span className="font-medium text-foreground">{tagLabel}</span>. Sell is what you
         charge. On a VAT-inclusive list that is the PDF cost incl; cost excl and VAT % sit
         on the same row. RRP is the recommended shelf price. Discount % and final price stay
-        in sync, taken off the sell price. To add prices for SKUs that are still blank, set Price to{" "}
-        <span className="font-medium text-foreground">No price yet</span>, download this
-        view, fill the sheet, and import it. Import updates only the rows in the file.
+        in sync, taken off the sell price. Download includes products with no price yet at
+        the bottom. Fill the sheet and import — only those rows update.
       </p>
 
+      <div className="flex flex-wrap items-end gap-2 rounded-md border bg-muted/30 px-3 py-2.5">
+        <div className="space-y-1">
+          <label htmlFor="bulk-tag-discount" className="text-xs font-medium text-foreground">
+            Discount % for all products on this tag
+          </label>
+          <Input
+            id="bulk-tag-discount"
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            className="h-8 w-28"
+            value={bulkDiscount}
+            onChange={(e) => setBulkDiscount(e.target.value)}
+            onBlur={(e) => setBulkDiscount(normalizeDiscountInput(e.target.value))}
+            placeholder="e.g. 10"
+          />
+        </div>
+        <Button type="button" size="sm" variant="secondary" onClick={applyBulkDiscount} disabled={softLoading}>
+          Apply to every priced product
+        </Button>
+        <p className="max-w-sm text-xs text-muted-foreground">
+          Sets the same discount on every product that already has a sell price. Then click Save.
+        </p>
+      </div>
+
       <DataTableToolbar
-        searchPlaceholder="Search products by name, SKU, or barcode…"
+        searchPlaceholder="Search products by name or barcode…"
         searchValue={search}
         onSearchChange={setSearch}
         searchInputProps={{ disabled: softLoading && rows.length === 0 }}
@@ -663,7 +743,7 @@ export function FmcgPriceTagItemsEditor({
             id: "priced",
             label: "Price",
             options: [
-              { label: "All SKUs", value: "all" },
+              { label: "All products", value: "all" },
               { label: "Has a price", value: "priced" },
               { label: "No price yet", value: "unpriced" },
             ],
@@ -705,7 +785,7 @@ export function FmcgPriceTagItemsEditor({
       {showEmptyCatalog ? (
         <div className="rounded-md border border-dashed px-6 py-10 text-center space-y-3">
           <p className="text-sm text-muted-foreground">
-            No products to price yet. Add SKUs under{" "}
+            No products to price yet. Add products under{" "}
             <span className="font-medium text-foreground">Masters → Products</span>, then return
             here.
           </p>
@@ -733,9 +813,7 @@ export function FmcgPriceTagItemsEditor({
                 <TableHeader>
                   <TableRow>
                     <SortableHead label="Product" field="name" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableHead label="Barcode" field="barcode" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <SortableHead label="Size" field="size" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[88px]" />
-                    <SortableHead label="SKU" field="sku" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                     <TableHead className="w-[88px]">Stock</TableHead>
                     <TableHead className="w-[120px]">Cost excl</TableHead>
                     <TableHead className="w-[88px]">VAT %</TableHead>
@@ -748,21 +826,26 @@ export function FmcgPriceTagItemsEditor({
                 <TableBody>
                   {showEmptySearch ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                         {pricedStatus === "priced"
-                          ? "No SKUs with a price match. Choose “No price yet” to list products still missing a price on this tag."
+                          ? "No products with a price match. Choose “No price yet” to list products still missing a price on this tag."
                           : pricedStatus === "unpriced"
-                            ? "Every matching SKU already has a price on this tag."
+                            ? "Every matching product already has a price on this tag."
                             : "No products match these filters."}
                       </TableCell>
                     </TableRow>
                   ) : (
                     rows.map((r) => (
                       <TableRow key={r.productId}>
-                        <TableCell className="text-sm">{r.name}</TableCell>
-                        <TableCell className="font-mono text-xs">{r.barcode}</TableCell>
+                        <TableCell className="text-sm">
+                          <span className="block font-medium">{r.name}</span>
+                          {r.barcode ? (
+                            <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
+                              {r.barcode}
+                            </span>
+                          ) : null}
+                        </TableCell>
                         <TableCell className="text-sm tabular-nums">{r.size}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{r.sku}</TableCell>
                         <TableCell className="text-sm tabular-nums">{r.stock}</TableCell>
                         <TableCell>
                           <Input

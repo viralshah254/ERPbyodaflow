@@ -10,6 +10,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -83,7 +84,7 @@ export default function WorkOrdersPage() {
   const [selectedProductOption, setSelectedProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [routingId, setRoutingId] = React.useState("");
   const [warehouses, setWarehouses] = React.useState<Array<{ id: string; code?: string; name: string }>>([]);
-  const [inputWarehouseId, setInputWarehouseId] = React.useState("");
+  const [inputWarehouseIds, setInputWarehouseIds] = React.useState<string[]>([]);
   const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
   const [measurementMode, setMeasurementMode] = React.useState<ManufacturingWorkOrder["measurementMode"]>("COUNT_ONLY");
   const [quantity, setQuantity] = React.useState("1");
@@ -190,14 +191,14 @@ export default function WorkOrdersPage() {
 
   React.useEffect(() => {
     if (availDebounce.current) clearTimeout(availDebounce.current);
-    if (!bomId || !Number(quantity) || !inputWarehouseId) {
+    if (!bomId || !Number(quantity) || inputWarehouseIds.length === 0) {
       setAvailLines([]);
       return;
     }
     availDebounce.current = setTimeout(async () => {
       setAvailLoading(true);
       try {
-        const result = await checkWorkOrderAvailability(bomId, Number(quantity), inputWarehouseId);
+        const result = await checkWorkOrderAvailability(bomId, Number(quantity), inputWarehouseIds);
         setAvailLines(result.lines);
       } catch {
         setAvailLines([]);
@@ -208,7 +209,7 @@ export default function WorkOrdersPage() {
     return () => {
       if (availDebounce.current) clearTimeout(availDebounce.current);
     };
-  }, [bomId, quantity, inputWarehouseId]);
+  }, [bomId, quantity, inputWarehouseIds]);
 
   const hasShortfall = availLines.some((line) => line.shortfall > 0);
 
@@ -256,8 +257,8 @@ export default function WorkOrdersPage() {
         id: "product",
         header: "Product",
         accessor: (r: ManufacturingWorkOrder) => (
-          <span className="block max-w-[min(360px,45vw)] truncate text-sm" title={r.productSku ? `${r.productSku} - ${r.productName}` : r.productName ?? r.productId}>
-            {r.productSku ? `${r.productSku} - ${r.productName}` : r.productName ?? r.productId}
+          <span className="block max-w-[min(360px,45vw)] truncate text-sm" title={r.productName ?? r.productId}>
+            {r.productName ?? r.productId}
           </span>
         ),
       },
@@ -326,7 +327,7 @@ export default function WorkOrdersPage() {
     setBomId("");
     setProductId("");
     setRoutingId("");
-    setInputWarehouseId("");
+    setInputWarehouseIds([]);
     setOutputWarehouseId("");
     setMeasurementMode("COUNT_ONLY");
     setGrnId("");
@@ -646,17 +647,35 @@ export default function WorkOrdersPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Input store</Label>
-                <Select value={inputWarehouseId} onValueChange={setInputWarehouseId}>
-                  <SelectTrigger><SelectValue placeholder="Required input store" /></SelectTrigger>
-                  <SelectContent>
-                    {warehouses.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>
-                        {warehouse.code ? `${warehouse.code} — ` : ""}{warehouse.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Input stores</Label>
+                <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
+                  {warehouses.length === 0 ? (
+                    <p className="px-1 py-1 text-xs text-muted-foreground">
+                      {sheetMetaLoading ? "Loading stores…" : "No stores found."}
+                    </p>
+                  ) : (
+                    warehouses.map((warehouse) => {
+                      const checked = inputWarehouseIds.includes(warehouse.id);
+                      return (
+                        <label key={warehouse.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              setInputWarehouseIds((current) => {
+                                if (value === true) return current.includes(warehouse.id) ? current : [...current, warehouse.id];
+                                return current.filter((id) => id !== warehouse.id);
+                              });
+                            }}
+                          />
+                          <span>{warehouse.code ? `${warehouse.code} — ` : ""}{warehouse.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Tick every store this order may draw from. A component is taken from the first ticked store that has it. A store set on the BOM component is used for that line.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Output store</Label>
@@ -712,12 +731,13 @@ export default function WorkOrdersPage() {
                 {availLines.length > 0 && (
                   <>
                     <p className="text-[11px] text-muted-foreground">
-                      Click a component for stock. RAW and packaging also have Purchase.
+                      Click a component for stock. Each line is checked in the input stores you ticked, or in the store named on that BOM component.
                     </p>
-                    <table className="w-full min-w-[28rem] text-xs">
+                    <table className="w-full min-w-[32rem] text-xs">
                       <thead>
                         <tr className="text-muted-foreground border-b">
                           <th className="text-left py-1 font-medium">Component</th>
+                          <th className="text-left py-1 font-medium">Store</th>
                           <th className="text-right py-1 font-medium">Required</th>
                           <th className="text-right py-1 font-medium">On hand</th>
                           <th className="text-right py-1 font-medium">Status</th>
@@ -725,9 +745,12 @@ export default function WorkOrdersPage() {
                       </thead>
                       <tbody>
                         {availLines.map((line) => (
-                          <tr key={line.productId} className="border-b border-border/40 last:border-0">
+                          <tr key={`${line.productId}-${line.warehouseId ?? ""}`} className="border-b border-border/40 last:border-0">
                             <td className="py-1 pr-2 align-top whitespace-nowrap">
                               <MaterialComponentLinks line={line} compact />
+                            </td>
+                            <td className="py-1 pr-2 align-top text-muted-foreground whitespace-nowrap">
+                              {line.warehouseName ?? "—"}
                             </td>
                             <td className="py-1 text-right tabular-nums whitespace-nowrap">
                               {Math.round(line.requiredQty * 1000) / 1000} {line.uom}
@@ -762,7 +785,7 @@ export default function WorkOrdersPage() {
               Cancel
             </Button>
             <Button
-              disabled={saving || sheetMetaLoading || (!productId && !grnId && !bomId) || !inputWarehouseId || !outputWarehouseId}
+              disabled={saving || sheetMetaLoading || (!productId && !grnId && !bomId) || inputWarehouseIds.length === 0 || !outputWarehouseId}
               onClick={async () => {
                 setSaving(true);
                 try {
@@ -771,7 +794,8 @@ export default function WorkOrdersPage() {
                     bomId: bomId || undefined,
                     routingId: routingId || undefined,
                     grnId: grnId || undefined,
-                    inputWarehouseId,
+                    inputWarehouseIds,
+                    inputWarehouseId: inputWarehouseIds[0],
                     outputWarehouseId,
                     measurementMode,
                     weighingRequired: measurementMode !== "COUNT_ONLY",
