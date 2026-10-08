@@ -17,6 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { KraTaxPinField } from "@/components/parties/KraTaxPinField";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import { cn } from "@/lib/utils";
@@ -126,8 +127,8 @@ export function OdaflowCustomerMatchingBoard({
   const loadPreview = React.useCallback(async (opts?: { soft?: boolean }) => {
     const soft = Boolean(opts?.soft && hasDataRef.current);
     if (soft) {
+      // Keep the table visible — only a thin progress bar while reconciling.
       setRefreshing(true);
-      setPageRows([]);
     } else {
       setLoading(true);
     }
@@ -189,11 +190,59 @@ export function OdaflowCustomerMatchingBoard({
     return () => window.clearTimeout(t);
   }, [filteredRows, pageOffset, pageSize]);
 
-  const tableBusy = refreshing || listBusy;
+  /** Pagination swaps only — never blank the board for background refresh. */
+  const tableBusy = listBusy;
 
   const partyOptionsFor = (row: CustomerMatchRow) => {
     if (row.candidates?.length) return row.candidates;
     return row.segment === "modern_trade" ? erpMt : erpDirect;
+  };
+
+  function erpSelectOptionsFor(row: CustomerMatchRow) {
+    return partyOptionsFor(row).map((party) => {
+      const meta = [party.code, party.taxId ? `PIN ${party.taxId}` : null]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        id: party.id,
+        label: meta ? `${party.name} (${meta})` : party.name,
+        keywords: [party.name, party.code, party.taxId].filter(Boolean).join(" "),
+      };
+    });
+  }
+
+  /** Instant row update so Link feels done; soft reload reconciles counts. */
+  const markRowMapped = (row: CustomerMatchRow, erpPartyId: string) => {
+    const party =
+      partyOptionsFor(row).find((p) => p.id === erpPartyId) ??
+      (row.erp?.id === erpPartyId ? row.erp : undefined);
+    setRows((prev) =>
+      prev.map((r) =>
+        r.key === row.key
+          ? {
+              ...r,
+              status: "mapped",
+              erp: party
+                ? { id: party.id, name: party.name, code: party.code, taxId: party.taxId }
+                : r.erp,
+              candidates: undefined,
+            }
+          : r
+      )
+    );
+    setCounts((prev) => ({
+      ...prev,
+      needsAction: Math.max(0, prev.needsAction - (needsAction(row.status) ? 1 : 0)),
+      directNeedsAction:
+        row.segment === "direct" && needsAction(row.status)
+          ? Math.max(0, prev.directNeedsAction - 1)
+          : prev.directNeedsAction,
+      modernTradeNeedsAction:
+        row.segment === "modern_trade" && needsAction(row.status)
+          ? Math.max(0, prev.modernTradeNeedsAction - 1)
+          : prev.modernTradeNeedsAction,
+      mapped: prev.mapped + (row.status === "mapped" ? 0 : 1),
+    }));
   };
 
   const handleConfirmLink = async (row: CustomerMatchRow) => {
@@ -215,12 +264,13 @@ export function OdaflowCustomerMatchingBoard({
         sfaId,
         erpPartyId,
       });
+      markRowMapped(row, erpPartyId);
       toast.success(
         row.segment === "modern_trade"
           ? `Linked ${row.sfa?.name ?? "supermarket"} to ERP.`
           : `Linked ${row.sfa?.name ?? "customer"} to ERP.`
       );
-      await loadPreview();
+      void loadPreview({ soft: true });
       onChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not confirm link");
@@ -236,7 +286,7 @@ export function OdaflowCustomerMatchingBoard({
     try {
       await pushErpCustomerToSfaMatchApi({ erpPartyId });
       toast.success(`${row.erp?.name ?? "Customer"} created in SFA as a direct customer.`);
-      await loadPreview();
+      void loadPreview({ soft: true });
       onChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not create in SFA");
@@ -284,7 +334,7 @@ export function OdaflowCustomerMatchingBoard({
       }
       setCreateRow(null);
       setCreateDraft(null);
-      await loadPreview();
+      void loadPreview({ soft: true });
       onChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not create customer in ERP");
@@ -332,7 +382,7 @@ export function OdaflowCustomerMatchingBoard({
           type="button"
           variant="outline"
           size="sm"
-          disabled={tableBusy}
+          disabled={refreshing}
           onClick={() => void loadPreview({ soft: true })}
         >
           <Icons.RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
@@ -398,7 +448,7 @@ export function OdaflowCustomerMatchingBoard({
       )}
 
       <div className="relative min-h-[22rem]">
-        <TopProgressBar active={tableBusy} />
+        <TopProgressBar active={refreshing || tableBusy} />
         {tableBusy ? (
           <p className="absolute right-2 top-2 z-20 text-[11px] text-muted-foreground">Loading…</p>
         ) : null}
@@ -418,7 +468,7 @@ export function OdaflowCustomerMatchingBoard({
         ) : (
           <div
             className={cn(
-              "overflow-x-auto rounded-xl border transition-opacity duration-300 ease-out",
+              "overflow-visible rounded-xl border transition-opacity duration-300 ease-out",
               tableBusy ? "opacity-0" : "opacity-100"
             )}
           >
@@ -437,7 +487,6 @@ export function OdaflowCustomerMatchingBoard({
             <tbody>
               {pageRows.map((row) => {
                 const selected = picked[row.key] ?? row.erp?.id ?? "";
-                const options = partyOptionsFor(row);
                 const busy = busyKey === row.key;
                 return (
                   <tr key={row.key} className="border-b align-top hover:bg-muted/20">
@@ -450,10 +499,17 @@ export function OdaflowCustomerMatchingBoard({
                       {row.sfa ? (
                         <div className="space-y-0.5">
                           <div className="font-medium">{row.sfa.name}</div>
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">KRA PIN </span>
+                            {row.sfa.taxId ? (
+                              <span className="font-medium tabular-nums">{row.sfa.taxId}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             {[
                               row.sfa.code,
-                              row.sfa.taxId ? `PIN ${row.sfa.taxId}` : null,
                               row.segment === "modern_trade" && row.sfa.branchCount != null
                                 ? `${row.sfa.branchCount} ${row.sfa.branchCount === 1 ? "branch" : "branches"}`
                                 : null,
@@ -492,23 +548,19 @@ export function OdaflowCustomerMatchingBoard({
                           </div>
                         </div>
                       ) : (
-                        <select
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={selected}
-                          disabled={!canSave || row.status === "pending_approval"}
-                          onChange={(e) =>
-                            setPicked((prev) => ({ ...prev, [row.key]: e.target.value }))
+                        <SearchableSelect
+                          className="w-full min-w-[14rem]"
+                          value={selected || undefined}
+                          onValueChange={(id) =>
+                            setPicked((prev) => ({ ...prev, [row.key]: id }))
                           }
-                        >
-                          <option value="">Select ERP customer…</option>
-                          {options.map((party) => (
-                            <option key={party.id} value={party.id}>
-                              {party.name}
-                              {party.code ? ` (${party.code})` : ""}
-                              {party.taxId ? ` · ${party.taxId}` : ""}
-                            </option>
-                          ))}
-                        </select>
+                          options={erpSelectOptionsFor(row)}
+                          placeholder="Select ERP customer…"
+                          searchPlaceholder="Search name, code, or KRA PIN…"
+                          emptyMessage="No ERP customer matches."
+                          disabled={!canSave || row.status === "pending_approval"}
+                          allowClear
+                        />
                       )}
                     </td>
                     <td className="py-3 px-3">
