@@ -188,7 +188,7 @@ export default function OrganizationPage() {
           <CardHeader>
             <CardTitle>Environment</CardTitle>
             <CardDescription>
-              Sandbox for dummy data and practice. Go Live starts empty real books.
+              Sandbox for dummy data and practice. Go Live clears operational books; products and prices stay.
             </CardDescription>
           </CardHeader>
           <CardContent>
