@@ -91,7 +91,7 @@ function Customer360Sheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
+      <SheetContent side="right" className="w-full overflow-y-auto flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center gap-2">
             <Users2 className="h-5 w-5 text-muted-foreground" />

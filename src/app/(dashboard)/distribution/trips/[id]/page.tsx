@@ -309,7 +309,7 @@ export default function TripDetailPage() {
       </div>
 
       <Sheet open={addCostOpen} onOpenChange={setAddCostOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Add cost line</SheetTitle>
             <SheetDescription>Fuel, driver, hire fee, toll — allocated to this trip.</SheetDescription>

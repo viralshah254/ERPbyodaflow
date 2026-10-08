@@ -147,7 +147,7 @@ export function AssignAssetCustodySheet(props: {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Transfer custody</SheetTitle>
           <SheetDescription>

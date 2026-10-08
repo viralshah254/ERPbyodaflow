@@ -100,7 +100,7 @@ export function AddPlatformUserSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md">
+      <SheetContent side="right" className="w-full">
         <SheetHeader>
           <SheetTitle>Add platform user</SheetTitle>
           <SheetDescription>

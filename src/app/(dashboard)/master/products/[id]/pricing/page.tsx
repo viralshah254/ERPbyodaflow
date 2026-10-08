@@ -466,7 +466,7 @@ function TierSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{isEdit ? "Edit tier" : "Add tier"}</SheetTitle>
           <SheetDescription>Min/max qty, UOM, price. Effective per {baseUom}.</SheetDescription>

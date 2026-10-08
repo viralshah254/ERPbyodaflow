@@ -275,7 +275,7 @@ export default function TaxTagsPage() {
       </Card>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="sm:max-w-md">
+        <SheetContent>
           <SheetHeader>
             <SheetTitle>{editing ? "Edit tax tag" : "New tax tag"}</SheetTitle>
             <SheetDescription>

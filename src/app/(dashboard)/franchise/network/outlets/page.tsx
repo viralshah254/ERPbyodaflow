@@ -614,7 +614,7 @@ export default function FranchiseOutletsPage() {
       </div>
 
       <Sheet open={canView && addOpen} onOpenChange={setAddOpen}>
-        <SheetContent className="overflow-y-auto sm:max-w-md">
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Add franchisee</SheetTitle>
             <SheetDescription>
@@ -720,7 +720,7 @@ export default function FranchiseOutletsPage() {
 
       {/* Targets editing sheet */}
       <Sheet open={!!targetOutlet} onOpenChange={(open) => { if (!open) setTargetOutlet(null); }}>
-        <SheetContent className="sm:max-w-sm">
+        <SheetContent>
           <SheetHeader>
             <SheetTitle>Weekly targets — {targetOutlet?.name}</SheetTitle>
             <SheetDescription>
@@ -764,7 +764,7 @@ export default function FranchiseOutletsPage() {
       </Sheet>
 
       <Sheet open={!!editOutlet} onOpenChange={(open) => { if (!open) setEditOutlet(null); }}>
-        <SheetContent className="overflow-y-auto sm:max-w-md">
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Edit franchisee</SheetTitle>
             <SheetDescription>

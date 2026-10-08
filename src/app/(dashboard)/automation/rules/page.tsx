@@ -214,7 +214,7 @@ export default function AutomationRulesPage() {
       </div>
 
       <Sheet open={createOpen} onOpenChange={handleOpenCreate}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Create rule</SheetTitle>
             <SheetDescription>

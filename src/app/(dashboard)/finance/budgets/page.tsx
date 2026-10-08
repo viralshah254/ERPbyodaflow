@@ -227,7 +227,7 @@ export default function BudgetsPage() {
 
       {drawerOpen ? (
         <div className="fixed inset-0 z-50 bg-black/40">
-          <div className="ml-auto h-full w-full max-w-lg bg-background p-6 shadow-xl">
+          <div className="ml-auto h-full w-full sm:w-1/2 bg-background p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{editing ? "Edit budget" : "Create budget"}</h2>
             <div className="mt-6 space-y-4">
               <div className="space-y-2">
@@ -314,7 +314,7 @@ export default function BudgetsPage() {
 
       {varianceOpen && variance ? (
         <div className="fixed inset-0 z-50 bg-black/40">
-          <div className="ml-auto h-full w-full max-w-xl bg-background p-6 shadow-xl">
+          <div className="ml-auto h-full w-full sm:w-1/2 bg-background p-6 shadow-xl">
             <h2 className="text-lg font-semibold">Budget variance - {variance.name}</h2>
             <p className="text-sm text-muted-foreground">Status: {variance.status}</p>
             <div className="mt-4 grid grid-cols-3 gap-3 text-sm">

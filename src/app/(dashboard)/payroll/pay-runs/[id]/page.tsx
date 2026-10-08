@@ -248,7 +248,7 @@ export default function PayRunDetailPage() {
       </div>
 
       <Sheet open={lineSheetOpen} onOpenChange={setLineSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Pay run line</SheetTitle>
             <SheetDescription>

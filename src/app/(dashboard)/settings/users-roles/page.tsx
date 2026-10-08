@@ -994,7 +994,7 @@ export default function UsersRolesPage() {
       >
         <SheetContent
           side="right"
-          className="w-full sm:max-w-lg overflow-y-auto"
+          className="w-full overflow-y-auto"
         >
           <SheetHeader>
             <SheetTitle>{editingUser ? "Edit user" : "Add user"}</SheetTitle>
@@ -1263,7 +1263,7 @@ export default function UsersRolesPage() {
       <Sheet open={roleSheetOpen} onOpenChange={setRoleSheetOpen}>
         <SheetContent
           side="right"
-          className="w-full sm:max-w-lg overflow-y-auto"
+          className="w-full overflow-y-auto"
         >
           <SheetHeader>
             <SheetTitle>{editingRole ? "Edit role" : "Add role"}</SheetTitle>

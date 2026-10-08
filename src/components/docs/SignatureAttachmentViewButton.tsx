@@ -85,7 +85,7 @@ export function SignatureAttachmentViewButton({
           }
         }}
       >
-        <SheetContent className="sm:max-w-lg overflow-y-auto">
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Signature</SheetTitle>
           </SheetHeader>

@@ -1360,7 +1360,7 @@ export default function CashWeightAuditPage() {
                   Record disbursement
                 </Button>
               </SheetTrigger>
-              <SheetContent className="flex w-full flex-col overflow-hidden sm:max-w-lg">
+              <SheetContent className="flex w-full flex-col overflow-hidden">
                 <div
                   ref={setDisbursementSheetPortalHost}
                   className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1"
@@ -2251,7 +2251,7 @@ export default function CashWeightAuditPage() {
           if (!open) setSelectedPoRow(null);
         }}
       >
-        <SheetContent className="overflow-y-auto sm:max-w-2xl w-full">
+        <SheetContent className="overflow-y-auto w-full">
           {selectedPoRow && (
             <>
               <SheetHeader className="pb-2">

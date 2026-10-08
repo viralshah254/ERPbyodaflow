@@ -49,7 +49,7 @@ export function PostingBatchSheet(props: {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl">
+      <SheetContent side="right" className="w-full">
         <SheetHeader>
           <SheetTitle>Posting Batch</SheetTitle>
           <SheetDescription>

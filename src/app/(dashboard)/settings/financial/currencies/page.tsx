@@ -280,7 +280,7 @@ export default function CurrenciesSettingsPage() {
           if (!open) resetAddForm();
         }}
       >
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Add currency</SheetTitle>
             <SheetDescription>

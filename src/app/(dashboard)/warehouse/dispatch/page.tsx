@@ -669,7 +669,7 @@ export default function WarehouseDispatchPage() {
       </div>
 
       <Sheet open={addVehicleOpen} onOpenChange={setAddVehicleOpen}>
-        <SheetContent className="overflow-y-auto sm:max-w-md">
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Add fleet vehicle</SheetTitle>
             <SheetDescription>It is selected as soon as you save it. Then choose the notes.</SheetDescription>

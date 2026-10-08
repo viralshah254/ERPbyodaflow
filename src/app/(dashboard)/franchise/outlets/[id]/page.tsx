@@ -154,7 +154,7 @@ function CustomerHistorySheet({
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-full max-w-lg overflow-y-auto">
+      <SheetContent side="right" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Users size={16} />
@@ -461,7 +461,7 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
 
       {adjusting ? (
         <Sheet open onOpenChange={(open) => !open && setAdjusting(null)}>
-          <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetContent side="right" className="w-full">
             <SheetHeader>
               <SheetTitle>Adjust outlet stock</SheetTitle>
               <SheetDescription>
@@ -596,7 +596,7 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
             }
           }}
         >
-          <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetContent side="right" className="w-full">
             <SheetHeader>
               <SheetTitle>Remove stock record</SheetTitle>
               <SheetDescription>
@@ -795,7 +795,7 @@ function ReceiptsTab({ outletOrgId }: { outletOrgId: string }) {
           if (!v) setDetail(null);
         }}
       >
-        <SheetContent side="right" className="w-full max-w-3xl overflow-y-auto sm:max-w-3xl">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{detail?.number ?? "Receipt"}</SheetTitle>
             <SheetDescription>

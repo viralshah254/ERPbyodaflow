@@ -628,7 +628,7 @@ export default function ProductsPage() {
       </div>
 
       <Sheet open={batchSheetProductId != null} onOpenChange={(open) => !open && setBatchSheetProductId(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader className="pr-8">
             <SheetTitle>{rows.find((r) => r.id === batchSheetProductId)?.name ?? "Cost batches"}</SheetTitle>
             <SheetDescription>

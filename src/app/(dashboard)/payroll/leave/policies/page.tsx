@@ -188,7 +188,7 @@ export default function LeavePoliciesPage() {
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit policy" : "New leave policy"}</SheetTitle>
             <SheetDescription>Statutory minimums are enforced by law. Additional days can be added on top.</SheetDescription>

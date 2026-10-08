@@ -2118,7 +2118,7 @@ export default function InventoryCostingPage() {
 
       {/* Wizard Sheet */}
       <Sheet open={allocationOpen} onOpenChange={(open) => { if (!open) { setAllocationOpen(false); setSelectedSource(null); } }}>
-        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto flex flex-col">
+        <SheetContent side="right" className="w-full overflow-y-auto flex flex-col">
           <SheetHeader className="mb-2">
             <SheetTitle className="flex items-center gap-2">
               <Icons.Sparkles className="h-5 w-5 text-primary" />

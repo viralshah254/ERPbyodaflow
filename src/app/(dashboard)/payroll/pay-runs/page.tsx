@@ -289,7 +289,7 @@ export default function PayRunsPage() {
       </div>
 
       <Sheet open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) { setCalculatedLines(null); setCasualDeductions({}); } }}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>New pay run</SheetTitle>
             <SheetDescription>

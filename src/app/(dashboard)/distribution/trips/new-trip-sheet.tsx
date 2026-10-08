@@ -123,7 +123,7 @@ export function NewTripSheet({ open, onOpenChange, defaultType, onCreated }: New
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto flex flex-col">
+      <SheetContent side="right" className="w-full overflow-y-auto flex flex-col">
         <SheetHeader>
           <SheetTitle>New trip</SheetTitle>
           <SheetDescription>

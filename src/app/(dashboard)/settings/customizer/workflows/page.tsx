@@ -213,7 +213,7 @@ export default function CustomizerWorkflowsPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit workflow" : "Create workflow"}</SheetTitle>
             <SheetDescription>Define entity type, states, and transitions.</SheetDescription>
@@ -278,7 +278,7 @@ export default function CustomizerWorkflowsPage() {
       </Sheet>
 
       <Sheet open={runsOpen} onOpenChange={setRunsOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full">
           <SheetHeader>
             <SheetTitle>Workflow runs</SheetTitle>
             <SheetDescription>Recent executions and outcomes.</SheetDescription>

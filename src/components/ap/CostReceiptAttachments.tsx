@@ -345,7 +345,7 @@ function PreviewSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col sm:max-w-2xl" onClick={(e) => e.stopPropagation()}>
+      <SheetContent className="flex w-full flex-col" onClick={(e) => e.stopPropagation()}>
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2 pr-8 text-base">
             <Icons.Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400" />

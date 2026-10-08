@@ -224,7 +224,7 @@ export default function PaymentRunsPage() {
       </div>
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>New payment run</SheetTitle>
             <SheetDescription>Select supplier bills due. Group by supplier/currency. Choose method. Generate file.</SheetDescription>

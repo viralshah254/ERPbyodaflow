@@ -251,7 +251,7 @@ export function PrintPreviewDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto flex flex-col p-0">
+      <SheetContent side="right" className="w-full overflow-y-auto flex flex-col p-0">
         <SheetHeader className="px-6 pt-6 pb-3 border-b">
           <SheetTitle className="flex items-center gap-2">
             <Icons.FileText className="h-4 w-4" />

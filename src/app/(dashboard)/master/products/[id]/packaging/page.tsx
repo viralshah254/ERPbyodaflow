@@ -374,7 +374,7 @@ function PackagingSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{initial ? "Edit UOM" : "Add UOM"}</SheetTitle>
           <SheetDescription>Conversion to base UOM, barcode, dimensions, weight.</SheetDescription>

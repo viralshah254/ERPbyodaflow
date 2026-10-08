@@ -47,7 +47,7 @@ export function DrillDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent>
         <SheetHeader>
           <SheetTitle>Drill into {def.label}</SheetTitle>
           <SheetDescription>

@@ -315,7 +315,7 @@ export default function ARPaymentsPage() {
       </div>
 
       <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Receive payment</SheetTitle>
             <SheetDescription>
@@ -437,7 +437,7 @@ export default function ARPaymentsPage() {
       </Sheet>
 
       <Sheet open={allocateSheetOpen} onOpenChange={setAllocateSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Allocate to invoices</SheetTitle>
             <SheetDescription>

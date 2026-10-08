@@ -206,7 +206,7 @@ export default function ScheduledJobsPage() {
           if (!open) resetForm();
         }}
       >
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit schedule" : "Create schedule"}</SheetTitle>
             <SheetDescription>Define cron, task type, and activation status.</SheetDescription>
@@ -297,7 +297,7 @@ export default function ScheduledJobsPage() {
       </Sheet>
 
       <Sheet open={runsOpen} onOpenChange={setRunsOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full">
           <SheetHeader>
             <SheetTitle>Schedule runs</SheetTitle>
             <SheetDescription>Recent execution history for this schedule.</SheetDescription>

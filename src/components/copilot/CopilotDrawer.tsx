@@ -60,7 +60,7 @@ export function CopilotDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md flex flex-col p-0"
+        className="w-full flex flex-col p-0"
       >
         <SheetHeader className="p-4 border-b shrink-0">
           <SheetTitle className="flex items-center gap-2">

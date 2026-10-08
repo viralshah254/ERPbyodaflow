@@ -85,7 +85,7 @@ export function SetPasswordSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md">
+      <SheetContent side="right" className="w-full">
         <SheetHeader>
           <SheetTitle>Set login password</SheetTitle>
           <SheetDescription>

@@ -1891,7 +1891,7 @@ export default function MasterProductsPage() {
 
       {/* ── Bulk import sheet ─────────────────────────────────────────────── */}
       <Sheet open={importOpen} onOpenChange={(o) => { if (!o) { setImportFile(null); setImportResult(null); setTallyPreview(null); } setImportOpen(o); }}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Import {productLabel.toLowerCase()}s</SheetTitle>
           </SheetHeader>

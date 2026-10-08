@@ -251,7 +251,7 @@ export default function ExchangeRatesSettingsPage() {
       </div>
 
       <Sheet open={addOpen} onOpenChange={setAddOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Add rate</SheetTitle>
             <SheetDescription>
