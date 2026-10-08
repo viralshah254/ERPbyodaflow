@@ -8,6 +8,8 @@ import * as Icons from "lucide-react";
 export type SearchableSelectOption = {
   id: string;
   label: string;
+  /** Extra text matched by search (e.g. KRA PIN, SKU) without changing the visible label. */
+  keywords?: string;
 };
 
 interface SearchableSelectProps {
@@ -45,7 +47,10 @@ export function SearchableSelect({
   const filtered = React.useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return options;
-    return options.filter((option) => option.label.toLowerCase().includes(normalized));
+    return options.filter((option) => {
+      const hay = `${option.label} ${option.keywords ?? ""}`.toLowerCase();
+      return hay.includes(normalized);
+    });
   }, [options, query]);
 
   React.useEffect(() => {
