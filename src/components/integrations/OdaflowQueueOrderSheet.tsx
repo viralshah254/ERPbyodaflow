@@ -564,9 +564,6 @@ export function OdaflowQueueOrderSheet({
       });
       clearOdaflowQueueOrderDraft(queueId);
       toast.success("Sales order created");
-      for (const alert of result.sfaProductAlerts ?? []) {
-        toast.warning(alert);
-      }
       onOpenChange(false);
       onChanged?.();
       router.push(`/docs/sales-order/${result.erpDocumentId}`);

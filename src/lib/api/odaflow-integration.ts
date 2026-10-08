@@ -240,13 +240,7 @@ export async function createSalesOrderFromQueueItem(
     deliveryAddress?: string;
     extraLines?: Array<{ erpProductId: string; qty: number; packing?: string }>;
   }
-): Promise<{
-  success: true;
-  erpDocumentId: string;
-  action: string;
-  /** Products created in SFA at price 0 — show as warnings. */
-  sfaProductAlerts?: string[];
-}> {
+): Promise<{ success: true; erpDocumentId: string; action: string }> {
   requireLiveApi("Odaflow integration");
   return apiRequest(`/api/integrations/odaflow/sync/queue/${encodeURIComponent(id)}/create-sales-order`, {
     method: "POST",
