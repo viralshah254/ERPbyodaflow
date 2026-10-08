@@ -302,13 +302,13 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
         ) : null}
 
         <div className="flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="flex min-w-[11rem] flex-1 items-center gap-2">
+          <div className="flex items-center gap-2">
             <Label className="shrink-0 text-xs text-muted-foreground">Price tag</Label>
             <Select
               value={defaultPriceListId || "__none__"}
               onValueChange={(v) => setDefaultPriceListId(v === "__none__" ? "" : v)}
             >
-              <SelectTrigger className="h-8">
+              <SelectTrigger className="h-8 w-[12rem]">
                 <SelectValue placeholder="Select price tag" />
               </SelectTrigger>
               <SelectContent>
