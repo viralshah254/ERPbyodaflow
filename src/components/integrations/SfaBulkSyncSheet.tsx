@@ -46,6 +46,20 @@ type Props = {
   closeOnSuccess?: boolean;
 };
 
+function priceTagEditorHref(priceListId: string, query?: string) {
+  const params = new URLSearchParams({
+    list: priceListId,
+    priced: "all",
+  });
+  const q = query?.trim();
+  if (q) params.set("q", q);
+  return `/pricing/workspace/lists?${params.toString()}`;
+}
+
+function isMissingPriceSkip(reason: string) {
+  return /no price in tag/i.test(reason);
+}
+
 export function SfaBulkSyncSheet({
   productIds,
   open,
@@ -213,13 +227,56 @@ export function SfaBulkSyncSheet({
                 ) : null}
               </div>
               {result.skipped.length ? (
-                <div className="max-h-40 overflow-y-auto space-y-1">
-                  {result.skipped.slice(0, 20).map((s, i) => (
-                    <p key={i} className="text-xs text-red-600">
-                      {s.barcode ? `${s.barcode}: ` : ""}
-                      {s.reason}
-                    </p>
-                  ))}
+                <div className="max-h-48 overflow-y-auto space-y-2">
+                  {result.skipped.slice(0, 20).map((s, i) => {
+                    const missingPrice = isMissingPriceSkip(s.reason);
+                    const searchQ = s.barcode?.trim() || s.productId;
+                    return (
+                      <div
+                        key={`${s.productId}-${i}`}
+                        className="flex flex-col gap-1.5 rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-2 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <p className="text-xs text-red-600 min-w-0">
+                          {s.barcode ? (
+                            <span className="font-mono">{s.barcode}: </span>
+                          ) : null}
+                          {s.reason}
+                        </p>
+                        {missingPrice && priceListId ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 shrink-0 text-xs"
+                            asChild
+                          >
+                            <Link
+                              href={priceTagEditorHref(priceListId, searchQ)}
+                              onClick={() => onOpenChange(false)}
+                            >
+                              <Icons.Tag className="mr-1.5 h-3.5 w-3.5" />
+                              Set price
+                            </Link>
+                          </Button>
+                        ) : s.productId ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 shrink-0 text-xs"
+                            asChild
+                          >
+                            <Link
+                              href={`/master/products/${s.productId}?tab=pricing`}
+                              onClick={() => onOpenChange(false)}
+                            >
+                              Open product
+                            </Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                   {result.skipped.length > 20 ? (
                     <p className="text-xs text-muted-foreground">
                       …and {result.skipped.length - 20} more
@@ -231,6 +288,22 @@ export function SfaBulkSyncSheet({
                 <p className="text-xs text-muted-foreground">
                   Prices from <span className="font-medium">{selectedTag.name}</span>
                 </p>
+              ) : null}
+              {result.skipped.some((s) => isMissingPriceSkip(s.reason)) && priceListId ? (
+                <Button type="button" variant="secondary" size="sm" className="w-full" asChild>
+                  <Link
+                    href={priceTagEditorHref(
+                      priceListId,
+                      result.skipped.length === 1
+                        ? result.skipped[0]?.barcode || result.skipped[0]?.productId
+                        : undefined
+                    )}
+                    onClick={() => onOpenChange(false)}
+                  >
+                    <Icons.Tags className="mr-2 h-4 w-4" />
+                    Open {selectedTag?.name ?? "price tag"} to set prices
+                  </Link>
+                </Button>
               ) : null}
             </div>
           ) : null}

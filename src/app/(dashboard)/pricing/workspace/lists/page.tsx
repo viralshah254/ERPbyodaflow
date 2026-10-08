@@ -77,6 +77,14 @@ function PriceListsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get("list") ?? "";
+  const productSearch = (searchParams.get("q") ?? "").trim();
+  const pricedParam = (searchParams.get("priced") ?? "").trim().toLowerCase();
+  const productPricedStatus: "all" | "priced" | "unpriced" =
+    pricedParam === "all" || pricedParam === "unpriced" || pricedParam === "priced"
+      ? pricedParam
+      : productSearch
+        ? "all"
+        : "priced";
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg = isFmcgOrg(templateId);
@@ -279,6 +287,8 @@ function PriceListsContent() {
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={setDeleteTarget}
+            productSearch={productSearch}
+            productPricedStatus={productPricedStatus}
             onSaved={() => {
               void refresh({ soft: true });
               void refreshSfaEnrollment();

@@ -158,22 +158,29 @@ export function FmcgPriceTagItemsEditor({
   tagName,
   onSaved,
   onViewChange,
+  initialSearch = "",
+  initialPricedStatus = "priced",
 }: {
   priceListId: string;
   tagName?: string;
   onSaved?: () => void;
   onViewChange?: (scope: PriceTagViewScope) => void;
+  /** Prefill search (e.g. barcode from SFA sync “Set price”). */
+  initialSearch?: string;
+  initialPricedStatus?: "all" | "priced" | "unpriced";
 }) {
   const [list, setList] = React.useState<PriceListDetail | null>(null);
   const [listReady, setListReady] = React.useState(false);
   const [rows, setRows] = React.useState<RowDraft[]>([]);
   /** Local edits keyed by productId — survive search / page changes. */
   const [edits, setEdits] = React.useState<Record<string, EditDraft>>({});
-  const [search, setSearch] = React.useState("");
-  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [search, setSearch] = React.useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = React.useState(initialSearch);
   const [categoryId, setCategoryId] = React.useState("");
   const [sizeFilter, setSizeFilter] = React.useState("");
-  const [pricedStatus, setPricedStatus] = React.useState<"all" | "priced" | "unpriced">("priced");
+  const [pricedStatus, setPricedStatus] = React.useState<"all" | "priced" | "unpriced">(
+    initialPricedStatus
+  );
   const [sortBy, setSortBy] = React.useState<SortField>("name");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
   const [categories, setCategories] = React.useState<ItemCategoryRow[]>([]);
@@ -379,11 +386,11 @@ export function FmcgPriceTagItemsEditor({
     let cancelled = false;
     const switching = hasLoadedOnce.current;
     setEdits({});
-    setSearch("");
-    setDebouncedSearch("");
+    setSearch(initialSearch);
+    setDebouncedSearch(initialSearch);
     setCategoryId("");
     setSizeFilter("");
-    setPricedStatus("priced");
+    setPricedStatus(initialPricedStatus);
     setSortBy("name");
     setSortDir("asc");
     setCursor("0");
@@ -398,7 +405,7 @@ export function FmcgPriceTagItemsEditor({
       await loadProductsPage({
         priceList: detail,
         soft: switching,
-        search: "",
+        search: initialSearch,
         cursor: "0",
       });
     })();
@@ -406,8 +413,8 @@ export function FmcgPriceTagItemsEditor({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- tag change only
-  }, [priceListId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tag / deep-link change only
+  }, [priceListId, initialSearch, initialPricedStatus]);
 
   // Skip only the first mount. A later flag that stayed true was swallowing the
   // first search/filter after a tag opened, so the grid kept the previous page.
@@ -588,6 +595,7 @@ export function FmcgPriceTagItemsEditor({
     setSaving(true);
     try {
       const byId = new Map(list.items.map((i) => [i.productId, { ...i }]));
+      const touchedProductIds = new Set<string>();
       for (const [productId, edit] of Object.entries(edits)) {
         const price = Number(edit.pricePerPiece);
         if (!Number.isFinite(price) || price < 0 || edit.pricePerPiece.trim() === "") {
@@ -606,6 +614,7 @@ export function FmcgPriceTagItemsEditor({
           ...(priceExcl != null && priceExcl > 0 ? { priceExcl } : {}),
           ...(vatRate != null && edit.vatRate.trim() !== "" ? { vatRate } : {}),
         });
+        touchedProductIds.add(productId);
       }
 
       // Also merge visible rows that may not have been keyed yet (typed then not via setRowEdit path)
@@ -628,6 +637,7 @@ export function FmcgPriceTagItemsEditor({
           ...(priceExcl != null && priceExcl > 0 ? { priceExcl } : {}),
           ...(vatRate != null && r.vatRate.trim() !== "" ? { vatRate } : {}),
         });
+        touchedProductIds.add(r.productId);
       }
 
       const items = [...byId.values()].map((i) => ({
@@ -641,7 +651,12 @@ export function FmcgPriceTagItemsEditor({
         ...(i.vatRate != null ? { vatRate: i.vatRate } : {}),
       }));
 
-      const saved = await updatePriceListApi(list.id, { items });
+      const sfaPushProductIds = [...touchedProductIds];
+
+      const saved = await updatePriceListApi(list.id, {
+        items,
+        ...(sfaPushProductIds.length ? { sfaPushProductIds } : {}),
+      });
       const sfa = saved?.sfaSync;
       const target = sfa?.target ? ` ${sfa.target}` : " SFA";
       const skippedNote =
