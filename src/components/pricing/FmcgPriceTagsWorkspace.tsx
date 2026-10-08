@@ -43,6 +43,8 @@ export function FmcgPriceTagsWorkspace({
   onEdit,
   onDelete,
   onSaved,
+  productSearch = "",
+  productPricedStatus = "priced",
 }: {
   lists: PriceList[];
   loading: boolean;
@@ -54,6 +56,9 @@ export function FmcgPriceTagsWorkspace({
   onEdit: (pl: PriceList) => void;
   onDelete: (pl: PriceList) => void;
   onSaved: () => void;
+  /** Deep-link from SFA sync — prefill product search in the piece-price grid. */
+  productSearch?: string;
+  productPricedStatus?: "all" | "priced" | "unpriced";
 }) {
   const [orgDefaultId, setOrgDefaultId] = useOrgDefaultPriceListId();
   const [assignmentRows, setAssignmentRows] = React.useState<CustomerDefaultPriceListRow[]>([]);
@@ -290,11 +295,13 @@ export function FmcgPriceTagsWorkspace({
                 />
               </div>
               <FmcgPriceTagItemsEditor
-                key={`${selected.id}-${editorEpoch}`}
+                key={`${selected.id}-${editorEpoch}-${productSearch}-${productPricedStatus}`}
                 priceListId={selected.id}
                 tagName={selected.name}
                 onSaved={onSaved}
                 onViewChange={setViewScope}
+                initialSearch={productSearch}
+                initialPricedStatus={productPricedStatus}
               />
             </div>
           </>

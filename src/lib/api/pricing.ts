@@ -440,6 +440,8 @@ export async function updatePriceListApi(
       priceExcl?: number;
       vatRate?: number;
     }>;
+    /** Only these SKUs are pushed to SFA after save (usually the ones just edited). */
+    sfaPushProductIds?: string[];
     parentPriceListId: string | null;
     markupType: "PERCENT" | "FLAT" | null;
     markupValue: number | null;
