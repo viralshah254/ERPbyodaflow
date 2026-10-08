@@ -61,10 +61,16 @@ export function AddPackUomDialog({
       const kept = existing.filter((item) => item.uom.trim().toUpperCase() !== nextUom);
       const items: ProductPackaging[] = [
         ...kept,
-        { uom: nextUom, unitsPer, baseUom: piece },
+        {
+          uom: nextUom,
+          unitsPer,
+          baseUom: piece,
+          factor: unitsPer,
+          referenceUom: piece,
+        },
       ];
       await saveProductPackagingApi(productId, items);
-      toast.success(`${nextUom} saved (${unitsPer} ${piece}).`);
+      toast.success(`1 ${nextUom} = ${unitsPer} ${piece} saved on SKU master.`);
       onSaved(items, nextUom);
       onOpenChange(false);
     } catch (e) {

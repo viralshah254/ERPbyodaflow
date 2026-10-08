@@ -466,6 +466,9 @@ export function CustomerFormSheet({
   const [salesReps, setSalesReps] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [priceLists, setPriceLists] = React.useState<Array<{ id: string; name: string }>>([]);
   const [taxConfigs, setTaxConfigs] = React.useState<TaxConfigRow[]>([]);
+  const [uomAliases, setUomAliases] = React.useState<
+    Array<{ customerUom: string; erpUom: string }>
+  >([]);
   const [nextCodePreview, setNextCodePreview] = React.useState("");
   const [draftRestored, setDraftRestored] = React.useState(false);
   const [loadedParentPartyId, setLoadedParentPartyId] = React.useState<string | null>(null);
@@ -587,6 +590,14 @@ export function CustomerFormSheet({
             defaultTaxConfigId: party.defaultTaxConfigId ?? "",
             creditControlMode: party.creditControlMode ?? "AMOUNT",
           });
+          setUomAliases(
+            Array.isArray(party.uomAliases)
+              ? party.uomAliases.map((a) => ({
+                  customerUom: a.customerUom,
+                  erpUom: a.erpUom,
+                }))
+              : []
+          );
         })
         .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load customer"))
         .finally(() => {
@@ -762,6 +773,12 @@ export function CustomerFormSheet({
       payload.customerType = effectiveKind.customerType;
       payload.defaultPriceListId = form.defaultPriceListId || undefined;
       payload.defaultTaxConfigId = form.defaultTaxConfigId || undefined;
+      payload.uomAliases = uomAliases
+        .map((a) => ({
+          customerUom: a.customerUom.trim().toUpperCase(),
+          erpUom: a.erpUom.trim().toUpperCase(),
+        }))
+        .filter((a) => a.customerUom && a.erpUom);
       if (isBranchCustomer && lockedParentPartyId) {
         payload.parentPartyId = lockedParentPartyId;
       }
@@ -859,7 +876,7 @@ export function CustomerFormSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         ref={setSheetPortalHost}
-        className="w-full sm:max-w-lg flex flex-col gap-0 p-0"
+        className="w-full flex flex-col gap-0 p-0"
       >
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0 space-y-3">
           <div>
@@ -1289,6 +1306,65 @@ export function CustomerFormSheet({
                       <p className="text-xs text-muted-foreground">
                         FMCG price tag (e.g. Naivas, Premium). Piece prices on the tag; pack prices calculate from packaging.
                       </p>
+                    </div>
+                  ) : null}
+                  {fmcg ? (
+                    <div className="space-y-2">
+                      <FieldLabel optional>Customer UOM aliases</FieldLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Map their words (e.g. CASE) to your ERP UOM (e.g. CTN). Does not create pack
+                        conversions — only terminology.
+                      </p>
+                      <div className="space-y-2">
+                        {uomAliases.map((alias, idx) => (
+                          <div key={idx} className="flex flex-wrap items-center gap-2">
+                            <Input
+                              className="h-8 w-28 font-mono uppercase"
+                              placeholder="CASE"
+                              value={alias.customerUom}
+                              onChange={(e) => {
+                                const next = [...uomAliases];
+                                next[idx] = {
+                                  ...alias,
+                                  customerUom: e.target.value.toUpperCase(),
+                                };
+                                setUomAliases(next);
+                              }}
+                            />
+                            <span className="text-xs text-muted-foreground">→</span>
+                            <Input
+                              className="h-8 w-28 font-mono uppercase"
+                              placeholder="CTN"
+                              value={alias.erpUom}
+                              onChange={(e) => {
+                                const next = [...uomAliases];
+                                next[idx] = { ...alias, erpUom: e.target.value.toUpperCase() };
+                                setUomAliases(next);
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setUomAliases(uomAliases.filter((_, i) => i !== idx))
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            setUomAliases([...uomAliases, { customerUom: "", erpUom: "" }])
+                          }
+                        >
+                          Add alias
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
                   {fmcg ? (

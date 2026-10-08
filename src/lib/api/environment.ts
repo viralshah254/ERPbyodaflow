@@ -1,5 +1,19 @@
 import { apiRequest, requireLiveApi } from "./client";
 
+export type GoLiveKeepGroup = "protected" | "master" | "operational";
+
+export type GoLiveKeepOption = {
+  id: string;
+  label: string;
+  description: string;
+  group: GoLiveKeepGroup;
+  locked: boolean;
+  defaultKeep: boolean;
+  disclaimer?: string;
+  includes: string[];
+  count: number;
+};
+
 export type EnvironmentStatus = {
   environmentMode: "SANDBOX" | "LIVE";
   sandboxSeededAt: string | null;
@@ -7,6 +21,8 @@ export type EnvironmentStatus = {
   canLoadDummy: boolean;
   dummyLoaded: boolean;
   orgName: string;
+  keepOptions: GoLiveKeepOption[];
+  defaultKeepCategoryIds: string[];
   preview: {
     documents: number;
     stockLevels: number;
@@ -30,11 +46,14 @@ export async function seedSandboxDummyApi(): Promise<EnvironmentStatus> {
   });
 }
 
-export async function goLiveApi(confirmName: string): Promise<EnvironmentStatus> {
+export async function goLiveApi(
+  confirmName: string,
+  keepCategoryIds: string[]
+): Promise<EnvironmentStatus> {
   requireLiveApi("Go Live");
   return apiRequest<EnvironmentStatus>("/api/settings/environment/go-live", {
     method: "POST",
-    body: { confirmName },
+    body: { confirmName, keepCategoryIds },
   });
 }
 

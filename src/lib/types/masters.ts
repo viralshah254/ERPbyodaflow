@@ -119,6 +119,8 @@ export type PartyRow = {
   defaultPriceListId?: string;
   /** FMCG tax tag (TaxConfig id). */
   defaultTaxConfigId?: string;
+  /** Customer UOM wording → ERP UOM (e.g. CASE → CTN). */
+  uomAliases?: Array<{ customerUom: string; erpUom: string }>;
   status: string;
   hiddenInOrgAt?: string | null;
 };

@@ -15,6 +15,20 @@ export async function fetchProductPackagingApi(productId: string): Promise<Produ
   return payload.items ?? [];
 }
 
+/** Batch packaging for inventory View As. */
+export async function fetchProductPackagingBatchApi(
+  productIds: string[]
+): Promise<Record<string, ProductPackaging[]>> {
+  requireLiveApi("Product packaging batch");
+  const ids = [...new Set(productIds.map((id) => id.trim()).filter(Boolean))].slice(0, 200);
+  if (!ids.length) return {};
+  const payload = await apiRequest<{ byProduct?: Record<string, ProductPackaging[]> }>(
+    `/api/settings/products/packaging-batch`,
+    { params: { ids: ids.join(",") } }
+  );
+  return payload.byProduct ?? {};
+}
+
 export async function fetchProductPackagingDetailApi(
   productId: string,
 ): Promise<ProductPackagingPayload> {
