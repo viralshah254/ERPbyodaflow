@@ -2,7 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_BODY_PAGINATED_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +42,7 @@ export default function OdaflowProductMatchingPage() {
           { label: "Product matching" },
         ]}
         sticky
+        dense
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link href="/settings/integrations/odaflow?tab=products">
@@ -49,7 +53,7 @@ export default function OdaflowProductMatchingPage() {
         }
       />
 
-      <div className="p-6">
+      <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>
         {sfaEnrollmentLoading ? (
           <div className="text-sm text-muted-foreground py-8 text-center">
             Checking your Odaflow connection…
