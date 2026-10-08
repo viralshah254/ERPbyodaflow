@@ -255,6 +255,81 @@ export async function fetchApSuppliersPageApi(
   return { items, limit, offset: parsedOffset, hasMore, nextCursor };
 }
 
+function mapArPaymentRow(item: BackendPayment): PaymentRow {
+  return {
+    id: item.id,
+    number: item.number,
+    date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
+    customerId: item.partyId,
+    customerName: item.partyName ?? item.partyId,
+    amount: item.amount,
+    status: item.status,
+    paymentMethod: item.paymentMethod,
+    mpesaTransactionNo: item.mpesaTransactionNo,
+    allocations: (item.allocations ?? []).map((allocation) => ({
+      documentType: allocation.documentType,
+      documentId: allocation.documentId,
+      documentNumber: allocation.documentNumber,
+      amount: allocation.amount,
+    })),
+  };
+}
+
+export type FetchArPaymentsPageOpts = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  partyId?: string;
+};
+
+export type FetchArPaymentsPageResult = {
+  items: PaymentRow[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export async function fetchArPaymentsPageApi(
+  filters?: FetchArPaymentsPageOpts
+): Promise<FetchArPaymentsPageResult> {
+  requireLiveApi("AR payments");
+  const lim = filters?.limit != null ? Math.min(Math.max(filters.limit, 1), 100) : 10;
+  const params = new URLSearchParams();
+  params.set("limit", String(lim));
+  if (filters?.cursor != null && filters.cursor !== "") {
+    params.set("cursor", filters.cursor);
+  }
+  if (filters?.search?.trim()) params.set("search", filters.search.trim());
+  if (filters?.partyId?.trim()) params.set("partyId", filters.partyId.trim());
+  const data = await apiRequest<{
+    items: BackendPayment[];
+    limit?: number;
+    offset?: number;
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/ar/payments", { params });
+  const limit = typeof data.limit === "number" ? data.limit : lim;
+  const parsedOffset =
+    typeof data.offset === "number"
+      ? data.offset
+      : filters?.cursor != null && filters.cursor !== ""
+        ? Number(filters.cursor) || 0
+        : 0;
+  const items = (data.items ?? []).map(mapArPaymentRow);
+  const hasMore =
+    typeof data.hasMore === "boolean" ? data.hasMore : items.length === limit && limit > 0;
+  let nextCursor: string | null;
+  if (data.nextCursor !== undefined && data.nextCursor !== null && String(data.nextCursor) !== "") {
+    nextCursor = String(data.nextCursor);
+  } else if (hasMore) {
+    nextCursor = String(parsedOffset + items.length);
+  } else {
+    nextCursor = null;
+  }
+  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+}
+
 export async function fetchArPaymentsApi(partyId?: string): Promise<PaymentRow[]> {
   requireLiveApi("AR payments");
   const params = new URLSearchParams();
@@ -262,23 +337,7 @@ export async function fetchArPaymentsApi(partyId?: string): Promise<PaymentRow[]
   const payload = await apiRequest<{ items: BackendPayment[] }>("/api/ar/payments", { params });
   return payload.items
     .filter((item) => !partyId?.trim() || item.partyId === partyId.trim())
-    .map((item) => ({
-      id: item.id,
-      number: item.number,
-      date: item.date,
-      customerId: item.partyId,
-      customerName: item.partyName ?? item.partyId,
-      amount: item.amount,
-      status: item.status,
-      paymentMethod: item.paymentMethod,
-      mpesaTransactionNo: item.mpesaTransactionNo,
-      allocations: (item.allocations ?? []).map((allocation) => ({
-        documentType: allocation.documentType,
-        documentId: allocation.documentId,
-        documentNumber: allocation.documentNumber,
-        amount: allocation.amount,
-      })),
-    }));
+    .map(mapArPaymentRow);
 }
 
 export async function fetchArCustomersApi(search?: string): Promise<Array<{ id: string; name: string }>> {
