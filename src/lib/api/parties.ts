@@ -42,6 +42,8 @@ type BackendParty = {
   defaultPriceListId?: string;
   defaultTaxConfigId?: string;
   defaultCurrency?: string;
+  /** Customer UOM wording → ERP UOM (e.g. CASE → CTN). */
+  uomAliases?: Array<{ customerUom: string; erpUom: string }>;
   status?: string;
   hiddenInOrgAt?: string | Date | null;
   coolcatchSupplierKind?: CoolcatchSupplierKind;
@@ -101,6 +103,7 @@ export type PartyPayload = {
   defaultPriceListId?: string;
   defaultTaxConfigId?: string;
   defaultCurrency?: string;
+  uomAliases?: Array<{ customerUom: string; erpUom: string }>;
   status?: "ACTIVE" | "INACTIVE";
   coolcatchSupplierKind?: CoolcatchSupplierKind;
   contactPersonFirstName?: string;
@@ -331,6 +334,14 @@ function mapParty(item: BackendParty): PartyRow {
     lastKnownLongitude: item.lastKnownLongitude,
     defaultPriceListId: item.defaultPriceListId,
     defaultTaxConfigId: item.defaultTaxConfigId,
+    uomAliases: Array.isArray(item.uomAliases)
+      ? item.uomAliases
+          .map((a) => ({
+            customerUom: String(a.customerUom ?? "").trim().toUpperCase(),
+            erpUom: String(a.erpUom ?? "").trim().toUpperCase(),
+          }))
+          .filter((a) => a.customerUom && a.erpUom)
+      : [],
     status: item.status ?? "ACTIVE",
     hiddenInOrgAt: item.hiddenInOrgAt ? String(item.hiddenInOrgAt) : null,
   };
@@ -460,6 +471,7 @@ export async function createPartyApi(payload: PartyPayload): Promise<PartyRow> {
     longitude: payload.longitude,
     defaultPriceListId: payload.defaultPriceListId,
     defaultTaxConfigId: payload.defaultTaxConfigId,
+    uomAliases: payload.uomAliases,
     status: payload.status ?? "ACTIVE",
   };
 }

@@ -249,7 +249,10 @@ export type ProductPatchPayload = Partial<
     | "status"
     | "description"
   >
->;
+> & {
+  /** Required with Base UOM change when stock/transactions exist (admin). */
+  confirmBaseUomChange?: boolean;
+};
 
 export async function patchProductApi(id: string, payload: ProductPatchPayload): Promise<void> {
   requireLiveApi("Product patch");
@@ -262,6 +265,7 @@ export async function patchProductApi(id: string, payload: ProductPatchPayload):
       barcode: payload.barcode,
       size: payload.size,
       productFamily: payload.productFamily,
+      confirmBaseUomChange: payload.confirmBaseUomChange,
       category: payload.category,
       unit: payload.unit,
       baseUom: payload.baseUom,

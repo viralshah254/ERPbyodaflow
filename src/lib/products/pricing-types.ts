@@ -9,12 +9,21 @@ export interface ProductPackaging {
   uom: UomCode;
   unitsPer: number;
   baseUom: UomCode;
+  /** How many of `referenceUom` equal one of this UOM. */
+  factor?: number;
+  /** Base UOM or another alternate on the same SKU. */
+  referenceUom?: UomCode;
   barcode?: string;
   dimensions?: { l: number; w: number; h: number; unit: "cm" | "in" };
   weight?: { value: number; unit: "kg" | "g" };
   isDefaultOrderUom?: boolean;
   isDefaultSalesUom?: boolean;
   isDefaultPurchaseUom?: boolean;
+  isDefaultWarehouseUom?: boolean;
+  isDefaultReportingUom?: boolean;
+  status?: "active" | "inactive";
+  /** Fixed sales price for this UOM; does not change quantity conversion. */
+  explicitSalesPrice?: number;
   /** Inner pack count (e.g. 6 per carton). Optional. */
   innerPackCount?: number;
   /** Carton count. Optional. */

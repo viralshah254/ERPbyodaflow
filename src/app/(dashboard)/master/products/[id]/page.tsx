@@ -492,7 +492,14 @@ export default function ProductDetailPage() {
       const familyNext = productFamilyDraft.trim() || undefined;
       if ((familyNext ?? "") !== (product.productFamily ?? "")) patch.productFamily = familyNext;
       const uomNext = baseUomDraft.trim();
-      if (uomNext && uomNext !== (product.baseUom ?? product.unit ?? "")) patch.baseUom = uomNext;
+      if (uomNext && uomNext !== (product.baseUom ?? product.unit ?? "")) {
+        const ok = window.confirm(
+          `Change Base UOM from ${product.baseUom ?? product.unit} to ${uomNext}? Historical transactions keep their conversion snapshots. Administrator confirmation is required if stock or documents exist.`
+        );
+        if (!ok) return;
+        patch.baseUom = uomNext;
+        patch.confirmBaseUomChange = true;
+      }
     }
     const notesNext = descriptionDraft.trim() || undefined;
     if (descriptionDraft !== (product.description ?? "")) patch.description = notesNext;
@@ -895,7 +902,7 @@ export default function ProductDetailPage() {
             </TabsTrigger>
             <TabsTrigger value="packaging">
               <Icons.Package className="mr-2 h-4 w-4" />
-              {fmcgOrg ? "Packs" : "Packaging / UOM"}
+              {fmcgOrg ? "Alternate Units" : "Packaging / UOM"}
             </TabsTrigger>
             {!fmcgOrg ? (
               <TabsTrigger value="variants">
@@ -1626,16 +1633,17 @@ export default function ProductDetailPage() {
             {fmcgOrg ? (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Sell packs</CardTitle>
+                  <CardTitle className="text-base">Alternate Units &amp; Packs</CardTitle>
                   <CardDescription>
-                    Set packing for this product only — how many pieces are in each carton, bale, or outer.
-                    Counts vary by SKU; there is no company-wide default.
+                    Base UOM plus chained Alternate UOMs for this SKU only. Conversions are never
+                    taken from customer POs or imports.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <FmcgProductPacksEditor
                     productId={id}
                     canWrite={canWrite}
+                    baseUom={baseUom}
                     onChanged={setPackaging}
                   />
                 </CardContent>
@@ -2076,7 +2084,7 @@ function TierSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{isEdit ? "Edit tier" : "Add tier"}</SheetTitle>
           <SheetDescription>Min/max qty, UOM, price. Effective per {baseUom}.</SheetDescription>
@@ -2275,7 +2283,7 @@ function PackagingSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>
             {fmcgMode
@@ -2847,7 +2855,7 @@ function MatrixGeneratorSheet({
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent side="right" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Generate variants</SheetTitle>
           <SheetDescription>

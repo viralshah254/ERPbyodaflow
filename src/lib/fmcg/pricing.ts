@@ -4,6 +4,13 @@
  */
 
 import type { ProductPackaging } from "@/lib/products/pricing-types";
+import {
+  isPieceUomCode,
+  normalizeAlternateRow,
+  normalizeUomCode,
+  resolveFactorToBase,
+  type SkuAlternateUom,
+} from "@/lib/products/sku-uom";
 
 export type FmcgCatalogItem = {
   productId: string;
@@ -13,20 +20,32 @@ export type FmcgCatalogItem = {
 };
 
 function normalizeUom(uom: string | undefined | null): string {
-  return String(uom ?? "EA").trim().toUpperCase() || "EA";
+  return normalizeUomCode(uom) || "EA";
 }
 
 export function isPieceUom(uom: string): boolean {
-  const u = normalizeUom(uom);
-  return (
-    u === "EA" ||
-    u === "PC" ||
-    u === "PCS" ||
-    u === "PIECE" ||
-    u === "RRP" ||
-    u === "UNIT" ||
-    u === "WHOLESALE"
-  );
+  return isPieceUomCode(uom);
+}
+
+function asSkuRows(
+  packaging: ProductPackaging[] | undefined,
+  productBaseUom?: string
+): SkuAlternateUom[] {
+  const base = normalizeUom(productBaseUom || "PCS");
+  return (packaging ?? [])
+    .map((r) => normalizeAlternateRow(r, base))
+    .filter((r): r is SkuAlternateUom => r != null);
+}
+
+export function resolveUnitsPerPieceOrNull(
+  uom: string,
+  packaging: ProductPackaging[] | undefined,
+  productBaseUom?: string
+): number | null {
+  const want = normalizeUom(uom);
+  const base = normalizeUom(productBaseUom || "PCS");
+  if (isPieceUom(want) || want === base) return 1;
+  return resolveFactorToBase(want, asSkuRows(packaging, base), base);
 }
 
 export function resolveUnitsPerPiece(
@@ -34,28 +53,10 @@ export function resolveUnitsPerPiece(
   packaging: ProductPackaging[] | undefined,
   productBaseUom?: string
 ): number {
-  const want = normalizeUom(uom);
-  if (isPieceUom(want)) return 1;
-  const base = normalizeUom(productBaseUom || "EA");
-  if (want === base) return 1;
-  const rows = packaging ?? [];
-  const exact = rows.find((r) => normalizeUom(r.uom) === want);
-  if (exact && exact.unitsPer > 0) return exact.unitsPer;
-  const aliases: Record<string, string[]> = {
-    CTN: ["CTN", "CARTON", "CARTONS", "CS"],
-    OUTER: ["OUTER", "OUTERS", "OTR"],
-    BALE: ["BALE", "BALES", "BL"],
-    PK: ["PK", "PACK", "PACKS"],
-  };
-  for (const list of Object.values(aliases)) {
-    if (!list.includes(want)) continue;
-    const hit = rows.find((r) => list.includes(normalizeUom(r.uom)));
-    if (hit && hit.unitsPer > 0) return hit.unitsPer;
-  }
-  return 1;
+  return resolveUnitsPerPieceOrNull(uom, packaging, productBaseUom) ?? 1;
 }
 
-/** Product carton count, unless the LPO states a different number of pieces. */
+/** SKU catalogue count always wins — LPO packing must never redefine conversion. */
 export function piecesChargedPerPack(input: {
   unit?: string | null;
   packing?: string | null;
@@ -63,16 +64,11 @@ export function piecesChargedPerPack(input: {
 }): number {
   const unit = (input.unit ?? "").trim();
   if (!unit || isPieceUom(unit)) return 1;
-  const match = (input.packing ?? "").match(/\s[*x×]\s*(\d+(?:[.,]\d+)?)/i);
-  const statedRaw = match?.[1] ? Number(match[1].replace(",", ".")) : null;
-  const stated = statedRaw != null && Number.isFinite(statedRaw) && statedRaw > 1 ? statedRaw : null;
   const catalog =
     input.catalogUnits != null && Number.isFinite(input.catalogUnits) && input.catalogUnits > 1
       ? input.catalogUnits
       : null;
-  if (stated && catalog && stated !== catalog) return stated;
   if (catalog) return catalog;
-  if (stated) return stated;
   return 1;
 }
 

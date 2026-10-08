@@ -60,6 +60,17 @@ import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { formatMoney } from "@/lib/money";
+import { fetchProductPackagingBatchApi } from "@/lib/api/product-master";
+import type { ProductPackaging } from "@/lib/products/pricing-types";
+import {
+  formatQtyAs,
+  normalizeAlternateRow,
+  type SkuAlternateUom,
+} from "@/lib/products/sku-uom";
+import {
+  QtyViewAsControl,
+  type QtyViewAsValue,
+} from "@/components/inventory/QtyViewAsControl";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -131,6 +142,11 @@ export default function StockLevelsPage() {
 
   // Franchise drill-down sheet state
   const [franchiseDrillRow, setFranchiseDrillRow] = React.useState<FranchiseNetworkStockItem | null>(null);
+
+  const [qtyViewAs, setQtyViewAs] = React.useState<QtyViewAsValue>({ mode: "preferred" });
+  const [packagingByProduct, setPackagingByProduct] = React.useState<
+    Record<string, ProductPackaging[]>
+  >({});
 
   const refreshStock = React.useCallback(async () => {
     const first = !hasLoadedOnce.current;
@@ -319,6 +335,55 @@ export default function StockLevelsPage() {
     [filteredItems, pageOffset, pageSize]
   );
 
+  React.useEffect(() => {
+    if (!fmcg) return;
+    const ids = [
+      ...new Set(pagedItems.map((r) => r.productId).filter((id): id is string => Boolean(id))),
+    ];
+    if (!ids.length) {
+      setPackagingByProduct({});
+      return;
+    }
+    let cancelled = false;
+    fetchProductPackagingBatchApi(ids)
+      .then((byProduct) => {
+        if (!cancelled) setPackagingByProduct(byProduct);
+      })
+      .catch(() => {
+        if (!cancelled) setPackagingByProduct({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fmcg, pagedItems]);
+
+  const viewAsUomOptions = React.useMemo(() => {
+    const codes = new Set<string>(["PCS"]);
+    for (const rows of Object.values(packagingByProduct)) {
+      for (const r of rows) {
+        if (r.uom) codes.add(r.uom.toUpperCase());
+      }
+    }
+    return [...codes].sort();
+  }, [packagingByProduct]);
+
+  const formatStockQty = React.useCallback(
+    (row: InventoryStockRow, baseQty: number) => {
+      if (!fmcg || qtyViewAs.mode === "base") {
+        const uom = row.uom || "PCS";
+        return `${baseQty.toLocaleString()}${uom ? ` ${uom}` : ""}`;
+      }
+      const pid = row.productId ?? "";
+      const raw = packagingByProduct[pid] ?? [];
+      const base = (row.uom || "PCS").toUpperCase();
+      const rows = raw
+        .map((r) => normalizeAlternateRow(r, base))
+        .filter((r): r is SkuAlternateUom => r != null);
+      return formatQtyAs(baseQty, qtyViewAs.mode, rows, base, qtyViewAs.selectedUom);
+    },
+    [fmcg, qtyViewAs, packagingByProduct]
+  );
+
   const warehouseOptions = React.useMemo(() => {
     const options = new Map<string, string>();
     warehouseLookup.forEach((w) => options.set(w.id, w.label));
@@ -413,9 +478,8 @@ export default function StockLevelsPage() {
       id: "quantity",
       header: "Quantity",
       accessor: (row: InventoryStockRow) => (
-        <div className="text-right font-medium">
-          {row.quantity.toLocaleString()}
-          {row.uom ? <span className="ml-1 text-muted-foreground text-xs">{row.uom}</span> : null}
+        <div className="text-right font-medium tabular-nums text-sm">
+          {formatStockQty(row, row.quantity)}
         </div>
       ),
     },
@@ -423,14 +487,18 @@ export default function StockLevelsPage() {
       id: "reserved",
       header: "Reserved",
       accessor: (row: InventoryStockRow) => (
-        <div className="text-right text-muted-foreground">{row.reserved}</div>
+        <div className="text-right text-muted-foreground tabular-nums text-sm">
+          {formatStockQty(row, row.reserved)}
+        </div>
       ),
     },
     {
       id: "available",
       header: "Available",
       accessor: (row: InventoryStockRow) => (
-        <div className="text-right font-semibold">{row.available}</div>
+        <div className="text-right font-semibold tabular-nums text-sm">
+          {formatStockQty(row, row.available)}
+        </div>
       ),
     },
     ...(fmcg
@@ -658,44 +726,54 @@ export default function StockLevelsPage() {
         </div>
       )}
 
-        <FiltersBar
-          className="shrink-0 rounded-xl p-2"
-          searchPlaceholder="Search by SKU or product name..."
-          searchValue={searchInput}
-          onSearchChange={setSearchInput}
-          searchInputDataHint="search"
-          filters={[
-            {
-              id: "warehouse",
-              label: "Warehouse",
-              options: [
-                { label: "All Warehouses", value: "all" },
-                ...warehouseOptions,
-              ],
-              value: warehouseFilter,
-              onChange: setWarehouseFilter,
-            },
-            {
-              id: "status",
-              label: "Status",
-              options: [
-                { label: "All Statuses", value: "all" },
-                { label: "In Stock", value: "In Stock" },
-                { label: "Low Stock", value: "Low Stock" },
-                { label: "Out of Stock", value: "Out of Stock" },
-              ],
-              value: statusFilter,
-              onChange: setStatusFilter,
-            },
-          ]}
-          activeFiltersCount={[warehouseFilter, statusFilter].filter((v) => v !== "all").length}
-          onClearFilters={() => {
-            setWarehouseFilter("all");
-            setStatusFilter("all");
-            setSearchInput("");
-            setSearchQuery("");
-          }}
-        />
+        <div className="flex flex-wrap items-end justify-between gap-3 shrink-0">
+          <FiltersBar
+            className="rounded-xl p-2 flex-1 min-w-[240px]"
+            searchPlaceholder="Search by SKU or product name..."
+            searchValue={searchInput}
+            onSearchChange={setSearchInput}
+            searchInputDataHint="search"
+            filters={[
+              {
+                id: "warehouse",
+                label: "Warehouse",
+                options: [
+                  { label: "All Warehouses", value: "all" },
+                  ...warehouseOptions,
+                ],
+                value: warehouseFilter,
+                onChange: setWarehouseFilter,
+              },
+              {
+                id: "status",
+                label: "Status",
+                options: [
+                  { label: "All Statuses", value: "all" },
+                  { label: "In Stock", value: "In Stock" },
+                  { label: "Low Stock", value: "Low Stock" },
+                  { label: "Out of Stock", value: "Out of Stock" },
+                ],
+                value: statusFilter,
+                onChange: setStatusFilter,
+              },
+            ]}
+            activeFiltersCount={[warehouseFilter, statusFilter].filter((v) => v !== "all").length}
+            onClearFilters={() => {
+              setWarehouseFilter("all");
+              setStatusFilter("all");
+              setSearchInput("");
+              setSearchQuery("");
+            }}
+          />
+          {fmcg ? (
+            <QtyViewAsControl
+              value={qtyViewAs}
+              onChange={setQtyViewAs}
+              uomOptions={viewAsUomOptions}
+              className="shrink-0 flex flex-wrap items-end gap-2 pb-2"
+            />
+          ) : null}
+        </div>
         <div className={LIST_TABLE_VIEWPORT_CLASS}>
           <TableLinearProgress active={fetching || searchInput.trim() !== searchQuery} />
           {initialLoading ? (
@@ -743,7 +821,7 @@ export default function StockLevelsPage() {
       {/* Franchise network drill-down sheet */}
       {franchiseDrillRow && (
         <Sheet open onOpenChange={(open) => !open && setFranchiseDrillRow(null)}>
-          <SheetContent side="right" className="w-full sm:max-w-lg">
+          <SheetContent side="right" className="w-full">
             <SheetHeader>
               <SheetTitle>
                 <span className="font-mono">{franchiseDrillRow.sku}</span>
@@ -835,7 +913,7 @@ export default function StockLevelsPage() {
       {/* Stock adjustment sheet */}
       {adjusting && (
         <Sheet open onOpenChange={(open) => !open && setAdjusting(null)}>
-          <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetContent side="right" className="w-full">
             <SheetHeader>
               <SheetTitle>Stock adjustment — {adjusting.sku}</SheetTitle>
               <SheetDescription>
@@ -912,7 +990,7 @@ export default function StockLevelsPage() {
 
       {/* Stock In — create warehouse quantity for a product (unblocks pick & pack) */}
       <Sheet open={stockInOpen} onOpenChange={setStockInOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-xl">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Stock In</SheetTitle>
             <SheetDescription>
