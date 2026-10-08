@@ -564,6 +564,9 @@ export function OdaflowQueueOrderSheet({
       });
       clearOdaflowQueueOrderDraft(queueId);
       toast.success("Sales order created");
+      for (const alert of result.sfaProductAlerts ?? []) {
+        toast.warning(alert);
+      }
       onOpenChange(false);
       onChanged?.();
       router.push(`/docs/sales-order/${result.erpDocumentId}`);
@@ -629,7 +632,7 @@ export function OdaflowQueueOrderSheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
-          className="flex h-full w-full max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,92rem)]"
+          className="flex h-full w-full max-w-none flex-col gap-0 overflow-hidden p-0 sm:w-[min(96vw,92rem)]"
         >
           <SheetHeader className="shrink-0 space-y-1 border-b px-6 py-4 pr-12">
             <SheetTitle>{order?.purchaseOrderNumber ?? item?.displayRef ?? "Odaflow order"}</SheetTitle>
