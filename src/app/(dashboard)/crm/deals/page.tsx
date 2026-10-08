@@ -177,7 +177,7 @@ export default function CRMDealsPage() {
 
       {drawerOpen ? (
         <div className="fixed inset-0 z-50 bg-black/40">
-          <div className="ml-auto h-full w-full max-w-md bg-background p-6 shadow-xl">
+          <div className="ml-auto h-full w-full sm:w-1/2 bg-background p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{editing ? "Edit deal" : "Create deal"}</h2>
             <p className="text-sm text-muted-foreground">Capture pipeline and close details.</p>
             <div className="mt-6 space-y-4">

@@ -285,7 +285,7 @@ export default function ChartOfAccountsPage() {
           }
         }}
       >
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>{isEditMode ? "Edit ledger account" : "Add ledger account"}</SheetTitle>
             <SheetDescription>

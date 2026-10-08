@@ -281,7 +281,7 @@ export default function LeaveRequestsPage() {
 
       {/* Create request sheet */}
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>New leave request</SheetTitle>
             <SheetDescription>Submit a leave application for an employee.</SheetDescription>
@@ -349,7 +349,7 @@ export default function LeaveRequestsPage() {
 
       {/* Reject dialog */}
       <Sheet open={rejectOpen} onOpenChange={(o) => { setRejectOpen(o); if (!o) { setRejectId(null); setRejectReason(""); } }}>
-        <SheetContent side="right" className="w-full sm:max-w-sm">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Reject leave request</SheetTitle>
             <SheetDescription>Provide an optional reason for rejection.</SheetDescription>

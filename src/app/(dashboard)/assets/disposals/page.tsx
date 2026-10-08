@@ -190,7 +190,7 @@ export default function DisposalsPage() {
       </div>
 
       <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Disposal wizard</SheetTitle>
             <SheetDescription>Step {wizardStep} of 2. Record a live asset disposal.</SheetDescription>

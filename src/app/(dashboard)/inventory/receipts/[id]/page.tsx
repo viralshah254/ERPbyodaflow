@@ -1229,7 +1229,7 @@ export default function ReceiptDetailPage() {
 
       {/* Edit GRN Header Sheet */}
       <Sheet open={editHeaderOpen} onOpenChange={setEditHeaderOpen}>
-        <SheetContent side="right" className="w-full max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Edit GRN Header</SheetTitle>
           </SheetHeader>

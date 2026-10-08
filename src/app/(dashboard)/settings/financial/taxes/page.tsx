@@ -235,7 +235,7 @@ export default function TaxesSettingsPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit tax code" : "Add tax code"}</SheetTitle>
             <SheetDescription>

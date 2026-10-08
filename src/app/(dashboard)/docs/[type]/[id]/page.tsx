@@ -267,6 +267,7 @@ export default function DocViewPage() {
   const [applyAmount, setApplyAmount] = React.useState("");
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
+  const [startPickPackLoading, setStartPickPackLoading] = React.useState(false);
   const [odaflowApprovalOpen, setOdaflowApprovalOpen] = React.useState(false);
   const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | "submit" | null>(null);
   /** True only for the very first fetch when document is still null — drives skeleton vs empty-state decisions. */
@@ -953,15 +954,15 @@ export default function DocViewPage() {
   }, []);
 
   const handleStartPickPack = React.useCallback(async () => {
-    setActionLoading(true);
+    setStartPickPackLoading(true);
     try {
       const result = await startPickPackFromSalesOrderApi(id);
       toast.success(`Pick & pack ${result.number} is ready.`);
       router.push(`/warehouse/pick-pack/${result.pickPackId}`);
+      // Keep the spinner until this page unmounts after navigation.
     } catch (e) {
       toast.error((e as Error).message);
-    } finally {
-      setActionLoading(false);
+      setStartPickPackLoading(false);
     }
   }, [id, router]);
 
@@ -1021,7 +1022,8 @@ export default function DocViewPage() {
       fulfilmentInProgress={fulfilmentInProgress}
       remainingLineSummaries={remainingLineSummaries}
       warehouseTaskLink={warehouseTaskLink}
-      actionLoading={actionLoading}
+      actionLoading={actionLoading || startPickPackLoading}
+      startPickPackLoading={startPickPackLoading}
       fmcgOrg={fmcgOrg}
       canRecordSignedPod={canRecordSignedPod}
       onPrintDn={() => setPrintOpen(true)}
@@ -3092,6 +3094,7 @@ function DynamicNextStepsPanel({
   remainingLineSummaries,
   warehouseTaskLink,
   actionLoading,
+  startPickPackLoading = false,
   fmcgOrg = false,
   canRecordSignedPod = false,
   onPrintDn,
@@ -3119,6 +3122,7 @@ function DynamicNextStepsPanel({
   remainingLineSummaries: string[];
   warehouseTaskLink: { label: string; href: string } | null;
   actionLoading: boolean;
+  startPickPackLoading?: boolean;
   fmcgOrg?: boolean;
   canRecordSignedPod?: boolean;
   onPrintDn?: () => void;
@@ -3470,7 +3474,19 @@ function DynamicNextStepsPanel({
                         disabled={actionLoading}
                         onClick={step.action}
                       >
-                        {step.actionLabel}
+                        {step.actionLabel === "Start pick & pack" && startPickPackLoading ? (
+                          <>
+                            <Icons.Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            Starting…
+                          </>
+                        ) : actionLoading && step.actionLabel === "Generate invoice & delivery note" ? (
+                          <>
+                            <Icons.Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            Generating…
+                          </>
+                        ) : (
+                          step.actionLabel
+                        )}
                       </Button>
                     )}
                     {step.href && step.actionLabel && !step.action && (

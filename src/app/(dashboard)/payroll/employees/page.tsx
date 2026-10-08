@@ -262,7 +262,7 @@ export default function PayrollEmployeesPage() {
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={(o) => { setSheetOpen(o); if (!o) resetForm(); }}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Add employee</SheetTitle>
             <SheetDescription>Set up personal profile, employment type, and statutory tax details.</SheetDescription>

@@ -178,7 +178,7 @@ export function SupermarketBranchesSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-xl flex flex-col gap-0 p-0">
+        <SheetContent className="w-full flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0 space-y-3">
           <div className="flex items-start justify-between gap-3 pr-6">
             <div className="min-w-0 space-y-1">

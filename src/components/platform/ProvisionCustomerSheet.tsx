@@ -219,7 +219,7 @@ export function ProvisionCustomerSheet({ open, onOpenChange, onSuccess }: Provis
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex h-full w-full max-w-xl flex-col overflow-hidden p-0 sm:max-w-xl">
+      <SheetContent side="right" className="flex h-full w-full flex-col overflow-hidden p-0">
         <SheetHeader className="shrink-0 px-6 pt-6">
           <SheetTitle>Provision customer</SheetTitle>
           <SheetDescription>

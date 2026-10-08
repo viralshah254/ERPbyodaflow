@@ -181,7 +181,7 @@ export default function BranchesPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit branch" : "Create branch"}</SheetTitle>
             <SheetDescription>Configure branch identity and location details.</SheetDescription>

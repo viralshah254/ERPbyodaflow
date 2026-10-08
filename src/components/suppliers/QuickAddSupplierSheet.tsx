@@ -109,7 +109,7 @@ export function QuickAddSupplierSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
+      <SheetContent side="right" className="w-full flex flex-col">
         <SheetHeader>
           <div className="flex items-center gap-2">
             <Truck className="h-5 w-5 text-muted-foreground" />

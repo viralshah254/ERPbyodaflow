@@ -443,7 +443,7 @@ export default function WorkOrdersPage() {
           }
         }}
       >
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetContent className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>New work order</SheetTitle>
             <SheetDescription>

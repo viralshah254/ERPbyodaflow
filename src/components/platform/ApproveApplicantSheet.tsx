@@ -69,7 +69,7 @@ export function ApproveApplicantSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg overflow-y-auto">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Approve application</SheetTitle>
           <SheetDescription>

@@ -53,7 +53,7 @@ export function EntityDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className={cn("flex flex-col w-full sm:max-w-lg", className)}
+        className={cn("flex w-full flex-col", className)}
       >
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>

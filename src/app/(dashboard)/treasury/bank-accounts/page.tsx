@@ -179,7 +179,7 @@ export default function BankAccountsPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit account" : "Add account"}</SheetTitle>
             <SheetDescription>Manage live bank accounts and GL mapping.</SheetDescription>

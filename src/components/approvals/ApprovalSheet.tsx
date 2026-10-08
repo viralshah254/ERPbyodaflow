@@ -92,7 +92,7 @@ export function ApprovalSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>
             {isCreditBreach ? "Credit override approval" : isOverrideRequest ? "Weight correction request" : "Approval"}

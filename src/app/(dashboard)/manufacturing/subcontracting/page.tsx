@@ -888,7 +888,7 @@ export default function SubcontractingPage() {
                   Send to processor
                 </Button>
               </SheetTrigger>
-            <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+            <SheetContent className="w-full overflow-y-auto">
               <SheetHeader>
                 <SheetTitle>Send to processor</SheetTitle>
                 <SheetDescription>

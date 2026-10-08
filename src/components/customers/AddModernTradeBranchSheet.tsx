@@ -254,7 +254,7 @@ export function AddModernTradeBranchSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col gap-0 p-0">
+      <SheetContent className="w-full flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
           <SheetTitle>Add branch / outlet</SheetTitle>
           <SheetDescription>

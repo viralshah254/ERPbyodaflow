@@ -332,7 +332,7 @@ export default function InventoryCostingSettingsPage() {
           if (!open) resetTemplateForm();
         }}
       >
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>{editingTemplateId ? "Edit landed cost template" : "Add landed cost template"}</SheetTitle>
             <SheetDescription>

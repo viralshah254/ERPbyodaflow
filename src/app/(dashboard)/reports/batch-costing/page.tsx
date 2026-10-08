@@ -539,7 +539,7 @@ export default function BatchCostingReportPage() {
 
       {/* Publish to price list sheet */}
       <Sheet open={!!publishRow} onOpenChange={(open) => { if (!open) closePublish(); }}>
-        <SheetContent className="sm:max-w-lg overflow-y-auto">
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Set selling price from batch cost</SheetTitle>
             <SheetDescription>

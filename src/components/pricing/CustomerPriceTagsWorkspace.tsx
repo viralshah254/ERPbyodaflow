@@ -718,7 +718,7 @@ export function CustomerPriceTagsWorkspace({
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="overflow-y-auto sm:max-w-lg">
+        <SheetContent className="overflow-y-auto">
           <div ref={setSheetPortalHost} className="flex flex-col gap-4">
             <SheetHeader>
               <SheetTitle>

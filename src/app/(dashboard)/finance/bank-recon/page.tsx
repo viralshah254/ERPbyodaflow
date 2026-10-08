@@ -820,7 +820,7 @@ export default function BankReconPage() {
       </div>
 
       <Sheet open={importOpen} onOpenChange={setImportOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Import bank statement CSV</SheetTitle>
             <SheetDescription>
@@ -869,7 +869,7 @@ export default function BankReconPage() {
       </Sheet>
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Create payment from statement line</SheetTitle>
             <SheetDescription>
@@ -956,7 +956,7 @@ export default function BankReconPage() {
       </Sheet>
 
       <Sheet open={!!viewPaymentDetail || loadingPaymentDetail} onOpenChange={(open) => !open && setViewPaymentDetail(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>{viewPaymentDetail?.number ?? "Payment details"}</SheetTitle>
             <SheetDescription>Linked bills and payment information</SheetDescription>

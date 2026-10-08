@@ -138,7 +138,7 @@ export function SfaCustomerApprovalSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0">
         <SheetHeader className="shrink-0 space-y-1 border-b px-6 py-4 text-left">
           <SheetTitle>{row?.name || "Customer"}</SheetTitle>
           <SheetDescription>

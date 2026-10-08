@@ -159,7 +159,7 @@ export default function TaxPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit tax code" : "Add Tax Code"}</SheetTitle>
             <SheetDescription>

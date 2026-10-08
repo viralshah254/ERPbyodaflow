@@ -194,7 +194,7 @@ export default function CustomizerDashboardsPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit dashboard" : "Create dashboard"}</SheetTitle>
             <SheetDescription>Define a dashboard name and widget layout JSON.</SheetDescription>
@@ -253,7 +253,7 @@ export default function CustomizerDashboardsPage() {
       </Sheet>
 
       <Sheet open={assignOpen} onOpenChange={setAssignOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
+        <SheetContent className="w-full">
           <SheetHeader>
             <SheetTitle>Assign dashboard</SheetTitle>
             <SheetDescription>Assign dashboard visibility to roles and branches.</SheetDescription>

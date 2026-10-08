@@ -218,7 +218,7 @@ export default function APPaymentsPage() {
       </div>
 
       <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Pay supplier</SheetTitle>
             <SheetDescription>
@@ -382,7 +382,7 @@ export default function APPaymentsPage() {
       </Sheet>
 
       <Sheet open={!!selectedPayment} onOpenChange={(open) => !open && setSelectedPayment(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           {selectedPayment ? (
             <>
               <SheetHeader>

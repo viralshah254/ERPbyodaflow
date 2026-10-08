@@ -149,7 +149,7 @@ export function SfaProductConnectSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg overflow-y-auto">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Connect to Odaflow SFA</SheetTitle>
           <SheetDescription>

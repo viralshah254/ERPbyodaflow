@@ -366,7 +366,7 @@ export default function P9FormsPage() {
 
       {/* Detail sheet */}
       <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-4xl overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>P9 Tax Deduction Card</SheetTitle>
             <SheetDescription>

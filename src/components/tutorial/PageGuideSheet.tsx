@@ -62,7 +62,7 @@ export function PageGuideSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md flex flex-col overflow-hidden"
+        className="w-full flex flex-col overflow-hidden"
       >
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">

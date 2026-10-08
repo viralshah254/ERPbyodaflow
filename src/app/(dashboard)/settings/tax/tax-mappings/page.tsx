@@ -191,7 +191,7 @@ export default function TaxMappingsPage() {
       </div>
 
       <Sheet open={addOpen} onOpenChange={setAddOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Add tax mapping</SheetTitle>
             <SheetDescription>Tax code, mapping type, COA account.</SheetDescription>

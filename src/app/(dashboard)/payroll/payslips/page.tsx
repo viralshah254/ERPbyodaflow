@@ -177,7 +177,7 @@ export default function PayslipsPage() {
       </div>
 
       <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent side="right" className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Payslip preview</SheetTitle>
             <SheetDescription>{selected?.employeeName ?? "—"} · {selected?.month ?? "—"}</SheetDescription>

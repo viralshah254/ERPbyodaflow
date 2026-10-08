@@ -166,7 +166,7 @@ export default function CRMTicketsPage() {
 
       {drawerOpen ? (
         <div className="fixed inset-0 z-50 bg-black/40">
-          <div className="ml-auto h-full w-full max-w-md bg-background p-6 shadow-xl">
+          <div className="ml-auto h-full w-full sm:w-1/2 bg-background p-6 shadow-xl">
             <h2 className="text-lg font-semibold">{editing ? "Edit ticket" : "Create ticket"}</h2>
             <div className="mt-6 space-y-4">
               <div className="space-y-2">
@@ -247,7 +247,7 @@ export default function CRMTicketsPage() {
 
       {historyOpen && editing ? (
         <div className="fixed inset-0 z-50 bg-black/40">
-          <div className="ml-auto h-full w-full max-w-md bg-background p-6 shadow-xl">
+          <div className="ml-auto h-full w-full sm:w-1/2 bg-background p-6 shadow-xl">
             <h2 className="text-lg font-semibold">Ticket history</h2>
             <p className="text-sm text-muted-foreground">{editing.subject}</p>
             <div className="mt-4 space-y-3">

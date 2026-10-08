@@ -791,7 +791,7 @@ export default function PlatformSettingsPage() {
       </div>
 
       <Sheet open={tenantSheetOpen} onOpenChange={setTenantSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Edit tenant</SheetTitle>
             <SheetDescription>Set tenant-level defaults for commercial and entitlement control.</SheetDescription>
@@ -844,7 +844,7 @@ export default function PlatformSettingsPage() {
       </Sheet>
 
       <Sheet open={createTenantSheetOpen} onOpenChange={setCreateTenantSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Create tenant</SheetTitle>
             <SheetDescription>Register a customer account before attaching organizations.</SheetDescription>
@@ -889,7 +889,7 @@ export default function PlatformSettingsPage() {
       </Sheet>
 
       <Sheet open={orgSheetOpen} onOpenChange={setOrgSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Edit organization</SheetTitle>
             <SheetDescription>Persist org-specific template and module overrides.</SheetDescription>
@@ -954,7 +954,7 @@ export default function PlatformSettingsPage() {
       </Sheet>
 
       <Sheet open={createOrgSheetOpen} onOpenChange={setCreateOrgSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Create organization</SheetTitle>
             <SheetDescription>Add an organization to an existing tenant.</SheetDescription>
@@ -991,7 +991,7 @@ export default function PlatformSettingsPage() {
       </Sheet>
 
       <Sheet open={provisionSheetOpen} onOpenChange={setProvisionSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-xl">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>Provision customer</SheetTitle>
             <SheetDescription>

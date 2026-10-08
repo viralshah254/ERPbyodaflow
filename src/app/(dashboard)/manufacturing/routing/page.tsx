@@ -353,7 +353,7 @@ export default function RoutingPage() {
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="flex w-full flex-col sm:max-w-2xl">
+        <SheetContent className="flex w-full flex-col">
           <SheetHeader>
             <SheetTitle>{editingRouteId ? "Edit route" : "New route"}</SheetTitle>
             <SheetDescription>

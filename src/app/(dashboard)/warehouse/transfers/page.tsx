@@ -244,7 +244,7 @@ export default function WarehouseTransfersPage() {
                   Create transfer
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full sm:max-w-md">
+              <SheetContent side="right" className="w-full">
                 <SheetHeader>
                   <SheetTitle>Create transfer</SheetTitle>
                   <SheetDescription>Move stock between two warehouses.</SheetDescription>

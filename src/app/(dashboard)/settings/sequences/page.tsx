@@ -151,7 +151,7 @@ export default function NumberingSequencesPage() {
       </div>
 
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full">
           <SheetHeader>
             <SheetTitle>{editing ? "Edit sequence" : "Add sequence"}</SheetTitle>
             <SheetDescription>Persist document numbering rules in the backend.</SheetDescription>

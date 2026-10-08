@@ -224,7 +224,7 @@ export function PartyImportSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="sm:max-w-md overflow-y-auto">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{labelLower}s — import &amp; sheet update</SheetTitle>
         </SheetHeader>

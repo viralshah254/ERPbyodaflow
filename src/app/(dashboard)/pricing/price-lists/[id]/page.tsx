@@ -257,7 +257,7 @@ function PricingEnginePanel({ priceListId, currency }: { priceListId: string; cu
       </Card>
 
       <Sheet open={bdOpen} onOpenChange={(o) => !o && setBdOpen(false)}>
-        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Cost breakdown</SheetTitle>
             <SheetDescription>Batch + delivery allocations snapshot</SheetDescription>

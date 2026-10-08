@@ -441,7 +441,7 @@ export default function FranchiseRoyaltiesPage() {
       </div>
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
-        <SheetContent className="flex w-full flex-col overflow-hidden sm:max-w-md" side="right">
+        <SheetContent className="flex w-full flex-col overflow-hidden" side="right">
           <div ref={setSheetPortalHost} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
             <SheetHeader>
               <SheetTitle>Add franchisee</SheetTitle>

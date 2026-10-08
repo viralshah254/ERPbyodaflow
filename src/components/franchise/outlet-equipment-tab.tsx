@@ -216,7 +216,7 @@ export function OutletEquipmentTab({
       />
 
       <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="w-full overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Assign equipment</SheetTitle>
             <SheetDescription>
