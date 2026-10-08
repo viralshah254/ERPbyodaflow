@@ -46,5 +46,11 @@ describe("FMCG selling nav", () => {
     expect(manufacturer).toContain("/sales/customer-approvals");
     expect(bakery).toContain("/sales/customer-approvals");
     expect(legacyBakex).toContain("/sales/customer-approvals");
+    expect(manufacturer).toContain("/sales/odaflow-customer-matching");
+    expect(bakery).toContain("/sales/odaflow-customer-matching");
+    expect(legacyBakex).toContain("/sales/odaflow-customer-matching");
+    expect(manufacturer).toContain("/sales/odaflow-product-matching");
+    expect(bakery).toContain("/sales/odaflow-product-matching");
+    expect(legacyBakex).toContain("/sales/odaflow-product-matching");
   });
 });

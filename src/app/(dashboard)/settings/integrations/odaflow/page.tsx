@@ -32,7 +32,7 @@ import {
 } from "@/lib/api/odaflow-integration";
 import { OdaflowSyncQueuePanel } from "@/components/integrations/OdaflowSyncQueuePanel";
 import { OdaflowProductsSyncPanel } from "@/components/integrations/OdaflowProductsSyncPanel";
-import { OdaflowMultichainMappingBoard } from "@/components/integrations/OdaflowMultichainMappingBoard";
+import { OdaflowCustomerMatchingBoard } from "@/components/integrations/OdaflowCustomerMatchingBoard";
 import { subscribeRealtimeInbox } from "@/lib/realtime-client";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { useSearchParams } from "next/navigation";
@@ -43,8 +43,8 @@ const TAB_LABELS: Record<Tab, string> = {
   setup: "Setup",
   overview: "Overview",
   queue: "Sync Queue",
-  products: "Products & sync",
-  customers: "Multichain mapping",
+  products: "Product matching",
+  customers: "Customer matching",
 };
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -207,7 +207,7 @@ export default function OdaflowIntegrationPage() {
     <PageShell>
       <PageHeader
         title="Odaflow SFA connector"
-        description="Connect Odaflow to this ERP account, sync products for your sales teams, and resolve unmatched orders."
+        description="Connect Odaflow, match customers and products, and resolve unmatched orders."
         breadcrumbs={[
           { label: "Settings", href: "/settings" },
           { label: "Odaflow connector" },
@@ -500,26 +500,64 @@ export default function OdaflowIntegrationPage() {
                   </CardContent>
                 </Card>
 
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Card
+                    className="cursor-pointer transition-colors hover:border-primary/50"
+                    onClick={() => setTab("customers")}
+                  >
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Icons.Users className="h-4 w-4 text-primary" />
+                        Customer matching
+                      </CardTitle>
+                      <CardDescription>
+                        Link SFA direct customers and supermarket HQs to ERP. Create missing directs
+                        either way.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button type="button" size="sm" variant="secondary">
+                        Open customer matching
+                        <Icons.ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                  <Card
+                    className="cursor-pointer transition-colors hover:border-primary/50"
+                    onClick={() => setTab("products")}
+                  >
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Icons.Package className="h-4 w-4 text-primary" />
+                        Product matching
+                      </CardTitle>
+                      <CardDescription>
+                        Sync ERP products into SFA catalogs and keep price lists aligned for the field.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button type="button" size="sm" variant="secondary">
+                        Open product matching
+                        <Icons.ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">How This Works</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm text-muted-foreground space-y-2">
                     <p>
-                      1. <strong>Odaflow</strong> captures orders from modern-trade (email/OCR), distributors, direct customers, and van sales.
+                      1. Match <strong>customers</strong> (direct + modern trade) and <strong>products</strong> so orders can land cleanly.
                     </p>
                     <p>
-                      2. When an order is approved in Odaflow, it pushes a signed JSON payload to{" "}
-                      <code className="text-xs bg-muted px-1 rounded">/api/integrations/odaflow/orders/upsert</code>.
+                      2. <strong>Odaflow</strong> captures orders from modern-trade, distributors, direct customers, and van sales.
                     </p>
                     <p>
-                      3. The ERP matches Odaflow IDs to ERP parties and products via <strong>External Record Mappings</strong>.
-                    </p>
-                    <p>
-                      4. Matched orders become ERP <strong>Sales Orders</strong> (Draft → ready to approve and dispatch).
-                    </p>
-                    <p>
-                      5. Orders with unmatched customers or products go to the <strong>Sync Queue</strong> tab — resolve mappings there.
+                      3. Matched orders become ERP <strong>Sales Orders</strong>. Unmatched ones go to the{" "}
+                      <strong>Sync Queue</strong>.
                     </p>
                   </CardContent>
                 </Card>
@@ -552,7 +590,7 @@ export default function OdaflowIntegrationPage() {
             <Card>
               <CardContent className="flex flex-col items-start gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
-                  <p className="text-base font-medium">Product sync is not ready yet</p>
+                  <p className="text-base font-medium">Product matching is not ready yet</p>
                   <p className="text-sm text-muted-foreground max-w-xl">
                     Finish connecting this ERP account to Odaflow first. Once Setup is complete, you can sync
                     products into your sales reps&apos; catalogs from here.
@@ -573,15 +611,15 @@ export default function OdaflowIntegrationPage() {
               Checking your Odaflow connection…
             </div>
           ) : sfaEnrolled ? (
-            <OdaflowMultichainMappingBoard canSave={canSave} />
+            <OdaflowCustomerMatchingBoard canSave={canSave} />
           ) : (
             <Card>
               <CardContent className="flex flex-col items-start gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
-                  <p className="text-base font-medium">Multichain mapping is not ready yet</p>
+                  <p className="text-base font-medium">Customer matching is not ready yet</p>
                   <p className="text-sm text-muted-foreground max-w-xl">
                     Finish connecting this ERP account to Odaflow first. Once Setup is complete, you can
-                    review SFA supermarket HQs against Multichain parties here.
+                    match direct customers and modern-trade supermarket HQs here.
                   </p>
                 </div>
                 <Button type="button" onClick={() => setTab("setup")}>

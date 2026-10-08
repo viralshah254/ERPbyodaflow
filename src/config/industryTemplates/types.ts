@@ -69,6 +69,7 @@ export type NavSectionKey =
   | "projects"
   | "intercompany"
   | "sales"
+  | "sfa-sync"
   | "purchasing"
   | "pricing"
   | "distribution"

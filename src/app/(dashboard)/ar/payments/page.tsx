@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import {
@@ -20,12 +19,15 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
 import type { PaymentRow, OpenInvoiceRow } from "@/lib/types/ar";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   allocateArPaymentApi,
   createArPaymentApi,
-  fetchArPaymentsApi,
+  fetchArPaymentsPageApi,
   fetchOpenInvoicesApi,
   searchArCustomerOptionsApi,
   submitArPaymentApi,
@@ -34,15 +36,26 @@ import type { PartyLookupOption } from "@/lib/api/parties";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
+import { formatActivityExact } from "@/lib/format/nairobi-datetime";
 import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+const SEARCH_DEBOUNCE_MS = 400;
+const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
+
 export default function ARPaymentsPage() {
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const [search, setSearch] = React.useState("");
+  const [searchInput, setSearchInput] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [pageSize, setPageSize] = React.useState<number>(10);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
   const [wizardOpen, setWizardOpen] = React.useState(false);
   const [step, setStep] = React.useState(1);
   const [customerId, setCustomerId] = React.useState("");
@@ -52,7 +65,6 @@ export default function ARPaymentsPage() {
   const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
   const [allocating, setAllocating] = React.useState(false);
   const [submittingId, setSubmittingId] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
   const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
   const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
@@ -62,19 +74,60 @@ export default function ARPaymentsPage() {
   const [openInvoices, setOpenInvoices] = React.useState<OpenInvoiceRow[]>([]);
   const [allocateInvoices, setAllocateInvoices] = React.useState<OpenInvoiceRow[]>([]);
 
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchArPaymentsPageApi({
+          limit: pageSize,
+          cursor: String(offset),
+          search: debouncedSearch || undefined,
+        });
+        setPayments(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error((error as Error).message || "Failed to load AR payments.");
+        setPayments([]);
+        setHasMore(false);
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, pageSize]
+  );
+
   const refreshData = React.useCallback(async () => {
-    setPayments(await fetchArPaymentsApi());
-  }, []);
+    await loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
 
   React.useEffect(() => {
-    setLoading(true);
-    Promise.all([fetchArPaymentsApi(), fetchBankAccountsApi()])
-      .then(([nextPayments, nextBankAccounts]) => {
-        setPayments(nextPayments);
-        setBankAccountOptions(nextBankAccounts.map((item) => ({ id: item.id, name: item.name })));
-      })
-      .catch((error) => toast.error((error as Error).message || "Failed to load AR payments."))
-      .finally(() => setLoading(false));
+    void loadPage(0);
+  }, [loadPage]);
+
+  const goToPreviousPage = React.useCallback(() => {
+    void loadPage(Math.max(0, pageOffset - pageSize));
+  }, [loadPage, pageOffset, pageSize]);
+
+  const goToNextPage = React.useCallback(() => {
+    void loadPage(pageOffset + pageSize);
+  }, [loadPage, pageOffset, pageSize]);
+
+  React.useEffect(() => {
+    fetchBankAccountsApi()
+      .then((nextBankAccounts) =>
+        setBankAccountOptions(nextBankAccounts.map((item) => ({ id: item.id, name: item.name })))
+      )
+      .catch(() => setBankAccountOptions([]));
   }, []);
 
   React.useEffect(() => {
@@ -82,16 +135,6 @@ export default function ARPaymentsPage() {
       .then(setOpenInvoices)
       .catch(() => setOpenInvoices([]));
   }, [customerId]);
-
-  const filtered = React.useMemo(() => {
-    if (!search.trim()) return payments;
-    const q = search.trim().toLowerCase();
-    return payments.filter(
-      (r) =>
-        r.number.toLowerCase().includes(q) ||
-        r.customerName.toLowerCase().includes(q)
-    );
-  }, [payments, search]);
 
   const openAllocateRef = React.useRef<(payment: PaymentRow) => void>(() => {});
   openAllocateRef.current = (payment: PaymentRow) => {
@@ -108,7 +151,13 @@ export default function ARPaymentsPage() {
         accessor: (r: PaymentRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
       },
-      { id: "date", header: "Date", accessor: "date" as keyof PaymentRow },
+      {
+        id: "date",
+        header: "Date",
+        accessor: (r: PaymentRow) => (
+          <span className="tabular-nums text-sm">{formatActivityExact(r.date) || "—"}</span>
+        ),
+      },
       {
         id: "customerName",
         header: "Customer",
@@ -171,7 +220,7 @@ export default function ARPaymentsPage() {
         ),
       },
     ],
-    [submittingId]
+    [refreshData, submittingId]
   );
 
   const handleReceivePayment = () => {
@@ -287,16 +336,17 @@ export default function ARPaymentsPage() {
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        <DataTableToolbar className="shrink-0"
+        <DataTableToolbar
+          className="shrink-0"
           searchPlaceholder="Search by number, customer..."
-          searchValue={search}
-          onSearchChange={setSearch}
+          searchValue={searchInput}
+          onSearchChange={setSearchInput}
           onExport={() =>
             downloadCsv(
               `ar-payments-${new Date().toISOString().slice(0, 10)}.csv`,
-              filtered.map((row) => ({
+              payments.map((row) => ({
                 number: row.number,
-                date: row.date,
+                date: formatActivityExact(row.date) || row.date,
                 customerName: row.customerName,
                 amount: row.amount,
                 status: row.status,
@@ -304,14 +354,37 @@ export default function ARPaymentsPage() {
             )
           }
         />
-        <DataTable<PaymentRow>
-          data={filtered}
-          columns={columns}
-          emptyMessage="No payments yet."
-          scrollMode="natural"
-          size="comfortable"
+        {initialLoading ? (
+          <SkeletonDataTable
+            rows={pageSize}
+            columnWidths={["w-28", "w-28", "w-40", "w-28", "w-24", "w-28", "w-28", "w-20"]}
           />
-        {loading ? <p className="text-sm text-muted-foreground">Loading AR payments...</p> : null}
+        ) : (
+          <>
+            <TableLinearProgress active={fetching} />
+            <DataTable<PaymentRow>
+              data={payments}
+              columns={columns}
+              emptyMessage="No payments yet."
+              scrollMode="natural"
+              size="comfortable"
+            />
+            <TablePagination
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={payments.length}
+              hasMore={hasMore}
+              loading={initialLoading}
+              busy={fetching}
+              entityLabel="payments"
+              sticky
+              onPrevious={goToPreviousPage}
+              onNext={goToNextPage}
+              pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+              onPageSizeChange={setPageSize}
+            />
+          </>
+        )}
       </div>
 
       <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>

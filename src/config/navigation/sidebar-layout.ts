@@ -150,13 +150,13 @@ export function applySidebarLayout(
     }));
   }
 
-  return enforceSectionPins(result, pins).map((sec) => ({
-    ...sec,
-    items:
-      sec.key === "sales"
-        ? pinItemAfter(sec.items, "sales-customer-approvals", "sales-customers")
-        : sec.items,
-  }));
+  return enforceSectionPins(result, pins).map((sec) => {
+    if (sec.key !== "sales") return sec;
+    return {
+      ...sec,
+      items: pinItemAfter(sec.items, "sales-customer-approvals", "sales-customers"),
+    };
+  });
 }
 
 function pinItemAfter(items: ResolvedNavItem[], itemKey: string, afterKey: string): ResolvedNavItem[] {

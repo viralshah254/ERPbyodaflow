@@ -363,6 +363,121 @@ export async function confirmMultichainLinkApi(params: {
   });
 }
 
+export type CustomerMatchSegment = "direct" | "modern_trade";
+
+export type CustomerMatchStatus =
+  | "mapped"
+  | "suggested"
+  | "ambiguous"
+  | "unmatched_sfa"
+  | "unmatched_erp"
+  | "pending_approval";
+
+export type CustomerMatchParty = {
+  id: string;
+  name: string;
+  code?: string;
+  taxId?: string;
+};
+
+export type CustomerMatchSfa = {
+  id: string;
+  name: string;
+  code?: string;
+  taxId?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  contactName?: string;
+  tradingName?: string;
+  branchCount?: number;
+  linkedErpPartyId?: string;
+};
+
+export type CustomerMatchRow = {
+  key: string;
+  segment: CustomerMatchSegment;
+  status: CustomerMatchStatus;
+  sfa?: CustomerMatchSfa;
+  erp?: CustomerMatchParty;
+  candidates?: CustomerMatchParty[];
+  pendingApprovalId?: string;
+};
+
+export type CustomerMatchPreviewResult = {
+  success: boolean;
+  rows: CustomerMatchRow[];
+  erpDirectParties: CustomerMatchParty[];
+  erpMultichainParties: CustomerMatchParty[];
+  counts: {
+    needsAction: number;
+    directNeedsAction: number;
+    modernTradeNeedsAction: number;
+    mapped: number;
+    pendingApproval: number;
+  };
+};
+
+export async function fetchCustomerMatchingPreviewApi(): Promise<CustomerMatchPreviewResult> {
+  requireLiveApi("Customer matching preview");
+  return apiRequest<CustomerMatchPreviewResult>(
+    "/api/integrations/odaflow/customers/matching/preview"
+  );
+}
+
+export async function confirmCustomerMatchLinkApi(params: {
+  segment: CustomerMatchSegment;
+  sfaId: string;
+  erpPartyId: string;
+}): Promise<{ success: boolean; partyId: string; sfaId: string; segment: CustomerMatchSegment }> {
+  requireLiveApi("Customer match link");
+  return apiRequest("/api/integrations/odaflow/customers/matching/link", {
+    method: "POST",
+    body: params,
+  });
+}
+
+export type CreateFromSfaDraft = {
+  name: string;
+  tradingName?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  taxId?: string;
+  customerCode?: string;
+  addressLine1?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+};
+
+export async function createErpCustomerFromSfaMatchApi(params: {
+  sfaId: string;
+  draft: CreateFromSfaDraft;
+  approveNow?: boolean;
+}): Promise<{
+  success: boolean;
+  action: "pending_approval" | "created" | "approved";
+  approvalId?: string;
+  partyId?: string;
+}> {
+  requireLiveApi("Create ERP customer from SFA");
+  return apiRequest("/api/integrations/odaflow/customers/matching/create-from-sfa", {
+    method: "POST",
+    body: params,
+  });
+}
+
+export async function pushErpCustomerToSfaMatchApi(params: {
+  erpPartyId: string;
+}): Promise<{ success: boolean; synced: boolean; message: string; odaflowId?: string }> {
+  requireLiveApi("Push ERP customer to SFA");
+  return apiRequest("/api/integrations/odaflow/customers/matching/push-to-sfa", {
+    method: "POST",
+    body: params,
+  });
+}
+
 export type ProductSfaSyncStatusRow = {
   productId: string;
   barcode?: string;
@@ -447,6 +562,9 @@ export async function fetchSfaProductSyncOverviewApi(opts?: {
   search?: string;
   limit?: number;
   offset?: number;
+  /** When false, skip the heavy overview aggregate (page/search refreshes). */
+  includeOverview?: boolean;
+  includeUnlinked?: boolean;
 }): Promise<{
   overview: SfaProductSyncOverview;
   unlinked: { items: SfaUnlinkedProduct[]; total: number; sfaLookupOk?: boolean };
@@ -456,6 +574,8 @@ export async function fetchSfaProductSyncOverviewApi(opts?: {
   if (opts?.search) qs.set("search", opts.search);
   if (opts?.limit != null) qs.set("limit", String(opts.limit));
   if (opts?.offset != null) qs.set("offset", String(opts.offset));
+  if (opts?.includeOverview === false) qs.set("includeOverview", "false");
+  if (opts?.includeUnlinked === false) qs.set("includeUnlinked", "false");
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return apiRequest(`/api/integrations/odaflow/products/sync-overview${suffix}`);
 }
