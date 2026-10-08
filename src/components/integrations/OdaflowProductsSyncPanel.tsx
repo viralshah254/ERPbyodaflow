@@ -36,12 +36,15 @@ import { SfaBulkSyncSheet } from "@/components/integrations/SfaBulkSyncSheet";
 import { SfaCatalogSyncAlertBanner } from "@/components/integrations/SfaCatalogSyncAlertBanner";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { cn } from "@/lib/utils";
 
 type Props = {
   canSave: boolean;
   productMappingsCount: number;
 };
+
+const PAGE_SIZE_OPTIONS = [20, 25, 30, 50];
 
 function CatalogPresenceBadge({ onSfa, linked }: { onSfa: boolean; linked: boolean }) {
   if (onSfa) {
@@ -67,6 +70,8 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
   const [unlinkedTotal, setUnlinkedTotal] = React.useState(0);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [pageSize, setPageSize] = React.useState(20);
+  const [pageOffset, setPageOffset] = React.useState(0);
 
   const [priceLists, setPriceLists] = React.useState<PriceList[]>([]);
   const [defaultPriceListId, setDefaultPriceListId] = React.useState("");
@@ -76,15 +81,18 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
 
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [bulkProductIds, setBulkProductIds] = React.useState<string[]>([]);
-  const hasDataRef = React.useRef(false);
+  const hasShellRef = React.useRef(false);
+  const listRequestId = React.useRef(0);
 
-  const refresh = React.useCallback(async (opts?: { soft?: boolean }) => {
-    const soft = Boolean(opts?.soft && hasDataRef.current);
-    if (soft) setRefreshing(true);
-    else setLoading(true);
+  const loadShell = React.useCallback(async () => {
+    setLoading(true);
     try {
       const [data, settings, lists] = await Promise.all([
-        fetchSfaProductSyncOverviewApi({ search: debouncedSearch || undefined, limit: 50 }),
+        fetchSfaProductSyncOverviewApi({
+          search: debouncedSearch || undefined,
+          limit: pageSize,
+          offset: 0,
+        }),
         fetchSfaSyncSettingsApi(),
         fetchPriceListsForUi(),
       ]);
@@ -92,30 +100,92 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
       setUnlinked(data.unlinked.items);
       setUnlinkedTotal(data.unlinked.total);
       setPriceLists(lists);
-      setDefaultPriceListId(settings.defaultPriceListId || lists.find((p) => p.isDefault)?.id || lists[0]?.id || "");
+      setDefaultPriceListId(
+        settings.defaultPriceListId || lists.find((p) => p.isDefault)?.id || lists[0]?.id || ""
+      );
       setDefaultGt(settings.defaultCatalogs.includes("general_trade"));
       setDefaultMt(settings.defaultCatalogs.includes("modern_trade"));
-      hasDataRef.current = true;
+      hasShellRef.current = true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load SFA product sync data.");
-      if (!hasDataRef.current) {
+      if (!hasShellRef.current) {
         setOverview(null);
         setUnlinked([]);
       }
     } finally {
-      if (soft) setRefreshing(false);
-      else setLoading(false);
+      setLoading(false);
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, pageSize]);
+
+  const loadUnlinkedPage = React.useCallback(async () => {
+    const requestId = ++listRequestId.current;
+    setRefreshing(true);
+    setUnlinked([]);
+    let keepRefreshing = false;
+    try {
+      const data = await fetchSfaProductSyncOverviewApi({
+        search: debouncedSearch || undefined,
+        limit: pageSize,
+        offset: pageOffset,
+        includeOverview: false,
+      });
+      if (requestId !== listRequestId.current) return;
+      if (
+        pageOffset > 0 &&
+        data.unlinked.items.length === 0 &&
+        data.unlinked.total > 0
+      ) {
+        keepRefreshing = true;
+        setPageOffset(Math.max(0, Math.floor((data.unlinked.total - 1) / pageSize) * pageSize));
+        return;
+      }
+      setUnlinked(data.unlinked.items);
+      setUnlinkedTotal(data.unlinked.total);
+      setOverview((prev) =>
+        prev
+          ? {
+              ...prev,
+              unlinked: debouncedSearch ? prev.unlinked : data.unlinked.total,
+              sfaLookupOk: data.unlinked.sfaLookupOk ?? prev.sfaLookupOk,
+            }
+          : data.overview
+      );
+    } catch (err) {
+      if (requestId !== listRequestId.current) return;
+      toast.error(err instanceof Error ? err.message : "Failed to load products.");
+      setUnlinked([]);
+    } finally {
+      if (requestId === listRequestId.current && !keepRefreshing) setRefreshing(false);
+    }
+  }, [debouncedSearch, pageOffset, pageSize]);
 
   React.useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPageOffset(0);
+    }, 300);
     return () => window.clearTimeout(t);
   }, [search]);
 
   React.useEffect(() => {
-    void refresh({ soft: hasDataRef.current });
-  }, [refresh]);
+    if (!hasShellRef.current) {
+      void loadShell();
+      return;
+    }
+    void loadUnlinkedPage();
+  }, [loadShell, loadUnlinkedPage]);
+
+  const refresh = React.useCallback(
+    async (opts?: { soft?: boolean }) => {
+      if (opts?.soft && hasShellRef.current) {
+        await loadUnlinkedPage();
+        return;
+      }
+      setPageOffset(0);
+      await loadShell();
+    },
+    [loadShell, loadUnlinkedPage]
+  );
 
   const handleSaveDefaults = async () => {
     if (!canSave) {
@@ -314,24 +384,24 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
               <code className="text-[11px] bg-muted px-1 rounded">ODAFLOW_SFA_API_KEY</code>.
             </p>
           ) : null}
-          <div className="relative">
+          <div className="relative min-h-[22rem]">
             <TopProgressBar active={refreshing} />
             {refreshing ? (
-              <p className="absolute right-0 -top-6 text-[11px] text-muted-foreground">
-                Updating…
+              <p className="absolute right-0 top-2 z-20 text-[11px] text-muted-foreground">
+                Loading…
               </p>
             ) : null}
-            {unlinked.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                {overview?.unlinked
+            {unlinked.length === 0 && !refreshing ? (
+              <p className="text-sm text-muted-foreground py-10 text-center">
+                {overview?.unlinked || unlinkedTotal
                   ? "No matches for this search."
                   : "Every barcoded product is on both General Trade and Modern Trade in SFA."}
               </p>
             ) : (
               <div
                 className={cn(
-                  "overflow-x-auto transition-opacity duration-200",
-                  refreshing && "opacity-70"
+                  "overflow-x-auto transition-opacity duration-300 ease-out",
+                  refreshing ? "opacity-0" : "opacity-100"
                 )}
               >
                 <table className="w-full text-sm">
@@ -367,6 +437,7 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
                             variant="ghost"
                             size="sm"
                             className="h-8"
+                            disabled={refreshing}
                             onClick={() => void openBulkSync([p.productId])}
                           >
                             Sync
@@ -379,14 +450,23 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
               </div>
             )}
           </div>
-          {unlinkedTotal > unlinked.length ? (
-            <p className="text-xs text-muted-foreground">
-              Showing {unlinked.length} of {unlinkedTotal}. Use{" "}
-              <Link href="/master/products" className="text-primary hover:underline">
-                Products
-              </Link>{" "}
-              to search and bulk-sync the full list.
-            </p>
+          {unlinkedTotal > 0 || refreshing ? (
+            <TablePagination
+              pageOffset={pageOffset}
+              pageSize={pageSize}
+              itemCount={unlinked.length}
+              hasMore={pageOffset + unlinked.length < unlinkedTotal}
+              loading={refreshing}
+              totalCount={unlinkedTotal}
+              entityLabel="products"
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPageOffset(0);
+              }}
+              onPrevious={() => setPageOffset((o) => Math.max(0, o - pageSize))}
+              onNext={() => setPageOffset((o) => o + pageSize)}
+            />
           ) : null}
         </CardContent>
       </Card>

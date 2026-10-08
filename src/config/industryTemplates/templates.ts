@@ -154,6 +154,7 @@ export const INDUSTRY_TEMPLATES_REGISTRY: Record<string, IndustryTemplateDefinit
       "inventory",
       "warehouse",
       "sales",
+      "sfa-sync",
       "purchasing",
       "finance",
       "pricing",

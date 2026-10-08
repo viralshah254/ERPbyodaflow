@@ -168,6 +168,19 @@ export function buildVisibleNav(input: BuildVisibleNavInput): ResolvedNavSection
       }
     }
   }
+  /** FMCG selling orgs: SFA sync section sits next to Sales (migrates saved defaultNav). */
+  {
+    const canonical = canonicalIndustryTemplateId(input.templateId);
+    const isFmcgSelling =
+      canonical === "fmcg-manufacturer" ||
+      canonical === "fmcg-bakery" ||
+      canonical === "fmcg-distributor";
+    if (isFmcgSelling && !order.includes("sfa-sync") && NAV_SECTIONS_CONFIG.some((s) => s.key === "sfa-sync")) {
+      const salesIdx = order.indexOf("sales");
+      if (salesIdx >= 0) order.splice(salesIdx + 1, 0, "sfa-sync");
+      else order.push("sfa-sync");
+    }
+  }
   const byKey = new Map<string, NavSectionConfig>(NAV_SECTIONS_CONFIG.map((s) => [s.key, s]));
   const result: ResolvedNavSection[] = [];
 

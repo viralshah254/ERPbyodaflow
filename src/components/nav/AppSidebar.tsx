@@ -35,13 +35,20 @@ function applyCountsToItems(
   franchisorInboundMerge: boolean,
 ): ResolvedNavItem[] {
   return items.map((item) => {
+    const children = item.children
+      ? applyCountsToItems(item.children, counts, franchisorInboundMerge)
+      : undefined;
     let count = counts[item.key] ?? 0;
     if (franchisorInboundMerge && item.key === "sales-orders") {
       count += counts["franchise-inbound-orders"] ?? 0;
     }
-    const children = item.children
-      ? applyCountsToItems(item.children, counts, franchisorInboundMerge)
-      : undefined;
+    if (count === 0 && children?.length) {
+      count = children.reduce((sum, child) => {
+        if (child.badge?.type !== "count") return sum;
+        const n = Number(child.badge.value);
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+    }
     const badge =
       count > 0
         ? { type: "count" as const, value: String(count) }
@@ -143,7 +150,13 @@ export function AppSidebar({ className }: AppSidebarProps) {
       visibleSections.map((section) => ({
         ...section,
         badgeCount:
-          section.key === "sales" ? (navCounts["odaflow-sync-queue"] ?? 0) : undefined,
+          section.key === "sales"
+            ? (navCounts["odaflow-sync-queue"] ?? 0)
+            : section.key === "sfa-sync"
+              ? (navCounts["odaflow-sfa-sync"] ??
+                  (navCounts["odaflow-customer-matching"] ?? 0) +
+                    (navCounts["odaflow-product-matching"] ?? 0))
+              : undefined,
         items: applyCountsToItems(
           section.items,
           navCounts,

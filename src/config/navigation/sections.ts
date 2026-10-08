@@ -305,6 +305,33 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     ],
   },
   {
+    key: "sfa-sync",
+    label: "SFA sync",
+    moduleKey: "sales",
+    tier: "primary",
+    order: 5.5,
+    items: [
+      {
+        key: "odaflow-customer-matching",
+        label: "Customer matching",
+        href: "/sales/odaflow-customer-matching",
+        icon: "Users",
+        moduleKey: "sales",
+        requiresPermissions: ["sales.customers.read", "automation.integrations.read"],
+        requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
+      },
+      {
+        key: "odaflow-product-matching",
+        label: "Product matching",
+        href: "/sales/odaflow-product-matching",
+        icon: "Package",
+        moduleKey: "sales",
+        requiresPermissions: ["inventory.read", "automation.integrations.read"],
+        requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
+      },
+    ],
+  },
+  {
     key: "purchasing",
     label: "Purchasing / Procurement",
     moduleKey: "purchasing",

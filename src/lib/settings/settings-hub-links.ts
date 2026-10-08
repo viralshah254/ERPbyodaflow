@@ -127,7 +127,7 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
       {
         href: "/settings/integrations/odaflow",
         label: "Odaflow SFA connector",
-        description: "API keys and inbound URLs for Odaflow order sync",
+        description: "Customer matching, product matching, and order sync with Odaflow SFA",
         icon: "Plug",
         requiresPermissions: ["settings.org.read"],
       },
