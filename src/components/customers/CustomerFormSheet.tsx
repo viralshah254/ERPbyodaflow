@@ -38,11 +38,13 @@ import {
   fetchNextCustomerCodeApi,
   fetchPartiesApi,
   fetchPartyByIdApi,
+  fetchPartyContactsApi,
+  fetchSalesRepsApi,
+  syncPartyContactsApi,
   updatePartyApi,
   type PartyPayload,
 } from "@/lib/api/parties";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
-import { fetchSalesRepsApi } from "@/lib/api/parties";
 import {
   fetchPriceListOptions,
   fetchTaxConfigsApi,
@@ -55,8 +57,9 @@ import {
   type ResolvedLocation,
 } from "@/components/location/LocationPickerField";
 import { normalizeKenyaPhone, normalizeKenyaPhoneOptional } from "@/lib/phone";
+import { Plus, Trash2 } from "lucide-react";
 
-const DRAFT_STORAGE_KEY = "erp.customer-create-draft.v1";
+const DRAFT_STORAGE_KEY = "erp.customer-create-draft.v3";
 
 const GENERIC_CUSTOMER_TYPES: { value: CustomerType; label: string }[] = [
   { value: "RETAILER", label: "Retailer" },
@@ -77,16 +80,22 @@ const AR_AP_GROUPS: { value: ArApGroup; label: string }[] = [
   { value: "BAD_DEBT", label: "Bad debt" },
 ];
 
+type ContactDraft = {
+  key: string;
+  id?: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+};
+
 type FormState = {
   kindId: CustomerKindId;
   customerType: CustomerType;
   name: string;
   tradingName: string;
   code: string;
-  phone: string;
-  email: string;
-  contactPersonFirstName: string;
-  contactPersonLastName: string;
+  contacts: ContactDraft[];
   taxId: string;
   sageDcLink: string;
   arApGroup: "" | ArApGroup;
@@ -108,16 +117,87 @@ type FormState = {
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID";
 };
 
+function newContactKey() {
+  return `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function emptyContact(partial?: Partial<ContactDraft>): ContactDraft {
+  return {
+    key: partial?.key ?? newContactKey(),
+    id: partial?.id,
+    firstName: partial?.firstName ?? "",
+    lastName: partial?.lastName ?? "",
+    phone: partial?.phone ?? "",
+    email: partial?.email ?? "",
+  };
+}
+
+function contactHasDetails(contact: ContactDraft) {
+  return Boolean(
+    contact.firstName.trim() ||
+      contact.lastName.trim() ||
+      contact.phone.trim() ||
+      contact.email.trim()
+  );
+}
+
+function splitContactName(name: string): { firstName: string; lastName: string } {
+  const trimmed = name.trim();
+  if (!trimmed) return { firstName: "", lastName: "" };
+  const space = trimmed.indexOf(" ");
+  if (space < 0) return { firstName: trimmed, lastName: "" };
+  return { firstName: trimmed.slice(0, space), lastName: trimmed.slice(space + 1).trim() };
+}
+
+function joinContactName(firstName: string, lastName: string) {
+  return `${firstName.trim()} ${lastName.trim()}`.trim();
+}
+
+function primaryContactDetails(contacts: ContactDraft[]) {
+  const primary = contacts.find(contactHasDetails);
+  return {
+    contactPersonFirstName: primary?.firstName.trim() || undefined,
+    contactPersonLastName: primary?.lastName.trim() || undefined,
+    phone: primary?.phone.trim() ? normalizeKenyaPhoneOptional(primary.phone) : undefined,
+    email: primary?.email.trim() || undefined,
+  };
+}
+
+function normalizeContactsFromDraft(form: Partial<FormState> & {
+  phone?: string;
+  email?: string;
+  contactPersonFirstName?: string;
+  contactPersonLastName?: string;
+}): ContactDraft[] {
+  if (Array.isArray(form.contacts) && form.contacts.length > 0) {
+    return form.contacts.map((c, index) =>
+      emptyContact({
+        key: c.key || newContactKey(),
+        id: c.id,
+        firstName: c.firstName ?? "",
+        lastName: c.lastName ?? "",
+        phone: c.phone ?? (index === 0 ? form.phone ?? "" : ""),
+        email: c.email ?? (index === 0 ? form.email ?? "" : ""),
+      })
+    );
+  }
+  return [
+    emptyContact({
+      firstName: form.contactPersonFirstName ?? "",
+      lastName: form.contactPersonLastName ?? "",
+      phone: form.phone ?? "",
+      email: form.email ?? "",
+    }),
+  ];
+}
+
 const emptyForm = (kindId: CustomerKindId = "general-trade"): FormState => ({
   kindId,
   customerType: "RETAILER",
   name: "",
   tradingName: "",
   code: "",
-  phone: "",
-  email: "",
-  contactPersonFirstName: "",
-  contactPersonLastName: "",
+  contacts: [emptyContact()],
   taxId: "",
   sageDcLink: "",
   arApGroup: "",
@@ -550,16 +630,53 @@ export function CustomerFormSheet({
               /* parent name is optional for display */
             }
           }
+          let contacts: ContactDraft[] = [];
+          try {
+            const partyContacts = await fetchPartyContactsApi(customerId);
+            contacts = partyContacts.map((c) => {
+              const parts = splitContactName(c.name);
+              return emptyContact({
+                id: c.id,
+                firstName: parts.firstName,
+                lastName: parts.lastName,
+                phone: c.phone ?? "",
+                email: c.email ?? "",
+              });
+            });
+          } catch {
+            /* fall back to legacy party fields below */
+          }
+          if (contacts.length === 0) {
+            contacts = [
+              emptyContact({
+                firstName: party.contactPersonFirstName ?? "",
+                lastName: party.contactPersonLastName ?? "",
+                phone: party.phone ?? "",
+                email: party.email ?? "",
+              }),
+            ];
+          } else if (
+            contacts[0] &&
+            !contacts[0].phone.trim() &&
+            !contacts[0].email.trim() &&
+            (party.phone || party.email)
+          ) {
+            contacts = [
+              {
+                ...contacts[0],
+                phone: contacts[0].phone || party.phone || "",
+                email: contacts[0].email || party.email || "",
+              },
+              ...contacts.slice(1),
+            ];
+          }
           setForm({
             kindId: matchedKind,
             customerType: party.customerType ?? "RETAILER",
             name: party.name ?? "",
             tradingName: party.tradingName ?? "",
             code: party.code ?? "",
-            phone: party.phone ?? "",
-            email: party.email ?? "",
-            contactPersonFirstName: party.contactPersonFirstName ?? "",
-            contactPersonLastName: party.contactPersonLastName ?? "",
+            contacts,
             taxId: party.taxId ?? "",
             sageDcLink: party.sageDcLink != null ? String(party.sageDcLink) : "",
             arApGroup: party.arApGroup ?? "",
@@ -625,7 +742,8 @@ export function CustomerFormSheet({
     } else {
       const draft = loadDraft(fmcg);
       if (draft) {
-        setForm({ ...emptyForm(kindId), ...draft.form, creditDays: draft.form.creditDays ?? "" });
+        const merged = { ...emptyForm(kindId), ...draft.form, creditDays: draft.form.creditDays ?? "" };
+        setForm({ ...merged, contacts: normalizeContactsFromDraft(draft.form) });
         setStep(Math.min(Math.max(draft.step, 0), createSteps.length - 1));
         setDraftRestored(true);
       } else {
@@ -658,6 +776,27 @@ export function CustomerFormSheet({
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     if (stepErrors[key]) setStepErrors((prev) => ({ ...prev, [key]: "" }));
+  };
+
+  const patchContact = (
+    key: string,
+    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email">>
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      contacts: prev.contacts.map((c) => (c.key === key ? { ...c, ...patch } : c)),
+    }));
+  };
+
+  const addContact = () => {
+    setForm((prev) => ({ ...prev, contacts: [...prev.contacts, emptyContact()] }));
+  };
+
+  const removeContact = (key: string) => {
+    setForm((prev) => {
+      const next = prev.contacts.filter((c) => c.key !== key);
+      return { ...prev, contacts: next.length > 0 ? next : [emptyContact()] };
+    });
   };
 
   const handleKindChange = (kindId: CustomerKindId) => {
@@ -703,9 +842,10 @@ export function CustomerFormSheet({
     }
     if (id === "identity") {
       if (!form.name.trim()) next.name = "Name is required.";
-      if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        next.email = "Enter a valid email address.";
-      }
+      const badEmail = form.contacts.find(
+        (c) => c.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())
+      );
+      if (badEmail) next.email = "Enter a valid email address for each contact.";
     }
     if (id === "location") {
       if (form.latitude.trim() && !Number.isFinite(Number(form.latitude))) {
@@ -735,15 +875,16 @@ export function CustomerFormSheet({
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
 
   const buildPayload = (): PartyPayload => {
+    const primary = primaryContactDetails(form.contacts);
     const payload: PartyPayload = {
       name: form.name.trim(),
       roles: ["customer"],
       tradingName: form.tradingName.trim() || form.name.trim() || undefined,
       code: form.code.trim() || undefined,
-      phone: normalizeKenyaPhoneOptional(form.phone),
-      email: form.email.trim() || undefined,
-      contactPersonFirstName: form.contactPersonFirstName.trim() || undefined,
-      contactPersonLastName: form.contactPersonLastName.trim() || undefined,
+      phone: primary.phone,
+      email: primary.email,
+      contactPersonFirstName: primary.contactPersonFirstName,
+      contactPersonLastName: primary.contactPersonLastName,
       taxId: form.taxId.trim() || undefined,
       sageDcLink: form.sageDcLink.trim() ? Number(form.sageDcLink) : undefined,
       arApGroup: form.arApGroup || undefined,
@@ -799,6 +940,14 @@ export function CustomerFormSheet({
       return;
     } else {
       const creditErrors = validateCreditFields(form);
+      const badEmail = form.contacts.find(
+        (c) => c.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())
+      );
+      if (badEmail) {
+        setStepErrors({ ...creditErrors, email: "Enter a valid email address for each contact." });
+        toast.error("Enter a valid email address for each contact.");
+        return;
+      }
       const first = Object.values(creditErrors)[0];
       if (first) {
         setStepErrors(creditErrors);
@@ -810,8 +959,15 @@ export function CustomerFormSheet({
     setSaving(true);
     try {
       const payload = buildPayload();
+      const contactRows = form.contacts.map((c) => ({
+        id: c.id,
+        name: joinContactName(c.firstName, c.lastName),
+        phone: normalizeKenyaPhoneOptional(c.phone),
+        email: c.email.trim() || undefined,
+      }));
       if (editing && customerId) {
         await updatePartyApi(customerId, payload);
+        await syncPartyContactsApi(customerId, contactRows);
         toast.success(isBranchCustomer ? "Branch updated" : "Customer updated");
         onOpenChange(false);
         onSuccess?.({
@@ -822,6 +978,7 @@ export function CustomerFormSheet({
         });
       } else {
         const created = await createPartyApi(payload);
+        await syncPartyContactsApi(created.id, contactRows);
         clearDraft();
         toast.success(
           supermarketOnly || (!isBranchCustomer && form.kindId === "modern-trade")
@@ -945,6 +1102,9 @@ export function CustomerFormSheet({
               terms={terms}
               priceLists={priceLists}
               taxConfigs={taxConfigs}
+              onPatchContact={patchContact}
+              onAddContact={addContact}
+              onRemoveContact={removeContact}
             />
           ) : (
             <>
@@ -1110,76 +1270,32 @@ export function CustomerFormSheet({
                       placeholder="Shop-front name if different"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <FieldLabel htmlFor="cust-code" optional>
-                        Code
-                      </FieldLabel>
-                      <Input
-                        id="cust-code"
-                        value={form.code}
-                        onChange={(e) => setField("code", e.target.value)}
-                        placeholder={nextCodePreview ? `Auto: ${nextCodePreview}` : "Auto: 001"}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Leave blank to auto-assign{" "}
-                        <span className="font-mono font-medium text-foreground">
-                          {nextCodePreview || "001"}
-                        </span>
-                        .
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <FieldLabel htmlFor="cust-phone" optional>
-                        Phone
-                      </FieldLabel>
-                      <Input
-                        id="cust-phone"
-                        value={form.phone}
-                        onChange={(e) => setField("phone", e.target.value)}
-                        onBlur={() => {
-                          if (!form.phone.trim()) return;
-                          setField("phone", normalizeKenyaPhone(form.phone));
-                        }}
-                        placeholder="07… or 254…"
-                      />
-                    </div>
-                  </div>
                   <div className="space-y-2">
-                    <FieldLabel htmlFor="cust-email" optional>
-                      Email
+                    <FieldLabel htmlFor="cust-code" optional>
+                      Code
                     </FieldLabel>
                     <Input
-                      id="cust-email"
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setField("email", e.target.value)}
-                      placeholder="email@example.com"
+                      id="cust-code"
+                      value={form.code}
+                      onChange={(e) => setField("code", e.target.value)}
+                      placeholder={nextCodePreview ? `Auto: ${nextCodePreview}` : "Auto: 001"}
                     />
-                    {stepErrors.email ? <p className="text-xs text-destructive">{stepErrors.email}</p> : null}
+                    <p className="text-xs text-muted-foreground">
+                      Leave blank to auto-assign{" "}
+                      <span className="font-mono font-medium text-foreground">
+                        {nextCodePreview || "001"}
+                      </span>
+                      .
+                    </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <FieldLabel htmlFor="cust-contact-first" optional>
-                        Contact first name
-                      </FieldLabel>
-                      <Input
-                        id="cust-contact-first"
-                        value={form.contactPersonFirstName}
-                        onChange={(e) => setField("contactPersonFirstName", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <FieldLabel htmlFor="cust-contact-last" optional>
-                        Contact last name
-                      </FieldLabel>
-                      <Input
-                        id="cust-contact-last"
-                        value={form.contactPersonLastName}
-                        onChange={(e) => setField("contactPersonLastName", e.target.value)}
-                      />
-                    </div>
-                  </div>
+                  <CustomerContactsFields
+                    idPrefix="cust"
+                    contacts={form.contacts}
+                    onPatch={patchContact}
+                    onAdd={addContact}
+                    onRemove={removeContact}
+                    emailError={stepErrors.email}
+                  />
                   <div className="space-y-2">
                     <FieldLabel optional>KRA PIN</FieldLabel>
                     <KraTaxPinField value={form.taxId} onChange={(taxId) => setField("taxId", taxId)} />
@@ -1415,8 +1531,17 @@ export function CustomerFormSheet({
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
-                      <dt>Phone</dt>
-                      <dd className="text-foreground text-right">{form.phone.trim() || "—"}</dd>
+                      <dt>Contacts</dt>
+                      <dd className="text-foreground text-right">
+                        {form.contacts
+                          .filter(contactHasDetails)
+                          .map((c) => {
+                            const name = joinContactName(c.firstName, c.lastName);
+                            const bits = [name, c.phone.trim(), c.email.trim()].filter(Boolean);
+                            return bits.join(" · ");
+                          })
+                          .join("; ") || "—"}
+                      </dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt>Credit limit</dt>
@@ -1475,6 +1600,113 @@ export function CustomerFormSheet({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CustomerContactsFields({
+  idPrefix,
+  contacts,
+  onPatch,
+  onAdd,
+  onRemove,
+  emailError,
+}: {
+  idPrefix: string;
+  contacts: ContactDraft[];
+  onPatch: (
+    key: string,
+    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email">>
+  ) => void;
+  onAdd: () => void;
+  onRemove: (key: string) => void;
+  emailError?: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <FieldLabel optional>Contacts</FieldLabel>
+        <Button type="button" variant="outline" size="sm" className="h-8" onClick={onAdd}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Add contact
+        </Button>
+      </div>
+      <div className="space-y-3">
+        {contacts.map((contact, index) => (
+          <div key={contact.key} className="space-y-3 rounded-md border border-border/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Contact {index + 1}
+                {index === 0 ? " · Primary" : ""}
+              </p>
+              {contacts.length > 1 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                  onClick={() => onRemove(contact.key)}
+                  aria-label={`Remove contact ${index + 1}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <FieldLabel htmlFor={`${idPrefix}-contact-first-${contact.key}`} optional>
+                  First name
+                </FieldLabel>
+                <Input
+                  id={`${idPrefix}-contact-first-${contact.key}`}
+                  value={contact.firstName}
+                  onChange={(e) => onPatch(contact.key, { firstName: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel htmlFor={`${idPrefix}-contact-last-${contact.key}`} optional>
+                  Last name
+                </FieldLabel>
+                <Input
+                  id={`${idPrefix}-contact-last-${contact.key}`}
+                  value={contact.lastName}
+                  onChange={(e) => onPatch(contact.key, { lastName: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <FieldLabel htmlFor={`${idPrefix}-contact-phone-${contact.key}`} optional>
+                  Phone
+                </FieldLabel>
+                <Input
+                  id={`${idPrefix}-contact-phone-${contact.key}`}
+                  value={contact.phone}
+                  onChange={(e) => onPatch(contact.key, { phone: e.target.value })}
+                  onBlur={() => {
+                    if (!contact.phone.trim()) return;
+                    onPatch(contact.key, { phone: normalizeKenyaPhone(contact.phone) });
+                  }}
+                  placeholder="07… or 254…"
+                />
+              </div>
+              <div className="space-y-2">
+                <FieldLabel htmlFor={`${idPrefix}-contact-email-${contact.key}`} optional>
+                  Email
+                </FieldLabel>
+                <Input
+                  id={`${idPrefix}-contact-email-${contact.key}`}
+                  type="email"
+                  value={contact.email}
+                  onChange={(e) => onPatch(contact.key, { email: e.target.value })}
+                  placeholder="email@example.com"
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {emailError ? <p className="text-xs text-destructive">{emailError}</p> : null}
+    </div>
   );
 }
 
@@ -1563,6 +1795,9 @@ function EditAllFields({
   terms,
   priceLists,
   taxConfigs,
+  onPatchContact,
+  onAddContact,
+  onRemoveContact,
 }: {
   fmcg: boolean;
   form: FormState;
@@ -1575,6 +1810,12 @@ function EditAllFields({
   terms: Array<{ id: string; name: string }>;
   priceLists: Array<{ id: string; name: string }>;
   taxConfigs: TaxConfigRow[];
+  onPatchContact: (
+    key: string,
+    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email">>
+  ) => void;
+  onAddContact: () => void;
+  onRemoveContact: (key: string) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -1620,62 +1861,19 @@ function EditAllFields({
           onChange={(e) => setField("tradingName", e.target.value)}
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <FieldLabel htmlFor="edit-code" optional>
-            Code
-          </FieldLabel>
-          <Input id="edit-code" value={form.code} onChange={(e) => setField("code", e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <FieldLabel htmlFor="edit-phone" optional>
-            Phone
-          </FieldLabel>
-          <Input
-            id="edit-phone"
-            value={form.phone}
-            onChange={(e) => setField("phone", e.target.value)}
-            onBlur={() => {
-              if (!form.phone.trim()) return;
-              setField("phone", normalizeKenyaPhone(form.phone));
-            }}
-            placeholder="07… or 254…"
-          />
-        </div>
-      </div>
       <div className="space-y-2">
-        <FieldLabel htmlFor="edit-email" optional>
-          Email
+        <FieldLabel htmlFor="edit-code" optional>
+          Code
         </FieldLabel>
-        <Input
-          id="edit-email"
-          type="email"
-          value={form.email}
-          onChange={(e) => setField("email", e.target.value)}
-        />
+        <Input id="edit-code" value={form.code} onChange={(e) => setField("code", e.target.value)} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <FieldLabel htmlFor="edit-contact-first" optional>
-            Contact first name
-          </FieldLabel>
-          <Input
-            id="edit-contact-first"
-            value={form.contactPersonFirstName}
-            onChange={(e) => setField("contactPersonFirstName", e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <FieldLabel htmlFor="edit-contact-last" optional>
-            Contact last name
-          </FieldLabel>
-          <Input
-            id="edit-contact-last"
-            value={form.contactPersonLastName}
-            onChange={(e) => setField("contactPersonLastName", e.target.value)}
-          />
-        </div>
-      </div>
+      <CustomerContactsFields
+        idPrefix="edit"
+        contacts={form.contacts}
+        onPatch={onPatchContact}
+        onAdd={onAddContact}
+        onRemove={onRemoveContact}
+      />
       <div className="space-y-2">
         <FieldLabel optional>KRA PIN</FieldLabel>
         <KraTaxPinField value={form.taxId} onChange={(taxId) => setField("taxId", taxId)} />

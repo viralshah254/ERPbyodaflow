@@ -707,3 +707,123 @@ export async function downloadPartyCompanyRegistrationApi(
     onError,
   );
 }
+
+export type PartyContactRow = {
+  id: string;
+  partyId: string;
+  name: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  isPrimary: boolean;
+  isActive: boolean;
+};
+
+export type PartyContactPayload = {
+  name: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  isPrimary?: boolean;
+  isActive?: boolean;
+};
+
+export async function fetchPartyContactsApi(partyId: string): Promise<PartyContactRow[]> {
+  requireLiveApi("Party contacts");
+  const data = await apiRequest<{ items: Array<Record<string, unknown>> }>(
+    `/api/parties/${encodeURIComponent(partyId)}/contacts`
+  );
+  return (data.items ?? [])
+    .map((item) => ({
+      id: String(item.id ?? item._id ?? ""),
+      partyId: String(item.partyId ?? partyId),
+      name: String(item.name ?? ""),
+      role: item.role != null ? String(item.role) : undefined,
+      email: item.email != null ? String(item.email) : undefined,
+      phone: item.phone != null ? String(item.phone) : undefined,
+      isPrimary: item.isPrimary === true,
+      isActive: item.isActive !== false,
+    }))
+    .filter((item) => item.id && item.isActive);
+}
+
+export async function createPartyContactApi(
+  partyId: string,
+  payload: PartyContactPayload
+): Promise<{ id: string }> {
+  requireLiveApi("Party contact create");
+  return apiRequest<{ id: string }>(`/api/parties/${encodeURIComponent(partyId)}/contacts`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updatePartyContactApi(
+  partyId: string,
+  contactId: string,
+  payload: Partial<PartyContactPayload>
+): Promise<PartyContactRow> {
+  requireLiveApi("Party contact update");
+  const updated = await apiRequest<Record<string, unknown>>(
+    `/api/parties/${encodeURIComponent(partyId)}/contacts/${encodeURIComponent(contactId)}`,
+    {
+      method: "PATCH",
+      body: payload,
+    }
+  );
+  return {
+    id: String(updated.id ?? updated._id ?? contactId),
+    partyId: String(updated.partyId ?? partyId),
+    name: String(updated.name ?? ""),
+    role: updated.role != null ? String(updated.role) : undefined,
+    email: updated.email != null ? String(updated.email) : undefined,
+    phone: updated.phone != null ? String(updated.phone) : undefined,
+    isPrimary: updated.isPrimary === true,
+    isActive: updated.isActive !== false,
+  };
+}
+
+/** Create/update/remove party contacts to match the form list. First filled row is primary. */
+export async function syncPartyContactsApi(
+  partyId: string,
+  contacts: Array<{ id?: string; name: string; phone?: string; email?: string }>
+): Promise<void> {
+  const filled = contacts
+    .map((c) => ({
+      id: c.id?.trim() || undefined,
+      name: c.name.trim(),
+      phone: c.phone?.trim() || undefined,
+      email: c.email?.trim() || undefined,
+    }))
+    .filter((c) => c.name || c.phone || c.email);
+  const existing = await fetchPartyContactsApi(partyId);
+  const keepIds = new Set(filled.map((c) => c.id).filter((id): id is string => Boolean(id)));
+
+  for (const row of existing) {
+    if (!keepIds.has(row.id)) {
+      await updatePartyContactApi(partyId, row.id, { isActive: false, isPrimary: false });
+    }
+  }
+
+  for (let i = 0; i < filled.length; i++) {
+    const row = filled[i]!;
+    const isPrimary = i === 0;
+    const payload: PartyContactPayload = {
+      name: row.name || [row.phone, row.email].filter(Boolean).join(" · ") || "Contact",
+      // Always send so clears reach PATCH (omitted keys leave stale phone/email).
+      phone: row.phone ?? "",
+      email: row.email ?? "",
+      isPrimary,
+      isActive: true,
+    };
+    if (row.id) {
+      await updatePartyContactApi(partyId, row.id, payload);
+    } else {
+      await createPartyContactApi(partyId, {
+        ...payload,
+        phone: row.phone,
+        email: row.email,
+      });
+    }
+  }
+}
