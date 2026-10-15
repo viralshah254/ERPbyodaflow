@@ -211,6 +211,26 @@ export default function APBillsPage() {
         sortValue: (r: APBillDisplayRow) => (r.costNumber ?? r.number).toLowerCase(),
       },
       {
+        id: "supplierInvoiceNumber",
+        header: "Supplier invoice no.",
+        accessor: (r: APBillDisplayRow) =>
+          r.supplierInvoiceNumber ? (
+            <span className="font-mono text-xs">{r.supplierInvoiceNumber}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "cuInvoiceNumber",
+        header: "CU number",
+        accessor: (r: APBillDisplayRow) =>
+          r.supplierCuInvoiceNumber ? (
+            <span className="font-mono text-xs">{r.supplierCuInvoiceNumber}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
         id: "date",
         header: "Date",
         accessor: (r: APBillDisplayRow) =>
@@ -506,6 +526,8 @@ export default function APBillsPage() {
                   `ap-bills-${new Date().toISOString().slice(0, 10)}.csv`,
                   displayRows.map((row) => ({
                     number: row.rowKind === "cost" ? (row.costNumber ?? row.number) : row.number,
+                    supplierInvoiceNumber: row.supplierInvoiceNumber ?? "",
+                    supplierCuInvoiceNumber: row.supplierCuInvoiceNumber ?? "",
                     date: row.date,
                     supplier: row.rowKind === "cost" ? "Shipment cost" : row.party,
                     costType: row.costType ?? "",

@@ -12,6 +12,7 @@ type BackendSalesDoc = {
   currency?: string;
   exchangeRate?: number;
   status?: string;
+  cuInvoiceNumber?: string;
   orderChannel?: string;
   reference?: string;
   externalSource?: string;
@@ -40,6 +41,7 @@ function mapSalesDoc(item: BackendSalesDoc): SalesDocRow {
     currency: item.currency,
     exchangeRate: item.exchangeRate,
     status: item.status ?? "DRAFT",
+    cuInvoiceNumber: item.cuInvoiceNumber,
     orderChannel: item.orderChannel,
     reference: item.reference,
     externalSource: item.externalSource,

@@ -96,6 +96,8 @@ import { can, Permissions } from "@/lib/permissions";
 import { useAuthStore } from "@/stores/auth-store";
 import { resolveDocumentCreatedByName } from "@/lib/documents/resolve-created-by-name";
 import { KraSigningPanel } from "@/components/kra/KraSigningPanel";
+import { PurchaseSupplierRefsCard } from "@/components/docs/PurchaseSupplierRefsCard";
+import { listedCuNumber } from "@/lib/kra/kra-signing";
 import { isIncotexSignableDocType } from "@/lib/kra/kra-signing";
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
 import { OdaflowApprovalConfirmDialog } from "@/components/integrations/OdaflowApprovalConfirmDialog";
@@ -461,6 +463,8 @@ export default function DocViewPage() {
     return () => cancelAnimationFrame(raf);
   }, [podSheetOpen, document?.id, document?.lines]);
   const [resolvedPartyName, setResolvedPartyName] = React.useState<string | null>(null);
+  const purchaseTaxDoc = ["bill", "purchase-credit-note", "purchase-debit-note"].includes(type);
+  const salesTaxDoc = ["invoice", "credit-note", "debit-note"].includes(type);
   const isPurchaseDoc = [
     "purchase-request",
     "purchase-order",
@@ -1497,6 +1501,29 @@ export default function DocViewPage() {
                 value: document?.number ? <DocumentNumberField number={document.number} /> : "—",
                 mono: true,
               },
+              ...(salesTaxDoc
+                ? [
+                    {
+                      label: "KRA CU number",
+                      value: listedCuNumber(document?.kraSigning) || "—",
+                      mono: true,
+                    },
+                  ]
+                : []),
+              ...(purchaseTaxDoc
+                ? [
+                    {
+                      label: "Supplier invoice no.",
+                      value: document?.supplierInvoiceNumber || "—",
+                      mono: true,
+                    },
+                    {
+                      label: "Supplier CU number",
+                      value: document?.supplierCuInvoiceNumber || "—",
+                      mono: true,
+                    },
+                  ]
+                : []),
               {
                 label: document?.createdAt ? "Created" : "Date",
                 value: document?.createdAt
@@ -1749,6 +1776,16 @@ export default function DocViewPage() {
                   </div>
                 ) : null}
                 {/* Invoice payment status bar */}
+                {purchaseTaxDoc && document?.id ? (
+                  <PurchaseSupplierRefsCard
+                    documentId={document.id}
+                    type={type as DocTypeKey}
+                    supplierInvoiceNumber={document.supplierInvoiceNumber}
+                    supplierCuInvoiceNumber={document.supplierCuInvoiceNumber}
+                    canWrite={canWrite}
+                    onSaved={() => refreshDocument(true)}
+                  />
+                ) : null}
                 {document?.status === "DRAFT" && (
                   <div className="mt-4 pt-4 border-t space-y-2">
                     <Label htmlFor="document-notes">Notes</Label>

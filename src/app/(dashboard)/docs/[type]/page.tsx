@@ -184,6 +184,15 @@ function buildColumns(
       );
     } else if (accessor === "party" && CUSTOMER_DOC_TYPES.has(type)) {
       acc = (r) => <CustomerLink id={r.partyId} name={r.party} />;
+    } else if (col.id === "cuInvoiceNumber" || col.id === "supplierInvoiceNumber") {
+      acc = (r) => {
+        const value =
+          col.id === "supplierInvoiceNumber"
+            ? r.supplierInvoiceNumber
+            : r.supplierCuInvoiceNumber || r.cuInvoiceNumber || r.kraSigning?.cuInvoiceNumber || r.kraSigning?.receiptNumber;
+        if (!value?.trim()) return <span className="text-muted-foreground">—</span>;
+        return <span className="font-mono text-xs">{value}</span>;
+      };
     } else if (accessor === "number") {
       acc = (r) => (
         <DocumentNumber value={r.number ?? "—"} className="font-medium" />
@@ -404,6 +413,8 @@ export default function DocTypeListPage() {
       fileName,
       rows.map((row) => ({
         number: row.number,
+        cuInvoiceNumber: row.supplierCuInvoiceNumber || row.cuInvoiceNumber || row.kraSigning?.cuInvoiceNumber || row.kraSigning?.receiptNumber || "",
+        supplierInvoiceNumber: row.supplierInvoiceNumber ?? "",
         date: row.date,
         party: row.party ?? "",
         reference: row.reference ?? row.poRef ?? "",

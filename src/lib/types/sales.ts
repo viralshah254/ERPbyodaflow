@@ -10,6 +10,8 @@ export type SalesDocRow = {
   currency?: string;
   exchangeRate?: number;
   status: string;
+  /** KRA Control Unit number sitting beside this invoice number. */
+  cuInvoiceNumber?: string;
   /** Channel the order was placed through (e.g. WHATSAPP). Used for list badges. */
   orderChannel?: string;
   reference?: string;

@@ -74,6 +74,24 @@ export function kraRetryButtonLabel(kraSigning?: KraSigningRecord | null): strin
   return "Send to KRA";
 }
 
+export function listedCuNumber(
+  source?: {
+    cuInvoiceNumber?: string | null;
+    receiptNumber?: string | null;
+    supplierCuInvoiceNumber?: string | null;
+    kraSigning?: { cuInvoiceNumber?: string | null; receiptNumber?: string | null } | null;
+  } | null
+): string {
+  return (
+    source?.supplierCuInvoiceNumber?.trim() ||
+    source?.cuInvoiceNumber?.trim() ||
+    source?.kraSigning?.cuInvoiceNumber?.trim() ||
+    source?.kraSigning?.receiptNumber?.trim() ||
+    source?.receiptNumber?.trim() ||
+    ""
+  );
+}
+
 export function docTypeLabel(typeKey: IncotexSignableDocType): string {
   switch (typeKey) {
     case "invoice":

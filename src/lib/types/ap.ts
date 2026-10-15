@@ -19,6 +19,8 @@ export type APBillRow = {
   allocated?: number;
   outstanding?: number;
   poRef?: string;
+  supplierInvoiceNumber?: string;
+  supplierCuInvoiceNumber?: string;
   /** True when this bill was auto-created from a GRN cost line (Fuel, Transport, etc.). */
   isLandedCostBill?: boolean;
   /** Sequential shipment cost code (SCOST0001, …). */

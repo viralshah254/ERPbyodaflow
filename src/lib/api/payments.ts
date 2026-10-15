@@ -94,6 +94,8 @@ type BackendApBill = {
   allocated?: number;
   outstanding?: number;
   poRef?: string;
+  supplierInvoiceNumber?: string;
+  supplierCuInvoiceNumber?: string;
   grnNumber?: string;
   isLandedCostBill?: boolean;
   costType?: string;
@@ -512,6 +514,8 @@ function mapApBillItem(item: BackendApBill): APBillRow {
     allocated: item.allocated,
     outstanding: item.outstanding,
     poRef: item.poRef,
+    supplierInvoiceNumber: item.supplierInvoiceNumber,
+    supplierCuInvoiceNumber: item.supplierCuInvoiceNumber,
     grnNumber: item.grnNumber,
     isLandedCostBill: item.isLandedCostBill,
     costType: item.costType,

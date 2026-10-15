@@ -116,6 +116,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     termKey: "creditNote",
     listColumns: [
       { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "cuInvoiceNumber", header: "CU number", accessor: "cuInvoiceNumber" },
       { id: "date", header: "Date", accessor: "date" },
       { id: "party", header: "Customer", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
@@ -150,6 +151,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     termKey: "debitNote",
     listColumns: [
       { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "cuInvoiceNumber", header: "CU number", accessor: "cuInvoiceNumber" },
       { id: "date", header: "Date", accessor: "date" },
       { id: "party", header: "Customer", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
@@ -284,6 +286,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     termKey: "bill",
     listColumns: [
       { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "supplierInvoiceNumber", header: "Supplier invoice no.", accessor: "supplierInvoiceNumber" },
+      { id: "cuInvoiceNumber", header: "CU number", accessor: "cuInvoiceNumber" },
       { id: "date", header: "Date", accessor: "date" },
       { id: "party", header: "Supplier", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
@@ -297,6 +301,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
           { id: "date", label: "Date", type: "date", required: true },
           { id: "supplier", label: "Supplier", type: "entity", entityType: "supplier", required: true },
           { id: "dueDate", label: "Due date", type: "date" },
+          { id: "supplierInvoiceNumber", label: "Supplier invoice no.", type: "text" },
+          { id: "supplierCuInvoiceNumber", label: "Supplier CU number", type: "text" },
         ],
       },
       { id: "lines", label: "Lines", fields: [] },
@@ -320,6 +326,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     termKey: "purchaseCreditNote",
     listColumns: [
       { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "supplierInvoiceNumber", header: "Supplier invoice no.", accessor: "supplierInvoiceNumber" },
+      { id: "cuInvoiceNumber", header: "CU number", accessor: "cuInvoiceNumber" },
       { id: "date", header: "Date", accessor: "date" },
       { id: "party", header: "Supplier", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
@@ -332,6 +340,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
         fields: [
           { id: "date", label: "Date", type: "date", required: true },
           { id: "supplier", label: "Supplier", type: "entity", entityType: "supplier", required: true },
+          { id: "supplierInvoiceNumber", label: "Supplier invoice no.", type: "text" },
+          { id: "supplierCuInvoiceNumber", label: "Supplier CU number", type: "text" },
         ],
       },
       { id: "lines", label: "Lines", fields: [] },
@@ -352,6 +362,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     termKey: "purchaseDebitNote",
     listColumns: [
       { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "supplierInvoiceNumber", header: "Supplier invoice no.", accessor: "supplierInvoiceNumber" },
+      { id: "cuInvoiceNumber", header: "CU number", accessor: "cuInvoiceNumber" },
       { id: "date", header: "Date", accessor: "date" },
       { id: "party", header: "Supplier", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },
@@ -365,6 +377,8 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
           { id: "date", label: "Date", type: "date", required: true },
           { id: "supplier", label: "Supplier", type: "entity", entityType: "supplier", required: true },
           { id: "warehouse", label: "Warehouse", type: "select" },
+          { id: "supplierInvoiceNumber", label: "Supplier invoice no.", type: "text" },
+          { id: "supplierCuInvoiceNumber", label: "Supplier CU number", type: "text" },
         ],
       },
       { id: "lines", label: "Lines", fields: [] },
@@ -385,6 +399,7 @@ export const DOC_TYPE_REGISTRY: Record<DocTypeKey, DocTypeConfig> = {
     termKey: "invoice",
     listColumns: [
       { id: "number", header: "Number", accessor: "number", sticky: true },
+      { id: "cuInvoiceNumber", header: "CU number", accessor: "cuInvoiceNumber" },
       { id: "date", header: "Date", accessor: "date" },
       { id: "party", header: "Customer", accessor: "party" },
       { id: "total", header: "Total", accessor: "total" },

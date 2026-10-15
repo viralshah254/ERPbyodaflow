@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { CustomerLink } from "@/components/customers/CustomerLink";
+import { listedCuNumber } from "@/lib/kra/kra-signing";
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -145,6 +146,14 @@ export default function SalesInvoicesPage() {
         header: "Number",
         accessor: (r: SalesDocRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
+      },
+      {
+        id: "cuInvoiceNumber",
+        header: "CU number",
+        accessor: (r: SalesDocRow) => {
+          const cu = listedCuNumber(r);
+          return cu ? <span className="font-mono text-xs">{cu}</span> : <span className="text-muted-foreground">—</span>;
+        },
       },
       {
         id: "date",
@@ -276,6 +285,7 @@ export default function SalesInvoicesPage() {
               fileName,
               rows.map((row) => ({
                 number: row.number,
+                cuInvoiceNumber: listedCuNumber(row),
                 date: formatActivityExact(invoiceWhen(row)) || row.date,
                 customer: row.party ?? "",
                 total: row.total ?? 0,
@@ -328,6 +338,7 @@ export default function SalesInvoicesPage() {
                         .filter((row) => selectedIds.includes(row.id))
                         .map((row) => ({
                           number: row.number,
+                          cuInvoiceNumber: listedCuNumber(row),
                           date: formatActivityExact(invoiceWhen(row)) || row.date,
                           customer: row.party ?? "",
                           total: row.total ?? 0,

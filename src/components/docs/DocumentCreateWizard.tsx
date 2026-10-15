@@ -136,6 +136,8 @@ const schema = z.object({
   date: z.string().min(1, "Date is required"),
   party: z.string().optional(),
   reference: z.string().optional(),
+  supplierInvoiceNumber: z.string().optional(),
+  supplierCuInvoiceNumber: z.string().optional(),
   branch: z.string().optional(),
   dueDate: z.string().optional(),
   poRef: z.string().optional(),
@@ -166,6 +168,8 @@ function getDefaultValues(baseCurrency: string): FormValues {
     date: today,
     party: "",
     reference: "",
+    supplierInvoiceNumber: "",
+    supplierCuInvoiceNumber: "",
     branch: "",
     dueDate: "",
     poRef: "",
@@ -188,6 +192,8 @@ function fieldIdToKey(id: string): keyof FormValues {
     dueDate: "dueDate",
     poRef: "poRef",
     reference: "reference",
+    supplierInvoiceNumber: "supplierInvoiceNumber",
+    supplierCuInvoiceNumber: "supplierCuInvoiceNumber",
     warehouse: "warehouse",
     currency: "currency",
     exchangeRate: "exchangeRate",
@@ -478,7 +484,17 @@ function RenderField({
       </div>
       <Input
         type={isDate ? "date" : isNum ? "number" : "text"}
-        placeholder={field.type === "entity" ? "Search or enter" : field.type === "select" ? "Select..." : undefined}
+        placeholder={
+          field.id === "supplierCuInvoiceNumber"
+            ? "CU number on the supplier tax invoice"
+            : field.id === "supplierInvoiceNumber"
+              ? "Invoice number on the supplier tax invoice"
+              : field.type === "entity"
+                ? "Search or enter"
+                : field.type === "select"
+                  ? "Select..."
+                  : undefined
+        }
         {...form.register(key)}
       />
       {form.formState.errors[key] && (
@@ -759,6 +775,8 @@ export function DocumentCreateWizard({
       date: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
       party: doc.partyId ?? "",
       reference: "",
+      supplierInvoiceNumber: doc.supplierInvoiceNumber ?? "",
+      supplierCuInvoiceNumber: doc.supplierCuInvoiceNumber ?? "",
       branch: doc.branchId ?? "",
       dueDate: (doc as { dueDate?: string }).dueDate?.slice(0, 10) ?? "",
       poRef: "",
@@ -1440,6 +1458,12 @@ export function DocumentCreateWizard({
         })(),
         poRef: form.getValues("poRef") || undefined,
         reference: form.getValues("reference") || undefined,
+        ...(["bill", "purchase-credit-note", "purchase-debit-note"].includes(type)
+          ? {
+              supplierInvoiceNumber: form.getValues("supplierInvoiceNumber")?.trim() ?? "",
+              supplierCuInvoiceNumber: form.getValues("supplierCuInvoiceNumber")?.trim() ?? "",
+            }
+          : {}),
         dueDate: form.getValues("dueDate") || undefined,
         ...(type === "bill" && billSourceLink
           ? {
