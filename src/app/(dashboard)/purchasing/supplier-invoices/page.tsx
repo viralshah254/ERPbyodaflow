@@ -49,6 +49,26 @@ export default function SupplierInvoicesPage() {
   const columns = React.useMemo(
     () => [
       { id: "number", header: "Number", accessor: (row: APBillRow) => <span className="font-medium">{row.number}</span> },
+      {
+        id: "supplierInvoiceNumber",
+        header: "Supplier invoice no.",
+        accessor: (row: APBillRow) =>
+          row.supplierInvoiceNumber ? (
+            <span className="font-mono text-xs">{row.supplierInvoiceNumber}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "cuInvoiceNumber",
+        header: "CU number",
+        accessor: (row: APBillRow) =>
+          row.supplierCuInvoiceNumber ? (
+            <span className="font-mono text-xs">{row.supplierCuInvoiceNumber}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
       { id: "date", header: "Date", accessor: "date" as keyof APBillRow },
       { id: "supplier", header: "Supplier", accessor: "party" as keyof APBillRow },
       {

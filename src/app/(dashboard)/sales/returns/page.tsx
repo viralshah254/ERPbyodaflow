@@ -22,6 +22,7 @@ import type { PartyLookupOption } from "@/lib/api/parties";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { listedCuNumber } from "@/lib/kra/kra-signing";
 
 export default function SalesReturnsPage() {
   const canWrite = useCanWriteSales();
@@ -66,6 +67,14 @@ export default function SalesReturnsPage() {
   const columns = React.useMemo(
     () => [
       { id: "number", header: "Number", accessor: (r: DocListRow) => <span className="font-medium">{r.number}</span>, sticky: true },
+      {
+        id: "cuInvoiceNumber",
+        header: "CU number",
+        accessor: (r: DocListRow) => {
+          const cu = listedCuNumber(r);
+          return cu ? <span className="font-mono text-xs">{cu}</span> : <span className="text-muted-foreground">—</span>;
+        },
+      },
       { id: "date", header: "Date", accessor: "date" as keyof DocListRow },
       {
         id: "party",

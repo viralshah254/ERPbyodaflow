@@ -44,6 +44,10 @@ export type DocListRow = {
   poRef?: string;
   warehouse?: string;
   reference?: string;
+  /** KRA Control Unit number, or the eTIMS receipt number when that is what KRA returned. */
+  cuInvoiceNumber?: string;
+  supplierInvoiceNumber?: string;
+  supplierCuInvoiceNumber?: string;
   pendingApprovalReason?: string;
   kraSigning?: KraSigningRecord | null;
 };
@@ -306,6 +310,8 @@ export type DocumentDetailRecord = {
   emailedAt?: string;
   emailedTo?: string;
   notes?: string;
+  supplierInvoiceNumber?: string;
+  supplierCuInvoiceNumber?: string;
   dueDate?: string;
   paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID";
   paidAmount?: number;

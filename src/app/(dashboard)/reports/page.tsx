@@ -27,6 +27,7 @@ const QUICK_LINKS = [
   { href: "/reports/saved", label: "Saved Views", desc: "Your saved report views", icon: "Bookmark" as const },
   { href: "/reports/scheduled", label: "Scheduled", desc: "Automated report schedules", icon: "Clock" as const },
   { href: "/reports/exports", label: "Exports", desc: "Export history & downloads", icon: "Download" as const },
+  { href: "/reports/kra-cu", label: "KRA CU numbers", desc: "Invoice number beside the KRA Control Unit number", icon: "Receipt" as const },
   { href: "/reports/vat-summary", label: "VAT summary", desc: "VAT output, input, net", icon: "Receipt" as const },
   { href: "/reports/wht-summary", label: "WHT summary", desc: "Withholding tax by period", icon: "Percent" as const },
   { href: "/reports/commission-reconciliation", label: "Commission reconciliation", desc: "Sales/commission/top-up/journal/settlement", icon: "Scale" as const },

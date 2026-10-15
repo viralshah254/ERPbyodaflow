@@ -185,6 +185,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/reports/exports", module: "reports", description: "Exports", inNav: true },
   { path: "/reports/vat-summary", module: "reports", description: "VAT summary", inNav: false },
   { path: "/reports/wht-summary", module: "reports", description: "WHT summary", inNav: false },
+  { path: "/reports/kra-cu", module: "reports", description: "KRA CU numbers and purchase match", inNav: true },
 
   // Analytics
   { path: "/analytics", module: "analytics", description: "Analytics hub", inNav: true },

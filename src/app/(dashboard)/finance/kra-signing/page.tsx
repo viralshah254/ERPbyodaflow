@@ -143,6 +143,14 @@ export default function KraSigningMonitorPage() {
         accessor: (r: IncotexMonitorRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
       },
+      {
+        id: "cuInvoiceNumber",
+        header: "CU number",
+        accessor: (r: IncotexMonitorRow) => {
+          const cu = r.kraSigning?.cuInvoiceNumber || r.kraSigning?.receiptNumber;
+          return cu ? <span className="font-mono text-xs">{cu}</span> : <span className="text-muted-foreground">—</span>;
+        },
+      },
       { id: "date", header: "Date", accessor: "date" as keyof IncotexMonitorRow },
       { id: "party", header: "Customer", accessor: "party" as keyof IncotexMonitorRow },
       {

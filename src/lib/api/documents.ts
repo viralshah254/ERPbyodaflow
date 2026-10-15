@@ -192,6 +192,8 @@ type BackendDocumentDetail = {
   emailedAt?: string;
   emailedTo?: string;
   notes?: string;
+  supplierInvoiceNumber?: string | null;
+  supplierCuInvoiceNumber?: string | null;
   dueDate?: string;
   paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID";
   paidAmount?: number;
@@ -272,6 +274,9 @@ type BackendDocumentListItem = {
   warehouseId?: string;
   poRef?: string;
   reference?: string;
+  supplierInvoiceNumber?: string;
+  supplierCuInvoiceNumber?: string;
+  cuInvoiceNumber?: string;
   pendingApprovalReason?: string;
   kraSigning?: KraSigningRecord | null;
 };
@@ -296,6 +301,8 @@ export type DocumentDraftPayload = {
   taxConfigId?: string;
   poRef?: string;
   reference?: string;
+  supplierInvoiceNumber?: string;
+  supplierCuInvoiceNumber?: string;
   dueDate?: string;
   sourceDocumentId?: string;
   sourceDocumentType?: DocTypeKey;
@@ -510,6 +517,8 @@ function mapDocumentDetail(
     emailedAt: payload.emailedAt,
     emailedTo: payload.emailedTo,
     notes: payload.notes,
+    supplierInvoiceNumber: payload.supplierInvoiceNumber ?? undefined,
+    supplierCuInvoiceNumber: payload.supplierCuInvoiceNumber ?? undefined,
     dueDate: payload.dueDate,
     paymentStatus: payload.paymentStatus,
     paidAmount: payload.paidAmount,
@@ -659,6 +668,9 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     warehouse: item.warehouse ?? item.warehouseId,
     poRef: item.poRef,
     reference: item.reference,
+    supplierInvoiceNumber: item.supplierInvoiceNumber,
+    supplierCuInvoiceNumber: item.supplierCuInvoiceNumber,
+    cuInvoiceNumber: item.cuInvoiceNumber,
     pendingApprovalReason: item.pendingApprovalReason,
     kraSigning: item.kraSigning ?? undefined,
   };
