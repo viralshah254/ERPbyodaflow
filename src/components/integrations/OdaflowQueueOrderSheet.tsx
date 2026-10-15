@@ -837,7 +837,12 @@ export function OdaflowQueueOrderSheet({
                             if (!id) applyProduct(line.index, null);
                           }}
                           onOptionSelect={(opt) => void checkProductMapping(line.index, opt)}
-                          loadOptions={loadProductOptions}
+                          loadOptions={(query) =>
+                            loadProductOptions(
+                              query.trim() ||
+                                [line.productName, line.packSize].filter(Boolean).join(" ")
+                            )
+                          }
                           minSearchLength={0}
                           searchDebounceMs={200}
                           placeholder="Select product"

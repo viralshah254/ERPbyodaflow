@@ -15,6 +15,20 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const ENV_DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
 const ENV_BRANCH_ID = process.env.NEXT_PUBLIC_CURRENT_BRANCH_ID ?? "";
 const API_BASE_OVERRIDE_KEY = "odaflow_erp_api_base";
+const HANDOFF_AT_KEY = "odaflow_erp_handoff_at";
+const HANDOFF_GRACE_MS = 20_000;
+
+export function markErpHandoffSettled(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(HANDOFF_AT_KEY, String(Date.now()));
+}
+
+/** True for a short window after SFA hands the browser to ERP. */
+export function erpHandoffGraceActive(): boolean {
+  if (typeof window === "undefined") return false;
+  const at = Number(sessionStorage.getItem(HANDOFF_AT_KEY) || 0);
+  return at > 0 && Date.now() - at < HANDOFF_GRACE_MS;
+}
 
 export function setApiBaseOverride(base: string): void {
   if (typeof window === "undefined") return;
@@ -119,10 +133,20 @@ async function applyFreshFirebaseBearerIfAvailable(forceRefresh = false): Promis
   return false;
 }
 
+async function waitForFirebaseBearer(forceRefresh: boolean): Promise<boolean> {
+  const deadline = Date.now() + (erpHandoffGraceActive() ? 5000 : 0);
+  do {
+    if (await applyFreshFirebaseBearerIfAvailable(forceRefresh)) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  } while (true);
+}
+
 let redirectingForExpiredSession = false;
 
 function redirectToLaunchpadForExpiredSession(): void {
   if (typeof window === "undefined" || redirectingForExpiredSession) return;
+  if (erpHandoffGraceActive()) return;
   const path = window.location.pathname;
   if (path.startsWith("/auth/") || path.startsWith("/login")) return;
   redirectingForExpiredSession = true;
@@ -151,7 +175,7 @@ async function withFirebaseAuthRetry(doFetch: () => Promise<Response>): Promise<
   const firstBody = await res.clone().json().catch(() => ({}));
   if (!isUnauthorizedPayload(401, firstBody)) return res;
 
-  const refreshed = await applyFreshFirebaseBearerIfAvailable(true);
+  const refreshed = await waitForFirebaseBearer(true);
   if (!refreshed) {
     redirectToLaunchpadForExpiredSession();
     return res;

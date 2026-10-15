@@ -210,6 +210,8 @@ function LoginContent() {
         error={handoffError}
         actionHref={hubRetry}
         actionLabel="Back to Odaflow"
+        secondaryHref="/auth/sign-out"
+        secondaryLabel="Sign out"
       />
     );
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { formatDocumentCreatedLabel, formatNairobiRelativeTime } from "./nairobi-datetime";
+import { formatActivityWhenEat, formatDocumentCreatedLabel, formatNairobiRelativeTime } from "./nairobi-datetime";
 
 describe("formatNairobiRelativeTime", () => {
   afterEach(() => {
@@ -34,5 +34,23 @@ describe("formatNairobiRelativeTime", () => {
 
   it("formats date-only fallback without time", () => {
     expect(formatDocumentCreatedLabel(undefined, "2026-07-30")).toBe("30th July");
+  });
+});
+
+describe("formatActivityWhenEat", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("converts a UTC timestamp to East African time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T08:00:00.000Z"));
+    expect(formatActivityWhenEat("2026-10-07T20:00:00.000Z")).toBe("8 days ago, 11:00 pm");
+  });
+
+  it("leaves a date-only value without a clock", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T08:00:00.000Z"));
+    expect(formatActivityWhenEat("2026-10-07")).toBe("8 days ago");
   });
 });

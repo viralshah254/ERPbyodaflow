@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
-import { setApiAuth } from "@/lib/api/client";
+import { erpHandoffGraceActive, setApiAuth } from "@/lib/api/client";
 import { odaflowHubLoggedOutUrl } from "@/lib/auth/odaflow-hub";
 import { onOdaflowLogout, shouldDropLocalSession } from "@/lib/auth/sso-logout-sync";
 import { useAuthStore } from "@/stores/auth-store";
 
 function dropErpSessionIfLoggedOutElsewhere() {
+  if (erpHandoffGraceActive()) return;
   if (!useAuthStore.getState().user) return;
   if (!shouldDropLocalSession()) return;
   setApiAuth({ bearerToken: undefined });

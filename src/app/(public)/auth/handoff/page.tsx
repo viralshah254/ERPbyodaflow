@@ -43,6 +43,8 @@ function HandoffContent() {
       error={error}
       actionHref={odaflowHubResumeUrl("erp")}
       actionLabel="Back to Odaflow"
+      secondaryHref="/auth/sign-out"
+      secondaryLabel="Sign out"
     />
   );
 }

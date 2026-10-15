@@ -9,7 +9,7 @@ import {
   isRememberMeExpired,
   signOut,
 } from "@/lib/firebase";
-import { isApiConfigured, setApiAuth } from "@/lib/api/client";
+import { isApiConfigured, erpHandoffGraceActive, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { odaflowHubLoggedOutUrl, odaflowHubResumeUrl } from "@/lib/auth/odaflow-hub";
 import { onOdaflowLogout, shouldDropLocalSession } from "@/lib/auth/sso-logout-sync";
@@ -77,9 +77,9 @@ export function AuthRestore() {
               pendingTimeout = null;
             }
             if (firebaseUser) {
-              if (shouldDropLocalSession()) {
+              if (shouldDropLocalSession() && !erpHandoffGraceActive()) {
                 await signOut();
-                if (!cancelled) {
+                if (!cancelled && shouldDropLocalSession() && !erpHandoffGraceActive()) {
                   setApiAuth({ bearerToken: undefined });
                   logout();
                   leaveErpTab(true);
@@ -145,12 +145,16 @@ export function AuthRestore() {
                   attachSfaFromErp().catch(() => undefined)
                 );
               } catch {
-                if (!cancelled) logout();
+                if (!cancelled && !erpHandoffGraceActive()) logout();
               }
               done();
               return;
             }
             const hadSession = Boolean(useAuthStore.getState().user);
+            if (hadSession && erpHandoffGraceActive()) {
+              done();
+              return;
+            }
             if (hadSession) {
               setApiAuth({ bearerToken: undefined });
               logout();
@@ -164,7 +168,7 @@ export function AuthRestore() {
             }, 50);
           })().catch((err) => {
             console.warn("[AuthRestore] session restore failed:", err);
-            if (!cancelled) logout();
+            if (!cancelled && !erpHandoffGraceActive()) logout();
             done();
           });
         });

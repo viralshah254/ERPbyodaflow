@@ -3,16 +3,21 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_PAGINATION_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SkeletonDataTable } from "@/components/ui/skeleton";
+import { TableLinearProgress } from "@/components/ui/table-linear-progress";
+import { TablePagination } from "@/components/ui/table-pagination";
 import type { SalesDocRow } from "@/lib/types/sales";
 import { downloadCsv } from "@/lib/export/csv";
-import { fetchSalesDocumentsApi } from "@/lib/api/sales-docs";
-import { bulkDocumentActionApi } from "@/lib/api/documents";
+import { fetchSalesDocumentsPageApi } from "@/lib/api/sales-docs";
+import { bulkDocumentActionApi, exportDocumentListApi } from "@/lib/api/documents";
+import { isApiConfigured } from "@/lib/api/client";
+import { formatActivityExact, formatActivityWhenEat } from "@/lib/format/nairobi-datetime";
 import {
   filterIdsForBulkPost,
   partitionBulkDocResults,
@@ -36,11 +41,18 @@ const STATUS_OPTIONS = [
 ];
 
 const scope = "sales-invoices";
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20, 25, 30, 50] as const;
+
+function invoiceWhen(row: SalesDocRow): string {
+  return row.createdAt || row.date;
+}
 
 export default function SalesInvoicesPage() {
   const canWrite = useCanWriteSales();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
@@ -48,35 +60,72 @@ export default function SalesInvoicesPage() {
     getSavedViews(scope)
   );
 
-  const [allRows, setAllRows] = React.useState<SalesDocRow[]>([]);
-
-  const refreshRows = React.useCallback(async () => {
-    const items = await fetchSalesDocumentsApi("invoice");
-    setAllRows(items);
-  }, []);
+  const [rows, setRows] = React.useState<SalesDocRow[]>([]);
+  const [pageSize, setPageSize] = React.useState<number>(DEFAULT_PAGE_SIZE);
+  const [pageSizeOptions, setPageSizeOptions] = React.useState<number[]>([...PAGE_SIZE_OPTIONS]);
+  const [pageOffset, setPageOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState<number | undefined>(undefined);
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [fetching, setFetching] = React.useState(false);
+  const hasLoadedOnce = React.useRef(false);
 
   React.useEffect(() => {
-    void refreshRows().catch((error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to load invoices.");
-    });
-  }, [refreshRows]);
-  const filtered = React.useMemo(() => {
-    let out = allRows;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      out = out.filter(
-        (r) =>
-          r.number.toLowerCase().includes(q) ||
-          (r.party?.toLowerCase().includes(q))
-      );
-    }
-    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
-    return out;
-  }, [allRows, search, statusFilter]);
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const loadPage = React.useCallback(
+    async (offset: number) => {
+      const isFirstLoad = !hasLoadedOnce.current;
+      if (isFirstLoad) setInitialLoading(true);
+      else setFetching(true);
+      try {
+        const page = await fetchSalesDocumentsPageApi("invoice", {
+          limit: pageSize,
+          cursor: String(offset),
+          search: debouncedSearch || undefined,
+          status: statusFilter || undefined,
+        });
+        setRows(page.items);
+        setPageOffset(page.offset);
+        setHasMore(page.hasMore);
+        setTotalCount(page.totalCount);
+        if (page.pageSizeOptions?.length) setPageSizeOptions(page.pageSizeOptions);
+        setSelectedIds([]);
+        hasLoadedOnce.current = true;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load invoices.");
+        setRows([]);
+        setHasMore(false);
+        setTotalCount(undefined);
+      } finally {
+        setInitialLoading(false);
+        setFetching(false);
+      }
+    },
+    [debouncedSearch, pageSize, statusFilter]
+  );
+
+  React.useEffect(() => {
+    void loadPage(0);
+  }, [loadPage]);
+
+  const refreshRows = React.useCallback(async () => {
+    await loadPage(pageOffset);
+  }, [loadPage, pageOffset]);
+
+  const goToPreviousPage = React.useCallback(() => {
+    void loadPage(Math.max(0, pageOffset - pageSize));
+  }, [loadPage, pageOffset, pageSize]);
+
+  const goToNextPage = React.useCallback(() => {
+    void loadPage(pageOffset + pageSize);
+  }, [loadPage, pageOffset, pageSize]);
 
   const selectedRows = React.useMemo(
-    () => allRows.filter((r) => selectedIds.includes(r.id)),
-    [allRows, selectedIds]
+    () => rows.filter((r) => selectedIds.includes(r.id)),
+    [rows, selectedIds]
   );
 
   const filterChips: FilterChip[] = React.useMemo(() => {
@@ -97,7 +146,19 @@ export default function SalesInvoicesPage() {
         accessor: (r: SalesDocRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
       },
-      { id: "date", header: "Date", accessor: "date" as keyof SalesDocRow },
+      {
+        id: "date",
+        header: "Date",
+        accessor: (r: SalesDocRow) => {
+          const when = invoiceWhen(r);
+          const exact = formatActivityExact(when);
+          return (
+            <span className="whitespace-nowrap text-sm text-muted-foreground" title={exact || undefined}>
+              {formatActivityWhenEat(when)}
+            </span>
+          );
+        },
+      },
       {
         id: "party",
         header: "Customer",
@@ -205,18 +266,23 @@ export default function SalesInvoicesPage() {
           onSelectView={handleSelectView}
           onSaveCurrentView={handleSaveView}
           onDeleteView={handleDeleteView}
-          onExport={() =>
+          onExport={() => {
+            const fileName = `sales-invoices-${new Date().toISOString().slice(0, 10)}.csv`;
+            if (isApiConfigured()) {
+              exportDocumentListApi("invoice", fileName, (msg) => toast.error(msg));
+              return;
+            }
             downloadCsv(
-              `sales-invoices-${new Date().toISOString().slice(0, 10)}.csv`,
-              filtered.map((row) => ({
+              fileName,
+              rows.map((row) => ({
                 number: row.number,
-                date: row.date,
+                date: formatActivityExact(invoiceWhen(row)) || row.date,
                 customer: row.party ?? "",
                 total: row.total ?? 0,
                 status: row.status,
               }))
-            )
-          }
+            );
+          }}
           bulkActions={
             selectedIds.length > 0 ? (
               <div className="flex items-center gap-2">
@@ -258,11 +324,11 @@ export default function SalesInvoicesPage() {
                   onClick={() =>
                     downloadCsv(
                       `sales-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`,
-                      filtered
+                      rows
                         .filter((row) => selectedIds.includes(row.id))
                         .map((row) => ({
                           number: row.number,
-                          date: row.date,
+                          date: formatActivityExact(invoiceWhen(row)) || row.date,
                           customer: row.party ?? "",
                           total: row.total ?? 0,
                           status: row.status,
@@ -276,18 +342,49 @@ export default function SalesInvoicesPage() {
             ) : undefined
           }
         />
-        <DataTable<SalesDocRow>
-          data={filtered}
-          columns={columns}
-          onRowClick={(row) => router.push(`/docs/invoice/${row.id}`)}
-          emptyMessage="No invoices yet."
-          selectable
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          scrollMode="fill"
-          size="comfortable"
-          className="min-h-0 flex-1 border-0"
+        <div className={LIST_TABLE_SURFACE_CLASS}>
+          {initialLoading ? (
+            <div className="p-4">
+              <SkeletonDataTable rows={pageSize} columnWidths={["w-24", "w-28", "w-40", "w-24", "w-24"]} />
+            </div>
+          ) : (
+            <>
+              <TableLinearProgress active={fetching} />
+              <div className={LIST_TABLE_SCROLL_BODY_CLASS}>
+                <DataTable<SalesDocRow>
+                  data={rows}
+                  columns={columns}
+                  onRowClick={(row) => router.push(`/docs/invoice/${row.id}`)}
+                  emptyMessage="No invoices yet."
+                  selectable
+                  selectedIds={selectedIds}
+                  onSelectionChange={setSelectedIds}
+                  scrollMode="fill"
+                  size="comfortable"
+                  className="min-h-0 flex-1 border-0 shadow-none"
+                />
+              </div>
+            </>
+          )}
+          <TablePagination
+            className={`${LIST_TABLE_PAGINATION_CLASS} rounded-none border-x-0 border-b-0 bg-card shadow-none`}
+            pageOffset={pageOffset}
+            pageSize={pageSize}
+            itemCount={initialLoading ? 0 : rows.length}
+            hasMore={hasMore}
+            loading={initialLoading}
+            busy={fetching}
+            totalCount={totalCount}
+            onPrevious={goToPreviousPage}
+            onNext={goToNextPage}
+            entityLabel="invoices"
+            pageSizeOptions={pageSizeOptions}
+            onPageSizeChange={(size) => {
+              if (size === pageSize) return;
+              setPageSize(size);
+            }}
           />
+        </div>
       </div>
     </PageShell>
   );
