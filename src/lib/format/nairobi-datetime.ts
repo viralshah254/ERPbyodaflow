@@ -164,6 +164,16 @@ export function formatActivityWhen(value?: string | null): string {
     : `${parts.day} ${month} ${parts.year}`;
 }
 
+/** Relative phrase plus the clock in East Africa time. Date-only values stay without a clock. */
+export function formatActivityWhenEat(value?: string | null): string {
+  const relative = formatActivityWhen(value);
+  if (!value?.trim() || relative === "—") return relative;
+  const parsed = parseActivityInstant(value);
+  if (!parsed?.hasTime) return relative;
+  const clock = formatClock(nairobiParts(parsed.date));
+  return `${relative}, ${clock}`;
+}
+
 /** Full date for tooltips and printed statements. */
 export function formatActivityExact(value?: string | null): string {
   if (!value?.trim()) return "";

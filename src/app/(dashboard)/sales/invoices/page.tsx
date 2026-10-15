@@ -17,7 +17,7 @@ import { downloadCsv } from "@/lib/export/csv";
 import { fetchSalesDocumentsPageApi } from "@/lib/api/sales-docs";
 import { bulkDocumentActionApi, exportDocumentListApi } from "@/lib/api/documents";
 import { isApiConfigured } from "@/lib/api/client";
-import { formatActivityExact, formatActivityWhen } from "@/lib/format/nairobi-datetime";
+import { formatActivityExact, formatActivityWhenEat } from "@/lib/format/nairobi-datetime";
 import {
   filterIdsForBulkPost,
   partitionBulkDocResults,
@@ -154,7 +154,7 @@ export default function SalesInvoicesPage() {
           const exact = formatActivityExact(when);
           return (
             <span className="whitespace-nowrap text-sm text-muted-foreground" title={exact || undefined}>
-              {formatActivityWhen(when)}
+              {formatActivityWhenEat(when)}
             </span>
           );
         },
