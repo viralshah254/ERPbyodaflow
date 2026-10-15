@@ -52,7 +52,7 @@ async function consumeAssertion(assertion: string): Promise<string> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assertion }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(20000),
       });
       const consumeJson = (await consumeRes.json()) as {
         customToken?: string;
