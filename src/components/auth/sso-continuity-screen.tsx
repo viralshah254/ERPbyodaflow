@@ -18,12 +18,16 @@ export function SsoContinuityScreen({
   error,
   actionHref,
   actionLabel = "Back to Odaflow",
+  secondaryHref,
+  secondaryLabel,
 }: {
   title?: string;
   message?: string;
   error?: string | null;
   actionHref?: string;
   actionLabel?: string;
+  secondaryHref?: string;
+  secondaryLabel?: string;
 }) {
   return (
     <div className="fixed inset-0 z-[80] overflow-hidden bg-[#07131f] text-[#e8e2d6]">
@@ -62,12 +66,22 @@ export function SsoContinuityScreen({
           </p>
 
           {error && actionHref && (
-            <a
-              href={actionHref}
-              className="mt-8 inline-flex rounded-full bg-sky-300 px-5 py-2.5 text-sm font-semibold text-[#07131f]"
-            >
-              {actionLabel}
-            </a>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <a
+                href={actionHref}
+                className="inline-flex rounded-full bg-sky-300 px-5 py-2.5 text-sm font-semibold text-[#07131f]"
+              >
+                {actionLabel}
+              </a>
+              {secondaryHref && secondaryLabel ? (
+                <a
+                  href={secondaryHref}
+                  className="inline-flex rounded-full border border-white/20 px-5 py-2.5 text-sm font-semibold text-[#f4efe4]"
+                >
+                  {secondaryLabel}
+                </a>
+              ) : null}
+            </div>
           )}
         </div>
       </div>

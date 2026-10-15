@@ -1,5 +1,5 @@
 import { setRememberMeUntil, signInWithCustomTokenAndGetIdToken } from "@/lib/firebase";
-import { setApiAuth, setApiBaseOverride } from "@/lib/api/client";
+import { setApiAuth, setApiBaseOverride, markErpHandoffSettled } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -146,6 +146,7 @@ async function existingErpIdToken(): Promise<string> {
  * A missing assertion or consume failure must not send the user to loggedOut login.
  */
 async function completeOnce(code: string): Promise<string> {
+  markErpHandoffSettled();
   const exchanged = await exchangeCode(code);
   let token = exchanged.firebaseIdToken || "";
   if (exchanged.erpAssertion) {
