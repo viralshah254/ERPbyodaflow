@@ -74,6 +74,7 @@ export interface ScannedDocument {
   fileId: string;
   fileName: string;
   contentType?: string;
+  ocrSource?: "text-layer" | "document-ai" | "none";
   status: DocumentHubStatus;
   documentType: string;
   groupKey: string;

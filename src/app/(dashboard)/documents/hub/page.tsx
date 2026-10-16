@@ -291,7 +291,8 @@ function Detail({
           <Field label="Number" value={item.fields.documentNumber || item.fields.chequeNumber} />
           <Field label="Total" value={item.fields.total != null ? formatMoney(item.fields.total, item.fields.currency || "KES") : undefined} />
           <Field label="Tax PIN" value={item.fields.taxPin} />
-          <Field label="Source" value={item.classificationSource === "user_confirmed" ? "Confirmed rule" : "Suggestion"} />
+          <Field label="Classification" value={item.classificationSource === "user_confirmed" ? "Confirmed rule" : "Suggestion"} />
+          <Field label="Read with" value={item.ocrSource === "document-ai" ? "Document AI" : item.ocrSource === "text-layer" ? "Text in the file" : "Not read yet"} />
         </dl>
         {item.flags.length ? (
           <Section title="Exceptions">
