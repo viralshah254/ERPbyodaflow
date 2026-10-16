@@ -1735,7 +1735,8 @@ export function DocumentCreateWizard({
       }
       setPostingPreview(items);
     } catch (error) {
-      const err = error as Error & { status?: number };
+      const err = error as Error & { status?: number; silent?: boolean };
+      if (err.silent) return;
       if (err.status === 403 || err.message?.toLowerCase().includes("forbidden")) {
         const msg = "You don't have permission to create this document. Sign out and back in, or contact your administrator.";
         setPostingPreviewError(msg);
@@ -1956,7 +1957,8 @@ export function DocumentCreateWizard({
         router.push(`/docs/${type}/${result.id}`);
       }
     } catch (error) {
-      const err = error as Error & { status?: number };
+      const err = error as Error & { status?: number; silent?: boolean };
+      if (err.silent) return;
       if (err.status === 403 || err.message?.toLowerCase().includes("forbidden")) {
         toast.error(`You don't have permission to ${isEditMode ? "update" : "create"} this document.`);
       } else {

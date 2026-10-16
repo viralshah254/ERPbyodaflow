@@ -14,7 +14,7 @@ import type { DocumentDetailRecord } from "@/lib/types/documents";
 import { DeliveryNoteWarehousePanel } from "@/components/docs/DeliveryNoteWarehousePanel";
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
 import { odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
-import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
+import { useCanWriteDocType, useSessionReady } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -27,6 +27,7 @@ export default function DocEditPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
+  const sessionReady = useSessionReady();
 
   const [loading, setLoading] = React.useState(true);
   const [document, setDocument] = React.useState<DocumentDetailRecord | null>(null);
@@ -66,6 +67,8 @@ export default function DocEditPage() {
     });
     if (detail) setDocument(detail);
   }, [type, id]);
+
+  if (!sessionReady) return null;
 
   if (!canWrite) {
     return (

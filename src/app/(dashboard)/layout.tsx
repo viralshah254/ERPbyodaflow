@@ -7,9 +7,9 @@ import { PushForegroundToast } from "@/components/push-foreground-toast";
 import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { odaflowHubResumeUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubLoginUrl } from "@/lib/auth/odaflow-hub";
 
 const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   MANUFACTURER: "fmcg-manufacturer",
@@ -22,8 +22,9 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isLoading, isPlatformOperator, user, collectionsHold } = useAuthStore();
+  const { isLoading, isPlatformOperator, user, collectionsHold, permissions } = useAuthStore();
   const router = useRouter();
+  const [accessReady, setAccessReady] = useState(false);
 
   const org = useAuthStore((s) => s.org);
   const { templateId, applyTemplate } = useOrgContextStore();
@@ -40,7 +41,8 @@ export default function DashboardLayout({
     }
   }, [isLoading, collectionsHold, isPlatformOperator, router]);
 
-  // Redirect to login only after AuthRestore has finished and we're still not authenticated
+  // Redirect only after AuthRestore has finished and we're still not authenticated.
+  // Keep the opened path so a real resume returns here instead of the dashboard.
   useEffect(() => {
     if (isLoading) return;
     if (!isApiConfigured()) {
@@ -48,9 +50,34 @@ export default function DashboardLayout({
       return;
     }
     if (!user) {
-      window.location.replace(odaflowHubResumeUrl("erp"));
+      const next = `${window.location.pathname}${window.location.search}`;
+      window.location.replace(odaflowHubLoginUrl("erp", next));
     }
   }, [isLoading, user, router]);
+
+  // Every page waits until permissions are loaded. An empty list is refreshed once
+  // before any screen can say the user has no access.
+  useEffect(() => {
+    if (isLoading || !user) {
+      setAccessReady(false);
+      return;
+    }
+    if (permissions.length > 0) {
+      setAccessReady(true);
+      return;
+    }
+    let cancel = false;
+    void import("@/lib/auth/restore-erp-session").then(({ reloadErpPermissions }) =>
+      reloadErpPermissions()
+        .catch(() => false)
+        .finally(() => {
+          if (!cancel) setAccessReady(true);
+        })
+    );
+    return () => {
+      cancel = true;
+    };
+  }, [isLoading, user, permissions.length]);
 
   useEffect(() => {
     if (org && !templateId) {
@@ -71,7 +98,7 @@ export default function DashboardLayout({
             actions are disabled.
           </div>
         ) : null}
-        {isLoading ? null : children}
+        {isLoading || !user || !accessReady ? null : children}
       </MainLayout>
     </>
   );

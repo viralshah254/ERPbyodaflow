@@ -8,7 +8,7 @@ import { DocumentCreateWizard } from "@/components/docs/DocumentCreateWizard";
 import { getDocTypeConfig } from "@/config/documents";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
-import { useCanWriteDocType } from "@/lib/rbac/use-write-guard";
+import { useCanWriteDocType, useSessionReady } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 export default function DocTypeNewPage() {
@@ -19,6 +19,9 @@ export default function DocTypeNewPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
+  const sessionReady = useSessionReady();
+
+  if (!sessionReady) return null;
 
   if (!canWrite) {
     return (

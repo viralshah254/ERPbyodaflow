@@ -3,7 +3,7 @@
  * See BACKEND_SPEC_COOL_CATCH.md §3.6.
  */
 
-import { apiRequest, getApiBase, requireLiveApi } from "@/lib/api/client";
+import { apiRequest, getApiBase, requireLiveApi, uploadFormData } from "@/lib/api/client";
 import {
   type LandedCostTemplateRow,
   type LandedCostSourceRow,
@@ -276,17 +276,10 @@ export async function uploadLandedCostAttachment(
   const formData = new FormData();
   formData.append("file", file);
   formData.append("lineIndex", String(lineIndex));
-  const url = `${getApiBase()}/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments`;
-  const resp = await fetch(url, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: resp.statusText }));
-    throw new Error((err as { error?: string }).error ?? "Upload failed");
-  }
-  return resp.json() as Promise<LandedCostAttachmentRow>;
+  return uploadFormData<LandedCostAttachmentRow>(
+    `/api/inventory/landed-cost/allocation/${encodeURIComponent(allocationId)}/attachments`,
+    formData
+  );
 }
 
 export async function deleteLandedCostAttachment(
