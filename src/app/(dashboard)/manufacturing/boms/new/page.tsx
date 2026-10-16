@@ -27,7 +27,7 @@ import { setUomsCache, listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
 import { manufacturingAreaLabel } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
-import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
+import { useCanWriteManufacturing, useSessionReady } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -41,6 +41,7 @@ function pickKgUomCode(codes: string[]): string | undefined {
 export default function NewBomPage() {
   const router = useRouter();
   const canWrite = useCanWriteManufacturing();
+  const sessionReady = useSessionReady();
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -107,6 +108,8 @@ export default function NewBomPage() {
       description: product.barcode?.trim() || undefined,
     }));
   }, []);
+
+  if (!sessionReady) return null;
 
   if (!canWrite) {
     return <div className="p-8 text-center text-muted-foreground">You do not have write access to manufacturing.</div>;

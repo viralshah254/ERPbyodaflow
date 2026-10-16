@@ -11,7 +11,8 @@ import {
 } from "@/lib/firebase";
 import { isApiConfigured, erpHandoffGraceActive, setApiAuth } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
-import { odaflowHubLoggedOutUrl, odaflowHubResumeUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubLoggedOutUrl, odaflowHubLoginUrl } from "@/lib/auth/odaflow-hub";
+import { restoreErpSessionFromHub } from "@/lib/auth/restore-erp-session";
 import { onOdaflowLogout, shouldDropLocalSession } from "@/lib/auth/sso-logout-sync";
 
 const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
@@ -20,12 +21,21 @@ const DEFAULT_TEMPLATE_BY_ORG_TYPE: Record<string, string> = {
   SHOP: "retail-multi-store",
 };
 
+/** A new tab often emits a signed-out flicker before IndexedDB restores the user. */
+const SIGNED_OUT_GRACE_MS = 2000;
+
+function currentErpReturnPath(): string {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
 function leaveErpTab(realLogout: boolean) {
   if (typeof window === "undefined") return;
   const path = window.location.pathname;
   if (path.startsWith("/auth/") || path.startsWith("/login")) return;
   window.location.replace(
-    realLogout ? odaflowHubLoggedOutUrl("erp") : odaflowHubResumeUrl("erp")
+    realLogout
+      ? odaflowHubLoggedOutUrl("erp")
+      : odaflowHubLoginUrl("erp", currentErpReturnPath())
   );
 }
 
@@ -59,12 +69,18 @@ export function AuthRestore() {
         if (cancelled) return;
 
         let resolved = false;
-        let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
+        let signedOutTimer: ReturnType<typeof setTimeout> | null = null;
+        let restoreTicket = 0;
+        const clearSignedOutTimer = () => {
+          if (signedOutTimer) {
+            clearTimeout(signedOutTimer);
+            signedOutTimer = null;
+          }
+        };
         const done = () => {
           if (!resolved) {
             resolved = true;
-            if (pendingTimeout) clearTimeout(pendingTimeout);
-            pendingTimeout = null;
+            clearSignedOutTimer();
             finishHydration();
           }
         };
@@ -72,11 +88,9 @@ export function AuthRestore() {
         const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
           void (async () => {
             if (cancelled) return;
-            if (pendingTimeout) {
-              clearTimeout(pendingTimeout);
-              pendingTimeout = null;
-            }
+            clearSignedOutTimer();
             if (firebaseUser) {
+              const ticket = ++restoreTicket;
               if (shouldDropLocalSession() && !erpHandoffGraceActive()) {
                 await signOut();
                 if (!cancelled && shouldDropLocalSession() && !erpHandoffGraceActive()) {
@@ -95,9 +109,10 @@ export function AuthRestore() {
               }
               try {
                 const token = await firebaseUser.getIdToken();
+                if (cancelled || ticket !== restoreTicket) return;
                 setApiAuth({ bearerToken: token });
                 const session = await fetchRuntimeSession();
-                if (cancelled) return;
+                if (cancelled || ticket !== restoreTicket) return;
                 setSession({
                   user: session.user,
                   org: session.org,
@@ -145,27 +160,45 @@ export function AuthRestore() {
                   attachSfaFromErp().catch(() => undefined)
                 );
               } catch {
-                if (!cancelled && !erpHandoffGraceActive()) logout();
+                if (!cancelled && ticket === restoreTicket && !erpHandoffGraceActive()) logout();
               }
-              done();
+              if (!cancelled && ticket === restoreTicket) done();
               return;
             }
-            const hadSession = Boolean(useAuthStore.getState().user);
-            if (hadSession && erpHandoffGraceActive()) {
-              done();
-              return;
-            }
-            if (hadSession) {
-              setApiAuth({ bearerToken: undefined });
-              logout();
-              done();
-              leaveErpTab(shouldDropLocalSession());
-              return;
-            }
-            pendingTimeout = setTimeout(() => {
-              pendingTimeout = null;
-              if (!cancelled && !resolved) done();
-            }, 50);
+            // A brand-new tab often hears "signed out" before the shared Firebase
+            // session is read, and again while that read is still in flight.
+            // Wait, then trust currentUser — don't bounce through sign-in on a flicker.
+            signedOutTimer = setTimeout(() => {
+              signedOutTimer = null;
+              void (async () => {
+                if (cancelled || auth.currentUser) return;
+                const hadSession = Boolean(useAuthStore.getState().user);
+                if (hadSession && erpHandoffGraceActive()) {
+                  if (!resolved) done();
+                  return;
+                }
+                if (hadSession && shouldDropLocalSession()) {
+                  restoreTicket += 1;
+                  setApiAuth({ bearerToken: undefined });
+                  logout();
+                  if (!resolved) done();
+                  leaveErpTab(true);
+                  return;
+                }
+                // Ask SFA for the shared cookie and rebuild this tab in place.
+                const restored = await restoreErpSessionFromHub().catch(() => "unavailable" as const);
+                if (cancelled || auth.currentUser) return;
+                if (restored === "restored" && useAuthStore.getState().user) {
+                  if (!resolved) done();
+                  return;
+                }
+                restoreTicket += 1;
+                setApiAuth({ bearerToken: undefined });
+                logout();
+                if (!resolved) done();
+                leaveErpTab(false);
+              })();
+            }, SIGNED_OUT_GRACE_MS);
           })().catch((err) => {
             console.warn("[AuthRestore] session restore failed:", err);
             if (!cancelled && !erpHandoffGraceActive()) logout();
@@ -209,7 +242,7 @@ export function AuthRestore() {
           unsubIdToken();
           document.removeEventListener("visibilitychange", onVisible);
           stopLogoutSync();
-          if (pendingTimeout) clearTimeout(pendingTimeout);
+          clearSignedOutTimer();
         };
         if (cancelled) teardown();
       } catch {

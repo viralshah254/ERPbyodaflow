@@ -31,6 +31,7 @@ import { downloadCsv } from "@/lib/export/csv";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -420,6 +421,7 @@ export default function APBillsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2 flex-wrap">
+            <DocumentHubUploadButton label="Scan supplier invoice" />
             <Button variant="outline" size="sm" asChild>
               <Link href="/ap/three-way-match">
                 <Icons.GitCompare className="mr-2 h-4 w-4" />

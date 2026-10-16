@@ -41,6 +41,7 @@ import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
@@ -322,6 +323,7 @@ export default function ARPaymentsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
+            <DocumentHubUploadButton label="Scan cheque" />
             {copilotEnabled ? (
               <Button variant="outline" size="sm" onClick={handleDraftReminder}>
                 <Icons.Sparkles className="mr-2 h-4 w-4" />

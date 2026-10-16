@@ -3,6 +3,7 @@ import {
   odaflowApiCandidates,
   odaflowApiUrl,
   odaflowHubLoggedOutUrl,
+  odaflowHubLoginUrl,
   odaflowHubResumeUrl,
 } from "./odaflow-hub";
 
@@ -47,6 +48,28 @@ describe("odaflow hub resume vs logout URLs", () => {
     expect(url).toContain("client=erp");
     expect(url).toContain("resume=1");
     expect(url).not.toContain("loggedOut=1");
+  });
+
+  it("sends the opened ERP page back through resume", () => {
+    const url = odaflowHubResumeUrl("erp", "/docs/bill/new?poId=1");
+    expect(url).toContain("next=%2Fdocs%2Fbill%2Fnew%3FpoId%3D1");
+  });
+
+  it("does not resume onto an external or auth path", () => {
+    expect(odaflowHubResumeUrl("erp", "https://evil.example")).not.toContain("next=");
+    expect(odaflowHubResumeUrl("erp", "//evil.example")).not.toContain("next=");
+    expect(odaflowHubResumeUrl("erp", "/login")).not.toContain("next=");
+    expect(odaflowHubResumeUrl("erp", "/auth/handoff")).not.toContain("next=");
+  });
+
+  it("sends an expired session to the SFA login form for the same page", () => {
+    const url = odaflowHubLoginUrl("erp", "/docs/bill/new");
+    expect(url).toContain("/login?");
+    expect(url).toContain("client=erp");
+    expect(url).toContain("session=expired");
+    expect(url).toContain("next=%2Fdocs%2Fbill%2Fnew");
+    expect(url).not.toContain("loggedOut=1");
+    expect(url).not.toContain("/auth/sso");
   });
 
   it("keeps loggedOut only on the real sign-out URL", () => {

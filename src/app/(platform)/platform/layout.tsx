@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { odaflowHubLoginUrl } from "@/lib/auth/odaflow-hub";
 import { useAuthStore } from "@/stores/auth-store";
 import { PlatformSidebar } from "@/components/platform/PlatformSidebar";
 import { Header } from "@/components/layout/header";
@@ -19,7 +20,7 @@ export default function PlatformLayout({
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
-      router.replace("/login?redirect=/platform");
+      window.location.replace(odaflowHubLoginUrl("erp", "/platform"));
       return;
     }
     if (!isPlatformOperator) {

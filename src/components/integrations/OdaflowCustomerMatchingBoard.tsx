@@ -108,6 +108,7 @@ export function OdaflowCustomerMatchingBoard({
     pendingApproval: 0,
   });
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [listBusy, setListBusy] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -144,8 +145,11 @@ export function OdaflowCustomerMatchingBoard({
       }
       setPicked(nextPicked);
       hasDataRef.current = true;
+      setLoadError(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not load customer matching");
+      const message = e instanceof Error ? e.message : "Could not load customer matching";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       if (soft) setRefreshing(false);
       else setLoading(false);
@@ -456,13 +460,17 @@ export function OdaflowCustomerMatchingBoard({
         {pageRows.length === 0 && !tableBusy ? (
           <div className="rounded-xl border border-dashed px-6 py-10 text-center">
             <Icons.Link2 className="mx-auto h-7 w-7 text-muted-foreground/60" />
-            <p className="mt-2 text-sm font-medium">Nothing to match here</p>
+            <p className="mt-2 text-sm font-medium">
+              {loadError ? "Could not load customers from SFA" : "Nothing to match here"}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {debouncedQuery
-                ? "Try a different search."
-                : showMapped
-                  ? "No customers in this filter."
-                  : "All visible customers are linked. Turn on “Showing linked” to review them."}
+              {loadError
+                ? loadError
+                : debouncedQuery
+                  ? "Try a different search."
+                  : showMapped
+                    ? "No customers in this filter."
+                    : "All visible customers are linked. Turn on “Showing linked” to review them."}
             </p>
           </div>
         ) : (

@@ -68,3 +68,10 @@ export function useCanWriteDocType(type: string): boolean {
   const permissions = useAuthStore((s) => s.permissions);
   return canWriteDocType(permissions, type);
 }
+
+/** True once a signed-in session and its permissions are in memory. */
+export function useSessionReady(): boolean {
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  return !isLoading && isAuthenticated;
+}

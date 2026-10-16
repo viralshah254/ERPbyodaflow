@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -376,6 +377,7 @@ export default function InventoryReceiptsPage() {
         showCommandHint
         actions={
           <div className="flex items-center gap-2">
+            <DocumentHubUploadButton label="Scan delivery note" />
             <Button variant="outline" asChild>
               <Link href="/purchasing/goods-receipt">Purchasing View</Link>
             </Button>

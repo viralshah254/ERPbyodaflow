@@ -17,15 +17,52 @@ function localHubReturn(): string | undefined {
   return undefined;
 }
 
+/** In-app path safe to send back through the hub. Drops external and auth URLs. */
+export function safeInAppPath(nextPath?: string | null): string | undefined {
+  if (!nextPath) return undefined;
+  const value = nextPath.trim();
+  if (!value.startsWith("/") || value.startsWith("//")) return undefined;
+  const pathOnly = value.split("?")[0]?.split("#")[0] ?? value;
+  if (pathOnly === "/" || pathOnly.startsWith("/login") || pathOnly.startsWith("/auth/")) {
+    return undefined;
+  }
+  return value;
+}
+
 /** Resume SSO with the existing hub session. Never mark the user logged out. */
-export function odaflowHubResumeUrl(client: "sfa" | "crm" | "hr" | "erp" = "erp"): string {
+export function odaflowHubResumeUrl(
+  client: "sfa" | "crm" | "hr" | "erp" = "erp",
+  nextPath?: string | null
+): string {
   const qs = new URLSearchParams({
     client,
     resume: "1",
   });
+  const next = safeInAppPath(nextPath);
+  if (next) qs.set("next", next);
   const ret = localHubReturn();
   if (ret) qs.set("return", ret);
   return `${odaflowHubWebUrl()}/auth/sso?${qs.toString()}`;
+}
+
+/**
+ * SFA login after the shared session is confirmed gone.
+ * `session=expired` opens the form directly — no "looking for your session" screen.
+ */
+export function odaflowHubLoginUrl(
+  client: "sfa" | "crm" | "hr" | "erp" = "erp",
+  nextPath?: string | null
+): string {
+  const qs = new URLSearchParams({
+    sso: "1",
+    client,
+    session: "expired",
+  });
+  const next = safeInAppPath(nextPath);
+  if (next) qs.set("next", next);
+  const ret = localHubReturn();
+  if (ret) qs.set("return", ret);
+  return `${odaflowHubWebUrl()}/login?${qs.toString()}`;
 }
 
 /** Unified hub sign-in after a real logout. Do not use this for handoff errors. */

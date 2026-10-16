@@ -9,7 +9,7 @@
  */
 import { canUseDevHeaders } from "@/lib/runtime-flags";
 import { getCurrentFirebaseIdTokenForApi, isFirebaseConfigured } from "@/lib/firebase";
-import { odaflowLaunchpadUrl } from "@/lib/auth/odaflow-hub";
+import { odaflowHubLoginUrl } from "@/lib/auth/odaflow-hub";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const ENV_DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
@@ -143,52 +143,92 @@ async function waitForFirebaseBearer(forceRefresh: boolean): Promise<boolean> {
 }
 
 let redirectingForExpiredSession = false;
+let authRecoveryDepth = 0;
 
-function redirectToLaunchpadForExpiredSession(): void {
+function redirectToSfaLoginForExpiredSession(): void {
   if (typeof window === "undefined" || redirectingForExpiredSession) return;
   if (erpHandoffGraceActive()) return;
   const path = window.location.pathname;
   if (path.startsWith("/auth/") || path.startsWith("/login")) return;
   redirectingForExpiredSession = true;
   setApiAuth({ bearerToken: undefined });
-  window.location.replace(odaflowLaunchpadUrl());
+  const next = `${window.location.pathname}${window.location.search}`;
+  window.location.replace(odaflowHubLoginUrl("erp", next));
 }
 
-function isUnauthorizedPayload(status: number, data: unknown): boolean {
-  if (status !== 401) return false;
-  const payload = data as { code?: string; error?: string } | null;
-  return (
-    payload?.code === "UNAUTHORIZED" ||
-    String(payload?.error || "").toLowerCase() === "unauthorized"
-  );
+/** 403s that are business rules, not a missing or stale login. */
+const NON_SESSION_FORBIDDEN = new Set([
+  "COLLECTIONS_HOLD",
+  "ORG_INACTIVE",
+  "TENANT_SUSPENDED",
+  "NOT_ENROLLED",
+  "MAKER_CHECKER_VIOLATION",
+  "APPROVER_MISMATCH",
+  "APPROVAL_BRANCH_FORBIDDEN",
+  "NOT_FRANCHISEE",
+  "SERVICE_PRINCIPAL_FORBIDDEN",
+]);
+
+/**
+ * A page load or a write was rejected because the login was missing or not ready.
+ * Real permission denials use the same 403 after a confirmed session, so callers retry once first.
+ */
+function isRecoverableAccessFailure(status: number, data: unknown): boolean {
+  if (status === 401) return true;
+  if (status !== 403) return false;
+  const payload = data as { code?: string; error?: string; message?: string } | null;
+  const code = String(payload?.code || "");
+  if (NON_SESSION_FORBIDDEN.has(code)) return false;
+  if (code === "FORBIDDEN") return true;
+  const text = `${payload?.error || ""} ${payload?.message || ""}`.toLowerCase();
+  return text.includes("insufficient permission") || text === "forbidden";
 }
 
 /**
- * Run an authenticated fetch; on UNAUTHORIZED force-refresh the Firebase ID token and retry once.
+ * Run an authenticated fetch. On a missing login or an access 403, refresh the
+ * session and retry once before the page sees an error.
  * Callers must build headers inside `doFetch` so the retry picks up the new Bearer.
  */
 async function withFirebaseAuthRetry(doFetch: () => Promise<Response>): Promise<Response> {
-  await applyFreshFirebaseBearerIfAvailable(false);
-  let res = await doFetch();
-  if (res.status !== 401) return res;
+  if (authRecoveryDepth > 0) return doFetch();
+  authRecoveryDepth += 1;
+  try {
+    await applyFreshFirebaseBearerIfAvailable(false);
+    let res = await doFetch();
+    const firstBody = res.status === 401 || res.status === 403
+      ? await res.clone().json().catch(() => ({}))
+      : null;
+    if (!isRecoverableAccessFailure(res.status, firstBody)) return res;
 
-  const firstBody = await res.clone().json().catch(() => ({}));
-  if (!isUnauthorizedPayload(401, firstBody)) return res;
-
-  const refreshed = await waitForFirebaseBearer(true);
-  if (!refreshed) {
-    redirectToLaunchpadForExpiredSession();
-    return res;
-  }
-
-  res = await doFetch();
-  if (res.status === 401) {
-    const again = await res.clone().json().catch(() => ({}));
-    if (isUnauthorizedPayload(401, again)) {
-      redirectToLaunchpadForExpiredSession();
+    const refreshed = await waitForFirebaseBearer(true);
+    if (refreshed) {
+      const { reloadErpPermissions } = await import("@/lib/auth/restore-erp-session");
+      await reloadErpPermissions().catch(() => false);
+      res = await doFetch();
+      const again = res.status === 401 || res.status === 403
+        ? await res.clone().json().catch(() => ({}))
+        : null;
+      if (!isRecoverableAccessFailure(res.status, again)) return res;
+      // Login is present and permissions were reloaded. A remaining 403 is a real denial.
+      if (res.status === 403) return res;
     }
+
+    const { restoreErpSessionFromHub } = await import("@/lib/auth/restore-erp-session");
+    const restored = await restoreErpSessionFromHub().catch(() => "unavailable" as const);
+    if (restored === "restored") {
+      res = await doFetch();
+      const after = res.status === 401 || res.status === 403
+        ? await res.clone().json().catch(() => ({}))
+        : null;
+      if (!isRecoverableAccessFailure(res.status, after)) return res;
+    }
+    if (res.status === 401 || restored === "signed-out") {
+      redirectToSfaLoginForExpiredSession();
+    }
+    return res;
+  } finally {
+    authRecoveryDepth -= 1;
   }
-  return res;
 }
 
 function apiUrl(path: string): string {
@@ -434,9 +474,10 @@ export async function apiRequest<T = unknown>(
     }
     const err = new Error(
       payload.error ?? payload.message ?? payload.reason ?? `Request failed (${res.status})`
-    ) as Error & { status?: number; body?: unknown };
+    ) as Error & { status?: number; body?: unknown; silent?: boolean };
     err.status = res.status;
     err.body = data;
+    if (redirectingForExpiredSession) err.silent = true;
     throw err;
   }
   return data as T;
