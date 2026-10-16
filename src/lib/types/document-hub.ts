@@ -73,6 +73,7 @@ export interface ScannedDocument {
   _id: string;
   fileId: string;
   fileName: string;
+  contentType?: string;
   status: DocumentHubStatus;
   documentType: string;
   groupKey: string;
