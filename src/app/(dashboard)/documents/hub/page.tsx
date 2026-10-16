@@ -16,6 +16,7 @@ import {
   confirmHubClassification,
   confirmHubPhysicalReceipt,
   createHubGroup,
+  deleteHubDocument,
   explainHubDocument,
   fetchDocumentHub,
   linkHubDocument,
@@ -127,7 +128,7 @@ export default function DocumentHubPage() {
           <Input value={party} onChange={(event) => setParty(event.target.value)} placeholder="Supplier or customer" />
         </div>
 
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(380px,1.08fr)]">
+        <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
           <Card className="relative overflow-hidden">
             <TableLinearProgress active={loading} />
             <CardHeader className="p-4 pb-2">
@@ -138,16 +139,20 @@ export default function DocumentHubPage() {
                 const critical = item.flags.some((flag) => flag.severity === "critical");
                 const selectedRow = item._id === selectedId;
                 return (
-                  <button
+                  <div
                     key={item._id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedId(item._id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") setSelectedId(item._id);
+                    }}
                     className={cn(
                       "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
                       selectedRow ? "border-primary bg-primary/5" : "hover:bg-muted/40",
                     )}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{item.fields.partyName || item.fileName}</p>
                         <p className="mt-0.5 truncate text-sm text-muted-foreground">
@@ -156,11 +161,27 @@ export default function DocumentHubPage() {
                           {item.fields.documentNumber || item.fields.chequeNumber || "No number"}
                         </p>
                       </div>
-                      <Badge variant={critical ? "destructive" : "secondary"} className="shrink-0 capitalize">
-                        {labelize(item.status)}
-                      </Badge>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge variant={critical ? "destructive" : "secondary"} className="capitalize">
+                          {labelize(item.status)}
+                        </Badge>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-muted-foreground"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const name = item.fields.partyName || item.fileName;
+                            if (!window.confirm(`Delete ${name}? The stored file is removed when nothing else uses it.`)) return;
+                            void run(() => deleteHubDocument(item._id), "File deleted.");
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
               {!loading && (data?.items.length ?? 0) === 0 ? (
@@ -177,6 +198,11 @@ export default function DocumentHubPage() {
               setPhysical={setPhysical}
               bankReference={bankReference}
               setBankReference={setBankReference}
+              onDelete={() => {
+                const name = selected.fields.partyName || selected.fileName;
+                if (!window.confirm(`Delete ${name}? The stored file is removed when nothing else uses it.`)) return;
+                void run(() => deleteHubDocument(selected._id), "File deleted.");
+              }}
               run={run}
             />
           ) : (
@@ -254,6 +280,7 @@ function Detail({
   setPhysical,
   bankReference,
   setBankReference,
+  onDelete,
   run,
 }: {
   item: ScannedDocument;
@@ -262,6 +289,7 @@ function Detail({
   setPhysical: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   bankReference: string;
   setBankReference: (value: string) => void;
+  onDelete: () => void;
   run: (work: () => Promise<unknown>, success: string) => Promise<void>;
 }) {
   const [documentType, setDocumentType] = React.useState(item.documentType);
@@ -278,8 +306,15 @@ function Detail({
   return (
     <Card>
       <CardHeader className="space-y-1 p-4 pb-2">
-        <CardTitle className="truncate text-base">{item.fields.partyName || item.fileName}</CardTitle>
-        <p className="truncate text-sm text-muted-foreground">{item.fileName}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="truncate text-base">{item.fields.partyName || item.fileName}</CardTitle>
+            <p className="truncate text-sm text-muted-foreground">{item.fileName}</p>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={onDelete}>
+            Delete
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-5 p-4 pt-2 text-sm">
         <DocumentHubPreview fileId={item.fileId} fileName={item.fileName} contentType={item.contentType} />

@@ -7,6 +7,11 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: process.env.CI !== "1",
   },
+  webpack: (config) => {
+    config.resolve.alias.canvas = false;
+    config.resolve.alias.encoding = false;
+    return config;
+  },
   /** Common store / legal URL variants → canonical slug (also helps if bookmarks use hyphenated paths). */
   async redirects() {
     return [

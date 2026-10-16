@@ -28,6 +28,10 @@ export async function uploadDocumentHubFiles(
   });
 }
 
+export function deleteHubDocument(id: string) {
+  return apiRequest<{ id: string; fileRemoved: boolean }>(`/api/document-hub/${id}`, { method: "DELETE" });
+}
+
 export function explainHubDocument(id: string) {
   return apiRequest<{ summary: string; source: "copilot" | "fields" }>(`/api/document-hub/${id}/summary`, { method: "POST" });
 }
