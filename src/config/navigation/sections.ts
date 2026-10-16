@@ -24,6 +24,14 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         { key: "approvals-requests", label: "My requests", href: "/approvals/requests", icon: "Send", moduleKey: "automation", requiresPermissions: ["approvals.read"] },
       ]},
       { key: "tasks", label: "Tasks / Work Queue", href: "/tasks", icon: "CheckSquare", moduleKey: "automation" },
+      {
+        key: "document-hub",
+        label: "Document Hub",
+        href: "/documents/hub",
+        icon: "ScanLine",
+        moduleKey: "dashboard",
+        requiresPermissions: ["finance.read", "purchase.read", "sales.read", "inventory.read", "finance.ar.read", "finance.ap.read"],
+      },
     ],
   },
   {
