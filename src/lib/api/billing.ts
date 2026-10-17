@@ -88,6 +88,17 @@ export async function fetchBillingInvoicesApi(): Promise<BillingInvoiceRow[]> {
   return payload.items ?? [];
 }
 
+export interface UnifiedBillingSummary {
+  accountId: string;
+  invoices: { _id: string; number?: string; currency: string; totalMinor: number; status: string; dueDate: string }[];
+}
+
+/** Unified billing for this org. Null until the org is migrated. */
+export async function fetchUnifiedBillingApi(): Promise<UnifiedBillingSummary | null> {
+  const payload = await apiRequest<{ success: boolean; data: UnifiedBillingSummary | null }>("/api/billing/v2/me");
+  return payload.data;
+}
+
 export async function fetchBillingPricingApi(): Promise<BillingPricing> {
   requireLiveApi("Billing pricing");
   return apiRequest<BillingPricing>("/api/billing/pricing");

@@ -20,6 +20,8 @@ import {
   confirmBillingCheckoutApi,
   fetchBillingCheckoutApi,
   fetchBillingInvoicesApi,
+  fetchUnifiedBillingApi,
+  type UnifiedBillingSummary,
   fetchBillingPricingApi,
   fetchBillingPaymentMethodApi,
   createBillingSetupIntentApi,
@@ -98,6 +100,7 @@ export default function SettingsBillingPage() {
   const [checkout, setCheckout] = React.useState<BillingCheckout | null>(null);
   const [pricing, setPricing] = React.useState<BillingPricing | null>(null);
   const [invoices, setInvoices] = React.useState<BillingInvoiceRow[]>([]);
+  const [unified, setUnified] = React.useState<UnifiedBillingSummary | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [checkoutBusy, setCheckoutBusy] = React.useState(false);
   const [paymentMethod, setPaymentMethod] = React.useState<BillingPaymentMethod>(null);
@@ -127,6 +130,7 @@ export default function SettingsBillingPage() {
       setCheckout(checkoutPayload);
       setPricing(pricingPayload);
       setInvoices(invoicePayload);
+      setUnified(await fetchUnifiedBillingApi().catch(() => null));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load billing.");
     } finally {
@@ -141,6 +145,20 @@ export default function SettingsBillingPage() {
 
   return (
     <PageShell>
+      {unified && (
+        <section className="mb-4 rounded-xl border p-4 text-sm">
+          <h2 className="mb-2 font-medium">Unified billing invoices</h2>
+          <ul className="space-y-1">
+            {unified.invoices.map((invoice) => (
+              <li key={invoice._id} className="flex justify-between">
+                <span className="font-mono">{invoice.number}</span>
+                <span>{invoice.currency} {(invoice.totalMinor / 100).toFixed(2)} · {invoice.status}</span>
+              </li>
+            ))}
+            {unified.invoices.length === 0 && <li className="text-muted-foreground">No invoices issued yet.</li>}
+          </ul>
+        </section>
+      )}
       <PageHeader
         title="Billing"
         description="Seat usage, franchise allocations, pending prorations, and internal invoices."
