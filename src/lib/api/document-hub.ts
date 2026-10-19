@@ -64,7 +64,11 @@ export function fetchHubDocument(id: string) {
   return apiRequest<ScannedDocument>(`/api/document-hub/${id}`);
 }
 
-export function commitHubDocument(id: string, body?: { bankAccountId?: string; warehouseId?: string; fields?: { partyName?: string; total?: number; documentNumber?: string } }) {
+export function rereadHubDocument(id: string) {
+  return apiRequest<ScannedDocument>(`/api/document-hub/${id}/reread`, { method: "POST" });
+}
+
+export function commitHubDocument(id: string, body?: { bankAccountId?: string; warehouseId?: string; partyId?: string; fields?: { partyName?: string; partyId?: string; total?: number; documentNumber?: string } }) {
   return apiRequest<ScannedDocument>(`/api/document-hub/${id}/commit`, { method: "POST", body: body ?? {} });
 }
 
