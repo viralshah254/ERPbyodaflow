@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchPartyByIdApi, updatePartyApi, type PartyDetail } from "@/lib/api/parties";
 import { paymentTermDisplayName } from "@/lib/fmcg/payment-class";
-import { creditModeUses } from "@/lib/customers/format-credit-limit";
+import { creditModeUses, isGeneralTradeParty } from "@/lib/customers/format-credit-limit";
 import { useCanWriteFinance, useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
@@ -88,16 +88,17 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
     }
     setSaving(true);
     try {
+      const generalTrade = isGeneralTradeParty(party);
       const amountValue = usesAmount && creditLimit.trim() ? Number(creditLimit) : null;
-      const ageValue = usesDays && maxAge.trim() ? Number(maxAge) : null;
-      const capValue = usesDays && daysCap.trim() ? Number(daysCap) : null;
+      const ageValue = generalTrade ? 7 : usesDays && maxAge.trim() ? Number(maxAge) : null;
+      const capValue = generalTrade ? 7 : usesDays && daysCap.trim() ? Number(daysCap) : null;
       await updatePartyApi(props.partyId, {
         name: party.name,
         roles: party.roles?.length ? party.roles : ["customer"],
         creditLimit: amountValue,
         creditLimitAmount: amountValue,
         paymentTermsId: paymentTermsId || undefined,
-        creditControlMode,
+        creditControlMode: generalTrade ? (amountValue != null ? "HYBRID" : "DAYS") : creditControlMode,
         onHold,
         sageDcLink: sageDcLink.trim() ? Number(sageDcLink) : undefined,
         arApGroup: (arApGroup || undefined) as PartyDetail["arApGroup"],
@@ -119,8 +120,15 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
     return <p className="text-sm text-muted-foreground">Loading credit settings…</p>;
   }
 
+  const generalTrade = party ? isGeneralTradeParty(party) : false;
+
   return (
     <div className="max-w-xl space-y-4">
+      {generalTrade ? (
+        <p className="text-sm text-muted-foreground">
+          General trade orders must be paid within 7 days of the order. If a customer has a credit limit, each order uses that limit and a payment puts the same amount back.
+        </p>
+      ) : null}
       <div className="space-y-2">
         <Label>Credit control</Label>
         <Select

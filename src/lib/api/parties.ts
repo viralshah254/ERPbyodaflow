@@ -540,12 +540,18 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
 
 export type PartyCreditSummary = {
   outstandingBalance: number;
+  openOrderBalance?: number;
+  creditUsed?: number;
+  availableCredit?: number | null;
   creditLimitAmount: number | null;
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID" | null;
   utilizationPct: number | null;
   warningThresholdPct: number;
   isOverCredit: boolean;
   isNearLimit: boolean;
+  generalTrade?: boolean;
+  creditDays?: number | null;
+  oldestUnpaidAgeDays?: number;
   maxOutstandingInvoiceAgeDays: number | null;
   paymentTermsId: string | null;
 };

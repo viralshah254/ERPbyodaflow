@@ -24,7 +24,7 @@ import type { PartyCreditSummary } from "@/lib/api/parties";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { formatMoney } from "@/lib/money";
-import { formatCustomerCreditLimit } from "@/lib/customers/format-credit-limit";
+import { formatCustomerCreditLimit, isGeneralTradeParty } from "@/lib/customers/format-credit-limit";
 import { can } from "@/lib/rbac/can";
 import { useCanWriteFinance, useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
@@ -170,7 +170,7 @@ export default function Customer360Page() {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-4" data-tutorial-hint="customer-kpis">
+              <div className="grid gap-4 md:grid-cols-3" data-tutorial-hint="customer-kpis">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm text-muted-foreground">Outstanding</CardTitle>
@@ -181,15 +181,39 @@ export default function Customer360Page() {
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-muted-foreground">Available credit</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-2xl font-semibold">
+                    {!credit
+                      ? "—"
+                      : credit.availableCredit != null
+                        ? formatMoney(credit.availableCredit, currency)
+                        : "No amount limit"}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
                     <CardTitle className="text-sm text-muted-foreground">Credit limit</CardTitle>
                   </CardHeader>
                   <CardContent className="text-2xl font-semibold">
                     {formatCustomerCreditLimit({
                       mode: credit?.creditControlMode ?? party.creditControlMode,
                       amount: credit?.creditLimitAmount ?? party.creditLimitAmount,
-                      days: credit?.maxOutstandingInvoiceAgeDays ?? party.maxOutstandingInvoiceAgeDays,
+                      days: credit?.creditDays ?? credit?.maxOutstandingInvoiceAgeDays ?? party.maxOutstandingInvoiceAgeDays,
                       currency,
                     })}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-muted-foreground">Pay within</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-2xl font-semibold">
+                    {credit?.generalTrade || isGeneralTradeParty(party)
+                      ? "7 days"
+                      : credit?.creditDays
+                        ? `${credit.creditDays} days`
+                        : "—"}
                   </CardContent>
                 </Card>
                 <Card>
@@ -271,14 +295,13 @@ export default function Customer360Page() {
               <section className="space-y-3">
                 <h2 className="text-base font-semibold">Credit limit</h2>
                 <p className="text-sm text-muted-foreground">
-                  Current limit
-                  {" "}
                   {credit?.creditLimitAmount != null
-                    ? formatMoney(credit.creditLimitAmount, currency)
-                    : party.creditLimitAmount != null
-                      ? formatMoney(party.creditLimitAmount, currency)
-                      : "is not set"}
-                  . Adjust it here. Credit notes that reduce what this customer owes are listed below.
+                    ? `${formatMoney(credit.creditLimitAmount, currency)} limit, ${formatMoney(credit.availableCredit ?? 0, currency)} still available.`
+                    : "No cash credit limit is set, so orders are not capped by amount."}
+                  {" "}
+                  {credit?.generalTrade || isGeneralTradeParty(party)
+                    ? "General trade orders must be paid within 7 days. A payment restores the amount that was used."
+                    : "A payment restores the amount that was used."}
                 </p>
                 <CustomerCreditTab partyId={id} onSaved={() => void load()} />
               </section>
