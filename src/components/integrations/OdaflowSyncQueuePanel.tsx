@@ -39,7 +39,6 @@ const EVENT_TYPE_OPTIONS = [
   { value: ALL_CHANNELS, label: "All channels" },
   { value: "order.modern_trade", label: "All modern trade" },
   { value: "order.modern_trade|email_lpo", label: "Email LPO" },
-  { value: "order.modern_trade|field", label: "Merchandiser / sales rep" },
   { value: "order.distributor", label: "Distributor" },
   { value: "order.direct", label: "Direct Customer" },
   { value: "order.van_sales", label: "Van Sales" },

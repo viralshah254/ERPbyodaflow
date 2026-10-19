@@ -62,22 +62,26 @@ const CHANNEL_OPTIONS = [
   { label: "WhatsApp", value: "whatsapp" },
 ];
 
-const TYPE_OPTIONS = [
-  { label: "All types", value: "" },
-  { label: "Email LPO", value: "email_lpo" },
-  { label: "Merchandiser / sales rep", value: "field" },
+const FMCG_CHANNEL_OPTIONS = [
+  ...CHANNEL_OPTIONS,
+  { label: "Modern trade (email)", value: "email_lpo" },
   { label: "Direct order", value: "direct" },
+  { label: "Distributor", value: "distributor" },
+  { label: "Van sales", value: "van_sales" },
 ];
+
+const SFA_CHANNEL_VALUES = new Set(["email_lpo", "direct", "distributor", "van_sales"]);
 
 function salesOrderTypeLabel(row: SalesDocRow): string | null {
   if (row.odaflowChannel === "direct") return "Direct order";
+  if (row.odaflowChannel === "distributor") return "Distributor";
+  if (row.odaflowChannel === "van_sales") return "Van sales";
   const arrival = modernTradeArrival({
     channel: row.odaflowChannel,
     orderTitle: row.odaflowOrderTitle,
     purchaseOrderNumber: row.number,
   });
-  if (arrival === "field") return "Merchandiser / sales rep";
-  if (arrival === "email_lpo") return "Email LPO";
+  if (arrival === "email_lpo") return "Modern trade (email)";
   return null;
 }
 
@@ -113,7 +117,6 @@ export function SalesOrdersListPanel({
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState(initialStatus);
   const [channelFilter, setChannelFilter] = React.useState("");
-  const [typeFilter, setTypeFilter] = React.useState("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() => getSavedViews(savedViewsScope));
@@ -146,8 +149,8 @@ export function SalesOrdersListPanel({
           status: statusFilter || undefined,
           orderChannels: channelFilter === "whatsapp" ? "WHATSAPP,COOLCATCH_WA" : undefined,
           sfaIntake:
-            fmcg && (typeFilter === "email_lpo" || typeFilter === "field" || typeFilter === "direct")
-              ? typeFilter
+            fmcg && SFA_CHANNEL_VALUES.has(channelFilter)
+              ? (channelFilter as "email_lpo" | "direct" | "distributor" | "van_sales")
               : undefined,
         });
         setRows(page.items);
@@ -162,7 +165,7 @@ export function SalesOrdersListPanel({
         setLoading(false);
       }
     },
-    [debouncedSearch, statusFilter, channelFilter, fmcg, typeFilter, pageSize]
+    [debouncedSearch, statusFilter, channelFilter, fmcg, pageSize]
   );
 
   React.useEffect(() => {
@@ -197,14 +200,13 @@ export function SalesOrdersListPanel({
       const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
-    if (channelFilter === "whatsapp") chips.push({ id: "channel", label: "Channel", value: "WhatsApp" });
-    if (fmcg && typeFilter) {
-      const opt = TYPE_OPTIONS.find((o) => o.value === typeFilter);
-      chips.push({ id: "type", label: "Type", value: opt?.label ?? typeFilter });
+    if (channelFilter) {
+      const opt = (fmcg ? FMCG_CHANNEL_OPTIONS : CHANNEL_OPTIONS).find((o) => o.value === channelFilter);
+      chips.push({ id: "channel", label: "Channel", value: opt?.label ?? channelFilter });
     }
     if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
     return chips;
-  }, [statusFilter, channelFilter, fmcg, typeFilter, search]);
+  }, [statusFilter, channelFilter, fmcg, search]);
 
   const columns = React.useMemo(
     () => [
@@ -357,21 +359,19 @@ export function SalesOrdersListPanel({
   const handleClearFilters = () => {
     setStatusFilter("");
     setChannelFilter("");
-    setTypeFilter("");
     setSearch("");
   };
 
   const handleRemoveFilterChip = (id: string) => {
     if (id === "status") setStatusFilter("");
     if (id === "channel") setChannelFilter("");
-    if (id === "type") setTypeFilter("");
     if (id === "q") setSearch("");
   };
 
   const handleSaveView = () => {
     const v = saveView(savedViewsScope, {
       name: `View ${savedViews.length + 1}`,
-      filters: { q: search, status: statusFilter, channel: channelFilter, type: typeFilter },
+      filters: { q: search, status: statusFilter, channel: channelFilter },
     });
     setSavedViews(getSavedViews(savedViewsScope));
     setCurrentViewId(v.id);
@@ -382,8 +382,8 @@ export function SalesOrdersListPanel({
     if (v?.filters) {
       setSearch((v.filters.q as string) ?? "");
       setStatusFilter((v.filters.status as string) ?? "");
-      setChannelFilter((v.filters.channel as string) ?? "");
-      setTypeFilter(fmcg ? ((v.filters.type as string) ?? "") : "");
+      const savedChannel = (v.filters.channel as string) || (v.filters.type as string) || "";
+      setChannelFilter(savedChannel === "field" ? "" : savedChannel);
     }
     setCurrentViewId(id);
   };
@@ -412,22 +412,11 @@ export function SalesOrdersListPanel({
           {
             id: "channel",
             label: "Channel",
-            options: CHANNEL_OPTIONS,
+            options: fmcg ? FMCG_CHANNEL_OPTIONS : CHANNEL_OPTIONS,
             value: channelFilter,
             onChange: (v) => setChannelFilter(v),
+            triggerClassName: "w-[220px]",
           },
-          ...(fmcg
-            ? [
-                {
-                  id: "type",
-                  label: "Type",
-                  options: TYPE_OPTIONS,
-                  value: typeFilter,
-                  onChange: (v: string) => setTypeFilter(v),
-                  triggerClassName: "w-[220px]",
-                },
-              ]
-            : []),
         ]}
         activeFiltersCount={filterChips.length}
         onClearFilters={handleClearFilters}

@@ -13,6 +13,15 @@ export function creditModeUses(mode: CreditControlMode | null | undefined): {
   };
 }
 
+export function isGeneralTradeParty(party: {
+  channel?: string | null;
+  sfaSegment?: string | null;
+}): boolean {
+  if (String(party.channel ?? "").trim().toUpperCase() === "GENERAL_TRADE") return true;
+  const segment = String(party.sfaSegment ?? "").trim().toUpperCase();
+  return segment === "GENERAL_TRADE_CLIENT" || segment === "DISTRIBUTOR" || segment === "VAN_SALES";
+}
+
 /** Blank, missing, and zero all mean that side of the limit is off. */
 export function positiveLimit(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null;

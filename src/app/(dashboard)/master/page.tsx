@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { isPlantCatalogueTemplate } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import * as Icons from "lucide-react";
 
@@ -23,7 +24,8 @@ export default function MasterHubPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
-  const productLabel = t("product", terminology);
+  const plantCatalogue = isPlantCatalogueTemplate(templateId);
+  const productLabel = plantCatalogue ? "Product" : t("product", terminology);
   const warehouseLabel = t("warehouse", terminology);
 
   const links = [

@@ -141,11 +141,13 @@ export async function fetchOrgDefaultPriceListId(): Promise<string | null> {
   }
 }
 
-/** Set the tag used when a customer has no tag of their own. */
-export async function setOrgDefaultPriceListApi(priceListId: string): Promise<void> {
+/** Set the tag used when a customer has no tag of their own. SFA catalog prices follow this tag. */
+export async function setOrgDefaultPriceListApi(
+  priceListId: string,
+): Promise<{ sfaSync?: SfaPricePushResult }> {
   requireLiveApi("Set default price tag");
   try {
-    await apiRequest("/api/pricing/org-default-price-list", {
+    return await apiRequest<{ sfaSync?: SfaPricePushResult }>("/api/pricing/org-default-price-list", {
       method: "POST",
       body: { priceListId },
     });
@@ -156,6 +158,7 @@ export async function setOrgDefaultPriceListApi(priceListId: string): Promise<vo
       method: "PATCH",
       body: { defaultPriceListId: priceListId },
     });
+    return {};
   }
 }
 

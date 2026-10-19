@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { productMatchesSearch } from "@/lib/products/product-search";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -141,13 +142,9 @@ export default function FranchisePerformanceHubPage() {
 
   const filteredStockProducts = React.useMemo(() => {
     if (!data) return [];
-    const q = stockSearch.trim().toLowerCase();
-    if (!q) return data.stockByProduct;
-    return data.stockByProduct.filter(
-      (p) =>
-        p.productName.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.productId.toLowerCase().includes(q)
+    if (!stockSearch.trim()) return data.stockByProduct;
+    return data.stockByProduct.filter((p) =>
+      productMatchesSearch({ name: p.productName, sku: p.sku, code: p.productId }, stockSearch)
     );
   }, [data, stockSearch]);
 
@@ -615,10 +612,10 @@ export default function FranchisePerformanceHubPage() {
               <CardHeader className="flex flex-row items-center justify-between gap-4">
                 <div>
                   <CardTitle>Stock by product</CardTitle>
-                  <CardDescription>Filter by SKU or product name.</CardDescription>
+                  <CardDescription>Name, size, or barcode. A number is the pack size.</CardDescription>
                 </div>
                 <Input
-                  placeholder="Search SKU or product…"
+                  placeholder="Name, size, or barcode"
                   value={stockSearch}
                   onChange={(e) => setStockSearch(e.target.value)}
                   className="max-w-xs"

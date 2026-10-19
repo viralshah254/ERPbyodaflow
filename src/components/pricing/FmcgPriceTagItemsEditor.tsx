@@ -12,8 +12,17 @@ import * as React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SavedViewsDropdown } from "@/components/ui/saved-views-dropdown";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
-import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import {
   Table,
   TableBody,
@@ -48,6 +57,8 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 const PAGE_SIZE = 25;
+/** Column header plus twenty compact rows. Extra rows scroll inside the table. */
+const TABLE_SCROLL_CLASS = "max-h-[calc(2.5rem+20*2.75rem)] overflow-auto transition-opacity";
 const SIZE_FILTERS = ["25kg", "10kg", "5kg", "1kg", "500g", "250g", "100g", "50g"] as const;
 type ProductSortField = "name" | "sku" | "barcode" | "size";
 type SortField = ProductSortField | "price" | "rrp" | "discount" | "final";
@@ -160,6 +171,7 @@ export function FmcgPriceTagItemsEditor({
   onViewChange,
   initialSearch = "",
   initialPricedStatus = "priced",
+  toolbarActions,
 }: {
   priceListId: string;
   tagName?: string;
@@ -168,6 +180,8 @@ export function FmcgPriceTagItemsEditor({
   /** Prefill search (e.g. barcode from SFA sync “Set price”). */
   initialSearch?: string;
   initialPricedStatus?: "all" | "priced" | "unpriced";
+  /** Download, import, and other tag actions. They sit on the table toolbar. */
+  toolbarActions?: React.ReactNode;
 }) {
   const [list, setList] = React.useState<PriceListDetail | null>(null);
   const [listReady, setListReady] = React.useState(false);
@@ -710,93 +724,12 @@ export function FmcgPriceTagItemsEditor({
     rows.length === 0 && hasFilters && !softLoading;
   const tagLabel = list?.name ?? tagName ?? "this tag";
 
+  const activeFilters =
+    (pricedStatus !== "all" ? 1 : 0) + (sizeFilter ? 1 : 0) + (categoryId ? 1 : 0);
+  const unsavedCount = Object.keys(edits).length;
+
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Enter <span className="font-medium text-foreground">sell price per piece</span> and
-        optional <span className="font-medium text-foreground">RRP</span> for{" "}
-        <span className="font-medium text-foreground">{tagLabel}</span>. Sell is what you
-        charge. On a VAT-inclusive list that is the PDF cost incl; cost excl and VAT % sit
-        on the same row. RRP is the recommended shelf price. Discount % and final price stay
-        in sync, taken off the sell price. Download includes products with no price yet at
-        the bottom. Fill the sheet and import — only those rows update.
-      </p>
-
-      <div className="flex flex-wrap items-end gap-2 rounded-md border bg-muted/30 px-3 py-2.5">
-        <div className="space-y-1">
-          <label htmlFor="bulk-tag-discount" className="text-xs font-medium text-foreground">
-            Discount % for all products on this tag
-          </label>
-          <Input
-            id="bulk-tag-discount"
-            type="number"
-            min={0}
-            max={100}
-            step="0.1"
-            className="h-8 w-28"
-            value={bulkDiscount}
-            onChange={(e) => setBulkDiscount(e.target.value)}
-            onBlur={(e) => setBulkDiscount(normalizeDiscountInput(e.target.value))}
-            placeholder="e.g. 10"
-          />
-        </div>
-        <Button type="button" size="sm" variant="secondary" onClick={applyBulkDiscount} disabled={softLoading}>
-          Apply to every priced product
-        </Button>
-        <p className="max-w-sm text-xs text-muted-foreground">
-          Sets the same discount on every product that already has a sell price. Then click Save.
-        </p>
-      </div>
-
-      <DataTableToolbar
-        searchPlaceholder="Search products by name or barcode…"
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchInputProps={{ disabled: softLoading && rows.length === 0 }}
-        filters={[
-          {
-            id: "priced",
-            label: "Price",
-            options: [
-              { label: "All products", value: "all" },
-              { label: "Has a price", value: "priced" },
-              { label: "No price yet", value: "unpriced" },
-            ],
-            value: pricedStatus,
-            onChange: (v) => setPricedStatus((v || "all") as "all" | "priced" | "unpriced"),
-          },
-          {
-            id: "size",
-            label: "Size",
-            options: [
-              { label: "All sizes", value: "" },
-              ...SIZE_FILTERS.map((s) => ({ label: s, value: s })),
-            ],
-            value: sizeFilter,
-            onChange: setSizeFilter,
-          },
-          {
-            id: "category",
-            label: "Category",
-            options: [
-              { label: "All categories", value: "" },
-              ...categories.map((c) => ({ label: categoryPathLabel(c, categories), value: c.id })),
-            ],
-            value: categoryId,
-            onChange: setCategoryId,
-          },
-        ]}
-        activeFiltersCount={
-          (pricedStatus !== "all" ? 1 : 0) + (sizeFilter ? 1 : 0) + (categoryId ? 1 : 0)
-        }
-        onClearFilters={() => {
-          setPricedStatus("priced");
-          setSizeFilter("");
-          setCategoryId("");
-          setSearch("");
-        }}
-      />
-
+    <div className="flex min-h-0 flex-col">
       {showEmptyCatalog ? (
         <div className="rounded-md border border-dashed px-6 py-10 text-center space-y-3">
           <p className="text-sm text-muted-foreground">
@@ -814,28 +747,141 @@ export function FmcgPriceTagItemsEditor({
           </div>
         </div>
       ) : (
-        <>
-          <div className="relative overflow-hidden rounded-md border">
+        <div className="overflow-hidden rounded-md border">
+          <div className="flex flex-wrap items-center gap-1.5 border-b px-2 py-1.5">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-sky-400 hover:bg-sky-400/10 hover:text-sky-300"
+                  >
+                    <Icons.Info className="mr-1.5 h-4 w-4" />
+                    How pricing works
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-80 text-sm leading-5 text-muted-foreground">
+                  Sell price per piece is what you charge on {tagLabel}. On a VAT-inclusive list that is the
+                  cost incl; cost excl and VAT % sit on the same row. RRP is the shelf price. Discount % and
+                  final price stay in sync, taken off the sell price. A download lists products with no price
+                  yet at the bottom. Import updates only the rows in the sheet.
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-8">
+                    <Icons.Percent className="mr-1.5 h-3.5 w-3.5" />
+                    Discount
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64 space-y-2">
+                  <label htmlFor="bulk-tag-discount" className="text-xs font-medium">
+                    Discount % for priced products
+                  </label>
+                  <Input
+                    id="bulk-tag-discount"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.1"
+                    className="h-8"
+                    value={bulkDiscount}
+                    onChange={(e) => setBulkDiscount(e.target.value)}
+                    onBlur={(e) => setBulkDiscount(normalizeDiscountInput(e.target.value))}
+                    placeholder="10"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    onClick={applyBulkDiscount}
+                    disabled={softLoading}
+                  >
+                    Apply
+                  </Button>
+                </PopoverContent>
+              </Popover>
+              <SavedViewsDropdown />
+              {toolbarActions}
+            </div>
+          <div className="flex flex-wrap items-center gap-2 border-b px-2 py-1.5">
+            <div className="relative min-w-[12rem] flex-1">
+              <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Name, size, or barcode"
+                className="h-8 pl-8"
+                aria-label="Search products"
+                disabled={softLoading && rows.length === 0}
+              />
+            </div>
+            <FilterSelect
+              ariaLabel="Price"
+              value={pricedStatus}
+              onChange={(value) => setPricedStatus((value || "all") as "all" | "priced" | "unpriced")}
+              options={[
+                { label: "All products", value: "all" },
+                { label: "Has a price", value: "priced" },
+                { label: "No price yet", value: "unpriced" },
+              ]}
+            />
+            <FilterSelect
+              ariaLabel="Size"
+              value={sizeFilter}
+              onChange={setSizeFilter}
+              options={[
+                { label: "All sizes", value: "" },
+                ...SIZE_FILTERS.map((size) => ({ label: size, value: size })),
+              ]}
+            />
+            <FilterSelect
+              ariaLabel="Category"
+              value={categoryId}
+              onChange={setCategoryId}
+              options={[
+                { label: "All categories", value: "" },
+                ...categories.map((category) => ({
+                  label: categoryPathLabel(category, categories),
+                  value: category.id,
+                })),
+              ]}
+            />
+            {activeFilters > 0 ? (
+              <Badge variant="secondary" className="shrink-0 gap-1">
+                {activeFilters}
+                <button
+                  type="button"
+                  className="rounded-full p-0.5 hover:bg-destructive/20"
+                  aria-label="Clear filters"
+                  onClick={() => {
+                    setPricedStatus("priced");
+                    setSizeFilter("");
+                    setCategoryId("");
+                    setSearch("");
+                  }}
+                >
+                  <Icons.X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ) : null}
+          </div>
+          <div className="relative">
             <TopProgressBar active={softLoading || initialLoading} />
-            <div
-              className={
-                softLoading
-                  ? "max-h-[420px] overflow-auto opacity-60 transition-opacity"
-                  : "max-h-[420px] overflow-auto transition-opacity"
-              }
-            >
+            <div className={softLoading ? `${TABLE_SCROLL_CLASS} opacity-60` : TABLE_SCROLL_CLASS}>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <SortableHead label="Product" field="name" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableHead label="Size" field="size" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[88px]" />
-                    <TableHead className="w-[88px]">Stock</TableHead>
-                    <TableHead className="w-[120px]">Cost excl</TableHead>
-                    <TableHead className="w-[88px]">VAT %</TableHead>
-                    <SortableHead label="Sell incl" field="price" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
-                    <SortableHead label="RRP / pc" field="rrp" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
-                    <SortableHead label="Discount %" field="discount" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[120px]" />
-                    <SortableHead label="Final price" field="final" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="w-[140px]" />
+                    <SortableHead label="Product" field="name" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="h-9" />
+                    <SortableHead label="Size" field="size" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="h-9 w-[88px]" />
+                    <TableHead className="h-9 w-[88px]">Stock</TableHead>
+                    <TableHead className="h-9 w-[120px]">Cost excl</TableHead>
+                    <TableHead className="h-9 w-[88px]">VAT %</TableHead>
+                    <SortableHead label="Sell incl" field="price" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="h-9 w-[140px]" />
+                    <SortableHead label="RRP / pc" field="rrp" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="h-9 w-[140px]" />
+                    <SortableHead label="Discount %" field="discount" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="h-9 w-[120px]" />
+                    <SortableHead label="Final price" field="final" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} className="h-9 w-[140px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -852,7 +898,7 @@ export function FmcgPriceTagItemsEditor({
                   ) : (
                     rows.map((r) => (
                       <TableRow key={r.productId}>
-                        <TableCell className="text-sm">
+                        <TableCell className="px-3 py-1.5 text-sm">
                           <span className="block font-medium">{r.name}</span>
                           {r.barcode ? (
                             <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
@@ -860,9 +906,9 @@ export function FmcgPriceTagItemsEditor({
                             </span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-sm tabular-nums">{r.size}</TableCell>
-                        <TableCell className="text-sm tabular-nums">{r.stock}</TableCell>
-                        <TableCell>
+                        <TableCell className="px-3 py-1.5 text-sm tabular-nums">{r.size}</TableCell>
+                        <TableCell className="px-3 py-1.5 text-sm tabular-nums">{r.stock}</TableCell>
+                        <TableCell className="px-3 py-1.5">
                           <Input
                             type="number"
                             min={0}
@@ -873,7 +919,7 @@ export function FmcgPriceTagItemsEditor({
                             placeholder="0"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="px-3 py-1.5">
                           <Input
                             type="number"
                             min={0}
@@ -885,7 +931,7 @@ export function FmcgPriceTagItemsEditor({
                             placeholder="0"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="px-3 py-1.5">
                           <Input
                             type="number"
                             min={0}
@@ -896,7 +942,7 @@ export function FmcgPriceTagItemsEditor({
                             placeholder="0"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="px-3 py-1.5">
                           <Input
                             type="number"
                             min={0}
@@ -907,7 +953,7 @@ export function FmcgPriceTagItemsEditor({
                             placeholder="0"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="px-3 py-1.5">
                           <Input
                             type="number"
                             min={0}
@@ -920,7 +966,7 @@ export function FmcgPriceTagItemsEditor({
                             placeholder="0"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="px-3 py-1.5">
                           <Input
                             type="number"
                             min={0}
@@ -938,13 +984,12 @@ export function FmcgPriceTagItemsEditor({
               </Table>
             </div>
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
             <p className="text-xs text-muted-foreground">
               Page {pageNumber}
               {rows.length > 0 ? ` · ${rows.length} on this page` : ""}
-              {Object.keys(edits).length > 0
-                ? ` · ${Object.keys(edits).length} unsaved edit${Object.keys(edits).length === 1 ? "" : "s"}`
+              {unsavedCount > 0
+                ? ` · ${unsavedCount} unsaved`
                 : ""}
             </p>
             <div className="flex items-center gap-2">
@@ -975,13 +1020,48 @@ export function FmcgPriceTagItemsEditor({
               >
                 Next
               </Button>
-              <Button onClick={() => void save()} disabled={saving || softLoading}>
-                {saving ? "Saving…" : "Save piece prices"}
+              <Button size="sm" onClick={() => void save()} disabled={saving || softLoading}>
+                {saving ? "Saving…" : "Save"}
               </Button>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
+  );
+}
+
+function FilterSelect({
+  ariaLabel,
+  value,
+  onChange,
+  options,
+}: {
+  ariaLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+}) {
+  const hasEmpty = options.some((option) => option.value === "");
+  const internal = value === "" && hasEmpty ? "__ALL__" : value;
+  return (
+    <Select
+      value={internal}
+      onValueChange={(next) => onChange(next === "__ALL__" && hasEmpty ? "" : next)}
+    >
+      <SelectTrigger className="h-8 w-[9.5rem] shrink-0" aria-label={ariaLabel}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem
+            key={option.value === "" ? "__ALL__" : option.value}
+            value={option.value === "" ? "__ALL__" : option.value}
+          >
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

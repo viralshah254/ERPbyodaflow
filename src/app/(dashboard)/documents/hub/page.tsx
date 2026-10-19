@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 import { DocumentHubPreview } from "@/components/documents/DocumentHubPreview";
@@ -52,21 +53,44 @@ export default function DocumentHubPage() {
   const [groupName, setGroupName] = React.useState("");
   const [bankReference, setBankReference] = React.useState("");
   const [physical, setPhysical] = React.useState<Record<string, string>>({});
+  const [pendingDelete, setPendingDelete] = React.useState<{ id: string; name: string } | null>(null);
+  const [readingFiles, setReadingFiles] = React.useState<string[]>([]);
+  const [arrived, setArrived] = React.useState<{ id: string; count: number; name: string } | null>(null);
+  const loadRequest = React.useRef(0);
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (override?: {
+    status?: DocumentHubStatus | "";
+    party?: string;
+    q?: string;
+    selectId?: string;
+  }) => {
+    const nextStatus = override ? override.status ?? "" : status;
+    const nextParty = override ? override.party ?? "" : party;
+    const nextQuery = override ? override.q ?? "" : query;
+    const requestId = ++loadRequest.current;
     setLoading(true);
     try {
       const next = await fetchDocumentHub({
-        status: status || undefined,
-        party: party || undefined,
-        q: query || undefined,
+        status: nextStatus || undefined,
+        party: nextParty || undefined,
+        q: nextQuery || undefined,
       });
+      if (requestId !== loadRequest.current) return;
       setData(next);
-      setSelectedId((current) => current && next.items.some((item) => item._id === current) ? current : next.items[0]?._id ?? null);
+      if (override) {
+        setStatus(nextStatus);
+        setParty(nextParty);
+        setQuery(nextQuery);
+      }
+      setSelectedId((current) => {
+        if (override?.selectId && next.items.some((item) => item._id === override.selectId)) return override.selectId;
+        return current && next.items.some((item) => item._id === current) ? current : next.items[0]?._id ?? null;
+      });
     } catch (error) {
+      if (requestId !== loadRequest.current) return;
       toast.error(error instanceof Error ? error.message : "Could not load the document hub.");
     } finally {
-      setLoading(false);
+      if (requestId === loadRequest.current) setLoading(false);
     }
   }, [party, query, status]);
 
@@ -96,7 +120,40 @@ export default function DocumentHubPage() {
         title="Document Hub"
         description="Upload a scan without sorting it first. The hub reads what it can, suggests a match, and keeps the original file."
         breadcrumbs={[{ label: "Core", href: "/dashboard" }, { label: "Document Hub" }]}
-        actions={<DocumentHubUploadButton />}
+        actions={
+          <DocumentHubUploadButton
+            onPendingChange={setReadingFiles}
+            onUploaded={async (result) => {
+              const incoming = result.uploads.flatMap((upload) => upload.items);
+              const first = incoming[0];
+              if (!first) {
+                toast.message("The file was stored, but nothing was added to the inbox.");
+                return;
+              }
+              setArrived({
+                id: first._id,
+                count: incoming.length,
+                name: first.fields.partyName || first.fileName,
+              });
+              setData((current) => {
+                if (!current) return current;
+                const ids = new Set(incoming.map((item) => item._id));
+                const counts = new Map((current.counts ?? []).map((row) => [row._id, row.count]));
+                for (const item of incoming) counts.set(item.status, (counts.get(item.status) ?? 0) + 1);
+                return {
+                  ...current,
+                  items: [...incoming, ...current.items.filter((item) => !ids.has(item._id))],
+                  counts: [...counts.entries()].map(([_id, count]) => ({ _id, count })),
+                };
+              });
+              setSelectedId(first._id);
+              setStatus("");
+              setParty("");
+              setQuery("");
+              await load({ status: "", party: "", q: "", selectId: first._id });
+            }}
+          />
+        }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
         <div className="relative overflow-hidden rounded-xl border bg-card">
@@ -134,7 +191,23 @@ export default function DocumentHubPage() {
             <CardHeader className="p-4 pb-2">
               <CardTitle className="text-base">Inbox</CardTitle>
             </CardHeader>
-            <CardContent className={cn("space-y-1.5 p-4 pt-2 transition-opacity duration-200", loading && "opacity-60")}>
+            <CardContent className={cn("space-y-1.5 p-4 pt-2 transition-opacity duration-200", loading && !readingFiles.length && "opacity-60")}>
+              {arrived ? (
+                <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2.5">
+                  <p className="text-sm font-medium">
+                    {arrived.count === 1 ? "Ready" : `${arrived.count} documents ready`}
+                  </p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {arrived.name} is open below.
+                  </p>
+                </div>
+              ) : null}
+              {readingFiles.map((name) => (
+                <div key={name} className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5">
+                  <p className="truncate text-sm font-medium">Reading {name}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">It will show here when the read finishes.</p>
+                </div>
+              ))}
               {(data?.items ?? []).map((item) => {
                 const critical = item.flags.some((flag) => flag.severity === "critical");
                 const selectedRow = item._id === selectedId;
@@ -150,6 +223,7 @@ export default function DocumentHubPage() {
                     className={cn(
                       "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
                       selectedRow ? "border-primary bg-primary/5" : "hover:bg-muted/40",
+                      arrived?.id === item._id && "ring-2 ring-primary/50",
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -172,9 +246,7 @@ export default function DocumentHubPage() {
                           className="h-7 px-2 text-muted-foreground"
                           onClick={(event) => {
                             event.stopPropagation();
-                            const name = item.fields.partyName || item.fileName;
-                            if (!window.confirm(`Delete ${name}? The stored file is removed when nothing else uses it.`)) return;
-                            void run(() => deleteHubDocument(item._id), "File deleted.");
+                            setPendingDelete({ id: item._id, name: item.fields.partyName || item.fileName });
                           }}
                         >
                           Delete
@@ -184,7 +256,7 @@ export default function DocumentHubPage() {
                   </div>
                 );
               })}
-              {!loading && (data?.items.length ?? 0) === 0 ? (
+              {!loading && !readingFiles.length && (data?.items.length ?? 0) === 0 ? (
                 <p className="px-1 py-8 text-center text-sm text-muted-foreground">No documents in this queue. Scan a PDF or photo to start one.</p>
               ) : null}
             </CardContent>
@@ -198,11 +270,7 @@ export default function DocumentHubPage() {
               setPhysical={setPhysical}
               bankReference={bankReference}
               setBankReference={setBankReference}
-              onDelete={() => {
-                const name = selected.fields.partyName || selected.fileName;
-                if (!window.confirm(`Delete ${name}? The stored file is removed when nothing else uses it.`)) return;
-                void run(() => deleteHubDocument(selected._id), "File deleted.");
-              }}
+              onDelete={() => setPendingDelete({ id: selected._id, name: selected.fields.partyName || selected.fileName })}
               run={run}
             />
           ) : (
@@ -269,6 +337,21 @@ export default function DocumentHubPage() {
           </Card>
         </div>
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={pendingDelete ? `Delete “${pendingDelete.name}”?` : "Delete this file?"}
+        description="This removes the file from Document Hub. The stored original is deleted when nothing else still uses it."
+        confirmLabel="Delete"
+        cancelLabel="Keep file"
+        variant="destructive"
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          void run(() => deleteHubDocument(pendingDelete.id), "File deleted.");
+        }}
+      />
     </PageShell>
   );
 }

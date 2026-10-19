@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
 import { fetchPartyByIdApi, updatePartyApi, type PartyDetail } from "@/lib/api/parties";
 import { paymentTermDisplayName } from "@/lib/fmcg/payment-class";
-import { creditModeUses } from "@/lib/customers/format-credit-limit";
+import { creditModeUses, isGeneralTradeParty } from "@/lib/customers/format-credit-limit";
 import { useCanWriteFinance, useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
@@ -88,16 +88,17 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
     }
     setSaving(true);
     try {
+      const generalTrade = isGeneralTradeParty(party);
       const amountValue = usesAmount && creditLimit.trim() ? Number(creditLimit) : null;
-      const ageValue = usesDays && maxAge.trim() ? Number(maxAge) : null;
-      const capValue = usesDays && daysCap.trim() ? Number(daysCap) : null;
+      const ageValue = generalTrade ? 7 : usesDays && maxAge.trim() ? Number(maxAge) : null;
+      const capValue = generalTrade ? 7 : usesDays && daysCap.trim() ? Number(daysCap) : null;
       await updatePartyApi(props.partyId, {
         name: party.name,
         roles: party.roles?.length ? party.roles : ["customer"],
         creditLimit: amountValue,
         creditLimitAmount: amountValue,
         paymentTermsId: paymentTermsId || undefined,
-        creditControlMode,
+        creditControlMode: generalTrade ? (amountValue != null ? "HYBRID" : "DAYS") : creditControlMode,
         onHold,
         sageDcLink: sageDcLink.trim() ? Number(sageDcLink) : undefined,
         arApGroup: (arApGroup || undefined) as PartyDetail["arApGroup"],
@@ -119,8 +120,15 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
     return <p className="text-sm text-muted-foreground">Loading credit settings…</p>;
   }
 
+  const generalTrade = party ? isGeneralTradeParty(party) : false;
+
   return (
     <div className="max-w-xl space-y-4">
+      {generalTrade ? (
+        <p className="text-sm text-muted-foreground">
+          General trade orders must be paid within 7 days of the order. If a customer has a credit limit, each order uses that limit and a payment puts the same amount back.
+        </p>
+      ) : null}
       <div className="space-y-2">
         <Label>Credit control</Label>
         <Select
@@ -132,23 +140,24 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="AMOUNT">Cash amount</SelectItem>
+            <SelectItem value="AMOUNT">Amount limit</SelectItem>
             <SelectItem value="DAYS">Days</SelectItem>
-            <SelectItem value="HYBRID">Cash amount + days</SelectItem>
+            <SelectItem value="HYBRID">Amount limit and days</SelectItem>
           </SelectContent>
         </Select>
       </div>
       {creditModeUses(creditControlMode).amount ? (
         <div className="space-y-2">
-          <Label>Cash credit limit</Label>
+          <Label>Cash credit amount limit</Label>
           <Input
             type="number"
             min={0}
             value={creditLimit}
             onChange={(e) => setCreditLimit(e.target.value)}
             disabled={!canEdit}
-            placeholder="Leave blank for no cash limit"
+            placeholder="Type the limit amount"
           />
+          <p className="text-xs text-muted-foreground">Type the amount this customer can order on credit. Leave it blank for no amount limit.</p>
         </div>
       ) : null}
       <div className="space-y-2">

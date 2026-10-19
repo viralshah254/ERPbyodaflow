@@ -495,7 +495,7 @@ export default function ProductsPage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 space-y-3 border-b px-4 py-4">
             <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
-              searchPlaceholder="Search products by name or SKU…"
+              searchPlaceholder="Name, size, or barcode"
               searchValue={searchInput}
               onSearchChange={setSearchInput}
               filters={[

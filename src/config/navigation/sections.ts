@@ -126,7 +126,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     order: 2,
     items: [
       { key: "masters-hub", label: "Masters", href: "/master", icon: "Database", moduleKey: "masters", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
-      { key: "masters-products", label: "Products", href: "/master/products", icon: "Package", moduleKey: "masters", termKey: "product", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
+      { key: "masters-products", label: "Products", href: "/master/products", icon: "Package", moduleKey: "masters", requiresPermissions: ["inventory.read", "purchase.read", "sales.read"] },
       {
         key: "masters-categories",
         label: "Categories",
@@ -171,7 +171,6 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         href: "/master/products",
         icon: "Package",
         moduleKey: "inventory",
-        termKey: "product",
         requiresPermissions: ["inventory.read"],
         requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },

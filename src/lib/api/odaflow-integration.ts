@@ -501,6 +501,18 @@ export type ProductSfaSyncResult = {
   warnings: Array<{ productId: string; barcode?: string; reason: string }>;
 };
 
+/** Re-send the chosen price tag to SFA when the catalog is behind but no SKU is missing. */
+export async function syncPendingCatalogToSfaApi(body: {
+  priceListId: string;
+  catalogs: Array<"general_trade" | "modern_trade">;
+}): Promise<ProductSfaSyncResult> {
+  requireLiveApi("Product SFA sync");
+  return apiRequest<ProductSfaSyncResult>("/api/integrations/odaflow/products/sync-pending", {
+    method: "POST",
+    body,
+  });
+}
+
 export async function syncProductsToSfaApi(body: {
   productIds: string[];
   catalogs: Array<"general_trade" | "modern_trade">;

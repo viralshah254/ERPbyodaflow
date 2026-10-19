@@ -362,9 +362,9 @@ function CreditLimitFields({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="AMOUNT">Cash amount</SelectItem>
+            <SelectItem value="AMOUNT">Amount limit</SelectItem>
             <SelectItem value="DAYS">Days</SelectItem>
-            <SelectItem value="HYBRID">Cash amount + days</SelectItem>
+            <SelectItem value="HYBRID">Amount limit and days</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
@@ -374,13 +374,13 @@ function CreditLimitFields({
       {amount ? (
         <div className="space-y-2">
           <FieldLabel htmlFor={`${idPrefix}-amount`} optional>
-            Cash credit limit
+            Cash credit amount limit
           </FieldLabel>
           <Input
             id={`${idPrefix}-amount`}
             type="number"
             min={0}
-            placeholder="Leave blank for no cash limit"
+            placeholder="Type the limit amount"
             value={form.creditLimit}
             onChange={(e) => setField("creditLimit", e.target.value)}
           />
