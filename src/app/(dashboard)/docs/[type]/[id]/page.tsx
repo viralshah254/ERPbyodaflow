@@ -2098,8 +2098,9 @@ export default function DocViewPage() {
                         ? `${line.taxCodeName}${line.taxCodeCode ? ` (${line.taxCodeCode})` : ""}`
                         : undefined;
                       const orderedQty =
-                        line.orderedWeightKg ??
-                        line.sourceQuantity ??
+                        (line.orderedWeightKg != null && line.orderedWeightKg > 0 ? line.orderedWeightKg : undefined) ??
+                        (line.sourceQuantity != null && line.sourceQuantity > 0 ? line.sourceQuantity : undefined) ??
+                        (line.orderedQuantity != null && line.orderedQuantity > 0 ? line.orderedQuantity : undefined) ??
                         (isGrnDoc ? undefined : line.qty);
                       const receivedQty = line.receivedWeightKg ?? line.qty;
                       const varianceKg =
