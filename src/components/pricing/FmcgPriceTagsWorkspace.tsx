@@ -6,7 +6,6 @@
  */
 
 import * as React from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -23,10 +22,10 @@ import {
 } from "@/components/pricing/FmcgPriceTagItemsEditor";
 import { PriceTagSheetActions } from "@/components/pricing/PriceTagSheetActions";
 import {
-  PriceTagAssignmentBar,
+  PriceTagCustomersPanel,
+  useCustomerPriceAssignments,
   useOrgDefaultPriceListId,
 } from "@/components/pricing/PriceTagAssignmentBar";
-import type { CustomerDefaultPriceListRow } from "@/lib/api/pricing";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import type { PriceList } from "@/lib/products/pricing-types";
 import { cn } from "@/lib/utils";
@@ -61,9 +60,15 @@ export function FmcgPriceTagsWorkspace({
   productPricedStatus?: "all" | "priced" | "unpriced";
 }) {
   const [orgDefaultId, setOrgDefaultId] = useOrgDefaultPriceListId();
-  const [assignmentRows, setAssignmentRows] = React.useState<CustomerDefaultPriceListRow[]>([]);
+  const {
+    rows: assignmentRows,
+    loading: assignmentsLoading,
+    reload: reloadAssignments,
+  } = useCustomerPriceAssignments();
   const [query, setQuery] = React.useState("");
   const [editorEpoch, setEditorEpoch] = React.useState(0);
+  const [pane, setPane] = React.useState<"products" | "customers">("products");
+  const paneIntent = React.useRef<"products" | "customers" | null>(null);
   const [viewScope, setViewScope] = React.useState<PriceTagViewScope>({
     search: "",
     categoryId: "",
@@ -79,6 +84,21 @@ export function FmcgPriceTagsWorkspace({
     }
     return counts;
   }, [assignmentRows]);
+
+  const openTag = (id: string, nextPane: "products" | "customers") => {
+    paneIntent.current = nextPane;
+    onSelect(id);
+    setPane(nextPane);
+  };
+
+  React.useEffect(() => {
+    if (paneIntent.current) {
+      setPane(paneIntent.current);
+      paneIntent.current = null;
+      return;
+    }
+    setPane("products");
+  }, [selectedId]);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -164,7 +184,7 @@ export function FmcgPriceTagsWorkspace({
                     >
                       <button
                         type="button"
-                        onClick={() => onSelect(pl.id)}
+                        onClick={() => openTag(pl.id, "products")}
                         className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-2 text-left"
                       >
                         <span
@@ -215,15 +235,13 @@ export function FmcgPriceTagsWorkspace({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => onSelect(pl.id)}>
+                          <DropdownMenuItem onClick={() => openTag(pl.id, "products")}>
                             <Icons.Tag className="mr-2 h-3.5 w-3.5" />
                             Set piece prices
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/pricing/rules?tag=${encodeURIComponent(pl.id)}`}>
-                              <Icons.Users className="mr-2 h-3.5 w-3.5" />
-                              Assign customers
-                            </Link>
+                          <DropdownMenuItem onClick={() => openTag(pl.id, "customers")}>
+                            <Icons.Users className="mr-2 h-3.5 w-3.5" />
+                            Customers on this tag
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => onEdit(pl)}>
                             <Icons.Pencil className="mr-2 h-3.5 w-3.5" />
@@ -256,44 +274,58 @@ export function FmcgPriceTagsWorkspace({
       <section className="flex min-w-0 flex-1 flex-col" id="fmcg-price-tag-editor">
         {selected ? (
           <>
-            <header className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3 sm:px-5">
+            <header className="flex items-center justify-between gap-3 border-b px-4 py-2">
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Editing prices for</p>
-                <h2 className="truncate text-lg font-semibold tracking-tight">{selected.name}</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {selected.currency} · price per piece · packs calculate from packaging
-                </p>
+                <h2 className="truncate text-base font-semibold leading-tight">{selected.name}</h2>
+                <p className="text-xs text-muted-foreground">{selected.currency}</p>
               </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => onEdit(selected)}>
+              <div className="flex shrink-0 items-center gap-2">
+                <div
+                  role="tablist"
+                  aria-label="What to edit on this price tag"
+                  className="inline-flex rounded-lg bg-muted p-1"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={pane === "products"}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                      pane === "products"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => setPane("products")}
+                  >
+                    <Icons.Package className="h-3.5 w-3.5" />
+                    Products
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={pane === "customers"}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+                      pane === "customers"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => setPane("customers")}
+                  >
+                    <Icons.Users className="h-3.5 w-3.5" />
+                    Customers
+                    <span className="tabular-nums text-xs text-muted-foreground">
+                      {customerCountByTag.get(selected.id) ?? 0}
+                    </span>
+                  </button>
+                </div>
+                <Button variant="ghost" size="sm" className="h-8" onClick={() => onEdit(selected)}>
                   <Icons.Pencil className="mr-1.5 h-3.5 w-3.5" />
-                  Edit tag
+                  Edit
                 </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/master/products">Products</Link>
-                </Button>
-                <PriceTagSheetActions
-                  mode="single"
-                  priceListId={selected.id}
-                  tagName={selected.name}
-                  exportScope={viewScope}
-                  onImported={() => {
-                    setEditorEpoch((n) => n + 1);
-                    onSaved();
-                  }}
-                />
               </div>
             </header>
-            <div className="flex-1 overflow-auto p-4 sm:p-5">
-              <div className="mb-4">
-                <PriceTagAssignmentBar
-                  priceListId={selected.id}
-                  tagName={selected.name}
-                  isDefault={selected.isDefault || selected.id === orgDefaultId}
-                  onDefaultChange={setOrgDefaultId}
-                  onAssignmentsChange={setAssignmentRows}
-                />
-              </div>
+            <div className={cn("min-h-0 flex-1 overflow-auto p-3", pane !== "products" && "hidden")}>
               <FmcgPriceTagItemsEditor
                 key={`${selected.id}-${editorEpoch}-${productSearch}-${productPricedStatus}`}
                 priceListId={selected.id}
@@ -302,8 +334,35 @@ export function FmcgPriceTagsWorkspace({
                 onViewChange={setViewScope}
                 initialSearch={productSearch}
                 initialPricedStatus={productPricedStatus}
+                toolbarActions={
+                  <PriceTagSheetActions
+                    mode="single"
+                    priceListId={selected.id}
+                    tagName={selected.name}
+                    exportScope={viewScope}
+                    onImported={() => {
+                      setEditorEpoch((n) => n + 1);
+                      onSaved();
+                    }}
+                  />
+                }
               />
             </div>
+            {pane === "customers" ? (
+              <div className="flex-1 overflow-auto p-4 sm:p-5">
+                <PriceTagCustomersPanel
+                  priceListId={selected.id}
+                  tagName={selected.name}
+                  isDefault={selected.isDefault || selected.id === orgDefaultId}
+                  rows={assignmentRows}
+                  loading={assignmentsLoading}
+                  onDefaultChange={setOrgDefaultId}
+                  onAssignmentsChange={() => {
+                    void reloadAssignments({ silent: true });
+                  }}
+                />
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-16 text-center">
