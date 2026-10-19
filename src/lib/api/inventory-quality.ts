@@ -11,6 +11,25 @@ export type InventoryQualityCase = {
   capa?: string;
 };
 
+export type InventoryLotOption = {
+  id: string;
+  lotNumber: string;
+  productId: string;
+  warehouseId: string;
+  remainingQuantity: number;
+  status: string;
+  qcStatus?: string;
+  expiryDate?: string;
+};
+
+export async function searchInventoryLotsApi(search: string) {
+  const params = new URLSearchParams();
+  if (search.trim()) params.set("search", search.trim());
+  params.set("limit", "20");
+  const result = await apiRequest<{ items: InventoryLotOption[] }>(`/api/inventory/lots?${params.toString()}`);
+  return result.items ?? [];
+}
+
 export async function fetchInventoryQualityCasesApi() {
   const result = await apiRequest<{ items: InventoryQualityCase[] }>("/api/inventory/quality-cases");
   return result.items ?? [];

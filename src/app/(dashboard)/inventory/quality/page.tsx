@@ -14,6 +14,8 @@ import {
   actionInventoryQualityCaseApi,
   createInventoryQualityCaseApi,
   fetchInventoryQualityCasesApi,
+  searchInventoryLotsApi,
+  type InventoryLotOption,
   type InventoryQualityCase,
 } from "@/lib/api/inventory-quality";
 
@@ -21,6 +23,8 @@ export default function InventoryQualityPage() {
   const [items, setItems] = React.useState<InventoryQualityCase[]>([]);
   const [kind, setKind] = React.useState<"QUALITY" | "LOSS" | "RECALL">("QUALITY");
   const [lotId, setLotId] = React.useState("");
+  const [lotQuery, setLotQuery] = React.useState("");
+  const [lotOptions, setLotOptions] = React.useState<InventoryLotOption[]>([]);
   const [quantity, setQuantity] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [capa, setCapa] = React.useState<Record<string, string>>({});
@@ -30,6 +34,12 @@ export default function InventoryQualityPage() {
     catch (error) { toast.error(error instanceof Error ? error.message : "Failed to load quality cases."); }
   }, []);
   React.useEffect(() => { void refresh(); }, [refresh]);
+  React.useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void searchInventoryLotsApi(lotQuery).then(setLotOptions).catch(() => setLotOptions([]));
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [lotQuery]);
 
   return (
     <PageShell>
@@ -43,7 +53,29 @@ export default function InventoryQualityPage() {
           <CardHeader><CardTitle className="text-base">Open a case</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1"><Label>Type</Label><Select value={kind} onValueChange={(value) => setKind(value as typeof kind)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="QUALITY">Quality hold</SelectItem><SelectItem value="LOSS">Loss</SelectItem><SelectItem value="RECALL">Recall</SelectItem></SelectContent></Select></div>
-            <div className="space-y-1"><Label>Lot ID</Label><Input value={lotId} onChange={(e) => setLotId(e.target.value)} /></div>
+            <div className="space-y-1">
+              <Label htmlFor="quality-lot-search">Lot</Label>
+              <Input id="quality-lot-search" value={lotQuery} onChange={(e) => setLotQuery(e.target.value)} placeholder="Search lot number" />
+              {lotOptions.length > 0 ? (
+                <div className="max-h-40 overflow-auto rounded-md border">
+                  {lotOptions.map((lot) => (
+                    <button
+                      key={lot.id}
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                      onClick={() => {
+                        setLotId(lot.id);
+                        setLotQuery(lot.lotNumber);
+                        if (!quantity) setQuantity(String(lot.remainingQuantity ?? ""));
+                      }}
+                    >
+                      {lot.lotNumber} · {lot.remainingQuantity} left · {lot.status}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {lotId ? <p className="text-xs text-muted-foreground">Selected lot {lotQuery || lotId}</p> : null}
+            </div>
             <div className="space-y-1"><Label>Affected quantity</Label><Input type="number" min={0} value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div>
             <div className="space-y-1"><Label>Reason / evidence</Label><Input value={reason} onChange={(e) => setReason(e.target.value)} /></div>
             <Button className="w-full" onClick={async () => {
