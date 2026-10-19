@@ -21,7 +21,7 @@ import {
   downloadOrgComplianceDoc,
   type OrgComplianceDocKindSlug,
 } from "@/lib/api/org";
-import { fetchApiBinary } from "@/lib/api/client";
+import { apiRequest, fetchApiBinary } from "@/lib/api/client";
 import type { OrgComplianceAttachmentSummary } from "@/lib/types/org";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -58,6 +58,9 @@ export default function OrganizationPage() {
   const [uploadingTax, setUploadingTax] = React.useState(false);
   const [uploadingCoi, setUploadingCoi] = React.useState(false);
   const [uploadingLogo, setUploadingLogo] = React.useState(false);
+  const [mailFromName, setMailFromName] = React.useState("");
+  const [mailReplyTo, setMailReplyTo] = React.useState("");
+  const [mailSaving, setMailSaving] = React.useState(false);
 
   const taxFileRef = React.useRef<HTMLInputElement>(null);
   const coiFileRef = React.useRef<HTMLInputElement>(null);
@@ -89,6 +92,11 @@ export default function OrganizationPage() {
         setTaxPinAttachment(profile.taxPinAttachment);
         setCoiAttachment(profile.certificateOfIncorporationAttachment);
         setLogoAttachment(profile.logoAttachment);
+        const mail = await apiRequest<{ fromName?: string; replyTo?: string }>("/api/settings/outbound-mail").catch(() => null);
+        if (!cancelled && mail) {
+          setMailFromName(mail.fromName ?? "");
+          setMailReplyTo(mail.replyTo ?? "");
+        }
       } catch (e) {
         if (!cancelled) toast.error((e as Error).message);
       } finally {
@@ -357,6 +365,44 @@ export default function OrganizationPage() {
                 </div>
               );
             })()}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Outbound email</CardTitle>
+            <CardDescription>
+              Name and reply-to used when purchase orders, invoices, delivery notes, dispatch notes, and statements are sent. The mailbox login stays the one already configured for OdaFlow.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 max-w-md">
+            <div className="space-y-1">
+              <Label>From name</Label>
+              <Input value={mailFromName} onChange={(event) => setMailFromName(event.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Reply-to</Label>
+              <Input type="email" value={mailReplyTo} onChange={(event) => setMailReplyTo(event.target.value)} />
+            </div>
+            <Button
+              disabled={mailSaving || !canManageOrg}
+              onClick={async () => {
+                setMailSaving(true);
+                try {
+                  await apiRequest("/api/settings/outbound-mail", {
+                    method: "PUT",
+                    body: { fromName: mailFromName, replyTo: mailReplyTo },
+                  });
+                  toast.success("Outbound email saved.");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not save");
+                } finally {
+                  setMailSaving(false);
+                }
+              }}
+            >
+              Save email settings
+            </Button>
           </CardContent>
         </Card>
       </div>

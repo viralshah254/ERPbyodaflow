@@ -552,6 +552,7 @@ export default function WorkOrdersPage() {
                   else if (match) setBomId(match.id);
                   if (cached?.routingId) setRoutingId(cached.routingId);
                   else if (match?.routeId) setRoutingId(match.routeId);
+                  if (match?.outputWarehouseId) setOutputWarehouseId(match.outputWarehouseId);
                 }}
                 onOptionSelect={setSelectedProductOption}
                 loadOptions={loadMakeableProducts}
@@ -587,6 +588,7 @@ export default function WorkOrdersPage() {
                         : (bom.finishedProductName ?? bom.name),
                     });
                     if (bom.routeId) setRoutingId(bom.routeId);
+                    if (bom.outputWarehouseId) setOutputWarehouseId(bom.outputWarehouseId);
                   }
                 }}
               >

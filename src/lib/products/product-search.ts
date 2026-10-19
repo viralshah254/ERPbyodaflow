@@ -100,6 +100,9 @@ export function productMatchesSearch(product: ProductSearchFields, query: string
       );
     }
     if (atom.type === "size") {
+      const code = String(product.code ?? "").trim().toLowerCase();
+      const sku = String(product.sku ?? "").trim().toLowerCase();
+      if (code === atom.number.toLowerCase() || sku === atom.number.toLowerCase()) return true;
       const re = new RegExp(`(^|[^0-9])${escapeRegExp(atom.number)}([^0-9]|$)`, "i");
       return re.test(String(product.size ?? "")) || re.test(String(product.name ?? ""));
     }

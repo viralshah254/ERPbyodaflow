@@ -2189,9 +2189,28 @@ export default function InventoryCostingPage() {
                 </Link>{" "}
                 first.
               </p>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/settings/inventory/costing">Set up templates</Link>
-              </Button>
+              <div className="flex justify-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const grnId = selectedSource?.id;
+                    if (!grnId) return;
+                    try {
+                      const { postGRN } = await import("@/lib/api/grn");
+                      await postGRN(grnId);
+                      toast.success("GRN posted without additional costs.");
+                      window.location.href = `/inventory/receipts/${grnId}`;
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "Failed to post GRN.");
+                    }
+                  }}
+                >
+                  Post without additional costs
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/settings/inventory/costing">Set up templates</Link>
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="py-10 text-center">

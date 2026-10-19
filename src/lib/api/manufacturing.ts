@@ -30,6 +30,8 @@ export type ManufacturingBom = {
   direction?: "STANDARD" | "REVERSE";
   isActive: boolean;
   routeId?: string;
+  outputWarehouseId?: string;
+  outputWarehouseName?: string;
   items: ManufacturingBomItem[];
 };
 
@@ -256,6 +258,7 @@ export async function createManufacturingBom(payload: {
   quantity: number;
   uom: string;
   type: "bom" | "formula" | "disassembly";
+  outputWarehouseId?: string;
 }): Promise<{ id: string; code?: string }> {
   return apiRequest("/api/manufacturing/boms", { method: "POST", body: payload });
 }

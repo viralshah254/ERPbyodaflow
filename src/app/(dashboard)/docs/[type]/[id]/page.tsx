@@ -60,7 +60,9 @@ import {
   fetchDocumentDetailApi,
   patchDocumentApi,
   requestDocumentApprovalApi,
+  sendDocumentEmailApi,
   sendInvoiceEmailApi,
+  settleInvoiceApi,
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
 import {
@@ -72,7 +74,8 @@ import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
-import { fetchPartyByIdApi, formatPartyDisplayName, type PartyLookupOption } from "@/lib/api/parties";
+import { fetchPartyByIdApi, formatPartyDisplayName, updatePartyApi, type PartyLookupOption } from "@/lib/api/parties";
+import { createPaymentTermApi, fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
@@ -219,6 +222,24 @@ function salesOrderFulfilmentInProgress(linkedDeliveryNote: LinkedDocSummary | n
   return DN_NEEDS_FULFILMENT_STATUSES.has(String(linkedDeliveryNote.status ?? "").trim().toUpperCase());
 }
 
+function toastDocumentActionError(error: unknown) {
+  const body = (error as { body?: { code?: string; grns?: Array<{ id: string; number: string }> } }).body;
+  const grn = body?.code === "LINKED_GRN_NOT_POSTED" ? body.grns?.[0] : undefined;
+  if (grn?.id) {
+    toast.error(error instanceof Error ? error.message : "Bill cannot be posted", {
+      action: {
+        label: `Go to ${grn.number}`,
+        onClick: () => {
+          window.location.href = `/inventory/receipts/${grn.id}`;
+        },
+      },
+      duration: 12000,
+    });
+    return;
+  }
+  toast.error(error instanceof Error ? error.message : "Request failed");
+}
+
 export default function DocViewPage() {
   const params = useParams();
   const router = useRouter();
@@ -262,6 +283,14 @@ export default function DocViewPage() {
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
   const [emailTo, setEmailTo] = React.useState("");
   const [emailSending, setEmailSending] = React.useState(false);
+  const [settleOpen, setSettleOpen] = React.useState(false);
+  const [settleMethod, setSettleMethod] = React.useState<"CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER">("CASH");
+  const [settleReference, setSettleReference] = React.useState("");
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermRow[]>([]);
+  const [partyNeedsTerms, setPartyNeedsTerms] = React.useState(false);
+  const [settleTermsId, setSettleTermsId] = React.useState("");
+  const [settleNetDays, setSettleNetDays] = React.useState("30");
+  const [settleSaving, setSettleSaving] = React.useState(false);
   const [pdfDownloading, setPdfDownloading] = React.useState(false);
   const [applyDialogOpen, setApplyDialogOpen] = React.useState(false);
   const [openInvoices, setOpenInvoices] = React.useState<Array<{ id: string; number: string; openAmount: number; currency: string }>>([]);
@@ -280,6 +309,26 @@ export default function DocViewPage() {
   const [extrasLoading, setExtrasLoading] = React.useState(true);
   const loading = initialLoading;
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
+  React.useEffect(() => {
+    if (type !== "invoice" || !document?.partyId) {
+      setPartyNeedsTerms(false);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all([fetchPartyByIdApi(document.partyId), fetchPaymentTermsApi()])
+      .then(([party, terms]) => {
+        if (cancelled) return;
+        setPaymentTerms(terms.filter((term) => term.isActive !== false));
+        setPartyNeedsTerms(!party?.paymentTermsId);
+        if (party?.paymentTermsId) setSettleTermsId(party.paymentTermsId);
+      })
+      .catch(() => {
+        if (!cancelled) setPartyNeedsTerms(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [type, document?.partyId]);
   const [notesDraft, setNotesDraft] = React.useState("");
   const [notesSaving, setNotesSaving] = React.useState(false);
   const [deliveryDraft, setDeliveryDraft] = React.useState("");
@@ -660,6 +709,31 @@ export default function DocViewPage() {
     },
     [type, id]
   );
+
+  const invoiceNeedsSettlement =
+    type === "invoice" && Boolean(document) && (!document?.retailPaymentMethod || partyNeedsTerms);
+
+  const runPost = React.useCallback(async () => {
+    await documentActionApi(type as DocTypeKey, id, "post");
+    setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
+    toast.success(signAndPost ? "Signed and posted." : "Document posted.");
+    void refreshDocument(true);
+  }, [id, refreshDocument, signAndPost, type]);
+
+  const requestPost = React.useCallback(async () => {
+    if (invoiceNeedsSettlement) {
+      setSettleOpen(true);
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await runPost();
+    } catch (error) {
+      toastDocumentActionError(error);
+    } finally {
+      setActionLoading(false);
+    }
+  }, [invoiceNeedsSettlement, runPost]);
 
   /** Load attachments, comments, and audit after core document renders. */
   React.useEffect(() => {
@@ -1042,18 +1116,16 @@ export default function DocViewPage() {
           openOdaflowApproval("submit");
           return;
         }
+        if (action === "post") {
+          await requestPost();
+          return;
+        }
         setActionLoading(true);
         try {
           await documentActionApi(type as DocTypeKey, id, action as "approve" | "post" | "cancel");
-          if (action === "post") {
-            setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
-            toast.success(isIncotexSignableDocType(type) ? "Signed and posted." : "Document posted.");
-            void refreshDocument(true);
-          } else {
-            await refreshDocument(true);
-            toast.success(`Document ${action}d.`);
-          }
-        } catch (e) { toast.error((e as Error).message); }
+          await refreshDocument(true);
+          toast.success(`Document ${action}d.`);
+        } catch (e) { toastDocumentActionError(e); }
         finally { setActionLoading(false); }
       }}
       onConvert={openConvertSheet}
@@ -1281,21 +1353,7 @@ export default function DocViewPage() {
               <Button
                 size="sm"
                 disabled={actionLoading}
-                onClick={async () => {
-                  setActionLoading(true);
-                  try {
-                    await documentActionApi(type as DocTypeKey, id, "post");
-                    // Optimistically mark as POSTED so the UI updates immediately while the
-                    // background refresh fills in the rest of the detail.
-                    setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
-                    toast.success(signAndPost ? "Signed and posted." : "Document posted.");
-                    void refreshDocument(true);
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  } finally {
-                    setActionLoading(false);
-                  }
-                }}
+                onClick={() => void requestPost()}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
                 {signAndPost ? "Sign and post" : "Post"}
@@ -2999,6 +3057,109 @@ export default function DocViewPage() {
         </div>
       )}
 
+      {settleOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
+            <h3 className="text-base font-semibold">How is this invoice settled?</h3>
+            {!document?.retailPaymentMethod ? (
+              <div className="space-y-2">
+                <Label>Payment method</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["CASH", "CHEQUE", "MPESA", "BANK_TRANSFER"] as const).map((method) => (
+                    <Button
+                      key={method}
+                      type="button"
+                      size="sm"
+                      variant={settleMethod === method ? "default" : "outline"}
+                      onClick={() => setSettleMethod(method)}
+                    >
+                      {method === "BANK_TRANSFER" ? "Bank transfer" : method === "MPESA" ? "M-Pesa" : method === "CASH" ? "Cash" : "Cheque"}
+                    </Button>
+                  ))}
+                </div>
+                <Input
+                  placeholder="Reference (optional)"
+                  value={settleReference}
+                  onChange={(event) => setSettleReference(event.target.value)}
+                />
+              </div>
+            ) : null}
+            {partyNeedsTerms ? (
+              <div className="space-y-2">
+                <Label>Customer payment terms</Label>
+                {paymentTerms.length ? (
+                  <select
+                    className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={settleTermsId}
+                    onChange={(event) => setSettleTermsId(event.target.value)}
+                  >
+                    <option value="">Choose terms</option>
+                    {paymentTerms.map((term) => (
+                      <option key={term.id} value={term.id}>{term.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Net days"
+                    value={settleNetDays}
+                    onChange={(event) => setSettleNetDays(event.target.value)}
+                  />
+                )}
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setSettleOpen(false)}>Cancel</Button>
+              <Button
+                disabled={settleSaving}
+                onClick={async () => {
+                  if (!document?.partyId && partyNeedsTerms) return;
+                  setSettleSaving(true);
+                  try {
+                    if (!document?.retailPaymentMethod) {
+                      await settleInvoiceApi(id, { method: settleMethod, reference: settleReference.trim() || undefined });
+                      setDocument((prev) => prev ? { ...prev, retailPaymentMethod: settleMethod, orderChannel: "MANUAL" } : prev);
+                    }
+                    if (partyNeedsTerms && document?.partyId) {
+                      let termsId = settleTermsId;
+                      if (!paymentTerms.length) {
+                        const days = Math.max(0, Number(settleNetDays) || 0);
+                        const created = await createPaymentTermApi({
+                          code: `NET${days}`,
+                          name: days === 0 ? "Immediate" : `Net ${days}`,
+                          method: days === 0 ? "IMMEDIATE" : "NET_DAYS",
+                          days,
+                        });
+                        termsId = created.id;
+                      }
+                      if (!termsId) throw new Error("Choose payment terms");
+                      await updatePartyApi(document.partyId, { paymentTermsId: termsId });
+                      setPartyNeedsTerms(false);
+                    }
+                    setSettleOpen(false);
+                    setActionLoading(true);
+                    try {
+                      await runPost();
+                    } catch (error) {
+                      toastDocumentActionError(error);
+                    } finally {
+                      setActionLoading(false);
+                    }
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Could not save");
+                  } finally {
+                    setSettleSaving(false);
+                  }
+                }}
+              >
+                {settleSaving ? "Saving…" : "Continue"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Email to customer dialog */}
       {emailDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -3008,7 +3169,11 @@ export default function DocViewPage() {
               <h3 className="text-base font-semibold">Send to customer</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              The invoice PDF will be attached and sent to the customer email address.
+              {type === "purchase-order"
+                ? "The purchase order PDF will be attached."
+                : type === "delivery-note"
+                  ? "The delivery note PDF will be attached."
+                  : "The invoice PDF will be attached and sent to the customer email address."}
               {document?.emailedAt && (
                 <span className="block mt-1 text-xs">
                   Last sent: {new Date(document.emailedAt).toLocaleString()}
@@ -3034,10 +3199,14 @@ export default function DocViewPage() {
                 onClick={async () => {
                   setEmailSending(true);
                   try {
-                    const result = await sendInvoiceEmailApi(id, {
-                      overrideTo: emailTo.trim() || undefined,
-                    });
-                    toast.success(`Invoice sent to ${result.to ?? "customer"}`);
+                    const result = type === "invoice"
+                      ? await sendInvoiceEmailApi(id, { overrideTo: emailTo.trim() || undefined })
+                      : await sendDocumentEmailApi(
+                          type === "purchase-order" ? "purchase-order" : "delivery-note",
+                          id,
+                          { overrideTo: emailTo.trim() || undefined }
+                        );
+                    toast.success(`Sent to ${result.to ?? "the address on file"}`);
                     setEmailDialogOpen(false);
                     await refreshDocument(true);
                   } catch (e) {
@@ -3285,6 +3454,7 @@ function DynamicNextStepsPanel({
       }
     }
   } else if (type === "delivery-note") {
+    steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this delivery note", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
     const st = status.toUpperCase();
     const hasPod = !!document?.podConfirmation?.confirmedAt;
     if (status === "DRAFT") {
@@ -3400,6 +3570,7 @@ function DynamicNextStepsPanel({
       steps.push({ icon: <Icons.ShoppingCart className="h-4 w-4 text-blue-500" />, text: "Approved — convert to a Purchase Order", action: () => onConvert("purchase-order"), actionLabel: "Create PO", variant: "default" });
     }
   } else if (type === "purchase-order") {
+    steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this purchase order", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
     if (status === "DRAFT") {
       steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Submit this PO for approval before creating a GRN", action: () => void onAction("submit"), actionLabel: "Submit for approval", variant: "default" });
     } else if (status === "PENDING_APPROVAL") {

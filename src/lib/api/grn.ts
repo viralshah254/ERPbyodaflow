@@ -107,7 +107,8 @@ export type GrnPostErrorCode =
   | "GRN_MISSING_WEIGHT"
   | "GRN_OPEN_VARIANCE"
   | "GRN_POST_FAILED"
-  | "GRN_NOT_FOUND";
+  | "GRN_NOT_FOUND"
+  | "WAREHOUSE_CANNOT_RECEIVE";
 
 export type GrnPostError = Error & {
   code?: GrnPostErrorCode;
@@ -115,6 +116,7 @@ export type GrnPostError = Error & {
   poId?: string | null;
   billId?: string | null;
   billNumber?: string | null;
+  warehouseId?: string | null;
 };
 
 export interface GrnPostResult {
@@ -137,6 +139,7 @@ export async function postGRN(id: string): Promise<GrnPostResult> {
     typed.poId = (body.poId as string | null | undefined) ?? null;
     typed.billId = (body.billId as string | null | undefined) ?? null;
     typed.billNumber = (body.billNumber as string | null | undefined) ?? null;
+    typed.warehouseId = (body.warehouseId as string | null | undefined) ?? null;
     throw typed;
   }
 }

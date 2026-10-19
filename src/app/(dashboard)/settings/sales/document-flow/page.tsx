@@ -34,6 +34,14 @@ const PICK_PACK_FIRST_STEPS = [
   "Proof of delivery",
 ];
 
+const JOY_DISPATCH_STEPS = [
+  "Approved sales orders",
+  "Pick list",
+  "Verify and transfer to the route warehouse",
+  "Dispatch note",
+  "Invoice from the route warehouse",
+];
+
 const OPTIONS: Array<{ key: keyof SalesDocumentFlowSettings; label: string; hint: string }> = [
   {
     key: "requireSalesOrderApprovalBeforePicking",
@@ -163,7 +171,12 @@ export default function SalesDocumentFlowPage() {
     };
   }, [fmcg]);
 
-  const steps = settings.mode === "pick_pack_first" ? PICK_PACK_FIRST_STEPS : CLASSIC_STEPS;
+  const steps =
+    settings.mode === "pick_pack_first"
+      ? PICK_PACK_FIRST_STEPS
+      : settings.mode === "joy_dispatch"
+        ? JOY_DISPATCH_STEPS
+        : CLASSIC_STEPS;
 
   const save = async () => {
     setSaving(true);
@@ -200,11 +213,12 @@ export default function SalesDocumentFlowPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 {(
                   [
                     ["classic", "Current flow", "Delivery note first, then pick & pack, then invoice after the signed note."],
                     ["pick_pack_first", "Pick & pack first", "Pick from the sales order, then invoice and delivery note, then proof of delivery."],
+                    ["joy_dispatch", "Route dispatch", "One pick list for many orders, transfer from DISPATCH, then the invoice reduces the route warehouse."],
                   ] as Array<[SalesDocumentFlowMode, string, string]>
                 ).map(([mode, label, hint]) => (
                   <button

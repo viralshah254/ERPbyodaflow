@@ -1,7 +1,7 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
 import type { WarehouseRow } from "@/lib/types/masters";
 
-type BackendWarehouse = {
+export type BackendWarehouse = {
   id: string;
   code?: string;
   name: string;

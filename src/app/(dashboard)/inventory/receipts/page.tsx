@@ -308,7 +308,7 @@ export default function InventoryReceiptsPage() {
                       size="sm"
                       variant="outline"
                       className="h-7 px-2.5 text-xs"
-                      disabled={postingId === r.id || !r.hasLandedCost}
+                      disabled={postingId === r.id}
                       onClick={(e) => handlePostRow(r, e)}
                     >
                       {postingId === r.id ? (
@@ -319,7 +319,7 @@ export default function InventoryReceiptsPage() {
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {!r.hasLandedCost && (
+                {false && (
                   <TooltipContent side="left">
                     Apply additional costs before posting
                   </TooltipContent>
