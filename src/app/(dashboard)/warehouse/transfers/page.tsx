@@ -22,9 +22,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { exportTransfersCsv, fetchTransfers, updateTransferStatus, type TransferRow, type TransferStatus } from "@/lib/api/warehouse-transfers";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
-import { fetchProductsApi } from "@/lib/api/products";
+import { fetchStockLevelsApi, type InventoryStockRow } from "@/lib/api/inventory-stock";
 import { fetchProductUomsApi } from "@/lib/api/uom";
-import type { ProductRow } from "@/lib/types/masters";
 import type { UomDefinition } from "@/lib/products/types";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
@@ -38,6 +37,21 @@ const STATUS_OPTIONS: { label: string; value: string }[] = [
   { label: "In transit", value: "IN_TRANSIT" },
   { label: "Received", value: "RECEIVED" },
 ];
+
+type TransferLineDraft = {
+  key: string;
+  productId: string;
+  qty: string;
+  unit: string;
+};
+
+function newLine(): TransferLineDraft {
+  return { key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, productId: "", qty: "", unit: "" };
+}
+
+function formatQty(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
 
 function statusVariant(s: TransferStatus): "default" | "secondary" | "outline" | "destructive" {
   if (s === "RECEIVED") return "secondary";
@@ -59,25 +73,35 @@ export default function WarehouseTransfersPage() {
 
   // Lookup data for dropdowns
   const [warehouses, setWarehouses] = React.useState<Array<{ id: string; label: string }>>([]);
-  const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [uoms, setUoms] = React.useState<UomDefinition[]>([]);
+  const [sourceStock, setSourceStock] = React.useState<InventoryStockRow[]>([]);
+  const [stockLoading, setStockLoading] = React.useState(false);
 
   // Create transfer form state
   const [date, setDate] = React.useState("");
   const [fromWarehouseId, setFromWarehouseId] = React.useState("");
   const [toWarehouseId, setToWarehouseId] = React.useState("");
   const [reference, setReference] = React.useState("");
-  const [lineProductId, setLineProductId] = React.useState("");
-  const [lineQty, setLineQty] = React.useState("");
-  const [lineUnit, setLineUnit] = React.useState("");
+  const [lines, setLines] = React.useState<TransferLineDraft[]>(() => [newLine()]);
   const [transferCostKes, setTransferCostKes] = React.useState("");
   const [costNotes, setCostNotes] = React.useState("");
   const [sourceGrnId, setSourceGrnId] = React.useState("");
 
-  // Derived from selected product
-  const selectedProduct = React.useMemo(
-    () => products.find((p) => p.id === lineProductId) ?? null,
-    [products, lineProductId]
+  const stockByProduct = React.useMemo(() => {
+    const map = new Map<string, InventoryStockRow>();
+    for (const row of sourceStock) {
+      if (!row.productId || row.available <= 0) continue;
+      map.set(row.productId, row);
+    }
+    return map;
+  }, [sourceStock]);
+
+  const transferableProducts = React.useMemo(
+    () =>
+      [...stockByProduct.values()].sort((a, b) =>
+        (a.sku || a.name).localeCompare(b.sku || b.name)
+      ),
+    [stockByProduct]
   );
 
   const load = React.useCallback(() => {
@@ -100,16 +124,30 @@ export default function WarehouseTransfersPage() {
 
   React.useEffect(() => {
     void fetchWarehouseOptions().then(setWarehouses).catch(() => setWarehouses([]));
-    void fetchProductsApi({ status: "ACTIVE" }).then(setProducts).catch(() => setProducts([]));
     void fetchProductUomsApi().then(setUoms).catch(() => setUoms([]));
   }, []);
 
-  // When product changes, auto-fill unit from product's base UOM
   React.useEffect(() => {
-    if (selectedProduct?.baseUom) {
-      setLineUnit(selectedProduct.baseUom);
+    if (!fromWarehouseId) {
+      setSourceStock([]);
+      return;
     }
-  }, [selectedProduct]);
+    let cancelled = false;
+    setStockLoading(true);
+    void fetchStockLevelsApi({ warehouseId: fromWarehouseId, limit: 100 })
+      .then((rows) => {
+        if (!cancelled) setSourceStock(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setSourceStock([]);
+      })
+      .finally(() => {
+        if (!cancelled) setStockLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromWarehouseId]);
 
   const filtered = allRows;
 
@@ -167,27 +205,61 @@ export default function WarehouseTransfersPage() {
     setFromWarehouseId("");
     setToWarehouseId("");
     setReference("");
-    setLineProductId("");
-    setLineQty("");
-    setLineUnit("");
+    setLines([newLine()]);
     setTransferCostKes("");
     setCostNotes("");
     setSourceGrnId("");
   };
 
+  const updateLine = (key: string, patch: Partial<TransferLineDraft>) => {
+    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  };
+
   const handleCreateTransfer = async () => {
-    if (!date || !fromWarehouseId || !toWarehouseId || !lineProductId || !lineQty) {
-      toast.error("Date, from, to, product and quantity are required.");
+    if (!date || !fromWarehouseId || !toWarehouseId) {
+      toast.error("Date, from, and to warehouse are required.");
       return;
     }
     if (fromWarehouseId === toWarehouseId) {
       toast.error("From and To warehouse must be different.");
       return;
     }
-    const qty = Number(lineQty);
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error("Enter a valid quantity.");
+    const filled = lines.filter((line) => line.productId || line.qty.trim());
+    if (filled.length === 0) {
+      toast.error("Add at least one product.");
       return;
+    }
+    const seen = new Set<string>();
+    const payloadLines: { productId: string; sku: string; productName?: string; quantity: number; unit?: string }[] = [];
+    for (const line of filled) {
+      const stock = stockByProduct.get(line.productId);
+      if (!line.productId || !stock) {
+        toast.error("Each line needs a product that has stock in the source warehouse.");
+        return;
+      }
+      if (seen.has(line.productId)) {
+        toast.error(`${stock.sku || stock.name} is already on this transfer.`);
+        return;
+      }
+      seen.add(line.productId);
+      const qty = Number(line.qty);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        toast.error(`Enter a quantity for ${stock.sku || stock.name}.`);
+        return;
+      }
+      if (qty > stock.available + 1e-9) {
+        toast.error(
+          `${stock.sku || stock.name} only has ${formatQty(stock.available)} ${stock.uom || line.unit || "EA"} available.`
+        );
+        return;
+      }
+      payloadLines.push({
+        productId: line.productId,
+        sku: stock.sku,
+        productName: stock.name,
+        quantity: qty,
+        unit: line.unit || stock.uom || "EA",
+      });
     }
     setSavingTransfer(true);
     try {
@@ -198,14 +270,7 @@ export default function WarehouseTransfersPage() {
           fromWarehouseId,
           toWarehouseId,
           reference: reference.trim() || undefined,
-          lines: [
-            {
-              sku: selectedProduct?.sku ?? lineProductId,
-              productName: selectedProduct?.name,
-              quantity: qty,
-              unit: lineUnit || selectedProduct?.unit || "pcs",
-            },
-          ],
+          lines: payloadLines,
           transferCostKes: Number.isFinite(costKes) && costKes! > 0 ? costKes : undefined,
           costNotes: costNotes.trim() || undefined,
           sourceGrnId: sourceGrnId.trim() || undefined,
@@ -244,7 +309,7 @@ export default function WarehouseTransfersPage() {
                   Create transfer
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full">
+              <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
                 <SheetHeader>
                   <SheetTitle>Create transfer</SheetTitle>
                   <SheetDescription>Move stock between two warehouses.</SheetDescription>
@@ -261,7 +326,13 @@ export default function WarehouseTransfersPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>From warehouse</Label>
-                    <Select value={fromWarehouseId} onValueChange={setFromWarehouseId}>
+                    <Select
+                      value={fromWarehouseId}
+                      onValueChange={(value) => {
+                        setFromWarehouseId(value);
+                        setLines([newLine()]);
+                      }}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select warehouse" />
                       </SelectTrigger>
@@ -300,53 +371,125 @@ export default function WarehouseTransfersPage() {
                       onChange={(e) => setReference(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Product / SKU</Label>
-                    <Select value={lineProductId} onValueChange={setLineProductId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.sku ? `${p.sku} — ${p.name}` : p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedProduct && (
-                      <p className="text-xs text-muted-foreground">{selectedProduct.name}</p>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Quantity</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={lineQty}
-                        onChange={(e) => setLineQty(e.target.value)}
-                      />
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Products</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!fromWarehouseId || stockLoading || transferableProducts.length === 0}
+                        onClick={() => {
+                          const used = new Set(lines.map((line) => line.productId).filter(Boolean));
+                          if (transferableProducts.every((row) => used.has(row.productId ?? ""))) {
+                            toast.error("Every product with stock is already on this transfer.");
+                            return;
+                          }
+                          setLines((current) => [...current, newLine()]);
+                        }}
+                      >
+                        <Icons.Plus className="mr-1 h-3.5 w-3.5" />
+                        Add product
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Unit</Label>
-                      <Select value={lineUnit} onValueChange={setLineUnit}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Unit" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {uoms.map((u) => (
-                            <SelectItem key={u.id} value={u.code}>
-                              {u.code}
-                            </SelectItem>
-                          ))}
-                          {uoms.length === 0 && (
-                            <SelectItem value="pcs">pcs</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {!fromWarehouseId ? (
+                      <p className="text-xs text-muted-foreground">Select a source warehouse to see stock you can transfer.</p>
+                    ) : stockLoading ? (
+                      <p className="text-xs text-muted-foreground">Loading stock in this warehouse…</p>
+                    ) : transferableProducts.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No stock available to transfer from this warehouse.</p>
+                    ) : null}
+                    {lines.map((line, index) => {
+                      const stock = line.productId ? stockByProduct.get(line.productId) : undefined;
+                      const usedElsewhere = new Set(
+                        lines.filter((other) => other.key !== line.key).map((other) => other.productId)
+                      );
+                      const options = transferableProducts.filter(
+                        (row) => row.productId === line.productId || !usedElsewhere.has(row.productId ?? "")
+                      );
+                      const qty = Number(line.qty);
+                      const over =
+                        stock != null && Number.isFinite(qty) && qty > stock.available + 1e-9;
+                      const unit = line.unit || stock?.uom || "EA";
+                      return (
+                        <div key={line.key} className="space-y-2 rounded-md border p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-muted-foreground">Product {index + 1}</span>
+                            {lines.length > 1 ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => setLines((current) => current.filter((row) => row.key !== line.key))}
+                              >
+                                Remove
+                              </Button>
+                            ) : null}
+                          </div>
+                          <Select
+                            value={line.productId}
+                            onValueChange={(productId) => {
+                              const next = stockByProduct.get(productId);
+                              updateLine(line.key, {
+                                productId,
+                                unit: next?.uom || line.unit,
+                              });
+                            }}
+                            disabled={!fromWarehouseId || stockLoading}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={fromWarehouseId ? "Select product" : "Choose source warehouse first"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {options.map((row) => (
+                                <SelectItem key={row.productId} value={row.productId ?? row.id}>
+                                  {row.sku ? `${row.sku} — ${row.name}` : row.name}
+                                  {` · ${formatQty(row.available)} ${row.uom || "EA"} available`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {stock ? (
+                            <p className={`text-xs ${over ? "text-destructive" : "text-muted-foreground"}`}>
+                              Available to transfer: {formatQty(stock.available)} {unit}
+                              {stock.reserved > 0
+                                ? ` (${formatQty(stock.quantity)} on hand, ${formatQty(stock.reserved)} reserved)`
+                                : ""}
+                            </p>
+                          ) : null}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label>Quantity</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={stock?.available}
+                                step={0.01}
+                                value={line.qty}
+                                onChange={(e) => updateLine(line.key, { qty: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label>Unit</Label>
+                              <Select value={line.unit} onValueChange={(unit) => updateLine(line.key, { unit })}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Unit" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {uoms.map((u) => (
+                                    <SelectItem key={u.id} value={u.code}>
+                                      {u.code}
+                                    </SelectItem>
+                                  ))}
+                                  {uoms.length === 0 && <SelectItem value="EA">EA</SelectItem>}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="border-t pt-4 space-y-3">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Logistics cost (optional)</p>
