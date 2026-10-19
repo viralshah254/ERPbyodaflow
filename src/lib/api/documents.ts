@@ -208,6 +208,8 @@ type BackendDocumentDetail = {
   kraSigning?: KraSigningRecord | null;
   salesFlow?: DocumentDetailRecord["salesFlow"];
   orderChannel?: string;
+  retailPaymentMethod?: "CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER";
+  retailMpesaRef?: string;
   externalSource?: string;
   externalOrderId?: string;
   odaflowChannel?: string;
@@ -623,6 +625,8 @@ function mapDocumentDetail(
     kraSigning: payload.kraSigning ?? undefined,
     ...(payload.salesFlow ? { salesFlow: payload.salesFlow } : {}),
     ...(payload.orderChannel ? { orderChannel: payload.orderChannel } : {}),
+    ...(payload.retailPaymentMethod ? { retailPaymentMethod: payload.retailPaymentMethod } : {}),
+    ...(payload.retailMpesaRef ? { retailMpesaRef: payload.retailMpesaRef } : {}),
     ...(payload.externalSource ? { externalSource: payload.externalSource } : {}),
     ...(payload.externalOrderId ? { externalOrderId: payload.externalOrderId } : {}),
     ...(payload.odaflowChannel ? { odaflowChannel: payload.odaflowChannel } : {}),
@@ -1043,6 +1047,29 @@ export async function deleteDocumentCommentApi(
   requireLiveApi("Delete document comment");
   await apiRequest(`/api/docs/${type}/${id}/comments/${encodeURIComponent(commentId)}`, {
     method: "DELETE",
+  });
+}
+
+export async function settleInvoiceApi(
+  invoiceId: string,
+  input: { method: "CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER"; reference?: string }
+): Promise<{ ok: boolean; method: string }> {
+  requireLiveApi("Invoice settlement");
+  return apiRequest(`/api/documents/invoice/${encodeURIComponent(invoiceId)}/settlement`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function sendDocumentEmailApi(
+  type: "invoice" | "purchase-order" | "delivery-note",
+  id: string,
+  options?: { overrideTo?: string }
+): Promise<{ sent: boolean; to: string }> {
+  requireLiveApi("Send document email");
+  return apiRequest(`/api/documents/${type}/${encodeURIComponent(id)}/email`, {
+    method: "POST",
+    body: options?.overrideTo?.trim() ? { overrideTo: options.overrideTo.trim() } : {},
   });
 }
 

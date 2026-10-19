@@ -24,6 +24,7 @@ import { createManufacturingBom, fetchNextManufacturingBomCode } from "@/lib/api
 import { fetchProductsPageApi } from "@/lib/api/products";
 import { productSearchLabel } from "@/lib/products/product-search";
 import { fetchUomsApi } from "@/lib/api/uom";
+import { fetchWarehousesApi, type BackendWarehouse } from "@/lib/api/warehouses";
 import { setUomsCache, listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
 import { manufacturingAreaLabel } from "@/lib/terminology";
@@ -59,6 +60,8 @@ export default function NewBomPage() {
   const [quantity, setQuantity] = React.useState(1);
   const [uom, setUom] = React.useState("EA");
   const [type, setType] = React.useState<BomType>("bom");
+  const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
+  const [warehouses, setWarehouses] = React.useState<BackendWarehouse[]>([]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -72,6 +75,9 @@ export default function NewBomPage() {
           }),
           fetchNextManufacturingBomCode().then((c) => {
             if (!cancelled && c) setCode(c);
+          }),
+          fetchWarehousesApi().then((rows) => {
+            if (!cancelled) setWarehouses(rows.filter((row) => row.status !== "INACTIVE"));
           }),
         ]);
       } catch {
@@ -129,6 +135,7 @@ export default function NewBomPage() {
         quantity: Number(quantity) || 1,
         uom: uom || "EA",
         type,
+        ...(outputWarehouseId ? { outputWarehouseId } : {}),
       });
       toast.success(`BOM ${bom.code ?? bom.id} created.`);
       router.push(`/manufacturing/boms/${encodeURIComponent(bom.id)}`);
@@ -236,6 +243,22 @@ export default function NewBomPage() {
                     <SelectItem value="bom">BOM (Standard assembly)</SelectItem>
                     <SelectItem value="formula">Formula (Batch / process)</SelectItem>
                     <SelectItem value="disassembly">Disassembly (Reverse — one input → many outputs)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Output warehouse</Label>
+                <Select value={outputWarehouseId || "__none__"} onValueChange={(value) => setOutputWarehouseId(value === "__none__" ? "" : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Where finished goods are received" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Choose later on the work order</SelectItem>
+                    {warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.code ? `${warehouse.code} — ${warehouse.name}` : warehouse.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

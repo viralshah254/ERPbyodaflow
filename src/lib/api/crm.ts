@@ -1,6 +1,14 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
-export type CrmAccountRow = { id: string; name: string };
+export type CrmAccountRow = {
+  id: string;
+  name: string;
+  code?: string;
+  email?: string;
+  phone?: string;
+  status?: string;
+  onHold?: boolean;
+};
 
 export type CrmDealRow = {
   id: string;
@@ -40,9 +48,12 @@ export type CrmTicketCommentRow = {
   createdAt: string;
 };
 
-export async function fetchCrmAccountsApi(): Promise<CrmAccountRow[]> {
+export async function fetchCrmAccountsApi(search?: string): Promise<CrmAccountRow[]> {
   requireLiveApi("CRM accounts");
-  const payload = await apiRequest<{ items: CrmAccountRow[] }>("/api/crm/accounts");
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set("search", search.trim());
+  params.set("limit", "100");
+  const payload = await apiRequest<{ items: CrmAccountRow[] }>(`/api/crm/accounts?${params.toString()}`);
   return payload.items ?? [];
 }
 

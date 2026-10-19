@@ -558,7 +558,7 @@ export default function ReceiptDetailPage() {
                     <span>
                       <Button
                         size="sm"
-                        disabled={posting || !hasAnyCosts}
+                        disabled={posting}
                         onClick={async () => {
                           setPosting(true);
                           try {
@@ -600,6 +600,14 @@ export default function ReceiptDetailPage() {
                                 },
                                 duration: 8000,
                               });
+                            } else if (e.code === "WAREHOUSE_CANNOT_RECEIVE" && e.warehouseId) {
+                              toast.error(msg, {
+                                action: {
+                                  label: "Open warehouse",
+                                  onClick: () => { window.location.href = `/master/warehouses`; },
+                                },
+                                duration: 10000,
+                              });
                             } else {
                               toast.error(msg);
                             }
@@ -613,7 +621,7 @@ export default function ReceiptDetailPage() {
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {!hasAnyCosts && (
+                  {false && (
                     <TooltipContent>
                       Apply additional costs before posting
                     </TooltipContent>
@@ -697,11 +705,9 @@ export default function ReceiptDetailPage() {
             <CardContent className="py-2.5 px-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  {hasAnyCosts
-                    ? "This GRN is a draft — post it to update inventory."
-                    : "Apply additional costs before posting this GRN."}
+                  This GRN is a draft — post it to update inventory. Additional costs are optional.
                 </span>
-                {canWrite && (hasAnyCosts ? (
+                {canWrite && (
                   <Button
                     size="sm"
                     variant="default"
@@ -728,6 +734,8 @@ export default function ReceiptDetailPage() {
                         } else if (e.code === "GRN_OPEN_VARIANCE") {
                           const auditUrl = e.poId ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}` : "/purchasing/cash-weight-audit";
                           toast.error(msg, { action: { label: "Go to cash-weight audit", onClick: () => { window.location.href = auditUrl; } }, duration: 8000 });
+                        } else if (e.code === "WAREHOUSE_CANNOT_RECEIVE") {
+                          toast.error(msg, { action: { label: "Open warehouse", onClick: () => { window.location.href = "/master/warehouses"; } }, duration: 10000 });
                         } else {
                           toast.error(msg);
                         }
@@ -739,14 +747,38 @@ export default function ReceiptDetailPage() {
                     <Icons.Send className="mr-1.5 h-3.5 w-3.5" />
                     {posting ? "Posting…" : "Post GRN"}
                   </Button>
-                ) : (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link href={`/inventory/costing?grnId=${grn.id}`}>
-                      <Icons.Plus className="mr-1.5 h-3.5 w-3.5" />
-                      Apply costs
-                    </Link>
+                )}
+                {canWrite && !grn.linkedBill && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={posting}
+                    onClick={async () => {
+                      setPosting(true);
+                      try {
+                        if (grn.status === "DRAFT") {
+                          await flushPendingReceivedWeights();
+                          await postGRN(id);
+                        }
+                        const result = await convertDocumentApi("grn", id, { targetType: "bill" });
+                        toast.success(`Bill ${result.number ?? ""} created.`);
+                        window.location.href = `/docs/bill/${result.id}`;
+                      } catch (raw) {
+                        const e = raw as GrnPostError;
+                        toast.error(e.message ?? "Failed to create bill.");
+                      } finally {
+                        setPosting(false);
+                      }
+                    }}
+                  >
+                    Convert to bill
                   </Button>
-                ))}
+                )}
+                {canWrite && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={`/inventory/costing?grnId=${grn.id}`}>Apply costs</Link>
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

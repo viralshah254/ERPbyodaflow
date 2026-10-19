@@ -36,7 +36,7 @@ export async function createTransfer(body: {
   fromWarehouseId: string;
   toWarehouseId: string;
   reference?: string;
-  lines: { sku: string; productName?: string; quantity: number; unit?: string }[];
+  lines: { productId?: string; sku: string; productName?: string; quantity: number; unit?: string }[];
   transferCostKes?: number;
   costNotes?: string;
   sourceGrnId?: string;

@@ -352,6 +352,8 @@ export type DocumentDetailRecord = {
   } | null;
   /** Odaflow SFA source metadata (sales orders synced from Odaflow). */
   orderChannel?: string;
+  retailPaymentMethod?: "CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER";
+  retailMpesaRef?: string;
   externalSource?: string;
   externalOrderId?: string;
   odaflowChannel?: string;

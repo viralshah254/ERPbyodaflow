@@ -1,6 +1,6 @@
 import { apiRequest, requireLiveApi } from "./client";
 
-export type SalesDocumentFlowMode = "classic" | "pick_pack_first";
+export type SalesDocumentFlowMode = "classic" | "pick_pack_first" | "joy_dispatch";
 
 export type SalesDocumentFlowSettings = {
   mode: SalesDocumentFlowMode;

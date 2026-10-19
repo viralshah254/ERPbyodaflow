@@ -18,11 +18,12 @@ import { useEffect } from "react";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
-  const { sidebarOpen, setRightPanelOpen, setCompactMode } = useUIStore();
+  const { sidebarOpen, setSidebarOpen, setRightPanelOpen, setCompactMode } = useUIStore();
 
   // Apply persisted UI preferences after hydration to avoid SSR mismatch.
   // The store initializes with safe SSR defaults; this runs only on the client.
   useEffect(() => {
+    if (window.matchMedia("(max-width: 767px)").matches) setSidebarOpen(false);
     const panel = localStorage.getItem("odaflow_right_panel");
     if (panel !== null) setRightPanelOpen(panel === "true");
     const compact = localStorage.getItem("odaflow_compact_mode");
@@ -77,7 +78,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-0 flex-1 w-full overflow-hidden">
-      {sidebarOpen && <AppSidebar />}
+      {sidebarOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+            aria-label="Close menu"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className="z-40 h-full shrink-0 max-md:fixed max-md:inset-y-0 max-md:left-0">
+            <AppSidebar />
+          </div>
+        </>
+      ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Header />
         <SandboxEnvironmentBanner />
@@ -87,7 +100,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <FirstVisitBanner />
           </div>
           <div
-            className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0"
+            className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-6 pt-0 md:px-6"
             data-tutorial-hint="page-main"
           >
             {children}
