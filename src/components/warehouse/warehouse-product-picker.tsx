@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fetchProductsPageApi } from "@/lib/api/products";
+import { productSearchLabel } from "@/lib/products/product-search";
 import type { ProductRow } from "@/lib/types/masters";
 import { cn } from "@/lib/utils";
 import {
@@ -27,11 +28,11 @@ export function productPickerAvailability(p: Pick<ProductRow, "availableQuantity
 }
 
 export function formatProductPickerLabel(
-  p: Pick<ProductRow, "sku" | "name">,
+  p: Pick<ProductRow, "sku" | "name" | "size">,
   avail?: number,
   stockKnown = true
 ): string {
-  const base = p.sku ? `${p.sku} — ${p.name}` : p.name;
+  const base = productSearchLabel(p);
   if (stockKnown && typeof avail === "number" && Number.isFinite(avail)) {
     return `${base} · ${formatShortAvailSuffix(avail, false)}`;
   }
@@ -64,7 +65,7 @@ function productToOption(
     stockKnown &&
     (effective ?? 0) <= 0 &&
     p.id !== allowZeroStockProductId;
-  const base = p.sku ? `${p.sku} — ${p.name}` : p.name;
+  const base = productSearchLabel(p);
   const availSuffix =
     stockKnown && typeof effective === "number"
       ? formatShortAvailSuffix(effective, claimedOther > 0)
@@ -120,7 +121,7 @@ export function WarehouseProductPicker({
   allowZeroStockProductId,
   selectedProduct,
   placeholder = "Select product…",
-  searchPlaceholder = "Search SKU or name…",
+  searchPlaceholder = "Name, size, or barcode",
   emptyMessage = "No products found.",
   className,
   triggerClassName,

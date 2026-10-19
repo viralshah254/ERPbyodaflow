@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/async-searchable-select";
 import { createManufacturingBom, fetchNextManufacturingBomCode } from "@/lib/api/manufacturing";
 import { fetchProductsPageApi } from "@/lib/api/products";
+import { productSearchLabel } from "@/lib/products/product-search";
 import { fetchUomsApi } from "@/lib/api/uom";
 import { setUomsCache, listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
@@ -104,8 +105,8 @@ export default function NewBomPage() {
     });
     return page.items.map((product) => ({
       id: product.id,
-      label: product.sku ? `${product.sku} — ${product.name}` : product.name,
-      description: product.barcode?.trim() || undefined,
+      label: productSearchLabel(product),
+      description: [product.size?.trim(), product.barcode?.trim()].filter(Boolean).join(" · ") || undefined,
     }));
   }, []);
 
@@ -188,7 +189,7 @@ export default function NewBomPage() {
                   onOptionSelect={setFinishedProductOption}
                   loadOptions={loadFinishedProducts}
                   placeholder="Select product"
-                  searchPlaceholder="Search name, SKU, or barcode"
+                  searchPlaceholder="Name, size, or barcode"
                   emptyMessage="No products match that search."
                   searchDebounceMs={250}
                   showSelectedDescription

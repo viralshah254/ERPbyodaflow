@@ -350,7 +350,7 @@ export default function InventoryStockExplorerPage() {
             </div>
 
             <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
-              searchPlaceholder="Search SKU or product name…"
+              searchPlaceholder="Name, size, or barcode"
               searchValue={searchInput}
               onSearchChange={setSearchInput}
               filters={[

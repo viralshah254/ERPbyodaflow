@@ -1056,7 +1056,7 @@ export default function MasterProductsPage() {
           <SfaCatalogSyncAlertBanner pending={sfaEnrollment?.catalogSyncPending} />
         ) : null}
         <DataTableToolbar
-          searchPlaceholder="Search by SKU, name, category..."
+          searchPlaceholder="Name, size, or barcode"
           searchValue={search}
           onSearchChange={setSearch}
           filters={[

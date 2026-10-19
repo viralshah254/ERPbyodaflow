@@ -749,7 +749,7 @@ export function FmcgPriceTagItemsEditor({
       </div>
 
       <DataTableToolbar
-        searchPlaceholder="Search products by name or barcode…"
+        searchPlaceholder="Name, size, or barcode — 250g matches size 250"
         searchValue={search}
         onSearchChange={setSearch}
         searchInputProps={{ disabled: softLoading && rows.length === 0 }}
