@@ -10,6 +10,52 @@ export function DocumentHubPreview({
   fileId,
   fileName,
   contentType,
+  fileUrl,
+}: {
+  fileId: string;
+  fileName: string;
+  contentType?: string;
+  fileUrl?: string;
+}) {
+  if (fileUrl) {
+    return <StoredFilePreview fileUrl={fileUrl} fileName={fileName} contentType={contentType} />;
+  }
+  return <StoredBytesPreview fileId={fileId} fileName={fileName} contentType={contentType} />;
+}
+
+function StoredFilePreview({
+  fileUrl,
+  fileName,
+  contentType,
+}: {
+  fileUrl: string;
+  fileName: string;
+  contentType?: string;
+}) {
+  const pdf = fileName.toLowerCase().endsWith(".pdf") || (contentType || "").includes("pdf");
+  const image = (contentType || "").startsWith("image/") && !pdf;
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      <div className="relative max-h-[75vh] overflow-y-auto bg-muted/40">
+        {pdf ? (
+          <iframe title={fileName} src={fileUrl} className="h-[75vh] w-full bg-white" />
+        ) : null}
+        {image ? <img src={fileUrl} alt={fileName} className="mx-auto max-h-[75vh] w-full object-contain" /> : null}
+        {!pdf && !image ? (
+          <a href={fileUrl} target="_blank" rel="noreferrer" className="block p-6 text-sm underline">
+            Open {fileName}
+          </a>
+        ) : null}
+      </div>
+      <p className="truncate border-t px-3 py-2 text-xs text-muted-foreground">{fileName}</p>
+    </div>
+  );
+}
+
+function StoredBytesPreview({
+  fileId,
+  fileName,
+  contentType,
 }: {
   fileId: string;
   fileName: string;

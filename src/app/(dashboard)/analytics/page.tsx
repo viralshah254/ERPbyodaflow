@@ -5,7 +5,6 @@ import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import * as Icons from "lucide-react";
 
 const HUBS = [
@@ -26,7 +25,7 @@ export default function AnalyticsHubPage() {
     <PageShell>
       <PageHeader
         title="Analytics Studio"
-        description="Intelligence Operating System — deeper than SAP, more beautiful than Power BI"
+        description="Explore reconciled figures. Forecasts and simulations are estimates."
         breadcrumbs={[{ label: "Analytics Studio" }]}
         sticky
         showCommandHint
@@ -55,22 +54,16 @@ export default function AnalyticsHubPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Intelligence, not reports
-              <Badge variant="secondary">Weeks 2–4</Badge>
-            </CardTitle>
+            <CardTitle>How to read these screens</CardTitle>
             <CardDescription>
-              Explorer, visual system, saved views, drill-through. Product, pricing, inventory, finance, payroll intelligence. AI insight cards, anomaly center, simulation lab.
+              Figures follow the books and stock they cite. A simulation does not post anything.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-              <li>19 metrics × 15 dimensions — semantic engine</li>
-              <li>Explore → MetricPicker, DimensionStack, GlobalFilterBar, InsightCanvas, ExplorerTable, DrillDrawer</li>
-              <li>Saved analysis views (localStorage); shareable link stub</li>
-              <li>Intelligence modules: products, pricing, inventory, finance, payroll</li>
-              <li>Insight cards: Explanation, Forecast, Recommendation, Anomaly, Simulation</li>
-              <li>Simulations: price tiers, reorder, payroll, FX — sliders + mock impact</li>
+              <li>Explore shows a metric with its filters and time range.</li>
+              <li>Forecasts and simulations are labelled estimates.</li>
+              <li>An anomaly is a prompt to check the source document, not a posted adjustment.</li>
             </ul>
           </CardContent>
         </Card>

@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DocumentCreateWizard } from "@/components/docs/DocumentCreateWizard";
@@ -13,6 +14,7 @@ import * as Icons from "lucide-react";
 
 export default function DocTypeNewPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const type = params.type as string;
   const terminology = useTerminology();
@@ -55,6 +57,18 @@ export default function DocTypeNewPage() {
         sticky
         showCommandHint
         dense
+        actions={
+          <DocumentHubUploadButton
+            label="Scan document"
+            onUploaded={async (result) => {
+              const id = result.uploads[0]?.items[0]?._id;
+              if (!id) return;
+              const next = new URLSearchParams(searchParams.toString());
+              next.set("scanId", id);
+              router.replace(`/docs/${type}/new?${next.toString()}`);
+            }}
+          />
+        }
       />
       <div className="p-4 pb-8 w-full max-w-screen-2xl mx-auto">
         <DocumentCreateWizard type={type} initialPoId={initialPoId} initialGrnId={initialGrnId} />

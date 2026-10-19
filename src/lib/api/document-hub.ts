@@ -60,6 +60,21 @@ export function createHubGroup(name: string, parentKey?: string) {
   return apiRequest<DocumentHubGroup>("/api/document-hub/groups", { method: "POST", body: { name, parentKey } });
 }
 
+export function fetchHubDocument(id: string) {
+  return apiRequest<ScannedDocument>(`/api/document-hub/${id}`);
+}
+
+export function commitHubDocument(id: string, body?: { bankAccountId?: string; warehouseId?: string; fields?: { partyName?: string; total?: number; documentNumber?: string } }) {
+  return apiRequest<ScannedDocument>(`/api/document-hub/${id}/commit`, { method: "POST", body: body ?? {} });
+}
+
+export function commitHubDocuments(ids: string[]) {
+  return apiRequest<{ results: Array<{ id: string; ok: boolean; number?: string; error?: string }> }>("/api/document-hub/commit", {
+    method: "POST",
+    body: { ids },
+  });
+}
+
 export function updateHubRule(id: string, body: { status?: "proposed" | "confirmed"; mode?: "suggest" | "draft" | "auto_post" }) {
   return apiRequest<DocumentLearningRule>(`/api/document-hub/rules/${id}`, { method: "POST", body });
 }

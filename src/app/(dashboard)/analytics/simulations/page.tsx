@@ -86,7 +86,7 @@ export default function AnalyticsSimulationsPage() {
     <PageShell>
       <PageHeader
         title="Simulation lab"
-        description="Sliders + instant mock recalculation"
+        description="Estimates only. Nothing here posts to the books."
         breadcrumbs={[{ label: "Analytics", href: "/analytics" }, { label: "Simulations" }]}
         sticky
         showCommandHint

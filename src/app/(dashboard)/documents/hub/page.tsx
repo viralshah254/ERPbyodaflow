@@ -13,6 +13,8 @@ import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploa
 import { DocumentHubPreview } from "@/components/documents/DocumentHubPreview";
 import {
   clearHubCheque,
+  commitHubDocument,
+  commitHubDocuments,
   confirmHubAllocation,
   confirmHubClassification,
   confirmHubPhysicalReceipt,
@@ -54,6 +56,7 @@ export default function DocumentHubPage() {
   const [bankReference, setBankReference] = React.useState("");
   const [physical, setPhysical] = React.useState<Record<string, string>>({});
   const [pendingDelete, setPendingDelete] = React.useState<{ id: string; name: string } | null>(null);
+  const [checked, setChecked] = React.useState<string[]>([]);
   const [readingFiles, setReadingFiles] = React.useState<string[]>([]);
   const [arrived, setArrived] = React.useState<{ id: string; count: number; name: string } | null>(null);
   const loadRequest = React.useRef(0);
@@ -188,8 +191,22 @@ export default function DocumentHubPage() {
         <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
           <Card className="relative overflow-hidden">
             <TableLinearProgress active={loading} />
-            <CardHeader className="p-4 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 p-4 pb-2">
               <CardTitle className="text-base">Inbox</CardTitle>
+              {checked.length ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void run(async () => {
+                    const result = await commitHubDocuments(checked);
+                    const failed = result.results.filter((row) => !row.ok);
+                    if (failed.length) throw new Error(failed.map((row) => row.error).filter(Boolean).join(" "));
+                    setChecked([]);
+                  }, checked.length === 1 ? "Recorded in the books." : "Selected documents recorded.")}
+                >
+                  Record {checked.length}
+                </Button>
+              ) : null}
             </CardHeader>
             <CardContent className={cn("space-y-1.5 p-4 pt-2 transition-opacity duration-200", loading && !readingFiles.length && "opacity-60")}>
               {arrived ? (
@@ -227,6 +244,16 @@ export default function DocumentHubPage() {
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={checked.includes(item._id)}
+                        aria-label={`Select ${item.fileName}`}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => {
+                          setChecked((current) => event.target.checked ? [...current, item._id] : current.filter((id) => id !== item._id));
+                        }}
+                      />
                       <div className="min-w-0">
                         <p className="truncate font-medium">{item.fields.partyName || item.fileName}</p>
                         <p className="mt-0.5 truncate text-sm text-muted-foreground">
@@ -400,9 +427,20 @@ function Detail({
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-4 pt-2 text-sm">
-        <DocumentHubPreview fileId={item.fileId} fileName={item.fileName} contentType={item.contentType} />
+        <DocumentHubPreview fileId={item.fileId} fileName={item.fileName} contentType={item.contentType} fileUrl={item.fileUrl} />
         <DocumentSummary documentId={item._id} />
         <p className="text-muted-foreground">{item.ledgerPostingNote}</p>
+        {item.postedRecord ? (
+          <p className="font-medium">{item.postedRecord.number} is in the books.</p>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void run(() => commitHubDocument(item._id), "Recorded. The original file stays attached.")}
+          >
+            Record in the books
+          </Button>
+        )}
         <dl className="grid grid-cols-2 gap-3">
           <Field label="Type" value={labelize(item.documentType)} />
           <Field label="Confidence" value={`${Math.round(item.confidence * 100)}%`} />

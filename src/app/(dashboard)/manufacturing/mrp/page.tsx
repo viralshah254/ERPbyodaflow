@@ -139,15 +139,19 @@ export default function MrpPage() {
       setApplying(suggestionIds?.length === 1 ? suggestionIds[0] : "all");
       try {
         const result = await applyManufacturingMrp(suggestionIds);
-        const count = result.created?.length ?? 0;
-        if (count === 0) {
+        const created = result.created ?? [];
+        const fresh = created.filter((row) => !row.reused).length;
+        const reused = created.length - fresh;
+        const purchases = result.purchasesNotRaised?.length ?? 0;
+        if (created.length === 0 && purchases === 0) {
           toast.info("No draft work orders were created. Make rows need a bill of materials.");
         } else {
-          toast.success(
-            count === 1
-              ? `Draft work order ${result.created[0]?.number ?? ""} is ready to release.`
-              : `${count} draft work orders are ready to release.`,
-          );
+          const parts = [
+            fresh ? `${fresh} new draft work order${fresh === 1 ? "" : "s"}` : "",
+            reused ? `${reused} existing draft${reused === 1 ? "" : "s"} reused` : "",
+            purchases ? `${purchases} buy suggestion${purchases === 1 ? "" : "s"} left for purchasing` : "",
+          ].filter(Boolean);
+          toast.success(parts.join(". ") + ".");
         }
         await loadPage(pageOffset);
       } catch (error) {
