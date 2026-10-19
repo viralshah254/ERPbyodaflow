@@ -46,6 +46,10 @@ type BackendDocumentLine = {
   taxRate?: number;
   /** Line gross weight (kg); used as POD baseline for weight variance. */
   weightKg?: number;
+  receivedWeightKg?: number;
+  orderedWeightKg?: number;
+  receiptVarianceKg?: number;
+  orderedQuantity?: number;
 };
 
 type BackendAttachment = {
@@ -491,6 +495,10 @@ function mapDocumentDetail(
       sourceDocumentType: line.sourceDocumentType,
       sourceLineId: line.sourceLineId,
       sourceQuantity: line.sourceQuantity,
+      orderedQuantity: line.orderedQuantity ?? line.orderedWeightKg ?? line.sourceQuantity,
+      ...(typeof line.receivedWeightKg === "number" ? { receivedWeightKg: line.receivedWeightKg } : {}),
+      ...(typeof line.orderedWeightKg === "number" ? { orderedWeightKg: line.orderedWeightKg } : {}),
+      ...(typeof line.receiptVarianceKg === "number" ? { receiptVarianceKg: line.receiptVarianceKg } : {}),
       convertedQuantity: line.convertedQuantity,
       remainingQuantity: line.remainingQuantity,
       taxCodeId: line.taxCodeId,
