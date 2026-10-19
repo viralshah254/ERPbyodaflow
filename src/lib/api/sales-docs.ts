@@ -80,8 +80,8 @@ export type FetchSalesDocumentsPageOpts = {
   status?: string;
   /** Comma-separated channel codes, e.g. WHATSAPP,COOLCATCH_WA */
   orderChannels?: string;
-  /** FMCG type. email_lpo, field (supermarket), or direct (general-trade client). */
-  sfaIntake?: "email_lpo" | "field" | "direct";
+  /** FMCG channel. email_lpo, direct, distributor, or van_sales. */
+  sfaIntake?: "email_lpo" | "direct" | "distributor" | "van_sales";
 };
 
 export async function fetchSalesDocumentsPageApi(
