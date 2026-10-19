@@ -140,23 +140,24 @@ export function CustomerCreditTab(props: { partyId: string; onSaved?: () => void
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="AMOUNT">Cash amount</SelectItem>
+            <SelectItem value="AMOUNT">Amount limit</SelectItem>
             <SelectItem value="DAYS">Days</SelectItem>
-            <SelectItem value="HYBRID">Cash amount + days</SelectItem>
+            <SelectItem value="HYBRID">Amount limit and days</SelectItem>
           </SelectContent>
         </Select>
       </div>
       {creditModeUses(creditControlMode).amount ? (
         <div className="space-y-2">
-          <Label>Cash credit limit</Label>
+          <Label>Cash credit amount limit</Label>
           <Input
             type="number"
             min={0}
             value={creditLimit}
             onChange={(e) => setCreditLimit(e.target.value)}
             disabled={!canEdit}
-            placeholder="Leave blank for no cash limit"
+            placeholder="Type the limit amount"
           />
+          <p className="text-xs text-muted-foreground">Type the amount this customer can order on credit. Leave it blank for no amount limit.</p>
         </div>
       ) : null}
       <div className="space-y-2">

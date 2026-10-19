@@ -297,7 +297,7 @@ export default function Customer360Page() {
                 <p className="text-sm text-muted-foreground">
                   {credit?.creditLimitAmount != null
                     ? `${formatMoney(credit.creditLimitAmount, currency)} limit, ${formatMoney(credit.availableCredit ?? 0, currency)} still available.`
-                    : "No cash credit limit is set, so orders are not capped by amount."}
+                    : "No cash credit amount limit is set, so orders are not capped by amount."}
                   {" "}
                   {credit?.generalTrade || isGeneralTradeParty(party)
                     ? "General trade orders must be paid within 7 days. A payment restores the amount that was used."

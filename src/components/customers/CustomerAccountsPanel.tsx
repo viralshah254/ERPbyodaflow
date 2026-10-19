@@ -720,11 +720,11 @@ export function CustomerAccountsPanel({
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Credit settings</p>
             {creditModeUses(form.creditControlMode).amount ? (
               <div className="space-y-2">
-                <Label>Cash credit limit</Label>
+                <Label>Cash credit amount limit</Label>
                 <Input
                   type="number"
                   min={0}
-                  placeholder="Leave blank for no cash limit"
+                  placeholder="Type the limit amount"
                   value={form.creditLimit}
                   onChange={(e) => {
                     setForm((prev) => ({ ...prev, creditLimit: e.target.value }));
@@ -773,9 +773,9 @@ export function CustomerAccountsPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="AMOUNT">Cash amount</SelectItem>
+                  <SelectItem value="AMOUNT">Amount limit</SelectItem>
                   <SelectItem value="DAYS">Days</SelectItem>
-                  <SelectItem value="HYBRID">Cash amount + days</SelectItem>
+                  <SelectItem value="HYBRID">Amount limit and days</SelectItem>
                 </SelectContent>
               </Select>
             </div>
