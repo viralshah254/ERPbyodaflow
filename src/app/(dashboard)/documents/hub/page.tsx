@@ -400,7 +400,7 @@ function Detail({
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-4 pt-2 text-sm">
-        <DocumentHubPreview fileId={item.fileId} fileName={item.fileName} contentType={item.contentType} />
+        <DocumentHubPreview fileId={item.fileId} fileName={item.fileName} contentType={item.contentType} fileUrl={item.fileUrl} />
         <DocumentSummary documentId={item._id} />
         <p className="text-muted-foreground">{item.ledgerPostingNote}</p>
         <dl className="grid grid-cols-2 gap-3">
