@@ -48,6 +48,8 @@ export interface HubExtractedLine {
   uom?: string;
   unitPrice?: number;
   amount?: number;
+  itemCode?: string;
+  productId?: string;
   physicalQuantity?: number;
 }
 
@@ -66,6 +68,10 @@ export interface HubFields {
   invoiceNumber?: string;
   chequeNumber?: string;
   bankName?: string;
+  payee?: string;
+  paymentReference?: string;
+  mpesaCode?: string;
+  dueDate?: string;
   lines: HubExtractedLine[];
 }
 
@@ -97,6 +103,7 @@ export interface ScannedDocument {
   assignedUserId?: string;
   ledgerPosting: string;
   ledgerPostingNote?: string;
+  postedRecord?: { kind: string; id: string; number: string };
   createdAt?: string;
   updatedAt?: string;
 }

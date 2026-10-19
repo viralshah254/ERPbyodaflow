@@ -4,7 +4,8 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { fetchHubDocument } from "@/lib/api/document-hub";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -568,6 +569,7 @@ export function DocumentCreateWizard({
 }: DocumentCreateWizardProps) {
   const isEditMode = mode === "edit" && !!existingDocument;
   const router = useRouter();
+  const scanId = useSearchParams().get("scanId");
   const terminology = useTerminology();
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -763,6 +765,49 @@ export function DocumentCreateWizard({
       cancelled = true;
     };
   }, [defaults, form, type, isEditMode, isHqDoc, isOdaflowFmcgEdit, existingDocument]);
+
+  React.useEffect(() => {
+    if (!scanId || isEditMode) return;
+    let cancelled = false;
+    void fetchHubDocument(scanId)
+      .then((item) => {
+        if (cancelled) return;
+        if (item.fields.partyId) form.setValue("party", item.fields.partyId);
+        if (item.fields.documentDate) form.setValue("date", item.fields.documentDate.slice(0, 10));
+        if (item.fields.dueDate) form.setValue("dueDate", item.fields.dueDate.slice(0, 10));
+        if (item.fields.currency) form.setValue("currency", item.fields.currency);
+        const number = item.fields.invoiceNumber || item.fields.documentNumber;
+        if (number) {
+          form.setValue("supplierInvoiceNumber", number);
+          form.setValue("reference", number);
+        }
+        if (item.fields.poReference) form.setValue("poRef", item.fields.poReference);
+        if (item.fields.total != null) form.setValue("totalAmount", item.fields.total);
+        const scannedLines = item.fields.lines.filter((line) => line.productId);
+        if (!scannedLines.length) return;
+        setLines(scannedLines.map((line, index) => {
+          const qty = line.quantity && line.quantity > 0 ? line.quantity : 1;
+          const amount = line.amount ?? (line.unitPrice ?? 0) * qty;
+          return {
+            id: `scan-${index}`,
+            productId: line.productId ?? "",
+            sku: line.itemCode ?? "",
+            name: line.description,
+            uom: line.uom ?? "ea",
+            qty,
+            baseQty: qty,
+            price: line.unitPrice ?? amount / qty,
+            priceReason: "Scanned document",
+            amount,
+          };
+        }));
+        setStep(2);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [form, isEditMode, scanId]);
 
   // Pre-populate from existingDocument when in edit mode
   React.useEffect(() => {

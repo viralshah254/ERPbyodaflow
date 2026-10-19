@@ -53,6 +53,7 @@ import { SalesOrdersListPanel } from "@/components/sales/SalesOrdersListPanel";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { useNavCounts } from "@/lib/use-nav-counts";
+import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 
 const CUSTOMER_DOC_TYPES = new Set([
   "quote",
@@ -573,12 +574,15 @@ export default function DocTypeListPage() {
           showCommandHint
           actions={
             canWrite ? (
-              <Button asChild>
-                <Link href="/docs/sales-order/new" data-tour-step="create-button">
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Create {label}
-                </Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                <DocumentHubUploadButton label="Scan document" />
+                <Button asChild>
+                  <Link href="/docs/sales-order/new" data-tour-step="create-button">
+                    <Icons.Plus className="mr-2 h-4 w-4" />
+                    Create {label}
+                  </Link>
+                </Button>
+              </div>
             ) : undefined
           }
         />
@@ -624,12 +628,15 @@ export default function DocTypeListPage() {
               </>
             ) : null}
             {canWrite ? (
-              <Button asChild>
-                <Link href={`/docs/${type}/new`} data-tour-step="create-button">
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  New {label}
-                </Link>
-              </Button>
+              <>
+                <DocumentHubUploadButton label="Scan document" />
+                <Button asChild>
+                  <Link href={`/docs/${type}/new`} data-tour-step="create-button">
+                    <Icons.Plus className="mr-2 h-4 w-4" />
+                    New {label}
+                  </Link>
+                </Button>
+              </>
             ) : null}
           </div>
         }

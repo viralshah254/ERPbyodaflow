@@ -4,6 +4,8 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DocumentPageShell } from "@/components/docs/DocumentPageShell";
+import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
+import { linkHubDocument } from "@/lib/api/document-hub";
 import { DocumentFulfilmentLinesTable } from "@/components/docs/DocumentFulfilmentLinesTable";
 import { LinePackingCell } from "@/components/docs/LinePackingCell";
 import { DocumentTabs } from "@/components/docs/DocumentTabs";
@@ -1199,6 +1201,15 @@ export default function DocViewPage() {
       rightSlot={rightSlot}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          <DocumentHubUploadButton
+            label="Scan document"
+            sourceTransaction={{ docType: type, docId: id }}
+            onUploaded={async (result) => {
+              const items = result.uploads.flatMap((upload) => upload.items);
+              await Promise.all(items.map((item) => linkHubDocument(item._id, type, id)));
+              toast.success(items.length === 1 ? "Scan attached to this document." : "Scans attached to this document.");
+            }}
+          />
           {canWrite && document?.status === "DRAFT" && (
             <Button
               size="sm"
