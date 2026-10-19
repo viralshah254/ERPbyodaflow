@@ -59,9 +59,18 @@ export function PriceTagAssignmentBar({
   const makeDefault = async () => {
     setSavingDefault(true);
     try {
-      await setOrgDefaultPriceListApi(priceListId);
+      const saved = await setOrgDefaultPriceListApi(priceListId);
       onDefaultChange(priceListId);
-      toast.success(`${tagName} is now the default. Customers without their own tag use these prices.`);
+      const sfa = saved.sfaSync;
+      if (sfa?.attempted && sfa.pushed > 0) {
+        toast.success(
+          `${tagName} is now the default. SFA catalog prices now use this tag (${sfa.pushed} product${sfa.pushed === 1 ? "" : "s"}).`
+        );
+      } else if (sfa?.attempted && sfa.reason) {
+        toast.success(`${tagName} is now the default. SFA was not updated: ${sfa.reason}`);
+      } else {
+        toast.success(`${tagName} is now the default. Customers without their own tag use these prices.`);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not set the default tag.");
     } finally {
