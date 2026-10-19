@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Bell, Search, Settings, LogOut, User, Sparkles, KeyRound, LayoutGrid } from "lucide-react";
+import { Bell, Menu, Search, Settings, LogOut, User, Sparkles, KeyRound, LayoutGrid } from "lucide-react";
 import { signOut as firebaseSignOut } from "@/lib/firebase";
 import { unregisterWebPushToken } from "@/lib/push-notifications";
 import { setApiAuth } from "@/lib/api/client";
@@ -31,6 +31,7 @@ export function Header() {
   const canSeeOrgProfile = permissions.includes("settings.org.read") || permissions.includes("*");
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
 
   const displayName = getUserDisplayName(user);
   const userInitials = getUserInitials(user);
@@ -54,7 +55,17 @@ export function Header() {
   };
 
   return (
-    <header className="z-40 flex h-16 shrink-0 items-center gap-4 border-b bg-background px-4">
+    <header className="z-40 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 md:gap-4">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="md:hidden"
+        aria-label="Open menu"
+        onClick={() => toggleSidebar()}
+      >
+        <Menu className="h-5 w-5" />
+      </Button>
       {/* Command palette trigger / Search */}
       <div className="flex-1 max-w-md">
         <button
