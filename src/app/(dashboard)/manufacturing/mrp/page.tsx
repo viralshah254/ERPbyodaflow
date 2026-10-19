@@ -142,14 +142,19 @@ export default function MrpPage() {
         const created = result.created ?? [];
         const fresh = created.filter((row) => !row.reused).length;
         const reused = created.length - fresh;
-        const purchases = result.purchasesNotRaised?.length ?? 0;
-        if (created.length === 0 && purchases === 0) {
-          toast.info("No draft work orders were created. Make rows need a bill of materials.");
+        const purchaseRows = result.purchases ?? [];
+        const purchaseFresh = purchaseRows.filter((row) => !row.reused).length;
+        const purchaseReused = purchaseRows.length - purchaseFresh;
+        const left = result.purchasesNotRaised?.length ?? 0;
+        if (created.length === 0 && purchaseRows.length === 0 && left === 0) {
+          toast.info("Nothing was raised.");
         } else {
           const parts = [
             fresh ? `${fresh} new draft work order${fresh === 1 ? "" : "s"}` : "",
-            reused ? `${reused} existing draft${reused === 1 ? "" : "s"} reused` : "",
-            purchases ? `${purchases} buy suggestion${purchases === 1 ? "" : "s"} left for purchasing` : "",
+            reused ? `${reused} existing work order draft${reused === 1 ? "" : "s"} reused` : "",
+            purchaseFresh ? `${purchaseFresh} draft purchase request${purchaseFresh === 1 ? "" : "s"}` : "",
+            purchaseReused ? `${purchaseReused} existing purchase request${purchaseReused === 1 ? "" : "s"} reused` : "",
+            left ? `${left} buy suggestion${left === 1 ? "" : "s"} left for purchasing` : "",
           ].filter(Boolean);
           toast.success(parts.join(". ") + ".");
         }
@@ -238,8 +243,13 @@ export default function MrpPage() {
               {applying === r.id ? "Raising…" : "Raise work order"}
             </Button>
           ) : (
-            <Button size="sm" variant="outline" asChild>
-              <Link href="/docs/purchase-order/new">New purchase order</Link>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canWrite || applying != null}
+              onClick={() => void raiseWorkOrders([r.id])}
+            >
+              {applying === r.id ? "Raising…" : "Raise requisition"}
             </Button>
           ),
       },
@@ -260,9 +270,9 @@ export default function MrpPage() {
         showCommandHint
         actions={
           <div className="flex items-center gap-2">
-            {canWrite && summary.workOrderSuggestions > 0 ? (
+            {canWrite && (summary.workOrderSuggestions > 0 || summary.purchaseSuggestions > 0) ? (
               <Button size="sm" disabled={applying != null} onClick={() => void raiseWorkOrders()}>
-                {applying === "all" ? "Raising…" : "Raise draft work orders"}
+                {applying === "all" ? "Raising…" : "Raise drafts"}
               </Button>
             ) : null}
             <Button variant="outline" size="sm" asChild>
