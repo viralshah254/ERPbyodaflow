@@ -542,6 +542,7 @@ export async function fetchManufacturingMrp(opts?: FetchManufacturingMrpOpts): P
 export async function applyManufacturingMrp(suggestionIds?: string[]): Promise<{
   applied: boolean;
   created: Array<{ id: string; number: string; productId: string; reused?: boolean }>;
+  purchases?: Array<{ id: string; number: string; productId: string; reused?: boolean }>;
   purchasesNotRaised?: Array<{ id: string; productId: string; shortageQty: number }>;
 }> {
   return apiRequest("/api/manufacturing/mrp/apply", {

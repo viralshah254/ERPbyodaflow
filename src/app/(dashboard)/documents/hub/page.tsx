@@ -22,9 +22,11 @@ import {
   deleteHubDocument,
   explainHubDocument,
   fetchDocumentHub,
+  rereadHubDocument,
   linkHubDocument,
   updateHubRule,
 } from "@/lib/api/document-hub";
+import { searchPartyLookupOptionsApi } from "@/lib/api/parties";
 import type { DocumentHubStatus, HubFlag, ScannedDocument } from "@/lib/types/document-hub";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -43,6 +45,25 @@ const QUEUES: Array<{ id: DocumentHubStatus | ""; label: string }> = [
 
 function labelize(value: string) {
   return value.replace(/_/g, " ");
+}
+
+function partyRole(documentType: string): "customer" | "supplier" | undefined {
+  if (
+    documentType.startsWith("customer_")
+    || documentType === "sales_order"
+    || documentType === "remittance_advice"
+    || documentType === "payment_confirmation"
+  ) return "customer";
+  if (
+    documentType.startsWith("supplier_")
+    || documentType.endsWith("_expense")
+    || documentType === "utility_bill"
+    || documentType === "goods_receipt"
+    || documentType === "purchase_order"
+    || documentType === "payment_voucher"
+    || documentType === "bank_confirmation"
+  ) return "supplier";
+  return undefined;
 }
 
 export default function DocumentHubPage() {
@@ -405,13 +426,45 @@ function Detail({
   const [documentType, setDocumentType] = React.useState(item.documentType);
   const [groupKey, setGroupKey] = React.useState(item.groupKey);
   const [amounts, setAmounts] = React.useState<Record<string, string>>({});
-  const lines = item.fields.lines.length ? item.fields.lines : [{ description: "Received goods" }];
+  const [chosenPartyId, setChosenPartyId] = React.useState(item.fields.partyId ?? "");
+  const [partySearch, setPartySearch] = React.useState("");
+  const [partyOptions, setPartyOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+  const role = partyRole(item.documentType);
+  const lines = item.fields.lines ?? [];
+  const receipt = item.documentType === "supplier_delivery_note" || item.documentType === "goods_receipt";
+  const countedLines = receipt ? (lines.length ? lines : [{ description: "Received goods" }]) : [];
+  const thinRead = !item.fields.partyName && item.fields.total == null && lines.length === 0;
 
   React.useEffect(() => {
     setDocumentType(item.documentType);
     setGroupKey(item.groupKey);
+    setChosenPartyId(item.fields.partyId ?? "");
+    setPartySearch("");
     setAmounts(Object.fromEntries((item.allocation?.lines ?? []).map((line) => [line.invoiceNumber, String(line.amount)])));
   }, [item]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      const query = partySearch.trim() || item.fields.partyName || "";
+      void searchPartyLookupOptionsApi({ role, search: query || undefined, limit: 8 })
+        .then((rows) => {
+          if (cancelled) return;
+          const next = rows.map((row) => ({ id: row.id, label: row.label }));
+          if (item.fields.partyId && item.fields.partyName && !next.some((row) => row.id === item.fields.partyId)) {
+            next.unshift({ id: item.fields.partyId, label: item.fields.partyName });
+          }
+          setPartyOptions(next);
+        })
+        .catch(() => {
+          if (!cancelled) setPartyOptions([]);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [item.fields.partyId, item.fields.partyName, partySearch, role]);
 
   return (
     <Card>
@@ -436,18 +489,78 @@ function Detail({
           <Button
             type="button"
             size="sm"
-            onClick={() => void run(() => commitHubDocument(item._id), "Recorded. The original file stays attached.")}
+            onClick={() => {
+              const partyId = chosenPartyId || item.fields.partyId;
+              if (role && !partyId) {
+                toast.error(role === "supplier" ? "Choose the supplier this document belongs to." : "Choose the customer this document belongs to.");
+                return;
+              }
+              void run(() => commitHubDocument(item._id, partyId ? { partyId } : {}), "Recorded. The original file stays attached.");
+            }}
           >
             Record in the books
           </Button>
         )}
+        <Section title="On the file">
+          <dl className="grid grid-cols-2 gap-3">
+            <Field label={role === "supplier" ? "Supplier" : "Customer"} value={item.fields.partyName} />
+            <Field label="Number" value={item.fields.documentNumber || item.fields.chequeNumber || item.fields.invoiceNumber} />
+            <Field label="Date" value={item.fields.documentDate} />
+            <Field label="Due" value={item.fields.dueDate} />
+            <Field label="Subtotal" value={item.fields.subtotal != null ? formatMoney(item.fields.subtotal, item.fields.currency || "KES") : undefined} />
+            <Field label="Tax" value={item.fields.tax != null ? formatMoney(item.fields.tax, item.fields.currency || "KES") : undefined} />
+            <Field label="Total" value={item.fields.total != null ? formatMoney(item.fields.total, item.fields.currency || "KES") : undefined} />
+            <Field label="Tax PIN" value={item.fields.taxPin} />
+          </dl>
+          {lines.length ? (
+            <div className="space-y-2">
+              {lines.map((line) => (
+                <div key={`${line.description}-${line.amount ?? ""}`} className="flex items-start justify-between gap-3">
+                  <span>
+                    {line.description}
+                    {line.quantity != null ? ` · ${line.quantity} ${line.uom ?? ""}`.trimEnd() : ""}
+                  </span>
+                  <span className="shrink-0 tabular-nums">{line.amount != null ? formatMoney(line.amount, item.fields.currency || "KES") : ""}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">The customer, number, and lines were not read from this copy.</p>
+          )}
+          {thinRead && item.ocrText?.trim() ? (
+            <p className="line-clamp-4 whitespace-pre-wrap text-muted-foreground">{item.ocrText.trim().slice(0, 500)}</p>
+          ) : null}
+          <Button type="button" size="sm" variant="outline" onClick={() => void run(() => rereadHubDocument(item._id), "Read the file again.")}>
+            Read the file again
+          </Button>
+        </Section>
+        {role ? (
+          <Section title={role === "supplier" ? "Supplier in the books" : "Customer in the books"}>
+            <p className="text-muted-foreground">
+              {item.fields.partyId
+                ? `Matched to ${item.fields.partyName}.`
+                : `The name on the file was not found among your ${role === "supplier" ? "suppliers" : "customers"}. Choose who this document belongs to before it is recorded.`}
+            </p>
+            {item.fields.partySuggestions?.length ? (
+              <div className="flex flex-wrap gap-2">
+                {item.fields.partySuggestions.map((suggestion) => (
+                  <Button key={suggestion.id} type="button" size="sm" variant={chosenPartyId === suggestion.id ? "default" : "outline"} onClick={() => setChosenPartyId(suggestion.id)}>
+                    {suggestion.name}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            <Input value={partySearch} onChange={(event) => setPartySearch(event.target.value)} placeholder={role === "supplier" ? "Search suppliers" : "Search customers"} aria-label={role === "supplier" ? "Search suppliers" : "Search customers"} />
+            <select className="h-10 w-full rounded-md border bg-background px-3" value={chosenPartyId} onChange={(event) => setChosenPartyId(event.target.value)} aria-label={role === "supplier" ? "Supplier in the books" : "Customer in the books"}>
+              <option value="">Choose…</option>
+              {partyOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </Section>
+        ) : null}
         <dl className="grid grid-cols-2 gap-3">
           <Field label="Type" value={labelize(item.documentType)} />
           <Field label="Confidence" value={`${Math.round(item.confidence * 100)}%`} />
-          <Field label="Number" value={item.fields.documentNumber || item.fields.chequeNumber} />
-          <Field label="Total" value={item.fields.total != null ? formatMoney(item.fields.total, item.fields.currency || "KES") : undefined} />
-          <Field label="Tax PIN" value={item.fields.taxPin} />
-          <Field label="Classification" value={item.classificationSource === "user_confirmed" ? "Confirmed rule" : "Suggestion"} />
+          <Field label="Classification" value={item.classificationSource === "user_confirmed" ? "Confirmed by you" : "Suggestion"} />
           <Field label="Read with" value={item.ocrSource === "document-ai" ? "Document AI" : item.ocrSource === "text-layer" ? "Text in the file" : "Not read yet"} />
         </dl>
         {item.flags.length ? (
@@ -519,30 +632,32 @@ function Detail({
             </div>
           </Section>
         ) : null}
-        <Section title="Counted quantity">
-          <p className="text-muted-foreground">Enter what was physically received. The delivery note quantity stays as the supplier{"\u2019"}s figure.</p>
-          {lines.map((line) => (
-            <label key={line.description} className="flex items-center justify-between gap-3">
-              <span>{line.description}{line.quantity != null ? ` · note ${line.quantity} ${line.uom ?? ""}` : ""}</span>
-              <Input
-                className="w-28 tabular-nums"
-                value={physical[`${item._id}:${line.description}`] ?? (line.physicalQuantity != null ? String(line.physicalQuantity) : "")}
-                onChange={(event) => setPhysical((current) => ({ ...current, [`${item._id}:${line.description}`]: event.target.value }))}
-              />
-            </label>
-          ))}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void run(() => confirmHubPhysicalReceipt(item._id, lines.map((line) => ({
-              description: line.description,
-              physicalQuantity: Number(physical[`${item._id}:${line.description}`] ?? line.physicalQuantity),
-            }))), "Counted quantity saved.")}
-          >
-            Save counted quantity
-          </Button>
-        </Section>
+        {receipt ? (
+          <Section title="Counted quantity">
+            <p className="text-muted-foreground">Enter what was physically received. The delivery note quantity stays as the supplier{"\u2019"}s figure.</p>
+            {countedLines.map((line) => (
+              <label key={line.description} className="flex items-center justify-between gap-3">
+                <span>{line.description}{line.quantity != null ? ` · note ${line.quantity} ${line.uom ?? ""}` : ""}</span>
+                <Input
+                  className="w-28 tabular-nums"
+                  value={physical[`${item._id}:${line.description}`] ?? (line.physicalQuantity != null ? String(line.physicalQuantity) : "")}
+                  onChange={(event) => setPhysical((current) => ({ ...current, [`${item._id}:${line.description}`]: event.target.value }))}
+                />
+              </label>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void run(() => confirmHubPhysicalReceipt(item._id, countedLines.map((line) => ({
+                description: line.description,
+                physicalQuantity: Number(physical[`${item._id}:${line.description}`] ?? line.physicalQuantity),
+              }))), "Counted quantity saved.")}
+            >
+              Save counted quantity
+            </Button>
+          </Section>
+        ) : null}
         <Section title="Classification">
           <select className="h-10 w-full rounded-md border bg-background px-3" value={groupKey} onChange={(event) => setGroupKey(event.target.value)}>
             {groups.map((group) => <option key={group.key} value={group.key}>{group.name}</option>)}

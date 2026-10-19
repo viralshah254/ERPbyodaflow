@@ -73,6 +73,7 @@ export interface HubFields {
   mpesaCode?: string;
   dueDate?: string;
   lines: HubExtractedLine[];
+  partySuggestions?: Array<{ id: string; name: string }>;
 }
 
 export interface ScannedDocument {
@@ -82,6 +83,7 @@ export interface ScannedDocument {
   contentType?: string;
   fileUrl?: string;
   ocrSource?: "text-layer" | "document-ai" | "none";
+  ocrText?: string;
   status: DocumentHubStatus;
   documentType: string;
   groupKey: string;
