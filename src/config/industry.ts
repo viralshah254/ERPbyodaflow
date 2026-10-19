@@ -10,6 +10,12 @@ export const FMCG_SELLING_TEMPLATE_IDS = [
   FMCG_BAKERY_TEMPLATE_ID,
 ] as const;
 
+/** Manufacturer and bakery catalogues split finished goods, raw materials, packaging, and semi-finished. */
+export function isPlantCatalogueTemplate(templateId?: string | null): boolean {
+  const id = canonicalIndustryTemplateId(templateId);
+  return id === "fmcg-manufacturer" || id === FMCG_BAKERY_TEMPLATE_ID;
+}
+
 /** Selling screens that retail multi-store also uses. */
 export const FMCG_COMMERCE_TEMPLATE_IDS = [
   ...FMCG_SELLING_TEMPLATE_IDS,

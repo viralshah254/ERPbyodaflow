@@ -12,6 +12,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -69,6 +70,15 @@ import type { TaxRow } from "@/lib/types/taxes";
 import { setProductsCache } from "@/lib/data/products.repo";
 import type { ProductRow } from "@/lib/types/masters";
 import { productTypeLabel, productTypeSortKey } from "@/lib/products/product-type";
+import {
+  defaultUnitForItemRole,
+  isItemRole,
+  itemRoleAddLabel,
+  itemRoleCreateTitle,
+  itemRoleLabel,
+  productTypeForItemRole,
+  type ItemRole,
+} from "@/lib/products/item-role";
 import { composeFmcgSize, FMCG_SIZE_UOMS } from "@/lib/products/fmcg-size";
 import {
   clearProductCreateDraft,
@@ -80,7 +90,7 @@ import {
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
-import { isSeafoodOrg } from "@/config/industry";
+import { isPlantCatalogueTemplate, isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useAuthStore } from "@/stores/auth-store";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
@@ -128,6 +138,15 @@ export default function MasterProductsPage() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
+  const plantCatalogue = isPlantCatalogueTemplate(templateId);
+  const roleParam = searchParams.get("role");
+  const itemRoleFilter: ItemRole | "" = plantCatalogue
+    ? roleParam === "all"
+      ? ""
+      : isItemRole(roleParam)
+        ? roleParam
+        : "FINISHED"
+    : "";
   const permissions = useAuthStore((s) => s.permissions);
   const orgId = useAuthStore((s) => s.org?.orgId ?? "");
   const { enrolled: sfaEnrolled, status: sfaEnrollment } = useErpSfaEnrollment();
@@ -173,6 +192,7 @@ export default function MasterProductsPage() {
   const [sizeUom, setSizeUom] = React.useState<string>("g");
   const [name, setName] = React.useState("");
   const [productType, setProductType] = React.useState<"RAW" | "FINISHED" | "BOTH" | "">("");
+  const [createItemRole, setCreateItemRole] = React.useState<ItemRole | "">("");
   const [categoryId, setCategoryId] = React.useState("");
   const [productFamily, setProductFamily] = React.useState("");
   /** Stock / packing unit (PCS, CARTON…). Not size UOM (g, ml…). */
@@ -314,7 +334,7 @@ export default function MasterProductsPage() {
     setListCursor("0");
     setListCursorStack([]);
     setListNextCursor(null);
-  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, pageSize, tableSort]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, pageSize, tableSort, itemRoleFilter]);
 
   const refreshProducts = React.useCallback(async () => {
     setLoading(true);
@@ -323,6 +343,7 @@ export default function MasterProductsPage() {
         search: debouncedSearch || undefined,
         status: statusFilter || undefined,
         productType: productTypeFilter || undefined,
+        itemRole: itemRoleFilter || undefined,
         categoryId: categoryFilter || undefined,
         departmentId: departmentFilter || undefined,
         productFamily: familyFilter || undefined,
@@ -342,7 +363,7 @@ export default function MasterProductsPage() {
       setLoading(false);
       setHasLoadedOnce(true);
     }
-  }, [debouncedSearch, statusFilter, productTypeFilter, categoryFilter, departmentFilter, familyFilter, listCursor, pageSize, serverSortBy, serverSortDir]);
+  }, [debouncedSearch, statusFilter, productTypeFilter, itemRoleFilter, categoryFilter, departmentFilter, familyFilter, listCursor, pageSize, serverSortBy, serverSortDir]);
 
   React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
@@ -564,6 +585,17 @@ export default function MasterProductsPage() {
     [categoryNameById, router, canDeleteProduct, fmcgOrg, seafoodOrg]
   );
 
+  const applyRoleDefaults = (role: ItemRole | "") => {
+    setCreateItemRole(role);
+    if (!role) {
+      setProductType(fmcgOrg ? "FINISHED" : "");
+      setUnit(fmcgOrg ? "PCS" : "");
+      return;
+    }
+    setProductType(productTypeForItemRole(role) ?? "");
+    setUnit(defaultUnitForItemRole(role));
+  };
+
   const resetForm = () => {
     setStep(1);
     setSku("");
@@ -575,10 +607,21 @@ export default function MasterProductsPage() {
     setName("");
     setCategoryId("");
     setProductFamily("");
-    setProductType(fmcgOrg ? "FINISHED" : "");
-    setUnit(fmcgOrg ? "PCS" : "");
+    applyRoleDefaults(plantCatalogue ? itemRoleFilter : "");
+    if (!plantCatalogue) {
+      setProductType(fmcgOrg ? "FINISHED" : "");
+      setUnit(fmcgOrg ? "PCS" : "");
+    }
     setDefaultTaxCodeId("");
     setCreatePackRows([]);
+  };
+
+  const setRoleTab = (next: ItemRole | "all") => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "FINISHED") params.delete("role");
+    else params.set("role", next);
+    const query = params.toString();
+    router.replace(query ? `/master/products?${query}` : "/master/products");
   };
 
   const applyCreateDraft = React.useCallback((draft: ProductCreateDraft) => {
@@ -696,6 +739,7 @@ export default function MasterProductsPage() {
         const draft = loadProductCreateDraft(orgId);
         if (productCreateDraftHasContent(draft) && draft) {
           applyCreateDraft(draft);
+          if (plantCatalogue && itemRoleFilter) applyRoleDefaults(itemRoleFilter);
           setDrawerOpen(true);
           return;
         }
@@ -703,7 +747,7 @@ export default function MasterProductsPage() {
       resetForm();
       setDrawerOpen(true);
     },
-    [orgId, applyCreateDraft, fmcgOrg]
+    [orgId, applyCreateDraft, fmcgOrg, plantCatalogue, itemRoleFilter]
   );
 
   const handleCreate = async () => {
@@ -712,7 +756,13 @@ export default function MasterProductsPage() {
       return;
     }
     const trimmedBarcode = barcode.trim();
-    if (fmcgOrg && !trimmedBarcode) {
+    const roleForCreate = plantCatalogue ? createItemRole || itemRoleFilter : "";
+    if (plantCatalogue && !roleForCreate) {
+      toast.error("Choose a material type.");
+      return;
+    }
+    const barcodeRequired = plantCatalogue ? roleForCreate === "FINISHED" : fmcgOrg;
+    if (barcodeRequired && !trimmedBarcode) {
       toast.error("Barcode is required — it is the product code on the pack.");
       return;
     }
@@ -735,7 +785,12 @@ export default function MasterProductsPage() {
       return;
     }
     // FMCG stock base is PCS; sell packs (CARTON/BALE/…) are set per product below.
-    const selectedUnit = fmcgOrg ? "PCS" : unit.trim() || (uomOptions[0] ?? "EA");
+    const selectedUnit =
+      plantCatalogue && roleForCreate && roleForCreate !== "FINISHED"
+        ? unit.trim() || defaultUnitForItemRole(roleForCreate)
+        : fmcgOrg
+          ? "PCS"
+          : unit.trim() || (uomOptions[0] ?? "EA");
     const composedSize = fmcgOrg
       ? composeFmcgSize(sizeValue, sizeUom)
       : size.trim() || undefined;
@@ -744,7 +799,7 @@ export default function MasterProductsPage() {
       ? trimmedBarcode || trimmedSku
       : code.trim() || undefined;
 
-    if (fmcgOrg) {
+    if (fmcgOrg && (!plantCatalogue || roleForCreate === "FINISHED")) {
       for (const row of createPackRows) {
         const uom = row.uom.trim();
         const pieces = Number(row.unitsPer);
@@ -770,7 +825,10 @@ export default function MasterProductsPage() {
       name: name.trim(),
       productFamily: seafoodOrg ? productFamily.trim() || undefined : undefined,
       category: categoryId.trim() || undefined,
-      productType: productType || (fmcgOrg ? "FINISHED" : undefined),
+      itemRole: roleForCreate || undefined,
+      productType: roleForCreate
+        ? productTypeForItemRole(roleForCreate)
+        : productType || (fmcgOrg ? "FINISHED" : undefined),
       defaultTaxCodeId: defaultTaxCodeId || undefined,
       unit: selectedUnit,
       baseUom: selectedUnit,
@@ -778,7 +836,7 @@ export default function MasterProductsPage() {
     };
     try {
       const created = await createProductApi(payload);
-      if (fmcgOrg) {
+      if (fmcgOrg && (!plantCatalogue || roleForCreate === "FINISHED")) {
         const packItems = createPackRows
           .map((row) => ({
             uom: row.uom.trim().toUpperCase(),
@@ -988,15 +1046,17 @@ export default function MasterProductsPage() {
   return (
     <PageShell>
       <PageHeader
-        title={productLabel + "s"}
+        title={plantCatalogue ? "Products" : productLabel + "s"}
         description={
-          fmcgOrg
+          plantCatalogue
+            ? "One catalogue. Finished goods, raw materials, packaging, and semi-finished goods are types on the item."
+            : fmcgOrg
             ? "Product catalogue — name, barcode (product code), size, category. Set piece prices on Price tags."
             : "Manage your product catalogue, pricing and variants"
         }
         breadcrumbs={[
           { label: "Masters", href: "/master" },
-          { label: productLabel + "s" },
+          { label: plantCatalogue ? "Products" : productLabel + "s" },
         ]}
         sticky
         showCommandHint
@@ -1027,13 +1087,31 @@ export default function MasterProductsPage() {
               data-tour-step="create-button"
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
-              Add {productLabel}
+              {plantCatalogue
+                ? itemRoleFilter
+                  ? itemRoleAddLabel(itemRoleFilter)
+                  : "Add product"
+                : `Add ${productLabel}`}
             </Button>
           </div>
         ) : undefined
         }
       />
       <div className="p-6 space-y-4">
+        {plantCatalogue ? (
+          <Tabs
+            value={itemRoleFilter || "all"}
+            onValueChange={(value) => setRoleTab(value === "all" ? "all" : (value as ItemRole))}
+          >
+            <TabsList>
+              <TabsTrigger value="FINISHED">Finished goods</TabsTrigger>
+              <TabsTrigger value="RAW">Raw materials</TabsTrigger>
+              <TabsTrigger value="PACKAGING">Packaging</TabsTrigger>
+              <TabsTrigger value="SEMI">Semi-finished</TabsTrigger>
+              <TabsTrigger value="all">All</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : null}
         {canWriteProduct && hasCreateDraft && !drawerOpen ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
             <div className="text-sm">
@@ -1237,7 +1315,13 @@ export default function MasterProductsPage() {
           }
           setDrawerOpen(o);
         }}
-        title={`New ${productLabel}`}
+        title={
+          plantCatalogue
+            ? createItemRole
+              ? itemRoleCreateTitle(createItemRole)
+              : "New product"
+            : `New ${productLabel}`
+        }
         description={
           fmcgOrg
             ? "Name, barcode (product code), size. Packing optional — set pieces per carton/bale/outer for this SKU."
@@ -1262,7 +1346,12 @@ export default function MasterProductsPage() {
               </Button>
               <Button
                 onClick={() => void handleCreate()}
-                disabled={saving || !name.trim() || !barcode.trim()}
+                disabled={
+                  saving ||
+                  !name.trim() ||
+                  (plantCatalogue && !createItemRole) ||
+                  ((plantCatalogue ? createItemRole === "FINISHED" : fmcgOrg) && !barcode.trim())
+                }
               >
                 {saving ? "Creating..." : "Create"}
               </Button>
@@ -1308,6 +1397,32 @@ export default function MasterProductsPage() {
         >
           {fmcgOrg ? (
               <>
+                {plantCatalogue ? (
+                  <div className="space-y-2">
+                    <Label>Material type</Label>
+                    {itemRoleFilter ? (
+                      <p className="text-sm font-medium">{itemRoleLabel(itemRoleFilter)}</p>
+                    ) : (
+                      <div className="grid gap-2">
+                        {(["FINISHED", "RAW", "PACKAGING", "SEMI"] as const).map((role) => (
+                          <button
+                            key={role}
+                            type="button"
+                            data-active={createItemRole === role}
+                            className={`w-full rounded-lg border px-4 py-3 text-left text-sm ${
+                              createItemRole === role
+                                ? "border-primary bg-primary/10"
+                                : "border-border"
+                            }`}
+                            onClick={() => applyRoleDefaults(role)}
+                          >
+                            {itemRoleLabel(role)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   <Label htmlFor="erp-product-name">Product name</Label>
                   <Input
@@ -1326,7 +1441,10 @@ export default function MasterProductsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="erp-product-barcode">
-                    Barcode <span className="text-destructive">*</span>
+                    Barcode{" "}
+                    {(plantCatalogue ? createItemRole === "FINISHED" : true) ? (
+                      <span className="text-destructive">*</span>
+                    ) : null}
                   </Label>
                   <Input
                     id="erp-product-barcode"
@@ -1341,7 +1459,9 @@ export default function MasterProductsPage() {
                     className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Required. The product code on the pack (EAN/UPC) — the main trade identifier.
+                    {plantCatalogue && createItemRole && createItemRole !== "FINISHED"
+                      ? "Optional. Use it when this item has a trade barcode."
+                      : "Required. The product code on the pack (EAN/UPC) — the main trade identifier."}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -1440,6 +1560,24 @@ export default function MasterProductsPage() {
                     Optional grouping (e.g. Beverages, Edible Oils). Leave as None if not needed.
                   </p>
                 </div>
+                {plantCatalogue && createItemRole && createItemRole !== "FINISHED" ? (
+                  <div className="space-y-2">
+                    <Label>Base unit of measure</Label>
+                    <Select value={unit || defaultUnitForItemRole(createItemRole)} onValueChange={setUnit}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uomOptions.map((code) => (
+                          <SelectItem key={code} value={code}>
+                            {code}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+                {!plantCatalogue || createItemRole === "FINISHED" || !createItemRole ? (
                 <div className="space-y-2 rounded-md border border-border/70 bg-muted/20 p-3">
                   <div>
                     <Label>Packing (optional)</Label>
@@ -1534,6 +1672,7 @@ export default function MasterProductsPage() {
                     </Button>
                   ) : null}
                 </div>
+                ) : null}
               </>
           ) : step === 1 ? (
               <>

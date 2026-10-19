@@ -17,6 +17,8 @@ export type ProductRow = {
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  /** Plant material type. Absent until the item is classified. */
+  itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
   defaultTaxCodeId?: string;
   /** Catalog logistics weight (kg) per sellable unit / pack. */
   grossWeightKg?: number;

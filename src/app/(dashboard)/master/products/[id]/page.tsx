@@ -96,7 +96,8 @@ import { t } from "@/lib/terminology";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
-import { isSeafoodOrg } from "@/config/industry";
+import { isPlantCatalogueTemplate, isSeafoodOrg } from "@/config/industry";
+import { isItemRole, itemRoleLabel, type ItemRole } from "@/lib/products/item-role";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { SfaProductConnectionCard } from "@/components/integrations/SfaProductConnectSheet";
@@ -171,6 +172,8 @@ export default function ProductDetailPage() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
+  const plantCatalogue = isPlantCatalogueTemplate(templateId);
+  const catalogueLabel = plantCatalogue ? "Products" : t("product", terminology) + "s";
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
@@ -218,6 +221,7 @@ export default function ProductDetailPage() {
   const [descriptionDraft, setDescriptionDraft] = React.useState("");
   const [productFamilyDraft, setProductFamilyDraft] = React.useState("");
   const [productTypeDraft, setProductTypeDraft] = React.useState("");
+  const [itemRoleDraft, setItemRoleDraft] = React.useState<ItemRole | "">("");
   const [baseUomDraft, setBaseUomDraft] = React.useState("");
   const [categoryDraft, setCategoryDraft] = React.useState("");
   const [sizeValueDraft, setSizeValueDraft] = React.useState("");
@@ -238,6 +242,7 @@ export default function ProductDetailPage() {
       setDescriptionDraft("");
       setProductFamilyDraft("");
       setProductTypeDraft("");
+      setItemRoleDraft("");
       setBaseUomDraft("");
       setCategoryDraft("");
       setSizeValueDraft("");
@@ -251,6 +256,7 @@ export default function ProductDetailPage() {
     setDescriptionDraft(product.description ?? "");
     setProductFamilyDraft(product.productFamily ?? "");
     setProductTypeDraft(product.productType ?? "");
+    setItemRoleDraft(isItemRole(product.itemRole) ? product.itemRole : "");
     setBaseUomDraft(product.baseUom ?? product.unit ?? "");
     setCategoryDraft(product.category ?? "");
     const parsed = parseFmcgSize(product.size);
@@ -429,6 +435,7 @@ export default function ProductDetailPage() {
       !fmcgOrg && (productFamilyDraft.trim() || "") !== (product.productFamily ?? "");
     const notesChanged = descriptionDraft !== (product.description ?? "");
     const typeChanged = Boolean(productTypeDraft) && productTypeDraft !== (product.productType ?? "");
+    const roleChanged = plantCatalogue && itemRoleDraft !== (product.itemRole ?? "");
     const taxChanged = (defaultTaxCodeId || "") !== (product.defaultTaxCodeId ?? "");
     const uomChanged =
       !fmcgOrg && Boolean(baseUomDraft) && baseUomDraft !== (product.baseUom ?? product.unit ?? "");
@@ -452,6 +459,7 @@ export default function ProductDetailPage() {
       familyChanged ||
       notesChanged ||
       typeChanged ||
+      roleChanged ||
       taxChanged ||
       uomChanged ||
       categoryChanged ||
@@ -469,6 +477,8 @@ export default function ProductDetailPage() {
     sizeValueDraft,
     sizeUomDraft,
     productTypeDraft,
+    itemRoleDraft,
+    plantCatalogue,
     defaultTaxCodeId,
     baseUomDraft,
     categoryDraft,
@@ -505,6 +515,9 @@ export default function ProductDetailPage() {
     if (descriptionDraft !== (product.description ?? "")) patch.description = notesNext;
     const typeNext = (productTypeDraft || undefined) as "RAW" | "FINISHED" | "BOTH" | undefined;
     if (typeNext && typeNext !== (product.productType ?? "")) patch.productType = typeNext;
+    if (plantCatalogue && itemRoleDraft && itemRoleDraft !== (product.itemRole ?? "")) {
+      patch.itemRole = itemRoleDraft;
+    }
     const taxNext = defaultTaxCodeId || undefined;
     if ((taxNext ?? "") !== (product.defaultTaxCodeId ?? "")) patch.defaultTaxCodeId = taxNext;
     const categoryNext = categoryDraft || undefined;
@@ -719,7 +732,7 @@ export default function ProductDetailPage() {
         title="Loading…"
         breadcrumbs={[
           { label: "Masters", href: "/master" },
-          { label: t("product", terminology) + "s", href: "/master/products" },
+          { label: catalogueLabel, href: "/master/products" },
           { label: "Loading…" },
         ]}
       />
@@ -779,7 +792,7 @@ export default function ProductDetailPage() {
           title="Product not found"
           breadcrumbs={[
             { label: "Masters", href: "/master" },
-            { label: t("product", terminology) + "s", href: "/master/products" },
+            { label: catalogueLabel, href: "/master/products" },
             { label: "Not found" },
           ]}
         />
@@ -816,7 +829,7 @@ export default function ProductDetailPage() {
         }
         breadcrumbs={[
           { label: "Masters", href: "/master" },
-          { label: t("product", terminology) + "s", href: "/master/products" },
+          { label: catalogueLabel, href: "/master/products" },
           { label: product.name || product.sku },
         ]}
         sticky
@@ -1091,6 +1104,34 @@ export default function ProductDetailPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {plantCatalogue ? (
+                    <div className="space-y-2">
+                      <Label>Material type</Label>
+                      <Select
+                        value={itemRoleDraft || "__unset__"}
+                        onValueChange={(value) => {
+                          if (isItemRole(value)) setItemRoleDraft(value);
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Unclassified" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__unset__" disabled>
+                            Unclassified
+                          </SelectItem>
+                          {(["FINISHED", "RAW", "PACKAGING", "SEMI"] as const).map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {itemRoleLabel(role)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Finished goods, raw materials, packaging, and semi-finished goods share this catalogue.
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="space-y-2">
                     <Label>Product type</Label>
                     <Select

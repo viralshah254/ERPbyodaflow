@@ -14,6 +14,7 @@ type BackendProduct = {
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
   defaultTaxCodeId?: string;
   grossWeightKg?: number | null;
   grossVolumeM3?: number | null;
@@ -36,6 +37,7 @@ export type ProductPayload = {
   unit?: string;
   baseUom?: string;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
   defaultTaxCodeId?: string;
   grossWeightKg?: number | null;
   grossVolumeM3?: number | null;
@@ -59,6 +61,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
     unit: uom,
     baseUom: uom,
     productType: item.productType,
+    itemRole: item.itemRole,
     defaultTaxCodeId: item.defaultTaxCodeId,
     grossWeightKg: typeof item.grossWeightKg === "number" ? item.grossWeightKg : undefined,
     grossVolumeM3: typeof item.grossVolumeM3 === "number" ? item.grossVolumeM3 : undefined,
@@ -79,6 +82,7 @@ export type FetchProductsOptions = {
   /** With sellable: also list active raw SKUs that have a barcode and are not labels. */
   includeBarcodedRaw?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
+  itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
   categoryId?: string;
   departmentId?: string;
   productFamily?: string;
@@ -117,6 +121,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.sellable) params.set("sellable", "true");
   if (opts.includeBarcodedRaw) params.set("includeBarcodedRaw", "true");
   if (opts.productType) params.set("productType", opts.productType);
+  if (opts.itemRole) params.set("itemRole", opts.itemRole);
   if (opts.categoryId?.trim()) params.set("categoryId", opts.categoryId.trim());
   if (opts.departmentId?.trim()) params.set("departmentId", opts.departmentId.trim());
   if (opts.productFamily?.trim()) params.set("productFamily", opts.productFamily.trim());
@@ -223,6 +228,7 @@ export async function createProductApi(payload: ProductPayload): Promise<{ id: s
       unit: payload.unit,
       baseUom: payload.baseUom,
       productType: payload.productType,
+      itemRole: payload.itemRole,
       defaultTaxCodeId: payload.defaultTaxCodeId,
       status: payload.status,
       description: payload.description,
@@ -243,6 +249,7 @@ export type ProductPatchPayload = Partial<
     | "unit"
     | "baseUom"
     | "productType"
+    | "itemRole"
     | "defaultTaxCodeId"
     | "grossWeightKg"
     | "grossVolumeM3"
@@ -270,6 +277,7 @@ export async function patchProductApi(id: string, payload: ProductPatchPayload):
       unit: payload.unit,
       baseUom: payload.baseUom,
       productType: payload.productType,
+      itemRole: payload.itemRole,
       defaultTaxCodeId: payload.defaultTaxCodeId,
       ...(payload.grossWeightKg !== undefined ? { grossWeightKg: payload.grossWeightKg } : {}),
       ...(payload.grossVolumeM3 !== undefined ? { grossVolumeM3: payload.grossVolumeM3 } : {}),
