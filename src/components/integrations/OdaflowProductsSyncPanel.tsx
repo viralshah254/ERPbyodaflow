@@ -19,6 +19,7 @@ import {
 import {
   fetchSfaProductSyncOverviewApi,
   fetchSfaSyncSettingsApi,
+  syncPendingCatalogToSfaApi,
   updateSfaSyncSettingsApi,
   type SfaProductSyncOverview,
   type SfaUnlinkedProduct,
@@ -229,7 +230,39 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
         offset += limit;
       }
       if (!allIds.length) {
-        toast.error("No products to sync.");
+        if (!defaultPriceListId) {
+          toast.error("Choose the price tag SFA should use, then sync again.");
+          return;
+        }
+        const toastId = toast.loading("Sending this price tag to SFA…");
+        try {
+          const result = await syncPendingCatalogToSfaApi({
+            priceListId: defaultPriceListId,
+            catalogs: ["general_trade", "modern_trade"],
+          });
+          const pushed =
+            result.created.gt +
+            result.created.mt +
+            result.updated.gt +
+            result.updated.mt;
+          if (pushed > 0) {
+            toast.success(
+              `Sent ${pushed} catalog price${pushed === 1 ? "" : "s"} to SFA.`,
+              { id: toastId }
+            );
+          } else {
+            toast.error(
+              result.skipped[0]?.reason ||
+                "No priced products on this tag could be sent. Add a barcode and a price, then sync again.",
+              { id: toastId }
+            );
+          }
+          await Promise.all([refresh(), refreshEnrollment()]);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Failed to sync the price tag to SFA.", {
+            id: toastId,
+          });
+        }
         return;
       }
       setBulkProductIds(allIds);
@@ -370,7 +403,7 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
           </div>
           <div className="flex shrink-0 flex-nowrap items-center gap-2">
             <Input
-              placeholder="Search name, SKU, barcode…"
+              placeholder="Name, size, or barcode"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8 w-48 sm:w-64"
@@ -400,9 +433,11 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
 
           {unlinked.length === 0 && !refreshing ? (
             <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-              {overview?.unlinked || unlinkedTotal
-                ? "No matches for this search."
-                : "Every barcoded product is on both General Trade and Modern Trade in SFA."}
+              {overview?.sfaLookupOk === false
+                ? "Live SFA check did not respond. ERP links still show these barcoded products as already in SFA. Sync to SFA sends the price tag selected above."
+                : overview?.unlinked || unlinkedTotal
+                  ? "No matches for this search."
+                  : "Every barcoded product is on both General Trade and Modern Trade in SFA."}
             </p>
           ) : (
             <div

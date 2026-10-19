@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { MrpPeriod, MrpItem } from "@/lib/mock/mrp-planning";
+import { productMatchesSearch } from "@/lib/products/product-search";
 
 export interface MrpPlanningGridProps {
   periods: MrpPeriod[];
@@ -30,11 +31,7 @@ export function MrpPlanningGrid({
 }: MrpPlanningGridProps) {
   const filtered = React.useMemo(() => {
     if (!itemFilter.trim()) return items;
-    const q = itemFilter.trim().toLowerCase();
-    return items.filter(
-      (i) =>
-        i.sku.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)
-    );
+    return items.filter((i) => productMatchesSearch({ name: i.name, sku: i.sku }, itemFilter));
   }, [items, itemFilter]);
 
   return (

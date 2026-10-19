@@ -420,7 +420,7 @@ export function BomComponentEditor({
                     setSearchOpen(false);
                   }
                 }}
-                placeholder="Search name, SKU, or barcode"
+                placeholder="Name, size, or barcode"
                 className="h-9 pl-9"
                 disabled={!hydrated}
                 aria-label="Search products to add"
@@ -447,7 +447,7 @@ export function BomComponentEditor({
                             <span className="min-w-0 flex-1">
                               <span className="block font-medium leading-snug">{product.name}</span>
                               <span className="block text-xs text-muted-foreground">
-                                {[product.sku, product.unit].filter(Boolean).join(" · ")}
+                                {[product.sku, product.size, product.barcode, product.unit].filter(Boolean).join(" · ")}
                               </span>
                             </span>
                           </button>

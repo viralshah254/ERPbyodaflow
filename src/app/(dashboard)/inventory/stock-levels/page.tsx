@@ -43,6 +43,7 @@ import {
   type InventoryCostingSnapshot,
 } from "@/lib/api/inventory-costing";
 import { fetchProductApi, fetchProductsPageApi } from "@/lib/api/products";
+import { productSearchLabel } from "@/lib/products/product-search";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import {
   Select,
@@ -231,7 +232,7 @@ export default function StockLevelsPage() {
     const page = await fetchProductsPageApi({ search: query || undefined, status: "ACTIVE", limit: 10 });
     return page.items.map((p) => ({
       id: p.id,
-      label: `${p.sku ? `${p.sku} — ` : ""}${p.name}`,
+      label: productSearchLabel(p),
     }));
   }, []);
 
@@ -256,7 +257,7 @@ export default function StockLevelsPage() {
           if (!product) return;
           setStockInProductOption({
             id: product.id,
-            label: `${product.sku ? `${product.sku} — ` : ""}${product.name}`,
+            label: productSearchLabel(product),
           });
         })
         .catch(() => undefined);
@@ -729,7 +730,7 @@ export default function StockLevelsPage() {
         <div className="flex flex-wrap items-end justify-between gap-3 shrink-0">
           <FiltersBar
             className="rounded-xl p-2 flex-1 min-w-[240px]"
-            searchPlaceholder="Search by SKU or product name..."
+            searchPlaceholder="Name, size, or barcode"
             searchValue={searchInput}
             onSearchChange={setSearchInput}
             searchInputDataHint="search"
@@ -1008,7 +1009,7 @@ export default function StockLevelsPage() {
                 onValueChange={setStockInProductId}
                 onOptionSelect={setStockInProductOption}
                 loadOptions={loadStockInProducts}
-                placeholder="Search SKU or name…"
+                placeholder="Name, size, or barcode"
                 searchPlaceholder="Type to search — fetches 10 matches from the server"
                 emptyMessage="No matching product."
                 searchDebounceMs={SEARCH_DEBOUNCE_MS}

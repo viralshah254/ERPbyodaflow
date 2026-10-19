@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { downloadCsv } from "@/lib/export/csv";
 import type { MovementRow } from "@/lib/types/inventory";
 import { fetchInventoryMovementsApi } from "@/lib/api/inventory-stock";
+import { productMatchesSearch } from "@/lib/products/product-search";
 import { toast } from "sonner";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -51,7 +52,8 @@ export default function StockMovementsPage() {
       if (warehouseFilter && row.warehouse !== warehouseFilter) return false;
       if (typeFilter && row.type !== typeFilter) return false;
       if (!q) return true;
-      return [row.sku, row.productName, row.reference, row.warehouse]
+      if (productMatchesSearch({ name: row.productName, sku: row.sku }, search)) return true;
+      return [row.reference, row.warehouse]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
     });
@@ -126,7 +128,7 @@ export default function StockMovementsPage() {
       />
       <div className={LIST_PAGE_BODY_VIEWPORT_CLASS}>
         <DataTableToolbar className="shrink-0 p-2"
-          searchPlaceholder="Search by SKU, product, reference..."
+          searchPlaceholder="Name, size, barcode, or reference"
           searchValue={search}
           onSearchChange={setSearch}
           searchInputDataHint="search"

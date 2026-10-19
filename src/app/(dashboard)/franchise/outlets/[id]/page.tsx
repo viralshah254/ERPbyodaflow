@@ -47,6 +47,7 @@ import {
   type OutletInvoiceDetail,
   type OutletInvoiceLineDetailRow,
 } from "@/lib/api/cool-catch";
+import { productMatchesSearch } from "@/lib/products/product-search";
 import { fetchInboundOrders, type InboundOrderRow } from "@/lib/api/cool-catch";
 import { OutletPricingTab } from "@/components/franchise/outlet-pricing-tab";
 import { OutletEquipmentTab } from "@/components/franchise/outlet-equipment-tab";
@@ -343,7 +344,7 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
   }, [latestTake]);
 
   const filtered = search.trim()
-    ? rows.filter((r) => r.productName.toLowerCase().includes(search.toLowerCase()) || r.sku.toLowerCase().includes(search.toLowerCase()))
+    ? rows.filter((r) => productMatchesSearch({ name: r.productName, sku: r.sku }, search))
     : rows;
 
   const adjustPreview = React.useMemo(() => {
@@ -450,7 +451,7 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
       <div className="flex items-center gap-3">
         <input
           type="search"
-          placeholder="Search SKU or product…"
+          placeholder="Name, size, or barcode"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-9 w-64 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
