@@ -26,6 +26,7 @@ import {
   fetchWarehouseCodesApi,
   fetchWarehousesApi,
   mapWarehouseRow,
+  approveWarehouseDispositionApi,
   updateWarehouseApi,
 } from "@/lib/api/warehouses";
 import { t } from "@/lib/terminology";
@@ -177,8 +178,50 @@ export default function MasterWarehousesPage() {
         header: "Status",
         accessor: (r: WarehouseRow) => <StatusBadge status={r.status} />,
       },
+      {
+        id: "disposition",
+        header: "Disposition",
+        accessor: (r: WarehouseRow) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <span>{r.dispositionPending ? `Pending ${r.dispositionPending}` : (r.stockDisposition || "Usable until approved")}</span>
+            {canWrite && !r.dispositionPending ? (
+              <>
+                <Button size="sm" variant="outline" onClick={async () => {
+                  try {
+                    await updateWarehouseApi(r.id, { stockDisposition: "EXPIRED" });
+                    toast.success("Expired disposition is waiting for a second person.");
+                    await reload();
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Could not request the disposition.");
+                  }
+                }}>Request expired</Button>
+                <Button size="sm" variant="outline" onClick={async () => {
+                  try {
+                    await updateWarehouseApi(r.id, { stockDisposition: "DAMAGED" });
+                    toast.success("Damaged disposition is waiting for a second person.");
+                    await reload();
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Could not request the disposition.");
+                  }
+                }}>Request damaged</Button>
+              </>
+            ) : null}
+            {canWrite && r.dispositionPending ? (
+              <Button size="sm" onClick={async () => {
+                try {
+                  await approveWarehouseDispositionApi(r.id);
+                  toast.success("Disposition approved.");
+                  await reload();
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not approve the disposition.");
+                }
+              }}>Approve</Button>
+            ) : null}
+          </div>
+        ),
+      },
     ],
-    []
+    [canWrite, reload]
   );
 
   return (

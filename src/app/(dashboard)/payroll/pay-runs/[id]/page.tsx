@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -27,6 +29,7 @@ import {
   approvePayRunApi,
   fetchPayRunDetailApi,
   postPayRunJournalApi,
+  recordHrPayrollSignatureApi,
   submitPayRunForApprovalApi,
 } from "@/lib/api/payroll";
 import type { PayRun, PayRunLine } from "@/lib/payroll/types";
@@ -115,6 +118,7 @@ export default function PayRunDetailPage() {
   };
 
   const [approving, setApproving] = React.useState(false);
+  const [signature, setSignature] = React.useState("");
   const handleApprove = async () => {
     setApproving(true);
     try {
@@ -214,7 +218,33 @@ export default function PayRunDetailPage() {
           <CardContent className="text-sm space-y-2">
             <p><span className="text-muted-foreground">Status:</span> <Badge variant={run.status === "APPROVED" || run.status === "PROCESSED" ? "secondary" : "outline"}>{run.status.replace("_", " ")}</Badge></p>
             <p><span className="text-muted-foreground">Total gross:</span> {formatMoney(run.totalGross, run.currency)}</p>
+            <p><span className="text-muted-foreground">Total deductions:</span> {formatMoney(run.totalDeductions ?? run.totalGross - run.totalNet, run.currency)}</p>
             <p><span className="text-muted-foreground">Total net:</span> {formatMoney(run.totalNet, run.currency)}</p>
+            <form
+              className="flex flex-wrap items-end gap-3 pt-2"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const deductions = run.totalDeductions ?? run.totalGross - run.totalNet;
+                try {
+                  await recordHrPayrollSignatureApi(id, {
+                    signature,
+                    gross: run.totalGross,
+                    net: run.totalNet,
+                    deductions,
+                  });
+                  setSignature("");
+                  toast.success("HR signature recorded against the run totals.");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not record the HR signature.");
+                }
+              }}
+            >
+              <div className="min-w-[16rem] flex-1 space-y-1">
+                <Label htmlFor="hr-signature">HR signature</Label>
+                <Input id="hr-signature" value={signature} onChange={(event) => setSignature(event.target.value)} required />
+              </div>
+              <Button type="submit" variant="outline">Sign pay run</Button>
+            </form>
           </CardContent>
         </Card>
         <Card>

@@ -102,8 +102,31 @@ export async function sendGaiaMessage(message: string): Promise<string> {
     const text = await res.text().catch(() => "");
     throw new Error(text || `Gaia chat failed (${res.status})`);
   }
-  const data = (await res.json()) as { reply?: string };
-  return data.reply ?? "";
+  const data = (await res.json()) as {
+    reply?: string;
+    citations?: Array<{ source?: string; cutoff?: string }>;
+    proposedAction?: { status?: string } | null;
+  };
+  return formatGaiaReply(data);
+}
+
+export function formatGaiaReply(data: {
+  reply?: string;
+  citations?: Array<{ source?: string; cutoff?: string }>;
+  proposedAction?: { status?: string } | null;
+}): string {
+  if (data.proposedAction && data.proposedAction.status !== "pending_approval") {
+    return "A GAIA proposal waits for approval. It does not post.";
+  }
+  const reply = data.reply?.trim() || "";
+  const citations = (data.citations ?? []).filter((item) => item.source?.trim() && item.cutoff?.trim());
+  if (!citations.length) {
+    return reply
+      ? `${reply}\n\nThis reply has no source or cutoff, so it is not a cited answer.`
+      : "This reply has no source or cutoff, so it is not a cited answer.";
+  }
+  const sources = citations.map((item) => `${item.source} · cutoff ${item.cutoff}`).join("\n");
+  return `${reply}\n\nSources\n${sources}`;
 }
 
 export async function resetGaiaChat(): Promise<void> {

@@ -48,6 +48,19 @@ export type CrmTicketCommentRow = {
   createdAt: string;
 };
 
+export type CreditReviewRow = {
+  id: string;
+  name: string;
+  reasons: string[];
+  overdueAmount: number;
+};
+
+export async function fetchCreditReviewApi(): Promise<CreditReviewRow[]> {
+  requireLiveApi("Credit review");
+  const payload = await apiRequest<{ items: CreditReviewRow[] }>("/api/crm/credit-review");
+  return payload.items ?? [];
+}
+
 export async function fetchCrmAccountsApi(search?: string): Promise<CrmAccountRow[]> {
   requireLiveApi("CRM accounts");
   const params = new URLSearchParams();

@@ -135,4 +135,6 @@ export type WarehouseRow = {
   purpose?: "STORAGE" | "RECEIVING" | "QUARANTINE" | "DISPATCH" | "TRANSIT";
   capabilities: string[];
   status: string;
+  stockDisposition?: string;
+  dispositionPending?: string;
 };

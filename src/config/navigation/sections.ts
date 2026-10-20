@@ -206,6 +206,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },
       { key: "warehouse-dispatch-returns", label: "Driver returns", href: "/warehouse/dispatch-returns", icon: "Undo2", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
+      { key: "warehouse-route-settlement", label: "Route settlement", href: "/warehouse/route-settlement", icon: "Wallet", moduleKey: "inventory", requiresPermissions: ["inventory.read"], requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS] },
       {
         key: "warehouse-route-pick-lists",
         label: "Route pick lists",
@@ -511,6 +512,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       ]},
       { key: "finance-trial-balance", label: "Trial Balance", href: "/finance/trial-balance", icon: "Scale", moduleKey: "finance", requiresPermissions: ["finance.gl.read"] },
       { key: "finance-period-close", label: "Period Close", href: "/finance/period-close", icon: "Lock", moduleKey: "finance", requiresPermissions: ["finance.close.write"] },
+      { key: "finance-cutoff", label: "Cutoff drafts", href: "/finance/cutoff", icon: "FileEdit", moduleKey: "finance", requiresPermissions: ["finance.write"] },
       { key: "finance-budgets", label: "Budgets", href: "/finance/budgets", icon: "PiggyBank", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-ledger", label: "Ledger", href: "/finance/ledger", icon: "BookOpen", moduleKey: "finance", requiresPermissions: ["finance.gl.read"] },
       { key: "finance-audit", label: "Audit Log", href: "/finance/audit", icon: "FileSearch", moduleKey: "finance", requiresPermissions: ["finance.audit.read"] },

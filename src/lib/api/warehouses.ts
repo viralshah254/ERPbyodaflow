@@ -9,6 +9,8 @@ export type BackendWarehouse = {
   purpose?: WarehouseUpsertInput["purpose"];
   capabilities?: string[];
   status?: string;
+  stockDisposition?: string;
+  dispositionPending?: string;
 };
 
 export type WarehouseUpsertInput = {
@@ -41,7 +43,12 @@ export async function createWarehouseApi(payload: WarehouseUpsertInput): Promise
   });
 }
 
-export async function updateWarehouseApi(id: string, payload: Partial<WarehouseUpsertInput>): Promise<BackendWarehouse> {
+export async function approveWarehouseDispositionApi(id: string): Promise<{ id: string; stockDisposition?: string }> {
+  requireLiveApi("Approve warehouse disposition");
+  return apiRequest(`/api/master/warehouses/${encodeURIComponent(id)}/disposition/approve`, { method: "POST" });
+}
+
+export async function updateWarehouseApi(id: string, payload: Partial<WarehouseUpsertInput> & { stockDisposition?: string }): Promise<BackendWarehouse> {
   requireLiveApi("Update warehouse");
   return apiRequest<BackendWarehouse>(`/api/master/warehouses/${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -61,5 +68,7 @@ export function mapWarehouseRow(
     purpose: warehouse.purpose,
     capabilities: warehouse.capabilities ?? [],
     status: warehouse.status ?? "ACTIVE",
+    stockDisposition: warehouse.stockDisposition,
+    dispositionPending: warehouse.dispositionPending,
   };
 }

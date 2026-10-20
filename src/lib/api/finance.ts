@@ -153,8 +153,17 @@ export type PostingMappingKey =
   | "accountsPayableAccountId"
   | "purchaseExpenseAccountId"
   | "inventoryAccountId"
+  | "wipAccountId"
+  | "finishedGoodsAccountId"
   | "goodsReceivedNotInvoicedAccountId"
-  | "bankClearingAccountId";
+  | "bankClearingAccountId"
+  | "outboundLogisticsClearingAccountId"
+  | "productionLabourAccountId"
+  | "productionOverheadAccountId"
+  | "inventoryLossAccountId"
+  | "payrollExpenseAccountId"
+  | "payrollPayableAccountId"
+  | "payrollDeductionsAccountId";
 
 export type PostingMappingRow = {
   key: PostingMappingKey;

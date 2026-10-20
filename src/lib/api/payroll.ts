@@ -167,6 +167,7 @@ function mapPayRun(item: BackendPayRun): PayRun {
     status: mapPayRunStatus(item.status),
     lineCount: item.lines?.length ?? 0,
     totalGross: item.totalGross,
+    totalDeductions: item.totalDeductions,
     totalNet: item.totalNet,
     totalEmployerNssf: item.totalEmployerNssf,
     createdAt: item.createdAt,
@@ -372,6 +373,17 @@ export async function postPayRunJournalApi(id: string): Promise<void> {
   await apiRequest(`/api/payroll/pay-runs/${id}/post-journal`, {
     method: "POST",
     body: {},
+  });
+}
+
+export async function recordHrPayrollSignatureApi(
+  id: string,
+  input: { signature: string; gross: number; net: number; deductions: number },
+): Promise<void> {
+  requireLiveApi("Payroll HR signature");
+  await apiRequest(`/api/payroll/pay-runs/${id}/hr-signature`, {
+    method: "POST",
+    body: input,
   });
 }
 

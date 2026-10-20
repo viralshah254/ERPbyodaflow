@@ -116,6 +116,7 @@ export interface PayRun {
   lineCount: number;
   totalGross: number;
   totalNet: number;
+  totalDeductions?: number;
   totalEmployerNssf?: number;
   createdAt?: string;
 }
