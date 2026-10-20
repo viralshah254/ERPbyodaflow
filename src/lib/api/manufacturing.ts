@@ -142,6 +142,15 @@ export type ManufacturingMrpSummary = {
   totalShortageQty: number;
 };
 
+export type ManufacturingPlanRun = {
+  id: string;
+  number: string;
+  status: "OPEN" | "APPLIED";
+  savedAt: string;
+  suggestionCount: number;
+  raisedCount: number;
+};
+
 export type ManufacturingMrpResponse = {
   items: ManufacturingMrpSuggestion[];
   suggestions: ManufacturingMrpSuggestion[];
@@ -151,6 +160,7 @@ export type ManufacturingMrpResponse = {
   offset?: number;
   hasMore?: boolean;
   nextCursor?: string | null;
+  planRun?: ManufacturingPlanRun;
 };
 
 export type FetchManufacturingMrpOpts = {
@@ -518,6 +528,7 @@ export async function fetchManufacturingMrpPage(
     offset: parsedOffset,
     hasMore,
     nextCursor,
+    planRun: payload.planRun,
   };
 }
 
@@ -539,15 +550,19 @@ export async function fetchManufacturingMrp(opts?: FetchManufacturingMrpOpts): P
   return { items: rows, suggestions: rows, summary, totalCount: rows.length };
 }
 
-export async function applyManufacturingMrp(suggestionIds?: string[]): Promise<{
+export async function applyManufacturingMrp(
+  suggestionIds?: string[],
+  planRunId?: string
+): Promise<{
   applied: boolean;
   created: Array<{ id: string; number: string; productId: string; reused?: boolean }>;
   purchases?: Array<{ id: string; number: string; productId: string; reused?: boolean }>;
   purchasesNotRaised?: Array<{ id: string; productId: string; shortageQty: number }>;
+  planRun?: ManufacturingPlanRun;
 }> {
   return apiRequest("/api/manufacturing/mrp/apply", {
     method: "POST",
-    body: { suggestionIds },
+    body: { suggestionIds, planRunId },
   });
 }
 
