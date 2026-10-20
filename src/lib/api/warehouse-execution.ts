@@ -35,6 +35,8 @@ export type WarehousePickPackRow = {
   sourceDocumentId?: string;
   sourceDocumentNumber?: string;
   sourceDocumentStatus?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
   customer?: string;
   warehouseId?: string;
   status: string;
@@ -219,6 +221,16 @@ export async function stagePickPackStock(
   });
 }
 
+export type PickPackActionResult = {
+  id: string;
+  status: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoiceCreated?: boolean;
+  invoiceError?: string;
+  alreadyDispatched?: boolean;
+};
+
 export async function runPickPackAction(
   id: string,
   payload: {
@@ -233,8 +245,8 @@ export async function runPickPackAction(
     carrier?: string;
     batchLabel?: string;
   }
-): Promise<void> {
-  await apiRequest(`/api/warehouse/pick-pack/${encodeURIComponent(id)}/action`, {
+): Promise<PickPackActionResult> {
+  return apiRequest<PickPackActionResult>(`/api/warehouse/pick-pack/${encodeURIComponent(id)}/action`, {
     method: "POST",
     body: payload,
   });

@@ -1821,7 +1821,7 @@ export default function PickPackDetailPage() {
                       action: "pick",
                       lines: buildPickLinesPayload(),
                     });
-                    await runPickPackAction(task.id, {
+                    const packed = await runPickPackAction(task.id, {
                       action: "pack",
                       cartonsCount: Math.max(1, Number(cartons) || 1),
                       packingNote,
@@ -1831,7 +1831,12 @@ export default function PickPackDetailPage() {
                           ? selectedVehicleId
                           : "",
                     });
-                    toast.success("Pick and pack confirmed.");
+                    if (packed.invoiceNumber) {
+                      toast.success(`Packed. Invoice ${packed.invoiceNumber} is ready for the driver.`);
+                    } else {
+                      toast.success("Pick and pack confirmed.");
+                    }
+                    if (packed.invoiceError) toast.error(packed.invoiceError);
                     await refresh();
                   } catch (e) {
                     toastPickPackInsufficientError(e);
@@ -1858,7 +1863,7 @@ export default function PickPackDetailPage() {
                 void (async () => {
                   setPickPackLoading(true);
                   try {
-                    await runPickPackAction(task.id, {
+                    const packed = await runPickPackAction(task.id, {
                       action: "pack",
                       cartonsCount: Math.max(1, Number(cartons) || 1),
                       packingNote,
@@ -1868,7 +1873,12 @@ export default function PickPackDetailPage() {
                           ? selectedVehicleId
                           : "",
                     });
-                    toast.success("Pack confirmed.");
+                    if (packed.invoiceNumber) {
+                      toast.success(`Packed. Invoice ${packed.invoiceNumber} is ready for the driver.`);
+                    } else {
+                      toast.success("Pack confirmed.");
+                    }
+                    if (packed.invoiceError) toast.error(packed.invoiceError);
                     await refresh();
                   } catch (e) {
                     toastPickPackInsufficientError(e);
@@ -1927,11 +1937,20 @@ export default function PickPackDetailPage() {
             disabled={!canComplete}
             title={!canComplete ? "Mark dispatched first." : undefined}
             onClick={() =>
-              void runWarehouseAction("Task completed.", () => runPickPackAction(task.id, { action: "complete" }))
+              void runWarehouseAction("Task completed.", async () => {
+                await runPickPackAction(task.id, { action: "complete" });
+              })
             }
           >
             Complete
           </Button>}
+          {task.invoiceId ? (
+            <Button variant="outline" asChild>
+              <Link href={`/docs/invoice/${task.invoiceId}`}>
+                Open invoice{task.invoiceNumber ? ` ${task.invoiceNumber}` : ""}
+              </Link>
+            </Button>
+          ) : null}
           {task.sourceDocumentId ? (
             <Button variant="outline" asChild>
               <Link href={`/docs/delivery-note/${task.sourceDocumentId}`}>Open delivery note</Link>
