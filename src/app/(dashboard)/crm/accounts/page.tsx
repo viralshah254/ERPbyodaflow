@@ -8,13 +8,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { fetchCrmAccountsApi, type CrmAccountRow } from "@/lib/api/crm";
+import { fetchCreditReviewApi, fetchCrmAccountsApi, type CreditReviewRow, type CrmAccountRow } from "@/lib/api/crm";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CRMAccountsPage() {
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<CrmAccountRow[]>([]);
+  const [review, setReview] = React.useState<CreditReviewRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -22,7 +23,12 @@ export default function CRMAccountsPage() {
     setLoading(true);
     setError(null);
     try {
-      setRows(await fetchCrmAccountsApi(query));
+      const [accounts, creditReview] = await Promise.all([
+        fetchCrmAccountsApi(query),
+        fetchCreditReviewApi().catch(() => [] as CreditReviewRow[]),
+      ]);
+      setRows(accounts);
+      setReview(creditReview);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not load accounts.";
       setError(message);
@@ -56,6 +62,19 @@ export default function CRMAccountsPage() {
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        {review.length > 0 ? (
+          <div className={`${LIST_TABLE_SURFACE_CLASS} mb-4`}>
+            <p className="px-3 py-2 text-sm font-medium">Credit review</p>
+            <DataTable
+              data={review}
+              columns={[
+                { id: "name", header: "Account", accessor: "name" },
+                { id: "reasons", header: "Why it is here", accessor: (row) => row.reasons.join(" ") },
+                { id: "overdue", header: "Overdue", accessor: (row) => row.overdueAmount ? row.overdueAmount.toLocaleString() : "—" },
+              ]}
+            />
+          </div>
+        ) : null}
         <div className="mb-3 max-w-sm shrink-0">
           <Input
             value={search}
