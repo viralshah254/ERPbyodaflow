@@ -3,12 +3,14 @@ import { apiRequest } from "./client";
 export type InventoryQualityCase = {
   _id: string;
   kind: "QUALITY" | "LOSS" | "RECALL";
-  status: "OPEN" | "CONTAINED" | "CLOSED";
+  status: "OPEN" | "APPROVED" | "CONTAINED" | "CLOSED";
   lotId: string;
   documentIds: string[];
   affectedQuantity: number;
   reason: string;
   capa?: string;
+  lossValue?: number;
+  createdBy?: string;
 };
 
 export type InventoryLotOption = {
@@ -48,7 +50,7 @@ export async function createInventoryQualityCaseApi(body: {
   });
 }
 
-export async function actionInventoryQualityCaseApi(id: string, action: "post-loss" | "close", capa?: string) {
+export async function actionInventoryQualityCaseApi(id: string, action: "approve-loss" | "post-loss" | "close", capa?: string) {
   return apiRequest(`/api/inventory/quality-cases/${encodeURIComponent(id)}/action`, {
     method: "POST",
     body: { action, capa },
