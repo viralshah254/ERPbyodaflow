@@ -64,6 +64,20 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
+function statementEquation(lines: BankStatementLine[]) {
+  if (!lines.length) return null;
+  const ordered = [...lines].sort((left, right) => left.date.localeCompare(right.date));
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+  if (first.balance == null || last.balance == null) return null;
+  const receipts = Math.round(ordered.reduce((sum, line) => sum + line.payIn, 0) * 100) / 100;
+  const payments = Math.round(ordered.reduce((sum, line) => sum + line.payOut, 0) * 100) / 100;
+  const opening = Math.round((first.balance - first.amount) * 100) / 100;
+  const closing = Math.round(last.balance * 100) / 100;
+  const expected = Math.round((opening + receipts - payments) * 100) / 100;
+  return { opening, receipts, payments, closing, ties: Math.abs(expected - closing) <= 0.009 };
+}
+
 function formatMoney(amount: number, currency = "KES") {
   return new Intl.NumberFormat("en-KE", {
     style: "currency",
@@ -163,6 +177,7 @@ export default function BankReconPage() {
 
   const session = snapshot?.session;
   const statements = snapshot?.statements ?? [];
+  const equation = statementEquation(statements);
   const systemTxns = snapshot?.systemTxns ?? [];
   const currency = session?.statementCurrency ?? baseCurrency;
 
@@ -482,6 +497,9 @@ export default function BankReconPage() {
                   : session
                     ? `${session.bankAccountName} · ${unmatchedStmt.length} unmatched line(s)`
                     : "No bank account configured"}
+                {equation
+                  ? ` · Opening ${equation.opening.toLocaleString()} + receipts ${equation.receipts.toLocaleString()} − payments ${equation.payments.toLocaleString()} ${equation.ties ? "ties" : "does not tie"} closing ${equation.closing.toLocaleString()}.`
+                  : ""}
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-3">

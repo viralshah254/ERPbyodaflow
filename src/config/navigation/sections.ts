@@ -206,6 +206,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },
       { key: "warehouse-dispatch-returns", label: "Driver returns", href: "/warehouse/dispatch-returns", icon: "Undo2", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
+      { key: "warehouse-route-settlement", label: "Route settlement", href: "/warehouse/route-settlement", icon: "Wallet", moduleKey: "inventory", requiresPermissions: ["inventory.read"], requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS] },
       {
         key: "warehouse-route-pick-lists",
         label: "Route pick lists",
