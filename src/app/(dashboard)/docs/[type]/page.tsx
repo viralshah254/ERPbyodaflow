@@ -228,6 +228,16 @@ export default function DocTypeListPage() {
   const searchParams = useSearchParams();
   const type = params.type as string;
   const statusFromUrl = searchParams.get("status") ?? "";
+  const idsFromUrl = searchParams.get("ids") ?? "";
+  const loadDocumentIds = React.useMemo(
+    () =>
+      idsFromUrl
+        .split(",")
+        .map((id) => id.trim())
+        .filter((id) => /^[a-zA-Z0-9_-]{8,80}$/.test(id))
+        .slice(0, 40),
+    [idsFromUrl],
+  );
   const terminology = useTerminology();
   const templateId = useOrgContextStore((s) => s.templateId);
   const navCounts = useNavCounts();
@@ -297,10 +307,11 @@ export default function DocTypeListPage() {
       }
       try {
         const page = await fetchDocumentListPageApi(type as DocTypeKey, {
-          limit: PAGE_SIZE,
+          limit: loadDocumentIds.length ? Math.min(100, Math.max(loadDocumentIds.length, PAGE_SIZE)) : PAGE_SIZE,
           cursor: String(offset),
           status: statusFilter || undefined,
           search: debouncedSearch.trim() || undefined,
+          ids: loadDocumentIds.length ? loadDocumentIds : undefined,
         });
         setRows(page.items);
         setPageOffset(page.offset);
@@ -314,7 +325,7 @@ export default function DocTypeListPage() {
         setFetching(false);
       }
     },
-    [type, statusFilter, debouncedSearch],
+    [type, statusFilter, debouncedSearch, loadDocumentIds],
   );
 
   React.useEffect(() => {
@@ -358,12 +369,20 @@ export default function DocTypeListPage() {
     if (search.trim()) {
       chips.push({ id: "q", label: "Search", value: search.trim() });
     }
+    if (loadDocumentIds.length) {
+      chips.push({
+        id: "ids",
+        label: "This vehicle",
+        value: `${loadDocumentIds.length} invoice${loadDocumentIds.length === 1 ? "" : "s"}`,
+      });
+    }
     return chips;
-  }, [statusFilter, search, statusOptions]);
+  }, [statusFilter, search, statusOptions, loadDocumentIds.length]);
 
   const handleRemoveFilterChip = (id: string) => {
     if (id === "status") setStatusFilter("");
     if (id === "q") setSearch("");
+    if (id === "ids") router.replace(`/docs/${type}`);
   };
 
   const handleClearFilters = () => {
@@ -601,9 +620,11 @@ export default function DocTypeListPage() {
       <PageHeader
         title={label}
         description={
-          type === "delivery-note"
-            ? "What has left the warehouse. Send a load from Dispatch."
-            : `List and manage ${label.toLowerCase()}s`
+          type === "invoice" && loadDocumentIds.length
+            ? "Print these for the driver. They were raised when the notes were packed, and they post after delivery is confirmed."
+            : type === "delivery-note"
+              ? "What has left the warehouse. Send a load from Dispatch."
+              : `List and manage ${label.toLowerCase()}s`
         }
         breadcrumbs={[{ label: "Documents", href: "/docs" }, { label }]}
         showCommandHint

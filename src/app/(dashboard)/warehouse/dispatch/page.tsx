@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { PageShell, LIST_PAGE_BODY_PAGINATED_CLASS, LIST_PAGE_SHELL_CLASS } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -103,6 +104,7 @@ function rowQty(row: WarehousePickPackRow): string {
 }
 
 export default function WarehouseDispatchPage() {
+  const router = useRouter();
   const canWrite = useCanWriteInventory();
   const [rows, setRows] = React.useState<WarehousePickPackRow[]>([]);
   const [runs, setRuns] = React.useState<DispatchBatchRow[]>([]);
@@ -327,9 +329,11 @@ export default function WarehouseDispatchPage() {
     setSaving(true);
     const failed: string[] = [];
     const sentIds: string[] = [];
+    const invoiceIds: string[] = [];
+    const invoiceErrors: string[] = [];
     for (const id of ids) {
       try {
-        await runPickPackAction(id, {
+        const result = await runPickPackAction(id, {
           action: "dispatch",
           vehicleMode,
           vehicleId: vehicleMode === "LEASED" ? vehicleId : undefined,
@@ -339,6 +343,8 @@ export default function WarehouseDispatchPage() {
           trackingRef: trackingRef.trim() || undefined,
         });
         sentIds.push(id);
+        if (result.invoiceId) invoiceIds.push(result.invoiceId);
+        if (result.invoiceError) invoiceErrors.push(result.invoiceError);
       } catch (error) {
         const row = selected.get(id);
         failed.push(row?.sourceDocumentNumber || row?.number || id);
@@ -347,7 +353,12 @@ export default function WarehouseDispatchPage() {
     }
     setSaving(false);
     if (sentIds.length && !failed.length) {
-      toast.success(`${sentIds.length} delivery note${sentIds.length === 1 ? "" : "s"} loaded. The phone can deliver them now.`);
+      toast.success(
+        invoiceIds.length
+          ? `${sentIds.length} delivery note${sentIds.length === 1 ? "" : "s"} loaded. Print the invoice${invoiceIds.length === 1 ? "" : "s"} for the driver.`
+          : `${sentIds.length} delivery note${sentIds.length === 1 ? "" : "s"} loaded.`
+      );
+      for (const message of invoiceErrors) toast.error(message);
     } else if (sentIds.length) {
       toast.error(`Some notes stayed packed: ${failed.join(", ")}`);
     }
@@ -359,13 +370,23 @@ export default function WarehouseDispatchPage() {
       });
       setListVersion((version) => version + 1);
     }
+    if (sentIds.length && !failed.length) {
+      const uniqueInvoices = [...new Set(invoiceIds)];
+      if (uniqueInvoices.length === 1) {
+        router.push(`/docs/invoice/${uniqueInvoices[0]}`);
+      } else if (uniqueInvoices.length > 1) {
+        router.push(`/docs/invoice?ids=${uniqueInvoices.join(",")}`);
+      } else {
+        router.push("/docs/delivery-note?status=IN_TRANSIT");
+      }
+    }
   }
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Dispatch"
-        description="Pick the vehicle, then the delivery notes going on it. The phone delivers the same notes."
+        description="Pick the vehicle, then the delivery notes going on it. Sending opens the invoices the driver takes."
         breadcrumbs={[
           { label: "Warehouse", href: "/warehouse/overview" },
           { label: "Dispatch" },

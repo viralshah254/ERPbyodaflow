@@ -736,6 +736,8 @@ export type FetchDocumentListOpts = {
   warehouseId?: string;
   dateFrom?: string;
   dateTo?: string;
+  /** Limit the list to these document ids (this vehicle's invoices). */
+  ids?: string[];
 };
 
 export type FetchDocumentListPageResult = {
@@ -771,6 +773,7 @@ export async function fetchDocumentListPageApi(
   if (opts?.warehouseId?.trim()) params.set("warehouseId", opts.warehouseId.trim());
   if (opts?.dateFrom?.trim()) params.set("dateFrom", opts.dateFrom.trim());
   if (opts?.dateTo?.trim()) params.set("dateTo", opts.dateTo.trim());
+  if (opts?.ids?.length) params.set("ids", opts.ids.join(","));
 
   const payload = await apiRequest<BackendDocumentListResponse>(`/api/documents/${encodeURIComponent(type)}`, {
     params,

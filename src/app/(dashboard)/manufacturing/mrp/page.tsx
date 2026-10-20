@@ -16,6 +16,7 @@ import {
   fetchManufacturingMrpPage,
   type ManufacturingMrpSuggestion,
   type ManufacturingMrpSummary,
+  type ManufacturingPlanRun,
 } from "@/lib/api/manufacturing";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { manufacturingAreaLabel } from "@/lib/terminology";
@@ -51,6 +52,7 @@ export default function MrpPage() {
   const [typeFilter, setTypeFilter] = React.useState("");
   const [rows, setRows] = React.useState<ManufacturingMrpSuggestion[]>([]);
   const [summary, setSummary] = React.useState<ManufacturingMrpSummary>(emptySummary);
+  const [planRun, setPlanRun] = React.useState<ManufacturingPlanRun | null>(null);
   const [totalCount, setTotalCount] = React.useState<number | null>(null);
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [fetching, setFetching] = React.useState(false);
@@ -77,6 +79,7 @@ export default function MrpPage() {
         });
         setRows(page.suggestions ?? []);
         setSummary(page.summary ?? emptySummary);
+        setPlanRun(page.planRun ?? null);
         setTotalCount(typeof page.totalCount === "number" ? page.totalCount : null);
         setPageOffset(page.offset ?? offset);
         setHasMore(!!page.hasMore);
@@ -138,7 +141,7 @@ export default function MrpPage() {
     async (suggestionIds?: string[]) => {
       setApplying(suggestionIds?.length === 1 ? suggestionIds[0] : "all");
       try {
-        const result = await applyManufacturingMrp(suggestionIds);
+        const result = await applyManufacturingMrp(suggestionIds, planRun?.id);
         const created = result.created ?? [];
         const fresh = created.filter((row) => !row.reused).length;
         const reused = created.length - fresh;
@@ -158,6 +161,7 @@ export default function MrpPage() {
           ].filter(Boolean);
           toast.success(parts.join(". ") + ".");
         }
+        if (result.planRun) setPlanRun(result.planRun);
         await loadPage(pageOffset);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not raise work orders.");
@@ -165,7 +169,7 @@ export default function MrpPage() {
         setApplying(null);
       }
     },
-    [loadPage, pageOffset],
+    [loadPage, pageOffset, planRun?.id],
   );
 
   const columns = React.useMemo(
@@ -297,6 +301,19 @@ export default function MrpPage() {
               <span className="text-muted-foreground">Total shortage qty</span>
               <p className="text-lg font-semibold tabular-nums">{summary.totalShortageQty}</p>
             </div>
+            {planRun ? (
+              <div className="rounded-lg border bg-card px-4 py-3 text-sm shadow-sm">
+                <span className="text-muted-foreground">Plan version</span>
+                <p className="text-lg font-semibold tabular-nums">{planRun.number}</p>
+                <p className="text-xs text-muted-foreground">
+                  {planRun.status === "APPLIED"
+                    ? "Drafts raised from this version"
+                    : planRun.raisedCount > 0
+                      ? `${planRun.raisedCount} of ${planRun.suggestionCount} raised`
+                      : "Saved with these quantities"}
+                </p>
+              </div>
+            ) : null}
             {totalCount != null && (
               <div className="rounded-lg border bg-card px-4 py-3 text-sm shadow-sm">
                 <span className="text-muted-foreground">Matching rows</span>
@@ -308,8 +325,10 @@ export default function MrpPage() {
 
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground max-w-3xl">
-            Open draft, approved, and partly shipped orders are netted against stock on hand. Items with a formula
-            become work orders. Items without one are purchases. Goods already fulfilled are not planned again.
+            Open approved and partly shipped orders are netted against usable stock. Formula scrap is included in
+            the required quantity. Items with a formula become work orders. Items without one are purchases.
+            Raising drafts uses {planRun ? `plan ${planRun.number}` : "the saved plan version"}, so a later stock
+            movement does not change the batch you already saved.
           </p>
         </div>
 
