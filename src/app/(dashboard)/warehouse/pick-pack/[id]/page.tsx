@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   fetchPickPackTask,
+  fetchPickPackTasks,
   warehouseStatusLabel,
   patchPickPackDispatchDraft,
   patchPickPackLines,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/api/warehouse-execution";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { patchDocumentApi } from "@/lib/api/documents";
+import { generateInvoiceAndDeliveryNoteApi } from "@/lib/api/sales-document-flow";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { ProductRow } from "@/lib/types/masters";
 import {
@@ -35,6 +37,7 @@ import {
   effectiveAvailForProduct,
   formatKg,
   lineStockView,
+  linesWithHeldByOtherTasks,
   sharedPoolShortfalls,
   type LineStockView,
 } from "@/lib/warehouse/pick-pack-task-stock";
@@ -168,7 +171,7 @@ function LineCanPickCell({ stock }: { stock: LineStockView }) {
   if (typeof stock.warehouseTotal !== "number" || !Number.isFinite(stock.warehouseTotal)) {
     return <span>—</span>;
   }
-  return <span className="tabular-nums">{formatKg(stock.remainingForLine)}</span>;
+  return <span className="tabular-nums">{formatKg(stock.availableNow)}</span>;
 }
 
 function LineRunningAvailCell({
@@ -284,6 +287,13 @@ export default function PickPackDetailPage() {
   const [scanFlash, setScanFlash] = React.useState<{ lineId: string; tone: "ok" | "over" } | null>(null);
   const [scanError, setScanError] = React.useState<string | null>(null);
   const [cartonsEdited, setCartonsEdited] = React.useState(false);
+  const [heldByOtherTasks, setHeldByOtherTasks] = React.useState<Map<string, number>>(() => new Map());
+  const [raisedDocs, setRaisedDocs] = React.useState<{
+    deliveryNoteId: string;
+    deliveryNoteNumber: string;
+    invoiceId?: string;
+    invoiceNumber?: string;
+  } | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -319,13 +329,56 @@ export default function PickPackDetailPage() {
     void refresh();
   }, [refresh]);
 
+  React.useEffect(() => {
+    setRaisedDocs(null);
+  }, [id]);
+
+  React.useEffect(() => {
+    if (!task?.warehouseId || task.availabilityIncludesOtherPicks) {
+      setHeldByOtherTasks(new Map());
+      return;
+    }
+    let cancelled = false;
+    void Promise.all([
+      fetchPickPackTasks({ status: "PICKED", warehouseId: task.warehouseId }),
+      fetchPickPackTasks({ status: "PACKED", warehouseId: task.warehouseId }),
+    ])
+      .then(([picked, packed]) => {
+        const rows = [...picked, ...packed];
+        if (cancelled) return;
+        const held = new Map<string, number>();
+        for (const row of rows) {
+          if (row.id === task.id) continue;
+          const status = String(row.status ?? "").toUpperCase();
+          if (status !== "PICKED" && status !== "PACKED") continue;
+          if (row.warehouseId && row.warehouseId !== task.warehouseId) continue;
+          for (const line of row.lines) {
+            const qty = line.pickedQty ?? 0;
+            if (qty > 1e-9 && line.productId) held.set(line.productId, (held.get(line.productId) ?? 0) + qty);
+          }
+        }
+        setHeldByOtherTasks(held);
+      })
+      .catch(() => {
+        if (!cancelled) setHeldByOtherTasks(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [task?.id, task?.warehouseId, task?.status, task?.availabilityIncludesOtherPicks]);
+
   const productStockKnown = Boolean(task?.warehouseId?.trim());
   const taskStatusForStock = (task?.status ?? "").trim().toUpperCase();
+  const stockLines = React.useMemo(() => {
+    if (!task) return [];
+    if (task.availabilityIncludesOtherPicks) return task.lines;
+    return linesWithHeldByOtherTasks(task.lines, heldByOtherTasks);
+  }, [task, heldByOtherTasks]);
 
   const taskStockSnapshot = React.useMemo(() => {
     if (!task) return null;
-    return buildTaskStockSnapshot(task.lines, linePickedDraft, taskStatusForStock);
-  }, [task, linePickedDraft, taskStatusForStock]);
+    return buildTaskStockSnapshot(stockLines, linePickedDraft, taskStatusForStock);
+  }, [task, stockLines, linePickedDraft, taskStatusForStock]);
 
   const makeGetTaskStockForProduct = React.useCallback(
     (excludeLineId?: string) =>
@@ -944,7 +997,19 @@ export default function PickPackDetailPage() {
   const isCancelled = taskStatusUpper === "CANCELLED";
   const canConfirmPick = taskStatusUpper === "PENDING" && !isCancelled;
   const canConfirmPackOnly = taskStatusUpper === "PICKED" && !dispatchedOrComplete && !isCancelled;
+  const salesOrderId =
+    task.salesOrderId ||
+    (task.sourceDocumentType === "sales-order" ? task.sourceDocumentId : undefined) ||
+    (task.sourceDocumentNumber?.toUpperCase().startsWith("SO") ? task.sourceDocumentId : undefined);
+  const deliveryNoteId =
+    raisedDocs?.deliveryNoteId ||
+    task.deliveryNoteId ||
+    (task.sourceDocumentType === "delivery-note" ? task.sourceDocumentId : undefined) ||
+    (task.sourceDocumentNumber?.toUpperCase().startsWith("DN") ? task.sourceDocumentId : undefined);
+  const invoiceId = raisedDocs?.invoiceId || task.invoiceId;
+  const invoiceNumber = raisedDocs?.invoiceNumber || task.invoiceNumber;
   const canDispatch = taskStatusUpper === "PACKED" && !isCancelled;
+  const needsInvoiceAndDeliveryNote = fmcg && canDispatch && !invoiceId && Boolean(salesOrderId);
   const canComplete = taskStatusUpper === "DISPATCHED" && !isCancelled;
   const picklistCardTone =
     taskStatusUpper === "PICKED"
@@ -958,7 +1023,9 @@ export default function PickPackDetailPage() {
     taskStatusUpper === "PICKED"
       ? "Picked — confirm pack if needed"
       : taskStatusUpper === "PACKED"
-        ? "Packed — ready to dispatch"
+        ? needsInvoiceAndDeliveryNote
+          ? "Packed — generate the invoice and delivery note"
+          : "Packed — ready to dispatch"
         : dispatchedOrComplete
           ? taskStatusUpper === "COMPLETED"
             ? "Complete — stock issued"
@@ -977,7 +1044,9 @@ export default function PickPackDetailPage() {
     if (taskStatusUpper === "PICKED") return "Pick saved — adjust cartons if needed, then confirm pack.";
     if (taskStatusUpper === "PACKED")
       return fmcg
-        ? "Packed — open Dispatch to send this note with others on one vehicle."
+        ? needsInvoiceAndDeliveryNote
+          ? "Packed. Generate the invoice and delivery note next. Dispatch opens after those exist."
+          : "Invoice and delivery note are ready. Open Dispatch to send this load."
         : "Packed — add courier/tracking and mark dispatched to issue stock from the fulfilment warehouse.";
     if (taskStatusUpper === "DISPATCHED")
       return "Dispatched — use Complete to close this warehouse task. The delivery note stays in transit until proof of delivery is recorded on the document.";
@@ -996,7 +1065,7 @@ export default function PickPackDetailPage() {
         title={`${task.reference} — ${warehouseStatusLabel(task.status)}`}
         description={
           task.sourceDocumentNumber
-            ? `${task.customer ?? "Customer"} · Delivery ${task.sourceDocumentNumber} (${warehouseStatusLabel(task.sourceDocumentStatus)})`
+            ? `${task.customer ?? "Customer"} · ${task.sourceDocumentNumber.toUpperCase().startsWith("SO") ? "Sales order" : "Delivery"} ${task.sourceDocumentNumber}${task.sourceDocumentStatus ? ` (${warehouseStatusLabel(task.sourceDocumentStatus)})` : ""}`
             : task.customer
         }
         breadcrumbs={[
@@ -1034,10 +1103,10 @@ export default function PickPackDetailPage() {
                 Fulfilment is locked to main stock. Edit the delivery note only while it is Draft to adjust routing; for Cool Catch
                 the saved warehouse is always the primary stock location.
               </p>
-            ) : task.sourceDocumentId && !fulfilmentWarehouseUi.changeViaDn ? (
+            ) : deliveryNoteId && !fulfilmentWarehouseUi.changeViaDn ? (
               <p className="text-sm text-muted-foreground">
                 Pick & pack can only sync this field while the linked delivery note is still in <strong>Draft</strong>.
-                <Link className="text-primary underline ml-1 inline" href={`/docs/delivery-note/${task.sourceDocumentId}`}>
+                <Link className="text-primary underline ml-1 inline" href={`/docs/delivery-note/${deliveryNoteId}`}>
                   Open delivery note
                 </Link>
               </p>
@@ -1927,7 +1996,45 @@ export default function PickPackDetailPage() {
             {pickPackLoading ? "Saving…" : "Mark dispatched"}
           </Button>
           ) : null}
-          {fmcg && canDispatch ? (
+          {fmcg && needsInvoiceAndDeliveryNote ? (
+            <Button
+              disabled={pickPackLoading}
+              onClick={() => {
+                void (async () => {
+                  if (!salesOrderId || pickPackLoading) return;
+                  setPickPackLoading(true);
+                  try {
+                    const result = await generateInvoiceAndDeliveryNoteApi(salesOrderId);
+                    setRaisedDocs({
+                      deliveryNoteId: result.deliveryNoteId,
+                      deliveryNoteNumber: result.deliveryNoteNumber,
+                      invoiceId: result.invoiceId,
+                      invoiceNumber: result.invoiceNumber,
+                    });
+                    if (result.kraStatus === "FAILED") {
+                      toast.error(result.kraLabel, {
+                        description:
+                          result.kraError ||
+                          "KRA signing failed. The invoice and delivery note are still created.",
+                      });
+                    } else {
+                      toast.success(
+                        `Invoice ${result.invoiceNumber ?? ""} and ${result.deliveryNoteNumber} are ready. Open dispatch when you want to load the vehicle.`
+                      );
+                    }
+                    await refresh();
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Could not generate the invoice and delivery note.");
+                  } finally {
+                    setPickPackLoading(false);
+                  }
+                })();
+              }}
+            >
+              {pickPackLoading ? "Saving…" : "Generate invoice & delivery note"}
+            </Button>
+          ) : null}
+          {fmcg && canDispatch && !needsInvoiceAndDeliveryNote ? (
             <Button variant="secondary" asChild>
               <Link href="/warehouse/dispatch">Open dispatch</Link>
             </Button>
@@ -1944,16 +2051,18 @@ export default function PickPackDetailPage() {
           >
             Complete
           </Button>}
-          {task.invoiceId ? (
+          {invoiceId ? (
             <Button variant="outline" asChild>
-              <Link href={`/docs/invoice/${task.invoiceId}`}>
-                Open invoice{task.invoiceNumber ? ` ${task.invoiceNumber}` : ""}
+              <Link href={`/docs/invoice/${invoiceId}`}>
+                Open invoice{invoiceNumber ? ` ${invoiceNumber}` : ""}
               </Link>
             </Button>
           ) : null}
-          {task.sourceDocumentId ? (
+          {deliveryNoteId ? (
             <Button variant="outline" asChild>
-              <Link href={`/docs/delivery-note/${task.sourceDocumentId}`}>Open delivery note</Link>
+              <Link href={`/docs/delivery-note/${deliveryNoteId}`}>
+                Open delivery note{raisedDocs?.deliveryNoteNumber || task.deliveryNoteNumber ? ` ${raisedDocs?.deliveryNoteNumber || task.deliveryNoteNumber}` : ""}
+              </Link>
             </Button>
           ) : null}
         </div>

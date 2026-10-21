@@ -147,6 +147,8 @@ export type LineStockView = {
   thisLinePick: number;
   afterThisLinePick: number;
   afterPrimaryPick: number;
+  /** What the warehouse column should show: free stock, with this pick already taken once it is confirmed. */
+  availableNow: number;
   overPickThisLine: boolean;
   shortVsOrder: boolean;
 };
@@ -169,6 +171,8 @@ export function lineStockView(
   const thisLinePick = parsePickPackPickedQty(line, linePickedDraft, taskStatusUpper);
   const afterThisLinePick = remainingForLine - thisLinePick;
   const afterPrimaryPick = remainingPrimaryForLine - thisLinePick;
+  const pickedOrPacked = taskStatusUpper === "PICKED" || taskStatusUpper === "PACKED";
+  const availableNow = pickedOrPacked ? Math.max(0, afterThisLinePick) : remainingForLine;
 
   return {
     poolKey,
@@ -180,9 +184,23 @@ export function lineStockView(
     thisLinePick,
     afterThisLinePick,
     afterPrimaryPick,
+    availableNow,
     overPickThisLine: thisLinePick > remainingForLine + EPS,
     shortVsOrder: thisLinePick + EPS < line.quantity,
   };
+}
+
+/** Drop stock already taken by other confirmed picks. The current task is excluded by the caller. */
+export function linesWithHeldByOtherTasks<T extends { productId: string; onHandWarehouse?: number }>(
+  lines: T[],
+  heldByProductId: Map<string, number>
+): T[] {
+  if (!heldByProductId.size) return lines;
+  return lines.map((line) => {
+    const held = heldByProductId.get(line.productId) ?? 0;
+    if (held <= 1e-9 || typeof line.onHandWarehouse !== "number") return line;
+    return { ...line, onHandWarehouse: Math.max(0, line.onHandWarehouse - held) };
+  });
 }
 
 export function effectiveAvailForProduct(
