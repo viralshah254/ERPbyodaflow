@@ -7,6 +7,7 @@ const WAREHOUSE_STATUS_LABELS: Record<string, string> = {
   DISPATCHED: "Dispatched",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
+  READY: "Ready to pick",
   DRAFT: "Draft",
   IN_TRANSIT: "In transit",
   CONVERTED: "Invoiced",
@@ -37,6 +38,8 @@ export type WarehousePickPackRow = {
   sourceDocumentNumber?: string;
   sourceDocumentStatus?: string;
   salesOrderId?: string;
+  /** Set when the sales order is confirmed and pick and pack has not started. */
+  readySalesOrderId?: string;
   deliveryNoteId?: string;
   deliveryNoteNumber?: string;
   /** True when on-hand already excludes other picked or packed tasks. */
@@ -179,6 +182,8 @@ export type PickPackPage = {
   hasMore: boolean;
   totalCount: number;
   pageSizeOptions: number[];
+  /** True when the server already added confirmed sales orders that are ready to pick. */
+  includesReadySalesOrders?: boolean;
 };
 
 /** Packed notes for dispatch. One page from the server, no client-side slice. */
@@ -187,6 +192,7 @@ export async function fetchPickPackPage(filters: {
   search?: string;
   limit: number;
   offset: number;
+  includeReadySalesOrders?: boolean;
 }): Promise<PickPackPage> {
   requireLiveApi("Pick-pack tasks");
   const params: Record<string, string> = {
@@ -195,6 +201,7 @@ export async function fetchPickPackPage(filters: {
   };
   if (filters.status) params.status = filters.status;
   if (filters.search?.trim()) params.search = filters.search.trim();
+  if (filters.includeReadySalesOrders) params.includeReadySalesOrders = "1";
   const page = await apiRequest<Partial<PickPackPage>>("/api/warehouse/pick-pack", { params });
   const items = page.items ?? [];
   return {
@@ -204,6 +211,7 @@ export async function fetchPickPackPage(filters: {
     hasMore: Boolean(page.hasMore),
     totalCount: typeof page.totalCount === "number" ? page.totalCount : items.length,
     pageSizeOptions: page.pageSizeOptions?.length ? page.pageSizeOptions : [20, 25, 30, 50],
+    includesReadySalesOrders: page.includesReadySalesOrders === true,
   };
 }
 

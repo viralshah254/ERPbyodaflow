@@ -1710,7 +1710,7 @@ export default function DocViewPage() {
             ]}
           />
         )}
-        {["sales-order", "invoice", "credit-note"].includes(type) && document?.partyId ? (
+        {["invoice", "credit-note"].includes(type) && document?.partyId ? (
           <div className="mt-4">
             <VatWithholdingNotice
               partyId={document.partyId}

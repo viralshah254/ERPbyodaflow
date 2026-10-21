@@ -56,14 +56,26 @@ export function VatWithholdingNotice({
   const expectedCash = roundMoney(invoiceGross - withholding);
 
   return (
-    <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-      <p className="font-medium">VAT withholding agent</p>
-      <p className="mt-1 text-muted-foreground">
-        The invoice stays {formatMoney(invoiceGross, currency)}. KRA withholding is 2% of the taxable value (
-        {formatMoney(taxable, currency)}), so {formatMoney(withholding, currency)} is expected to be withheld. The customer
-        should pay {formatMoney(expectedCash, currency)}. That amount stays on the invoice until a KRA certificate is
-        matched.
-      </p>
+    <div className="mt-4 max-w-sm rounded-md border px-3 py-2 text-sm">
+      <p className="font-medium">Amount to pay</p>
+      <dl className="mt-2 space-y-1">
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted-foreground">Invoice total</dt>
+          <dd className="tabular-nums">{formatMoney(invoiceGross, currency)}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted-foreground">VAT included</dt>
+          <dd className="tabular-nums">{formatMoney(vat, currency)}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted-foreground">VAT withheld, 2% of {formatMoney(taxable, currency)}</dt>
+          <dd className="tabular-nums">− {formatMoney(withholding, currency)}</dd>
+        </div>
+        <div className="flex justify-between gap-4 border-t pt-1 font-medium">
+          <dt>Customer pays</dt>
+          <dd className="tabular-nums">{formatMoney(expectedCash, currency)}</dd>
+        </div>
+      </dl>
     </div>
   );
 }

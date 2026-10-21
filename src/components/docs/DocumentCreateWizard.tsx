@@ -39,7 +39,6 @@ import {
   applyLineTax,
   type DocumentLine,
 } from "@/components/docs/DocumentLineEditor";
-import { VatWithholdingNotice } from "@/components/docs/VatWithholdingNotice";
 import {
   documentLinesOperational,
   documentLinesOperationalErrorMessage,
@@ -2832,14 +2831,6 @@ export function DocumentCreateWizard({
                   </>
                 ) : null}
               </div>
-              {selectedPartyDetail?.vatWithholding?.agent ? (
-                <VatWithholdingNotice
-                  agent
-                  gross={form.watch("totalAmount") ?? 0}
-                  tax={lines.reduce((sum, line) => sum + (line.tax ?? 0), 0)}
-                  currency={selectedCurrency}
-                />
-              ) : null}
               <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
                 <div className="space-y-1">
                   <span className="text-muted-foreground">Total (Document Currency)</span>
