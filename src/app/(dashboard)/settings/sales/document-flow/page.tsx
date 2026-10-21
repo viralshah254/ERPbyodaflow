@@ -60,13 +60,13 @@ const OPTIONS: Array<{ key: keyof SalesDocumentFlowSettings; label: string; hint
   },
   {
     key: "requireSuccessfulKraSigningBeforeDispatch",
-    label: "Require successful KRA signing before dispatch",
-    hint: "Dispatch stays blocked until the invoice is KRA signed.",
+    label: "Hold dispatch when KRA rejects the invoice",
+    hint: "A missing invoice or a KRA rejection keeps the load in the warehouse. If KRA cannot be reached, the load can leave and the invoice is signed when KRA answers.",
   },
   {
     key: "allowDispatchWhileKraSigningPending",
     label: "Allow dispatch while KRA signing is pending",
-    hint: "A failed KRA signature still blocks dispatch when signing is required.",
+    hint: "A rejected invoice still stays in the warehouse when the hold above is on.",
   },
   {
     key: "enableQrProofOfDelivery",

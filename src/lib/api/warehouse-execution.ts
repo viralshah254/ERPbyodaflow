@@ -228,6 +228,7 @@ export type PickPackActionResult = {
   invoiceNumber?: string;
   invoiceCreated?: boolean;
   invoiceError?: string;
+  kraWarning?: string;
   alreadyDispatched?: boolean;
 };
 

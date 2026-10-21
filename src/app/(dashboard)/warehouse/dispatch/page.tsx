@@ -331,6 +331,7 @@ export default function WarehouseDispatchPage() {
     const sentIds: string[] = [];
     const invoiceIds: string[] = [];
     const invoiceErrors: string[] = [];
+    const kraWarnings = new Set<string>();
     for (const id of ids) {
       try {
         const result = await runPickPackAction(id, {
@@ -345,6 +346,7 @@ export default function WarehouseDispatchPage() {
         sentIds.push(id);
         if (result.invoiceId) invoiceIds.push(result.invoiceId);
         if (result.invoiceError) invoiceErrors.push(result.invoiceError);
+        if (result.kraWarning) kraWarnings.add(result.kraWarning);
       } catch (error) {
         const row = selected.get(id);
         failed.push(row?.sourceDocumentNumber || row?.number || id);
@@ -359,6 +361,7 @@ export default function WarehouseDispatchPage() {
           : `${sentIds.length} delivery note${sentIds.length === 1 ? "" : "s"} loaded.`
       );
       for (const message of invoiceErrors) toast.error(message);
+      for (const message of kraWarnings) toast.warning(message);
     } else if (sentIds.length) {
       toast.error(`Some notes stayed packed: ${failed.join(", ")}`);
     }
