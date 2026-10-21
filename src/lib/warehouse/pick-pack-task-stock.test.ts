@@ -4,6 +4,7 @@ import {
   effectiveAvailForProduct,
   formatKg,
   lineStockView,
+  linesWithHeldByOtherTasks,
   sharedPoolShortfalls,
   stockPoolKey,
 } from "./pick-pack-task-stock";
@@ -55,6 +56,27 @@ describe("stock pool sharing", () => {
     const view2 = lineStockView(lines[1]!, lines, snapshot, draft, "PENDING");
     expect(view2.remainingForLine).toBe(10);
     expect(view2.overPickThisLine).toBe(false);
+  });
+
+  it("shows free stock after a confirmed pick, and keeps a pending line at the warehouse total", () => {
+    const packed = [line("l1", "p1", "SKU-2159", 1, 37, 1)];
+    const packedView = lineStockView(packed[0]!, packed, buildTaskStockSnapshot(packed, {}, "PACKED"), {}, "PACKED");
+    expect(packedView.availableNow).toBe(36);
+    const pending = [line("l1", "p1", "SKU-2159", 1, 36)];
+    const pendingView = lineStockView(
+      pending[0]!,
+      pending,
+      buildTaskStockSnapshot(pending, { l1: "1" }, "PENDING"),
+      { l1: "1" },
+      "PENDING"
+    );
+    expect(pendingView.availableNow).toBe(36);
+  });
+
+  it("reduces warehouse stock by pieces already picked on other tasks", () => {
+    const lines = [line("l1", "p1", "SKU-2159", 1, 37)];
+    const adjusted = linesWithHeldByOtherTasks(lines, new Map([["p1", 1]]));
+    expect(adjusted[0]?.onHandWarehouse).toBe(36);
   });
 
   it("flags over-pick on a line", () => {

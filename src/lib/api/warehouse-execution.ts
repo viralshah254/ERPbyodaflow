@@ -33,8 +33,14 @@ export type WarehousePickPackRow = {
   number: string;
   reference: string;
   sourceDocumentId?: string;
+  sourceDocumentType?: "delivery-note" | "sales-order";
   sourceDocumentNumber?: string;
   sourceDocumentStatus?: string;
+  salesOrderId?: string;
+  deliveryNoteId?: string;
+  deliveryNoteNumber?: string;
+  /** True when on-hand already excludes other picked or packed tasks. */
+  availabilityIncludesOtherPicks?: boolean;
   invoiceId?: string;
   invoiceNumber?: string;
   customer?: string;
@@ -154,7 +160,11 @@ export type WarehouseLocationStockRow = {
   updatedAt?: string;
 };
 
-export async function fetchPickPackTasks(filters?: { status?: string; sourceDocumentId?: string }): Promise<WarehousePickPackRow[]> {
+export async function fetchPickPackTasks(filters?: {
+  status?: string;
+  sourceDocumentId?: string;
+  warehouseId?: string;
+}): Promise<WarehousePickPackRow[]> {
   requireLiveApi("Pick-pack tasks");
   const payload = await apiRequest<{ items: WarehousePickPackRow[] }>("/api/warehouse/pick-pack", {
     params: filters,
