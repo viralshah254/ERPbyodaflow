@@ -80,6 +80,7 @@ import {
   type PricingOption,
   type TaxConfigRow,
 } from "@/lib/api/pricing";
+import { isPlantCatalogueTemplate } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
@@ -574,6 +575,7 @@ export function DocumentCreateWizard({
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const templateId = useOrgContextStore((s) => s.templateId);
   const fmcgOrg = isFmcgOrg(templateId);
+  const plantCatalogue = isPlantCatalogueTemplate(templateId);
   const isOdaflowFmcgEdit =
     isEditMode &&
     type === "sales-order" &&
@@ -2711,6 +2713,7 @@ export function DocumentCreateWizard({
                 lineEditorMode === "sales" && fmcgOrg ? fmcgCatalogByProductId : undefined
               }
               fmcgOrg={fmcgOrg}
+              plantCatalogue={plantCatalogue}
               taxCodes={taxCodes}
               defaultLineTaxCodeId={defaultLineTaxCodeId}
               linesAreTaxInclusive={form.watch("linesAreTaxInclusive") ?? false}
