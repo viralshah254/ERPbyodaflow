@@ -186,7 +186,8 @@ export default function MasterWarehousesPage() {
             <span>{r.dispositionPending ? `Pending ${r.dispositionPending}` : (r.stockDisposition || "Usable until approved")}</span>
             {canWrite && !r.dispositionPending ? (
               <>
-                <Button size="sm" variant="outline" onClick={async () => {
+                <Button size="sm" variant="outline" onClick={async (event) => {
+                  event.stopPropagation();
                   try {
                     await updateWarehouseApi(r.id, { stockDisposition: "EXPIRED" });
                     toast.success("Expired disposition is waiting for a second person.");
@@ -195,7 +196,8 @@ export default function MasterWarehousesPage() {
                     toast.error(error instanceof Error ? error.message : "Could not request the disposition.");
                   }
                 }}>Request expired</Button>
-                <Button size="sm" variant="outline" onClick={async () => {
+                <Button size="sm" variant="outline" onClick={async (event) => {
+                  event.stopPropagation();
                   try {
                     await updateWarehouseApi(r.id, { stockDisposition: "DAMAGED" });
                     toast.success("Damaged disposition is waiting for a second person.");
@@ -207,7 +209,8 @@ export default function MasterWarehousesPage() {
               </>
             ) : null}
             {canWrite && r.dispositionPending ? (
-              <Button size="sm" onClick={async () => {
+              <Button size="sm" onClick={async (event) => {
+                event.stopPropagation();
                 try {
                   await approveWarehouseDispositionApi(r.id);
                   toast.success("Disposition approved.");

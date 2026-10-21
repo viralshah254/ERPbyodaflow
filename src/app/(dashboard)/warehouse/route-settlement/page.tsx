@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { fetchEmployeesApi } from "@/lib/api/payroll";
 import {
   approveRouteSettlementApi,
   createRouteSettlementApi,
   fetchRouteSettlementsApi,
   type RouteSettlementRow,
 } from "@/lib/api/route-settlement";
+import type { Employee } from "@/lib/payroll/types";
 import { toast } from "sonner";
 
 export default function RouteSettlementPage() {
@@ -24,6 +27,7 @@ export default function RouteSettlementPage() {
   const [cash, setCash] = React.useState("");
   const [mpesa, setMpesa] = React.useState("");
   const [returnsAmount, setReturnsAmount] = React.useState("");
+  const [employees, setEmployees] = React.useState<Employee[]>([]);
 
   const reload = React.useCallback(async () => {
     setLoading(true);
@@ -39,7 +43,12 @@ export default function RouteSettlementPage() {
 
   React.useEffect(() => {
     void reload();
+    void fetchEmployeesApi().then(setEmployees).catch(() => setEmployees([]));
   }, [reload]);
+
+  const driverName = React.useCallback((id: string) => {
+    return employees.find((employee) => employee.id === id)?.name ?? "Driver";
+  }, [employees]);
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
@@ -53,6 +62,10 @@ export default function RouteSettlementPage() {
           className="mb-4 grid gap-3 sm:grid-cols-3"
           onSubmit={async (event) => {
             event.preventDefault();
+            if (!driverId) {
+              toast.error("Choose the driver.");
+              return;
+            }
             try {
               await createRouteSettlementApi({
                 routeDate,
@@ -71,7 +84,21 @@ export default function RouteSettlementPage() {
           }}
         >
           <div className="space-y-1"><Label htmlFor="route-date">Route date</Label><Input id="route-date" type="date" value={routeDate} onChange={(event) => setRouteDate(event.target.value)} required /></div>
-          <div className="space-y-1"><Label htmlFor="driver-id">Driver id</Label><Input id="driver-id" value={driverId} onChange={(event) => setDriverId(event.target.value)} required /></div>
+          <div className="space-y-1">
+            <Label>Driver</Label>
+            <SearchableSelect
+              value={driverId}
+              onValueChange={setDriverId}
+              options={employees.map((employee) => ({
+                id: employee.id,
+                label: employee.name,
+                keywords: [employee.department, employee.role].filter(Boolean).join(" "),
+              }))}
+              placeholder="Search payroll"
+              searchPlaceholder="Name or role"
+              emptyMessage="No people on the payroll list."
+            />
+          </div>
           <div className="space-y-1"><Label htmlFor="expected">Expected</Label><Input id="expected" type="number" value={expected} onChange={(event) => setExpected(event.target.value)} /></div>
           <div className="space-y-1"><Label htmlFor="cash">Cash</Label><Input id="cash" type="number" value={cash} onChange={(event) => setCash(event.target.value)} /></div>
           <div className="space-y-1"><Label htmlFor="mpesa">M-Pesa</Label><Input id="mpesa" type="number" value={mpesa} onChange={(event) => setMpesa(event.target.value)} /></div>
@@ -84,7 +111,7 @@ export default function RouteSettlementPage() {
             emptyMessage={loading ? "Loading settlements…" : "No settlements."}
             columns={[
               { id: "date", header: "Date", accessor: "routeDate" },
-              { id: "driver", header: "Driver", accessor: "driverId" },
+              { id: "driver", header: "Driver", accessor: (row) => driverName(row.driverId) },
               { id: "expected", header: "Expected", accessor: (row) => row.expected.toLocaleString() },
               { id: "collected", header: "Collected", accessor: (row) => (row.cash + row.mpesa + row.returnsAmount).toLocaleString() },
               { id: "status", header: "Status", accessor: "status" },

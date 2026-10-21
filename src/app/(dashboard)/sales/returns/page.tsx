@@ -9,13 +9,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { bulkDocumentActionApi, createDocumentApi, fetchDocumentListApi } from "@/lib/api/documents";
 import { searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
-import { fetchProductsApi } from "@/lib/api/products";
+import { fetchProductsPageApi } from "@/lib/api/products";
+import { searchDocumentOptions } from "@/lib/lookups/named-options";
 import type { DocListRow } from "@/lib/types/documents";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import type { PartyLookupOption } from "@/lib/api/parties";
@@ -41,8 +42,10 @@ export default function SalesReturnsPage() {
   const [ambiguousAccepted, setAmbiguousAccepted] = React.useState(false);
   const [returnReason, setReturnReason] = React.useState("");
   const [saving, setSaving] = React.useState(false);
-  const [products, setProducts] = React.useState<Array<{ id: string; name: string; sku: string }>>([]);
   const [productId, setProductId] = React.useState("");
+  const [productOption, setProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
+  const [sourceDocumentOption, setSourceDocumentOption] = React.useState<AsyncSearchableSelectOption | null>(null);
+  const [sheetPortalHost, setSheetPortalHost] = React.useState<HTMLElement | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -58,10 +61,7 @@ export default function SalesReturnsPage() {
 
   React.useEffect(() => {
     void refresh();
-    void Promise.all([fetchWarehouseOptions(), fetchProductsApi()]).then(([warehouseItems, productItems]) => {
-      setWarehouses(warehouseItems);
-      setProducts(productItems.map((item) => ({ id: item.id, name: item.name, sku: item.sku })));
-    });
+    void fetchWarehouseOptions().then(setWarehouses).catch(() => setWarehouses([]));
   }, [refresh]);
 
   const columns = React.useMemo(
@@ -149,6 +149,7 @@ export default function SalesReturnsPage() {
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent>
+          <div ref={setSheetPortalHost}>
           <SheetHeader>
             <SheetTitle>Create sales return</SheetTitle>
             <SheetDescription>Create a credit note and capture warehouse return quantity for stock reversal.</SheetDescription>
@@ -169,48 +170,63 @@ export default function SalesReturnsPage() {
                 searchPlaceholder="Type name, code, phone, or email"
                 emptyMessage="No customers found."
                 recentStorageKey="lookup:recent-customers"
+                portalContainer={sheetPortalHost}
               />
             </div>
             <div className="space-y-2">
               <Label>Warehouse</Label>
-              <Select value={warehouseId} onValueChange={setWarehouseId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select warehouse" />
-                </SelectTrigger>
-                <SelectContent>
-                  {warehouses.map((warehouse) => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {warehouse.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={warehouseId}
+                onValueChange={setWarehouseId}
+                options={warehouses.map((warehouse) => ({ id: warehouse.id, label: warehouse.label }))}
+                placeholder="Search warehouses"
+                searchPlaceholder="Warehouse name"
+                emptyMessage="No warehouses."
+              />
             </div>
             <div className="space-y-2">
               <Label>Product</Label>
-              <Select value={productId} onValueChange={setProductId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      {product.sku} - {product.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AsyncSearchableSelect
+                value={productId}
+                onValueChange={(value) => {
+                  setProductId(value);
+                  if (!value) setProductOption(null);
+                }}
+                onOptionSelect={setProductOption}
+                loadOptions={async (query) => {
+                  const page = await fetchProductsPageApi({ search: query, limit: 20, sellable: true });
+                  return page.items.map((item) => ({
+                    id: item.id,
+                    label: [item.sku, item.name].filter(Boolean).join(" · "),
+                  }));
+                }}
+                selectedOption={productOption}
+                portalContainer={sheetPortalHost}
+                placeholder="Search products"
+                searchPlaceholder="Name or SKU"
+                emptyMessage="No product matches."
+              />
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
               <Input value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Original invoice or delivery ID</Label>
-              <Input
+              <Label>Original invoice or delivery</Label>
+              <AsyncSearchableSelect
                 value={sourceDocumentId}
-                onChange={(e) => setSourceDocumentId(e.target.value)}
-                placeholder="Link the original document when known"
+                onValueChange={(value) => {
+                  setSourceDocumentId(value);
+                  if (!value) setSourceDocumentOption(null);
+                }}
+                onOptionSelect={setSourceDocumentOption}
+                loadOptions={(query) => searchDocumentOptions(["invoice", "delivery-note"], query)}
+                selectedOption={sourceDocumentOption}
+                portalContainer={sheetPortalHost}
+                allowClear
+                placeholder="Search the original sale"
+                searchPlaceholder="Number or customer"
+                emptyMessage="No invoice or delivery note matches."
               />
             </div>
             {!sourceDocumentId.trim() ? (
@@ -289,6 +305,7 @@ export default function SalesReturnsPage() {
               Create return
             </Button>
           </SheetFooter>
+          </div>
         </SheetContent>
       </Sheet>
     </PageShell>

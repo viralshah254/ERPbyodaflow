@@ -5,8 +5,9 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { searchDocumentOptions } from "@/lib/lookups/named-options";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 export default function CoolcatchEtimsPage() {
   const [sourceType, setSourceType] = React.useState<"invoice" | "sales-order">("invoice");
   const [sourceDocumentId, setSourceDocumentId] = React.useState("");
+  const [sourceDocumentOption, setSourceDocumentOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [receiptType, setReceiptType] = React.useState<"GENERIC" | "ETIMS">("ETIMS");
   const [issuing, setIssuing] = React.useState(false);
   const [retrying, setRetrying] = React.useState(false);
@@ -32,7 +34,7 @@ export default function CoolcatchEtimsPage() {
   const handleIssue = async () => {
     const id = sourceDocumentId.trim();
     if (!id) {
-      toast.error("Enter a sales order or invoice document id.");
+      toast.error("Choose the invoice or sales order.");
       return;
     }
     setIssuing(true);
@@ -91,7 +93,11 @@ export default function CoolcatchEtimsPage() {
               <Label>Source type</Label>
               <Select
                 value={sourceType}
-                onValueChange={(v) => setSourceType(v as "invoice" | "sales-order")}
+                onValueChange={(v) => {
+                  setSourceType(v as "invoice" | "sales-order");
+                  setSourceDocumentId("");
+                  setSourceDocumentOption(null);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -103,12 +109,20 @@ export default function CoolcatchEtimsPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="doc-id">Document id</Label>
-              <Input
-                id="doc-id"
+              <Label>{sourceType === "invoice" ? "Invoice" : "Sales order"}</Label>
+              <AsyncSearchableSelect
                 value={sourceDocumentId}
-                onChange={(e) => setSourceDocumentId(e.target.value)}
-                placeholder="Paste document id"
+                onValueChange={(value) => {
+                  setSourceDocumentId(value);
+                  if (!value) setSourceDocumentOption(null);
+                }}
+                onOptionSelect={setSourceDocumentOption}
+                loadOptions={(query) => searchDocumentOptions([sourceType], query)}
+                selectedOption={sourceDocumentOption}
+                reloadToken={sourceType}
+                placeholder={sourceType === "invoice" ? "Search invoices" : "Search sales orders"}
+                searchPlaceholder="Number or customer"
+                emptyMessage="No document matches."
               />
             </div>
             <div className="space-y-2">

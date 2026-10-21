@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { searchCrmAccountOptions } from "@/lib/lookups/named-options";
 import {
   createCrmDealApi,
   deleteCrmDealApi,
@@ -37,6 +39,7 @@ export default function CRMDealsPage() {
   const [loading, setLoading] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<CrmDealRow | null>(null);
+  const [accountOption, setAccountOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [form, setForm] = React.useState({
     accountId: "",
     name: "",
@@ -73,6 +76,7 @@ export default function CRMDealsPage() {
 
   const openCreate = () => {
     setEditing(null);
+    setAccountOption(null);
     setForm({ accountId: "", name: "", stage: "lead", amount: "", expectedCloseDate: "" });
     setDrawerOpen(true);
   };
@@ -86,13 +90,17 @@ export default function CRMDealsPage() {
       amount: row.amount != null ? String(row.amount) : "",
       expectedCloseDate: row.expectedCloseDate ? String(row.expectedCloseDate).slice(0, 10) : "",
     });
+    setAccountOption({
+      id: row.accountId,
+      label: accountNameById.get(row.accountId) ?? "Selected customer",
+    });
     setDrawerOpen(true);
   };
 
   const columns = React.useMemo(
     () => [
       { id: "name", header: "Deal", accessor: (row: CrmDealRow) => <span className="font-medium">{row.name}</span> },
-      { id: "account", header: "Account", accessor: (row: CrmDealRow) => accountNameById.get(row.accountId) ?? row.accountId },
+      { id: "account", header: "Account", accessor: (row: CrmDealRow) => accountNameById.get(row.accountId) ?? "Customer" },
       { id: "stage", header: "Stage", accessor: (row: CrmDealRow) => row.stage ?? "lead" },
       { id: "amount", header: "Amount", accessor: (row: CrmDealRow) => (row.amount != null ? row.amount.toLocaleString() : "—") },
       {
@@ -183,19 +191,19 @@ export default function CRMDealsPage() {
             <div className="mt-6 space-y-4">
               <div className="space-y-2">
                 <Label>Account</Label>
-                <Select value={form.accountId || "__none__"} onValueChange={(value) => setForm((prev) => ({ ...prev, accountId: value === "__none__" ? "" : value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Select</SelectItem>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <AsyncSearchableSelect
+                  value={form.accountId}
+                  onValueChange={(value) => {
+                    setForm((prev) => ({ ...prev, accountId: value }));
+                    if (!value) setAccountOption(null);
+                  }}
+                  onOptionSelect={setAccountOption}
+                  loadOptions={searchCrmAccountOptions}
+                  selectedOption={accountOption}
+                  placeholder="Search customers"
+                  searchPlaceholder="Name, code, or phone"
+                  emptyMessage="No account matches."
+                />
               </div>
               <div className="space-y-2">
                 <Label>Deal name</Label>

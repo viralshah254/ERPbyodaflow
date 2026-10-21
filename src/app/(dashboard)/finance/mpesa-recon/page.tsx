@@ -6,8 +6,9 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { searchDocumentOptions } from "@/lib/lookups/named-options";
 import {
   Table,
   TableBody,
@@ -43,6 +44,8 @@ export default function FinanceMpesaReconPage() {
   const [matching, setMatching] = React.useState(false);
   const [selected, setSelected] = React.useState<MpesaUnmatchedPayment | null>(null);
   const [documentId, setDocumentId] = React.useState("");
+  const [documentOption, setDocumentOption] = React.useState<AsyncSearchableSelectOption | null>(null);
+  const [sheetPortalHost, setSheetPortalHost] = React.useState<HTMLElement | null>(null);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -63,7 +66,7 @@ export default function FinanceMpesaReconPage() {
     if (!selected) return;
     const docId = documentId.trim();
     if (!docId) {
-      toast.error("Enter the sales order or invoice document id to match.");
+      toast.error("Choose the invoice or sales order this payment belongs to.");
       return;
     }
     setMatching(true);
@@ -149,6 +152,7 @@ export default function FinanceMpesaReconPage() {
                           onClick={() => {
                             setSelected(row);
                             setDocumentId("");
+                            setDocumentOption(null);
                           }}
                         >
                           Match
@@ -165,6 +169,7 @@ export default function FinanceMpesaReconPage() {
 
       <Sheet open={selected != null} onOpenChange={(open) => !open && setSelected(null)}>
         <SheetContent>
+          <div ref={setSheetPortalHost}>
           <SheetHeader>
             <SheetTitle>Match M-Pesa payment</SheetTitle>
             <SheetDescription>
@@ -189,12 +194,20 @@ export default function FinanceMpesaReconPage() {
                 ) : null}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="match-document-id">Sales document id</Label>
-                <Input
-                  id="match-document-id"
+                <Label>Invoice or sales order</Label>
+                <AsyncSearchableSelect
                   value={documentId}
-                  onChange={(e) => setDocumentId(e.target.value)}
-                  placeholder="Paste sales order or invoice id"
+                  onValueChange={(value) => {
+                    setDocumentId(value);
+                    if (!value) setDocumentOption(null);
+                  }}
+                  onOptionSelect={setDocumentOption}
+                  loadOptions={(query) => searchDocumentOptions(["invoice", "sales-order"], query)}
+                  selectedOption={documentOption}
+                  portalContainer={sheetPortalHost}
+                  placeholder="Search the sale"
+                  searchPlaceholder="Number or customer"
+                  emptyMessage="No invoice or sales order matches."
                 />
               </div>
             </div>
@@ -207,6 +220,7 @@ export default function FinanceMpesaReconPage() {
               {matching ? "Matching…" : "Confirm match"}
             </Button>
           </SheetFooter>
+          </div>
         </SheetContent>
       </Sheet>
     </PageShell>

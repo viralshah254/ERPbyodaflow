@@ -13,12 +13,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   createFuelEvent,
   fetchFuelEvents,
   fetchDistributionVehicles,
   type FuelEventRow,
 } from "@/lib/api/logistics";
+import { fetchTrips } from "@/lib/api/trips";
+import type { TripRow } from "@/lib/mock/distribution/trips";
 import { formatMoney } from "@/lib/money";
 import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
@@ -26,6 +29,7 @@ import { toast } from "sonner";
 export default function LogisticsFuelAuditPage() {
   const canWrite = useCanWriteDistribution();
   const [vehicles, setVehicles] = React.useState<{ id: string; code: string }[]>([]);
+  const [trips, setTrips] = React.useState<TripRow[]>([]);
   const [vehicleId, setVehicleId] = React.useState<string>("");
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
@@ -43,6 +47,7 @@ export default function LogisticsFuelAuditPage() {
 
   React.useEffect(() => {
     let cancelled = false;
+    void fetchTrips().then(setTrips).catch(() => setTrips([]));
     fetchDistributionVehicles()
       .then((vs) => {
         if (!cancelled) {
@@ -125,7 +130,7 @@ export default function LogisticsFuelAuditPage() {
   };
 
   const tripLabel = (r: FuelEventRow) =>
-    r.tripBatchLabel || r.tripReference || (r.tripId ? r.tripId.slice(0, 8) : "—");
+    r.tripBatchLabel || r.tripReference || (r.tripId ? trips.find((trip) => trip.id === r.tripId)?.reference || "Linked trip" : "—");
 
   return (
     <PageLayout
@@ -160,8 +165,19 @@ export default function LogisticsFuelAuditPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Trip id (optional)</Label>
-              <Input value={formTripId} onChange={(e) => setFormTripId(e.target.value)} placeholder="Link to outbound trip" />
+              <Label>Trip (optional)</Label>
+              <SearchableSelect
+                value={formTripId}
+                onValueChange={setFormTripId}
+                allowClear
+                options={trips.map((trip) => ({
+                  id: trip.id,
+                  label: [trip.reference, trip.vehicleCode || trip.carrier, String(trip.plannedAt ?? "").slice(0, 10)].filter(Boolean).join(" · "),
+                }))}
+                placeholder="No trip"
+                searchPlaceholder="Trip reference"
+                emptyMessage="No trips yet."
+              />
             </div>
             <div className="space-y-2">
               <Label>Odometer (km)</Label>

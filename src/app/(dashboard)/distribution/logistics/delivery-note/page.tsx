@@ -4,30 +4,57 @@ import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { fetchDocumentDetailApi } from "@/lib/api/documents";
 import {
+  fetchDistributionVehicles,
   fetchOutboundLogisticsForDeliveryNote,
   type OutboundLogisticsAllocationRow,
 } from "@/lib/api/logistics";
+import { fetchTrips } from "@/lib/api/trips";
+import { searchDocumentOptions } from "@/lib/lookups/named-options";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 
 export default function LogisticsDeliveryNoteOutboundPage() {
   const [dnId, setDnId] = React.useState("");
+  const [noteOption, setNoteOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [items, setItems] = React.useState<OutboundLogisticsAllocationRow[]>([]);
   const [totalsByLineId, setTotalsByLineId] = React.useState<Record<string, number>>({});
+  const [lineNames, setLineNames] = React.useState<Record<string, string>>({});
+  const [tripNames, setTripNames] = React.useState<Record<string, string>>({});
+  const [vehicleNames, setVehicleNames] = React.useState<Record<string, string>>({});
+
+  const named = (map: Record<string, string>, id: string | undefined, fallback: string) => {
+    if (!id) return "—";
+    return map[id] ?? fallback;
+  };
 
   const load = async () => {
     const id = dnId.trim();
     if (!id) {
-      toast.error("Paste a delivery note document id.");
+      toast.error("Choose a delivery note.");
       return;
     }
     setLoading(true);
     try {
-      const data = await fetchOutboundLogisticsForDeliveryNote(id);
+      const [data, detail, trips, vehicles] = await Promise.all([
+        fetchOutboundLogisticsForDeliveryNote(id),
+        fetchDocumentDetailApi("delivery-note", id, { include: ["core"] }).catch(() => null),
+        fetchTrips().catch(() => []),
+        fetchDistributionVehicles().catch(() => []),
+      ]);
+      const lines: Record<string, string> = {};
+      for (const line of detail?.lines ?? []) {
+        if (!line.id) continue;
+        const title = [line.productSku, line.productName || line.description].filter(Boolean).join(" · ");
+        lines[line.id] = title || "Line";
+      }
+      setLineNames(lines);
+      setTripNames(Object.fromEntries(trips.map((trip) => [trip.id, trip.reference || "Trip"])));
+      setVehicleNames(Object.fromEntries(vehicles.map((vehicle) => [vehicle.id, vehicle.name || vehicle.code || "Vehicle"])));
       setItems(data.items ?? []);
       setTotalsByLineId(data.totalsByLineId ?? {});
       if (!data.items?.length) {
@@ -56,17 +83,24 @@ export default function LogisticsDeliveryNoteOutboundPage() {
           <CardHeader>
             <CardTitle>Lookup delivery note</CardTitle>
             <CardDescription>
-              Use the document id from the delivery note detail URL or ERP document list — this is outbound allocation only.
+              Search the delivery note by number or customer. This view is the outbound freight allocated to that note.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-2">
-              <Label htmlFor="dn-id">Delivery note id</Label>
-              <Input
-                id="dn-id"
-                placeholder="e.g. …uuid…"
+              <Label>Delivery note</Label>
+              <AsyncSearchableSelect
                 value={dnId}
-                onChange={(e) => setDnId(e.target.value)}
+                onValueChange={(value) => {
+                  setDnId(value);
+                  if (!value) setNoteOption(null);
+                }}
+                onOptionSelect={setNoteOption}
+                loadOptions={(query) => searchDocumentOptions(["delivery-note"], query)}
+                selectedOption={noteOption}
+                placeholder="Search delivery notes"
+                searchPlaceholder="Number or customer"
+                emptyMessage="No delivery note matches."
               />
             </div>
             <Button type="button" onClick={() => void load()} disabled={loading}>
@@ -81,10 +115,10 @@ export default function LogisticsDeliveryNoteOutboundPage() {
               <CardTitle>Totals by line</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="text-sm space-y-1 font-mono">
+              <ul className="text-sm space-y-1">
                 {Object.entries(totalsByLineId).map(([lineId, kes]) => (
                   <li key={lineId} className="flex justify-between gap-4">
-                    <span className="truncate">{lineId}</span>
+                    <span className="truncate">{named(lineNames, lineId, "Line")}</span>
                     <span>{formatMoney(kes, "KES")}</span>
                   </li>
                 ))}
@@ -114,9 +148,9 @@ export default function LogisticsDeliveryNoteOutboundPage() {
                 <tbody>
                   {items.map((row) => (
                     <tr key={row.id} className="border-b border-muted/60">
-                      <td className="py-2 pr-3 font-mono text-xs max-w-[8rem] truncate">{row.tripId}</td>
-                      <td className="py-2 pr-3 font-mono text-xs max-w-[8rem] truncate">{row.lineId}</td>
-                      <td className="py-2 pr-3 font-mono text-xs max-w-[7rem] truncate">{row.vehicleId}</td>
+                      <td className="py-2 pr-3">{named(tripNames, row.tripId, "Trip")}</td>
+                      <td className="py-2 pr-3">{named(lineNames, row.lineId, "Line")}</td>
+                      <td className="py-2 pr-3">{named(vehicleNames, row.vehicleId, "Vehicle")}</td>
                       <td className="py-2 pr-3">{row.periodKey}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">
                         {formatMoney(row.provisionalKes ?? 0, "KES")}

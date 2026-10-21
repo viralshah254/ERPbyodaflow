@@ -5,6 +5,9 @@ export type InventoryQualityCase = {
   kind: "QUALITY" | "LOSS" | "RECALL";
   status: "OPEN" | "APPROVED" | "CONTAINED" | "CLOSED";
   lotId: string;
+  lotNumber?: string;
+  productName?: string;
+  productSku?: string;
   documentIds: string[];
   affectedQuantity: number;
   reason: string;
@@ -17,6 +20,8 @@ export type InventoryLotOption = {
   id: string;
   lotNumber: string;
   productId: string;
+  productName?: string;
+  productSku?: string;
   warehouseId: string;
   remainingQuantity: number;
   status: string;
