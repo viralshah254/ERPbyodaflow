@@ -227,6 +227,9 @@ export default function SalesReturnsPage() {
                 placeholder="Search the original sale"
                 searchPlaceholder="Number or customer"
                 emptyMessage="No invoice or delivery note matches."
+                wrapLabels
+                showSelectedDescription
+                minDropdownWidth={520}
               />
             </div>
             {!sourceDocumentId.trim() ? (

@@ -123,6 +123,9 @@ export default function CoolcatchEtimsPage() {
                 placeholder={sourceType === "invoice" ? "Search invoices" : "Search sales orders"}
                 searchPlaceholder="Number or customer"
                 emptyMessage="No document matches."
+                wrapLabels
+                showSelectedDescription
+                minDropdownWidth={520}
               />
             </div>
             <div className="space-y-2">

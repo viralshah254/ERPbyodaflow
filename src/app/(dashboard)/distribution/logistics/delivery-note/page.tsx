@@ -101,6 +101,9 @@ export default function LogisticsDeliveryNoteOutboundPage() {
                 placeholder="Search delivery notes"
                 searchPlaceholder="Number or customer"
                 emptyMessage="No delivery note matches."
+                wrapLabels
+                showSelectedDescription
+                minDropdownWidth={520}
               />
             </div>
             <Button type="button" onClick={() => void load()} disabled={loading}>

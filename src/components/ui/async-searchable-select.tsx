@@ -42,6 +42,8 @@ interface AsyncSearchableSelectProps {
   showSelectedDescription?: boolean;
   /** Extra classes for the dropdown panel (width, shadow). */
   dropdownClassName?: string;
+  /** Minimum panel width in pixels. The panel grows past a narrow field so two-line rows stay readable. */
+  minDropdownWidth?: number;
   /** Extra classes for the trigger button (e.g. min-height for multi-line label). */
   triggerClassName?: string;
   /** Max height of the scrollable option list. Default max-h-64. */
@@ -89,6 +91,7 @@ export function AsyncSearchableSelect({
   clipLabels = true,
   showSelectedDescription = false,
   dropdownClassName,
+  minDropdownWidth = 320,
   triggerClassName,
   listMaxHeightClassName = "max-h-[min(24rem,50vh)]",
   floating = true,
@@ -144,7 +147,7 @@ export function AsyncSearchableSelect({
     const margin = 8;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const minPanelW = 320;
+    const minPanelW = minDropdownWidth;
     let width = Math.max(rect.width, minPanelW);
     width = Math.min(width, vw - margin * 2);
     let left = rect.left;
@@ -165,7 +168,7 @@ export function AsyncSearchableSelect({
       top = Math.max(margin, rect.top - maxH - searchBlock - margin * 2);
     }
     setFloatingPos({ top, left, width, maxH });
-  }, []);
+  }, [minDropdownWidth]);
 
   React.useEffect(() => {
     if (!scopedRecentKey) {
@@ -489,7 +492,7 @@ export function AsyncSearchableSelect({
               ref={(element) => {
                 optionRefs.current[index] = element;
               }}
-              className={`flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted ${
+              className={`flex w-full items-start justify-between gap-3 px-3 py-3 text-left text-sm hover:bg-muted ${
                 highlightedIndex === index ? "bg-muted" : ""
               }`}
               onMouseEnter={() => setHighlightedIndex(index)}
@@ -530,7 +533,7 @@ export function AsyncSearchableSelect({
                 {option.description ? (
                   <span
                     className={cn(
-                      "block text-xs text-muted-foreground",
+                      "mt-1 block text-[13px] leading-5 text-muted-foreground",
                       option.description.includes("\n") || wrapLabels
                         ? "whitespace-pre-line break-words"
                         : "truncate"

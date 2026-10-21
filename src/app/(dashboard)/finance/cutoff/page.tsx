@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { AddAssetSheet } from "@/components/assets/add-asset-sheet";
+import { suggestNextFaCode } from "@/components/assets/asset-form-constants";
 import { fetchAssetsApi } from "@/lib/api/assets";
 import {
   createAssetOpeningApi,
@@ -57,6 +59,9 @@ export default function CutoffDraftPage() {
   const [draftId, setDraftId] = React.useState("");
   const [selectedAssetId, setSelectedAssetId] = React.useState("");
   const [assetChoice, setAssetChoice] = React.useState<AsyncSearchableSelectOption | null>(null);
+  const [addAssetOpen, setAddAssetOpen] = React.useState(false);
+  const [suggestedAssetCode, setSuggestedAssetCode] = React.useState("");
+  const [suggestedAssetName, setSuggestedAssetName] = React.useState("");
   const [cost, setCost] = React.useState("");
   const [accumulated, setAccumulated] = React.useState("");
   const [openingId, setOpeningId] = React.useState("");
@@ -132,6 +137,17 @@ export default function CutoffDraftPage() {
   });
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId);
+
+  const chooseAsset = React.useCallback((asset: AssetRow) => {
+    setSelectedAssetId(asset.id);
+    setAssetChoice({
+      id: asset.id,
+      label: `${asset.code} · ${asset.name}`,
+      description: asset.category,
+    });
+    setCost(asset.cost != null ? String(asset.cost) : "");
+    setAccumulated(asset.accumulatedDepreciation != null ? String(asset.accumulatedDepreciation) : "0");
+  }, []);
 
   return (
     <PageShell>
@@ -276,17 +292,16 @@ export default function CutoffDraftPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Asset opening</CardTitle>
-            <CardDescription>Pick the asset from the register. Cost and accumulated depreciation start from that asset and stay on a draft. Posting stays refused.</CardDescription>
+            <CardDescription>Pick an asset from the register, or add one. Cost and accumulated depreciation start from that asset and stay on a draft. Posting stays refused.</CardDescription>
           </CardHeader>
           <CardContent>
             <form
               className="grid gap-3 sm:grid-cols-3"
               onSubmit={async (event) => {
                 event.preventDefault();
-                const typedCode = assetChoice?.id.startsWith("code:") ? assetChoice.label : "";
-                const assetCode = selectedAsset?.code || typedCode;
+                const assetCode = selectedAsset?.code ?? "";
                 if (!assetCode) {
-                  toast.error("Choose an asset, or type its code.");
+                  toast.error("Choose an asset from the register, or add one.");
                   return;
                 }
                 const openingCost = Number(cost);
@@ -332,13 +347,10 @@ export default function CutoffDraftPage() {
                     }
                     const asset = assets.find((row) => row.id === id);
                     if (!asset) return;
-                    setSelectedAssetId(id);
-                    setAssetChoice({ id: asset.id, label: `${asset.code} · ${asset.name}`, description: asset.category });
-                    setCost(asset.cost != null ? String(asset.cost) : "");
-                    setAccumulated(asset.accumulatedDepreciation != null ? String(asset.accumulatedDepreciation) : "0");
+                    chooseAsset(asset);
                   }}
                   onOptionSelect={(option) => {
-                    if (option && !option.id.startsWith("code:")) setAssetChoice(option);
+                    if (option) setAssetChoice(option);
                   }}
                   loadOptions={loadAssetOptions}
                   selectedOption={assetChoice}
@@ -346,15 +358,14 @@ export default function CutoffDraftPage() {
                   searchDebounceMs={0}
                   showSelectedDescription
                   onCreateNew={(query) => {
-                    const code = query.trim();
-                    if (!code) return;
-                    setSelectedAssetId("");
-                    setAssetChoice({ id: `code:${code}`, label: code, description: "Not on the register yet" });
+                    setSuggestedAssetCode(suggestNextFaCode(assets));
+                    setSuggestedAssetName(query.trim());
+                    setAddAssetOpen(true);
                   }}
-                  createNewLabel="Use this asset code"
+                  createNewLabel="Add asset"
                   placeholder="Search the asset register"
                   searchPlaceholder="Code, name, or tag"
-                  emptyMessage="Nothing on the register matches. You can still use the code you typed."
+                  emptyMessage="No asset on the register matches."
                 />
               </div>
               <div className="space-y-1">
@@ -401,6 +412,18 @@ export default function CutoffDraftPage() {
           </CardContent>
         </Card>
       </div>
+      <AddAssetSheet
+        open={addAssetOpen}
+        onOpenChange={setAddAssetOpen}
+        suggestedCode={suggestedAssetCode}
+        suggestedName={suggestedAssetName}
+        onSuccess={async (created) => {
+          const list = await fetchAssetsApi().catch(() => assets);
+          setAssets(list);
+          const asset = created ? list.find((row) => row.id === created.id) : undefined;
+          if (asset) chooseAsset(asset);
+        }}
+      />
     </PageShell>
   );
 }

@@ -37,18 +37,20 @@ export function AddAssetSheet(props: {
   onOpenChange: (open: boolean) => void;
   editing?: AssetRow | null;
   suggestedCode?: string;
+  suggestedName?: string;
   assignToOutletId?: string;
   assignToOutletName?: string;
   /** When false (default for register), show full depreciation and vendor fields. */
   compact?: boolean;
   suppliers?: Array<{ id: string; name: string }>;
-  onSuccess?: () => void | Promise<void>;
+  onSuccess?: (created?: { id: string }) => void | Promise<void>;
 }) {
   const {
     open,
     onOpenChange,
     editing = null,
     suggestedCode,
+    suggestedName,
     assignToOutletId,
     assignToOutletName,
     compact: compactProp,
@@ -67,8 +69,8 @@ export function AddAssetSheet(props: {
       return;
     }
     const base = emptyAssetForm();
-    setForm({ ...base, code: suggestedCode ?? base.code });
-  }, [open, editing, suggestedCode]);
+    setForm({ ...base, code: suggestedCode ?? base.code, name: suggestedName ?? base.name });
+  }, [open, editing, suggestedCode, suggestedName]);
 
   const buildPatchBody = () => {
     if (form.depreciationMethod === "REDUCING_BALANCE") {
@@ -108,13 +110,15 @@ export function AddAssetSheet(props: {
     setSaving(true);
     try {
       const patchBody = buildPatchBody();
+      let createdId: string | undefined;
       if (editing) {
         await updateAssetApi(editing.id, patchBody);
         toast.success("Asset updated.");
       } else {
-        const { id } = await createAssetApi({ ...patchBody, status: "ACTIVE" });
+        const created = await createAssetApi({ ...patchBody, status: "ACTIVE" });
+        createdId = created.id;
         if (assignToOutletId) {
-          await assignAssetCustodyApi(id, {
+          await assignAssetCustodyApi(created.id, {
             custodyType: "FRANCHISE_OUTLET",
             custodianOutletId: assignToOutletId,
             effectiveFrom: form.acquisitionDate,
@@ -126,7 +130,7 @@ export function AddAssetSheet(props: {
         }
       }
       onOpenChange(false);
-      await onSuccess?.();
+      await onSuccess?.(createdId ? { id: createdId } : undefined);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Save failed");
     } finally {

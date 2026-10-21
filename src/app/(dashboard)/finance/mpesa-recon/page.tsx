@@ -208,6 +208,9 @@ export default function FinanceMpesaReconPage() {
                   placeholder="Search the sale"
                   searchPlaceholder="Number or customer"
                   emptyMessage="No invoice or sales order matches."
+                  wrapLabels
+                  showSelectedDescription
+                  minDropdownWidth={520}
                 />
               </div>
             </div>
