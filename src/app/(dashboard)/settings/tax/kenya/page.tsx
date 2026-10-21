@@ -17,7 +17,8 @@ import * as Icons from "lucide-react";
 
 const LINKS = [
   { href: "/settings/tax/vat", label: "VAT", desc: "Rates: Standard, Zero, Exempt", icon: "Receipt" as const },
-  { href: "/settings/tax/withholding", label: "Withholding tax", desc: "WHT codes, apply on AP/Payments", icon: "Percent" as const },
+  { href: "/settings/tax/withholding", label: "Withholding tax", desc: "Income WHT codes, apply on AP and payments", icon: "Percent" as const },
+  { href: "/settings/tax/vat-withholding", label: "VAT withholding", desc: "2% of taxable value for KRA withholding agents", icon: "Receipt" as const },
   { href: "/settings/tax/tax-mappings", label: "Tax mappings", desc: "Link tax codes to COA accounts", icon: "Link" as const },
 ];
 

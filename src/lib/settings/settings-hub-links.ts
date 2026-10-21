@@ -77,7 +77,8 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     links: [
       { href: "/settings/tax/kenya", label: "Kenya profile", description: "Country tax profile", icon: "Globe", requiresPermissions: ["settings.financial.read"] },
       { href: "/settings/tax/vat", label: "VAT", description: "VAT configuration", icon: "Receipt", requiresPermissions: ["settings.financial.read"] },
-      { href: "/settings/tax/withholding", label: "Withholding", description: "Withholding tax", icon: "Percent", requiresPermissions: ["settings.financial.read"] },
+      { href: "/settings/tax/withholding", label: "Withholding", description: "Income withholding tax", icon: "Percent", requiresPermissions: ["settings.financial.read"] },
+      { href: "/settings/tax/vat-withholding", label: "VAT withholding", description: "KRA VAT withholding agents and certificates", icon: "Receipt", requiresPermissions: ["settings.financial.read"] },
       { href: "/settings/tax/tax-mappings", label: "Tax mappings", description: "VAT and WHT mappings", icon: "Link", requiresPermissions: ["settings.financial.read"] },
     ],
   },

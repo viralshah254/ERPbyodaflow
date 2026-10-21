@@ -85,6 +85,12 @@ export type PartyRow = {
   email?: string;
   phone?: string;
   taxId?: string;
+  vatWithholding?: {
+    agent: boolean;
+    matchMethod?: "PIN" | "LEGAL_NAME";
+    withholderName?: string;
+    pin?: string;
+  };
   sageDcLink?: number;
   arApGroup?: ArApGroup;
   onHold?: boolean;

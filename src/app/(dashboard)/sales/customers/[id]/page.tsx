@@ -248,6 +248,11 @@ export default function Customer360Page() {
                   <div>
                     <p className="text-muted-foreground">Tax PIN</p>
                     <p>{party.taxId || "—"}</p>
+                    {party.vatWithholding?.agent ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        VAT withholding agent. New invoices keep the gross amount and expect 2% of the taxable value to be withheld.
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <p className="text-muted-foreground">Address</p>
