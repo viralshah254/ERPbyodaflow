@@ -27,6 +27,12 @@ type BackendParty = {
   email?: string;
   phone?: string;
   taxId?: string;
+  vatWithholding?: {
+    agent: boolean;
+    matchMethod?: "PIN" | "LEGAL_NAME";
+    withholderName?: string;
+    pin?: string;
+  };
   sageDcLink?: number;
   arApGroup?: ArApGroup;
   onHold?: boolean;
@@ -312,6 +318,7 @@ function mapParty(item: BackendParty): PartyRow {
     email: item.email,
     phone: item.phone,
     taxId: item.taxId,
+    vatWithholding: item.vatWithholding?.agent ? item.vatWithholding : undefined,
     sageDcLink: item.sageDcLink,
     arApGroup: item.arApGroup,
     onHold: item.onHold,

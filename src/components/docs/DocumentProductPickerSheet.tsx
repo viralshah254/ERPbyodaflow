@@ -7,26 +7,32 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { ProductRow } from "@/lib/types/masters";
-import { productTypeLabel, type ProductKind } from "@/lib/products/product-type";
+import { productTypeLabel } from "@/lib/products/product-type";
+import {
+  defaultPickerTypeFilter,
+  matchesPickerTypeFilter,
+  type PickerTypeFilter,
+} from "@/lib/products/picker-type-filter";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 
-type ProductTypeFilter = "" | ProductKind;
-
-const TYPE_FILTER_OPTIONS: Array<{ value: ProductTypeFilter; label: string }> = [
+const TYPE_FILTER_OPTIONS: Array<{ value: PickerTypeFilter; label: string }> = [
   { value: "", label: "All types" },
   { value: "FINISHED", label: "Finished goods" },
   { value: "RAW", label: "Purchased / raw" },
   { value: "BOTH", label: "Stock (buy & sell)" },
 ];
 
-function defaultTypeFilter(productFilter: "purchasable" | "sellable" | "all"): ProductTypeFilter {
-  if (productFilter === "sellable") return "FINISHED";
-  if (productFilter === "purchasable") return "RAW";
-  return "";
-}
+/** Bakery and manufacturer plants: finished goods, raw materials, packaging, semi-finished. */
+const PLANT_TYPE_FILTER_OPTIONS: Array<{ value: PickerTypeFilter; label: string }> = [
+  { value: "", label: "All types" },
+  { value: "FINISHED", label: "Finished goods" },
+  { value: "RAW", label: "Raw materials" },
+  { value: "PACKAGING", label: "Packaging" },
+  { value: "SEMI", label: "Semi-finished" },
+];
 
 export type CatalogAddItem = {
   product: ProductRow;
@@ -40,6 +46,8 @@ type DocumentProductPickerSheetProps = {
   /** purchasable | sellable | all — matches document line filter. */
   productFilter?: "purchasable" | "sellable" | "all";
   fmcgOrg?: boolean;
+  /** Top Food and bakery catalogues. Type filter uses item role, including packaging. */
+  plantCatalogue?: boolean;
   /** Catalog already loaded for the lines step. */
   products?: ProductRow[];
   loading?: boolean;
@@ -66,6 +74,7 @@ export function DocumentProductPickerSheet({
   onOpenChange,
   productFilter = "sellable",
   fmcgOrg = false,
+  plantCatalogue = false,
   products = [],
   loading: catalogLoading = false,
   priceLabel,
@@ -78,9 +87,10 @@ export function DocumentProductPickerSheet({
 }: DocumentProductPickerSheetProps) {
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [typeFilter, setTypeFilter] = React.useState<ProductTypeFilter>(() =>
-    defaultTypeFilter(productFilter)
+  const [typeFilter, setTypeFilter] = React.useState<PickerTypeFilter>(() =>
+    defaultPickerTypeFilter(productFilter, plantCatalogue)
   );
+  const typeOptions = plantCatalogue ? PLANT_TYPE_FILTER_OPTIONS : TYPE_FILTER_OPTIONS;
   const [categoryKey, setCategoryKey] = React.useState<string | null>(null);
   const [remoteItems, setRemoteItems] = React.useState<ProductRow[]>([]);
   const [cursor, setCursor] = React.useState<string | null>("0");
@@ -105,7 +115,7 @@ export function DocumentProductPickerSheet({
     if (!open) return;
     setSearch("");
     setDebouncedSearch("");
-    setTypeFilter(defaultTypeFilter(productFilter));
+    setTypeFilter(defaultPickerTypeFilter(productFilter, plantCatalogue));
     setCategoryKey(null);
     setSelected(new Map());
     setQtyById({});
@@ -116,7 +126,7 @@ export function DocumentProductPickerSheet({
     setAddedIds(new Set());
     const focusId = window.setTimeout(() => searchRef.current?.focus(), 30);
     return () => window.clearTimeout(focusId);
-  }, [open, productFilter]);
+  }, [open, productFilter, plantCatalogue]);
 
   const loadPage = React.useCallback(
     async (opts: { reset: boolean; cursor: string | null; search: string }) => {
@@ -124,12 +134,18 @@ export function DocumentProductPickerSheet({
       if (opts.reset) setLoading(true);
       else setLoadingMore(true);
       try {
+        const roleOnly = plantCatalogue && (typeFilter === "PACKAGING" || typeFilter === "SEMI");
         const page = await fetchProductsPageApi({
           search: opts.search || undefined,
           status: "ACTIVE",
-          purchasable: productFilter === "purchasable" ? true : undefined,
-          sellable: productFilter === "sellable" ? true : undefined,
-          productType: typeFilter || undefined,
+          purchasable:
+            !roleOnly && productFilter === "purchasable" ? true : undefined,
+          sellable: !roleOnly && productFilter === "sellable" ? true : undefined,
+          productType:
+            !plantCatalogue && (typeFilter === "RAW" || typeFilter === "FINISHED" || typeFilter === "BOTH")
+              ? typeFilter
+              : undefined,
+          itemRole: roleOnly ? typeFilter : undefined,
           limit: PAGE_SIZE,
           cursor: opts.cursor ?? "0",
           includeStock: false,
@@ -153,17 +169,11 @@ export function DocumentProductPickerSheet({
         }
       }
     },
-    [productFilter, typeFilter]
+    [plantCatalogue, productFilter, typeFilter]
   );
 
   React.useEffect(() => {
     if (!open) return;
-    if (!debouncedSearch) {
-      setRemoteItems([]);
-      setHasMore(false);
-      setCursor(null);
-      return;
-    }
     void loadPage({ reset: true, cursor: "0", search: debouncedSearch });
   }, [open, debouncedSearch, typeFilter, loadPage]);
 
@@ -178,7 +188,7 @@ export function DocumentProductPickerSheet({
     const q = debouncedSearch.toLowerCase();
     const tokens = q.split(/\s+/).filter(Boolean);
     return merged.filter((p) => {
-      if (typeFilter && p.productType && p.productType !== typeFilter) return false;
+      if (!matchesPickerTypeFilter(p, typeFilter, plantCatalogue)) return false;
       if (categoryKey && groupKey && groupKey(p) !== categoryKey) return false;
       if (!tokens.length) return true;
       const hay = [p.sku, p.barcode ?? "", p.name, p.size ?? "", p.categoryName ?? "", p.category ?? "", p.productFamily ?? ""]
@@ -186,7 +196,7 @@ export function DocumentProductPickerSheet({
         .toLowerCase();
       return tokens.every((t) => hay.includes(t));
     });
-  }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey]);
+  }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey, plantCatalogue]);
 
   React.useEffect(() => {
     setHighlight((i) => Math.min(i, Math.max(visible.length - 1, 0)));
@@ -313,9 +323,9 @@ export function DocumentProductPickerSheet({
                 id="doc-product-type-filter"
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as ProductTypeFilter)}
+                onChange={(e) => setTypeFilter(e.target.value as PickerTypeFilter)}
               >
-                {TYPE_FILTER_OPTIONS.map((opt) => (
+                {typeOptions.map((opt) => (
                   <option key={opt.value || "all"} value={opt.value}>
                     {opt.label}
                   </option>
@@ -433,7 +443,7 @@ export function DocumentProductPickerSheet({
             {loadingMore ? (
               <p className="px-3 py-2 text-center text-xs text-muted-foreground">Loading more…</p>
             ) : null}
-            {!loading && !loadingMore && hasMore && debouncedSearch ? (
+            {!loading && !loadingMore && hasMore ? (
               <div className="p-2 text-center">
                 <Button
                   type="button"

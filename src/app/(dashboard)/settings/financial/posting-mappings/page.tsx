@@ -14,13 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import {
   fetchPostingMappingsApi,
@@ -54,6 +48,24 @@ export default function PostingMappingsPage() {
       .catch((error) => toast.error((error as Error).message || "Failed to load posting mappings."))
       .finally(() => setLoading(false));
   }, [refresh]);
+
+  const accountOption = React.useCallback((id: string | null | undefined): AsyncSearchableSelectOption | null => {
+    if (!id) return null;
+    const account = accounts.find((row) => row.id === id);
+    if (!account) return { id, label: "Selected account" };
+    const type = account.type ? account.type.charAt(0) + account.type.slice(1).toLowerCase() : "";
+    return { id: account.id, label: `${account.code} · ${account.name}`, description: type || undefined };
+  }, [accounts]);
+
+  const loadAccountOptions = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
+    const q = query.trim().toLowerCase();
+    return accounts
+      .filter((account) => !q || `${account.code} ${account.name} ${account.type}`.toLowerCase().includes(q))
+      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+      .slice(0, 40)
+      .map((account) => accountOption(account.id)!)
+      .filter(Boolean);
+  }, [accounts, accountOption]);
 
   const handleSave = async () => {
     try {
@@ -118,30 +130,35 @@ export default function PostingMappingsPage() {
                   <TableRow key={row.key}>
                     <TableCell className="font-medium">{row.label}</TableCell>
                     <TableCell>
-                      <Select
-                        value={draft[row.key] ?? "__fallback__"}
+                      <AsyncSearchableSelect
+                        value={draft[row.key] ?? ""}
                         onValueChange={(value) =>
                           setDraft((current) => ({
                             ...current,
-                            [row.key]: value === "__fallback__" ? null : value,
+                            [row.key]: value || null,
                           }))
                         }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Use fallback" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__fallback__">Use fallback</SelectItem>
-                          {accounts.map((account) => (
-                            <SelectItem key={account.id} value={account.id}>
-                              {account.code} - {account.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        loadOptions={loadAccountOptions}
+                        selectedOption={accountOption(draft[row.key])}
+                        allowClear
+                        searchDebounceMs={0}
+                        showSelectedDescription
+                        placeholder="Use the chart fallback"
+                        searchPlaceholder="Code or account name"
+                        emptyMessage="No account matches."
+                      />
                     </TableCell>
                     <TableCell>
-                      {row.fallback.code} - {row.fallback.name} ({row.fallback.type})
+                      {(() => {
+                        const live = accounts.find((account) => account.code === row.fallback.code);
+                        if (!live) {
+                          return `${row.fallback.code} - ${row.fallback.name} (${row.fallback.type}). That code is not on this chart.`;
+                        }
+                        if (live.type !== row.fallback.type || live.name !== row.fallback.name) {
+                          return `${live.code} - ${live.name} (${live.type}) is on this chart. The template expected ${row.fallback.name} (${row.fallback.type}). Choose the account before posting uses it.`;
+                        }
+                        return `${live.code} - ${live.name} (${live.type})`;
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}

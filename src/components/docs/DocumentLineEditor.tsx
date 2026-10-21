@@ -140,6 +140,8 @@ interface DocumentLineEditorProps {
    * Seafood / other templates must leave this false/undefined.
    */
   fmcgOrg?: boolean;
+  /** Manufacturer and bakery plants. The picker lists finished goods, raw materials, and packaging. */
+  plantCatalogue?: boolean;
   /** Load packaging / pricing for products just added from the picker. */
   onProductsAdded?: (productIds: string[]) => void;
   /** FMCG: a pack was saved from the line UOM menu. Replace that product's packaging. */
@@ -324,6 +326,7 @@ export function DocumentLineEditor({
   catalogPricesByProductId,
   fmcgCatalogByProductId,
   fmcgOrg = false,
+  plantCatalogue = false,
   onProductsAdded,
   onPackagingUpdated,
   onCatalogReadyChange,
@@ -342,6 +345,12 @@ export function DocumentLineEditor({
   const [pendingQtyFocusId, setPendingQtyFocusId] = React.useState<string | null>(null);
   const [expandedLineIds, setExpandedLineIds] = React.useState<Record<string, boolean>>({});
   const [remoteMatches, setRemoteMatches] = React.useState<ProductRow[]>([]);
+
+  React.useEffect(() => {
+    if (!fmcgOrg || !swapLineId) return;
+    const id = window.setTimeout(() => searchInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, [fmcgOrg, swapLineId]);
 
   /** In-progress qty/price/discount text while typing (avoids coercing `3.` → 3 mid-entry). */
   const [lineFieldDrafts, setLineFieldDrafts] = React.useState<
@@ -1235,6 +1244,10 @@ export function DocumentLineEditor({
     if (productPickerOpen) return;
     if (document.querySelector("[data-radix-select-content]")) return;
     event.preventDefault();
+    if (fmcgOrg && !swapLineId) {
+      setProductPickerOpen(true);
+      return;
+    }
     const target = event.target;
     const inSearch = target === searchInputRef.current;
     if (inSearch && searchOpen && searchResults[highlightIndex]) {
@@ -1279,6 +1292,23 @@ export function DocumentLineEditor({
     <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
       <Label>{lineItemsLabel}</Label>
       <div data-line-composer className="relative space-y-2">
+        {fmcgOrg && !swapLineId ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setProductPickerOpen(true)}
+              disabled={productListLoading}
+            >
+              Add products
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Select several products, set the quantity on each row, then add the lines.
+              <span className="mx-1.5">·</span>
+              <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd>
+            </p>
+          </div>
+        ) : (
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1312,17 +1342,20 @@ export function DocumentLineEditor({
             Browse
           </Button>
         </div>
+        )}
+        {fmcgOrg && !swapLineId ? null : (
         <p className="text-xs text-muted-foreground">
           <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd> new line
           <span className="mx-1.5">·</span>
           Type a quantity, like seasoning 24
         </p>
+        )}
         {swapLine ? (
           <p className="text-xs text-muted-foreground">
             Replacing {swapLine.name}. Pick a product, or press Escape to keep it.
           </p>
         ) : null}
-        {searchOpen ? (
+        {searchOpen && !(fmcgOrg && !swapLineId) ? (
           <div
             id="line-product-results"
             className="max-h-80 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-sm"
@@ -1391,6 +1424,7 @@ export function DocumentLineEditor({
         onOpenChange={setProductPickerOpen}
         productFilter={productFilter ?? (mode === "purchasing" ? "purchasable" : "sellable")}
         fmcgOrg={fmcgOrg}
+        plantCatalogue={plantCatalogue}
         products={products}
         loading={productListLoading}
         priceLabel={priceLabelFor}
@@ -1402,7 +1436,11 @@ export function DocumentLineEditor({
       />
 
       {lines.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No lines yet. Search above to add the first product.</p>
+        <p className="text-sm text-muted-foreground">
+          {fmcgOrg
+            ? "No lines yet. Add products to build this order."
+            : "No lines yet. Search above to add the first product."}
+        </p>
       ) : (
         <div className="min-w-0 space-y-2">
           <div className="min-w-0 overflow-hidden rounded-md border">

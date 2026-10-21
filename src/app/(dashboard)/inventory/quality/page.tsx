@@ -69,7 +69,7 @@ export default function InventoryQualityPage() {
                         if (!quantity) setQuantity(String(lot.remainingQuantity ?? ""));
                       }}
                     >
-                      {lot.lotNumber} · {lot.remainingQuantity} left · {lot.status}
+                      {[lot.lotNumber, [lot.productSku, lot.productName].filter(Boolean).join(" "), `${lot.remainingQuantity} left`, lot.status].filter(Boolean).join(" · ")}
                     </button>
                   ))}
                 </div>
@@ -93,7 +93,7 @@ export default function InventoryQualityPage() {
             {items.map((item) => (
               <div key={item._id} className="rounded-md border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div><p className="font-medium">{item.kind} · {item.lotId}</p><p className="text-sm text-muted-foreground">{item.reason} · {item.affectedQuantity} units{item.lossValue != null ? ` · KES ${item.lossValue.toLocaleString()}` : ""} · {item.documentIds.length} linked document(s)</p></div>
+                  <div><p className="font-medium">{item.kind === "QUALITY" ? "Quality hold" : item.kind === "LOSS" ? "Loss" : "Recall"}{item.lotNumber ? ` · Lot ${item.lotNumber}` : ""}{[item.productSku, item.productName].filter(Boolean).length ? ` · ${[item.productSku, item.productName].filter(Boolean).join(" ")}` : ""}</p><p className="text-sm text-muted-foreground">{item.reason} · {item.affectedQuantity} units{item.lossValue != null ? ` · KES ${item.lossValue.toLocaleString()}` : ""} · {item.documentIds.length} linked document(s)</p></div>
                   <Badge>{item.status}</Badge>
                 </div>
                 {item.status !== "CLOSED" ? <div className="mt-3 flex flex-col gap-2 sm:flex-row">

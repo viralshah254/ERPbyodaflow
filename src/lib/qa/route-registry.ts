@@ -239,6 +239,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/settings/tax/kenya", module: "settings", description: "Kenya profile", inNav: true },
   { path: "/settings/tax/vat", module: "settings", description: "VAT settings", inNav: true },
   { path: "/settings/tax/withholding", module: "settings", description: "Withholding tax", inNav: true },
+  { path: "/settings/tax/vat-withholding", module: "settings", description: "VAT withholding", inNav: true },
   { path: "/settings/tax/tax-mappings", module: "settings", description: "Tax mappings", inNav: true },
   { path: "/settings/customization", module: "settings", description: "Customization", inNav: false },
   { path: "/settings/customizer/modules", module: "settings", description: "Customizer modules", inNav: true },

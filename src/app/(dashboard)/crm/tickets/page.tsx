@@ -10,7 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { searchCrmAccountOptions } from "@/lib/lookups/named-options";
 import {
   addCrmTicketCommentApi,
   createCrmTicketApi,
@@ -33,6 +35,7 @@ export default function CRMTicketsPage() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyComments, setHistoryComments] = React.useState<CrmTicketCommentRow[]>([]);
   const [newComment, setNewComment] = React.useState("");
+  const [accountOption, setAccountOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [form, setForm] = React.useState({
     subject: "",
     accountId: "",
@@ -64,6 +67,7 @@ export default function CRMTicketsPage() {
 
   const openCreate = () => {
     setEditing(null);
+    setAccountOption(null);
     setForm({ subject: "", accountId: "", status: "open", priority: "medium", description: "" });
     setDrawerOpen(true);
   };
@@ -77,6 +81,7 @@ export default function CRMTicketsPage() {
       priority: row.priority ?? "medium",
       description: row.description ?? "",
     });
+    setAccountOption(row.accountId ? { id: row.accountId, label: "Selected customer" } : null);
     setDrawerOpen(true);
   };
 
@@ -198,8 +203,21 @@ export default function CRMTicketsPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Account ID</Label>
-                <Input value={form.accountId} onChange={(event) => setForm((prev) => ({ ...prev, accountId: event.target.value }))} />
+                <Label>Account</Label>
+                <AsyncSearchableSelect
+                  value={form.accountId}
+                  onValueChange={(value) => {
+                    setForm((prev) => ({ ...prev, accountId: value }));
+                    if (!value) setAccountOption(null);
+                  }}
+                  onOptionSelect={setAccountOption}
+                  loadOptions={searchCrmAccountOptions}
+                  selectedOption={accountOption}
+                  allowClear
+                  placeholder="Search customers"
+                  searchPlaceholder="Name, code, or phone"
+                  emptyMessage="No account matches."
+                />
               </div>
               <div className="space-y-2">
                 <Label>Description</Label>

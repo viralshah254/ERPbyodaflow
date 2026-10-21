@@ -10,7 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { searchCrmAccountOptions } from "@/lib/lookups/named-options";
 import {
   createCrmActivityApi,
   deleteCrmActivityApi,
@@ -29,6 +31,7 @@ export default function CRMActivitiesPage() {
   const [accounts, setAccounts] = React.useState<CrmAccountRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [accountOption, setAccountOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [form, setForm] = React.useState({
     subject: "",
     type: "task",
@@ -178,8 +181,21 @@ export default function CRMActivitiesPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Account ID</Label>
-                <Input value={form.accountId} onChange={(event) => setForm((prev) => ({ ...prev, accountId: event.target.value }))} placeholder={accounts[0]?.id ?? "account-id"} />
+                <Label>Account</Label>
+                <AsyncSearchableSelect
+                  value={form.accountId}
+                  onValueChange={(value) => {
+                    setForm((prev) => ({ ...prev, accountId: value }));
+                    if (!value) setAccountOption(null);
+                  }}
+                  onOptionSelect={setAccountOption}
+                  loadOptions={searchCrmAccountOptions}
+                  selectedOption={accountOption}
+                  allowClear
+                  placeholder="Search customers"
+                  searchPlaceholder="Name, code, or phone"
+                  emptyMessage="No account matches."
+                />
               </div>
               <div className="space-y-2">
                 <Label>Notes</Label>
@@ -206,6 +222,7 @@ export default function CRMActivitiesPage() {
                       toast.success("Activity created.");
                       setDrawerOpen(false);
                       setForm({ subject: "", type: "task", accountId: "", dueDate: "", notes: "" });
+                      setAccountOption(null);
                       await refresh();
                     } catch (error) {
                       toast.error(error instanceof Error ? error.message : "Failed to create activity.");
