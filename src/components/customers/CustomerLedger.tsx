@@ -219,6 +219,15 @@ export function CustomerLedger({
             <p className="text-sm text-muted-foreground">
               {statement ? prettyRange(statement.from, statement.to) : "Loading statement…"}
             </p>
+            {statement?.branches?.length ? (
+              <ul className="mt-2 space-y-0.5 text-sm text-muted-foreground">
+                {statement.branches.map((branch) => (
+                  <li key={branch.name}>
+                    {branch.name} · {prettyRange(branch.from, branch.to)}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <div className="text-right">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Balance due</p>
@@ -273,6 +282,7 @@ export function CustomerLedger({
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
+                {statement?.branches?.length ? <TableHead>Branch</TableHead> : null}
                 <TableHead>Reference</TableHead>
                 <TableHead>Details</TableHead>
                 <TableHead className="text-right">Debit</TableHead>
@@ -282,7 +292,7 @@ export function CustomerLedger({
             </TableHeader>
             <TableBody>
               <TableRow>
-                <TableCell className="text-muted-foreground" colSpan={5}>
+                <TableCell className="text-muted-foreground" colSpan={statement?.branches?.length ? 6 : 5}>
                   Opening balance
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
@@ -308,7 +318,11 @@ export function CustomerLedger({
                         {formatActivityWhen(line.date)}
                       </span>
                       <span className="hidden print:inline">{formatActivityExact(line.date) || line.date}</span>
+                      {statement?.branches?.length && line.dueDate ? (
+                        <span className="block text-xs text-muted-foreground">Due {formatActivityExact(line.dueDate) || line.dueDate}</span>
+                      ) : null}
                     </TableCell>
+                    {statement?.branches?.length ? <TableCell>{line.branchName || "—"}</TableCell> : null}
                     <TableCell className="font-medium">{line.sourceNumber || line.sourceTypeLabel}</TableCell>
                     <TableCell>
                       <span className="text-muted-foreground">{line.sourceTypeLabel}</span>
@@ -330,13 +344,13 @@ export function CustomerLedger({
               })}
               {lines.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground">
+                  <TableCell colSpan={statement?.branches?.length ? 7 : 6} className="text-muted-foreground">
                     No posted transactions in this period. Draft documents stay off the ledger until they are posted.
                   </TableCell>
                 </TableRow>
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="font-medium">
+                  <TableCell colSpan={statement?.branches?.length ? 6 : 5} className="font-medium">
                     Closing balance
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">

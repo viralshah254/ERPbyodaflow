@@ -15,6 +15,13 @@ export type PartyStatementLine = {
   balance: number;
   currency: string;
   dueDate?: string;
+  branchName?: string;
+};
+
+export type StatementBranchSummary = {
+  name: string;
+  from: string;
+  to: string;
 };
 
 export type PartyStatementAging = {
@@ -50,6 +57,7 @@ export type PartyStatement = {
   periodCredits: number;
   lines: PartyStatementLine[];
   aging: PartyStatementAging;
+  branches?: StatementBranchSummary[];
 };
 
 function statementPath(kind: PartyStatementKind, partyId: string, suffix = ""): string {
