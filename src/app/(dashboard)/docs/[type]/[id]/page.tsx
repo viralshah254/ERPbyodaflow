@@ -15,7 +15,6 @@ import { DocumentAttachments } from "@/components/docs/DocumentAttachments";
 import { DocumentPriceTagControl } from "@/components/docs/DocumentPriceTagControl";
 import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
-import { VatWithholdingNotice } from "@/components/docs/VatWithholdingNotice";
 import { DocumentTabLoading } from "@/components/docs/DocumentTabLoading";
 import { PodSignaturePad } from "@/components/docs/PodSignaturePad";
 import { DeliveryEvidencePanel } from "@/components/docs/DeliveryEvidencePanel";
@@ -1710,16 +1709,6 @@ export default function DocViewPage() {
             ]}
           />
         )}
-        {["invoice", "credit-note"].includes(type) && document?.partyId ? (
-          <div className="mt-4">
-            <VatWithholdingNotice
-              partyId={document.partyId}
-              gross={document.total ?? 0}
-              tax={document.tax}
-              currency={document.currency ?? "KES"}
-            />
-          </div>
-        ) : null}
         {odaflowSource ? (
           <OdaflowSourceCard info={odaflowSource} showPdfPreview={false} pdfInAttachments />
         ) : null}
