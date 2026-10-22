@@ -67,6 +67,12 @@ export type APPaymentRow = {
   date: string;
   party: string;
   partyId?: string;
+  payeeName?: string;
+  chequeNumber?: string;
+  chequeDate?: string;
+  counterAccountName?: string;
+  releasedBy?: string;
+  releasedOn?: string;
   amount: number;
   status: string;
   paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
