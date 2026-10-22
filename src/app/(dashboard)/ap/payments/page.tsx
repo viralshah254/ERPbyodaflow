@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ApChequeBoxSheet } from "@/components/finance/ApChequeBoxSheet";
 
 function supplierLabelForBill(
   bill: OpenBillRow,
@@ -57,6 +58,7 @@ export default function APPaymentsPage() {
   const [allRows, setAllRows] = React.useState<APPaymentRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [wizardOpen, setWizardOpen] = React.useState(false);
+  const [chequeOpen, setChequeOpen] = React.useState(false);
   const [supplierId, setSupplierId] = React.useState("");
   const [supplierOptions, setSupplierOptions] = React.useState<Array<{ id: string; name: string }>>([]);
   const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
@@ -94,7 +96,9 @@ export default function APPaymentsPage() {
     return allRows.filter(
       (r) =>
         r.number.toLowerCase().includes(q) ||
-        r.party.toLowerCase().includes(q)
+        r.party.toLowerCase().includes(q) ||
+        (r.chequeNumber ?? "").toLowerCase().includes(q) ||
+        (r.releasedBy ?? "").toLowerCase().includes(q)
     );
   }, [allRows, search]);
 
@@ -112,7 +116,20 @@ export default function APPaymentsPage() {
         sticky: true,
       },
       { id: "date", header: "Date", accessor: (r: APPaymentRow) => r.date.slice(0, 10) },
-      { id: "party", header: "Supplier", accessor: "party" as keyof APPaymentRow },
+      { id: "chequeNumber", header: "Cheque", accessor: (r: APPaymentRow) => r.chequeNumber || "—" },
+      { id: "chequeDate", header: "Cheque date", accessor: (r: APPaymentRow) => r.chequeDate || "—" },
+      { id: "party", header: "Paid to", accessor: "party" as keyof APPaymentRow },
+      {
+        id: "settled",
+        header: "Settled",
+        accessor: (r: APPaymentRow) => {
+          if (r.status === "CANCELLED") return "Cancelled";
+          if (r.counterAccountName) return r.counterAccountName;
+          const bills = (r.allocations ?? []).map((line) => line.documentNumber || line.documentId).filter(Boolean);
+          return bills.length ? bills.join(", ") : "—";
+        },
+      },
+      { id: "releasedBy", header: "Released by", accessor: (r: APPaymentRow) => r.releasedBy || "—" },
       {
         id: "amount",
         header: "Amount",
@@ -176,6 +193,9 @@ export default function APPaymentsPage() {
                 AP Bills
               </Link>
             </Button>
+            <Button variant="outline" onClick={() => setChequeOpen(true)}>
+              Record cheques
+            </Button>
             <Button
               onClick={() => setWizardOpen(true)}
             >
@@ -216,6 +236,13 @@ export default function APPaymentsPage() {
         </div>
         {loading ? <p className="text-sm text-muted-foreground">Loading AP payments...</p> : null}
       </div>
+
+      <ApChequeBoxSheet
+        open={chequeOpen}
+        onOpenChange={setChequeOpen}
+        bankAccounts={bankAccountOptions}
+        onPosted={refreshPayments}
+      />
 
       <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
         <SheetContent side="right" className="w-full">

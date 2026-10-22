@@ -37,6 +37,11 @@ type BackendPayment = {
   reference?: string;
   chequeNumber?: string;
   chequeDate?: string;
+  payeeName?: string;
+  counterAccountId?: string;
+  counterAccountName?: string;
+  releasedBy?: string;
+  releasedOn?: string;
   bankAccountId?: string;
   bankAccountName?: string;
   openAmount?: number;
@@ -542,8 +547,14 @@ export async function fetchApPaymentsApi(): Promise<APPaymentRow[]> {
     id: item.id,
     number: item.number,
     date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
-    party: item.partyName ?? item.partyId,
+    party: item.payeeName || item.partyName || item.partyId,
     partyId: item.partyId,
+    payeeName: item.payeeName,
+    chequeNumber: item.chequeNumber,
+    chequeDate: item.chequeDate ? String(item.chequeDate).slice(0, 10) : undefined,
+    counterAccountName: item.counterAccountName,
+    releasedBy: item.releasedBy,
+    releasedOn: item.releasedOn ? String(item.releasedOn).slice(0, 10) : undefined,
     amount: item.amount,
     status: item.status,
     paymentMethod: item.paymentMethod,
@@ -742,6 +753,51 @@ function mapOpenBill(item: BackendOpenBill): OpenBillRow {
 export async function fetchOpenBillsApi(supplierId?: string): Promise<OpenBillRow[]> {
   const page = await fetchApOpenPageApi(supplierId);
   return page.items;
+}
+
+export async function fetchApOpenItemsApi(partyId: string): Promise<{
+  bills: Array<{ id: string; number: string; outstanding: number }>;
+  creditNotes: Array<{ id: string; number: string; outstanding: number }>;
+}> {
+  requireLiveApi("AP open items");
+  const payload = await apiRequest<{
+    bills: Array<{ id: string; number: string; outstanding: number }>;
+    creditNotes: Array<{ id: string; number: string; outstanding: number }>;
+  }>("/api/ap/open-items", { params: { partyId } });
+  return { bills: payload.bills ?? [], creditNotes: payload.creditNotes ?? [] };
+}
+
+export async function previewApSettlementApi(body: {
+  partyId: string;
+  amount: number;
+}): Promise<import("@/lib/types/ar").SettlementPreview> {
+  requireLiveApi("AP settlement preview");
+  return apiRequest("/api/ap/settlement-preview", { method: "POST", body });
+}
+
+export async function createApChequeApi(body: {
+  payeeName: string;
+  partyId?: string;
+  amount: number;
+  date: string;
+  bankAccountId: string;
+  chequeNumber: string;
+  chequeDate: string;
+  releasedBy?: string;
+  releasedOn?: string;
+  counterAccountId?: string;
+  allocations?: { documentId: string; amount: number }[];
+  creditNoteApplications?: { creditNoteId: string; invoiceId: string; amount: number }[];
+  cancelled?: boolean;
+}): Promise<{ id: string; number: string }> {
+  requireLiveApi("AP cheque");
+  return apiRequest("/api/ap/payments", {
+    method: "POST",
+    body: {
+      ...body,
+      paymentMethod: "CHEQUE",
+    },
+  });
 }
 
 export async function createApPaymentApi(body: {

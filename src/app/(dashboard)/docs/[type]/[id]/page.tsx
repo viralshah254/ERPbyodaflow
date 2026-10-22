@@ -242,6 +242,19 @@ function toastDocumentActionError(error: unknown) {
   toast.error(error instanceof Error ? error.message : "Request failed");
 }
 
+function isCreditNoteDoc(type: string | null | undefined): boolean {
+  return type === "credit-note" || type === "purchase-credit-note";
+}
+
+function roundCreditQty(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Quantity on this document that is not already on another credit note. */
+function openCreditQty(line: { qty?: number; convertedQuantity?: number }): number {
+  return Math.max(0, roundCreditQty((line.qty ?? 0) - (line.convertedQuantity ?? 0)));
+}
+
 export default function DocViewPage() {
   const params = useParams();
   const router = useRouter();
@@ -339,6 +352,9 @@ export default function DocViewPage() {
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
+  const [convertCreditQtys, setConvertCreditQtys] = React.useState<Record<string, string>>({});
+  const [creditQtyDraft, setCreditQtyDraft] = React.useState<Record<string, string>>({});
+  const [creditQtySaving, setCreditQtySaving] = React.useState(false);
   const [convertPartyId, setConvertPartyId] = React.useState("");
   const [convertWarehouseId, setConvertWarehouseId] = React.useState("");
   const [outputTemplateId, setOutputTemplateId] = React.useState("");
@@ -835,6 +851,18 @@ export default function DocViewPage() {
     };
   }, [fmcgOrg, type, document?.id, document?.status, document?.salesFlow]);
 
+  const savedCreditQtyKey = (document?.lines ?? []).map((line) => `${line.id}:${line.qty}`).join("|");
+  React.useEffect(() => {
+    if (!initialLoading && document && isCreditNoteDoc(type) && document.status === "DRAFT") {
+      const next: Record<string, string> = {};
+      for (const line of document.lines ?? []) {
+        if (!line.id) continue;
+        next[line.id] = String(line.qty ?? 0);
+      }
+      setCreditQtyDraft(next);
+    }
+  }, [initialLoading, document, document?.status, savedCreditQtyKey, type]);
+
   React.useEffect(() => {
     if (!initialLoading && document) setNotesDraft(document.notes ?? "");
   }, [initialLoading, document?.id, document?.notes]);
@@ -842,6 +870,57 @@ export default function DocViewPage() {
   React.useEffect(() => {
     if (!initialLoading && document) setDeliveryDraft(document.deliveryAddress ?? "");
   }, [initialLoading, document?.id, document?.deliveryAddress]);
+
+  const creditQtyDirty = React.useMemo(() => {
+    if (!isCreditNoteDoc(type) || document?.status !== "DRAFT") return false;
+    return (document.lines ?? []).some((line) => {
+      if (!line.id) return false;
+      const raw = creditQtyDraft[line.id];
+      if (raw == null || raw.trim() === "") return false;
+      return Math.abs(Number(raw) - (line.qty ?? 0)) > 0.001;
+    });
+  }, [creditQtyDraft, document, type]);
+
+  const saveCreditQuantities = React.useCallback(async () => {
+    if (!document || !isCreditNoteDoc(type)) return;
+    setCreditQtySaving(true);
+    try {
+      const lines = (document.lines ?? []).flatMap((line) => {
+        if (!line.id) return [];
+        const raw = creditQtyDraft[line.id] ?? String(line.qty ?? 0);
+        const qty = roundCreditQty(Number(raw));
+        if (!Number.isFinite(qty) || !(qty > 0)) return [];
+        const cap = line.sourceQuantity != null && line.sourceQuantity > 0 ? line.sourceQuantity : undefined;
+        if (cap != null && qty > cap + 0.001) {
+          throw new Error(`${line.description} can be credited up to ${cap}.`);
+        }
+        return [
+          {
+            lineId: line.id,
+            productId: line.productId,
+            description: line.description,
+            quantity: qty,
+            unit: line.unit,
+            unitPrice: line.unitPrice,
+            ...(line.discount != null ? { discount: line.discount } : {}),
+            ...(line.taxCodeId ? { taxCodeId: line.taxCodeId } : {}),
+            ...(line.sourceLineId ? { sourceLineId: line.sourceLineId } : {}),
+          },
+        ];
+      });
+      if (!lines.length) {
+        toast.error("Enter a quantity on at least one line. Zero leaves that line off the credit note.");
+        return;
+      }
+      await patchDocumentApi(type as DocTypeKey, id, { lines, total: document.total ?? 0 });
+      toast.success("Credit note quantities updated.");
+      await refreshDocument(true);
+    } catch (e) {
+      toastDocumentActionError(e);
+    } finally {
+      setCreditQtySaving(false);
+    }
+  }, [creditQtyDraft, document, id, refreshDocument, type]);
 
   // For bills: fetch the GRN's landed cost allocation so we can show the breakdown card
   React.useEffect(() => {
@@ -1018,6 +1097,16 @@ export default function DocViewPage() {
           duration: 12000,
         });
         return;
+      }
+      if (targetType === "credit-note" || targetType === "purchase-credit-note") {
+        const next: Record<string, string> = {};
+        for (const line of document?.lines ?? []) {
+          if (!line.id) continue;
+          next[line.id] = String(openCreditQty(line));
+        }
+        setConvertCreditQtys(next);
+      } else {
+        setConvertCreditQtys({});
       }
       convertSheetDismissShieldUntilRef.current = Date.now() + 600;
       setConvertOpen(true);
@@ -2061,6 +2150,21 @@ export default function DocViewPage() {
                     fmcgOrg={fmcgOrg}
                   />
                 ) : (
+                  <>
+                  {isCreditNoteDoc(type) && document?.status === "DRAFT" ? (
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-dashed px-3 py-2 text-sm">
+                      <p className="text-muted-foreground">
+                        This can be a partial credit note. Lower a quantity, or set it to 0 to leave that line off.
+                      </p>
+                      <Button
+                        size="sm"
+                        disabled={creditQtySaving || !creditQtyDirty}
+                        onClick={() => void saveCreditQuantities()}
+                      >
+                        {creditQtySaving ? "Saving…" : "Save quantities"}
+                      </Button>
+                    </div>
+                  ) : null}
                   <div className="rounded border overflow-x-auto">
                     <div
                       className={
@@ -2218,6 +2322,33 @@ export default function DocViewPage() {
                                     : "—"}
                               </span>
                             </>
+                          ) : isCreditNoteDoc(type) && document?.status === "DRAFT" && line.id ? (
+                            <div className="text-right">
+                              <Input
+                                type="number"
+                                min={0}
+                                step="any"
+                                max={line.sourceQuantity && line.sourceQuantity > 0 ? line.sourceQuantity : undefined}
+                                className="h-8 px-1 text-right tabular-nums"
+                                value={creditQtyDraft[line.id] ?? String(line.qty ?? "")}
+                                onChange={(e) => {
+                                  const lineId = line.id;
+                                  if (!lineId) return;
+                                  const raw = e.target.value;
+                                  const cap =
+                                    line.sourceQuantity != null && line.sourceQuantity > 0
+                                      ? line.sourceQuantity
+                                      : undefined;
+                                  const next =
+                                    raw !== "" && cap != null && Number(raw) > cap ? String(cap) : raw;
+                                  setCreditQtyDraft((prev) => ({ ...prev, [lineId]: next }));
+                                }}
+                                aria-label={`Quantity to credit for ${line.description}`}
+                              />
+                              {line.sourceQuantity != null && line.sourceQuantity > 0 ? (
+                                <p className="mt-0.5 text-[10px] text-muted-foreground">of {line.sourceQuantity}</p>
+                              ) : null}
+                            </div>
                           ) : (
                             <span className="text-right">{line.qty ?? "—"}</span>
                           )}
@@ -2244,7 +2375,18 @@ export default function DocViewPage() {
                           <div className="flex justify-end">
                             {line.amount != null ? (
                               <DualCurrencyAmount
-                                amount={line.amount}
+                                amount={
+                                  isCreditNoteDoc(type) &&
+                                  document?.status === "DRAFT" &&
+                                  line.id &&
+                                  (line.qty ?? 0) > 0
+                                    ? roundCreditQty(
+                                        line.amount *
+                                          (Number(creditQtyDraft[line.id] ?? line.qty) || 0) /
+                                          (line.qty ?? 1)
+                                      )
+                                    : line.amount
+                                }
                                 currency={document?.currency ?? "KES"}
                                 exchangeRate={document?.exchangeRate}
                                 align="right"
@@ -2259,6 +2401,7 @@ export default function DocViewPage() {
                       );
                     })}
                   </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -2387,6 +2530,46 @@ export default function DocViewPage() {
                 {type.replace(/-/g, " ")} to {convertType?.replace(/-/g, " ")}
               </p>
             </div>
+            {isCreditNoteDoc(convertType) ? (
+              <div className="space-y-2">
+                <Label>Quantities to credit</Label>
+                <p className="text-xs text-muted-foreground">
+                  Credit the whole line, part of it, or 0 to leave it off. The credit note does not have to match the invoice total.
+                </p>
+                <div className="max-h-64 space-y-2 overflow-y-auto rounded border p-2">
+                  {(document?.lines ?? []).map((line) => {
+                    const open = openCreditQty(line);
+                    const lineId = line.id ?? "";
+                    return (
+                      <div key={lineId || line.description} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="truncate">{line.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {open > 0 ? `${open} still open` : "Already credited"}
+                            {line.unit ? ` ${line.unit}` : ""}
+                          </p>
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={open}
+                          step="any"
+                          disabled={open <= 0}
+                          className="h-8 text-right tabular-nums"
+                          value={convertCreditQtys[lineId] ?? String(open)}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const next = raw !== "" && Number(raw) > open ? String(open) : raw;
+                            setConvertCreditQtys((prev) => ({ ...prev, [lineId]: next }));
+                          }}
+                          aria-label={`Quantity to credit for ${line.description}`}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {convertType && ["quote", "sales-order", "delivery-note", "invoice", "purchase-order", "bill"].includes(convertType) ? (
               <div className="space-y-2">
                 <Label htmlFor="convert-party">
@@ -2455,6 +2638,20 @@ export default function DocViewPage() {
               }
               onClick={async () => {
                 if (!convertType) return;
+                let creditLines: Array<{ sourceLineId: string; quantity: number }> | undefined;
+                if (isCreditNoteDoc(convertType)) {
+                  creditLines = (document?.lines ?? []).flatMap((line) => {
+                    if (!line.id) return [];
+                    const open = openCreditQty(line);
+                    const qty = roundCreditQty(Number(convertCreditQtys[line.id] ?? open));
+                    if (!Number.isFinite(qty) || qty <= 0) return [];
+                    return [{ sourceLineId: line.id, quantity: Math.min(qty, open) }];
+                  });
+                  if (!creditLines.length) {
+                    toast.error("Enter a quantity on at least one line.");
+                    return;
+                  }
+                }
                 setActionLoading(true);
                 try {
                   const created = await convertDocumentApi(type as DocTypeKey, id, {
@@ -2462,6 +2659,7 @@ export default function DocViewPage() {
                     partyId: convertPartyId || undefined,
                     warehouseId: convertWarehouseId || undefined,
                     outputTemplateId: outputTemplateId || undefined,
+                    ...(creditLines ? { lines: creditLines } : {}),
                   });
                   toast.success(`Created ${created.number ?? convertType}.`);
                   if (created.pickPackSyncWarning) toast.warning(created.pickPackSyncWarning);
