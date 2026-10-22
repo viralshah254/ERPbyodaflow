@@ -72,6 +72,19 @@ export default function CollectionsPage() {
       },
       { id: "dueDate", header: "Due date", accessor: "dueDate" as keyof OverdueInvoiceRow },
       { id: "daysOverdue", header: "Days overdue", accessor: (r: OverdueInvoiceRow) => r.daysOverdue },
+      {
+        id: "actions",
+        header: "",
+        accessor: (r: OverdueInvoiceRow) => (
+          <Button variant="ghost" size="sm" asChild>
+            <Link
+              href={`/ar/payments?receive=1&customerId=${encodeURIComponent(r.customerId)}&customerName=${encodeURIComponent(r.customerName)}&invoiceId=${encodeURIComponent(r.id)}&invoiceNumber=${encodeURIComponent(r.number)}&amount=${encodeURIComponent(String(r.outstanding))}`}
+            >
+              Record receipt
+            </Link>
+          </Button>
+        ),
+      },
     ],
     [baseCurrency]
   );
@@ -130,8 +143,8 @@ export default function CollectionsPage() {
             <h3 className="text-sm font-semibold">Overdue invoices</h3>
             <p className="text-xs text-muted-foreground">
               {copilotEnabled
-                ? "Send reminder (Copilot prefill). Record receipt → AR payments."
-                : "Record receipt → AR payments."}
+                ? "Send reminder (Copilot prefill). Record receipt opens the settlement for that invoice."
+                : "Record receipt opens the settlement for that invoice."}
             </p>
           </div>
           <DataTable<OverdueInvoiceRow>
