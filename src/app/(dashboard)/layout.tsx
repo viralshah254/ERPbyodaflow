@@ -2,6 +2,7 @@
 
 import { MainLayout } from "@/components/layout/main-layout";
 import { AppShellScrollLock } from "@/components/layout/app-shell-scroll-lock";
+import { TopFoodDisplayCase } from "@/components/layout/top-food-display-case";
 import { PushNotificationInit } from "@/components/push-notification-init";
 import { PushForegroundToast } from "@/components/push-foreground-toast";
 import { isApiConfigured } from "@/lib/api/client";
@@ -89,6 +90,7 @@ export default function DashboardLayout({
   return (
     <>
       <AppShellScrollLock />
+      <TopFoodDisplayCase />
       <PushNotificationInit />
       <PushForegroundToast />
       <MainLayout>

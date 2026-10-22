@@ -143,3 +143,10 @@
 .driver-active .driver-popover {
   z-index: 10060 !important;
 }
+
+/* Top Food only. Draws every on-screen label, master, and product name in capitals.
+   The saved spelling is unchanged. Other organisations do not set this attribute. */
+html[data-display-case="upper"] body,
+html[data-display-case="upper"] body * {
+  text-transform: uppercase;
+}
