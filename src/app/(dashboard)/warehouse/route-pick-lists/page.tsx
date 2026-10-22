@@ -8,12 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchWarehousesApi, type BackendWarehouse } from "@/lib/api/warehouses";
+import { fetchDistributionRoutes, type DistributionRouteRow } from "@/lib/api/distribution";
+import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
 import {
   createJoyPickList,
   emailJoyDispatchNote,
   fetchJoyMovementSummary,
+  fetchJoyPickListTally,
   fetchJoyPickLists,
   fetchJoySalesOrders,
+  JOY_WHERE_NOW,
   recordJoyDamage,
   recordJoyShort,
   reviewJoyMovementSummary,
@@ -22,6 +26,7 @@ import {
   type JoyMovementSummary,
   type JoyPickList,
   type JoySalesOrder,
+  type JoyTallyLine,
 } from "@/lib/api/joy-dispatch";
 import { toast } from "sonner";
 
@@ -49,16 +54,26 @@ export default function RoutePickListsPage() {
   const [summaryTo, setSummaryTo] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [summary, setSummary] = React.useState<JoyMovementSummary | null>(null);
   const [summaryReason, setSummaryReason] = React.useState("");
+  const [routes, setRoutes] = React.useState<DistributionRouteRow[]>([]);
+  const [flowOn, setFlowOn] = React.useState<boolean | null>(null);
+  const [tally, setTally] = React.useState<JoyTallyLine[]>([]);
+  const [damageWarehouseId, setDamageWarehouseId] = React.useState("");
 
   const load = React.useCallback(async () => {
-    const [orderRows, listRows, warehouseRows] = await Promise.all([
+    const flow = await fetchSalesDocumentFlowApi();
+    const enabled = flow.mode === "joy_dispatch";
+    setFlowOn(enabled);
+    if (!enabled) return;
+    const [orderRows, listRows, warehouseRows, routeRows] = await Promise.all([
       fetchJoySalesOrders(),
       fetchJoyPickLists(),
       fetchWarehousesApi(),
+      fetchDistributionRoutes().catch(() => [] as DistributionRouteRow[]),
     ]);
     setOrders(orderRows);
     setLists(listRows);
     setWarehouses(warehouseRows.filter((row) => row.status !== "INACTIVE"));
+    setRoutes(routeRows);
   }, []);
 
   React.useEffect(() => {
@@ -71,6 +86,35 @@ export default function RoutePickListsPage() {
   };
 
   const warehouseName = (id: string) => warehouses.find((row) => row.id === id)?.name ?? id;
+
+  React.useEffect(() => {
+    if (!active || active.status !== "TRANSFERRED") {
+      setTally([]);
+      return;
+    }
+    void fetchJoyPickListTally(active.id)
+      .then((payload) => setTally(payload.lines ?? []))
+      .catch(() => setTally([]));
+  }, [active]);
+
+  if (flowOn === null) {
+    return (
+      <PageShell>
+        <PageHeader title="Route pick lists" />
+      </PageShell>
+    );
+  }
+
+  if (flowOn === false) {
+    return (
+      <PageShell>
+        <PageHeader
+          title="Route pick lists"
+          description="Turn on Route dispatch under Sales document flow to use this for Joy. Other organisations keep their current pick and pack."
+        />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell>
@@ -97,7 +141,16 @@ export default function RoutePickListsPage() {
               </div>
               <div>
                 <Label>Route</Label>
-                <Input value={routeName} onChange={(event) => setRouteName(event.target.value)} />
+                {routes.length ? (
+                  <select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={routeName} onChange={(event) => setRouteName(event.target.value)}>
+                    <option value="">Choose a route</option>
+                    {routes.map((route) => (
+                      <option key={route.id} value={route.name}>{route.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input value={routeName} onChange={(event) => setRouteName(event.target.value)} placeholder="Route name" />
+                )}
               </div>
               <div>
                 <Label>Destination warehouse</Label>
@@ -247,7 +300,10 @@ export default function RoutePickListsPage() {
                     {active.lines.map((line) => <option key={line.productId} value={line.productId}>{line.name}</option>)}
                   </select>
                   <Input placeholder="Quantity" value={shortQty} onChange={(event) => setShortQty(event.target.value)} />
-                  <Input placeholder="Where are the goods now?" value={whereNow} onChange={(event) => setWhereNow(event.target.value)} />
+                  <select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={whereNow} onChange={(event) => setWhereNow(event.target.value)}>
+                    <option value="">Where are the goods now?</option>
+                    {JOY_WHERE_NOW.map((place) => <option key={place} value={place}>{place}</option>)}
+                  </select>
                   <Button onClick={async () => {
                     try {
                       await recordJoyShort(active.id, { productId: shortProductId, quantity: Number(shortQty), whereNow });
@@ -267,14 +323,49 @@ export default function RoutePickListsPage() {
                   </select>
                   <Input placeholder="Quantity" value={damageQty} onChange={(event) => setDamageQty(event.target.value)} />
                   <Input placeholder="Reason" value={damageReason} onChange={(event) => setDamageReason(event.target.value)} />
+                  <select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={damageWarehouseId} onChange={(event) => setDamageWarehouseId(event.target.value)}>
+                    <option value="">DISPATCH</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>{warehouse.code ? `${warehouse.code} — ${warehouse.name}` : warehouse.name}</option>
+                    ))}
+                  </select>
                   <Button onClick={async () => {
                     try {
-                      await recordJoyDamage(active.id, { lines: [{ productId: damageProductId, quantity: Number(damageQty) }], reason: damageReason });
+                      await recordJoyDamage(active.id, {
+                        lines: [{ productId: damageProductId, quantity: Number(damageQty) }],
+                        reason: damageReason,
+                        toWarehouseId: damageWarehouseId || undefined,
+                      });
                       toast.success("Damaged goods transferred back to DISPATCH.");
                     } catch (error) {
                       toast.error(error instanceof Error ? error.message : "Could not record the return");
                     }
                   }}>Return to DISPATCH</Button>
+                </CardContent>
+              </Card>
+              <Card className="md:col-span-2">
+                <CardHeader><CardTitle>Load tally</CardTitle></CardHeader>
+                <CardContent>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left"><th>Product</th><th>Picked</th><th>Invoice</th><th>Delivery note</th><th>Short</th><th>Gap</th></tr>
+                    </thead>
+                    <tbody>
+                      {tally.map((line) => (
+                        <tr key={line.productId} className="border-t">
+                          <td>{line.name}</td>
+                          <td>{line.picked}</td>
+                          <td>{line.invoiceQty}</td>
+                          <td>{line.deliveryQty}</td>
+                          <td>{line.shortQty}</td>
+                          <td>{line.gap === 0 ? "Recorded" : line.gap}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {tally.some((line) => line.gap !== 0) ? (
+                    <p className="mt-2 text-sm text-muted-foreground">A gap has to be recorded as a short or a damaged return.</p>
+                  ) : null}
                 </CardContent>
               </Card>
               <Card className="md:col-span-2">
@@ -328,7 +419,7 @@ export default function RoutePickListsPage() {
                       <td>{row.type}</td>
                       <td>{row.productId}</td>
                       <td>{row.quantity}</td>
-                      <td>{row.reference || row.documentType}</td>
+                      <td>{row.otherSide || row.reference || row.documentType}</td>
                     </tr>
                   ))}
                 </tbody>

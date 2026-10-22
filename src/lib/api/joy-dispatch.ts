@@ -31,6 +31,24 @@ export type JoyPickList = {
   lines: JoyPickLine[];
   dispatchNoteId?: string;
   transferId?: string;
+  emailedTo?: string;
+};
+
+export const JOY_WHERE_NOW = [
+  "Still on the vehicle",
+  "Back in the route warehouse",
+  "Returned to dispatch",
+  "Damaged",
+] as const;
+
+export type JoyTallyLine = {
+  productId: string;
+  name: string;
+  picked: number;
+  invoiceQty: number;
+  deliveryQty: number;
+  shortQty: number;
+  gap: number;
 };
 
 export async function fetchJoySalesOrders(): Promise<JoySalesOrder[]> {
@@ -94,12 +112,18 @@ export async function emailJoyDispatchNote(id: string, to: string) {
   });
 }
 
+export async function fetchJoyPickListTally(id: string): Promise<{ lines: JoyTallyLine[] }> {
+  requireLiveApi("Route pick lists");
+  return apiRequest(`/api/joy-dispatch/pick-lists/${encodeURIComponent(id)}/tally`);
+}
+
 export type JoyMovement = {
   productId?: string;
   quantity?: number;
   type?: string;
   reference?: string;
   documentType?: string;
+  otherSide?: string;
 };
 
 export type JoyMovementSummary = {

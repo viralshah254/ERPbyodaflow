@@ -23,7 +23,6 @@ import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchGRNById, postGRN, patchGRNLine, patchGrnHeaderApi, confirmGRNProcessing, recordGRNLineQc, recordGRNBulkQc, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow, type GrnPostError } from "@/lib/api/grn";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -44,6 +43,73 @@ import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+function toastGrnActionError(raw: unknown, fallback = "Failed to post GRN.") {
+  const e = raw as GrnPostError & {
+    body?: { code?: string; grns?: Array<{ id: string; number: string }> };
+  };
+  const linked = e.body?.code === "LINKED_GRN_NOT_POSTED" ? e.body.grns?.[0] : undefined;
+  const msg = e.message ?? fallback;
+  if (linked?.id) {
+    toast.error(msg, {
+      action: {
+        label: `Go to ${linked.number}`,
+        onClick: () => {
+          window.location.href = `/inventory/receipts/${linked.id}`;
+        },
+      },
+      duration: 12000,
+    });
+    return;
+  }
+  if (e.code === "GRN_CONVERTED_TO_BILL" && e.billId) {
+    toast.error(msg, {
+      action: {
+        label: `View bill ${e.billNumber ?? ""}`.trim(),
+        onClick: () => {
+          window.location.href = `/docs/bill/${e.billId}`;
+        },
+      },
+      duration: 8000,
+    });
+    return;
+  }
+  if (e.code === "GRN_MISSING_WEIGHT") {
+    toast.error(msg, {
+      description: "Enter received weight (kg) for each line below before posting.",
+      duration: 8000,
+    });
+    return;
+  }
+  if (e.code === "GRN_OPEN_VARIANCE") {
+    const auditUrl = e.poId
+      ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}`
+      : "/purchasing/cash-weight-audit";
+    toast.error(msg, {
+      action: {
+        label: "Go to cash-weight audit",
+        onClick: () => {
+          window.location.href = auditUrl;
+        },
+      },
+      duration: 8000,
+    });
+    return;
+  }
+  if (e.code === "WAREHOUSE_CANNOT_RECEIVE") {
+    toast.error(msg, {
+      action: {
+        label: "Open warehouse",
+        onClick: () => {
+          window.location.href = "/master/warehouses";
+        },
+      },
+      duration: 10000,
+    });
+    return;
+  }
+  toast.error(msg);
+}
+
 export default function ReceiptDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -62,7 +128,6 @@ export default function ReceiptDetailPage() {
   const [putawayLink, setPutawayLink] = React.useState<{ id: string; label: string } | null>(null);
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [processingAllocation, setProcessingAllocation] = React.useState<ProcessingCostAllocationRecord | null>(null);
-  const [costsChecked, setCostsChecked] = React.useState(false);
   const weightTableRef = React.useRef<HTMLDivElement>(null);
   const [editingWeight, setEditingWeight] = React.useState<Record<number, string>>({});
   const [editingProcessedWeight, setEditingProcessedWeight] = React.useState<Record<number, string>>({});
@@ -188,14 +253,12 @@ export default function ReceiptDetailPage() {
   }, [id, loadAuditAndComments]);
 
   React.useEffect(() => {
-    setCostsChecked(false);
     Promise.all([
       fetchLandedCostAllocation(id).catch(() => null),
       fetchProcessingCostAllocation(id).catch(() => null),
     ]).then(([a, p]) => {
       setLandedAllocation(a);
       setProcessingAllocation(p);
-      setCostsChecked(true);
     });
   }, [id]);
 
@@ -235,9 +298,6 @@ export default function ReceiptDetailPage() {
       </PageShell>
     );
   }
-
-  // Costs are applied if the backend flag is set OR if we've fetched an allocation (handles processing-only case)
-  const hasAnyCosts = grn.hasLandedCost || (costsChecked && (landedAllocation !== null || processingAllocation !== null));
 
   const totalReceivedWeight = grn.lines.reduce((acc, line) => acc + (Number(line.receivedWeightKg) || 0), 0);
   const totalPaidWeight = grn.lines.reduce((acc, line) => acc + (Number(line.paidWeightKg) || 0), 0);
@@ -552,82 +612,33 @@ export default function ReceiptDetailPage() {
               </Button>
             )}
             {canWrite && grn.status === "DRAFT" && (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button
-                        size="sm"
-                        disabled={posting}
-                        onClick={async () => {
-                          setPosting(true);
-                          try {
-                            await flushPendingReceivedWeights();
-                            const result = await postGRN(grn.id);
-                            setGrn(await fetchGRNById(grn.id));
-                            if (result.stockAdded?.length) {
-                              const summary = result.stockAdded
-                                .map((s) => `+${s.qty} ${s.productName ?? s.productId}`)
-                                .join(", ");
-                              toast.success(`GRN posted — stock updated`, { description: summary, duration: 8000 });
-                            } else {
-                              toast.success("GRN posted.");
-                            }
-                          } catch (raw) {
-                            const e = raw as GrnPostError;
-                            const msg = e.message ?? "Failed to post GRN.";
-                            if (e.code === "GRN_CONVERTED_TO_BILL" && e.billId) {
-                              toast.error(msg, {
-                                action: {
-                                  label: `View bill ${e.billNumber ?? ""}`.trim(),
-                                  onClick: () => { window.location.href = `/docs/bill/${e.billId}`; },
-                                },
-                                duration: 8000,
-                              });
-                            } else if (e.code === "GRN_MISSING_WEIGHT") {
-                              toast.error(msg, {
-                                description: "Enter received weight (kg) for each line below before posting.",
-                                duration: 8000,
-                              });
-                            } else if (e.code === "GRN_OPEN_VARIANCE") {
-                              const auditUrl = e.poId
-                                ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}`
-                                : "/purchasing/cash-weight-audit";
-                              toast.error(msg, {
-                                action: {
-                                  label: "Go to cash-weight audit",
-                                  onClick: () => { window.location.href = auditUrl; },
-                                },
-                                duration: 8000,
-                              });
-                            } else if (e.code === "WAREHOUSE_CANNOT_RECEIVE" && e.warehouseId) {
-                              toast.error(msg, {
-                                action: {
-                                  label: "Open warehouse",
-                                  onClick: () => { window.location.href = `/master/warehouses`; },
-                                },
-                                duration: 10000,
-                              });
-                            } else {
-                              toast.error(msg);
-                            }
-                          } finally {
-                            setPosting(false);
-                          }
-                        }}
-                      >
-                        <Icons.Send className="mr-2 h-4 w-4" />
-                        {posting ? "Posting…" : "Post"}
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {false && (
-                    <TooltipContent>
-                      Apply additional costs before posting
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                size="sm"
+                disabled={posting}
+                onClick={async () => {
+                  setPosting(true);
+                  try {
+                    await flushPendingReceivedWeights();
+                    const result = await postGRN(grn.id);
+                    setGrn(await fetchGRNById(grn.id));
+                    if (result.stockAdded?.length) {
+                      const summary = result.stockAdded
+                        .map((s) => `+${s.qty} ${s.productName ?? s.productId}`)
+                        .join(", ");
+                      toast.success(`GRN posted — stock updated`, { description: summary, duration: 8000 });
+                    } else {
+                      toast.success("GRN posted.");
+                    }
+                  } catch (raw) {
+                    toastGrnActionError(raw);
+                  } finally {
+                    setPosting(false);
+                  }
+                }}
+              >
+                <Icons.Send className="mr-2 h-4 w-4" />
+                {posting ? "Posting…" : "Post"}
+              </Button>
             )}
             {grn.linkedBill ? (
               <Button size="sm" variant="outline" asChild>
@@ -647,8 +658,8 @@ export default function ReceiptDetailPage() {
                     const result = await convertDocumentApi("grn", grn.id, { targetType: "bill" });
                     toast.success(`Bill ${result.number ?? ""} created.`);
                     window.location.href = `/docs/bill/${result.id}`;
-                  } catch (e) {
-                    toast.error((e as Error)?.message ?? "Failed to create bill.");
+                  } catch (raw) {
+                    toastGrnActionError(raw, "Failed to create bill.");
                   } finally {
                     setCreatingBill(false);
                   }
@@ -705,7 +716,7 @@ export default function ReceiptDetailPage() {
             <CardContent className="py-2.5 px-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  This GRN is a draft — post it to update inventory. Additional costs are optional.
+                  Post this GRN so stock updates. Additional costs are optional.
                 </span>
                 {canWrite && (
                   <Button
@@ -727,18 +738,7 @@ export default function ReceiptDetailPage() {
                         }
                         setGrn(await fetchGRNById(id));
                       } catch (raw) {
-                        const e = raw as GrnPostError;
-                        const msg = e.message ?? "Failed to post GRN.";
-                        if (e.code === "GRN_MISSING_WEIGHT") {
-                          toast.error(msg, { description: "Enter received weight (kg) for each line below before posting.", duration: 8000 });
-                        } else if (e.code === "GRN_OPEN_VARIANCE") {
-                          const auditUrl = e.poId ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}` : "/purchasing/cash-weight-audit";
-                          toast.error(msg, { action: { label: "Go to cash-weight audit", onClick: () => { window.location.href = auditUrl; } }, duration: 8000 });
-                        } else if (e.code === "WAREHOUSE_CANNOT_RECEIVE") {
-                          toast.error(msg, { action: { label: "Open warehouse", onClick: () => { window.location.href = "/master/warehouses"; } }, duration: 10000 });
-                        } else {
-                          toast.error(msg);
-                        }
+                        toastGrnActionError(raw);
                       } finally {
                         setPosting(false);
                       }
@@ -764,8 +764,7 @@ export default function ReceiptDetailPage() {
                         toast.success(`Bill ${result.number ?? ""} created.`);
                         window.location.href = `/docs/bill/${result.id}`;
                       } catch (raw) {
-                        const e = raw as GrnPostError;
-                        toast.error(e.message ?? "Failed to create bill.");
+                        toastGrnActionError(raw, "Failed to create bill.");
                       } finally {
                         setPosting(false);
                       }

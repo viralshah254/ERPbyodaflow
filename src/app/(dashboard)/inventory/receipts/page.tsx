@@ -29,7 +29,6 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 
 const SEARCH_DEBOUNCE_MS = 400;
@@ -300,32 +299,19 @@ export default function InventoryReceiptsPage() {
         header: "",
         accessor: (r: PurchasingDocRow) =>
           canWrite && (r.status === "DRAFT" || r.status === "APPROVED") ? (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2.5 text-xs"
-                      disabled={postingId === r.id}
-                      onClick={(e) => handlePostRow(r, e)}
-                    >
-                      {postingId === r.id ? (
-                        <Icons.Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        "Post"
-                      )}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {false && (
-                  <TooltipContent side="left">
-                    Apply additional costs before posting
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs"
+              disabled={postingId === r.id}
+              onClick={(e) => handlePostRow(r, e)}
+            >
+              {postingId === r.id ? (
+                <Icons.Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                "Post"
+              )}
+            </Button>
           ) : null,
       },
     ],

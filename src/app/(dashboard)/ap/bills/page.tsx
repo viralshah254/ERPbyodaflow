@@ -284,7 +284,7 @@ export default function APBillsPage() {
           if (r.sourceGrnNumber) {
             return r.sourceGrnId ? (
               <Link
-                href={`/docs/grn/${r.sourceGrnId}`}
+                href={`/inventory/receipts/${r.sourceGrnId}`}
                 className="inline-flex items-center gap-1 text-sm font-mono text-primary hover:underline"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -618,7 +618,7 @@ export default function APBillsPage() {
                       return;
                     }
                     if (row.sourceGrnId) {
-                      router.push(`/docs/grn/${row.sourceGrnId}`);
+                      router.push(`/inventory/receipts/${row.sourceGrnId}`);
                     }
                   }}
                   emptyMessage={
