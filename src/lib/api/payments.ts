@@ -1,7 +1,7 @@
 import { apiRequest, downloadFile, requireLiveApi } from "@/lib/api/client";
 import { sortPartyLookupOptions, toPartyLookupOption, type PartyLookupOption } from "@/lib/api/parties";
 import type { APBillRow, APPaymentRow } from "@/lib/types/ap";
-import type { OpenInvoiceRow, PaymentRow } from "@/lib/types/ar";
+import type { ArOpenItem, OpenInvoiceRow, PaymentRow, SettlementPreview } from "@/lib/types/ar";
 
 export type OpenBillRow = {
   id: string;
@@ -34,6 +34,11 @@ type BackendPayment = {
   status: string;
   paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
   mpesaTransactionNo?: string;
+  reference?: string;
+  chequeNumber?: string;
+  chequeDate?: string;
+  bankAccountId?: string;
+  bankAccountName?: string;
   openAmount?: number;
   appliedAmount?: number;
   allocations?: Array<{
@@ -268,6 +273,13 @@ function mapArPaymentRow(item: BackendPayment): PaymentRow {
     status: item.status,
     paymentMethod: item.paymentMethod,
     mpesaTransactionNo: item.mpesaTransactionNo,
+    reference: item.reference,
+    chequeNumber: item.chequeNumber,
+    chequeDate: item.chequeDate ? String(item.chequeDate).slice(0, 10) : undefined,
+    bankAccountId: item.bankAccountId,
+    bankAccountName: item.bankAccountName,
+    openAmount: item.openAmount,
+    appliedAmount: item.appliedAmount,
     allocations: (item.allocations ?? []).map((allocation) => ({
       documentType: allocation.documentType,
       documentId: allocation.documentId,
@@ -423,6 +435,50 @@ export async function fetchOpenInvoicesApi(customerId?: string): Promise<OpenInv
   return page.items;
 }
 
+function mapArOpenItem(item: BackendOpenInvoice & { sourceType?: "invoice" | "credit-note" }, sourceType: "invoice" | "credit-note"): ArOpenItem {
+  return {
+    id: item.id,
+    number: item.number,
+    date: typeof item.date === "string" ? item.date.slice(0, 10) : String(item.date ?? ""),
+    dueDate: item.dueDate ? String(item.dueDate).slice(0, 10) : undefined,
+    customerId: item.customerId ?? "",
+    customerName: item.customerName ?? item.customerId ?? "",
+    total: item.total,
+    allocated: item.allocated,
+    outstanding: item.outstanding,
+    status: item.status,
+    currency: item.currency,
+    sourceType,
+  };
+}
+
+export async function fetchArOpenItemsApi(customerId: string): Promise<{ invoices: ArOpenItem[]; creditNotes: ArOpenItem[] }> {
+  requireLiveApi("AR open items");
+  const params = new URLSearchParams();
+  params.set("partyId", customerId);
+  const payload = await apiRequest<{
+    invoices: Array<BackendOpenInvoice & { sourceType?: "invoice" | "credit-note" }>;
+    creditNotes: Array<BackendOpenInvoice & { sourceType?: "invoice" | "credit-note" }>;
+  }>("/api/ar/open-items", { params });
+  return {
+    invoices: (payload.invoices ?? []).map((item) => mapArOpenItem(item, "invoice")),
+    creditNotes: (payload.creditNotes ?? []).map((item) => mapArOpenItem(item, "credit-note")),
+  };
+}
+
+export async function previewArSettlementApi(body: {
+  partyId: string;
+  amount: number;
+  reference?: string;
+  references?: string[];
+}): Promise<SettlementPreview> {
+  requireLiveApi("AR settlement preview");
+  return apiRequest<SettlementPreview>("/api/ar/settlement-preview", {
+    method: "POST",
+    body,
+  });
+}
+
 export async function createArPaymentApi(body: {
   customerId: string;
   amount: number;
@@ -430,6 +486,11 @@ export async function createArPaymentApi(body: {
   bankAccountId?: string;
   paymentMethod?: "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
   mpesaTransactionNo?: string;
+  reference?: string;
+  chequeNumber?: string;
+  chequeDate?: string;
+  allocations?: { documentId: string; amount: number }[];
+  creditNoteApplications?: { creditNoteId: string; invoiceId: string; amount: number }[];
 }): Promise<{ id: string; number: string }> {
   requireLiveApi("AR payment creation");
   return apiRequest<{ id: string; number: string }>("/api/ar/payments", {
@@ -441,6 +502,11 @@ export async function createArPaymentApi(body: {
       bankAccountId: body.bankAccountId,
       paymentMethod: body.paymentMethod,
       mpesaTransactionNo: body.mpesaTransactionNo,
+      reference: body.reference,
+      chequeNumber: body.chequeNumber,
+      chequeDate: body.chequeDate,
+      allocations: body.allocations,
+      creditNoteApplications: body.creditNoteApplications,
     },
   });
 }

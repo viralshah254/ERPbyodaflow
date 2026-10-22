@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -16,9 +15,7 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -26,14 +23,13 @@ import type { PaymentRow, OpenInvoiceRow } from "@/lib/types/ar";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   allocateArPaymentApi,
-  createArPaymentApi,
   downloadArReceiptPdfApi,
   fetchArPaymentsPageApi,
   fetchOpenInvoicesApi,
-  searchArCustomerOptionsApi,
   submitArPaymentApi,
 } from "@/lib/api/payments";
-import type { PartyLookupOption } from "@/lib/api/parties";
+import { ArChequeBoxSheet } from "@/components/finance/ArChequeBoxSheet";
+import { ArSettlementSheet, type ReceivePrefill } from "@/components/finance/ArSettlementSheet";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
@@ -49,7 +45,22 @@ import { useOrgContextStore } from "@/stores/orgContextStore";
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
 
+function methodDetail(row: PaymentRow): string {
+  if (row.paymentMethod === "CHEQUE") {
+    return ["Cheque", row.chequeNumber, row.chequeDate].filter(Boolean).join(" · ");
+  }
+  if (row.paymentMethod === "MPESA") return row.mpesaTransactionNo ? `M-Pesa ${row.mpesaTransactionNo}` : "M-Pesa";
+  if (row.paymentMethod === "CASH") return "Cash";
+  return row.bankAccountName || row.reference || "Bank transfer";
+}
+
+function appliedSummary(row: PaymentRow): string {
+  const numbers = [...new Set((row.allocations ?? []).map((line) => line.documentNumber || line.documentId).filter(Boolean))];
+  return numbers.length ? numbers.join(", ") : "—";
+}
+
 export default function ARPaymentsPage() {
+  const searchParams = useSearchParams();
   const templateId = useOrgContextStore((s) => s.templateId);
   const issueReceipt = isFmcgTemplateId(templateId);
   const copilotEnabled = useCopilotFeatureEnabled();
@@ -62,23 +73,19 @@ export default function ARPaymentsPage() {
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [fetching, setFetching] = React.useState(false);
   const hasLoadedOnce = React.useRef(false);
-  const [wizardOpen, setWizardOpen] = React.useState(false);
-  const [step, setStep] = React.useState(1);
-  const [customerId, setCustomerId] = React.useState("");
-  const [allocations, setAllocations] = React.useState<Record<string, number>>({});
+  const [receiveOpen, setReceiveOpen] = React.useState(false);
+  const [receiveSession, setReceiveSession] = React.useState(0);
+  const [receivePrefill, setReceivePrefill] = React.useState<ReceivePrefill | null>(null);
+  const [chequeBoxOpen, setChequeBoxOpen] = React.useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = React.useState<string | null>(null);
   const [allocateSheetOpen, setAllocateSheetOpen] = React.useState(false);
   const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
   const [allocating, setAllocating] = React.useState(false);
   const [submittingId, setSubmittingId] = React.useState<string | null>(null);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
-  const [selectedCustomerOption, setSelectedCustomerOption] = React.useState<PartyLookupOption | null>(null);
   const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
-  const [bankAccountId, setBankAccountId] = React.useState("");
-  const [paymentMethod, setPaymentMethod] = React.useState<"BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA">("BANK_TRANSFER");
-  const [mpesaTransactionNo, setMpesaTransactionNo] = React.useState("");
-  const [openInvoices, setOpenInvoices] = React.useState<OpenInvoiceRow[]>([]);
   const [allocateInvoices, setAllocateInvoices] = React.useState<OpenInvoiceRow[]>([]);
+  const openedFromQuery = React.useRef(false);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
@@ -136,11 +143,26 @@ export default function ARPaymentsPage() {
       .catch(() => setBankAccountOptions([]));
   }, []);
 
+  const openReceive = React.useCallback((prefill: ReceivePrefill | null) => {
+    setReceivePrefill(prefill);
+    setReceiveSession((value) => value + 1);
+    setReceiveOpen(true);
+  }, []);
+
   React.useEffect(() => {
-    fetchOpenInvoicesApi(customerId || undefined)
-      .then(setOpenInvoices)
-      .catch(() => setOpenInvoices([]));
-  }, [customerId]);
+    if (openedFromQuery.current) return;
+    if (searchParams.get("receive") !== "1") return;
+    const customerId = searchParams.get("customerId")?.trim();
+    if (!customerId) return;
+    openedFromQuery.current = true;
+    const amount = Number(searchParams.get("amount"));
+    openReceive({
+      customerId,
+      customerName: searchParams.get("customerName")?.trim() || customerId,
+      invoiceNumber: searchParams.get("invoiceNumber")?.trim() || undefined,
+      amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
+    });
+  }, [openReceive, searchParams]);
 
   const openAllocateRef = React.useRef<(payment: PaymentRow) => void>(() => {});
   openAllocateRef.current = (payment: PaymentRow) => {
@@ -184,14 +206,19 @@ export default function ARPaymentsPage() {
         ),
       },
       {
-        id: "paymentMethod",
+        id: "methodDetail",
         header: "Method",
-        accessor: (r: PaymentRow) => r.paymentMethod ?? "—",
+        accessor: (r: PaymentRow) => methodDetail(r),
       },
       {
-        id: "mpesaTransactionNo",
-        header: "M-Pesa Txn",
-        accessor: (r: PaymentRow) => r.mpesaTransactionNo ?? "—",
+        id: "applied",
+        header: "Applied to",
+        accessor: (r: PaymentRow) => appliedSummary(r),
+      },
+      {
+        id: "unapplied",
+        header: "Unapplied",
+        accessor: (r: PaymentRow) => formatMoney(r.openAmount ?? 0, "KES"),
       },
       {
         id: "actions",
@@ -240,17 +267,6 @@ export default function ARPaymentsPage() {
     [issueReceipt, refreshData, submittingId]
   );
 
-  const handleReceivePayment = () => {
-    setStep(1);
-    setCustomerId("");
-    setSelectedCustomerOption(null);
-    setBankAccountId("");
-    setPaymentMethod("BANK_TRANSFER");
-    setMpesaTransactionNo("");
-    setAllocations({});
-    setWizardOpen(true);
-  };
-
   const selectedPayment = selectedPaymentId ? payments.find((p) => p.id === selectedPaymentId) : null;
 
   React.useEffect(() => {
@@ -262,36 +278,6 @@ export default function ARPaymentsPage() {
       .then(setAllocateInvoices)
       .catch(() => setAllocateInvoices([]));
   }, [selectedPayment?.customerId]);
-
-  const handleWizardSubmit = async () => {
-    const totalAmount = Object.values(allocations).reduce((sum, amount) => sum + amount, 0);
-    if (!customerId || totalAmount <= 0) {
-      toast.error("Select a customer and allocate at least one invoice amount.");
-      return;
-    }
-    if (paymentMethod === "MPESA" && !mpesaTransactionNo.trim()) {
-      toast.error("M-Pesa transaction number is required for M-Pesa receipts.");
-      return;
-    }
-    try {
-      const payment = await createArPaymentApi({
-        customerId,
-        amount: totalAmount,
-        bankAccountId: bankAccountId || undefined,
-        paymentMethod,
-        mpesaTransactionNo: paymentMethod === "MPESA" ? mpesaTransactionNo.trim() : undefined,
-      });
-      const nextAllocations = Object.entries(allocations)
-        .filter(([, amount]) => amount > 0)
-        .map(([documentId, amount]) => ({ documentId, amount }));
-      await allocateArPaymentApi(payment.id, nextAllocations);
-      await refreshData();
-      toast.success(`Payment ${payment.number} posted and allocated.`);
-      setWizardOpen(false);
-    } catch (error) {
-      toast.error((error as Error).message || "Failed to create payment.");
-    }
-  };
 
   const handleAllocateSubmit = async () => {
     if (!selectedPaymentId) return;
@@ -319,10 +305,8 @@ export default function ARPaymentsPage() {
   };
 
   const handleDraftReminder = () => {
-    const overdue = openInvoices.filter((i) => new Date(i.dueDate) < new Date());
-    const total = overdue.reduce((s, i) => s + i.outstanding, 0);
     openWithPrompt(
-      `Draft a payment reminder message for customer ${customerId || "selected"}. Overdue total: ${formatMoney(total, "KES")}. Include invoice numbers and amounts.`
+      "Draft a payment reminder for the overdue invoices on this customer's account. Include invoice numbers, amounts, and the due dates."
     );
   };
 
@@ -346,7 +330,10 @@ export default function ARPaymentsPage() {
                 Draft payment reminder
               </Button>
             ) : null}
-            <Button onClick={handleReceivePayment}>
+            <Button variant="outline" onClick={() => setChequeBoxOpen(true)}>
+              Record cheques
+            </Button>
+            <Button onClick={() => openReceive(null)}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Receive Payment
             </Button>
@@ -368,6 +355,9 @@ export default function ARPaymentsPage() {
                 customerName: row.customerName,
                 amount: row.amount,
                 status: row.status,
+                method: methodDetail(row),
+                appliedTo: appliedSummary(row),
+                unapplied: row.openAmount ?? 0,
               }))
             )
           }
@@ -375,7 +365,7 @@ export default function ARPaymentsPage() {
         {initialLoading ? (
           <SkeletonDataTable
             rows={pageSize}
-            columnWidths={["w-28", "w-28", "w-40", "w-28", "w-24", "w-28", "w-28", "w-20"]}
+            columnWidths={["w-28", "w-28", "w-40", "w-28", "w-24", "w-40", "w-36", "w-28", "w-20"]}
           />
         ) : (
           <>
@@ -405,128 +395,24 @@ export default function ARPaymentsPage() {
         )}
       </div>
 
-      <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
-        <SheetContent side="right" className="w-full">
-          <SheetHeader>
-            <SheetTitle>Receive payment</SheetTitle>
-            <SheetDescription>
-              Customer → Open invoices → Allocate → Review and post receipt.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            {step === 1 && (
-              <>
-                <div className="space-y-2">
-                  <Label>Customer</Label>
-                  <AsyncSearchableSelect
-                    value={customerId}
-                    onValueChange={(value) => {
-                      setCustomerId(value);
-                      if (!value) setSelectedCustomerOption(null);
-                    }}
-                    onOptionSelect={(option) => setSelectedCustomerOption(option)}
-                    loadOptions={searchArCustomerOptionsApi}
-                    selectedOption={selectedCustomerOption}
-                    placeholder="Select customer"
-                    searchPlaceholder="Type name, code, phone, or email"
-                    emptyMessage="No customers found."
-                    recentStorageKey="lookup:recent-customers"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Payment method</Label>
-                  <Select
-                    value={paymentMethod}
-                    onValueChange={(value) =>
-                      setPaymentMethod(value as "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA")
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BANK_TRANSFER">Bank transfer</SelectItem>
-                      <SelectItem value="CHEQUE">Cheque</SelectItem>
-                      <SelectItem value="CASH">Cash</SelectItem>
-                      <SelectItem value="MPESA">M-Pesa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {paymentMethod === "MPESA" && (
-                  <div className="space-y-2">
-                    <Label>M-Pesa transaction number</Label>
-                    <Input
-                      placeholder="e.g. SF94KX22Q"
-                      value={mpesaTransactionNo}
-                      onChange={(e) => setMpesaTransactionNo(e.target.value)}
-                    />
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label>Bank account</Label>
-                  <SearchableSelect
-                    value={bankAccountId}
-                    onValueChange={setBankAccountId}
-                    options={bankAccountOptions.map((account) => ({ id: account.id, label: account.name }))}
-                    placeholder="Select bank account"
-                    searchPlaceholder="Type to search bank account"
-                  />
-                </div>
-                <Button onClick={() => setStep(2)}>Next</Button>
-              </>
-            )}
-            {step === 2 && (
-              <>
-                <div className="space-y-2">
-                  <Label>Open invoices</Label>
-                  <div className="rounded border divide-y max-h-48 overflow-auto">
-                    {openInvoices.length === 0 ? (
-                      <div className="p-3 text-sm text-muted-foreground">
-                        No open invoices
-                      </div>
-                    ) : (
-                      openInvoices.map((inv) => (
-                        <div
-                          key={inv.id}
-                          className="flex items-center justify-between p-2 text-sm"
-                        >
-                          <span>{inv.number} · {formatMoney(inv.outstanding, "KES")}</span>
-                          <Input
-                            type="number"
-                            className="w-24 h-8"
-                            placeholder="Allocate"
-                            value={allocations[inv.id] ?? ""}
-                            onChange={(e) =>
-                              setAllocations((a) => ({
-                                ...a,
-                                [inv.id]: parseFloat(e.target.value) || 0,
-                              }))
-                            }
-                          />
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
-                  <Button onClick={() => setStep(3)}>Next</Button>
-                </div>
-              </>
-            )}
-            {step === 3 && (
-              <>
-                <p className="text-sm text-muted-foreground">Review allocations and post the receipt to customer open items.</p>
-                <SheetFooter>
-                  <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
-                  <Button onClick={handleWizardSubmit}>Submit</Button>
-                </SheetFooter>
-              </>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
+      <ArSettlementSheet
+        open={receiveOpen}
+        sessionKey={receiveSession}
+        prefill={receivePrefill}
+        bankAccounts={bankAccountOptions}
+        onOpenChange={setReceiveOpen}
+        onPosted={() => {
+          void refreshData();
+        }}
+      />
+      <ArChequeBoxSheet
+        open={chequeBoxOpen}
+        bankAccounts={bankAccountOptions}
+        onOpenChange={setChequeBoxOpen}
+        onPosted={() => {
+          void refreshData();
+        }}
+      />
       <Sheet open={allocateSheetOpen} onOpenChange={setAllocateSheetOpen}>
         <SheetContent side="right" className="w-full">
           <SheetHeader>
