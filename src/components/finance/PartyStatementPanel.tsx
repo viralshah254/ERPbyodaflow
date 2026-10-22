@@ -212,6 +212,15 @@ export function PartyStatementPanel(props: {
                   <p className="text-xs text-muted-foreground">
                     {statement.from} – {statement.to}
                   </p>
+                  {statement.branches?.length ? (
+                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {statement.branches.map((branch) => (
+                        <li key={branch.name}>
+                          {branch.name} · {branch.from} – {branch.to}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </CardContent>
               </Card>
             )}
@@ -257,6 +266,7 @@ export function PartyStatementPanel(props: {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
+                    {statement.branches?.length ? <TableHead>Branch</TableHead> : null}
                     <TableHead>Description</TableHead>
                     <TableHead className="text-right">Debit</TableHead>
                     <TableHead className="text-right">Credit</TableHead>
@@ -265,7 +275,7 @@ export function PartyStatementPanel(props: {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground">
+                    <TableCell colSpan={statement.branches?.length ? 5 : 4} className="text-muted-foreground">
                       Opening balance
                     </TableCell>
                     <TableCell className="text-right font-medium">
@@ -276,7 +286,13 @@ export function PartyStatementPanel(props: {
                     const href = statementDocHref(props.kind, line.sourceType, line.sourceId);
                     return (
                       <TableRow key={`${line.sourceType}-${line.sourceId}`}>
-                        <TableCell>{line.date}</TableCell>
+                        <TableCell>
+                          <span>{line.date}</span>
+                          {statement.branches?.length && line.dueDate ? (
+                            <span className="block text-xs text-muted-foreground">Due {line.dueDate}</span>
+                          ) : null}
+                        </TableCell>
+                        {statement.branches?.length ? <TableCell>{line.branchName || "—"}</TableCell> : null}
                         <TableCell>
                           {href ? (
                             <Link href={href} className="hover:underline">
@@ -300,7 +316,7 @@ export function PartyStatementPanel(props: {
                   })}
                   {statement.lines.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-muted-foreground">
+                      <TableCell colSpan={statement.branches?.length ? 6 : 5} className="text-muted-foreground">
                         No transactions in this period. Try All time, or post an invoice or payment.
                       </TableCell>
                     </TableRow>
