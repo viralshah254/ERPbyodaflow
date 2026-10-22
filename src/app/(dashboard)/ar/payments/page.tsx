@@ -27,6 +27,7 @@ import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
   allocateArPaymentApi,
   createArPaymentApi,
+  downloadArReceiptPdfApi,
   fetchArPaymentsPageApi,
   fetchOpenInvoicesApi,
   searchArCustomerOptionsApi,
@@ -42,11 +43,15 @@ import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
+import { isFmcgTemplateId } from "@/lib/fmcg/sfa-customer";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 50] as const;
 
 export default function ARPaymentsPage() {
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const issueReceipt = isFmcgTemplateId(templateId);
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const [searchInput, setSearchInput] = React.useState("");
@@ -217,11 +222,22 @@ export default function ARPaymentsPage() {
             <Button variant="ghost" size="sm" onClick={() => openAllocateRef.current(r as PaymentRow)}>
               Allocate
             </Button>
+            {issueReceipt && (r.status === "POSTED" || r.status === "ALLOCATED") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  void downloadArReceiptPdfApi(r.id, `${r.number}.pdf`, (message) => toast.error(message));
+                }}
+              >
+                Receipt
+              </Button>
+            )}
           </div>
         ),
       },
     ],
-    [refreshData, submittingId]
+    [issueReceipt, refreshData, submittingId]
   );
 
   const handleReceivePayment = () => {

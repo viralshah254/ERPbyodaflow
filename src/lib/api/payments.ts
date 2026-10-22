@@ -1,4 +1,4 @@
-import { apiRequest, requireLiveApi } from "@/lib/api/client";
+import { apiRequest, downloadFile, requireLiveApi } from "@/lib/api/client";
 import { sortPartyLookupOptions, toPartyLookupOption, type PartyLookupOption } from "@/lib/api/parties";
 import type { APBillRow, APPaymentRow } from "@/lib/types/ap";
 import type { OpenInvoiceRow, PaymentRow } from "@/lib/types/ar";
@@ -451,6 +451,15 @@ export async function allocateArPaymentApi(paymentId: string, allocations: { doc
     method: "POST",
     body: { allocations },
   });
+}
+
+export function downloadArReceiptPdfApi(
+  paymentId: string,
+  fileName: string,
+  onNotAvailable: (message: string) => void,
+): Promise<boolean> {
+  requireLiveApi("Payment receipt");
+  return downloadFile(`/api/ar/payments/${encodeURIComponent(paymentId)}/pdf`, fileName, onNotAvailable);
 }
 
 export async function submitArPaymentApi(paymentId: string): Promise<{ id: string; status: string }> {
