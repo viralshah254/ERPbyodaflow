@@ -20,6 +20,11 @@ function typeLabel(typeKey: string) {
   return typeKey.replace(/-/g, " ");
 }
 
+function documentHref(typeKey: string, id: string) {
+  if (typeKey === "grn") return `/inventory/receipts/${encodeURIComponent(id)}`;
+  return `/docs/${typeKey}/${id}`;
+}
+
 function ChainStep({
   href,
   number,
@@ -128,7 +133,7 @@ export function DocumentChainTimeline({
   if (sourceDocument) {
     steps.push({
       key: sourceDocument.id,
-      href: `/docs/${sourceDocument.typeKey}/${sourceDocument.id}`,
+      href: documentHref(sourceDocument.typeKey, sourceDocument.id),
       number: sourceDocument.number,
       typeKey: sourceDocument.typeKey,
       status: sourceDocument.status,
@@ -149,7 +154,7 @@ export function DocumentChainTimeline({
   for (const node of downstream) {
     steps.push({
       key: node.id,
-      href: `/docs/${node.typeKey}/${node.id}`,
+      href: documentHref(node.typeKey, node.id),
       number: node.number,
       typeKey: node.typeKey,
       status: node.status,

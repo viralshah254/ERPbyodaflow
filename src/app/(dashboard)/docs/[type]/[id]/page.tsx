@@ -286,6 +286,7 @@ export default function DocViewPage() {
   const [emailTo, setEmailTo] = React.useState("");
   const [emailSending, setEmailSending] = React.useState(false);
   const [settleOpen, setSettleOpen] = React.useState(false);
+  const [settleStep, setSettleStep] = React.useState<"payment" | "terms">("payment");
   const [settleMethod, setSettleMethod] = React.useState<"CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER">("CASH");
   const [settleReference, setSettleReference] = React.useState("");
   const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermRow[]>([]);
@@ -724,6 +725,7 @@ export default function DocViewPage() {
 
   const requestPost = React.useCallback(async () => {
     if (invoiceNeedsSettlement) {
+      setSettleStep(document?.retailPaymentMethod ? "terms" : "payment");
       setSettleOpen(true);
       return;
     }
@@ -735,7 +737,7 @@ export default function DocViewPage() {
     } finally {
       setActionLoading(false);
     }
-  }, [invoiceNeedsSettlement, runPost]);
+  }, [document?.retailPaymentMethod, invoiceNeedsSettlement, runPost]);
 
   /** Load attachments, comments, and audit after core document renders. */
   React.useEffect(() => {
@@ -1179,6 +1181,15 @@ export default function DocViewPage() {
     },
     [id]
   );
+
+  React.useEffect(() => {
+    if (type !== "grn" || !id) return;
+    router.replace(`/inventory/receipts/${encodeURIComponent(id)}`);
+  }, [id, router, type]);
+
+  if (type === "grn") {
+    return <p className="p-6 text-sm text-muted-foreground">Opening receipt…</p>;
+  }
 
   return (
     <>
@@ -2465,7 +2476,7 @@ export default function DocViewPage() {
                   if (/packing counts missing|pieces per/i.test(msg)) {
                     void refreshDocument(true);
                   }
-                  toast.error(msg, { duration: 15000 });
+                  toastDocumentActionError(e);
                 } finally {
                   setActionLoading(false);
                 }
@@ -3072,8 +3083,10 @@ export default function DocViewPage() {
       {settleOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-md mx-4 space-y-4">
-            <h3 className="text-base font-semibold">How is this invoice settled?</h3>
-            {!document?.retailPaymentMethod ? (
+            <h3 className="text-base font-semibold">
+              {settleStep === "payment" ? "How is this invoice paid?" : "Customer payment terms"}
+            </h3>
+            {settleStep === "payment" ? (
               <div className="space-y-2">
                 <Label>Payment method</Label>
                 <div className="grid grid-cols-2 gap-2">
@@ -3089,14 +3102,15 @@ export default function DocViewPage() {
                     </Button>
                   ))}
                 </div>
-                <Input
-                  placeholder="Reference (optional)"
-                  value={settleReference}
-                  onChange={(event) => setSettleReference(event.target.value)}
-                />
+                {settleMethod !== "CASH" ? (
+                  <Input
+                    placeholder={settleMethod === "MPESA" ? "M-Pesa reference (optional)" : settleMethod === "CHEQUE" ? "Cheque number (optional)" : "Transfer reference (optional)"}
+                    value={settleReference}
+                    onChange={(event) => setSettleReference(event.target.value)}
+                  />
+                ) : null}
               </div>
-            ) : null}
-            {partyNeedsTerms ? (
+            ) : (
               <div className="space-y-2">
                 <Label>Customer payment terms</Label>
                 {paymentTerms.length ? (
@@ -3120,20 +3134,27 @@ export default function DocViewPage() {
                   />
                 )}
               </div>
-            ) : null}
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setSettleOpen(false)}>Cancel</Button>
               <Button
                 disabled={settleSaving}
                 onClick={async () => {
-                  if (!document?.partyId && partyNeedsTerms) return;
+                  if (settleStep === "terms" && !document?.partyId) return;
                   setSettleSaving(true);
                   try {
-                    if (!document?.retailPaymentMethod) {
-                      await settleInvoiceApi(id, { method: settleMethod, reference: settleReference.trim() || undefined });
+                    if (settleStep === "payment" && !document?.retailPaymentMethod) {
+                      await settleInvoiceApi(id, {
+                        method: settleMethod,
+                        reference: settleMethod === "CASH" ? undefined : settleReference.trim() || undefined,
+                      });
                       setDocument((prev) => prev ? { ...prev, retailPaymentMethod: settleMethod, orderChannel: "MANUAL" } : prev);
+                      if (partyNeedsTerms) {
+                        setSettleStep("terms");
+                        return;
+                      }
                     }
-                    if (partyNeedsTerms && document?.partyId) {
+                    if (settleStep === "terms" && partyNeedsTerms && document?.partyId) {
                       let termsId = settleTermsId;
                       if (!paymentTerms.length) {
                         const days = Math.max(0, Number(settleNetDays) || 0);
@@ -3165,7 +3186,7 @@ export default function DocViewPage() {
                   }
                 }}
               >
-                {settleSaving ? "Saving…" : "Continue"}
+                {settleSaving ? "Saving…" : settleStep === "payment" && partyNeedsTerms ? "Continue" : signAndPost ? "Sign and post" : "Post"}
               </Button>
             </div>
           </div>
