@@ -256,10 +256,10 @@ export default function PurchaseOrderDetailPage() {
           : "Awaiting receiving",
         links: (order.linkedGrns ?? []).map((g) => ({
           label: g.number,
-          href: `/docs/grn/${g.id}`,
+          href: `/inventory/receipts/${g.id}`,
           badge: g.status,
         })),
-        href: order.linkedGrns?.[0]?.id ? `/docs/grn/${order.linkedGrns[0].id}` : `/docs/grn/new?poId=${id}`,
+        href: order.linkedGrns?.[0]?.id ? `/inventory/receipts/${order.linkedGrns[0].id}` : `/docs/grn/new?poId=${id}`,
         actionLabel:
           receivedStatus === "current" && !order.linkedGrns?.length ? "Create GRN" : undefined,
       },
@@ -603,7 +603,7 @@ export default function PurchaseOrderDetailPage() {
                           className="grid grid-cols-1 gap-2 border-b border-border/60 pb-3 last:border-0 last:pb-0 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:gap-x-3"
                         >
                           <Link
-                            href={`/docs/grn/${g.id}`}
+                            href={`/inventory/receipts/${g.id}`}
                             className="font-medium text-primary hover:underline"
                           >
                             {g.number}
