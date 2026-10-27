@@ -28,6 +28,7 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   "/treasury/overview": ["cash", "bank", "payments"],
   "/treasury/payment-runs": ["pay run", "ap"],
   "/treasury/collections": ["ar", "receipts"],
+  "/ar/receipts": ["cheque", "check", "cashbook", "collection", "deposit", "payment"],
   "/finance/bank-recon": ["reconcile", "statement"],
   "/assets/overview": ["depreciation", "disposals", "register"],
   "/payroll/overview": ["employees", "pay runs", "payslips"],

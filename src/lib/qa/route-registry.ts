@@ -97,6 +97,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/ar/statements", module: "finance", description: "Customer statements", inNav: true },
   { path: "/ar/aging", module: "finance", description: "AR aging", inNav: true },
   { path: "/ar/payments", module: "finance", description: "AR Payments", inNav: true },
+  { path: "/ar/receipts", module: "finance", description: "Collect receipts", inNav: true },
 
   // Finance
   { path: "/pricing/overview", module: "pricing", description: "Pricing overview", inNav: true },

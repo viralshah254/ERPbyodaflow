@@ -53,6 +53,7 @@ const MAJOR_ROUTES = [
   "/ap/suppliers",
   "/ar/customers",
   "/ar/payments",
+  "/ar/receipts",
 
   // Finance
   "/finance",

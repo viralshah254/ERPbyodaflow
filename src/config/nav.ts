@@ -246,6 +246,14 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: "finance.ar.read",
       },
       {
+        id: "ar-receipts",
+        label: "Collect receipts",
+        href: "/ar/receipts",
+        icon: "Receipt",
+        moduleId: "finance",
+        permission: "finance.ar.read",
+      },
+      {
         id: "finance-ap",
         label: "Accounts Payable (AP)",
         href: "/finance/ap",

@@ -72,6 +72,11 @@ interface AsyncSearchableSelectProps {
   listHeader?: React.ReactNode;
   /** When this value changes while open, reload options (e.g. external filter changed). */
   reloadToken?: string | number;
+  /**
+   * When this changes to a non-empty value, open the search so the clerk can type immediately.
+   * Used by the receipt grid after Enter starts a new line.
+   */
+  openSignal?: string;
 }
 
 export function AsyncSearchableSelect({
@@ -102,6 +107,7 @@ export function AsyncSearchableSelect({
   createNewLabel = "Add new",
   listHeader,
   reloadToken,
+  openSignal,
 }: AsyncSearchableSelectProps) {
   const orgId = useAuthStore((s) => s.org?.orgId);
   // Scope recent items per org so selections from one org never bleed into another
@@ -110,6 +116,11 @@ export function AsyncSearchableSelect({
     : recentStorageKey;
 
   const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!openSignal) return;
+    setOpen(true);
+  }, [openSignal]);
   const [query, setQuery] = React.useState("");
   const [options, setOptions] = React.useState<AsyncSearchableSelectOption[]>([]);
   const [loading, setLoading] = React.useState(false);

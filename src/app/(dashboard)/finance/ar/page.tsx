@@ -72,6 +72,12 @@ export default function AccountsReceivablePage() {
               Aging report
             </Link>
           </Button>
+          <Button asChild>
+            <Link href="/ar/receipts">
+              <Icons.Receipt className="mr-2 h-4 w-4" />
+              Collect receipts
+            </Link>
+          </Button>
         </div>
       }
     >
