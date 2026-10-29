@@ -21,6 +21,7 @@ import type { ProductRow } from "@/lib/types/masters";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 
 type WarehouseOption = { id: string; code?: string; name: string };
 
@@ -445,7 +446,7 @@ export function BomComponentEditor({
                             onClick={() => addProducts([{ product, qty: 1 }])}
                           >
                             <span className="min-w-0 flex-1">
-                              <span className="block font-medium leading-snug">{product.name}</span>
+                              <span className={cn("block font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{product.name}</span>
                               <span className="block text-xs text-muted-foreground">
                                 {[product.sku, product.size, product.barcode, product.unit].filter(Boolean).join(" · ")}
                               </span>
@@ -494,7 +495,12 @@ export function BomComponentEditor({
               return (
                 <TableRow key={line.id}>
                   <TableCell className="font-medium">
-                    <span className="block">{line.productSku ? `${line.productSku} — ${line.productName ?? ""}` : line.productName ?? line.productId}</span>
+                    <span className="block">
+                      {line.productSku ? <span className="font-mono">{line.productSku} — </span> : null}
+                      <span className={line.productName || !line.productSku ? CAPS_ON_PRODUCT_CLASS : undefined}>
+                        {line.productName ?? (line.productSku ? "" : line.productId)}
+                      </span>
+                    </span>
                   </TableCell>
                   <TableCell>
                     {canWrite ? (

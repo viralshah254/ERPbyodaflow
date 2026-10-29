@@ -12,6 +12,8 @@ type BackendOrg = {
   taxPinAttachment?: OrgComplianceAttachmentSummary | null;
   certificateOfIncorporationAttachment?: OrgComplianceAttachmentSummary | null;
   logoAttachment?: OrgComplianceAttachmentSummary | null;
+  capsOnProduct?: boolean;
+  featureFlags?: Record<string, boolean>;
 };
 
 function mapOrg(org: BackendOrg): OrgProfileRecord {
@@ -24,6 +26,7 @@ function mapOrg(org: BackendOrg): OrgProfileRecord {
     certificateOfIncorporationAttachment:
       org.certificateOfIncorporationAttachment ?? null,
     logoAttachment: org.logoAttachment ?? null,
+    capsOnProduct: org.capsOnProduct === true || org.featureFlags?.capsOnProduct === true,
   };
 }
 
@@ -37,6 +40,7 @@ export async function saveOrgProfileApi(payload: {
   name?: string;
   taxId?: string;
   registrationNumber?: string;
+  capsOnProduct?: boolean;
 }): Promise<OrgProfileRecord> {
   requireLiveApi("Organization profile save");
   const org = await apiRequest<BackendOrg>("/api/org", {

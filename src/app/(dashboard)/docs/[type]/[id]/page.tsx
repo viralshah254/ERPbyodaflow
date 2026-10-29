@@ -87,6 +87,7 @@ import {
 } from "@/components/docs/document-detail-header";
 import { DocumentChainTimeline } from "@/components/docs/document-chain-timeline";
 import { DocumentLineProductDescription } from "@/components/docs/DocumentLineProductDescription";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { DeliveryNoteWarehousePanel } from "@/components/docs/DeliveryNoteWarehousePanel";
 import { deliveryLinePrimaryLabel, deliveryLineSku } from "@/lib/documents/format-delivery-line";
 import { fetchPickPackTasks, fetchPutawayTasks } from "@/lib/api/warehouse-execution";
@@ -2543,7 +2544,7 @@ export default function DocViewPage() {
                     return (
                       <div key={lineId || line.description} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-2 text-sm">
                         <div className="min-w-0">
-                          <p className="truncate">{line.description}</p>
+                          <p className={`truncate ${CAPS_ON_PRODUCT_CLASS}`}>{line.description}</p>
                           <p className="text-xs text-muted-foreground">
                             {open > 0 ? `${open} still open` : "Already credited"}
                             {line.unit ? ` ${line.unit}` : ""}

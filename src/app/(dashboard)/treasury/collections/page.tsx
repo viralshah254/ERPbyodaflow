@@ -109,6 +109,12 @@ export default function CollectionsPage() {
                 Send reminder (Copilot)
               </Button>
             ) : null}
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/ar/receipts">
+                <Icons.Receipt className="mr-2 h-4 w-4" />
+                Collect receipts
+              </Link>
+            </Button>
             <Button size="sm" asChild>
               <Link href="/ar/payments">
                 <Icons.CreditCard className="mr-2 h-4 w-4" />

@@ -36,5 +36,5 @@ yarn-error.log*
 next-env.d.ts
 
 
-# Internal documentation
-docs/
+# Internal documentation at the repo root. Do not ignore app routes or src/lib/docs.
+/docs/

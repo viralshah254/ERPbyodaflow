@@ -13,6 +13,36 @@ export function defaultPickerTypeFilter(
   return "";
 }
 
+export type PickerListQuery = {
+  purchasable?: boolean;
+  sellable?: boolean;
+  productType?: "RAW" | "FINISHED" | "BOTH";
+  itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
+};
+
+/**
+ * What the product list API should be asked for.
+ * On a plant, "purchasable" only returns raw materials, so a finished-goods
+ * or packaging filter (and All types) has to ask for the role itself.
+ */
+export function pickerListQuery(args: {
+  productFilter: "purchasable" | "sellable" | "all";
+  plantCatalogue: boolean;
+  typeFilter: PickerTypeFilter;
+}): PickerListQuery {
+  const { productFilter, plantCatalogue, typeFilter } = args;
+  if (plantCatalogue && (typeFilter === "FINISHED" || typeFilter === "RAW" || typeFilter === "PACKAGING" || typeFilter === "SEMI")) {
+    return { itemRole: typeFilter };
+  }
+  if (plantCatalogue) return {};
+  return {
+    purchasable: productFilter === "purchasable" ? true : undefined,
+    sellable: productFilter === "sellable" ? true : undefined,
+    productType:
+      typeFilter === "RAW" || typeFilter === "FINISHED" || typeFilter === "BOTH" ? typeFilter : undefined,
+  };
+}
+
 /**
  * Plant catalogues (Top Food and bakery) classify with item role.
  * A finished good may still be stored as BOTH, or with no product type.

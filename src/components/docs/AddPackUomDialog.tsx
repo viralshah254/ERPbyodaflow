@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/product-master";
 import type { ProductPackaging } from "@/lib/products/pricing-types";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { toast } from "sonner";
 
 const SUGGESTED_UOMS = ["CARTON", "OUTER", "BALE", "BOX", "PACK", "DOZEN"] as const;
@@ -91,9 +92,14 @@ export function AddPackUomDialog({
         >
           <Dialog.Title className="text-lg font-semibold">Add pack UOM</Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-muted-foreground">
-            {productName
-              ? `How many ${baseUom} are in one pack of ${productName}?`
-              : `How many ${baseUom} are in this pack?`}
+            {productName ? (
+              <>
+                How many {baseUom} are in one pack of{" "}
+                <span className={CAPS_ON_PRODUCT_CLASS}>{productName}</span>?
+              </>
+            ) : (
+              `How many ${baseUom} are in this pack?`
+            )}
           </Dialog.Description>
           <div className="mt-4 grid gap-3">
             <div className="space-y-1">

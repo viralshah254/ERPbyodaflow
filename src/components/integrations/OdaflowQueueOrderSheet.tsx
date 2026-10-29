@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/async-searchable-select";
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { OdaflowMappingConflictDialog } from "@/components/integrations/OdaflowMappingConflictDialog";
 import {
   createSalesOrderFromQueueItem,
@@ -146,6 +147,7 @@ function toProductOption(product: ProductRow): AsyncSearchableSelectOption {
   return {
     id: product.id,
     label: product.name,
+    labelClassName: CAPS_ON_PRODUCT_CLASS,
     description: productOptionDetail(product),
   };
 }
@@ -173,7 +175,7 @@ async function resolveCatalogProduct(line: {
   const barcode = line.barcode?.trim();
   if (!barcode) {
     return id
-      ? { id, label: line.productName || id }
+      ? { id, label: line.productName || id, labelClassName: CAPS_ON_PRODUCT_CLASS }
       : null;
   }
 
@@ -187,7 +189,7 @@ async function resolveCatalogProduct(line: {
     const hit = page.items.find((product) => (product.barcode ?? "").trim() === barcode);
     return hit ? toProductOption(hit) : null;
   } catch {
-    return id ? { id, label: line.productName || id } : null;
+    return id ? { id, label: line.productName || id, labelClassName: CAPS_ON_PRODUCT_CLASS } : null;
   }
 }
 
@@ -319,6 +321,7 @@ export function OdaflowQueueOrderSheet({
               products[line.index] = {
                 id: line.erpProductId,
                 label: line.erpProductName ?? line.productName ?? line.erpProductId,
+                labelClassName: CAPS_ON_PRODUCT_CLASS,
               };
             }
           })
@@ -780,7 +783,7 @@ export function OdaflowQueueOrderSheet({
                       )}
                     >
                       <div>
-                        <p className="font-medium">{line.productName ?? "Unknown product"}</p>
+                        <p className={cn("font-medium", CAPS_ON_PRODUCT_CLASS)}>{line.productName ?? "Unknown product"}</p>
                         {line.packSize && (
                           <p className="mt-0.5 text-xs text-muted-foreground">Size {line.packSize}</p>
                         )}

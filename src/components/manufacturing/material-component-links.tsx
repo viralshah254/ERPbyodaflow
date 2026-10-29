@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import type { MaterialAvailabilityLine } from "@/lib/api/manufacturing";
 
 export function materialStockHref(
@@ -32,7 +33,7 @@ export function MaterialComponentLinks({
     <div className="space-y-0.5">
       <Link
         href={stockHref}
-        className="inline-block font-medium text-primary underline-offset-2 hover:underline"
+        className={`inline-block font-medium text-primary underline-offset-2 hover:underline${line.productName ? ` ${CAPS_ON_PRODUCT_CLASS}` : ""}`}
       >
         {label}
       </Link>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,7 +235,7 @@ export default function RoutePickListsPage() {
             <tbody>
               {active.lines.map((line) => (
                 <tr key={line.productId} className="border-b">
-                  <td className="py-2">{line.name}</td>
+                  <td className={`py-2 ${CAPS_ON_PRODUCT_CLASS}`}>{line.name}</td>
                   <td>{line.orderedQty}</td>
                   <td className="no-print">
                     <Input
@@ -297,7 +298,7 @@ export default function RoutePickListsPage() {
                 <CardContent className="space-y-2">
                   <select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={shortProductId} onChange={(event) => setShortProductId(event.target.value)}>
                     <option value="">Product</option>
-                    {active.lines.map((line) => <option key={line.productId} value={line.productId}>{line.name}</option>)}
+                    {active.lines.map((line) => <option key={line.productId} value={line.productId} className={CAPS_ON_PRODUCT_CLASS}>{line.name}</option>)}
                   </select>
                   <Input placeholder="Quantity" value={shortQty} onChange={(event) => setShortQty(event.target.value)} />
                   <select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={whereNow} onChange={(event) => setWhereNow(event.target.value)}>
@@ -319,7 +320,7 @@ export default function RoutePickListsPage() {
                 <CardContent className="space-y-2">
                   <select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={damageProductId} onChange={(event) => setDamageProductId(event.target.value)}>
                     <option value="">Product</option>
-                    {active.lines.map((line) => <option key={line.productId} value={line.productId}>{line.name}</option>)}
+                    {active.lines.map((line) => <option key={line.productId} value={line.productId} className={CAPS_ON_PRODUCT_CLASS}>{line.name}</option>)}
                   </select>
                   <Input placeholder="Quantity" value={damageQty} onChange={(event) => setDamageQty(event.target.value)} />
                   <Input placeholder="Reason" value={damageReason} onChange={(event) => setDamageReason(event.target.value)} />
@@ -353,7 +354,7 @@ export default function RoutePickListsPage() {
                     <tbody>
                       {tally.map((line) => (
                         <tr key={line.productId} className="border-t">
-                          <td>{line.name}</td>
+                          <td className={CAPS_ON_PRODUCT_CLASS}>{line.name}</td>
                           <td>{line.picked}</td>
                           <td>{line.invoiceQty}</td>
                           <td>{line.deliveryQty}</td>

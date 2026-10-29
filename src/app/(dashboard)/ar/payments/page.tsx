@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -28,7 +29,6 @@ import {
   fetchOpenInvoicesApi,
   submitArPaymentApi,
 } from "@/lib/api/payments";
-import { ArChequeBoxSheet } from "@/components/finance/ArChequeBoxSheet";
 import { ArSettlementSheet, type ReceivePrefill } from "@/components/finance/ArSettlementSheet";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -76,7 +76,6 @@ export default function ARPaymentsPage() {
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [receiveSession, setReceiveSession] = React.useState(0);
   const [receivePrefill, setReceivePrefill] = React.useState<ReceivePrefill | null>(null);
-  const [chequeBoxOpen, setChequeBoxOpen] = React.useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = React.useState<string | null>(null);
   const [allocateSheetOpen, setAllocateSheetOpen] = React.useState(false);
   const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
@@ -330,8 +329,8 @@ export default function ARPaymentsPage() {
                 Draft payment reminder
               </Button>
             ) : null}
-            <Button variant="outline" onClick={() => setChequeBoxOpen(true)}>
-              Record cheques
+            <Button variant="outline" asChild>
+              <Link href="/ar/receipts">Collect receipts</Link>
             </Button>
             <Button onClick={() => openReceive(null)}>
               <Icons.Plus className="mr-2 h-4 w-4" />
@@ -401,14 +400,6 @@ export default function ARPaymentsPage() {
         prefill={receivePrefill}
         bankAccounts={bankAccountOptions}
         onOpenChange={setReceiveOpen}
-        onPosted={() => {
-          void refreshData();
-        }}
-      />
-      <ArChequeBoxSheet
-        open={chequeBoxOpen}
-        bankAccounts={bankAccountOptions}
-        onOpenChange={setChequeBoxOpen}
         onPosted={() => {
           void refreshData();
         }}

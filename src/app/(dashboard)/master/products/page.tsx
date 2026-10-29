@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { TopProgressBar } from "@/components/ui/top-progress-bar";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -467,6 +468,7 @@ export default function MasterProductsPage() {
             {
               id: "name",
               header: "Name",
+              className: CAPS_ON_PRODUCT_CLASS,
               accessor: "name" as keyof ProductRow,
               sortable: true,
               sortValue: (r: ProductRow) => r.name?.toLowerCase() ?? "",
@@ -1432,6 +1434,7 @@ export default function MasterProductsPage() {
                     data-1p-ignore
                     data-lpignore="true"
                     placeholder="e.g. BEEF MASALA 50GM (POUCH)"
+                    className={CAPS_ON_PRODUCT_CLASS}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
@@ -1727,6 +1730,7 @@ export default function MasterProductsPage() {
                     data-1p-ignore
                     data-lpignore="true"
                     placeholder="Product name"
+                    className={CAPS_ON_PRODUCT_CLASS}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />

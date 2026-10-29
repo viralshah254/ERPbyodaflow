@@ -28,6 +28,7 @@ import type { UomDefinition } from "@/lib/products/types";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import * as Icons from "lucide-react";
 
 const STATUS_OPTIONS: { label: string; value: string }[] = [
@@ -444,7 +445,8 @@ export default function WarehouseTransfersPage() {
                             <SelectContent>
                               {options.map((row) => (
                                 <SelectItem key={row.productId} value={row.productId ?? row.id}>
-                                  {row.sku ? `${row.sku} — ${row.name}` : row.name}
+                                  {row.sku ? <span>{row.sku} — </span> : null}
+                                  <span className={CAPS_ON_PRODUCT_CLASS}>{row.name}</span>
                                   {` · ${formatQty(row.available)} ${row.uom || "EA"} available`}
                                 </SelectItem>
                               ))}

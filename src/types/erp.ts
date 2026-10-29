@@ -57,6 +57,8 @@ export interface Org {
   franchisePersona?: "STANDARD" | "LIGHT_ERP";
   taxId?: string;
   registrationNumber?: string;
+  /** When true, product names draw in capitals. The saved spelling stays as entered. */
+  capsOnProduct?: boolean;
   address?: Address;
   contactEmail?: string;
   contactPhone?: string;

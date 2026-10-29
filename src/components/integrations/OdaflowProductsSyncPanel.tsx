@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import Link from "next/link";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
@@ -475,7 +476,7 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
                       <td className="py-1.5 pr-4">
                         <Link
                           href={`/master/products/${p.productId}`}
-                          className="text-primary hover:underline"
+                          className={`text-primary hover:underline ${CAPS_ON_PRODUCT_CLASS}`}
                         >
                           {p.name}
                         </Link>

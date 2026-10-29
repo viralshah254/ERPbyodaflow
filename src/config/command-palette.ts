@@ -56,6 +56,14 @@ export const COMMAND_NAV_FALLBACK_ITEMS: CommandItemNav[] = [
   { id: "nav-inbox", label: "Inbox (alerts & tasks)", group: "nav", href: "/inbox", keywords: ["alerts", "tasks", "notifications"], icon: "Inbox" },
   { id: "nav-work-queue", label: "Work queue", group: "nav", href: "/work/queue", keywords: ["work", "queue", "payroll", "tax", "pricing", "alerts"], icon: "ListTodo" },
   {
+    id: "nav-display",
+    label: "Display",
+    group: "nav",
+    href: "/settings/display",
+    keywords: ["display", "caps", "capitals", "product names", "uppercase"],
+    icon: "CaseSensitive",
+  },
+  {
     id: "nav-uom-catalog",
     label: "UOM catalog",
     group: "nav",

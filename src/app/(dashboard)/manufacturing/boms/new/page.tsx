@@ -23,6 +23,7 @@ import {
 import { createManufacturingBom, fetchNextManufacturingBomCode } from "@/lib/api/manufacturing";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import { productSearchLabel } from "@/lib/products/product-search";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { fetchUomsApi } from "@/lib/api/uom";
 import { fetchWarehousesApi, type BackendWarehouse } from "@/lib/api/warehouses";
 import { setUomsCache, listUoms } from "@/lib/data/uom.repo";
@@ -112,6 +113,7 @@ export default function NewBomPage() {
     return page.items.map((product) => ({
       id: product.id,
       label: productSearchLabel(product),
+      labelClassName: CAPS_ON_PRODUCT_CLASS,
       description: [product.size?.trim(), product.barcode?.trim()].filter(Boolean).join(" · ") || undefined,
     }));
   }, []);

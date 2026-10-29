@@ -56,6 +56,7 @@ type BackendOrg = {
   franchiseStoreFormat?: string;
   franchiseManagerName?: string;
   franchisePersona?: "STANDARD" | "LIGHT_ERP";
+  capsOnProduct?: boolean;
 };
 
 type BackendTenant = {
@@ -141,6 +142,7 @@ function mapOrg(org: BackendOrg): Org {
     franchiseStoreFormat: org.franchiseStoreFormat,
     franchiseManagerName: org.franchiseManagerName,
     franchisePersona: org.franchisePersona,
+    capsOnProduct: org.capsOnProduct === true || org.featureFlags?.capsOnProduct === true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

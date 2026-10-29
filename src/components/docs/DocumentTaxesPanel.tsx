@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -325,7 +326,7 @@ export function DocumentTaxesPanel({
                 {lineTaxRows.map((row) => (
                   <TableRow key={row.key}>
                     <TableCell className="max-w-[220px]">
-                      <span className="font-medium line-clamp-2">{row.description}</span>
+                      <span className={`font-medium line-clamp-2 ${CAPS_ON_PRODUCT_CLASS}`}>{row.description}</span>
                       {row.name && row.name !== row.description ? (
                         <p className="text-xs text-muted-foreground mt-0.5">{row.name}</p>
                       ) : null}

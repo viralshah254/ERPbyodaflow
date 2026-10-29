@@ -487,6 +487,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "ar-customers", label: "Customer credit", href: "/ar/customers", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
       { key: "ar-statements", label: "Customer statements", href: "/ar/statements", icon: "FileText", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
       { key: "ar-payments", label: "AR Payments", href: "/ar/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
+      { key: "ar-receipts", label: "Collect receipts", href: "/ar/receipts", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.ar.read"] },
       { key: "finance-ap", label: "Accounts Payable (AP)", href: "/finance/ap", icon: "ArrowUpCircle", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "ap-suppliers", label: "AP Suppliers", href: "/ap/suppliers", icon: "Building2", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "ap-statements", label: "Supplier statements", href: "/ap/statements", icon: "FileText", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },

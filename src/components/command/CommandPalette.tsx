@@ -34,8 +34,8 @@ import {
 import { fetchPreferencesApi } from "@/lib/api/preferences";
 import { isApiConfigured } from "@/lib/api/client";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { searchErpApi, type ErpSearchHit } from "@/lib/api/erp-search";
 import { isRecordListHref, recordHref } from "@/lib/nav/record-destination";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
@@ -526,7 +526,7 @@ export function CommandPalette() {
           )}
 
           {/* Results */}
-          <ScrollArea className="h-[min(65vh,440px)]">
+          <div className="h-[min(65vh,440px)] overflow-y-auto">
             <div className="p-2">
               {/* Empty query hint */}
               {isEmptyQuery && recents.length === 0 && (
@@ -614,7 +614,17 @@ export function CommandPalette() {
                             <Icon className="h-3.5 w-3.5" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <span className="block truncate font-medium leading-snug">{item.label}</span>
+                            <span
+                              className={cn(
+                                "block truncate font-medium leading-snug",
+                                displayGroup === "search" &&
+                                  "entityType" in item &&
+                                  (item as SearchResultItem).entityType === "product" &&
+                                  CAPS_ON_PRODUCT_CLASS
+                              )}
+                            >
+                              {item.label}
+                            </span>
                             {/* Subtitle / breadcrumb line */}
                             {isAskAi && "intentPreview" in item ? (
                               <span className="block truncate text-xs text-muted-foreground">
@@ -648,7 +658,7 @@ export function CommandPalette() {
                 })()
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Footer hint */}
           <div className="flex items-center justify-between border-t px-4 py-2 text-[11px] text-muted-foreground">

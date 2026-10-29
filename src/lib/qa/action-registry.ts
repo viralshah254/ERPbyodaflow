@@ -72,6 +72,7 @@ export const ACTION_REGISTRY: ActionInfo[] = [
 
   // AR
   { module: "finance", page: "/ar/payments", action: "New receipt", behavior: "Opens drawer", status: "ok" },
+  { module: "finance", page: "/ar/receipts", action: "Post receipts", behavior: "Posts each grid line as a customer receipt", status: "ok" },
   { module: "finance", page: "/ar/payments", action: "Allocate", behavior: "Allocates payment to invoices", status: "ok" },
 
   // Finance

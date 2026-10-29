@@ -588,7 +588,7 @@ export async function checkCustomerIdentityApi(params: {
   return apiRequest("/api/parties/check-identity", { params: query });
 }
 
-export async function searchPartyLookupOptionsApi(filters?: {
+export async function searchPartyLookupPageApi(filters?: {
   role?: PartyRole;
   customerType?: CustomerType | "";
   customerCategoryId?: string;
@@ -600,7 +600,8 @@ export async function searchPartyLookupOptionsApi(filters?: {
   status?: string;
   search?: string;
   limit?: number;
-}): Promise<PartyLookupOption[]> {
+  cursor?: string;
+}): Promise<{ options: PartyLookupOption[]; nextCursor: string | null }> {
   requireLiveApi("Party lookup");
   const params = new URLSearchParams();
   if (filters?.role) params.set("role", filters.role);
@@ -613,7 +614,8 @@ export async function searchPartyLookupOptionsApi(filters?: {
   if (filters?.status) params.set("status", filters.status);
   if (filters?.search?.trim()) params.set("search", filters.search.trim());
   if (filters?.limit) params.set("limit", String(Math.min(Math.max(filters.limit, 1), 100)));
-  const data = await apiRequest<{ items: BackendParty[] }>("/api/parties", {
+  if (filters?.cursor) params.set("cursor", filters.cursor);
+  const data = await apiRequest<{ items: BackendParty[]; nextCursor?: string | null }>("/api/parties", {
     params,
   });
   // Resolve supermarket names for branch rows so pickers can show "Under Naivas".
@@ -635,17 +637,27 @@ export async function searchPartyLookupOptionsApi(filters?: {
       if (p?.id) parentNameById.set(p.id, p.name);
     }
   }
-  return sortPartyLookupOptions(
-    data.items.map((item) =>
-      toPartyLookupOption({
-        ...item,
-        parentPartyName: item.parentPartyId
-          ? parentNameById.get(item.parentPartyId) ?? undefined
-          : undefined,
-      })
+  return {
+    options: sortPartyLookupOptions(
+      data.items.map((item) =>
+        toPartyLookupOption({
+          ...item,
+          parentPartyName: item.parentPartyId
+            ? parentNameById.get(item.parentPartyId) ?? undefined
+            : undefined,
+        })
+      ),
+      filters?.search ?? ""
     ),
-    filters?.search ?? ""
-  );
+    nextCursor: data.nextCursor ?? null,
+  };
+}
+
+export async function searchPartyLookupOptionsApi(
+  filters?: Parameters<typeof searchPartyLookupPageApi>[0]
+): Promise<PartyLookupOption[]> {
+  const page = await searchPartyLookupPageApi(filters);
+  return page.options;
 }
 
 export async function uploadPartyPinCertificateApi(partyId: string, file: File): Promise<{ storageKey: string; fileName: string }> {

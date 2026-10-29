@@ -7,6 +7,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1186,7 +1187,7 @@ export default function PickPackDetailPage() {
                         href={`/master/products/${l.productId}?tab=packaging`}
                         className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-50"
                       >
-                        {l.productName ?? l.sku ?? "open product"}
+                        <span className={CAPS_ON_PRODUCT_CLASS}>{l.productName ?? l.sku ?? "open product"}</span>
                       </Link>
                     </span>
                   ))}
@@ -1382,7 +1383,7 @@ export default function PickPackDetailPage() {
                             }}
                           />
                         ) : (
-                          line.productName ?? line.productId
+                          <span className={CAPS_ON_PRODUCT_CLASS}>{line.productName ?? line.productId}</span>
                         )}
                         {!fmcg && canEditPicked && isRoundFishMixLine(line) ? (
                           <Button
