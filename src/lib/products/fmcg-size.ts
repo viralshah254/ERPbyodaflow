@@ -119,6 +119,20 @@ export function composeFmcgSize(value: string, sizeUom: string): string | undefi
   return normalizeFmcgSize(`${v}${u}`) ?? `${v}${u}`;
 }
 
+/**
+ * Trade unit for a simple pack size (35kg → KG, 2L → L).
+ * Multipacks (12x330ml) and piece sizes stay unset so the line can open on PCS or a carton.
+ */
+export function fmcgSizeOrderUom(size?: string | null): string | undefined {
+  const normalized = normalizeFmcgSize(size) ?? "";
+  if (!normalized) return undefined;
+  const match = normalized.match(new RegExp(`^(\\d+(?:\\.\\d+)?)(${UNIT_ALT})$`, "i"));
+  if (!match) return undefined;
+  const unit = canonicalizeFmcgSizeUnit(match[2]);
+  if (!unit || unit === "pcs") return undefined;
+  return unit === "L" ? "L" : unit.toUpperCase();
+}
+
 /** Split a stored size string back into value + UOM for the edit UI. */
 export function parseFmcgSize(size?: string | null): { value: string; uom: string } {
   const normalized = normalizeFmcgSize(size) ?? "";

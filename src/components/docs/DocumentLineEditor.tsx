@@ -32,6 +32,7 @@ import {
   type FmcgCatalogItem,
 } from "@/lib/fmcg/pricing";
 import { DocumentProductPickerSheet, type CatalogAddItem } from "@/components/docs/DocumentProductPickerSheet";
+import { defaultDocumentLineUom, documentLineBaseUom } from "@/lib/docs/default-line-uom";
 import { AddPackUomDialog } from "@/components/docs/AddPackUomDialog";
 import { cn } from "@/lib/utils";
 import {
@@ -194,28 +195,9 @@ function configuredPackUoms(packaging: ProductPackaging[] | undefined): string[]
     .filter(Boolean);
 }
 
-/** Default UOM from product packaging (purchase vs sales). */
-function pickDefaultUomFromPackaging(
-  packaging: ProductPackaging[],
-  mode: "sales" | "purchasing",
-  opts?: { fmcgOrg?: boolean }
-): string | undefined {
-  const usable = opts?.fmcgOrg
-    ? packaging.filter((p) => Number.isFinite(p.unitsPer) && p.unitsPer > 1)
-    : packaging;
-  if (!usable.length) return undefined;
-  if (mode === "purchasing") {
-    const p = usable.find((x) => x.isDefaultPurchaseUom);
-    if (p) return p.uom;
-  }
-  const s = usable.find((x) => x.isDefaultSalesUom);
-  if (s) return s.uom;
-  return usable[0]?.uom;
-}
-
 /**
  * Line UOM options.
- * FMCG: base piece UOM (PCS) + only packs saved on that product (no org catalog / defaults).
+ * FMCG: the product's base unit first, then packs saved on that product.
  * Seafood / other: packaging UOMs merged with org UOM catalog.
  */
 function mergeLineUomOptions(
@@ -227,14 +209,17 @@ function mergeLineUomOptions(
   if (opts?.fmcgOrg) {
     const base = String(opts.baseUom ?? "PCS").trim().toUpperCase() || "PCS";
     const merged = new Set<string>([base, ...configuredPackUoms(packagingForProduct)]);
+    if (!isPieceUom(base)) merged.add("PCS");
     if (currentValue) merged.add(String(currentValue).trim().toUpperCase());
     const arr = [...merged].filter(Boolean);
     arr.sort((a, b) => {
+      if (a === base && b !== base) return -1;
+      if (b === base && a !== base) return 1;
       if (isPieceUom(a) && !isPieceUom(b)) return -1;
       if (!isPieceUom(a) && isPieceUom(b)) return 1;
       return a.localeCompare(b);
     });
-    return arr.length ? arr : ["PCS"];
+    return arr.length ? arr : [base];
   }
   const fromPack = (packagingForProduct ?? []).map((p) => p.uom);
   const merged = new Set<string>([...fromPack, ...catalogUomCodes]);
@@ -247,13 +232,17 @@ function mergeLineUomOptions(
 function defaultLineUom(
   packaging: ProductPackaging[],
   mode: "sales" | "purchasing",
-  product: Pick<ProductRow, "unit" | "baseUom">,
+  product: Pick<ProductRow, "unit" | "baseUom" | "size">,
   fmcgOrg: boolean
 ): string {
-  const fromPack = pickDefaultUomFromPackaging(packaging, mode, { fmcgOrg });
-  if (fromPack) return fromPack;
-  if (fmcgOrg) return "PCS";
-  return product.unit ?? product.baseUom ?? "EA";
+  return defaultDocumentLineUom({
+    packaging,
+    mode,
+    baseUom: product.baseUom,
+    unit: product.unit,
+    size: product.size,
+    fmcgOrg,
+  });
 }
 
 function isPreservedCommercialLine(line: Pick<DocumentLine, "priceReason">): boolean {
@@ -1538,7 +1527,14 @@ export function DocumentLineEditor({
                       packagingForProduct={packagingByProductId?.[l.productId]}
                       catalogUomCodes={catalogUomCodes}
                       fmcgOrg={fmcgOrg}
-                      baseUom={product?.baseUom || product?.unit || "PCS"}
+                      baseUom={documentLineBaseUom(
+                        {
+                          baseUom: product?.baseUom,
+                          unit: product?.unit,
+                          size: product?.size,
+                        },
+                        fmcgOrg
+                      )}
                       onPackagingUpdated={onPackagingUpdated}
                     />
                   </td>
@@ -1732,6 +1728,8 @@ function UomSelect({
   React.useEffect(() => {
     if (!fmcgOrg) return;
     if (!selectValue || selectValue === normalizedValue || selectValue === value) return;
+    // A product set to KG must not be rewritten to PCS while packaging is still loading.
+    if (normalizedValue && !isPieceUom(normalizedValue) && isPieceUom(selectValue)) return;
     // Never strip a pack UOM before product packaging has loaded.
     const packsLoaded = (packagingForProduct?.length ?? 0) > 0;
     if (!packsLoaded && normalizedValue && !isPieceUom(normalizedValue)) return;

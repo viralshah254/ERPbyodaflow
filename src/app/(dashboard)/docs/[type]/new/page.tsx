@@ -16,7 +16,7 @@ export default function DocTypeNewPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const type = params.type as string;
+  const type = (typeof params.type === "string" && params.type) || "grn";
   const terminology = useTerminology();
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;

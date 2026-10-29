@@ -20,11 +20,26 @@ export type AsyncSearchableSelectOption = {
   }>;
 };
 
+export type AsyncSearchLoadResult =
+  | AsyncSearchableSelectOption[]
+  | { options: AsyncSearchableSelectOption[]; nextCursor?: string | null };
+
+function normalizeSearchLoad(result: AsyncSearchLoadResult): {
+  options: AsyncSearchableSelectOption[];
+  nextCursor: string | null;
+} {
+  if (Array.isArray(result)) return { options: result, nextCursor: null };
+  return { options: result.options ?? [], nextCursor: result.nextCursor ?? null };
+}
+
 interface AsyncSearchableSelectProps {
   value?: string;
   onValueChange: (value: string) => void;
   onOptionSelect?: (option: AsyncSearchableSelectOption | null) => void;
-  loadOptions: (query: string) => Promise<AsyncSearchableSelectOption[]>;
+  loadOptions: (
+    query: string,
+    page?: { cursor: string | null }
+  ) => Promise<AsyncSearchLoadResult>;
   selectedOption?: AsyncSearchableSelectOption | null;
   placeholder?: string;
   searchPlaceholder?: string;
@@ -123,6 +138,7 @@ export function AsyncSearchableSelect({
   }, [openSignal]);
   const [query, setQuery] = React.useState("");
   const [options, setOptions] = React.useState<AsyncSearchableSelectOption[]>([]);
+  const [loadingMore, setLoadingMore] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
   const [recentOptions, setRecentOptions] = React.useState<AsyncSearchableSelectOption[]>([]);
@@ -148,6 +164,10 @@ export function AsyncSearchableSelect({
   React.useLayoutEffect(() => {
     loadOptionsRef.current = loadOptions;
   }, [loadOptions]);
+  const nextCursorRef = React.useRef<string | null>(null);
+  const loadingMoreRef = React.useRef(false);
+  const queryRef = React.useRef(query);
+  queryRef.current = query;
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const dragMovedRef = React.useRef(false);
 
@@ -299,27 +319,35 @@ export function AsyncSearchableSelect({
     if (!open) {
       setQuery("");
       setOptions([]);
+      nextCursorRef.current = null;
       setLoading(false);
+      setLoadingMore(false);
       setHighlightedIndex(-1);
       return;
     }
     if (query.trim().length > 0 && query.trim().length < minSearchLength) {
       setOptions([]);
+      nextCursorRef.current = null;
       setLoading(false);
       return;
     }
     const runLoad = () => {
       const requestId = ++requestIdRef.current;
       setLoading(true);
-      void loadOptionsRef.current(query.trim())
-        .then((nextOptions) => {
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
+      void loadOptionsRef.current(query.trim(), { cursor: null })
+        .then((result) => {
           if (requestId !== requestIdRef.current) return;
-          setOptions(nextOptions);
-          setHighlightedIndex(nextOptions.length > 0 ? 0 : -1);
+          const page = normalizeSearchLoad(result);
+          setOptions(page.options);
+          nextCursorRef.current = page.nextCursor;
+          setHighlightedIndex(page.options.length > 0 ? 0 : -1);
         })
         .catch(() => {
           if (requestId !== requestIdRef.current) return;
           setOptions([]);
+          nextCursorRef.current = null;
           setHighlightedIndex(-1);
         })
         .finally(() => {
@@ -356,6 +384,34 @@ export function AsyncSearchableSelect({
       current >= 0 && current < visibleOptions.length ? current : 0
     );
   }, [open, visibleOptions]);
+
+  const loadMore = React.useCallback(() => {
+    const cursor = nextCursorRef.current;
+    if (!cursor || loadingMoreRef.current) return;
+    const requestQuery = queryRef.current.trim();
+    const requestId = requestIdRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    void loadOptionsRef.current(requestQuery, { cursor })
+      .then((result) => {
+        if (requestId !== requestIdRef.current || queryRef.current.trim() !== requestQuery) return;
+        const page = normalizeSearchLoad(result);
+        setOptions((prev) => {
+          const seen = new Set(prev.map((option) => option.id));
+          const extra = page.options.filter((option) => !seen.has(option.id));
+          return extra.length ? [...prev, ...extra] : prev;
+        });
+        nextCursorRef.current = page.nextCursor;
+      })
+      .catch(() => {
+        if (requestId !== requestIdRef.current) return;
+        nextCursorRef.current = null;
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+        if (requestId === requestIdRef.current) setLoadingMore(false);
+      });
+  }, []);
 
   const commitSelection = React.useCallback(
     (option: AsyncSearchableSelectOption) => {
@@ -466,11 +522,18 @@ export function AsyncSearchableSelect({
       </div>
       {listHeader ? <div className="mt-2">{listHeader}</div> : null}
       <div
+        data-no-drag=""
+        data-search-scroll=""
         className={cn(
-          "mt-2 overflow-auto rounded-md border bg-muted/20",
+          "mt-2 overflow-y-auto rounded-md border bg-muted/20",
           !(floating && floatingPos) && listMaxHeightClassName
         )}
         style={listScrollStyle}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          if (el.scrollHeight - el.scrollTop - el.clientHeight > 80) return;
+          loadMore();
+        }}
       >
         {allowClear && value ? (
           <button
@@ -558,6 +621,9 @@ export function AsyncSearchableSelect({
             </button>
           ))
         )}
+        {loadingMore ? (
+          <div className="px-3 py-2 text-center text-xs text-muted-foreground">Loading more…</div>
+        ) : null}
       </div>
       {onCreateNew ? (
         <button
@@ -582,7 +648,7 @@ export function AsyncSearchableSelect({
     <div
       ref={panelRef}
       data-async-searchable-panel=""
-      className={cn(opts.className, "cursor-grab active:cursor-grabbing")}
+      className={opts.className}
       style={opts.style}
       role="listbox"
       aria-label={searchPlaceholder}

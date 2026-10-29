@@ -34,7 +34,6 @@ import {
 import { fetchPreferencesApi } from "@/lib/api/preferences";
 import { isApiConfigured } from "@/lib/api/client";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { searchErpApi, type ErpSearchHit } from "@/lib/api/erp-search";
 import { isRecordListHref, recordHref } from "@/lib/nav/record-destination";
@@ -526,7 +525,7 @@ export function CommandPalette() {
           )}
 
           {/* Results */}
-          <ScrollArea className="h-[min(65vh,440px)]">
+          <div className="h-[min(65vh,440px)] overflow-y-auto">
             <div className="p-2">
               {/* Empty query hint */}
               {isEmptyQuery && recents.length === 0 && (
@@ -648,7 +647,7 @@ export function CommandPalette() {
                 })()
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Footer hint */}
           <div className="flex items-center justify-between border-t px-4 py-2 text-[11px] text-muted-foreground">

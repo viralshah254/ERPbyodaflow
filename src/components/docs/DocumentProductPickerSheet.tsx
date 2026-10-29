@@ -11,6 +11,7 @@ import { productTypeLabel } from "@/lib/products/product-type";
 import {
   defaultPickerTypeFilter,
   matchesPickerTypeFilter,
+  pickerListQuery,
   type PickerTypeFilter,
 } from "@/lib/products/picker-type-filter";
 import { toast } from "sonner";
@@ -61,7 +62,7 @@ type DocumentProductPickerSheetProps = {
   onConfirm?: (products: ProductRow[]) => void;
 };
 
-const PAGE_SIZE = 40;
+const PAGE_SIZE = 100;
 
 function rowQty(map: Record<string, string>, id: string): number {
   const raw = map[id];
@@ -102,8 +103,11 @@ export function DocumentProductPickerSheet({
   const [highlight, setHighlight] = React.useState(0);
   const [addedIds, setAddedIds] = React.useState<Set<string>>(new Set());
   const listRef = React.useRef<HTMLDivElement | null>(null);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const searchRef = React.useRef<HTMLInputElement | null>(null);
   const loadGen = React.useRef(0);
+  const pagingRef = React.useRef(false);
+  const autoPages = React.useRef(0);
   const existing = React.useMemo(() => new Set(existingProductIds), [existingProductIds]);
 
   React.useEffect(() => {
@@ -130,22 +134,20 @@ export function DocumentProductPickerSheet({
 
   const loadPage = React.useCallback(
     async (opts: { reset: boolean; cursor: string | null; search: string }) => {
+      if (!opts.reset && pagingRef.current) return;
       const gen = ++loadGen.current;
+      pagingRef.current = true;
       if (opts.reset) setLoading(true);
       else setLoadingMore(true);
       try {
-        const roleOnly = plantCatalogue && (typeFilter === "PACKAGING" || typeFilter === "SEMI");
+        const query = pickerListQuery({ productFilter, plantCatalogue, typeFilter });
         const page = await fetchProductsPageApi({
           search: opts.search || undefined,
           status: "ACTIVE",
-          purchasable:
-            !roleOnly && productFilter === "purchasable" ? true : undefined,
-          sellable: !roleOnly && productFilter === "sellable" ? true : undefined,
-          productType:
-            !plantCatalogue && (typeFilter === "RAW" || typeFilter === "FINISHED" || typeFilter === "BOTH")
-              ? typeFilter
-              : undefined,
-          itemRole: roleOnly ? typeFilter : undefined,
+          purchasable: query.purchasable,
+          sellable: query.sellable,
+          productType: query.productType,
+          itemRole: query.itemRole,
           limit: PAGE_SIZE,
           cursor: opts.cursor ?? "0",
           includeStock: false,
@@ -164,6 +166,7 @@ export function DocumentProductPickerSheet({
         }
       } finally {
         if (gen === loadGen.current) {
+          pagingRef.current = false;
           setLoading(false);
           setLoadingMore(false);
         }
@@ -174,6 +177,7 @@ export function DocumentProductPickerSheet({
 
   React.useEffect(() => {
     if (!open) return;
+    autoPages.current = 0;
     void loadPage({ reset: true, cursor: "0", search: debouncedSearch });
   }, [open, debouncedSearch, typeFilter, loadPage]);
 
@@ -197,6 +201,33 @@ export function DocumentProductPickerSheet({
       return tokens.every((t) => hay.includes(t));
     });
   }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey, plantCatalogue]);
+
+  React.useEffect(() => {
+    autoPages.current = 0;
+  }, [categoryKey]);
+
+  React.useEffect(() => {
+    if (!open || loading || loadingMore || !hasMore || cursor == null) return;
+    if (visible.length >= 8 || autoPages.current >= 20) return;
+    autoPages.current += 1;
+    void loadPage({ reset: false, cursor, search: debouncedSearch });
+  }, [open, loading, loadingMore, hasMore, cursor, visible.length, debouncedSearch, loadPage]);
+
+  React.useEffect(() => {
+    const root = listRef.current;
+    const sentinel = sentinelRef.current;
+    if (!open || !root || !sentinel || !hasMore || loading || loadingMore) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        if (cursor == null) return;
+        void loadPage({ reset: false, cursor, search: debouncedSearch });
+      },
+      { root, rootMargin: "160px" }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [open, hasMore, loading, loadingMore, cursor, debouncedSearch, loadPage]);
 
   React.useEffect(() => {
     setHighlight((i) => Math.min(i, Math.max(visible.length - 1, 0)));
@@ -277,7 +308,7 @@ export function DocumentProductPickerSheet({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-hidden rounded-lg border bg-background p-5 shadow-lg",
+            "fixed left-1/2 top-1/2 z-50 flex h-[min(85vh,40rem)] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-hidden rounded-lg border bg-background p-5 shadow-lg",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
           )}
           onOpenAutoFocus={(e) => {
@@ -359,16 +390,17 @@ export function DocumentProductPickerSheet({
 
           <div
             ref={listRef}
-            className="min-h-[16rem] flex-1 overflow-y-auto rounded-md border"
+            className="min-h-0 flex-1 overflow-y-auto rounded-md border"
           >
             {(loading || catalogLoading) && visible.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">Loading products…</p>
             ) : visible.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">
-                No products match
-                {debouncedSearch ? ` “${debouncedSearch}”` : ""}
-                {categoryKey && groupLabel ? ` in ${groupLabel(categoryKey)}` : ""}
-                .
+                {hasMore || loadingMore
+                  ? "Loading products…"
+                  : `No products match${debouncedSearch ? ` “${debouncedSearch}”` : ""}${
+                      categoryKey && groupLabel ? ` in ${groupLabel(categoryKey)}` : ""
+                    }.`}
               </p>
             ) : (
               <ul>
@@ -440,6 +472,7 @@ export function DocumentProductPickerSheet({
                 })}
               </ul>
             )}
+            <div ref={sentinelRef} className="h-1" />
             {loadingMore ? (
               <p className="px-3 py-2 text-center text-xs text-muted-foreground">Loading more…</p>
             ) : null}

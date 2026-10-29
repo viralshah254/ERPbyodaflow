@@ -58,6 +58,7 @@ import {
   fetchPartyByIdApi,
   fetchPartyCreditSummaryApi,
   searchPartyLookupOptionsApi,
+  searchPartyLookupPageApi,
   toPartyLookupOption,
   type PartyDetail,
   type PartyCreditSummary,
@@ -226,12 +227,13 @@ function PartyEntityField({
 
   /** Stable reference required: AsyncSearchableSelect effect depends on loadOptions; inline arrows retrigger search every parent render. */
   const loadPartyLookupOptions = React.useCallback(
-    (query: string) =>
-      searchPartyLookupOptionsApi({
+    (query: string, page?: { cursor: string | null }) =>
+      searchPartyLookupPageApi({
         role,
         status: "ACTIVE",
         search: query,
-        limit: role === "customer" ? 40 : 20,
+        limit: 50,
+        cursor: page?.cursor ?? "0",
       }),
     [role]
   );
