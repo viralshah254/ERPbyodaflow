@@ -15,4 +15,5 @@ export interface OrgProfileRecord {
   taxPinAttachment: OrgComplianceAttachmentSummary | null;
   certificateOfIncorporationAttachment: OrgComplianceAttachmentSummary | null;
   logoAttachment: OrgComplianceAttachmentSummary | null;
+  capsOnProduct: boolean;
 }

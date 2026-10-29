@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -128,7 +129,7 @@ export function ZonePriceCascadeDialog({
                       <TableCell className="font-medium">{c.outletName}</TableCell>
                       <TableCell>
                         <span className="font-mono text-xs text-muted-foreground">{c.sku}</span>
-                        <span className="ml-2">{c.productName}</span>
+                        <span className={`ml-2 ${CAPS_ON_PRODUCT_CLASS}`}>{c.productName}</span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{fmtPrice(c.outletPrice, currency)}</TableCell>
                       <TableCell className="text-right tabular-nums">{fmtPrice(c.newZonePrice, currency)}</TableCell>

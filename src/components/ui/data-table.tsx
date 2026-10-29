@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { isProductNameColumn, CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 interface Column<T> {
@@ -378,6 +379,7 @@ export function DataTable<T extends object>({
                                 selectable ? "left-12" : "left-0",
                               ),
                             column.className,
+                            isProductNameColumn(column) && CAPS_ON_PRODUCT_CLASS,
                           )}
                         >
                           {value ?? ""}

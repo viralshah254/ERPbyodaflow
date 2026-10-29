@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
@@ -320,6 +321,7 @@ export default function WorkOrdersPage() {
     return items.map((row) => ({
       id: row.productId,
       label: row.productSku ? `${row.productSku} — ${row.productName}` : row.productName,
+      labelClassName: CAPS_ON_PRODUCT_CLASS,
     }));
   }, []);
 
@@ -586,6 +588,7 @@ export default function WorkOrdersPage() {
                       label: bom.finishedProductSku
                         ? `${bom.finishedProductSku} — ${bom.finishedProductName ?? bom.name}`
                         : (bom.finishedProductName ?? bom.name),
+                      labelClassName: CAPS_ON_PRODUCT_CLASS,
                     });
                     if (bom.routeId) setRoutingId(bom.routeId);
                     if (bom.outputWarehouseId) setOutputWarehouseId(bom.outputWarehouseId);

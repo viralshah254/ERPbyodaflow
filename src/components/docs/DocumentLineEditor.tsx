@@ -35,6 +35,7 @@ import { DocumentProductPickerSheet, type CatalogAddItem } from "@/components/do
 import { defaultDocumentLineUom, documentLineBaseUom } from "@/lib/docs/default-line-uom";
 import { AddPackUomDialog } from "@/components/docs/AddPackUomDialog";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import {
   productFamilyKey,
   productFamilyLabel,
@@ -1390,7 +1391,7 @@ export function DocumentLineEditor({
                       onClick={() => addFromSearch(p, false)}
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium leading-snug">{p.name}</span>
+                        <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">
                           {[p.sku, p.size?.trim(), productGroupLabel(productGroupKey(p))]
                             .filter(Boolean)
@@ -1485,7 +1486,10 @@ export function DocumentLineEditor({
                       <div className="min-w-0">
                         <button
                           type="button"
-                          className="line-clamp-2 text-left text-sm font-medium leading-snug hover:underline"
+                          className={cn(
+                            "line-clamp-2 text-left text-sm font-medium leading-snug hover:underline",
+                            CAPS_ON_PRODUCT_CLASS
+                          )}
                           onClick={() => {
                             setSwapLineId(l.id);
                             setSearchQuery("");

@@ -10,6 +10,7 @@ import { deliveryLinePrimaryLabel } from "@/lib/documents/format-delivery-line";
 import { resolveSalesUomQty, scaleQtyWithHeal } from "@/lib/documents/sales-uom-qty";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 
 type FulfilmentLine = DocumentDetailRecord["lines"][number];
 type LineState = "SHIPPED" | "NOT_PACKED" | "PARTIALLY_PACKED" | "PENDING";
@@ -291,7 +292,7 @@ export function DocumentFulfilmentLinesTable({
           <ul className="mt-2 space-y-1.5 pl-6 text-sm text-amber-900/90 dark:text-amber-100/90 list-disc">
             {issueLines.map((r) => (
               <li key={r.line.id ?? r.label}>
-                <span className="font-medium">{r.label}</span>
+                <span className={cn("font-medium", CAPS_ON_PRODUCT_CLASS)}>{r.label}</span>
                 {" — "}
                 {r.line.fulfilmentReason ??
                   (r.state === "NOT_PACKED"

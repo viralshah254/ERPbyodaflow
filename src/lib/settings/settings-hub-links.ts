@@ -39,6 +39,13 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     title: "Interface",
     links: [
       {
+        href: "/settings/display",
+        label: "Display",
+        description: "How product names appear across the organisation",
+        icon: "CaseSensitive",
+        requiresPermissions: ["settings.org.read"],
+      },
+      {
         href: "/settings/sidebar",
         label: "Sidebar navigation",
         description: "Reorder sidebar sections and links for your organization",

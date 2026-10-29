@@ -9,6 +9,7 @@
  */
 
 import * as React from "react";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -899,7 +900,7 @@ export function FmcgPriceTagItemsEditor({
                     rows.map((r) => (
                       <TableRow key={r.productId}>
                         <TableCell className="px-3 py-1.5 text-sm">
-                          <span className="block font-medium">{r.name}</span>
+                          <span className={`block font-medium ${CAPS_ON_PRODUCT_CLASS}`}>{r.name}</span>
                           {r.barcode ? (
                             <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
                               {r.barcode}

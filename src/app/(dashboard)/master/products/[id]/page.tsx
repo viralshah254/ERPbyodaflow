@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/layout/page-header";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -816,6 +817,7 @@ export default function ProductDetailPage() {
     <PageShell>
       <PageHeader
         title={`${product.sku} — ${product.name}`}
+        titleClassName={CAPS_ON_PRODUCT_CLASS}
         description={
           fmcgOrg
             ? [
@@ -830,7 +832,7 @@ export default function ProductDetailPage() {
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: catalogueLabel, href: "/master/products" },
-          { label: product.name || product.sku },
+          { label: product.name || product.sku, className: CAPS_ON_PRODUCT_CLASS },
         ]}
         sticky
         showCommandHint
@@ -976,7 +978,7 @@ export default function ProductDetailPage() {
                         value={nameDraft}
                         onChange={(e) => setNameDraft(e.target.value)}
                         placeholder="Product display name"
-                        className="font-medium"
+                        className={`font-medium ${CAPS_ON_PRODUCT_CLASS}`}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();

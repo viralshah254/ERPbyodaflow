@@ -13,6 +13,8 @@ import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 export type AsyncSearchableSelectOption = {
   id: string;
   label: string;
+  /** Extra classes for the label. Use `capsOnProduct` so product names draw in capitals when the organisation setting is on. */
+  labelClassName?: string;
   description?: string;
   badges?: Array<{
     label: string;
@@ -589,7 +591,8 @@ export function AsyncSearchableSelect({
                   <span
                     className={cn(
                       "block flex-1 min-w-0",
-                      wrapLabels ? "whitespace-normal break-words" : "truncate"
+                      wrapLabels ? "whitespace-normal break-words" : "truncate",
+                      option.labelClassName
                     )}
                   >
                     {option.label}
@@ -716,7 +719,8 @@ export function AsyncSearchableSelect({
             className={cn(
               "block",
               wrapLabels ? "whitespace-normal break-words line-clamp-2" : clipLabels ? "truncate" : "whitespace-nowrap",
-              effectiveSelected?.badges?.length ? "pr-14" : ""
+              effectiveSelected?.badges?.length ? "pr-14" : "",
+              effectiveSelected?.labelClassName
             )}
             title={wrapLabels ? (effectiveSelected?.label ?? undefined) : undefined}
           >

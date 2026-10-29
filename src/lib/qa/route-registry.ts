@@ -221,6 +221,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/settings/users-roles", module: "settings", description: "Users & roles", inNav: true },
   { path: "/settings/preferences", module: "settings", description: "Preferences", inNav: true },
   { path: "/settings/sidebar", module: "settings", description: "Sidebar navigation", inNav: true },
+  { path: "/settings/display", module: "settings", description: "Display", inNav: true },
   { path: "/settings/sequences", module: "settings", description: "Numbering sequences", inNav: true },
   { path: "/settings/compliance", module: "settings", description: "Compliance", inNav: true },
   { path: "/settings/integrations/kra", module: "settings", description: "KRA eTIMS", inNav: true },

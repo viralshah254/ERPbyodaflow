@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -339,7 +340,7 @@ export function CommissionDefaultsEditor(props: {
                 tableRows.map((r) => (
                   <tr key={r.productId} className="border-b border-border/60">
                     <td className="p-3 font-mono text-xs">{r.sku}</td>
-                    <td className="p-3">{r.name}</td>
+                    <td className={`p-3 ${CAPS_ON_PRODUCT_CLASS}`}>{r.name}</td>
                     {mode === "zone" ? (
                       <td className="p-2">
                         <Input

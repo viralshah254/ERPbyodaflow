@@ -44,6 +44,7 @@ import {
 } from "@/lib/api/inventory-costing";
 import { fetchProductApi, fetchProductsPageApi } from "@/lib/api/products";
 import { productSearchLabel } from "@/lib/products/product-search";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import {
   Select,
@@ -233,6 +234,7 @@ export default function StockLevelsPage() {
     return page.items.map((p) => ({
       id: p.id,
       label: productSearchLabel(p),
+      labelClassName: CAPS_ON_PRODUCT_CLASS,
     }));
   }, []);
 
@@ -258,6 +260,7 @@ export default function StockLevelsPage() {
           setStockInProductOption({
             id: product.id,
             label: productSearchLabel(product),
+            labelClassName: CAPS_ON_PRODUCT_CLASS,
           });
         })
         .catch(() => undefined);

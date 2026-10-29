@@ -8,6 +8,7 @@ import { fetchProductsPageApi } from "@/lib/api/products";
 import { productSearchLabel } from "@/lib/products/product-search";
 import type { ProductRow } from "@/lib/types/masters";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import {
   formatShortAvailSuffix,
 } from "@/lib/warehouse/pick-pack-task-stock";
@@ -76,6 +77,7 @@ function productToOption(
   return {
     product: p,
     label,
+    availSuffix,
     disabled,
     effectiveRemaining: effective,
   };
@@ -211,12 +213,6 @@ export function WarehouseProductPicker({
     }
     return null;
   }, [items, lastSelected, selectedProduct, value, getTaskStockForProduct]);
-
-  const displayLabel = effectiveSelected
-    ? effectiveSelected.sku
-      ? `${effectiveSelected.sku} — ${effectiveSelected.name ?? effectiveSelected.id}`
-      : (effectiveSelected.name ?? effectiveSelected.id)
-    : placeholder;
 
   const updateFloatingPosition = React.useCallback(() => {
     const btn = triggerRef.current;
@@ -481,7 +477,15 @@ export function WarehouseProductPicker({
                 if (!option.disabled) commitSelection(option.product);
               }}
             >
-              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {option.product.sku?.trim() ? <span>{option.product.sku.trim()} — </span> : null}
+                <span className={CAPS_ON_PRODUCT_CLASS}>{option.product.name?.trim() || "Product"}</span>
+                {option.product.size?.trim() &&
+                !(option.product.name ?? "").toLowerCase().includes(option.product.size.trim().toLowerCase()) ? (
+                  <span>{` · ${option.product.size.trim()}`}</span>
+                ) : null}
+                {option.availSuffix ? <span>{` · ${option.availSuffix}`}</span> : null}
+              </span>
               {option.product.id === value ? <Icons.Check className="mt-0.5 h-4 w-4 shrink-0" /> : null}
             </button>
           ))
@@ -538,7 +542,16 @@ export function WarehouseProductPicker({
           }
         }}
       >
-        <span className="truncate text-left flex-1 min-w-0">{displayLabel}</span>
+        <span className="truncate text-left flex-1 min-w-0">
+          {effectiveSelected ? (
+            <>
+              {effectiveSelected.sku ? <span>{effectiveSelected.sku} — </span> : null}
+              <span className={CAPS_ON_PRODUCT_CLASS}>{effectiveSelected.name ?? effectiveSelected.id}</span>
+            </>
+          ) : (
+            placeholder
+          )}
+        </span>
         <Icons.ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
       </Button>
       {open && !floating

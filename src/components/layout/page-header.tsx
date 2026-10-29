@@ -12,6 +12,7 @@ import { PageHelp } from "@/components/tutorial/PageHelp";
 interface Breadcrumb {
   label: string;
   href?: string;
+  className?: string;
 }
 
 interface PageHeaderProps {
@@ -28,6 +29,7 @@ interface PageHeaderProps {
   /** Extra-tight padding; default chrome is already compact. */
   dense?: boolean;
   className?: string;
+  titleClassName?: string;
 }
 
 export function PageHeader({
@@ -40,6 +42,7 @@ export function PageHeader({
   showRightPanelToggle = false,
   dense = false,
   className,
+  titleClassName,
 }: PageHeaderProps) {
   const { rightPanelOpen, toggleRightPanel } = useUIStore();
   const visibleCrumbs = (breadcrumbs ?? []).filter((crumb, i, all) => {
@@ -62,11 +65,11 @@ export function PageHeader({
             <React.Fragment key={`${crumb.label}-${i}`}>
               {i > 0 && <ChevronRight className="h-3 w-3 shrink-0" />}
               {crumb.href ? (
-                <Link href={crumb.href} className="hover:text-foreground transition-colors">
+                <Link href={crumb.href} className={cn("hover:text-foreground transition-colors", crumb.className)}>
                   {crumb.label}
                 </Link>
               ) : (
-                <span>{crumb.label}</span>
+                <span className={crumb.className}>{crumb.label}</span>
               )}
             </React.Fragment>
           ))}
@@ -74,7 +77,7 @@ export function PageHeader({
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1" data-tutorial-hint="page-title">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+          <h1 className={cn("text-lg font-semibold tracking-tight text-foreground sm:text-xl", titleClassName)}>
             {title}
           </h1>
           {description ? (

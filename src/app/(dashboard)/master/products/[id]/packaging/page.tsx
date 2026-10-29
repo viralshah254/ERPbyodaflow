@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -186,7 +187,7 @@ export default function ProductPackagingPage() {
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: t("product", terminology) + "s", href: "/master/products" },
-          { label: product.name || product.sku, href: `/master/products/${id}` },
+          { label: product.name || product.sku, href: `/master/products/${id}`, className: CAPS_ON_PRODUCT_CLASS },
           { label: "Packaging" },
         ]}
         sticky

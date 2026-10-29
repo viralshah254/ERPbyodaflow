@@ -8,6 +8,7 @@ import {
   type DeliveryLineLabelInput,
 } from "@/lib/documents/format-delivery-line";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 
 type DocumentLineProductDescriptionProps = {
   line: DeliveryLineLabelInput;
@@ -29,6 +30,7 @@ export function DocumentLineProductDescription({
     const barcode = deliveryLineBarcode(line);
     const nameClass = cn(
       "block",
+      CAPS_ON_PRODUCT_CLASS,
       sizeLabel ? "pr-14" : "",
       productHref ? "hover:underline underline-offset-2" : "",
       nameClassName
@@ -63,11 +65,11 @@ export function DocumentLineProductDescription({
   return (
     <>
       {productHref ? (
-        <Link href={productHref} className={cn(nameClassName, "hover:underline underline-offset-2")}>
+        <Link href={productHref} className={cn(CAPS_ON_PRODUCT_CLASS, nameClassName, "hover:underline underline-offset-2")}>
           {name}
         </Link>
       ) : (
-        <span className={nameClassName}>{name}</span>
+        <span className={cn(CAPS_ON_PRODUCT_CLASS, nameClassName)}>{name}</span>
       )}
       {sku ? <p className="truncate font-mono text-xs text-muted-foreground">{sku}</p> : null}
     </>

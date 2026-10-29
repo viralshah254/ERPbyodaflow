@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -248,7 +249,7 @@ export function SfaProductConnectSheet({
           {step === 2 ? (
             <div className="space-y-3 text-sm">
               <div className="rounded-lg border p-3 space-y-2">
-                <p className="font-medium">{productName}</p>
+                <p className={`font-medium ${CAPS_ON_PRODUCT_CLASS}`}>{productName}</p>
                 <p className="text-muted-foreground font-mono text-xs">{barcode || "No barcode"}</p>
                 {size ? <p className="text-muted-foreground">Size: {size}</p> : null}
                 <p>

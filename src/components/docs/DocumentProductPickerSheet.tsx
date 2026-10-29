@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { Label } from "@/components/ui/label";
 
 const TYPE_FILTER_OPTIONS: Array<{ value: PickerTypeFilter; label: string }> = [
@@ -436,7 +437,7 @@ export function DocumentProductPickerSheet({
                         onClick={() => addOne(p, false)}
                         onMouseEnter={() => setHighlight(index)}
                       >
-                        <span className="block text-sm font-medium leading-snug">{p.name}</span>
+                        <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>
                       </button>
                       <span className="hidden shrink-0 text-sm tabular-nums sm:block">
