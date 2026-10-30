@@ -155,7 +155,7 @@ export default function MasterProductsPage() {
   const orgId = useAuthStore((s) => s.org?.orgId ?? "");
   const { enrolled: sfaEnrolled, status: sfaEnrollment } = useErpSfaEnrollment();
   const canDeleteProduct = permissions.includes("admin.settings");
-  const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
+  const canWriteProduct = permissions.includes("catalog.write");
   const productLabel = t("product", terminology);
   const [hasCreateDraft, setHasCreateDraft] = React.useState(false);
   const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);

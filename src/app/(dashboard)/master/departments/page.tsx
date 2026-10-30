@@ -29,7 +29,7 @@ import {
   updateProductDepartmentApi,
   type ProductDepartmentRow,
 } from "@/lib/api/product-departments";
-import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { useCanWriteCatalog } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -49,7 +49,7 @@ function suggestDepartmentCodeFromName(name: string, existingCodes: string[]): s
 }
 
 export default function MasterDepartmentsPage() {
-  const canWrite = useCanWriteInventory();
+  const canWrite = useCanWriteCatalog();
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");

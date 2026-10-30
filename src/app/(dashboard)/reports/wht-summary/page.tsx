@@ -1,4 +1,5 @@
 "use client";
+import { WithholdingIncomeTaxPanel } from "@/components/finance/WithholdingIncomeTaxPanel";
 
 import * as React from "react";
 import Link from "next/link";
@@ -23,17 +24,19 @@ import * as Icons from "lucide-react";
 export default function WhtSummaryReportPage() {
   const [summary, setSummary] = React.useState<{ totalWht: number; billCount: number; dateFrom?: string; dateTo?: string } | null>(null);
 
+  const [loadError, setLoadError] = React.useState("");
+
   React.useEffect(() => {
     fetchWhtSummaryApi()
       .then(setSummary)
-      .catch((error) => toast.error((error as Error).message || "Failed to load WHT summary."));
+      .catch((error) => setLoadError((error as Error).message || "Failed to load WHT summary."));
   }, []);
 
   return (
     <PageShell>
       <PageHeader
         title="WHT summary"
-        description="Live withholding tax summary sourced from posted bills."
+        description="Withholding income tax deductions recorded against supplier payments."
         breadcrumbs={[
           { label: "Reports", href: "/reports" },
           { label: "WHT summary" },
@@ -46,6 +49,7 @@ export default function WhtSummaryReportPage() {
             <Button
               variant="outline"
               size="sm"
+              disabled={!summary}
               onClick={() =>
                 downloadTaxSummaryCsvApi("wht-summary", "wht-summary.csv", (message) =>
                   toast.error(message || "Export failed.")
@@ -62,10 +66,11 @@ export default function WhtSummaryReportPage() {
         }
       />
       <div className="p-6">
+        {loadError && <p role="alert" className="mb-4 rounded-md border border-destructive p-4 text-destructive">{loadError}</p>}
         <Card>
           <CardHeader>
             <CardTitle>WHT summary</CardTitle>
-            <CardDescription>Aggregated withholding on posted bills for the selected scope.</CardDescription>
+            <CardDescription>Recorded withholding deductions. Ordinary purchase VAT and withholding VAT are reported separately.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -74,7 +79,7 @@ export default function WhtSummaryReportPage() {
                   <TableHead>From</TableHead>
                   <TableHead>To</TableHead>
                   <TableHead className="text-right">Total WHT</TableHead>
-                  <TableHead className="text-right">Posted bills</TableHead>
+                  <TableHead className="text-right">Bills with deductions</TableHead>
                   <TableHead>Currency</TableHead>
                 </TableRow>
               </TableHeader>
@@ -82,14 +87,15 @@ export default function WhtSummaryReportPage() {
                 <TableRow>
                   <TableCell className="font-medium">{summary?.dateFrom?.slice(0, 10) ?? "All time"}</TableCell>
                   <TableCell>{summary?.dateTo?.slice(0, 10) ?? "Current"}</TableCell>
-                  <TableCell className="text-right">{formatMoney(summary?.totalWht ?? 0, "KES")}</TableCell>
-                  <TableCell className="text-right">{summary?.billCount ?? 0}</TableCell>
+                  <TableCell className="text-right">{summary ? formatMoney(summary.totalWht, "KES") : "—"}</TableCell>
+                  <TableCell className="text-right">{summary?.billCount ?? "—"}</TableCell>
                   <TableCell>KES</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           </CardContent>
         </Card>
+        {summary && <WithholdingIncomeTaxPanel />}
       </div>
     </PageShell>
   );

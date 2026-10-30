@@ -37,12 +37,12 @@ import {
 } from "@/lib/api/product-categories";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useOrgContextStore } from "@/stores/orgContextStore";
-import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { useCanWriteCatalog } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function MasterCategoriesPage() {
-  const canWrite = useCanWriteInventory();
+  const canWrite = useCanWriteCatalog();
   const templateId = useOrgContextStore((s) => s.template?.id);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";

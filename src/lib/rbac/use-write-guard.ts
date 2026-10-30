@@ -75,3 +75,7 @@ export function useSessionReady(): boolean {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   return !isLoading && isAuthenticated;
 }
+
+export function useCanWriteCatalog(): boolean {
+  return useAuthStore((state) => state.permissions.includes("catalog.write"));
+}

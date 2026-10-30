@@ -192,7 +192,7 @@ export default function WorkOrdersPage() {
 
   React.useEffect(() => {
     if (availDebounce.current) clearTimeout(availDebounce.current);
-    if (!bomId || !Number(quantity) || inputWarehouseIds.length === 0) {
+    if (!bomId || !Number(quantity)) {
       setAvailLines([]);
       return;
     }
@@ -201,6 +201,7 @@ export default function WorkOrdersPage() {
       try {
         const result = await checkWorkOrderAvailability(bomId, Number(quantity), inputWarehouseIds);
         setAvailLines(result.lines);
+        if (inputWarehouseIds.length === 0) setInputWarehouseIds([...new Set(result.lines.map((line) => line.warehouseId).filter((id): id is string => Boolean(id)))]);
       } catch {
         setAvailLines([]);
       } finally {
@@ -652,7 +653,7 @@ export default function WorkOrdersPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Input stores</Label>
+                <div className="flex items-center justify-between"><Label>Input stores</Label><Button type="button" variant="outline" size="sm" onClick={() => setInputWarehouseIds([])}>Find materials automatically</Button></div>
                 <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
                   {warehouses.length === 0 ? (
                     <p className="px-1 py-1 text-xs text-muted-foreground">

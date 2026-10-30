@@ -674,3 +674,7 @@ export async function checkWorkOrderAvailability(
   if (ids[0]) params.set("warehouseId", ids[0]);
   return apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/availability?${params.toString()}`);
 }
+
+export async function checkExistingWorkOrderAvailability(id: string): Promise<{ lines: MaterialAvailabilityLine[] }> {
+  return apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/availability`);
+}

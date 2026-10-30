@@ -235,7 +235,7 @@ export default function TrialBalancePage() {
                             )}
                           >
                             {formatMoney(Math.abs(row.balance), baseCurrency)}
-                            {row.balance < 0 ? " Cr" : " Dr"}
+                            {row.credit > row.debit ? " Cr" : " Dr"}
                           </td>
                         </tr>
                       ))}

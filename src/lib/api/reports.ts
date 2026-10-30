@@ -145,13 +145,17 @@ export async function fetchVatSummaryApi(input?: { dateFrom?: string; dateTo?: s
   dateFrom?: string;
   dateTo?: string;
   totalVat: number;
+  outputVat: number; inputVat: number; netVat: number; billCount: number; unsignedCount: number; note: string;
+  rows: Array<{ id: string; type: string; number: string; date: string; side: string; gross: number; tax: number; cuNumber: string }>;
   invoiceCount: number;
 }> {
   requireLiveApi("VAT summary");
   const params = new URLSearchParams();
   if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
   if (input?.dateTo) params.set("dateTo", input.dateTo);
-  return apiRequest("/api/reports/vat-summary", { params });
+  const result = await apiRequest<Awaited<ReturnType<typeof fetchVatSummaryApi>> & { calculationVersion?: string }>("/api/reports/vat-summary", { params });
+  if (result.calculationVersion !== "source-tax-events-v1" || !Array.isArray(result.rows)) throw new Error("The connected server needs the tax reporting update before a verified VAT summary is available.");
+  return result;
 }
 
 export async function fetchWhtSummaryApi(input?: { dateFrom?: string; dateTo?: string }): Promise<{
@@ -164,7 +168,9 @@ export async function fetchWhtSummaryApi(input?: { dateFrom?: string; dateTo?: s
   const params = new URLSearchParams();
   if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
   if (input?.dateTo) params.set("dateTo", input.dateTo);
-  return apiRequest("/api/reports/wht-summary", { params });
+  const result = await apiRequest<Awaited<ReturnType<typeof fetchWhtSummaryApi>> & { calculationVersion?: string }>("/api/reports/wht-summary", { params });
+  if (result.calculationVersion !== "withholding-deductions-v1") throw new Error("The connected server needs the withholding register update before a verified WHT summary is available.");
+  return result;
 }
 
 export type CommissionReconciliationRow = {
@@ -209,7 +215,9 @@ export function downloadTaxSummaryCsvApi(
   onError: (message: string) => void
 ): void {
   requireLiveApi(`${reportId} export`);
-  downloadFile(`/api/reports/${reportId}?format=csv`, filename, onError);
+  void (reportId === "vat-summary" ? fetchVatSummaryApi() : fetchWhtSummaryApi())
+    .then(() => downloadFile(`/api/reports/${reportId}?format=csv`, filename, onError))
+    .catch((error) => onError(error instanceof Error ? error.message : "Tax report is unavailable."));
 }
 
 export type BatchCostingRow = {

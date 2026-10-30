@@ -148,6 +148,10 @@ export type FinanceAccount = {
 };
 
 export type PostingMappingKey =
+  | "cogsAccountId"
+  | "inputVatAccountId"
+  | "outputVatAccountId"
+  | "withholdingTaxPayableAccountId"
   | "accountsReceivableAccountId"
   | "salesRevenueAccountId"
   | "accountsPayableAccountId"

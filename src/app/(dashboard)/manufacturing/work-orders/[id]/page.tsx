@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  checkWorkOrderAvailability,
+  checkExistingWorkOrderAvailability,
   fetchManufacturingWorkOrder,
   runManufacturingWorkOrderAction,
   type ManufacturingWorkOrder,
@@ -64,6 +64,7 @@ export default function WorkOrderDetailPage() {
   const [acting, setActing] = React.useState(false);
   const [availLines, setAvailLines] = React.useState<MaterialAvailabilityLine[]>([]);
   const [availLoading, setAvailLoading] = React.useState(false);
+  const [availError, setAvailError] = React.useState<string | null>(null);
   const [completionQuantity, setCompletionQuantity] = React.useState("");
   const [measuredWeight, setMeasuredWeight] = React.useState("");
   const [deviceReadingId, setDeviceReadingId] = React.useState("");
@@ -77,7 +78,7 @@ export default function WorkOrderDetailPage() {
       setCompletionQuantity(String(next.openQuantity));
       setActualInputs(Object.fromEntries(next.materialLines.map((line) => {
         const remaining = Math.max(0, line.plannedQuantity - line.consumedQuantity);
-        return [line.lineId, { issue: String(remaining), consume: String(remaining), returnQty: "0" }];
+        return [line.lineId, { issue: String(Math.max(0, remaining - Math.max(0, line.issuedQuantity - line.returnedQuantity - line.consumedQuantity))), consume: String(remaining), returnQty: "0" }];
       })));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load work order.");
@@ -92,21 +93,19 @@ export default function WorkOrderDetailPage() {
   }, [refresh]);
 
   React.useEffect(() => {
-    const inputWarehouseIds = [
-      ...new Set((order?.materialLines ?? []).map((line) => line.warehouseId).filter(Boolean)),
-    ];
-    if (!order?.bomId || inputWarehouseIds.length === 0 || order.status === "COMPLETED" || order.status === "CANCELLED") {
+    if (!order?.bomId || order.status === "COMPLETED" || order.status === "CANCELLED") {
       setAvailLines([]);
       return;
     }
     let cancelled = false;
     setAvailLoading(true);
-    void checkWorkOrderAvailability(order.bomId, order.quantity, inputWarehouseIds)
+    setAvailError(null);
+    void checkExistingWorkOrderAvailability(order.id)
       .then((result) => {
         if (!cancelled) setAvailLines(result.lines);
       })
-      .catch(() => {
-        if (!cancelled) setAvailLines([]);
+      .catch((error) => {
+        if (!cancelled) { setAvailLines([]); setAvailError(error instanceof Error ? error.message : "Availability check failed. Retry before release."); }
       })
       .finally(() => {
         if (!cancelled) setAvailLoading(false);
@@ -259,7 +258,15 @@ export default function WorkOrderDetailPage() {
                       >
                         <div className="space-y-1.5">
                           <Label htmlFor="completion-quantity">Complete now</Label>
-                          <Input id="completion-quantity" type="number" min="0.001" max={order.openQuantity} step="0.001" value={completionQuantity} onChange={(event) => setCompletionQuantity(event.target.value)} />
+                          <Input id="completion-quantity" type="number" min="0.001" max={order.openQuantity} step="0.001" value={completionQuantity} onChange={(event) => {
+                            const value = event.target.value;
+                            setCompletionQuantity(value);
+                            const ratio = Number(value) / (order.plannedQuantity || order.quantity || 1);
+                            setActualInputs(Object.fromEntries(order.materialLines.map((line) => {
+                              const qty = Math.min(Math.max(0, line.plannedQuantity - line.consumedQuantity), Math.round(line.plannedQuantity * ratio * 1000) / 1000);
+                              return [line.lineId, { issue: String(Math.max(0, qty - Math.max(0, line.issuedQuantity - line.returnedQuantity - line.consumedQuantity))), consume: String(qty), returnQty: "0" }];
+                            })));
+                          }} />
                         </div>
                         {order.measurementMode !== "COUNT_ONLY" && (
                           <div className="space-y-1.5">
@@ -329,7 +336,7 @@ export default function WorkOrderDetailPage() {
                     {(order.status === "RELEASED" || order.status === "IN_PROGRESS") && (
                       <Button
                         size="sm"
-                        disabled={acting || shortfalls.length > 0 || availLoading || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
+                        disabled={acting || shortfalls.length > 0 || availLoading || Boolean(availError) || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
                         onClick={() => void runAction("complete")}
                       >
                         Complete this order
@@ -363,6 +370,8 @@ export default function WorkOrderDetailPage() {
                     <p className="text-sm text-muted-foreground">No BOM is linked, so availability cannot be checked here.</p>
                   ) : availLoading ? (
                     <p className="text-sm text-muted-foreground">Checking on-hand…</p>
+                  ) : availError ? (
+                    <p role="alert" className="text-sm text-destructive">{availError}</p>
                   ) : availLines.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No BOM components to issue.</p>
                   ) : (
