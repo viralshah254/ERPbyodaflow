@@ -48,7 +48,7 @@ export default function DocTypeNewPage() {
     <PageShell>
       <PageHeader
         title={`New ${label}`}
-        description="Complete the steps below. Header, lines, and step progress are autosaved — refresh safely anytime."
+        description="Complete the steps below. Leaving this page asks you to discard the document."
         breadcrumbs={[
           { label: "Documents", href: "/docs" },
           { label, href: `/docs/${type}` },

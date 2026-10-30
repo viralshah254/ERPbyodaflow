@@ -125,6 +125,7 @@ const DEFAULTS: SalesDocumentFlowSettings = {
   allowPartialDeliveries: true,
   allowPartialReceipt: true,
   sendPodNotification: true,
+  prefillSalesOrderFinishedGoods: false,
 };
 
 function FlowSteps({ steps }: { steps: string[] }) {
@@ -151,7 +152,7 @@ export default function SalesDocumentFlowPage() {
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    if (!isApiConfigured() || !fmcg) {
+    if (!isApiConfigured()) {
       setLoading(false);
       return;
     }
@@ -169,7 +170,7 @@ export default function SalesDocumentFlowPage() {
     return () => {
       cancelled = true;
     };
-  }, [fmcg]);
+  }, []);
 
   const steps =
     settings.mode === "pick_pack_first"
@@ -196,11 +197,43 @@ export default function SalesDocumentFlowPage() {
       title="Document flow"
       description="Choose how approved sales orders move through the warehouse, the invoice, and proof of delivery."
     >
+      <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Sales order lines</CardTitle>
+          <CardDescription>
+            When this is on, a new sales order lists every finished good and the user enters quantities. Lines left blank are not saved.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="prefillSalesOrderFinishedGoods">Show all finished goods on new sales orders</Label>
+              <p className="text-sm text-muted-foreground">
+                Raw materials, packaging, and semi-finished items stay off the order. Other organisations can turn this on here.
+              </p>
+            </div>
+            <Switch
+              id="prefillSalesOrderFinishedGoods"
+              checked={settings.prefillSalesOrderFinishedGoods}
+              disabled={loading}
+              onCheckedChange={(checked) =>
+                setSettings((prev) => ({ ...prev, prefillSalesOrderFinishedGoods: checked }))
+              }
+            />
+          </div>
+          {!fmcg ? (
+            <Button onClick={() => void save()} disabled={loading || saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          ) : null}
+        </CardContent>
+      </Card>
       {!fmcg ? (
         <Card>
           <CardHeader>
             <CardTitle>FMCG sales</CardTitle>
-            <CardDescription>This setting is used by FMCG manufacturer and bakery organisations.</CardDescription>
+            <CardDescription>The document flow below is used by FMCG manufacturer and bakery organisations.</CardDescription>
           </CardHeader>
         </Card>
       ) : (
@@ -266,6 +299,7 @@ export default function SalesDocumentFlowPage() {
           </Card>
         </div>
       )}
+      </div>
     </PageLayout>
   );
 }

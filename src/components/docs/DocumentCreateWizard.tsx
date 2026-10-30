@@ -51,6 +51,7 @@ import {
   searchPurchaseOrderLookupApi,
   fetchDocumentDetailApi,
   fetchDocumentListPageApi,
+  uploadDocumentAttachmentApi,
   type DocumentPostingPreviewLine,
   type PurchaseOrderLookupOption,
 } from "@/lib/api/documents";
@@ -100,6 +101,7 @@ import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteDocumentDraftApi } from "@/lib/api/document-drafts";
 import { isApiConfigured } from "@/lib/api/client";
+import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
 import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { CustomerLink } from "@/components/customers/CustomerLink";
@@ -583,11 +585,25 @@ export function DocumentCreateWizard({
   const skipEditAutosaveRef = React.useRef(false);
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
+  const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
+  const sheetFinishedGoods = type === "sales-order" && !isEditMode && prefillFinishedGoods;
+  const billableLines = React.useMemo(
+    () => (sheetFinishedGoods ? lines.filter((line) => line.qty > 0) : lines),
+    [lines, sheetFinishedGoods]
+  );
   const linesOperational = React.useMemo(
-    () => documentLinesOperational(lines),
-    [lines]
+    () => documentLinesOperational(billableLines),
+    [billableLines]
+  );
+  const linesBlockedMessage = React.useCallback(
+    (context: "continue" | "review" | "submit") =>
+      sheetFinishedGoods && lines.length > 0 && billableLines.length === 0
+        ? "Enter a quantity for at least one product."
+        : documentLinesOperationalErrorMessage(billableLines, context),
+    [billableLines, lines.length, sheetFinishedGoods]
   );
   const [submitting, setSubmitting] = React.useState(false);
+  const [invoiceCopyFile, setInvoiceCopyFile] = React.useState<File | null>(null);
   const [loadingFxRate, setLoadingFxRate] = React.useState(false);
   const [postingPreview, setPostingPreview] = React.useState<DocumentPostingPreviewLine[]>([]);
   const [loadingPostingPreview, setLoadingPostingPreview] = React.useState(false);
@@ -702,6 +718,19 @@ export function DocumentCreateWizard({
     if (isEditMode) return;
     deleteDocumentDraftApi(type).catch(() => {});
   }, [type, isEditMode]);
+
+  React.useEffect(() => {
+    if (isEditMode || type !== "sales-order" || !isApiConfigured()) return;
+    let cancelled = false;
+    fetchSalesDocumentFlowApi()
+      .then((settings) => {
+        if (!cancelled) setPrefillFinishedGoods(settings.prefillSalesOrderFinishedGoods);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditMode, type]);
 
   React.useEffect(() => {
     if (!scanId || isEditMode) return;
@@ -1176,13 +1205,14 @@ export function DocumentCreateWizard({
     (next: DocumentLine[] | ((prev: DocumentLine[]) => DocumentLine[])) => {
       setLines((prev) => {
         const resolved = typeof next === "function" ? next(prev) : next;
-        const total = resolved.reduce((s, l) => s + l.amount, 0);
-        form.setValue("linesCount", resolved.length);
+        const counted = sheetFinishedGoods ? resolved.filter((line) => line.qty > 0) : resolved;
+        const total = counted.reduce((s, l) => s + l.amount, 0);
+        form.setValue("linesCount", counted.length);
         form.setValue("totalAmount", total);
         return resolved;
       });
     },
-    [form]
+    [form, sheetFinishedGoods]
   );
 
   const handlePackagingUpdated = React.useCallback((productId: string, items: ProductPackaging[]) => {
@@ -1473,7 +1503,7 @@ export function DocumentCreateWizard({
                 sourceDocumentNumber: form.getValues("poRef") || undefined,
               }
             : {}),
-        lines: lines.map((line) => ({
+        lines: billableLines.map((line) => ({
           productId: line.productId,
           description: line.name,
           quantity: line.qty,
@@ -1485,8 +1515,8 @@ export function DocumentCreateWizard({
           amount: line.amount,
           ...(line.sourceLineId ? { sourceLineId: line.sourceLineId, lineId: line.sourceLineId } : {}),
         })),
-        subtotal: lines.reduce((s, l) => s + l.qty * l.price, 0),
-        tax: lines.reduce((s, l) => s + (l.tax ?? 0), 0) || undefined,
+        subtotal: billableLines.reduce((s, l) => s + l.qty * l.price, 0),
+        tax: billableLines.reduce((s, l) => s + (l.tax ?? 0), 0) || undefined,
         total: form.getValues("totalAmount") ?? 0,
         currency: selectedCurrency,
         ...(selectedCurrency !== baseCurrency && { exchangeRate }),
@@ -1496,7 +1526,7 @@ export function DocumentCreateWizard({
     [
       baseCurrency,
       form,
-      lines,
+      billableLines,
       linkedPoId,
       type,
       billSourceLink,
@@ -1589,7 +1619,7 @@ export function DocumentCreateWizard({
           return;
         }
         if (!linesOperational) {
-          toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+          toast.error(linesBlockedMessage("continue"));
           return;
         }
         persistWizardProgress(true);
@@ -1632,7 +1662,7 @@ export function DocumentCreateWizard({
             return;
           }
           if (!linesOperational) {
-            toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+            toast.error(linesBlockedMessage("continue"));
             return;
           }
         }
@@ -1646,6 +1676,7 @@ export function DocumentCreateWizard({
       linkedSupplierBillId,
       headerStepReady,
       lines,
+      linesBlockedMessage,
       linesOperational,
       linesStepReady,
       maxStepReached,
@@ -1662,7 +1693,7 @@ export function DocumentCreateWizard({
       return;
     }
     if (!linesOperational) {
-      toast.error(documentLinesOperationalErrorMessage(lines, "review"));
+      toast.error(linesBlockedMessage("review"));
       setStep(2);
       return;
     }
@@ -1758,7 +1789,7 @@ export function DocumentCreateWizard({
         return;
       }
       if (!linesOperational) {
-        toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+        toast.error(linesBlockedMessage("continue"));
         return;
       }
     }
@@ -1877,9 +1908,18 @@ export function DocumentCreateWizard({
       const patched = await patchDocumentApi(type as DocTypeKey, existingDocument.id, payload);
       toast.success(`${label} updated.`);
       if (patched.pickPackSyncWarning) toast.warning(patched.pickPackSyncWarning);
+      if (type === "bill" && invoiceCopyFile) {
+        try {
+          await uploadDocumentAttachmentApi("bill", existingDocument.id, invoiceCopyFile);
+          toast.success(`Invoice copy ${invoiceCopyFile.name} attached.`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Upload failed.";
+          toast.error(`The bill was saved, but the invoice copy did not upload. ${message}`);
+        }
+      }
       router.push(`/docs/${type}/${existingDocument.id}`);
     },
-    [buildDraftPayload, existingDocument, label, router, type]
+    [buildDraftPayload, existingDocument, invoiceCopyFile, label, router, type]
   );
 
   const confirmOdaflowCorrectionReasons = React.useCallback(
@@ -1912,9 +1952,20 @@ export function DocumentCreateWizard({
     odaflowConfirmedCorrections.customer || (odaflowConfirmedCorrections.products?.length ?? 0) > 0
   );
 
+  const attachInvoiceCopy = async (docId: string) => {
+    if (type !== "bill" || !invoiceCopyFile) return;
+    try {
+      await uploadDocumentAttachmentApi("bill", docId, invoiceCopyFile);
+      toast.success(`Invoice copy ${invoiceCopyFile.name} attached.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload failed.";
+      toast.error(`The bill was saved, but the invoice copy did not upload. ${message}`);
+    }
+  };
+
   const onSubmit = async () => {
     if (!linesOperational) {
-      toast.error(documentLinesOperationalErrorMessage(lines, "submit"));
+      toast.error(linesBlockedMessage("submit"));
       setStep(2);
       return;
     }
@@ -1955,6 +2006,7 @@ export function DocumentCreateWizard({
         await deleteDocumentDraftApi(type);
         toast.success(`${label} draft created.`);
         if (result.pickPackSyncWarning) toast.warning(result.pickPackSyncWarning);
+        await attachInvoiceCopy(result.id);
         router.push(`/docs/${type}/${result.id}`);
       }
     } catch (error) {
@@ -2305,7 +2357,7 @@ export function DocumentCreateWizard({
       : step === 2 && !linesStepReady
         ? "Loading line items and product catalog…"
         : step === 2 && !linesOperational
-          ? documentLinesOperationalErrorMessage(lines, "continue")
+          ? linesBlockedMessage("continue")
           : undefined;
 
   const formDirty = form.formState.isDirty;
@@ -2356,7 +2408,12 @@ export function DocumentCreateWizard({
     const currentUrl = window.location.href;
     window.history.pushState({ docCreateGuard: type }, "", currentUrl);
     const onPopState = () => {
-      if (allowLeaveRef.current || !hasEntriesRef.current) return;
+      if (allowLeaveRef.current) return;
+      if (!hasEntriesRef.current) {
+        allowLeaveRef.current = true;
+        window.history.back();
+        return;
+      }
       window.history.pushState({ docCreateGuard: type }, "", currentUrl);
       pendingLeaveRef.current = "back";
       setLeaveConfirmOpen(true);
@@ -2840,6 +2897,7 @@ export function DocumentCreateWizard({
             )}
             <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
             <DocumentLineEditor
+              sheetFinishedGoods={sheetFinishedGoods}
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}
               currency={selectedCurrency}
@@ -3001,6 +3059,12 @@ export function DocumentCreateWizard({
                   </p>
                 </div>
               </div>
+              {type === "bill" ? (
+                <div className="space-y-1 border-t pt-4 text-sm">
+                  <span className="text-muted-foreground">Invoice copy</span>
+                  <p className="font-medium">{invoiceCopyFile?.name ?? "None"}</p>
+                </div>
+              ) : null}
               <p className="text-sm text-muted-foreground">
                 {isEditMode ? "Review your changes and save." : "Confirm and create draft. You can edit after creation."}
               </p>
@@ -3105,7 +3169,7 @@ export function DocumentCreateWizard({
                 step === 2 && !linesStepReady
                   ? "Loading line items and product catalog…"
                   : step === 2 && !linesOperational
-                    ? documentLinesOperationalErrorMessage(lines, "review")
+                    ? linesBlockedMessage("review")
                     : undefined
               }
             >
@@ -3222,7 +3286,7 @@ export function DocumentCreateWizard({
             void deleteDocumentDraftApi(type)
               .catch(() => {})
               .finally(() => {
-                if (href === "back") window.history.back();
+                if (href === "back") window.history.go(-2);
                 else if (href) router.push(href);
               });
           }}
