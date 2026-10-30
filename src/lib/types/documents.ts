@@ -211,8 +211,10 @@ export type DocumentDetailRecord = {
   /** Customer price tag used for FMCG sales pricing (resolved from doc, chain, or party default). */
   priceListId?: string;
   priceListName?: string;
-  /** Tax tag applied to sales lines. */
+  /** Tax tag applied to the document lines. */
   taxConfigId?: string;
+  /** Unit prices already include VAT. */
+  linesAreTaxInclusive?: boolean;
   total?: number;
   currency: string;
   exchangeRate?: number;

@@ -440,9 +440,12 @@ export function DocumentProductPickerSheet({
                         <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>
                       </button>
-                      <span className="hidden shrink-0 text-sm tabular-nums sm:block">
-                        {priceLabel ? priceLabel(p) : ""}
-                      </span>
+                      {priceLabel?.(p) ? (
+                        <span className="hidden shrink-0 text-sm tabular-nums sm:block">
+                          {priceLabel(p)}
+                        </span>
+                      ) : null}
+                      <span className="shrink-0 text-xs text-muted-foreground">Qty</span>
                       <Input
                         className="h-8 w-16 shrink-0 tabular-nums"
                         inputMode="decimal"

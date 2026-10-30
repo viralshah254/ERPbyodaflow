@@ -1086,7 +1086,7 @@ export function DocumentLineEditor({
   );
   const priceLabelFor = React.useCallback(
     (p: ProductRow) => {
-      if (useCostPricing) return "Enter cost";
+      if (useCostPricing) return "";
       const uom = defaultLineUom(packagingByProductId?.[p.id] ?? [], mode, p, fmcgOrg);
       const { price } = resolvePrice(p.id, 1, uom);
       return formatMoney(price, currency);
@@ -1399,7 +1399,9 @@ export function DocumentLineEditor({
                           {qtyForAdd ? ` · Add at qty ${qtyForAdd}` : ""}
                         </span>
                       </span>
-                      <span className="shrink-0 text-sm tabular-nums">{priceLabelFor(p)}</span>
+                      {priceLabelFor(p) ? (
+                        <span className="shrink-0 text-sm tabular-nums">{priceLabelFor(p)}</span>
+                      ) : null}
                     </button>
                   </li>
                 ))}

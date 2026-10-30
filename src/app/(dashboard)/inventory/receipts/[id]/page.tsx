@@ -31,7 +31,9 @@ import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
 import { fetchProcessingCostAllocation, type ProcessingCostAllocationRecord } from "@/lib/api/processing-cost";
 import { BatchLandedCostCard } from "@/components/operational/BatchLandedCostCard";
-import { addDocumentCommentApi, editDocumentCommentApi, deleteDocumentCommentApi, convertDocumentApi } from "@/lib/api/documents";
+import { addDocumentCommentApi, editDocumentCommentApi, deleteDocumentCommentApi, convertDocumentApi, fetchDocumentListPageApi } from "@/lib/api/documents";
+import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { fetchAuditLogs } from "@/lib/api/audit-log";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
@@ -116,6 +118,9 @@ export default function ReceiptDetailPage() {
   const canWrite = useCanWriteInventory();
   const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
   const hasLandedCostMultiCurrency = useOrgContextStore((s) => s.hasFlag?.("landedCostMultiCurrency") ?? false);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcgOrg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
   const currentUser = useAuthStore((s) => s.user);
   const currentUserId = currentUser?.userId;
   const permissions = useAuthStore((s) => s.permissions);
@@ -134,6 +139,8 @@ export default function ReceiptDetailPage() {
   const [editingVarianceReason, setEditingVarianceReason] = React.useState<Record<number, string>>({});
   const [editingLot, setEditingLot] = React.useState<Record<number, string>>({});
   const [editingExpiry, setEditingExpiry] = React.useState<Record<number, string>>({});
+  const [supplierInvoiceNo, setSupplierInvoiceNo] = React.useState("");
+  const [linkedBillIdDraft, setLinkedBillIdDraft] = React.useState("");
 
   // GRN header edit dialog
   const [editHeaderOpen, setEditHeaderOpen] = React.useState(false);
@@ -218,7 +225,8 @@ export default function ReceiptDetailPage() {
       const num = pending?.trim() ? parseFloat(pending) : Number(line.receivedWeightKg ?? line.qty);
       const lotNumber = (editingLot[idx] ?? line.lotNumber ?? "").trim();
       const expiryDate = (editingExpiry[idx] ?? line.expiryDate ?? "").trim();
-      if (!lotNumber) throw new Error(`Enter a lot number for line ${idx + 1}.`);
+      if (!fmcgOrg && !lotNumber) throw new Error(`Enter a lot number for line ${idx + 1}.`);
+      if (fmcgOrg) continue;
       const orderedKg = line.orderedWeightKg ?? line.qty ?? 0;
       const reasonCode = editingVarianceReason[idx] ?? line.varianceReasonCode;
       const updated = await patchGRNLine(working.id, idx, {
@@ -241,12 +249,16 @@ export default function ReceiptDetailPage() {
       setEditingVarianceReason({});
       setEditingLot({});
     }
-  }, [grn, hasCashWeightAudit, editingWeight, editingVarianceReason, editingLot, editingExpiry]);
+  }, [grn, fmcgOrg, hasCashWeightAudit, editingWeight, editingVarianceReason, editingLot, editingExpiry]);
 
   React.useEffect(() => {
     setLoading(true);
     fetchGRNById(id).then((g) => {
       setGrn(g ?? null);
+      if (g) {
+        setSupplierInvoiceNo(g.supplierInvoiceNumber ?? "");
+        setLinkedBillIdDraft(g.linkedSupplierBillId ?? "");
+      }
       setLoading(false);
       if (g) loadAuditAndComments(g.id);
     });
@@ -276,6 +288,49 @@ export default function ReceiptDetailPage() {
       active = false;
     };
   }, [id]);
+
+  const saveSupplierInvoice = React.useCallback(async () => {
+    if (!grn || !fmcgOrg || grn.linkedBill) return;
+    const invoice = supplierInvoiceNo.trim();
+    if (!invoice && !linkedBillIdDraft) {
+      throw new Error("Enter the supplier invoice number before posting this goods receipt.");
+    }
+    if (
+      invoice === (grn.supplierInvoiceNumber ?? "") &&
+      linkedBillIdDraft === (grn.linkedSupplierBillId ?? "")
+    ) {
+      return;
+    }
+    const updated = await patchGrnHeaderApi(grn.id, {
+      supplierInvoiceNumber: invoice,
+      linkedSupplierBillId: linkedBillIdDraft,
+    });
+    setGrn(updated);
+  }, [fmcgOrg, grn, linkedBillIdDraft, supplierInvoiceNo]);
+
+  const postReceipt = React.useCallback(async () => {
+    if (!grn) return;
+    setPosting(true);
+    try {
+      if (fmcgOrg) await saveSupplierInvoice();
+      else await flushPendingReceivedWeights();
+      const result = await postGRN(grn.id);
+      const refreshed = await fetchGRNById(grn.id);
+      if (refreshed) setGrn(refreshed);
+      if (result.stockAdded?.length) {
+        const summary = result.stockAdded
+          .map((s) => `+${s.qty} ${s.productName ?? s.productId}`)
+          .join(", ");
+        toast.success("GRN posted — stock updated", { description: summary, duration: 8000 });
+      } else {
+        toast.success(refreshed?.linkedBill ? `GRN posted. Supplier invoice ${refreshed.linkedBill.number} is ready.` : "GRN posted.");
+      }
+    } catch (raw) {
+      toastGrnActionError(raw);
+    } finally {
+      setPosting(false);
+    }
+  }, [fmcgOrg, flushPendingReceivedWeights, grn, saveSupplierInvoice]);
 
   if (loading && !grn) {
     return (
@@ -615,26 +670,7 @@ export default function ReceiptDetailPage() {
               <Button
                 size="sm"
                 disabled={posting}
-                onClick={async () => {
-                  setPosting(true);
-                  try {
-                    await flushPendingReceivedWeights();
-                    const result = await postGRN(grn.id);
-                    setGrn(await fetchGRNById(grn.id));
-                    if (result.stockAdded?.length) {
-                      const summary = result.stockAdded
-                        .map((s) => `+${s.qty} ${s.productName ?? s.productId}`)
-                        .join(", ");
-                      toast.success(`GRN posted — stock updated`, { description: summary, duration: 8000 });
-                    } else {
-                      toast.success("GRN posted.");
-                    }
-                  } catch (raw) {
-                    toastGrnActionError(raw);
-                  } finally {
-                    setPosting(false);
-                  }
-                }}
+                onClick={() => void postReceipt()}
               >
                 <Icons.Send className="mr-2 h-4 w-4" />
                 {posting ? "Posting…" : "Post"}
@@ -655,6 +691,7 @@ export default function ReceiptDetailPage() {
                 onClick={async () => {
                   setCreatingBill(true);
                   try {
+                    if (fmcgOrg) await saveSupplierInvoice();
                     const result = await convertDocumentApi("grn", grn.id, { targetType: "bill" });
                     toast.success(`Bill ${result.number ?? ""} created.`);
                     window.location.href = `/docs/bill/${result.id}`;
@@ -716,39 +753,22 @@ export default function ReceiptDetailPage() {
             <CardContent className="py-2.5 px-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  Post this GRN so stock updates. Additional costs are optional.
+                  {fmcgOrg
+                    ? "Post this goods receipt to update stock. A supplier invoice is required."
+                    : "Post this GRN so stock updates. Additional costs are optional."}
                 </span>
                 {canWrite && (
                   <Button
                     size="sm"
                     variant="default"
                     disabled={posting}
-                    onClick={async () => {
-                      setPosting(true);
-                      try {
-                        await flushPendingReceivedWeights();
-                        const result = await postGRN(id);
-                        if (result.stockAdded?.length) {
-                          const summary = result.stockAdded
-                            .map((s) => `+${s.qty} ${s.productName ?? s.productId}`)
-                            .join(", ");
-                          toast.success("GRN posted — stock updated", { description: summary, duration: 8000 });
-                        } else {
-                          toast.success("GRN posted.");
-                        }
-                        setGrn(await fetchGRNById(id));
-                      } catch (raw) {
-                        toastGrnActionError(raw);
-                      } finally {
-                        setPosting(false);
-                      }
-                    }}
+                    onClick={() => void postReceipt()}
                   >
                     <Icons.Send className="mr-1.5 h-3.5 w-3.5" />
                     {posting ? "Posting…" : "Post GRN"}
                   </Button>
                 )}
-                {canWrite && !grn.linkedBill && (
+                {canWrite && !fmcgOrg && !grn.linkedBill && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -773,7 +793,7 @@ export default function ReceiptDetailPage() {
                     Convert to bill
                   </Button>
                 )}
-                {canWrite && (
+                {canWrite && !fmcgOrg && (
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/inventory/costing?grnId=${grn.id}`}>Apply costs</Link>
                   </Button>
@@ -800,7 +820,7 @@ export default function ReceiptDetailPage() {
                     Enter processed weight
                   </Button>
                 )}
-                {canWrite && (
+                {canWrite && !fmcgOrg && (
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/inventory/costing?sourceId=${grn.id}`}>
                       <Icons.TrendingUp className="mr-1.5 h-3.5 w-3.5" />
@@ -939,14 +959,73 @@ export default function ReceiptDetailPage() {
                       <p className="font-medium">—</p>
                     )}
                   </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Ownership / Location</p>
-                    <OwnershipLocationBadge owner="CoolCatch" location={grn.warehouse ?? "Warehouse"} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Stock age</p>
-                    <StockAgeIndicator days={grn.status === "POSTED" ? 2 : 0} />
-                  </div>
+                  {fmcgOrg ? (
+                    <div className="sm:col-span-2">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Supplier invoice</p>
+                      {grn.linkedBill ? (
+                        <Link href={`/docs/bill/${grn.linkedBill.id}`} className="text-sm font-medium text-primary hover:underline">
+                          {grn.supplierInvoiceNumber || grn.linkedBill.number}
+                        </Link>
+                      ) : canWrite ? (
+                        <div className="mt-1 space-y-2">
+                          <Input
+                            value={supplierInvoiceNo}
+                            onChange={(event) => setSupplierInvoiceNo(event.target.value)}
+                            placeholder="Invoice number on the supplier tax invoice"
+                            className="h-8"
+                          />
+                          <AsyncSearchableSelect
+                            value={linkedBillIdDraft}
+                            onValueChange={(billId) => setLinkedBillIdDraft(billId)}
+                            onOptionSelect={(opt) => {
+                              if (!opt) {
+                                setLinkedBillIdDraft("");
+                                return;
+                              }
+                              setLinkedBillIdDraft(opt.id);
+                              const invoiceNo = opt.description?.match(/^Invoice ([^·]+)/)?.[1]?.trim();
+                              if (invoiceNo) setSupplierInvoiceNo(invoiceNo);
+                            }}
+                            loadOptions={async (q) => {
+                              const page = await fetchDocumentListPageApi("bill", {
+                                search: q,
+                                limit: 20,
+                                partyId: grn.partyId,
+                              });
+                              return page.items
+                                .filter((item) => item.status !== "CANCELLED")
+                                .map((item) => ({
+                                  id: item.id,
+                                  label: item.supplierInvoiceNumber || item.number,
+                                  description: [
+                                    item.supplierInvoiceNumber ? `Invoice ${item.supplierInvoiceNumber}` : item.number,
+                                    item.party,
+                                    item.status,
+                                  ].filter(Boolean).join(" · "),
+                                }));
+                            }}
+                            placeholder="Or link an existing supplier invoice"
+                            searchPlaceholder="Invoice or bill number"
+                            emptyMessage="No supplier invoices found."
+                            allowClear
+                          />
+                        </div>
+                      ) : (
+                        <p className="font-medium">{grn.supplierInvoiceNumber || "—"}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Ownership / Location</p>
+                        <OwnershipLocationBadge owner="CoolCatch" location={grn.warehouse ?? "Warehouse"} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Stock age</p>
+                        <StockAgeIndicator days={grn.status === "POSTED" ? 2 : 0} />
+                      </div>
+                    </>
+                  )}
                   {totalReceivedWeight > 0 && (
                     <div>
                       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Received kg</p>
@@ -963,6 +1042,8 @@ export default function ReceiptDetailPage() {
                       </p>
                     </div>
                   )}
+                  {!fmcgOrg ? (
+                  <>
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Work order</p>
                     {grn.workOrderId ? (
@@ -997,6 +1078,8 @@ export default function ReceiptDetailPage() {
                       </Badge>
                     )}
                   </div>
+                  </>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -1016,7 +1099,7 @@ export default function ReceiptDetailPage() {
                   <CardTitle className="text-base">Receipt Lines</CardTitle>
                   <CardDescription className="text-xs">Received quantity and financial value per line.</CardDescription>
                 </div>
-                {canWrite && grn.status !== "DRAFT" && pendingQcLineIndexes.length > 1 ? (
+                {canWrite && !fmcgOrg && grn.status !== "DRAFT" && pendingQcLineIndexes.length > 1 ? (
                   <Button
                     size="sm"
                     variant="outline"
@@ -1040,7 +1123,7 @@ export default function ReceiptDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="max-h-[min(38vh,20rem)] overflow-auto">
-                  <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={lineColumns} emptyMessage="No receipt lines." />
+                  <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={fmcgOrg ? lineColumns.filter((column) => column.id !== "lot") : lineColumns} emptyMessage="No receipt lines." />
                 </div>
               </CardContent>
               {hasCashWeightAudit && totalReceivedWeight > 0 && (
@@ -1152,6 +1235,37 @@ export default function ReceiptDetailPage() {
                   />
                 );
               }
+              if (fmcgOrg) {
+                const vat = (grn.lines ?? []).reduce((sum, line) => sum + (line.tax ?? 0), 0);
+                const gross = grn.totalAmount ?? (grn.lines ?? []).reduce((sum, line) => sum + (line.value ?? 0), 0);
+                const net = Math.max(0, Math.round((gross - vat) * 100) / 100);
+                const money = (amount: number) =>
+                  `${grn.currency ?? "KES"} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                return (
+                  <Card>
+                    <CardHeader className="space-y-0 p-4 pb-2">
+                      <CardTitle className="text-base">Tax</CardTitle>
+                      <CardDescription className="text-xs">
+                        {grn.linesAreTaxInclusive ? "Prices include VAT." : "Prices exclude VAT."}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-3 gap-3 p-4 pt-0 text-sm">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Net</p>
+                        <p className="font-medium tabular-nums">{money(net)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">VAT</p>
+                        <p className="font-medium tabular-nums">{money(vat)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+                        <p className="font-medium tabular-nums">{money(gross)}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              }
               return (
                 <div className="space-y-2">
                   <CostImpactPanel
@@ -1173,11 +1287,13 @@ export default function ReceiptDetailPage() {
                 </div>
               );
             })()}
-            <BatchLandedCostCard
-              grnId={id}
-              grnNumber={grn.number}
-              costingHref={`/inventory/costing?grnId=${id}`}
-            />
+            {!fmcgOrg ? (
+              <BatchLandedCostCard
+                grnId={id}
+                grnNumber={grn.number}
+                costingHref={`/inventory/costing?grnId=${id}`}
+              />
+            ) : null}
           </div>
 
           <div className="space-y-3 min-w-0">
@@ -1185,7 +1301,7 @@ export default function ReceiptDetailPage() {
               compact
               title="Receipt Timeline"
               steps={[
-                { id: "po", label: "Purchase order approved", status: "completed", detail: grn.poRef ?? "PO linked" },
+                { id: "po", label: "Purchase order approved", status: grn.poRef ? "completed" : "upcoming", detail: grn.poRef ?? "No purchase order" },
                 { id: "arrive", label: "Stock arrived at facility", status: "completed", timestamp: grn.date ? `${grn.date.slice(0, 10)}T08:00:00Z` : undefined },
                 {
                   id: "verify",
@@ -1200,10 +1316,14 @@ export default function ReceiptDetailPage() {
                   actionLabel: hasCashWeightAudit ? "Open audit" : undefined,
                 },
                 { id: "post", label: "Receipt posted to inventory", status: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "completed" : "upcoming" },
-                {
+                ...(fmcgOrg ? [] : [{
                   id: "landed",
                   label: "Additional costs allocated",
-                  status: (landedAllocation || processingAllocation) ? "completed" : ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "current" : "upcoming",
+                  status: ((landedAllocation || processingAllocation)
+                    ? "completed"
+                    : ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status)
+                      ? "current"
+                      : "upcoming") as "completed" | "current" | "upcoming",
                   detail: (landedAllocation || processingAllocation)
                     ? [
                         landedAllocation ? `KES ${(landedAllocation.totalLandedCostBase ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} inbound` : null,
@@ -1216,7 +1336,7 @@ export default function ReceiptDetailPage() {
                   actionLabel: !(landedAllocation || processingAllocation) && ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status)
                     ? "Allocate costs"
                     : undefined,
-                },
+                }]),
                 {
                   id: "putaway",
                   label: "Putaway completed",

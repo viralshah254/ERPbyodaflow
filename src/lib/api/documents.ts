@@ -151,6 +151,7 @@ type BackendDocumentDetail = {
   priceListId?: string;
   priceListName?: string;
   taxConfigId?: string;
+  linesAreTaxInclusive?: boolean;
   total?: number;
   currency?: string;
   exchangeRate?: number;
@@ -303,8 +304,10 @@ export type DocumentDraftPayload = {
   warehouseId?: string;
   /** Customer price tag / price list used for sales lines. */
   priceListId?: string;
-  /** Tax tag (VAT configuration) applied to sales lines. */
+  /** Tax tag (VAT configuration) applied to the document lines. */
   taxConfigId?: string;
+  /** Existing supplier bill chosen on an FMCG goods receipt. */
+  linkedSupplierBillId?: string;
   poRef?: string;
   reference?: string;
   supplierInvoiceNumber?: string;
@@ -448,6 +451,8 @@ function mapDocumentDetail(
     ...(payload.priceListId ? { priceListId: payload.priceListId } : {}),
     ...(payload.priceListName ? { priceListName: payload.priceListName } : {}),
     ...(payload.taxConfigId ? { taxConfigId: payload.taxConfigId } : {}),
+    ...(payload.linesAreTaxInclusive != null ? { linesAreTaxInclusive: payload.linesAreTaxInclusive } : {}),
+    ...(payload.supplierInvoiceNumber ? { supplierInvoiceNumber: payload.supplierInvoiceNumber } : {}),
     total: resolvedTotal,
     currency: payload.currency ?? "KES",
     exchangeRate: payload.exchangeRate,
