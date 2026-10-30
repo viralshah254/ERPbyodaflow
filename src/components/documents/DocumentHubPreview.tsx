@@ -11,34 +11,38 @@ export function DocumentHubPreview({
   fileName,
   contentType,
   fileUrl,
+  fill = false,
 }: {
   fileId: string;
   fileName: string;
   contentType?: string;
   fileUrl?: string;
+  fill?: boolean;
 }) {
   if (fileUrl) {
-    return <StoredFilePreview fileUrl={fileUrl} fileName={fileName} contentType={contentType} />;
+    return <StoredFilePreview fileUrl={fileUrl} fileName={fileName} contentType={contentType} fill={fill} />;
   }
-  return <StoredBytesPreview fileId={fileId} fileName={fileName} contentType={contentType} />;
+  return <StoredBytesPreview fileId={fileId} fileName={fileName} contentType={contentType} fill={fill} />;
 }
 
 function StoredFilePreview({
   fileUrl,
   fileName,
   contentType,
+  fill,
 }: {
   fileUrl: string;
   fileName: string;
   contentType?: string;
+  fill: boolean;
 }) {
   const pdf = fileName.toLowerCase().endsWith(".pdf") || (contentType || "").includes("pdf");
   const image = (contentType || "").startsWith("image/") && !pdf;
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <div className="relative max-h-[75vh] overflow-y-auto bg-muted/40">
+    <div className={fill ? "flex h-full min-h-[32rem] flex-col overflow-hidden bg-muted/30" : "overflow-hidden rounded-lg border"}>
+      <div className={fill ? "relative min-h-0 flex-1 overflow-y-auto" : "relative max-h-[75vh] overflow-y-auto bg-muted/40"}>
         {pdf ? (
-          <iframe title={fileName} src={fileUrl} className="h-[75vh] w-full bg-white" />
+          <iframe title={fileName} src={fileUrl} className={fill ? "h-full min-h-[32rem] w-full bg-white" : "h-[75vh] w-full bg-white"} />
         ) : null}
         {image ? <img src={fileUrl} alt={fileName} className="mx-auto max-h-[75vh] w-full object-contain" /> : null}
         {!pdf && !image ? (
@@ -56,10 +60,12 @@ function StoredBytesPreview({
   fileId,
   fileName,
   contentType,
+  fill,
 }: {
   fileId: string;
   fileName: string;
   contentType?: string;
+  fill: boolean;
 }) {
   const stageRef = React.useRef<HTMLDivElement>(null);
   const [imageUrl, setImageUrl] = React.useState<string | null>(null);
@@ -160,8 +166,8 @@ function StoredBytesPreview({
   const linkOnly = failed === "open-link" && imageUrl;
 
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <div className="relative max-h-[75vh] overflow-y-auto bg-muted/40">
+    <div className={fill ? "flex h-full min-h-[32rem] flex-col overflow-hidden bg-muted/30" : "overflow-hidden rounded-lg border"}>
+      <div className={fill ? "relative min-h-0 flex-1 overflow-y-auto" : "relative max-h-[75vh] overflow-y-auto bg-muted/40"}>
         <TableLinearProgress active={rendering} />
         {rendering ? <div className="h-80" /> : null}
         {failed && failed !== "open-link" ? <p className="p-6 text-sm text-muted-foreground">{failed}</p> : null}

@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import type { DocumentHubGroup, DocumentHubList, DocumentLearningRule, ScannedDocument } from "@/lib/types/document-hub";
+import type { DocumentHubGroup, DocumentHubList, DocumentLearningRule, HubFields, ScannedDocument } from "@/lib/types/document-hub";
 
 export function fetchDocumentHub(params?: { status?: string; documentType?: string; party?: string; q?: string }) {
   const search = new URLSearchParams();
@@ -68,7 +68,7 @@ export function rereadHubDocument(id: string) {
   return apiRequest<ScannedDocument>(`/api/document-hub/${id}/reread`, { method: "POST" });
 }
 
-export function commitHubDocument(id: string, body?: { bankAccountId?: string; warehouseId?: string; partyId?: string; fields?: { partyName?: string; partyId?: string; total?: number; documentNumber?: string } }) {
+export function commitHubDocument(id: string, body?: { bankAccountId?: string; warehouseId?: string; partyId?: string; fields?: Partial<HubFields> & { partyId?: string } }) {
   return apiRequest<ScannedDocument>(`/api/document-hub/${id}/commit`, { method: "POST", body: body ?? {} });
 }
 

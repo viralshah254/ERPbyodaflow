@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { CustomerLink } from "@/components/customers/CustomerLink";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as Icons from "lucide-react";
 import {
   LIST_PAGE_SHELL_CLASS,
@@ -69,6 +69,7 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 export default function MasterPartiesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const terminology = useTerminology();
   const { templateId } = useOrgContext();
   const fmcgOrg = isFmcgOrg(templateId);
@@ -174,14 +175,18 @@ export default function MasterPartiesPage() {
   React.useEffect(() => {
     if (!drawerOpen || tab !== "suppliers") return;
     if (!editingId) {
-      setSupplierForm(emptySupplierMasterForm(supplierBaseCurrency));
+      const suggested = searchParams.get("new") === "1" ? searchParams.get("name")?.trim() : "";
+      setSupplierForm({
+        ...emptySupplierMasterForm(supplierBaseCurrency),
+        ...(suggested ? { name: suggested } : {}),
+      });
       setSupplierFormErrors({});
       setPinCertFile(null);
       setPinCertExistingUrl(null);
       setCompanyRegFile(null);
       setCompanyRegExistingUrl(null);
     }
-  }, [drawerOpen, editingId, supplierBaseCurrency, tab]);
+  }, [drawerOpen, editingId, searchParams, supplierBaseCurrency, tab]);
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -417,6 +422,14 @@ export default function MasterPartiesPage() {
     router.push(`/sales/customers?id=${encodeURIComponent(customerId)}`);
   };
 
+  const openedFromHub = React.useRef(false);
+  React.useEffect(() => {
+    const requested = searchParams.get("tab");
+    if (requested === "suppliers" || requested === "customers" || requested === "franchisees") {
+      setTab(requested);
+    }
+  }, [searchParams]);
+
   const openCreateDrawer = () => {
     if (fmcgOrg && tab === "customers") {
       goToSalesNewCustomer();
@@ -441,6 +454,26 @@ export default function MasterPartiesPage() {
     resetCreditFields();
     setDrawerOpen(true);
   };
+
+  React.useEffect(() => {
+    if (openedFromHub.current || searchParams.get("new") !== "1") return;
+    const requested = searchParams.get("tab");
+    if (requested && tab !== requested) return;
+    const suggested = searchParams.get("name")?.trim() ?? "";
+    if (fmcgOrg && (requested === "customers" || tab === "customers")) {
+      openedFromHub.current = true;
+      router.push(suggested ? `/sales/customers?new=1&name=${encodeURIComponent(suggested)}` : "/sales/customers?new=1");
+      return;
+    }
+    openedFromHub.current = true;
+    openCreateDrawer();
+    if (!suggested) return;
+    if (requested === "suppliers" || tab === "suppliers") {
+      setSupplierForm((current) => ({ ...current, name: suggested }));
+      return;
+    }
+    setFormName(suggested);
+  }, [searchParams, tab, fmcgOrg, router]);
 
   /** Load next supplier code (su0001, …) whenever the create drawer opens on the Suppliers tab. */
   React.useEffect(() => {

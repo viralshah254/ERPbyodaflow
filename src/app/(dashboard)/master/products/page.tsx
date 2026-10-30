@@ -779,6 +779,15 @@ export default function MasterProductsPage() {
     [orgId, applyCreateDraft, fmcgOrg, plantCatalogue, itemRoleFilter]
   );
 
+  const openedFromHub = React.useRef(false);
+  React.useEffect(() => {
+    if (openedFromHub.current || searchParams.get("new") !== "1" || !canWriteProduct) return;
+    openedFromHub.current = true;
+    openCreateDrawer({ preferDraft: false });
+    const suggested = searchParams.get("name")?.trim();
+    if (suggested) setName(suggested);
+  }, [searchParams, canWriteProduct, openCreateDrawer]);
+
   const handleCreate = async () => {
     if (!name.trim()) {
       toast.error("Product name is required.");
